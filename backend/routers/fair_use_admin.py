@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -20,6 +20,8 @@ from utils.fair_use import (
     invalidate_enforcement_cache,
     normalize_expired_restriction_state,
     FAIR_USE_ENABLED,
+    FAIR_USE_THROTTLE_DECAY_ENABLED,
+    FAIR_USE_STAGE_QUIET_PERIOD,
     FAIR_USE_DAILY_SPEECH_MS,
     FAIR_USE_3DAY_SPEECH_MS,
     FAIR_USE_WEEKLY_SPEECH_MS,
@@ -181,10 +183,21 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
     if stage not in valid_stages:
         raise HTTPException(status_code=400, detail=f'Invalid stage. Must be one of: {valid_stages}')
 
-    updates = {'stage': stage}
+    updates: Dict[str, Any] = {'stage': stage}
     if stage == 'none':
         updates['throttle_until'] = None
         updates['restrict_until'] = None
+    elif stage == 'restrict':
+        # Stage reads expire a restriction with no future restrict_until, so give a manual
+        # restrict the same 30-day window escalate_enforcement applies.
+        updates['restrict_until'] = datetime.now(timezone.utc) + timedelta(days=30)
+
+    if FAIR_USE_THROTTLE_DECAY_ENABLED:
+        now = datetime.now(timezone.utc)
+        updates['stage_entered_at'] = now
+        updates['warning_until'] = now + FAIR_USE_STAGE_QUIET_PERIOD if stage == 'warning' else None
+        if stage == 'throttle':
+            updates['throttle_until'] = now + FAIR_USE_STAGE_QUIET_PERIOD
 
     fair_use_db.update_fair_use_state(uid, updates)
     invalidate_enforcement_cache(uid)
@@ -233,7 +246,7 @@ def get_public_case_status(case_ref: str):
 
         stage = 'none'
         if uid:
-            state = fair_use_db.get_fair_use_state(uid)
+            state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
             stage = state.get('stage', 'none')
 
         created_at = data.get('created_at')

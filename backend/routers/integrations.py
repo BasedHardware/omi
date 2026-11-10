@@ -1,3 +1,5 @@
+from utils.generated_compute import require_generated_compute, generated_compute_configured
+
 # async-blockers: no-import-scope
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -19,7 +21,6 @@ import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 from utils.llm.gateway_error_contract import BYOK_RATE_LIMIT_ERROR_DETAIL, is_byok_rate_limit_gateway_error
-from utils.subscription import is_trial_paywalled
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.integrations_registry import oauth_authorization_query, resolve_integration_provider
 from utils.retrieval.tools.google_utils import (
@@ -258,10 +259,10 @@ async def synthesize_connector_data(
     their own prompts and inventing memories via Anthropic Haiku chat completions, then
     persist through the normal memory/task write APIs.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     from utils.llm import connector_synthesis
 
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
     try:
         synthesis = await run_blocking(
             llm_executor,

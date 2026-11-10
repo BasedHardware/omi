@@ -245,7 +245,20 @@ class GlobalShortcutManager: @unchecked Sendable {
       isRegistrationSuspended = false
       unregisterShortcuts()
     }
-    let outcome = registerAskOmi() ?? .otherFailure
+    // Suspension releases the dedicated summon registration too. Probe it for real rather
+    // than taking registerAskOmi's duplicate-registration shortcut, which assumes it is live.
+    let isSummonChord = MainActor.assumeIsolated {
+      ShortcutSettings.shared.askOmiShortcut == Self.summonShortcut
+    }
+    let outcome: HotKeyRegistrationOutcome
+    if isSummonChord {
+      outcome =
+        hotKeyRefs[.summonOmi] != nil
+        ? .registered
+        : registerHotKey(keyCode: Int(kVK_ANSI_O), modifiers: Int(controlKey | cmdKey), id: .summonOmi)
+    } else {
+      outcome = registerAskOmi() ?? .otherFailure
+    }
     if wasSuspended {
       unregisterShortcuts()
       isRegistrationSuspended = true
@@ -274,7 +287,7 @@ class GlobalShortcutManager: @unchecked Sendable {
       }
     } else {
       // The shortcut will not fire on this machine. Keep the local NSLog for
-      // debugging and surface the failure to ops/Sentry via the incident path
+      // debugging and surface the failure to ops via the incident path
       // (NOT recordFallback — this is a hard-terminal failure with no mode switch).
       // User-visible conflict surfacing in shortcut settings is tracked separately.
       logger("GlobalShortcutManager: Failed to register hotkey (keycode \(keyCode)), error: \(attempt.status)")

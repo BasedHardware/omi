@@ -1,5 +1,8 @@
 """Real preservation writer/transactions with synthetic task rows and fake integrations only."""
 
+import fakeredis
+from database import action_item_versions
+
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -98,6 +101,8 @@ class Store(StrictFirestore):
 
 @pytest.fixture
 def world(monkeypatch):
+    fake_redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(action_item_versions, '_redis', lambda: fake_redis)
     monkeypatch.setenv('ACTION_ITEM_REFRESH_PRESERVE_ENABLED', 'true')
     monkeypatch.setattr(socket.socket, 'connect', lambda *a: pytest.fail('network forbidden'))
     monkeypatch.setattr(
@@ -194,12 +199,13 @@ def test_same_description_in_another_conversation_never_matches(world):
     assert world.external[0] != 'foreign'
 
 
-def test_duplicate_occurrences_pair_one_to_one(world):
+def test_duplicate_occurrences_do_not_create_more_tasks(world):
     world.write(['Send report', 'Send report'])
     world.drain()
     world.write(['Send report', 'Send report'])
     world.drain()
-    assert len(world.external) == 1
+    assert not world.external
+    assert len([p for p in world.store.rows if p[-2] == 'action_items']) == 1
 
 
 def test_user_edit_at_commit_retries_and_does_not_clobber(world):

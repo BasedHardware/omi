@@ -83,7 +83,11 @@ def test_success_charges_media_duration_even_without_transcript(monkeypatch, met
     fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
     response = _upload(_make_client(monkeypatch, fake))
     assert response.status_code == 200
-    record.assert_called_once_with(_UID, transcription_seconds=10)
+    record.assert_called_once_with(
+        _UID,
+        transcription_seconds=10,
+        usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'parakeet_proxy'},
+    )
     assert allowance.call_args_list == [call(_UID, source=None, byok_active=False)] * 2
 
 
@@ -181,6 +185,88 @@ def _upload(client: TestClient, content=b'RIFF-fake-wav', filename='audio.wav', 
         files={'file': (filename, content, 'audio/wav')},
         data=data or {},
     )
+
+
+def test_retired_gpu_proxy_uses_vendor_without_parakeet_and_charges_correct_provider(monkeypatch, metering):
+    from unittest.mock import AsyncMock
+
+    _, record = metering
+    fake = _FakeSttClient()
+    client = _make_client(monkeypatch, fake)
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    monkeypatch.setenv('MODULATE_API_KEY', 'test-key')
+    monkeypatch.delenv('HOSTED_PARAKEET_API_URL')
+    payload = {
+        'text': 'hello',
+        'segments': [{'start': 0, 'end': 1, 'text': 'hello', 'speaker': 'SPEAKER_00'}],
+        'detected_language': 'en',
+    }
+    vendor = AsyncMock(return_value=payload)
+    monkeypatch.setattr(stt_router, 'vendor_proxy_payload', vendor)
+    response = _upload(client)
+    assert response.status_code == 200
+    assert response.json() == payload
+    assert fake.calls == []
+    vendor.assert_awaited_once()
+    record.assert_called_once_with(
+        _UID,
+        transcription_seconds=10,
+        usage_metadata={'funding': 'omi', 'provider': 'modulate', 'source': 'parakeet_proxy'},
+    )
+
+
+def test_retired_gpu_proxy_keeps_allowance_fence_before_vendor(monkeypatch, metering):
+    from unittest.mock import AsyncMock
+
+    allowance, record = metering
+    allowance.return_value = TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, 0, 'plan_within_allowance')
+    client = _make_client(monkeypatch, _FakeSttClient())
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    monkeypatch.setenv('MODULATE_API_KEY', 'test-key')
+    vendor = AsyncMock()
+    monkeypatch.setattr(stt_router, 'vendor_proxy_payload', vendor)
+    assert _upload(client).status_code == 402
+    vendor.assert_not_awaited()
+    record.assert_not_called()
+
+
+def test_retired_gpu_proxy_does_not_retry_or_charge_vendor_failure(monkeypatch, metering):
+    from unittest.mock import AsyncMock
+
+    _, record = metering
+    client = _make_client(monkeypatch, _FakeSttClient())
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    monkeypatch.setenv('MODULATE_API_KEY', 'test-key')
+    vendor = AsyncMock(side_effect=stt_router.ModulateBatchError('credit_refusal'))
+    monkeypatch.setattr(stt_router, 'vendor_proxy_payload', vendor)
+    assert _upload(client).status_code == 503
+    vendor.assert_awaited_once()
+    record.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('diarize', [True, False])
+async def test_vendor_proxy_response_preserves_released_schema(monkeypatch, diarize):
+    from unittest.mock import AsyncMock
+    from utils.stt import proxy_vendor
+
+    vendor = AsyncMock(
+        return_value=(
+            [
+                {'text': 'hello', 'timestamp': [0.5, 1.5], 'speaker': 'SPEAKER_00'},
+                {'text': 'world', 'timestamp': [2, 3], 'speaker': 'SPEAKER_01'},
+            ],
+            'es',
+        )
+    )
+    monkeypatch.setattr(proxy_vendor, 'modulate_batch_async', vendor)
+    result = await proxy_vendor.vendor_proxy_payload(b'audio', diarize=diarize)
+    assert result['text'] == 'hello world'
+    assert result['detected_language'] == 'es'
+    assert result['segments'][0]['start'] == 0.5
+    assert result['segments'][1]['end'] == 3
+    assert ('speaker' in result['segments'][0]) == diarize
+    vendor.assert_awaited_once_with(b'audio', diarize=diarize, filename='audio.wav', content_type='audio/wav')
 
 
 def _chunked_upload(client: TestClient, content: bytes):
@@ -360,6 +446,17 @@ def test_success_passthrough(monkeypatch):
     assert call['data'] == {'diarize': 'true'}
 
 
+def test_upstream_request_time_is_attributed_to_app_proxy(monkeypatch):
+    from prometheus_client import REGISTRY
+
+    labels = {'caller': 'app_proxy', 'route': 'v2'}
+    before = REGISTRY.get_sample_value('omi_parakeet_request_seconds_count', labels) or 0.0
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
+    response = _upload(_make_client(monkeypatch, fake))
+    assert response.status_code == 200
+    assert REGISTRY.get_sample_value('omi_parakeet_request_seconds_count', labels) == before + 1
+
+
 def test_diarize_false_forwarded(monkeypatch):
     fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
     client = _make_client(monkeypatch, fake)
@@ -525,7 +622,11 @@ def test_real_probe_rewinds_upload_for_provider(monkeypatch, metering):
     fake = _FakeSttClient(response=_FakeResponse(json_data={'text': 'ok'}))
     assert _upload(_make_client(monkeypatch, fake), content=body).status_code == 200
     assert fake.calls[0]['files']['file'][1] == body
-    metering[1].assert_called_once_with(_UID, transcription_seconds=2)
+    metering[1].assert_called_once_with(
+        _UID,
+        transcription_seconds=2,
+        usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'parakeet_proxy'},
+    )
 
 
 async def test_child_probe_suppresses_native_playlist_logs_without_changing_parent():

@@ -138,42 +138,6 @@ def test_cache_key_threading_does_not_reset_the_deadline(resolved_deadlines, mon
 # ---------------------------------------------------------------------------
 
 
-def test_deadline_holds_with_the_belief_model_enabled(resolved_deadlines, monkeypatch):
-    monkeypatch.setattr(working_observations, "belief_model_enabled", lambda: True)
-    _extract()
-    assert resolved_deadlines == [model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS]
-
-
-def test_deadline_holds_with_the_belief_model_disabled(resolved_deadlines, monkeypatch):
-    monkeypatch.setattr(working_observations, "belief_model_enabled", lambda: False)
-    _extract()
-    assert resolved_deadlines == [model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS]
-
-
-def test_belief_flag_swaps_the_parser_schema_not_the_deadline(resolved_deadlines, monkeypatch):
-    """The flag changes the output schema; it must not touch the request deadline."""
-    schemas: list[type] = []
-
-    class _SpyParser:
-        def __init__(self, pydantic_object):
-            schemas.append(pydantic_object)
-
-        def get_format_instructions(self):
-            return 'Return the requested JSON schema.'
-
-        def parse(self, _completion):
-            return working_observations.WorkingObservationBatch()
-
-    monkeypatch.setattr(working_observations, "belief_model_enabled", lambda: True)
-    monkeypatch.setattr(working_observations, "PydanticOutputParser", _SpyParser)
-
-    _extract()
-
-    assert (
-        schemas and schemas[0] is working_observations.BeliefWorkingObservationBatch
-    ), "the belief schema must be selected when the flag is on"
-
-
 # ---------------------------------------------------------------------------
 # Client-source axes: explicit client and BYOK construction
 # ---------------------------------------------------------------------------

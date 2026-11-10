@@ -11,6 +11,13 @@ from starlette.responses import PlainTextResponse
 from scripts import route_policy_inventory as inventory
 
 
+def test_spaces_policies_declare_auth_byok_validation():
+    manifest = inventory.load_manifest(Path(__file__).parents[2] / 'route_policy_manifest.yaml')
+    spaces = [route for route in manifest['routes'] if route['path'].startswith('/v1/spaces/{sid}/')]
+    assert {route['path'].rsplit('/', 1)[1] for route in spaces} == {'changes', 'snapshot', 'mutations', 'cursors'}
+    assert all(route['policy']['byok'] == 'validated_when_headers_present' for route in spaces)
+
+
 def _policy(**overrides):
     policy = {
         'review_status': 'reviewed',
@@ -108,8 +115,14 @@ def test_inventory_expands_multi_method_and_websocket_routes():
     assert entries[2]['observed']['timeout_class_hint'] == 'websocket'
 
 
-def test_beta_promotion_token_is_registered_for_only_the_two_beta_admission_routes():
-    manifest = inventory.load_manifest(inventory.DEFAULT_MANIFEST_PATH)
+@pytest.fixture(scope='module')
+def shipped_manifest():
+    """Parse the shipped manifest once; it is large, and parsing is setup, not the behavior under test."""
+    return inventory.load_manifest(inventory.DEFAULT_MANIFEST_PATH)
+
+
+def test_beta_promotion_token_is_registered_for_only_the_two_beta_admission_routes(shipped_manifest):
+    manifest = shipped_manifest
     assert 'beta_promotion_token' in inventory.AUTH_MECHANISMS
     routes = [
         route
@@ -122,33 +135,30 @@ def test_beta_promotion_token_is_registered_for_only_the_two_beta_admission_rout
     ]
 
 
-def test_beta_breakglass_routes_reuse_existing_admin_key_authority():
-    manifest = inventory.load_manifest(inventory.DEFAULT_MANIFEST_PATH)
+def test_plugin_capability_routes_declare_the_conversation_audio_scope(shipped_manifest):
+    manifest = shipped_manifest
+    routes = [
+        route
+        for route in manifest['routes']
+        if 'plugin_capability' in route.get('policy', {}).get('auth', {}).get('mechanisms', [])
+    ]
+    assert [(route['method'], route['path']) for route in routes] == [
+        ('GET', '/v1/apps/{app_id}/backup-audio/{conversation_id}'),
+        ('HEAD', '/v1/apps/{app_id}/backup-audio/{conversation_id}'),
+    ]
+    assert all(
+        route['policy']['auth'] == {'mechanisms': ['plugin_capability'], 'placement': 'handler', 'scopes': ['audio']}
+        for route in routes
+    )
+
+
+def test_beta_breakglass_routes_reuse_existing_admin_key_authority(shipped_manifest):
+    manifest = shipped_manifest
     routes = [route for route in manifest['routes'] if route.get('path') == '/v2/desktop/beta/breakglass']
     assert [(route.get('method'), route.get('path')) for route in routes] == [
         ('POST', '/v2/desktop/beta/breakglass'),
     ]
     assert all(route['policy']['auth']['mechanisms'] == ['admin_key'] for route in routes)
-
-
-def test_jit_mutation_routes_are_authenticated_and_rate_limited():
-    manifest = inventory.load_manifest(inventory.DEFAULT_MANIFEST_PATH)
-    routes = {
-        (route.get('method'), route.get('path')): route['policy']
-        for route in manifest['routes']
-        if route.get('path') in {'/v1/jit/trigger-feedback', '/v1/jit/proactivity/reservations'}
-    }
-
-    assert set(routes) == {
-        ('POST', '/v1/jit/trigger-feedback'),
-        ('POST', '/v1/jit/proactivity/reservations'),
-    }
-    for policy in routes.values():
-        assert policy['auth']['mechanisms'] == ['firebase_id_token']
-        assert policy['auth']['placement'] == 'dependency'
-        assert policy['rate_limit']['key_subject'] == 'uid'
-        assert policy['rate_limit']['enforcement'] == 'fail_open'
-        assert policy['rate_limit']['policy_name'] != 'none'
 
 
 def test_dependency_evidence_captures_nested_depends_and_security():

@@ -1,10 +1,8 @@
-/// Additive, versioned references that let a chat answer point at supporting
-/// conversation or screen evidence without making that evidence required for
-/// the text answer to render.
-///
-/// Older mobile releases ignore the containing JSON field. Newer releases
-/// ignore unknown fields/kinds/states, so the envelope can evolve without
-/// changing the existing ServerMessage JSON contract.
+/// Additive, versioned evidence data retained in the ServerMessage wire contract.
+/// Mobile decodes the envelope for forward compatibility but intentionally
+/// renders no evidence UI in chat today. A future navigator may render screen
+/// evidence without changing the text answer or existing conversation citations.
+/// Unknown fields, kinds, and states remain safe to decode.
 
 library;
 
@@ -24,10 +22,7 @@ enum ChatEvidenceReferenceKind {
 
   static ChatEvidenceReferenceKind fromWire(Object? value) {
     final wireValue = value?.toString().trim().toLowerCase();
-    return values.firstWhere(
-      (kind) => kind.wireValue == wireValue,
-      orElse: () => ChatEvidenceReferenceKind.unknown,
-    );
+    return values.firstWhere((kind) => kind.wireValue == wireValue, orElse: () => ChatEvidenceReferenceKind.unknown);
   }
 }
 
@@ -45,13 +40,13 @@ enum ChatEvidenceReferenceState {
 
   static ChatEvidenceReferenceState fromWire(Object? value) {
     final wireValue = value?.toString().trim().toLowerCase();
-    return values.firstWhere(
-      (state) => state.wireValue == wireValue,
-      orElse: () => ChatEvidenceReferenceState.unknown,
-    );
+    return values.firstWhere((state) => state.wireValue == wireValue, orElse: () => ChatEvidenceReferenceState.unknown);
   }
 }
 
+/// A decoded wire reference retained for forward compatibility.
+/// Mobile chat intentionally renders no evidence UI; a future navigator may
+/// render screen evidence from these references.
 class ChatEvidenceReference {
   static const maxReferencesPerEnvelope = 24;
   static const maxIdentifierCharacters = 256;
@@ -102,37 +97,24 @@ class ChatEvidenceReference {
     return ChatEvidenceReference(
       id: _string(json['id'] ?? json['reference_id'], maxLength: maxIdentifierCharacters) ?? '',
       kind: ChatEvidenceReferenceKind.fromWire(json['kind'] ?? json['type']),
-      state: ChatEvidenceReferenceState.fromWire(
-        json['state'] ?? json['status'],
-      ),
+      state: ChatEvidenceReferenceState.fromWire(json['state'] ?? json['status']),
       title: _string(json['title'], maxLength: maxTitleCharacters),
       summary: _string(json['summary'] ?? json['preview'], maxLength: maxSummaryCharacters),
-      conversationId: _string(
-        json['conversation_id'] ?? json['conversationId'],
-        maxLength: maxIdentifierCharacters,
-      ),
-      segmentId: _string(
-        json['segment_id'] ?? json['segmentId'],
-        maxLength: maxIdentifierCharacters,
-      ),
+      conversationId: _string(json['conversation_id'] ?? json['conversationId'], maxLength: maxIdentifierCharacters),
+      segmentId: _string(json['segment_id'] ?? json['segmentId'], maxLength: maxIdentifierCharacters),
       frameId: _string(json['frame_id'] ?? json['frameId'], maxLength: maxIdentifierCharacters),
       requestId: _string(json['request_id'] ?? json['requestId'], maxLength: maxIdentifierCharacters),
       startMs: _int(json['start_ms'] ?? json['startMs']),
       endMs: _int(json['end_ms'] ?? json['endMs']),
       capturedAtMs: _int(json['captured_at_ms'] ?? json['capturedAtMs']),
-      errorCode: _string(
-        json['error_code'] ?? json['errorCode'],
-        maxLength: maxErrorCodeCharacters,
-      ),
-      errorMessage: _string(
-        json['error_message'] ?? json['errorMessage'],
-        maxLength: maxErrorMessageCharacters,
-      ),
+      errorCode: _string(json['error_code'] ?? json['errorCode'], maxLength: maxErrorCodeCharacters),
+      errorMessage: _string(json['error_message'] ?? json['errorMessage'], maxLength: maxErrorMessageCharacters),
       metadata: _map(json['metadata']),
     );
   }
 
-  /// A usable reference is optional UI chrome; the answer must not depend on it.
+  /// Whether a future navigator could resolve this reference. Mobile chat does
+  /// not render evidence UI, and the answer never depends on this value.
   bool get canOpen {
     if (id.trim().isEmpty || state != ChatEvidenceReferenceState.available) return false;
     return switch (kind) {
@@ -185,11 +167,7 @@ class ChatEvidenceReference {
   }
 
   Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{
-      'id': id,
-      'kind': kind.wireValue,
-      'state': state.wireValue,
-    };
+    final json = <String, dynamic>{'id': id, 'kind': kind.wireValue, 'state': state.wireValue};
     _put(json, 'title', title);
     _put(json, 'summary', summary);
     _put(json, 'conversation_id', conversationId);
@@ -199,16 +177,8 @@ class ChatEvidenceReference {
     _put(json, 'start_ms', startMs);
     _put(json, 'end_ms', endMs);
     _put(json, 'captured_at_ms', capturedAtMs);
-    _put(
-      json,
-      'error_code',
-      _string(errorCode, maxLength: maxErrorCodeCharacters),
-    );
-    _put(
-      json,
-      'error_message',
-      _string(errorMessage, maxLength: maxErrorMessageCharacters),
-    );
+    _put(json, 'error_code', _string(errorCode, maxLength: maxErrorCodeCharacters));
+    _put(json, 'error_message', _string(errorMessage, maxLength: maxErrorMessageCharacters));
     final boundedMetadata = _map(metadata);
     if (boundedMetadata.isNotEmpty) json['metadata'] = boundedMetadata;
     return json;
@@ -274,6 +244,9 @@ class ChatEvidenceReference {
   }
 }
 
+/// The evidence envelope remains part of the ServerMessage wire contract and
+/// is decoded for forward compatibility. Mobile chat intentionally renders no
+/// evidence UI today; a future navigator may render screen evidence.
 class ChatEvidenceReferenceEnvelope {
   static const currentSchemaVersion = 1;
 
@@ -291,10 +264,7 @@ class ChatEvidenceReferenceEnvelope {
 
   factory ChatEvidenceReferenceEnvelope.fromJson(Map<String, dynamic> json) {
     const schemaKeys = ['schema_version', 'schemaVersion', 'version'];
-    final schemaKey = schemaKeys.firstWhere(
-      json.containsKey,
-      orElse: () => '',
-    );
+    final schemaKey = schemaKeys.firstWhere(json.containsKey, orElse: () => '');
     final schemaVersion = schemaKey.isEmpty ? currentSchemaVersion : _schemaVersion(json[schemaKey]) ?? 0;
     final rawReferences = json['references'] ?? json['evidence_refs'] ?? json['evidence_references'];
     final references = rawReferences is List
@@ -313,9 +283,7 @@ class ChatEvidenceReferenceEnvelope {
                 reference['kind'] = 'unknown';
                 reference['state'] = 'unknown';
               }
-              return ChatEvidenceReference.fromJson(
-                reference,
-              );
+              return ChatEvidenceReference.fromJson(reference);
             })
             .whereType<ChatEvidenceReference>()
             .take(ChatEvidenceReference.maxReferencesPerEnvelope)

@@ -31,6 +31,10 @@ inputs:
       firebase_signer_service_account.
     required: false
     default: ''
+  probe_fleet:
+    description: Probe fleet telemetry on an admitted-source development backend candidate only.
+    required: false
+    default: 'false'
   evidence_path:
     description: Optional absolute path for the redacted probe report.
     required: false
@@ -44,6 +48,7 @@ runs:
       env:
         CANDIDATE_API_URL: ${{ inputs.candidate_api_url }}
         EVIDENCE_PATH: ${{ inputs.evidence_path }}
+        PROBE_FLEET: ${{ inputs.probe_fleet }}
         PROBE_SECRET_PROJECT: ${{ inputs.project_id }}
         FIREBASE_AUTH_PROJECT_ID: ${{ inputs.firebase_auth_project_id }}
         FIREBASE_SIGNER_SERVICE_ACCOUNT: ${{ inputs.firebase_signer_service_account }}
@@ -86,4 +91,10 @@ runs:
           python3 "$DEPLOY_CONTROL_SCRIPT_DIR/transcription_capability_probe.py" "${probe_args[@]}" > "$EVIDENCE_PATH"
         else
           python3 "$DEPLOY_CONTROL_SCRIPT_DIR/transcription_capability_probe.py" "${probe_args[@]}"
+        fi
+        # Exercise this additive endpoint only when it exists in the admitted
+        # runtime source. Older-source replays retain their original probe.
+        if [[ "$PROBE_FLEET" == true && "$PROBE_SECRET_PROJECT" == based-hardware-dev && -f backend/routers/fleet_telemetry.py ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPT_DIR/probe_dev_fleet_telemetry.py" \
+            --candidate-api-url "$CANDIDATE_API_URL" --bearer-token-file "$token_file"
         fi

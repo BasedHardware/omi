@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-grafana-alert-import-omits-gated-rules",
+  "violated_contract": "A Grafana alert UID that live-alert-gate.json or the pusher finalization set requires must be applied by the reviewed monitoring import before any KeepLast business rule is written, and a later read-back must not treat Grafana-assigned query defaults as drift when the committed rule omits them. A workflow path filter that watches only live-stt.json leaves resilience.json KeepLast edits unprovisioned while the release gate still demands them.",
+  "canonical_prevention": "The egress provision-live-alerts job imports every live-alert-gate.json UID on the same --mode import path as live-STT. Production upserts datasource canaries and reads them back before KeepLast business rules; development applies _development_rules (Error, no canaries). Definition comparison ignores only queryType \"\", model.intervalMs 1000, and model.maxDataPoints 43200 when the committed node omits them. A resilience.json change is on that workflow's path filter, and the following fleet check covers these UIDs.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/verify_pusher_live_alert_route.py",
+    "backend/tests/unit/test_verify_pusher_live_alert_route.py",
+    "backend/tests/unit/test_cloud_run_metrics_egress_workflow.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/charts/monitoring/alerts/resilience.json",
+    "backend/charts/monitoring/live-alert-gate.json",
+    "backend/scripts/verify_pusher_live_alert_route.py",
+    ".github/workflows/gcp_cloud_run_metrics_egress.yml"
+  ],
+  "status": "open"
+}

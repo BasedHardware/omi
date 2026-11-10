@@ -206,6 +206,15 @@ if [ -n "${FAKE_XCRUN_XCTEST_TIMING:-}" ] && [ "${#suites[@]}" -gt 0 ]; then
       echo "	 Executed 2 tests, with 0 failures (0 unexpected) in 0.100 (0.250) seconds"
     fi
   done
+  # Adversarial timing output larger than a pipe buffer. These are diagnostic
+  # rows, not extra invocations: the real runner must drain its sorted report
+  # even though it displays only 25 entries.
+  if [ "${FAKE_XCRUN_EXTRA_TIMINGS:-0}" -gt 0 ]; then
+    for ((timing_index = 0; timing_index < FAKE_XCRUN_EXTRA_TIMINGS; timing_index++)); do
+      printf "Test Suite 'TimingBufferPressure%0100dTests' passed at 2026-10-12 00:00:00.000.\n" "$timing_index"
+      printf '\t Executed 2 tests, with 0 failures (0 unexpected) in 0.100 (0.250) seconds\n'
+    done
+  fi
   echo "Test Suite 'All tests' passed at 2026-09-08 00:00:00.000."
   echo "	 Executed 4 tests, with 0 failures (0 unexpected) in 0.400 (0.900) seconds"
 fi
@@ -908,6 +917,22 @@ if grep -q "All tests" "$TMPDIR/timing-runner.out"; then
   fail "duration harvest recorded the aggregate 'All tests' wrapper as a suite"
 fi
 unset FAKE_XCRUN_XCTEST_TIMING OMI_SWIFT_TEST_SLOW_SUITES_FILE OMI_SWIFT_TEST_LANE
+
+# #21300: BSD sort hit Broken pipe after the 25-row `head` closed and made
+# every successful test batch look red. Exercise the real runner/report path.
+export FAKE_XCRUN_XCTEST_TIMING=1
+export FAKE_XCRUN_EXTRA_TIMINGS=1000
+if ! "$RUNNER" >"$TMPDIR/timing-pressure.out" 2>"$TMPDIR/timing-pressure.err"; then
+  fail "a large successful timing report changed the runner verdict"
+fi
+if grep -q 'Broken pipe' "$TMPDIR/timing-pressure.err"; then
+  fail "timing report closed its producer early"
+fi
+timing_rows=$(awk '/Slowest executed Swift suites/{report=1;next} report && /^  [[:space:]0-9.]+s  /{count++} END{print count+0}' "$TMPDIR/timing-pressure.out")
+if [ "$timing_rows" -ne 25 ]; then
+  fail "large timing report must remain bounded to 25 rows (got $timing_rows)"
+fi
+unset FAKE_XCRUN_XCTEST_TIMING FAKE_XCRUN_EXTRA_TIMINGS
 
 # --- PR-lane slow-suite ratchet ---
 #

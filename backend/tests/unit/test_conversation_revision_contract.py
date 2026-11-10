@@ -1,4 +1,7 @@
 from datetime import datetime, timezone
+from copy import deepcopy
+import pytest
+from tests.support.transcript_correction_store import install_store, target_updates, read
 
 import database.conversations as conversations_db
 from models.conversation import Conversation, ConversationMutationResponse
@@ -45,6 +48,9 @@ class _ConversationRef:
 class _DocumentPath:
     def __init__(self, ref):
         self.ref = ref
+        # The recurring-voice privacy fence reads user.id off the users/{uid}
+        # reference during processing writes.
+        self.id = 'user-1'
 
     def collection(self, _name):
         return self
@@ -71,6 +77,9 @@ class _Transaction:
     def update(self, ref, data):
         ref.update(data)
 
+    def create(self, ref, data):
+        ref.create(data)
+
 
 class _PhotoRef:
     def __init__(self):
@@ -96,6 +105,59 @@ class _PhotoConversationRef(_ConversationRef):
     def collection(self, name):
         assert name == 'photos'
         return self.photos
+
+
+@pytest.mark.parametrize(
+    'writer', ['upsert_conversation_with_lifecycle', 'create_conversation_if_absent_with_lifecycle']
+)
+@pytest.mark.parametrize(
+    'segments', [[], [{'speaker_id_scope': 'stream:1', 'speaker': 'SPEAKER_0', 'text': 'Fixture'}]]
+)
+def test_scope_index_provenance_is_stamped_only_on_actual_creation(monkeypatch, writer, segments):
+    ref = _ConversationRef(_Snapshot(None, exists=False))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    getattr(conversations_db, writer)(
+        'user-1',
+        {'id': 'conversation-1', 'transcript_segments': segments, 'data_protection_level': 'standard'},
+    )
+    written = ref.create_calls[0] if ref.create_calls else ref.set_calls[0][0]
+    assert written['recording_speaker_scopes'] == (['stream:1'] if segments else [])
+    assert written['recording_speaker_scopes_at_creation'] is True
+
+
+@pytest.mark.parametrize('existing_marker', [None, True])
+def test_existing_upsert_cannot_promote_or_overwrite_scope_creation_provenance(monkeypatch, existing_marker):
+    existing = {'id': 'conversation-1', 'data_protection_level': 'standard'}
+    if existing_marker is not None:
+        existing['recording_speaker_scopes_at_creation'] = existing_marker
+    ref = _ConversationRef(_Snapshot(existing))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    conversations_db.upsert_conversation_with_lifecycle(
+        'user-1',
+        {
+            'id': 'conversation-1',
+            'transcript_segments': [],
+            'recording_speaker_scopes_at_creation': not bool(existing_marker),
+            'data_protection_level': 'standard',
+        },
+    )
+    written, options = ref.set_calls[0]
+    assert options == {'merge': True}
+    assert written['recording_speaker_scopes'] == []
+    assert 'recording_speaker_scopes_at_creation' not in written
+
+
+def test_create_without_transcript_index_has_no_creation_proof(monkeypatch):
+    ref = _ConversationRef(_Snapshot(None, exists=False))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    conversations_db.create_conversation_if_absent_with_lifecycle(
+        'user-1',
+        {'id': 'conversation-1', 'recording_speaker_scopes_at_creation': True, 'data_protection_level': 'standard'},
+    )
+    assert 'recording_speaker_scopes_at_creation' not in ref.create_calls[0]
 
 
 def test_document_update_time_is_exposed_as_server_revision():
@@ -148,6 +210,13 @@ def test_processing_upsert_preserves_every_user_owned_field(monkeypatch):
         'folder_id': 'important',
         'visibility': 'shared',
         'data_protection_level': 'standard',
+        'record_audio_partial': {
+            'version': 1,
+            'reason': 'tail_lagging',
+            'upload_revision': 4,
+            'generation': 2,
+            'applied_generation': 1,
+        },
     }
     ref = _ConversationRef(_Snapshot(existing))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
@@ -158,6 +227,7 @@ def test_processing_upsert_preserves_every_user_owned_field(monkeypatch):
         'starred': False,
         'folder_id': None,
         'visibility': 'private',
+        'record_audio_partial': None,
         'status': 'completed',
         'data_protection_level': 'standard',
     }
@@ -173,6 +243,7 @@ def test_processing_upsert_preserves_every_user_owned_field(monkeypatch):
     assert written['folder_id'] == 'important'
     assert written['visibility'] == 'shared'
     assert written['status'] == 'completed'
+    assert written['record_audio_partial'] == existing['record_audio_partial']
 
 
 def test_processing_upsert_fills_user_fields_the_stub_left_null(monkeypatch):
@@ -232,6 +303,7 @@ def test_first_processing_write_still_creates_complete_document(monkeypatch):
 
 
 def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch):
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
     ref = _ConversationRef(_Snapshot(None, exists=False))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
     revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
@@ -359,56 +431,37 @@ def _segment_snapshot(segments, *, is_locked=False, exists=True):
 
 
 def test_segment_text_edit_reads_and_writes_inside_a_transaction(monkeypatch):
-    # Regression for #9392: the read-modify-write must be atomic so concurrent
-    # edits to different segments can't lose-update each other.
-    ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}, {'id': 's2', 'text': 'keep'}]))
-    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-
-    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'new text')
-
-    assert result == 'ok'
-    # The write went through the transaction (recorded on the ref), and the edit
-    # landed while the untouched segment is preserved.
-    assert len(ref.update_calls) == 1
-    import json as _json
-    import zlib as _zlib
-
-    written = _json.loads(_zlib.decompress(ref.update_calls[0]['transcript_segments']).decode('utf-8'))
-    assert {s['id']: s['text'] for s in written} == {'s1': 'new text', 's2': 'keep'}
+    segments = [{'id': 's1', 'text': 'old'}, {'id': 's2', 'text': 'keep'}]
+    database = install_store(monkeypatch, 'user-1', 'conv-1', {'transcript_segments': segments})
+    original = deepcopy(database.rows[('users', 'user-1', 'conversations', 'conv-1')]['transcript_segments'])
+    assert conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'new text') == 'ok'
+    assert len(database.transactions) == 1
+    assert len(target_updates(database, 'user-1', 'conv-1')) == 1
+    assert database.rows[('users', 'user-1', 'conversations', 'conv-1')]['transcript_segments'] == original
+    assert {s['id']: s['text'] for s in read(database, 'user-1', 'conv-1')['transcript_segments']} == {
+        's1': 'new text',
+        's2': 'keep',
+    }
 
 
 def test_segment_text_edit_missing_segment_does_not_write(monkeypatch):
-    ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}]))
-    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-
-    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 'missing', 'x')
-
-    assert result == 'segment_not_found'
-    assert ref.update_calls == []
+    database = install_store(monkeypatch, 'user-1', 'conv-1', {'transcript_segments': [{'id': 's1', 'text': 'old'}]})
+    assert conversations_db.update_conversation_segment_text('user-1', 'conv-1', 'missing', 'x') == 'segment_not_found'
+    assert not database.transactions
 
 
 def test_segment_text_edit_rejects_locked_conversation(monkeypatch):
-    ref = _ConversationRef(_segment_snapshot([{'id': 's1', 'text': 'old'}], is_locked=True))
-    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-
-    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x')
-
-    assert result == 'locked'
-    assert ref.update_calls == []
+    database = install_store(
+        monkeypatch, 'user-1', 'conv-1', {'is_locked': True, 'transcript_segments': [{'id': 's1', 'text': 'old'}]}
+    )
+    assert conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x') == 'locked'
+    assert not database.transactions
 
 
 def test_segment_text_edit_missing_conversation_returns_not_found(monkeypatch):
-    ref = _ConversationRef(_segment_snapshot([], exists=False))
-    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-
-    result = conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x')
-
-    assert result == 'not_found'
-    assert ref.update_calls == []
+    database = install_store(monkeypatch, 'user-1', 'conv-1', None)
+    assert conversations_db.update_conversation_segment_text('user-1', 'conv-1', 's1', 'x') == 'not_found'
+    assert not database.transactions
 
 
 def test_processing_upsert_preserves_explicit_user_unfile_on_completed_conversation(monkeypatch):

@@ -1,0 +1,439 @@
+{
+  "measurement_start_utc": "2026-10-03T11:40:00Z",
+  "measurement_end_utc": "2026-10-13T11:40:00Z",
+  "end_unix": 1791891600,
+  "context": "gke_based-hardware_us-central1_prod-omi-gke",
+  "identity_tier": "ro-prod",
+  "api": "/api/v1/namespaces/prod-omi-monitoring/services/prod-omi-kube-prometheus-s-prometheus:9090/proxy/api/v1/query_range",
+  "step_seconds": 300,
+  "chunk_seconds": 86400,
+  "expected_samples": 2881,
+  "limitations": [
+    "Five-minute sampled conditions can miss shorter intervals; these are not delivered notifications.",
+    "Oldest retained samples lack full windows; conservative post-warmup intervals reported separately.",
+    "Pusher bad share counts terminal failure and cancelled only. In-flight sessions are outside that ratio.",
+    "Chat bad share counts failure and stale terminals. Accepted work with no such terminal is not a miss.",
+    "No Grafana pending history, notification policy or causal incident proof was read.",
+    "The `for` values here are what was replayed. The rules now pend longer (critical 2m, warning 15m); a longer pending duration can only suppress a replayed page, never add one, so these counts are an upper bound.",
+    "Live critical's 1h/5m arm is capped at a 50% bad share (14.4x of the 7.9% budget exceeds 100%). Read-only check on 2026-10-13: the capped arm had 0 true samples over the same 10 days at 15-minute steps; the worst 1h bad share was 24.4%.",
+    "omi-slo-live-signal-dead dropped its absent(omi_live_stt_accepted_total) arm after the replay: that counter is sparse until accepted traffic, so it read as vanished after restarts. Removing an OR arm can only remove true samples."
+  ],
+  "baselines": {
+    "live": {
+      "bad_query": "sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[10d]))",
+      "valid_query": "sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[10d]))",
+      "good_query": "(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[10d]))) - (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[10d])))",
+      "bad_events": 8115.258889811692,
+      "good_events": 169033.81439783776,
+      "valid_events": 177149.07328764946,
+      "success_fraction": 0.9541896621912643,
+      "bad_share": 0.045810337808735654,
+      "objective": 0.921,
+      "worst_3d": {
+        "end_utc": "2026-10-11T19:40:00Z",
+        "bad_events": 2612.5239167204713,
+        "valid_events": 47415.868663402674,
+        "share": 0.055098092481787944
+      },
+      "worst_3d_error_budget_fraction": 0.6974442086302275,
+      "daily": [
+        {
+          "end_utc": "2026-10-04T11:40:00Z",
+          "bad_events": 465.59031978953226,
+          "valid_events": 13131.1885839063,
+          "share": 0.03545682988363779
+        },
+        {
+          "end_utc": "2026-10-05T11:40:00Z",
+          "bad_events": 446.65129943923165,
+          "valid_events": 13263.104470872078,
+          "share": 0.033676225684578606
+        },
+        {
+          "end_utc": "2026-10-06T11:40:00Z",
+          "bad_events": 1040.09964968905,
+          "valid_events": 19752.66912033636,
+          "share": 0.05265615716805662
+        },
+        {
+          "end_utc": "2026-10-07T11:40:00Z",
+          "bad_events": 975.4563041875629,
+          "valid_events": 22229.752666222314,
+          "share": 0.043880663848759334
+        },
+        {
+          "end_utc": "2026-10-08T11:40:00Z",
+          "bad_events": 1097.6034068379277,
+          "valid_events": 23889.668942661574,
+          "share": 0.04594468887251321
+        },
+        {
+          "end_utc": "2026-10-09T11:40:00Z",
+          "bad_events": 1127.2807161282778,
+          "valid_events": 21745.390111016077,
+          "share": 0.051839985871635595
+        },
+        {
+          "end_utc": "2026-10-10T11:40:00Z",
+          "bad_events": 909.1518202378671,
+          "valid_events": 16414.96205453589,
+          "share": 0.05538555722622852
+        },
+        {
+          "end_utc": "2026-10-11T11:40:00Z",
+          "bad_events": 629.2634042766465,
+          "valid_events": 13239.572283572914,
+          "share": 0.04752898287034613
+        },
+        {
+          "end_utc": "2026-10-12T11:40:00Z",
+          "bad_events": 541.4026482081738,
+          "valid_events": 14379.363442728103,
+          "share": 0.037651364079122056
+        },
+        {
+          "end_utc": "2026-10-13T11:40:00Z",
+          "bad_events": 882.6852929313358,
+          "valid_events": 19098.82677325614,
+          "share": 0.04621672856718872
+        }
+      ],
+      "hourly_presence_samples": 241
+    },
+    "chat": {
+      "bad_query": "sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[10d]))",
+      "valid_query": "sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[10d]))",
+      "good_query": "(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[10d]))) - (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[10d])))",
+      "bad_events": 14.02861083736469,
+      "good_events": 8124.132858829705,
+      "valid_events": 8138.1614696670695,
+      "success_fraction": 0.9982761940900715,
+      "bad_share": 0.001723805909928523,
+      "objective": 0.994,
+      "worst_3d": {
+        "end_utc": "2026-10-13T00:40:00Z",
+        "bad_events": 10.030299630018122,
+        "valid_events": 2515.814048261271,
+        "share": 0.003986900238890971
+      },
+      "worst_3d_error_budget_fraction": 0.6644833731484946,
+      "daily": [
+        {
+          "end_utc": "2026-10-04T11:40:00Z",
+          "bad_events": 0.0,
+          "valid_events": 744.4750624154802,
+          "share": 0.0
+        },
+        {
+          "end_utc": "2026-10-05T11:40:00Z",
+          "bad_events": 0.0,
+          "valid_events": 720.8621208960105,
+          "share": 0.0
+        },
+        {
+          "end_utc": "2026-10-06T11:40:00Z",
+          "bad_events": 1.004424778761062,
+          "valid_events": 848.3542524985966,
+          "share": 0.0011839685789312687
+        },
+        {
+          "end_utc": "2026-10-07T11:40:00Z",
+          "bad_events": 0.0,
+          "valid_events": 877.4559357185578,
+          "share": 0.0
+        },
+        {
+          "end_utc": "2026-10-08T11:40:00Z",
+          "bad_events": 0.0,
+          "valid_events": 861.0610125930564,
+          "share": 0.0
+        },
+        {
+          "end_utc": "2026-10-09T11:40:00Z",
+          "bad_events": 0.0,
+          "valid_events": 724.383337970002,
+          "share": 0.0
+        },
+        {
+          "end_utc": "2026-10-10T11:40:00Z",
+          "bad_events": 4.005633802816901,
+          "valid_events": 699.1313439311672,
+          "share": 0.005729443884311494
+        },
+        {
+          "end_utc": "2026-10-11T11:40:00Z",
+          "bad_events": 0.0,
+          "valid_events": 819.8340006902856,
+          "share": 0.0
+        },
+        {
+          "end_utc": "2026-10-12T11:40:00Z",
+          "bad_events": 2.0281414332399628,
+          "valid_events": 800.5480054038326,
+          "share": 0.0025334413671006233
+        },
+        {
+          "end_utc": "2026-10-13T11:40:00Z",
+          "bad_events": 7.010370220960359,
+          "valid_events": 1039.3282323604385,
+          "share": 0.006745097460730929
+        }
+      ],
+      "hourly_presence_samples": 240
+    },
+    "pusher": {
+      "bad_query": "sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[10d]))",
+      "valid_query": "sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[10d]))",
+      "good_query": "(sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[10d]))) - (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[10d])))",
+      "bad_events": 1622.0688016700665,
+      "good_events": 464689.65816736256,
+      "valid_events": 466311.7269690326,
+      "success_fraction": 0.9965214925813398,
+      "bad_share": 0.0034785074186602792,
+      "objective": 0.989,
+      "worst_3d": {
+        "end_utc": "2026-10-07T11:40:00Z",
+        "bad_events": 1285.6792472126212,
+        "valid_events": 161636.43223709328,
+        "share": 0.007954142698019636
+      },
+      "worst_3d_error_budget_fraction": 0.7231038816381481,
+      "daily": [
+        {
+          "end_utc": "2026-10-04T11:40:00Z",
+          "bad_events": 85.31242449400013,
+          "valid_events": 42877.31381135926,
+          "share": 0.0019896867809708445
+        },
+        {
+          "end_utc": "2026-10-05T11:40:00Z",
+          "bad_events": 70.02019336100592,
+          "valid_events": 42867.96003882815,
+          "share": 0.001633392242075068
+        },
+        {
+          "end_utc": "2026-10-06T11:40:00Z",
+          "bad_events": 501.1720189896458,
+          "valid_events": 55421.468309922035,
+          "share": 0.009042922071047359
+        },
+        {
+          "end_utc": "2026-10-07T11:40:00Z",
+          "bad_events": 714.6220994205858,
+          "valid_events": 63353.74721290598,
+          "share": 0.011279871055125339
+        },
+        {
+          "end_utc": "2026-10-08T11:40:00Z",
+          "bad_events": 144.02539052559789,
+          "valid_events": 57088.45263557258,
+          "share": 0.0025228462828549977
+        },
+        {
+          "end_utc": "2026-10-09T11:40:00Z",
+          "bad_events": 10.00229657456808,
+          "valid_events": 53118.89745926841,
+          "share": 0.00018830015405040822
+        },
+        {
+          "end_utc": "2026-10-10T11:40:00Z",
+          "bad_events": 63.10144219371835,
+          "valid_events": 42304.19156366987,
+          "share": 0.0014916120568986078
+        },
+        {
+          "end_utc": "2026-10-11T11:40:00Z",
+          "bad_events": 9.001220998166147,
+          "valid_events": 30967.882610009347,
+          "share": 0.00029066310769522224
+        },
+        {
+          "end_utc": "2026-10-12T11:40:00Z",
+          "bad_events": 15.002014470057986,
+          "valid_events": 36227.28897570868,
+          "share": 0.0004141081183335915
+        },
+        {
+          "end_utc": "2026-10-13T11:40:00Z",
+          "bad_events": 10.001504272953884,
+          "valid_events": 42099.11828502898,
+          "share": 0.00023757039768005202
+        }
+      ],
+      "hourly_presence_samples": 241
+    }
+  },
+  "rules": {
+    "omi-slo-live-critical": {
+      "expression": "(((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[1h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h]))) > bool 0.5) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[5m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m]))) > bool 0.5) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) >= bool 5)) > 0) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[6h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h]))) > bool 0.474) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[30m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m]))) > bool 0.474) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) >= bool 5)) > 0) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)",
+      "for": "0s",
+      "evaluated_samples": 2881,
+      "true_condition_samples": 0,
+      "sampled_firing_intervals": [],
+      "post_warmup_firing_intervals": [],
+      "full_window_results_from_utc": "2026-10-03T17:40:00Z"
+    },
+    "omi-slo-live-warning": {
+      "expression": "(((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[24h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h]))) > bool 0.237) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[2h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h]))) > bool 0.237) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[3d])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d]))) > bool 0.079) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[6h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h]))) > bool 0.079) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) * 0)",
+      "for": "0s",
+      "evaluated_samples": 2881,
+      "true_condition_samples": 0,
+      "sampled_firing_intervals": [],
+      "post_warmup_firing_intervals": [],
+      "full_window_results_from_utc": "2026-10-06T11:40:00Z"
+    },
+    "omi-slo-chat-critical": {
+      "expression": "((((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[1h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1)) > bool 0.0864) * ((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[1h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1) * 0)) >= bool 4) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) >= bool 20)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1)) > bool 0.036) * ((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) >= bool 7) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 40)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) * 0))",
+      "for": "5m",
+      "evaluated_samples": 2881,
+      "true_condition_samples": 0,
+      "sampled_firing_intervals": [],
+      "post_warmup_firing_intervals": [],
+      "full_window_results_from_utc": "2026-10-03T17:40:00Z"
+    },
+    "omi-slo-chat-warning": {
+      "expression": "((((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[24h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])), 1)) > bool 0.018) * (((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[2h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])), 1)) > bool 0.018) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[3d])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])), 1)) > bool 0.006) * (((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1)) > bool 0.006) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])) * 0))",
+      "for": "0s",
+      "evaluated_samples": 2881,
+      "true_condition_samples": 0,
+      "sampled_firing_intervals": [],
+      "post_warmup_firing_intervals": [],
+      "full_window_results_from_utc": "2026-10-06T11:40:00Z"
+    },
+    "omi-slo-pusher-critical": {
+      "expression": "(((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[1h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h]))) > bool 0.1584) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[5m])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]))) > bool 0.1584) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m])) >= bool 7)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[6h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h]))) > bool 0.066) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[30m])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m]))) > bool 0.066) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m])) >= bool 16)) > 0) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)",
+      "for": "0s",
+      "evaluated_samples": 2881,
+      "true_condition_samples": 0,
+      "sampled_firing_intervals": [],
+      "post_warmup_firing_intervals": [],
+      "full_window_results_from_utc": "2026-10-03T17:40:00Z"
+    },
+    "omi-slo-pusher-warning": {
+      "expression": "(((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[24h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h]))) > bool 0.033) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[2h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h]))) > bool 0.033) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[3d])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d]))) > bool 0.011) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[6h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h]))) > bool 0.011) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) * 0)",
+      "for": "0s",
+      "evaluated_samples": 2881,
+      "true_condition_samples": 69,
+      "sampled_firing_intervals": [
+        {
+          "start": "2026-10-03T11:40:00Z",
+          "last_true_sample": "2026-10-03T17:20:00Z"
+        }
+      ],
+      "post_warmup_firing_intervals": [],
+      "full_window_results_from_utc": "2026-10-06T11:40:00Z"
+    },
+    "omi-slo-live-signal-dead": {
+      "expression": "absent(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or (((((sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or vector(0)",
+      "for": "5m",
+      "evaluated_samples": 2881,
+      "true_condition_samples": 1,
+      "sampled_firing_intervals": [],
+      "post_warmup_firing_intervals": [],
+      "full_window_results_from_utc": "2026-10-03T12:40:00Z"
+    }
+  },
+  "synthetic_cases": {
+    "chat_cancelled_10m": {
+      "uid": "omi-slo-chat-critical",
+      "events_per_minute": 0.5651501020602132,
+      "outage_minutes": 10,
+      "ending": "cancelled",
+      "expression": "((((((vector(0) or (clamp_min(vector(33.9090061236), 1) * 0)) / clamp_min(vector(33.9090061236), 1)) > bool 0.0864) * ((vector(0) or (clamp_min(vector(33.9090061236), 1) * 0)) >= bool 4) * (vector(33.9090061236) >= bool 20)) > 0) or (((((vector(0) or (clamp_min(vector(203.454036742), 1) * 0)) / clamp_min(vector(203.454036742), 1)) > bool 0.036) * ((vector(0) or (clamp_min(vector(203.454036742), 1) * 0)) >= bool 7) * (vector(203.454036742) >= bool 40)) > 0) or (vector(203.454036742) * 0))",
+      "value": 0.0
+    },
+    "chat_no_terminal_10m": {
+      "uid": "omi-slo-chat-critical",
+      "events_per_minute": 0.5651501020602132,
+      "outage_minutes": 10,
+      "ending": "no_terminal",
+      "expression": "((((((vector(0) or (clamp_min(vector(33.9090061236), 1) * 0)) / clamp_min(vector(33.9090061236), 1)) > bool 0.0864) * ((vector(0) or (clamp_min(vector(33.9090061236), 1) * 0)) >= bool 4) * (vector(33.9090061236) >= bool 20)) > 0) or (((((vector(0) or (clamp_min(vector(203.454036742), 1) * 0)) / clamp_min(vector(203.454036742), 1)) > bool 0.036) * ((vector(0) or (clamp_min(vector(203.454036742), 1) * 0)) >= bool 7) * (vector(203.454036742) >= bool 40)) > 0) or (vector(203.454036742) * 0))",
+      "value": 0.0
+    },
+    "pusher_cancelled_10m": {
+      "uid": "omi-slo-pusher-critical",
+      "events_per_minute": 32.38275881729393,
+      "outage_minutes": 10,
+      "ending": "cancelled",
+      "expression": "(((((vector(323.827588173) or (vector(1942.96552904) * 0)) / vector(1942.96552904)) > bool 0.1584) * (((vector(161.913794086) or (vector(161.913794086) * 0)) / vector(161.913794086)) > bool 0.1584) * (vector(1942.96552904) >= bool 20) * (vector(161.913794086) >= bool 7)) > 0) or (((((vector(323.827588173) or (vector(11657.7931742) * 0)) / vector(11657.7931742)) > bool 0.066) * (((vector(323.827588173) or (vector(971.482764519) * 0)) / vector(971.482764519)) > bool 0.066) * (vector(11657.7931742) >= bool 20) * (vector(971.482764519) >= bool 16)) > 0) or (vector(11657.7931742) * 0)",
+      "value": 1.0
+    },
+    "pusher_no_terminal_10m": {
+      "uid": "omi-slo-pusher-critical",
+      "events_per_minute": 32.38275881729393,
+      "outage_minutes": 10,
+      "ending": "no_terminal",
+      "expression": "(((((vector(0) or (vector(1619.13794086) * 0)) / vector(1619.13794086)) > bool 0.1584) * (((vector(0) or (vector(0) * 0)) / vector(0)) > bool 0.1584) * (vector(1619.13794086) >= bool 20) * (vector(0) >= bool 7)) > 0) or (((((vector(0) or (vector(11333.9655861) * 0)) / vector(11333.9655861)) > bool 0.066) * (((vector(0) or (vector(647.655176346) * 0)) / vector(647.655176346)) > bool 0.066) * (vector(11333.9655861) >= bool 20) * (vector(647.655176346) >= bool 16)) > 0) or (vector(11333.9655861) * 0)",
+      "value": 0.0
+    },
+    "live_both_families_vanished": {
+      "uid": "omi-slo-live-signal-dead",
+      "expression": "vector(1) or (((((vector(0) or vector(0)) < bool 1) * ((vector(0) or vector(0)) > bool 20))) > 0) or (((((vector(0) or vector(0)) < bool 1) * ((vector(0) or vector(0)) > bool 20))) > 0) or vector(0)",
+      "value": 1.0
+    }
+  },
+  "page_replay": {
+    "step_seconds": 900,
+    "days": 10,
+    "replayed_at_utc": "2026-10-13T12:40:00Z",
+    "method": "(expr) > 0 via read-only query_range in ten one-day chunks, 3 s pause between chunks. 15-minute steps keep the replay cheap: one-minute replays of multi-day windows overloaded prod Prometheus on 2026-10-13. The round-4 one-minute replay of the chat critical (stricter thresholds than these) found 0 pages.",
+    "rules": {
+      "omi-slo-chat-critical": {
+        "for": "5m",
+        "would_page": 0,
+        "failed_days": 0,
+        "pages": [],
+        "explanation": "No true sample in 10 days at 15-minute steps."
+      },
+      "omi-slo-live-critical": {
+        "for": "0s",
+        "would_page": 0,
+        "failed_days": 0,
+        "pages": [],
+        "explanation": "No true sample in 10 days at 15-minute steps. The replayed expression had the uncapped 1h/5m arm, which is always false; the capped 50% arm was replayed on its own over the same window with 0 true samples, so together they cover the expression recorded in `expressions`."
+      },
+      "omi-slo-pusher-critical": {
+        "for": "0s",
+        "would_page": 0,
+        "failed_days": 0,
+        "pages": [],
+        "explanation": "No true sample in 10 days at 15-minute steps."
+      },
+      "omi-slo-chat-warning": {
+        "for": "0s",
+        "would_page": 0,
+        "failed_days": 0,
+        "pages": [],
+        "explanation": "No true sample in 10 days at 15-minute steps."
+      },
+      "omi-slo-live-warning": {
+        "for": "0s",
+        "would_page": 0,
+        "failed_days": 0,
+        "pages": [],
+        "explanation": "No true sample in 10 days at 15-minute steps."
+      },
+      "omi-slo-pusher-warning": {
+        "for": "0s",
+        "would_page": 1,
+        "failed_days": 0,
+        "pages": [
+          {
+            "start": "2026-10-03T12:23Z",
+            "end": "2026-10-03T17:23Z"
+          }
+        ],
+        "explanation": "One episode at the start of Prometheus retention (10-day retention begins 2026-10-03): the 3-day window is incomplete there, so the share is computed over a truncated, unrepresentative denominator. No other true sample in 10 days."
+      }
+    },
+    "end_unix": 1791891600,
+    "expressions": {
+      "omi-slo-chat-critical": "((((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[1h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1)) > bool 0.0864) * ((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[1h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1) * 0)) >= bool 4) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) >= bool 20)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1)) > bool 0.036) * ((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) >= bool 7) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 40)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) * 0))",
+      "omi-slo-live-critical": "(((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[1h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h]))) > bool 0.5) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[5m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m]))) > bool 0.5) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) >= bool 5)) > 0) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[6h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h]))) > bool 0.474) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[30m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m]))) > bool 0.474) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) >= bool 5)) > 0) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)",
+      "omi-slo-pusher-critical": "(((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[1h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h]))) > bool 0.1584) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[5m])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]))) > bool 0.1584) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m])) >= bool 7)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[6h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h]))) > bool 0.066) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[30m])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m]))) > bool 0.066) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m])) >= bool 16)) > 0) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)",
+      "omi-slo-chat-warning": "((((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[24h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])), 1)) > bool 0.018) * (((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[2h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])), 1)) > bool 0.018) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[3d])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])), 1)) > bool 0.006) * (((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1)) > bool 0.006) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])) * 0))",
+      "omi-slo-live-warning": "(((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[24h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h]))) > bool 0.237) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[2h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h]))) > bool 0.237) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[3d])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d]))) > bool 0.079) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[6h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h]))) > bool 0.079) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) * 0)",
+      "omi-slo-pusher-warning": "(((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[24h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h]))) > bool 0.033) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[2h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h]))) > bool 0.033) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[3d])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d]))) > bool 0.011) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[6h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h]))) > bool 0.011) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) * 0)"
+    }
+  }
+}

@@ -8,6 +8,7 @@ import numpy as np
 
 from routers.listen.speaker_queue import subtract_audio_ranges
 from utils.audio import AudioRingBuffer
+from utils.observability.speaker_embedding_budget import PCM_WINDOWS_RESTORED
 
 MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
 
@@ -57,11 +58,14 @@ def select_query_audio(
 ) -> tuple[bytes, list[tuple[float, float]]]:
     if capture_watermark is not None:
         newer = [(max(start, capture_watermark), end) for start, end in fresh if end > capture_watermark]
-        pcm, selected = select_query_audio(ring, newer, prefer_recent=True, sample_rate=sample_rate)
+        pcm, selected = select_query_audio(
+            ring, newer, prefer_recent=True, sample_rate=sample_rate, minimum_seconds=minimum_seconds
+        )
         if len(pcm) / (sample_rate * 2) >= minimum_seconds:
             return pcm, selected
         # Only insufficient new physical evidence permits older pending speech.
     selected, chunks = [], []
+    uncorrected_bytes = 0
     remaining_seconds = MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS
     ordered = sorted(fresh, key=lambda r: (-min(10.0, r[1] - r[0]), -r[1])) if prefer_recent else fresh
     for start, end in ordered:
@@ -75,8 +79,13 @@ def select_query_audio(
             continue
         # Timestamp-overlapping spans can return more PCM than the wall window.
         # Bound physical samples too, including when provider timing is malformed.
-        chunk = chunk[: int(remaining_seconds * sample_rate) * 2]
+        byte_limit = int(remaining_seconds * sample_rate) * 2
+        uncorrected_bytes += min(len(chunk) - 2 * getattr(chunk, 'restored_samples', 0), byte_limit)
+        chunk = chunk[:byte_limit]
         chunks.append(chunk)
         selected.append((start, end))
         remaining_seconds -= max(end - start, len(chunk) / (sample_rate * 2))
-    return b''.join(chunks), selected
+    pcm = b''.join(chunks)
+    if uncorrected_bytes < minimum_seconds * sample_rate * 2 <= len(pcm):
+        PCM_WINDOWS_RESTORED.labels(reason='full_span_rounding').inc()
+    return pcm, selected

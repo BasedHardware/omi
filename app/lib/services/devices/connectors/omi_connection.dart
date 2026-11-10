@@ -22,6 +22,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsMuteCharacteristicUuid = '19b10015-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -69,13 +70,24 @@ class OmiDeviceConnection extends DeviceConnection {
     return completer.future;
   }
 
-  OmiDeviceConnection(super.device, super.transport, {PendantRingCustody? custody})
-      : _custody = custody ?? PendantRingCustody.shared {
+  OmiDeviceConnection(
+    super.device,
+    super.transport, {
+    PendantRingCustody? custody,
+    Duration enableAckTimeout = _defaultEnableAckTimeout,
+  })  : _custody = custody ?? PendantRingCustody.shared,
+        _enableAckTimeout = enableAckTimeout {
     final t = transport;
     if (t is NativeBleTransport) {
       t.beforeAudioResubscribe = (_) => _audioResubscribeGate();
     }
   }
+
+  /// How long the custody opt-in waits for the device ack before giving up
+  /// (live custody off, ring-id custody retained). Injected shorter by tests
+  /// over an in-memory transport; the default matches real hardware.
+  static const Duration _defaultEnableAckTimeout = Duration(seconds: 5);
+  final Duration _enableAckTimeout;
 
   int _audioSubscribers = 0;
   Completer<void>? _physicalReady = Completer<void>();
@@ -414,29 +426,36 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<BleAudioCodec> performGetAudioCodec() async {
-    try {
-      final codecValue = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final codecValue = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
 
-      var codecId = 1;
-      if (codecValue.isNotEmpty) {
-        codecId = codecValue[0];
+        if (codecValue.isNotEmpty) {
+          final codecId = codecValue[0];
+          switch (codecId) {
+            case 1:
+              return BleAudioCodec.pcm8;
+            case 20:
+              return BleAudioCodec.opus;
+            case 21:
+              return BleAudioCodec.opusFS320;
+            default:
+              Logger.debug('OmiDeviceConnection: Unknown codec id: $codecId, defaulting to pcm8');
+              return BleAudioCodec.pcm8;
+          }
+        } else {
+          Logger.debug('OmiDeviceConnection: Attempt $attempt returned empty codec data');
+        }
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Attempt $attempt reading audio codec failed: $e');
       }
 
-      switch (codecId) {
-        case 1:
-          return BleAudioCodec.pcm8;
-        case 20:
-          return BleAudioCodec.opus;
-        case 21:
-          return BleAudioCodec.opusFS320;
-        default:
-          Logger.debug('OmiDeviceConnection: Unknown codec id: $codecId');
-          return BleAudioCodec.pcm8;
+      if (attempt < 3) {
+        await Future<void>.delayed(Duration(milliseconds: 100 * attempt));
       }
-    } catch (e) {
-      Logger.debug('OmiDeviceConnection: Error reading audio codec: $e');
-      return BleAudioCodec.pcm8;
     }
+
+    throw StateError('OmiDeviceConnection: Failed to read valid audio codec from peripheral after retries');
   }
 
   @override
@@ -820,7 +839,7 @@ class OmiDeviceConnection extends DeviceConnection {
         Logger.debug('OmiDeviceConnection: CMD_CUSTODY_ENABLE caps=0x${requestedCaps.toRadixString(16)}');
 
         return await completer.future.timeout(
-          const Duration(seconds: 5),
+          _enableAckTimeout,
           onTimeout: () {
             Logger.debug('OmiDeviceConnection: custody enable timeout');
             return null;
@@ -974,8 +993,18 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<bool> performHasPhotoStreamingCharacteristic() async {
+    // Ask the native transport whether the device advertises the image
+    // characteristic. A read cannot tell: the native transport answers a
+    // characteristic the firmware lacks with an empty read rather than an
+    // error, so every pendant counted as having a camera and the capture loop
+    // re-armed photo streaming on each reset. Glass may also read empty until
+    // it has captured, so data in the read is no test either.
+    final t = transport;
+    if (t is NativeBleTransport) {
+      return t.hasCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
+    }
     try {
-      // Try to read from the image data stream characteristic to see if it exists
+      // Other transports throw for an absent characteristic.
       await transport.readCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
       return true;
     } catch (e) {
@@ -1239,6 +1268,38 @@ class OmiDeviceConnection extends DeviceConnection {
       return null;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting mic gain: $e');
+      return null;
+    }
+  }
+
+  /// Write the persistent capture mute flag. Old firmware without the
+  /// characteristic / feature bit is a no-op (caller keeps the local pref).
+  Future<void> setCaptureMuted(bool muted) async {
+    // getFeatures() intentionally maps failed reads to legacy capabilities.
+    // A privacy mutation must distinguish unsupported firmware from a lost
+    // connection, otherwise a failed write can be reported as a successful pause.
+    final bytes = await transport.readCharacteristic(featuresServiceUuid, featuresCharacteristicUuid);
+    if (bytes.length < 4) throw StateError('Unable to confirm device mute capabilities');
+    final features = ByteData.sublistView(Uint8List.fromList(bytes)).getUint32(0, Endian.little);
+    if ((features & OmiFeatures.captureMute) == 0) return;
+    await transport.writeCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid, [muted ? 1 : 0]);
+    final confirmed = await transport.readCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid);
+    if (confirmed.length != 1 || confirmed.single != (muted ? 1 : 0)) {
+      throw StateError('Device did not confirm capture mute');
+    }
+  }
+
+  /// Read the pendant mute flag. Returns null when the characteristic is
+  /// missing (legacy firmware) so the app can fall back to local prefs.
+  Future<bool?> getCaptureMuted() async {
+    try {
+      final features = await getFeatures();
+      if ((features & OmiFeatures.captureMute) == 0) return null;
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid);
+      if (value.isEmpty) return null;
+      return value[0] != 0;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting capture mute: $e');
       return null;
     }
   }

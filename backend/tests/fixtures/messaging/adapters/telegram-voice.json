@@ -13,7 +13,8 @@
     },
     "voice": {
       "file_id": "fixture-file",
-      "file_size": 9
+      "file_size": 2587,
+      "duration": 1
     }
   }
 }

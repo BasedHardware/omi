@@ -12,6 +12,7 @@ import routers.listen.receiver as receiver_module
 from routers.listen.receiver import ListenReceiver
 from tests.unit.test_parakeet_window_live import runtime, _flush_capture
 from tests.unit.test_parakeet_failover_exhausted import Replacement, setup_chain
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.observability import fallback
 from utils.stt import live_chain, live_router, parakeet_window as window, streaming as st
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, WINDOW_ADMISSION
@@ -24,6 +25,7 @@ def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def serving(monkeypatch, runtime):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
@@ -91,6 +93,9 @@ async def test_historical_open_window_and_soniox_exhaust_with_failed_modulate(re
     source = source.replace('fallback_reason_for_typed_death', 'fallback_metric_reason')
     namespace = {'__name__': f'historical_chain_{revision}'}
     exec(compile(source, f'{revision}/live_chain.py', 'exec'), namespace)
+    # Historical source predates the additive cohort label. Bind its counter
+    # to a child without changing the historical selection/recovery behavior.
+    namespace['CHAIN_EXHAUSTED'] = CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')
     st._parakeet_circuit.record_serve_failure()
     if not previous_soniox:
         st._soniox_circuit.record_serve_failure()
@@ -134,7 +139,7 @@ async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(
         for actual in actuals:
             actual._stt_failed_providers.add('soniox')
             actual._stt_failed_reasons['soniox'] = 'connection_lost'
-    before = CHAIN_EXHAUSTED._value.get()
+    before = CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get()
     overflow_before = WINDOW_ADMISSION.labels(outcome='overflow')._value.get()
     try:
         tasks = [asyncio.create_task(actual._failover_stt_socket()) for actual in actuals]
@@ -145,7 +150,7 @@ async def test_concurrent_modulate_deaths_at_window_capacity_continue_on_soniox(
         assert len(replacements) == 35
         window_connect.assert_not_called()
         assert WINDOW_ADMISSION.labels(outcome='overflow')._value.get() - overflow_before == 35
-        assert CHAIN_EXHAUSTED._value.get() == before
+        assert CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get() == before
         for actual in actuals:
             assert actual.host.stt_service == st.STTService.soniox
             assert actual._stt_failed_providers == {'modulate'}
@@ -243,13 +248,13 @@ async def test_unrecoverable_ring_pressure_terminates_once_without_rebuild_loop(
         st._soniox_circuit.record_account_failure(1800)
         ring = actual._window_ring()
         ring.ring_seconds = len(capture) / (2 * 16000)
-        before = CHAIN_EXHAUSTED._value.get()
+        before = CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get()
         await _flush_capture(actual, b'\x01\x00' * 640, len(capture) // 2)
         assert actual.host.state.stt_terminal_failure
         assert actual.recovery.exhausted
-        assert CHAIN_EXHAUSTED._value.get() - before == 1
+        assert CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get() - before == 1
         assert await asyncio.gather(*(actual._failover_stt_socket() for _ in range(35))) == [False] * 35
-        assert CHAIN_EXHAUSTED._value.get() - before == 1
+        assert CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get() - before == 1
         actual.host.request.websocket.close.assert_awaited_once()
     finally:
         await actual._drain_stt_sockets()

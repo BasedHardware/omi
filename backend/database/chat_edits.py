@@ -1,10 +1,13 @@
 """Owner-scoped field snapshots for exact chat undo, with concurrency fences."""
 
 import base64
+from database.action_item_fence import fenced_action_item_commit
+from contextlib import nullcontext
 from datetime import datetime
 
 from google.cloud import firestore
 from database._client import get_firestore_client
+from database.people_generation import bump_people_generation
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
 COLLECTIONS = {'conversation': 'conversations', 'person': 'people', 'task': 'action_items'}
@@ -74,8 +77,11 @@ def restore(uid, kind, target_id, expected, previous, *, firestore_client=None):
             raise PermissionError('Edit target changed; undo refused')
         patch = {key: decode(previous[key]) if key in previous else firestore.DELETE_FIELD for key in FIELDS[kind]}
         tx.update(ref, patch)
+        if kind == 'person':
+            bump_people_generation(tx, ref)
 
-    run_with_transaction_contention_retry(client.transaction, apply, operation_name='chat_edit_restore')
+    with fenced_action_item_commit(uid) if kind == 'task' else nullcontext():
+        run_with_transaction_contention_retry(client.transaction, apply, operation_name='chat_edit_restore')
 
 
 def apply_update(uid, kind, target_id, expected, updates, *, firestore_client=None):
@@ -97,7 +103,10 @@ def apply_update(uid, kind, target_id, expected, updates, *, firestore_client=No
         if encode(prior) != expected:
             raise PermissionError('Edit target changed before write')
         tx.update(ref, updates)
+        if kind == 'person':
+            bump_people_generation(tx, ref)
         prior.update(updates)
         return encode(prior)
 
-    return run_with_transaction_contention_retry(client.transaction, apply, operation_name='chat_edit_apply')
+    with fenced_action_item_commit(uid) if kind == 'task' else nullcontext():
+        return run_with_transaction_contention_retry(client.transaction, apply, operation_name='chat_edit_apply')

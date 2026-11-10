@@ -48,7 +48,8 @@ def save_token(
     token_data: Dict[str, Any] = data.model_dump()
     token_data['device_key'] = device_key
 
-    notification_db.save_token(uid, token_data)
+    if notification_db.save_token(uid, token_data) is False:
+        raise HTTPException(status_code=409, detail='Push token registration was superseded')
     # Analytics-only lifecycle signal (Firestore stays the eligibility source of
     # truth): a recent `registered` event is how churn/re-engagement analysis
     # knows a uid had a deliverable push token as of a date. Low cardinality —
@@ -78,7 +79,7 @@ def sync_user_time_zone(
 
 @router.post('/v1/notification')
 def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...)) -> Dict[str, str]:
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
         raise HTTPException(status_code=400, detail='uid is required')

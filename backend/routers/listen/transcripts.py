@@ -7,18 +7,21 @@ import logging
 import math
 import time
 import uuid
+from utils.speakers.context import name_only_allowed
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from fastapi.websockets import WebSocketDisconnect
 
-from config.capture_evidence import capture_evidence_dark_write_enabled, listen_committed_capture_coverage_enabled
 from config.translation import resolve_ondemand_config
+from config.recorded_time import late_audio_intake_enabled
 from routers.listen.capture_merges import snapshot_proofs, acknowledge_proofs
 from models.capture_window_proof import CaptureWindowProof
 from config.live_capture import capture_window_reason
-from utils.capture_evidence import unknown_envelope
+from routers.listen.coverage import publish_committed, committed_snapshot
+from utils.stt.transcript_admission import AdmissionState, admit_segments
+from config.refactor_modes import serving_for
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 
 
@@ -40,13 +43,17 @@ from models.transcript_segment import (
 from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
 from utils.audio_timeline import UNPLACED_SEGMENT_OFFSET
+from utils.episodes import live as episode_live
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.recorded_time import is_late, recorded_span
+from utils.sync.late_audio import ingest_late_transcript
 from utils.metrics import (
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL,
     OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.soniox_idle_arm import note_segments
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 import config.speaker_match_scores as match_scores
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
@@ -60,6 +67,7 @@ from utils.transcribe_decisions import (
     should_queue_speaker_embedding,
     should_skip_speaker_detection,
 )
+from database._client import is_permanent_firestore_write_rejection
 from utils.transcribe_store import conversations_db, user_db
 from utils.translation import TranslationService
 from utils.translation_cache import ConversationLanguageState, TranscriptSegmentLanguageCache
@@ -69,6 +77,36 @@ from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 MAX_V2_PERSIST_ATTEMPTS = 5
+# Cadence for the mid-session rollover probe against a conversation whose every
+# content write is permanently rejected (Firestore 1 MiB ceiling): rare enough
+# not to multiply generation churn, frequent enough to relieve a session whose
+# saturated row never shrinks.
+OVERSIZED_ROLLOVER_PROBE_SECONDS = 60.0
+# A permanent rejection must still reach an escape even while live speech keeps
+# refilling the backlog: below this many retained segments the whole batch is
+# retried (the tail drop buys nothing once the batch is small) and above it the
+# newest segment is dropped per attempt so the oldest speech can land.
+LEGACY_PERSIST_SHRINK_FLOOR = 4
+# Rejections a full-cap backlog may absorb before the loop probes the rollover
+# even though the batch never shrank — the all-day storm shape where every
+# dropped tail is instantly replaced by fresh speech. At the 8s backoff cap
+# this is roughly five minutes of refusals.
+LEGACY_PERSIST_STALL_REJECTS = 100
+LEGACY_VALUE_ERROR_ROLLOVER_FAILURES = 5
+
+
+def _legacy_persist_reason(error: Exception) -> str:
+    # Only audited, fixed prefixes may reach logs. SDK/validation/codec errors
+    # can include document paths or user content even before their first colon.
+    reason = str(error).split(':', 1)[0][:60]
+    if reason in {
+        'undecodable transcript_segments',
+        'undecodable json blob',
+        'undecodable manual_speaker_assignments',
+        'Cyclic transcript segment absorption',
+    }:
+        return reason
+    return 'other'
 
 
 def _observe_refusal(speaker, reason, scope=None):
@@ -86,6 +124,14 @@ def _observe_embedding_admission(speaker, raw, enabled):
         _observe_refusal(speaker, 'already_labeled', raw.get('speaker_id_scope'))
     elif raw.get('speaker_id') in speaker.speaker_to_person:
         _observe_refusal(speaker, 'already_mapped', raw.get('speaker_id_scope'))
+
+
+class LateTranscriptReplyError(RuntimeError):
+    """Late speech committed, but its read-side reply could not be built."""
+
+
+class LegacyPhotoPersistError(RuntimeError):
+    """Speech committed; retry the photos without replaying that speech."""
 
 
 class ConversationCache:
@@ -126,6 +172,7 @@ class ConversationCache:
 class TranscriptProcessor:
     def __init__(self, host: Any):
         self.host = host
+        self.media_admission = AdmissionState()
         self.segment_buffer: deque[Dict[str, Any]] = deque(maxlen=host.limits.max_segment_buffer_size)
         self.photo_buffer: deque[ConversationPhoto] = deque(maxlen=host.limits.max_photo_buffer_size)
         self.cache = ConversationCache(self._load_conversation)
@@ -169,6 +216,15 @@ class TranscriptProcessor:
         # stream_transcript task and tear the session down.
         self._legacy_retry_until = 0.0
         self._legacy_persist_failures = 0
+        # A conversation at Firestore's 1 MiB ceiling rejects every content write
+        # permanently. Retry the retained batch without its newest tail until the
+        # remainder fits the row again; probe the mid-session rollover only when
+        # even one segment cannot land.
+        self._oversized_rollover_probe_at = 0.0
+        # Rejections absorbed since the last successful persist. Drives the
+        # stall-escape probe: a backlog that never shrinks because live speech
+        # keeps replacing every dropped tail still has to reach the rollover.
+        self._legacy_persist_rejects = 0
 
     def _queue_v2_retry(self, segments: List[Dict[str, Any]]) -> None:
         """Retry uncommitted text, then retain it for unplaced v1 persistence."""
@@ -247,6 +303,12 @@ class TranscriptProcessor:
             raise RuntimeError('Legacy unplaced transcript persistence returned no receipt')
         self.current_session_segments[str(segment.id)] = segment.speech_profile_processed
         if is_current:
+            # This recovery path bypasses _deliver_live_updates and its pusher
+            # integrations. Retained speech still owes the episode activity/notes.
+            if self.host.user_has_credits:
+                await episode_live.on_realtime_segments(
+                    self.host.request.uid, [segment.model_dump()], owner, self.host.request.source
+                )
             await self._deliver_segments([item.model_dump() for item in result[1]])
 
     def _queue_v2_photos(self, photos: List[ConversationPhoto]) -> None:
@@ -283,6 +345,8 @@ class TranscriptProcessor:
         for raw in segments:
             if not raw.get('id'):
                 raw['id'] = str(uuid.uuid4())
+        # refactor: superseded by utils.stt.transcript_admission when MEDIA_NOISE_MODE=serve
+        segments = admit_segments(self.host.request.uid, segments, origin='live', state=self.media_admission)
         if not getattr(self.host.state, 'capture_timeline_v2', False):
             self.segment_buffer.extend(segments)
             return
@@ -324,7 +388,7 @@ class TranscriptProcessor:
                 context = coordinator.result_context(segment_id, conversation_id) if coordinator else None
                 if context is not None and context[1] == 'viewed_v1' and not config.gate_enabled:
                     return False
-                if config.gate_enabled and config.admits(self.host.request.uid):
+                if config.gate_enabled:
                     if context is None:
                         current = await self.cache.get(conversation_id, force_refresh=True)
                         source = next(
@@ -422,9 +486,49 @@ class TranscriptProcessor:
         audio_timeline: Optional[Dict[str, Any]] = None,
         update_finished_at: bool = True,
     ) -> Optional[tuple[Conversation, List[TranscriptSegment], List[str]]]:
+        origin = started_at or getattr(conversation, 'started_at', None)
+        fresh_segments = [segment.model_dump() for segment in segments]
+        if late_audio_intake_enabled() and not photos and is_late(recorded_span(origin, fresh_segments), finished_at):
+            # A socket is transport, not proof that this speech is happening
+            # now. Keep its historical words out of live lifecycle/episodes.
+            snapshot = conversation.model_dump()
+            snapshot['started_at'] = origin
+            snapshot['data_protection_level'] = self.cache.protection_level
+            assigned = await self.host.persistence.call(
+                ingest_late_transcript, self.host.request.uid, snapshot, fresh_segments
+            )
+            if getattr(self.host.state, 'capture_timeline_v2', False):
+                self._v2_committed_ids.update(str(segment.id) for segment in segments)
+            try:
+                # Assignment returns a write plan: encrypted fields and delete
+                # transforms are not a Conversation. Let the normal read path
+                # resolve transforms and decode every protected field.
+                read_row = await self._load_conversation(assigned['id'])
+                if not read_row:
+                    raise ValueError('Committed late conversation unavailable for reply')
+                saved = deserialize_conversation(read_row)
+            except Exception as error:
+                record_fallback(
+                    component='other',
+                    from_mode='late_transcript_reply',
+                    to_mode='none',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
+                )
+                logger.warning('Late transcript committed; reply unavailable type=%s', type(error).__name__)
+                raise LateTranscriptReplyError from error
+            late_ids = getattr(self, '_late_conversation_ids', set())
+            if len(late_ids) >= 256:
+                late_ids.pop()
+            late_ids.add(saved.id)
+            self._late_conversation_ids = late_ids
+            return saved, saved.transcript_segments, []
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
         if segments:
+            # Transcript delivery stays live. Coverage publication below waits
+            # for the original audio's window receipt before releasing WAL.
             # Preserve unmerged speech until the transaction reads the current receipt.
             # Apply live identity to the fresh copy as well: the merge compares
             # speaker_match_source, and a recognized persisted word has
@@ -441,25 +545,8 @@ class TranscriptProcessor:
             self._apply_speaker_identity_statuses(targets)
             fresh = [segment.model_dump() for segment in segments]
             self._capture_merge_tails = getattr(self, "_capture_merge_tails", {})
-            source_map = self.host.state.source_position_map if capture_evidence_dark_write_enabled() else None
-            capture_evidence = None
-            if capture_evidence_dark_write_enabled():
-                if source_map is not None:
-                    if listen_committed_capture_coverage_enabled():
-                        capture_evidence = source_map.committed_snapshot(conversation.id, segments) or unknown_envelope(
-                            'missing_source_position', origin='live'
-                        )
-                    else:
-                        capture_evidence = source_map.snapshot(
-                            (start, end)
-                            for start, end, owner in (self.host.state.conversation_sample_ranges or ())
-                            if owner == conversation.id
-                        )
-                else:
-                    capture_evidence = unknown_envelope(
-                        'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
-                        origin='live',
-                    )
+            source_map = self.host.state.source_position_map
+            capture_evidence = committed_snapshot(self.host, conversation.id, segments)
             written = await self.host.persistence.call(
                 conversations_db.update_conversation_segments,
                 self.host.request.uid,
@@ -470,21 +557,25 @@ class TranscriptProcessor:
                 **snapshot_proofs(self._capture_merge_tails, conversation.id, segments),
                 started_at=started_at,
                 audio_timeline=audio_timeline,
-                **({'capture_evidence': capture_evidence} if capture_evidence_dark_write_enabled() else {}),
+                capture_evidence=capture_evidence,
+                finished_at=finished_at if update_finished_at else None,
                 data_protection_level=self.cache.protection_level,
                 invalidate_client_processing=False,
             )
-            if capture_evidence_dark_write_enabled():
-                OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
-                    path='live',
-                    status=(
-                        'mapped'
-                        if self.host.state.source_position_map and self.host.state.source_position_map.runs
-                        else 'unknown'
-                    ),
-                ).inc()
+            OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+                path='live',
+                status=(
+                    'mapped'
+                    if self.host.state.source_position_map and self.host.state.source_position_map.runs
+                    else 'unknown'
+                ),
+            ).inc()
             if not isinstance(written, LiveTranscriptMerge):
                 return None
+            if not getattr(self.host.state, 'capture_timeline_v2', False):
+                # Later reply/photo/coverage work can fail after this commit.
+                # Such faults must never earn a cross-generation text replay.
+                self._legacy_segments_committed = True
             if getattr(self.host.state, 'capture_timeline_v2', False):
                 self._v2_committed_ids.update(str(segment.id) for segment in segments)
             acknowledge_proofs(self._capture_merge_tails, conversation.id, written.capture_proofs)
@@ -507,6 +598,7 @@ class TranscriptProcessor:
                     OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='version', reason=attribution).inc()
                     if sid in written.created_ids:
                         OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='segment', reason=attribution).inc()
+            await publish_committed(self.host, conversation.id, capture_evidence)
             if source_map is not None:
                 source_map.acknowledge(conversation.id, capture_evidence)
             conversation.transcript_segments = list(by_id.values())
@@ -526,6 +618,8 @@ class TranscriptProcessor:
                     # duplicate text on a different conversation.
                     self._queue_v2_photos(photos)
                 else:
+                    if getattr(self, '_legacy_segments_committed', False):
+                        raise LegacyPhotoPersistError
                     return None
             else:
                 if getattr(self.host.state, 'capture_timeline_v2', False):
@@ -539,7 +633,8 @@ class TranscriptProcessor:
                         conversation.id,
                         {'source': conversation.source},
                     )
-        if update_finished_at:
+        # refactor: superseded by the segment transaction when LIFECYCLE_V2_MODE=serve
+        if update_finished_at and not (segments and serving_for('LIFECYCLE_V2_MODE', self.host.request.uid)):
             await self.host.persistence.call(
                 conversations_db.update_conversation_finished_at, self.host.request.uid, conversation.id, finished_at
             )
@@ -626,16 +721,15 @@ class TranscriptProcessor:
         speaker = self.host.speakers
         for segment in segments:
             try:
-                if match_scores.enabled():
-                    segment.speaker_match_scores = next(
-                        (
-                            row
-                            for row in getattr(speaker, 'match_scores', [])
-                            if row['speaker_id'] == segment.speaker_id
-                            and row['speaker_id_scope'] == (segment.speaker_id_scope or '')[:128]
-                        ),
-                        None,
-                    )
+                segment.speaker_match_scores = next(
+                    (
+                        row
+                        for row in getattr(speaker, 'match_scores', [])
+                        if row['speaker_id'] == segment.speaker_id
+                        and row['speaker_id_scope'] == (segment.speaker_id_scope or '')[:128]
+                    ),
+                    None,
+                )
             except Exception:
                 match_scores.record_failure(logger, reason='malformed_doc')
             person_id = speaker.segment_assignments.get(cast(str, segment.id))
@@ -695,12 +789,12 @@ class TranscriptProcessor:
             return
         coordinator.demand_changed()
         config = resolve_ondemand_config()
-        if not config.gate_enabled or not config.admits(self.host.request.uid) or coordinator.realtime_interpreter:
+        if not config.gate_enabled or coordinator.realtime_interpreter:
             return
         demand = coordinator.demand
         if demand is None:
             return
-        snapshot = demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+        snapshot = demand.snapshot()
         if snapshot.policy != DemandPolicy.viewed:
             return
         conversation_id = self.host.state.current_conversation_id
@@ -728,15 +822,15 @@ class TranscriptProcessor:
             current = resolve_ondemand_config()
             if (
                 not current.gate_enabled
-                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).policy != DemandPolicy.viewed
-                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).generation != snapshot.generation
+                or demand.snapshot().policy != DemandPolicy.viewed
+                or demand.snapshot().generation != snapshot.generation
                 or self.host.state.current_conversation_id != conversation_id
             ):
                 return
             page = raw_segments[max(0, end - config.max_segments) : end]
             end -= config.max_segments
             pages_done += 1
-            policy = 'viewed_v1' if current.gemini_enabled else 'legacy'
+            policy = 'viewed_v1'
             segments = [
                 TranscriptSegment(**raw)
                 for raw in page
@@ -799,10 +893,16 @@ class TranscriptProcessor:
         Shared by the legacy loop and the v2 batch path so the two persistence
         modes never drift in what a delivered segment triggers downstream.
         """
+        if conversation.id in getattr(self, '_late_conversation_ids', ()):
+            # Intake scheduled recorded-time recovery. Historical speech must
+            # not appear as fresh words in the current client capture either.
+            return
         client_segments = [segment.model_dump() for segment in updated]
         delivered = await self._deliver_segments(client_segments)
         if delivered and client_segments:
             self.host.complete_live_transcription()
+        if delivered:
+            note_segments(self.host, client_segments, removed)
         if self.host.transcript_send is not None and self.host.user_has_credits:
             self.host.transcript_send([transcript_segment_for_client(segment.model_dump()) for segment in new_segments])
         elif not self.host.pusher_enabled and self.host.user_has_credits:
@@ -822,6 +922,24 @@ class TranscriptProcessor:
             )
         await self._translate(updated, conversation.id, removed)
 
+    def _handle_oversized_legacy_persist(self, error: Exception) -> bool:
+        """True when a legacy persist failed with a permanent Firestore rejection.
+
+        A conversation at Firestore's 1 MiB ceiling refuses every content write,
+        and the same permanence holds for permission-denied or policy-refused
+        rows: re-persisting the same retained batch can never succeed, so the
+        loop would burn one rejected transaction per backoff tick while
+        ``segment_buffer``'s maxlen silently evicted the oldest retained
+        speech. The caller reacts by retrying the drain without its newest tail
+        (oldest speech keeps its place and persists first on the smaller row)
+        and, once the batch is at the shrink floor, by probing the mid-session
+        rollover — the same recovery the no-merge-result path already
+        exercises — so retained and fresh speech land on a conversation
+        Firestore still accepts. Transient failures return False and keep
+        today's whole-batch retry.
+        """
+        return is_permanent_firestore_write_rejection(error)
+
     def _requeue_legacy_persist(self, segments, photos) -> None:
         """Retain a failed legacy drain for the next tick (buffers are bounded deques)."""
         for raw in segments or []:
@@ -838,6 +956,8 @@ class TranscriptProcessor:
 
     async def process_loop(self) -> None:
         diarized_speaker_ids_by_conversation: Dict[str, set[int]] = {}
+        value_error_conversation_id: Optional[str] = None
+        value_error_failures = 0
         while (
             self.host.state.active
             or self.segment_buffer
@@ -888,6 +1008,11 @@ class TranscriptProcessor:
                 self, '_legacy_retry_until', 0.0
             ):
                 continue
+            # Revoke cached derived identities before another batch can project
+            # them, including voices which are already mapped and never requeued.
+            refresh_enrollment = getattr(self.host.speakers, 'refresh_enrollment_authority', None)
+            if refresh_enrollment is not None and (self.segment_buffer or self.host.state.speaker_map_dirty):
+                await refresh_enrollment()
             if not self.segment_buffer and not self.photo_buffer:
                 if self.host.state.speaker_map_dirty and time.monotonic() >= self._flush_backoff_until:
                     try:
@@ -975,9 +1100,14 @@ class TranscriptProcessor:
             if raw_segments:
                 self.host.state.last_transcript_time = time.time()
                 if not data.get('transcript_segments'):
-                    started_at = datetime.fromtimestamp(
-                        self.host.state.first_audio_byte_timestamp + raw_segments[0]['start'], tz=timezone.utc
-                    )
+                    # Delayed first words (or a reconnect before any words) must
+                    # not replace the capture start with the later merge time.
+                    # Project the new words against the retained origin below.
+                    first_word = self.host.state.first_audio_byte_timestamp + raw_segments[0]['start']
+                    capture_start = persisted_started_seconds(data.get('started_at'))
+                    if capture_start is None:
+                        capture_start = self.host.state.first_audio_byte_timestamp
+                    started_at = datetime.fromtimestamp(min(capture_start, first_word), tz=timezone.utc)
                     data['started_at'] = started_at
                 started_ts = (
                     persisted_started_seconds(data.get('started_at')) or self.host.state.first_audio_byte_timestamp
@@ -1015,6 +1145,7 @@ class TranscriptProcessor:
                     ' '.join(segment.text for segment in new_segments).split()
                 )
             transcript_segments = new_segments
+            self._legacy_segments_committed = False
             try:
                 current = deserialize_conversation(data)
                 result = await self._update_live_conversation(
@@ -1025,22 +1156,133 @@ class TranscriptProcessor:
                     await self.host.conversations.create_new_in_progress_conversation(rollover=True)
                     result = await self._write_fresh(transcript_segments, photos, finished_at, started_at)
                     rolled_over = True
+            except LateTranscriptReplyError:
+                # The assignment is durable. Retrying this batch here would
+                # wedge live persistence on an unrelated read/validation fault.
+                self._legacy_persist_failures = 0
+                self._legacy_retry_until = 0.0
+                self._legacy_persist_rejects = 0
+                value_error_failures = 0
+                continue
             except asyncio.CancelledError:
-                self._requeue_legacy_persist(legacy_retry_segments, photos)
+                self._requeue_legacy_persist(None if self._legacy_segments_committed else legacy_retry_segments, photos)
                 raise
             except Exception as error:
-                self._requeue_legacy_persist(legacy_retry_segments, photos)
+                if (
+                    isinstance(error, conversations_db.TranscriptSegmentsDecodeError)
+                    and not self._legacy_segments_committed
+                ):
+                    value_error_failures = (
+                        value_error_failures + 1 if value_error_conversation_id == conversation_id else 1
+                    )
+                    value_error_conversation_id = conversation_id
+                else:
+                    value_error_failures = 0
+                # The segment transaction already authorized this speech. A
+                # later permanent photo/reply fault cannot enter any speech
+                # retry path, including the existing size-limit escape.
+                oversized = not self._legacy_segments_committed and self._handle_oversized_legacy_persist(error)
+                retained_count = len(legacy_retry_segments or [])
                 failures = getattr(self, '_legacy_persist_failures', 0) + 1
                 self._legacy_persist_failures = failures
                 self._legacy_retry_until = time.monotonic() + min(8.0, 0.5 * 2 ** min(failures - 1, 4))
+                if oversized:
+                    # Permanent rejection: the write itself is refused and no
+                    # replay of the same payload against the same row can
+                    # succeed. Above the shrink floor the newest tail is
+                    # dropped, not retried, so the oldest speech keeps its
+                    # place and persists first on the smaller row; at or below
+                    # the floor the drop buys nothing, so the batch is kept
+                    # whole. Escape comes from the rollover probe — the same
+                    # recovery the no-merge-result path already uses — at a
+                    # bounded cadence, with the speech kept queued for the
+                    # fresh generation.
+                    self._legacy_persist_rejects = getattr(self, '_legacy_persist_rejects', 0) + 1
+                    below_floor = retained_count <= LEGACY_PERSIST_SHRINK_FLOOR
+                    saturated = below_floor
+                    buffer_cap = self.segment_buffer.maxlen
+                    stalled = (
+                        buffer_cap is not None
+                        and retained_count >= buffer_cap
+                        and self._legacy_persist_rejects >= LEGACY_PERSIST_STALL_REJECTS
+                    )
+                    requeue: Optional[List[Dict[str, Any]]] = legacy_retry_segments
+                    if requeue and not below_floor:
+                        requeue = requeue[:-1]
+                    self._requeue_legacy_persist(requeue, photos)
+                    escaped = False
+                    if (
+                        (saturated or stalled)
+                        and time.monotonic() >= self._oversized_rollover_probe_at
+                        and (conversation_id)
+                    ):
+                        self._oversized_rollover_probe_at = time.monotonic() + OVERSIZED_ROLLOVER_PROBE_SECONDS
+                        try:
+                            await self.host.conversations.create_new_in_progress_conversation(rollover=True)
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as probe_error:
+                            logger.error('Live transcript rollover probe failed type=%s', type(probe_error).__name__)
+                        else:
+                            if self.host.state.current_conversation_id != conversation_id:
+                                escaped = True
+                                logger.warning(
+                                    'Live transcript rollover escaped an over-limit conversation; '
+                                    'retried %d retained segment(s) on a fresh generation',
+                                    len(self.segment_buffer),
+                                )
+                    if escaped:
+                        self._legacy_persist_rejects = 0
+                    record_fallback(
+                        component='other',
+                        from_mode='live_transcript_persist',
+                        to_mode='none' if not self.segment_buffer else 'shrink_retry',
+                        reason='document_size_limit',
+                        outcome='degraded',
+                        log=logger,
+                    )
+                    continue
+                self._requeue_legacy_persist(None if self._legacy_segments_committed else legacy_retry_segments, photos)
                 logger.error(
-                    'Live transcript persist failed; retained %d segment(s) for retry type=%s',
+                    'Live transcript persist failed; retained %d segment(s) for retry type=%s reason=%s',
                     len(legacy_retry_segments or []),
                     type(error).__name__,
+                    _legacy_persist_reason(error),
                 )
+                if (
+                    value_error_failures >= LEGACY_VALUE_ERROR_ROLLOVER_FAILURES
+                    and conversation_id
+                    and self.host.state.current_conversation_id == conversation_id
+                    and time.monotonic() >= self._oversized_rollover_probe_at
+                ):
+                    # A strict decoder must never coerce a corrupt row into an
+                    # empty authorized merge. Keep the entire pristine drain
+                    # queued, then use the existing generation escape. Neither
+                    # a failed nor a no-op probe consumes speech or resets debt.
+                    self._oversized_rollover_probe_at = time.monotonic() + OVERSIZED_ROLLOVER_PROBE_SECONDS
+                    try:
+                        await self.host.conversations.rollover_after_transcript_decode_failure()
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as probe_error:
+                        logger.error('Live transcript rollover probe failed type=%s', type(probe_error).__name__)
+                    else:
+                        escaped = self.host.state.current_conversation_id != conversation_id
+                        if escaped:
+                            value_error_failures = 0
+                        record_fallback(
+                            component='other',
+                            from_mode='live_transcript_persist',
+                            to_mode='fresh_generation' if escaped else 'none',
+                            reason='other',
+                            outcome='degraded',
+                            log=logger,
+                        )
                 continue
+            value_error_failures = 0
             self._legacy_persist_failures = 0
             self._legacy_retry_until = 0.0
+            self._legacy_persist_rejects = 0
             if rolled_over:
                 record_fallback(
                     component='other',
@@ -1058,6 +1300,8 @@ class TranscriptProcessor:
             if not transcript_segments:
                 continue
             await self._deliver_live_updates(conversation, updated, removed, transcript_segments, conversation.id)
+            if conversation.id in getattr(self, '_late_conversation_ids', ()):
+                continue
             await self._speaker_detection(
                 updated,
                 self.host.state.first_audio_byte_timestamp - offset,
@@ -1269,15 +1513,19 @@ class TranscriptProcessor:
                         segment.speaker_identity_status = SpeakerIdentityStatus.user
                     new_segments.append(segment)
             current = deserialize_conversation(data)
-            result = await self._update_live_conversation(
-                current,
-                new_segments,
-                photos if is_current else [],
-                finished_at,
-                pin_started_at,
-                audio_timeline=pin_marker,
-                update_finished_at=is_current or data.get('status') == 'in_progress',
-            )
+            try:
+                result = await self._update_live_conversation(
+                    current,
+                    new_segments,
+                    photos if is_current else [],
+                    finished_at,
+                    pin_started_at,
+                    audio_timeline=pin_marker,
+                    update_finished_at=is_current or data.get('status') == 'in_progress',
+                )
+            except LateTranscriptReplyError:
+                # _v2_committed_ids already records the durable assignment.
+                continue
             if result is None:
                 if not is_current:
                     self._reroute_unplaced(segments, base=started_ts)
@@ -1328,6 +1576,8 @@ class TranscriptProcessor:
                 continue
             if is_current:
                 await self._deliver_live_updates(conversation, updated, removed, new_segments, owner)
+            if conversation.id in getattr(self, '_late_conversation_ids', ()):
+                continue
             await self._speaker_detection(
                 updated,
                 started_ts,
@@ -1379,11 +1629,14 @@ class TranscriptProcessor:
         """
         speaker = self.host.speakers
         observer = getattr(speaker, 'observe_segment', None)
+        ordinal_tracker = getattr(self.host, 'speaker_ordinal_tracker', None)
         if observer is not None:
             observed = queue_from_raw if queue_from_raw is not None else [s.model_dump() for s in segments]
             for raw in observed:
                 if raw.get('speaker_id') is not None:
                     observer(raw['speaker_id'], raw.get('speaker_id_scope') or '', raw.get('id') or '')
+                    if ordinal_tracker is not None:
+                        ordinal_tracker.observe(raw)
         for segment in segments:
             segment_id = cast(str, segment.id)
             if queue_from_raw is None:
@@ -1453,6 +1706,8 @@ class TranscriptProcessor:
             detection = detect_speaker_introduction(segment.text, language=self.host.language)
             if not detection:
                 continue
+            if not name_only_allowed(self.host.request.uid):
+                continue
             if not await speaker.named_speakers_allowed():
                 continue
             name = detection.name
@@ -1483,6 +1738,7 @@ class TranscriptProcessor:
                     speaker_id=cast(int, segment.speaker_id),
                     person_id=person_id_for_client(person_id, self.host.request.speaker_auto_assign_enabled),
                     person_name=name,
+                    is_user=False,  # Contact-only; owner decisions use the owner wire adapter.
                     segment_id=segment_id,
                 )
             )

@@ -773,11 +773,20 @@ html[data-share-theme='dark']:has(.share-note) body {
   font-size: 9px;
 }
 
+/* The separator rides at the end of the owner (only when a due date follows),
+   so a wrapped due date never starts its row with a stray dot. */
+.share-note .sn-action-meta .sn-owner:has(+ time)::after {
+  content: '·';
+  margin-left: 4px; /* + the 6px flex gap inside .sn-owner = the 10px the old rule used */
+  color: var(--sn-faint);
+}
+
 .share-note .sn-context {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--sn-muted);
+  overflow-wrap: anywhere;
 }
 
 .share-note .sn-events {
@@ -1575,3 +1584,22 @@ html[data-share-theme='dark']:has(.share-note) body {
   line-height: 1.6;
   color: var(--sn-muted);
 }
+
+/* Note provenance uses the public transcript identities, never displays them. */
+.sn-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 5px 10px;
+  border: 1px solid var(--sn-hairline);
+  border-radius: 999px;
+  font-size: 12px;
+  color: inherit;
+  cursor: pointer;
+}
+.sn-source-chip:hover, .sn-source-chip:focus-visible { background: rgba(128,128,128,.12); }
+.sn-seg { scroll-margin-block: 100px; transition: background-color .25s; }
+.sn-seg-source { background: var(--sn-card); border-radius: 8px; }
+
+.sn-sources { display: flex; flex-wrap: wrap; gap: 6px; }

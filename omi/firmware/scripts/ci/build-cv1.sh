@@ -26,6 +26,10 @@ git config --global --add safe.directory '*'
 # MCUboot image signing needs the `ecdsa` python package (per BUILD.md).
 pip3 install --quiet ecdsa 2>/dev/null || pip3 install --quiet --break-system-packages ecdsa
 
+# Verify CV1 MTU notification limit contract
+python3 "$FW/scripts/check_cv1_mtu.py" "$FW/omi/src/lib/core/transport.c"
+
+
 cd "$FW"
 mkdir -p "$NCS_VERSION"
 cd "$NCS_VERSION"
@@ -49,6 +53,7 @@ west build -b "$BOARD" "$FW/omi" --sysbuild -d build --pristine always \
   -- -DBOARD_ROOT="$FW"
 
 # Fail loud if any expected artifact is missing (silent-drop prevention).
+test -s build/omi/zephyr/zephyr.elf
 test -s build/dfu_application.zip
 test -s build/merged.hex
 test -s build/merged_CPUNET.hex

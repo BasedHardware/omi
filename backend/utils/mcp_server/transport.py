@@ -26,6 +26,7 @@ from utils.mcp_analytics import (
     result_count_for_tool_result,
     schedule_mcp_active,
     schedule_mcp_tool_call,
+    schedule_mcp_tool_use_succeeded,
 )
 from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 from utils.mcp_server.auth import MCPAuthContext, authenticate_mcp_request, invalid_mcp_auth_exception
@@ -67,6 +68,7 @@ from utils.mcp_server.versions import (
     unsupported_version_error,
 )
 from utils.other.endpoints import check_rate_limit_context, check_rate_limit_inline
+from utils.ladder_v1 import enforce_daily_cap
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +107,14 @@ def _protocol_error_response(msg_id: Any, exc: JsonRpcProtocolError) -> Dict[str
 
 def _tools_for_scopes(scopes: List[str]) -> List[Dict[str, Any]]:
     scope_set = set(scopes)
-    return [tool for tool in MCP_TOOLS if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set]
+    from config.demand_processing import tool_enabled
+
+    return [
+        tool
+        for tool in MCP_TOOLS
+        if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set
+        and (tool['name'] != 'process_recent_conversations' or tool_enabled())
+    ]
 
 
 def require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
@@ -155,6 +164,7 @@ def _handle_tool_call(
     msg_id: Any,
     params: Dict[str, Any],
     effective_version: str,
+    marker_client_name: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     tool_name = params.get("name")
     if "arguments" in params and not isinstance(params["arguments"], dict):
@@ -197,12 +207,25 @@ def _handle_tool_call(
     started_at = time.monotonic()
     tool_error: Optional[ToolExecutionError] = None
     result: Optional[Dict[str, Any]] = None
+    daily: dict | None = None
     try:
         require_tool_scope(auth_context, tool_name)
+        # Hosted tool calls share the daily request count. They do not draw
+        # the monthly usage budget.
+        daily = enforce_daily_cap(auth_context.uid)
         result = execute_tool(auth_context.uid, tool_name, arguments, auth_context=auth_context.memory_context)
     except ToolExecutionError as e:
         tool_error = e
     except HTTPException as exc:
+        # A Redis outage at admission is the same retryable 503 REST returns.
+        # A reached daily cap stays a model-visible tool result.
+        if exc.status_code == 503 and exc.detail == 'usage_unavailable':
+            raise
+        detail: Any = exc.detail
+        if isinstance(detail, dict) and detail.get('error') in {'mcp_daily_cap', 'usage_budget_exhausted'}:
+            payload = _tool_error_payload(detail['error'], str(detail))
+            payload['_meta'] = {'omi_usage': detail}
+            return create_mcp_response(msg_id, _complete_result(payload, effective_version))
         tool_error = tool_error_from_http(exc)
     except Exception:
         logger.exception("hosted MCP tool call failed tool=%s", mcp_tool_enum(tool_name))
@@ -305,6 +328,17 @@ def _handle_tool_call(
             _complete_result(_tool_error_payload(error_code, tool_error.message), effective_version),
         )
 
+    # This point is reached only after application success, including empty reads.
+    # clientInfo is the only marker client source; never infer initiation from it.
+    schedule_mcp_tool_use_succeeded(
+        uid=auth_context.uid,
+        tool_name=tool_name,
+        client_name=(
+            marker_client_name
+            if marker_client_name is not None
+            else normalize_client_name(client_info_name({"params": params}), None)
+        ),
+    )
     _tool_call_analytics(
         auth_context,
         request,
@@ -317,7 +351,10 @@ def _handle_tool_call(
         result_count=result_count_for_tool_result(tool_name, result or {}),
         effective_version=effective_version,
     )
-    return create_mcp_response(msg_id, _complete_result(_tool_result_payload(result or {}), effective_version))
+    payload = _tool_result_payload(result or {})
+    if daily is not None and daily['state'] == 'nudge':
+        payload['_meta'] = dict(payload.get('_meta') or {}, omi_usage={**daily, 'trigger': 'mcp_daily_cap'})
+    return create_mcp_response(msg_id, _complete_result(payload, effective_version))
 
 
 def _envelope_error(message: Dict[str, Any]) -> Optional[Tuple[int, str, Any]]:
@@ -435,7 +472,14 @@ def handle_mcp_message(
         )
 
     if method == "tools/call":
-        return _handle_tool_call(auth_context, request, msg_id, params, effective_version)
+        return _handle_tool_call(
+            auth_context,
+            request,
+            msg_id,
+            params,
+            effective_version,
+            marker_client_name=normalize_client_name(client_info_name(message), None),
+        )
 
     if method == "ping":
         # ping was removed in the 2026 stateless revision.

@@ -1,0 +1,25 @@
+{
+  "id": "onboarding-activation-funnel",
+  "kind": "question",
+  "owner": "Product infra",
+  "question": "Where do new mobile signups drop between welcome, sign-in, permissions, pairing, and a recording that never becomes a visible conversation? android_sdk is SDK_INT (0 on iOS); ios_version is the major iOS version (0 on Android). Counts are instrumentation presence, not completion.",
+  "query": "contracts/analytics/consumers/onboarding-activation-funnel.sql",
+  "events": [
+    "recordingProducedNoConversation",
+    "onboardingWelcomeShown",
+    "onboardingGetStartedTapped",
+    "signInStarted",
+    "signInFailed",
+    "onboardingPermissionResult",
+    "devicePairingBlocked",
+    "deviceScanEmpty",
+    "deviceConnectFailed",
+    "deviceConnectFailureShown"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "A zero means the signal was not observed in that namespace and build. It is not proof that nobody opened welcome, signed in, or tried to pair."
+}

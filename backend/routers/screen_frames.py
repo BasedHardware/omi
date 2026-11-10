@@ -16,7 +16,7 @@ from concurrent.futures import wait
 from datetime import timedelta
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 import database.conversations as conversations_db
 import database.redis_db as redis_db
@@ -36,7 +36,8 @@ import utils.other.storage as storage
 from utils.executors import llm_executor, storage_executor, submit_with_context
 from utils.other import endpoints as auth
 from utils.screen_frames import enforcement, store as screen_frame_store
-from utils.screen_frames.availability import screen_frame_egress_enabled
+from utils.screen_frames.availability import screen_frame_storage_ready
+from utils.conversations.late_meeting_notes import refresh_notes_after_evidence
 from utils.conversations.screen_content_window import (
     LEGACY_LIFECYCLE_FINGERPRINT,
     ensure_aware as _ensure_aware,
@@ -195,17 +196,13 @@ def update_screen_frame_settings(
 )
 def adjudicate_screen_frames(
     request: ScreenFrameAdjudicationRequest,
+    background_tasks: BackgroundTasks,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "screenshots:adjudicate")),
 ):
-    # Before anything else, and specifically before the judge: the judge is the
-    # first step that sends screen bytes to Gemini, and it runs two stages ahead
-    # of any bucket or signer check. 409 rather than 200-with-empty-set on
-    # purpose — this must not stamp `screen_frames_adjudicated_at`, or a
-    # conversation adjudicated while the feature was off would never be retried
-    # once it is switched on. The client treats any 4xx as "render nothing, try
-    # again next open", which is exactly right here.
+    # Storage and signing must be provisioned before any candidate can reach
+    # the privacy judge. The rollout flag was the only removed condition.
     bucket = storage.configured_screen_frames_bucket()
-    if not screen_frame_egress_enabled() or not bucket:
+    if not screen_frame_storage_ready() or not bucket:
         raise HTTPException(status_code=409, detail={"code": "screen_frame_egress_unavailable"})
 
     policy = get_purpose_policy(request.purpose)
@@ -252,6 +249,7 @@ def adjudicate_screen_frames(
             raise HTTPException(status_code=409, detail={"code": "attempt_id_reused_with_different_request"})
         stored = redis_db.get_screen_frame_adjudication_response(uid, request.purpose, attempt_id)
         if stored is not None:
+            background_tasks.add_task(refresh_notes_after_evidence, uid, request.subject.id)
             return ScreenFrameAdjudicationResponse.model_validate(stored)
         # Reserved but not yet finished (concurrent duplicate, or a crash
         # mid-request) — nothing safe to replay yet.
@@ -322,6 +320,7 @@ def adjudicate_screen_frames(
         bucket=bucket,
     )
     frame_set = enforcement.build_frame_set_response(uid, request.subject.id)
+    background_tasks.add_task(refresh_notes_after_evidence, uid, request.subject.id)
     response = ScreenFrameAdjudicationResponse(
         attempt_id=request.attempt_id,
         outcome="committed" if committed else "no_approved_frames",
@@ -419,7 +418,10 @@ def get_shared_conversation_screenshots(conversation_id: str):
     if not uid:
         return EMPTY_FRAME_SET
 
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    try:
+        conversation = conversations_db.get_conversation(uid, conversation_id)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
     if conversation is None or conversations_db.is_soft_deleted(conversation):
         return EMPTY_FRAME_SET
 

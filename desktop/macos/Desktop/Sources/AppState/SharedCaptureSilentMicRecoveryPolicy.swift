@@ -1,12 +1,35 @@
 import AVFoundation
 import CoreAudio
 
+struct CoreAudioCaptureRecoveryRequest {
+  enum Scope { case microphone, allSources }
+  let reason: String
+  let scope: Scope
+}
+
+/// Only the physical creation/arming effects are substituted by hermetic tests.
+/// Session, source ownership and teardown decisions stay in AppState.
+@MainActor
+struct CoreAudioCaptureRecoveryEffects {
+  var makeMicrophone: (AudioDeviceID?) -> AudioCaptureService
+  var armCapture: (AppState) async -> Void
+
+  static var live: Self {
+    Self(
+      makeMicrophone: { deviceID in
+        deviceID.map { AudioCaptureService(overrideDeviceID: $0) } ?? AudioCaptureService()
+      },
+      armCapture: { await $0.startMicrophoneAudioCapture() })
+  }
+}
+
 /// Terminal policy for the shared microphone capture path used by listening,
 /// manual recording, and Quick Note. `AudioCaptureService` is deliberately
 /// recreated during recovery, so the cross-rebuild cap belongs here.
 enum SharedCaptureSilentMicRecoveryPolicy {
   enum Action: Equatable {
     case rebuild
+    case continueSystemAudio
     case stopAndSurfaceError
   }
 
@@ -19,8 +42,11 @@ enum SharedCaptureSilentMicRecoveryPolicy {
     capture.detectSilentMicOnAnyTransport = true
   }
 
-  static func action(for recoveryAttempt: Int) -> Action {
-    recoveryAttempt >= maximumRecoveryAttempts ? .stopAndSurfaceError : .rebuild
+  static func action(for recoveryAttempt: Int, systemAudioLive: Bool = false) -> Action {
+    guard recoveryAttempt >= maximumRecoveryAttempts else { return .rebuild }
+    // A silent microphone must not take a proven-live, independently owned tap
+    // down with it. Keep the mic open so unmuting it can recover without a restart.
+    return systemAudioLive ? .continueSystemAudio : .stopAndSurfaceError
   }
 }
 

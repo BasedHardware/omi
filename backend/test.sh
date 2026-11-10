@@ -33,10 +33,14 @@ export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
 # immune: contention stall cycles are charged to the process, so identical work measured
 # ~2x higher with the machine saturated (0.03s -> 0.06s on an 8-core host). At the former
 # 0.12s budget -- only 1.2x the target -- a busy runner failed a shifting set of files
-# that all passed in isolation. CI already carries a 1.0-second ceiling for the same
-# reason; this is the local lane's equivalent headroom.
+# that all passed in isolation. CI carries a 1.0-second ceiling for the same reason, and
+# the local lane now uses the same one: a laptop shared with builds and other agents is
+# at least as loaded as a runner, and the former 0.30s local budget failed pushes on
+# tests that passed alone and passed CI (2026-10-20, twice in one sync push). A
+# stricter local gate than CI only blocks pushes CI would accept; the warn target still
+# reports anything over 0.1s.
 export BACKEND_FAST_UNIT_WARN_SECONDS="${BACKEND_FAST_UNIT_WARN_SECONDS:-0.1}"
-export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.30}"
+export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-1.0}"
 
 # The file-isolated runner already parallelizes pytest processes. Letting each process
 # start a native BLAS/OpenMP pool oversubscribes the machine and makes process CPU time
@@ -49,7 +53,11 @@ export VECLIB_MAXIMUM_THREADS="${VECLIB_MAXIMUM_THREADS:-1}"
 export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
 export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
 
-pytest_args=(-v)
+# LangSmith's pytest integration is for live evaluation/upload, which this
+# hermetic suite does not use. Local startup measurements saved ~0.17s per
+# process before collection; file isolation pays this cost hundreds of times.
+# Keep the other plugins active.
+pytest_args=(-p no:langsmith_plugin -v)
 
 marker_expr="${BACKEND_PYTEST_MARK_EXPR:-not integration and not slow}"
 if [[ -n "$marker_expr" ]]; then
@@ -82,7 +90,9 @@ fi
 
 selected_tests=()
 while IFS= read -r test_path; do
-  if [[ -n "$test_path" && "$test_path" != testing/e2e/* ]]; then
+  # Automatic unit selections leave E2E to its own CI job. An explicit list
+  # must honor hermetic E2E paths too, rather than silently report no tests.
+  if [[ -n "$test_path" && ( "$test_path" != testing/e2e/* || -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ) ]]; then
     selected_tests+=("$test_path")
   fi
 done < "$test_list_file"
@@ -180,16 +190,24 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   active_pids=()
   active_status_files=()
   active_test_paths=()
+  trap 'set +u; [ "${#active_test_paths[@]}" -gt 0 ] && echo "backend unit: cancelled with files in flight: ${active_test_paths[*]}" >&2 || true' TERM
   failed_test_paths=()
   failed=0
   status_dir="$(mktemp -d)"
   test_index=0
 
-  active_pid_count() {
-    set +u
-    local count="${#active_pids[@]}"
-    set -u
-    echo "$count"
+  # Count in the parent shell: command substitution here forked twice per
+  # 20ms poll, competing with pytest workers throughout every isolated shard.
+  active_count=0
+
+  wait_for_worker_completion() {
+    # Bash 5.1+ can wait for any tracked child, including one that completed
+    # between the status-file scan and this call. Older shells keep polling.
+    if (( BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 1) )); then
+      wait -n "${active_pids[@]}" || true
+    else
+      sleep 0.02
+    fi
   }
 
   reap_finished_children() {
@@ -236,8 +254,18 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     active_pids=("${still_active[@]}")
     active_status_files=("${still_status_files[@]}")
     active_test_paths=("${still_test_paths[@]}")
+    active_count="${#still_active[@]}"
     set -u
   }
+
+  # GNU timeout is available on CI; keep macOS/Bash 3 hosts without it on
+  # the existing execution path. Include Python so the array is never empty
+  # (empty array expansion under set -u fails on Bash 3).
+  file_budget="${BACKEND_UNIT_FILE_BUDGET_SECONDS:-300}"
+  runner=("$PYTHON_BIN")
+  if command -v timeout >/dev/null 2>&1; then
+    runner=(timeout --signal=TERM --kill-after=30s "${file_budget}s" "$PYTHON_BIN")
+  fi
 
   if [[ "$isolated_count" -gt 0 ]]; then
     for test_path in "${isolated_tests[@]}"; do
@@ -245,10 +273,30 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
       test_index=$((test_index + 1))
       (
         echo "::group::$test_path"
+        # Per-file workers do not use loop-on-failure. Load the HTTP-server
+        # fixture plugin only where its fixture is referenced; importing it
+        # (and Werkzeug) in every isolated process adds suite-wide startup cost.
+        file_pytest_args=("${pytest_args[@]}" -p no:xdist.looponfail)
+        if [[ -f "$test_path" ]]; then
+          test_source="$(<"$test_path")"
+          httpserver_fixture_pattern='(^|[^[:alnum:]_])httpserver'
+          if [[ ! "$test_source" =~ $httpserver_fixture_pattern ]]; then
+            file_pytest_args+=(-p no:pytest_httpserver)
+          fi
+          unset test_source
+        fi
+        # Bash's clock avoids starting extra Python processes for every file.
+        # Include collection/import and process shutdown, which pytest's
+        # call-phase duration summary omits. Precision is one second.
+        file_started=$SECONDS
         set +e
-        "$PYTHON_BIN" -m pytest "${pytest_args[@]}" "$test_path"
+        "${runner[@]}" -m pytest "${file_pytest_args[@]}" "$test_path"
         status=$?
         set -e
+        echo "BACKEND-UNIT-FILE-WALL $((SECONDS - file_started))s $test_path"
+        if [[ "$status" -eq 124 ]]; then
+          echo "::error title=Backend unit file timed out::$test_path exceeded ${file_budget}s (TERM, then KILL) and was terminated"
+        fi
         if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
           echo "No tests matched marker expression for $test_path; treating as skipped."
           status=0
@@ -266,20 +314,21 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
       active_pids+=("$!")
       active_status_files+=("$status_file")
       active_test_paths+=("$test_path")
+      active_count=$((active_count + 1))
 
-      while [[ "$(active_pid_count)" -ge "$worker_count" ]]; do
+      while [[ "$active_count" -ge "$worker_count" ]]; do
         reap_finished_children
-        if [[ "$(active_pid_count)" -lt "$worker_count" ]]; then
+        if [[ "$active_count" -lt "$worker_count" ]]; then
           break
         fi
-        sleep 0.02
+        wait_for_worker_completion
       done
     done
 
-    while [[ "$(active_pid_count)" -gt 0 ]]; do
+    while [[ "$active_count" -gt 0 ]]; do
       reap_finished_children
-      if [[ "$(active_pid_count)" -gt 0 ]]; then
-        sleep 0.02
+      if [[ "$active_count" -gt 0 ]]; then
+        wait_for_worker_completion
       fi
     done
 

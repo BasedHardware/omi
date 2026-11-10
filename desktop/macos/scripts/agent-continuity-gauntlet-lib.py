@@ -536,8 +536,6 @@ EVIDENCE_FORBIDDEN_MUTATING_TOOLS = {
     "create_canonical_goal",
     "create_context_reminder",
     "create_memory",
-    "create_standing_trigger",
-    "close_fact",
     "complete_onboarding",
     "complete_task",
     "delete_task",
@@ -545,7 +543,6 @@ EVIDENCE_FORBIDDEN_MUTATING_TOOLS = {
     "point_click",
     "request_permission",
     "save_knowledge_graph",
-    "save_playbook",
     "set_user_preferences",
     "spawn_agent",
     "update_action_item",
@@ -5432,7 +5429,8 @@ def continuity_contract_self_check_failures() -> list[str]:
     """Fail if hermetic INV-6 contract tests / harness filter drift out of the DoD gate.
 
     Live gauntlet suites exercise bridge/LLM continuity; they do NOT replace these
-    hermetic behavioral tests. See AGENTS.md → "Live gauntlet vs hermetic INV-6".
+    hermetic behavioral tests. See docs/chat-continuity-write-path.md →
+    "Live gauntlet vs hermetic INV-6".
     """
     failures: list[str] = []
     tests_dir = DESKTOP_DIR / "Desktop/Tests"

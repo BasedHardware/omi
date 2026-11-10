@@ -7,8 +7,9 @@ from types import SimpleNamespace
 import pytest
 
 from database import review_changes, review_store
-from models.dream_agent import Edit
-from utils import dream_tools
+from tests.unit.test_dream_cleanup_edits import store, UID
+from models.dream_edit import Edit
+from utils.agent_capabilities import tools as dream_tools, transcripts
 
 
 def spelling(target='conversations/c1'):
@@ -47,8 +48,8 @@ def test_semantic_key_is_stable_and_merge_direction_independent():
     )
 
 
-def test_transcript_fix_uses_encoded_reversible_patch_and_snapshot_fence(monkeypatch):
-    uid = 'synthetic'
+def test_transcript_fix_uses_immutable_overlay_and_snapshot_fence(store, monkeypatch):
+    uid = UID
     row = {
         'id': 'c1',
         'data_protection_level': 'enhanced',
@@ -62,33 +63,31 @@ def test_transcript_fix_uses_encoded_reversible_patch_and_snapshot_fence(monkeyp
         'client_processing': {'old': 'projection'},
     }
     stored = dream_tools.conversations.encode_conversation_for_write(uid, row, 'enhanced')
-    ref = SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: deepcopy(stored)))
-    monkeypatch.setattr(
-        review_store,
-        'user',
-        lambda uid: SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda key: ref)),
-    )
-    monkeypatch.setattr(review_changes, 'agent_change_allowed', lambda *a: True)
-    captured = []
-    monkeypatch.setattr(review_changes, 'record_agent_change', lambda *a, **k: captured.append((a, k)))
-    result = dream_tools.apply_edit(uid, spelling(), {'conversations/c1': deepcopy(row)})
-    assert result == 'applied'
-    args, kwargs = captured[0]
-    patch = args[2][0].patch
-    assert isinstance(patch['transcript_segments'], str)
-    assert patch['structured.title'] == 'Alice meeting'
-    persisted = deepcopy(stored)
-    persisted['structured']['title'] = patch['structured.title']
-    persisted['transcript_segments'] = patch['transcript_segments']
+    store.rows[('users', uid, 'conversations', 'c1')] = deepcopy(stored)
+    monkeypatch.setattr(dream_tools.conversations, 'db', store)
+    assert dream_tools.apply_edit(uid, spelling(), {'conversations/c1': deepcopy(row)}) == 'applied'
+    persisted = store.rows[('users', uid, 'conversations', 'c1')]
+    assert persisted['transcript_segments'] == stored['transcript_segments']
     decoded = dream_tools.conversations.prepare_conversation_for_read(persisted, uid)
     assert decoded['transcript_segments'][0]['text'] == 'Alice said hi'
+    assert decoded['transcript_segments'][0]['original_text'] == 'Alise said hi'
     assert decoded['structured']['title'] == 'Alice meeting'
-    assert decoded['structured']['overview'] == 'Alise discussed Widgets'
-    assert decoded['structured']['sections'][0]['heading'] == 'Alise meeting'
-    assert decoded['structured']['sections'][0]['body_markdown'] == 'Alise met us'
-    assert decoded['structured']['sections'][0]['source_segment_ids'] == ['s1']
-    assert kwargs['expected_documents'] == {'c1': stored}
-    assert set(patch) <= review_changes.ALLOWED_FIELDS['conversations']
+    assert decoded['structured']['overview'] == row['structured']['overview']
+    assert decoded['structured']['sections'] == row['structured']['sections']
+    assert 'client_processing' not in decoded
+    journal = next(
+        review_store.decode_doc(uid, value) for path, value in store.rows.items() if path[2:3] == ('review_changes',)
+    )
+    from utils.agent_capabilities.transcripts import original_fingerprint
+
+    assert journal['transcript_overlay']['original_fingerprint'] == original_fingerprint(uid, stored)
+    review_changes.set_undone(uid, journal['change']['change_id'], True)
+    assert (
+        transcripts.originals(
+            dream_tools.conversations.prepare_conversation_for_read(persisted, uid)['transcript_segments']
+        )
+        == row['transcript_segments']
+    )
 
 
 def test_concurrent_transcript_correction_is_refused(monkeypatch):
@@ -160,6 +159,64 @@ def test_memory_correction_key_survives_undo_tail_and_tool_kind_changes():
     assert original == dream_tools.edit_key(tail, {tail.target: row})
     rewrite = tail.model_copy(update={'kind': 'memory', 'before': '', 'after': 'Alice prefers Widgets'})
     assert original == dream_tools.edit_key(rewrite, {rewrite.target: row})
-    assert original.startswith('dream:memory:')
+    assert original.startswith('agent:memory:')
     changed = dict(row, content='Alise now prefers Robots')
     assert original != dream_tools.edit_key(tail, {tail.target: changed})
+
+
+@pytest.mark.parametrize('fragment', ['s1', '12.5', '00:00:12.5'])
+def test_fragment_spelling_only_changes_selected_segment_and_journals_scope(store, monkeypatch, fragment):
+    uid = UID
+    row = {
+        'id': 'c1',
+        'data_protection_level': 'enhanced',
+        'user_title': 'Alise meeting',
+        'structured': {'title': 'Alise meeting'},
+        'transcript_segments': [
+            {'id': 's1', 'start': 12.5, 'end': 15, 'text': 'Alise met Alise.'},
+            {'id': 's2', 'start': 20, 'end': 22, 'text': 'Alise elsewhere.'},
+        ],
+    }
+    stored = dream_tools.conversations.encode_conversation_for_write(uid, row, 'enhanced')
+    store.rows[('users', uid, 'conversations', 'c1')] = deepcopy(stored)
+    monkeypatch.setattr(dream_tools.conversations, 'db', store)
+    edit = spelling('conversations/c1#' + fragment)
+    records = {'conversations/c1': deepcopy(row)}
+    assert dream_tools.apply_edit(uid, edit, records) == 'applied'
+    raw = store.rows[('users', uid, 'conversations', 'c1')]
+    assert raw['transcript_segments'] == stored['transcript_segments']
+    decoded = dream_tools.conversations.prepare_conversation_for_read(raw, uid)
+    assert decoded['transcript_segments'][0]['text'] == 'Alice met Alice.'
+    assert decoded['transcript_segments'][1] == {
+        **row['transcript_segments'][1],
+        'original_text': row['transcript_segments'][1]['text'],
+    }
+    assert decoded['structured'] == row['structured'] and decoded['user_title'] == row['user_title']
+    journal = next(
+        review_store.decode_doc(uid, value) for path, value in store.rows.items() if path[2:3] == ('review_changes',)
+    )
+    assert journal['transcript_overlay']['before'] == {'client_processing': {'present': False}}
+    assert journal['transcript_overlay']['after'] == {'client_processing': {'present': False}}
+    assert len(journal['transcript_overlay']['corrections']) == 1
+    assert journal['change']['refs'][0]['label'] == 'Conversation #' + fragment
+    alias = edit.model_copy(update={'target': 'conversations/c1#s1'})
+    assert dream_tools.edit_key(edit, records) == dream_tools.edit_key(alias, records)
+    review_changes.set_undone(uid, journal['change']['change_id'], True)
+    assert (
+        transcripts.originals(dream_tools.conversations.prepare_conversation_for_read(raw, uid)['transcript_segments'])
+        == row['transcript_segments']
+    )
+
+
+@pytest.mark.parametrize('fragment', ['unknown', '', '20'])
+def test_invalid_or_wrong_segment_spelling_cannot_widen_target(fragment):
+    records = {
+        'conversations/c1': {
+            'transcript_segments': [
+                {'id': 's1', 'start': 12.5, 'text': 'Alise here.'},
+                {'id': 's2', 'start': 20, 'text': 'Different name.'},
+            ]
+        }
+    }
+    with pytest.raises(ValueError, match='agent_target_(term_missing|quote_mismatch)'):
+        dream_tools.validate_edit(spelling('conversations/c1#' + fragment), records)

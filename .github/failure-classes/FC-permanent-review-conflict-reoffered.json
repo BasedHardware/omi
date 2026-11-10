@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-permanent-review-conflict-reoffered",
+  "violated_contract": "A Review question on the explicit terminal allowlist must settle its proposal; all other pre-application conflicts must release. Releasing terminal premises re-offers unanswerable questions, while treating unknown or reversible exclusions as permanent silently loses valid questions.",
+  "canonical_prevention": "Release pre-application conflicts by default. Settle only explicit permanent evidence exclusions (deleted, tombstoned, hidden, source purged, archived or user-rejected), collapsed entity identities, incompatible entity types and invalid item shapes. Settlement atomically resolves only the matching proposal evidence version and refunds attention. Already-true affirmative identity answers succeed without another merge. Reader-path lifecycle tests cover both terminal exclusions and default release.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_review_stale_answers.py",
+    "backend/tests/integration/test_review_surface_emulator.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/review.py",
+    "backend/database/review_store.py",
+    "backend/utils/agent_capabilities/tools.py",
+    "backend/utils/agent_capabilities/reads.py"
+  ],
+  "status": "open"
+}

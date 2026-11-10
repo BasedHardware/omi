@@ -1,3 +1,5 @@
+import { DESKTOP_HEALTH_EVENT_WEIGHT_SQL } from "./telemetry/desktop-health-sampling";
+
 export type ReliabilitySource = "chat" | "voice";
 export type ReliabilityChannel = "production" | "beta";
 
@@ -82,7 +84,7 @@ type ChatRow = [
   reason: unknown,
   count: unknown,
   durationMs: unknown,
-  actorId?: unknown,
+  actorId?: unknown
 ];
 
 type VoiceRow = [
@@ -96,6 +98,7 @@ type VoiceRow = [
   durationMs: unknown,
   source?: unknown,
   actorId?: unknown,
+  latencyCount?: unknown
 ];
 
 type MutableMetric = {
@@ -104,6 +107,8 @@ type MutableMetric = {
   failure: number;
   excluded: number;
   durationMs: number;
+  /** Successes that carried a known duration. Absent latency adds neither. */
+  durationSamples: number;
 };
 
 const CHAT_STARTED = "chat_agent_query_started";
@@ -131,6 +136,7 @@ const emptyMetric = (): MutableMetric => ({
   failure: 0,
   excluded: 0,
   durationMs: 0,
+  durationSamples: 0,
 });
 
 export const numberValue = (value: unknown): number => {
@@ -148,9 +154,11 @@ const percent = (numerator: number, denominator: number): number | null =>
 
 const averageSeconds = (
   durationMs: number,
-  successes: number,
+  durationSamples: number
 ): number | null =>
-  successes > 0 ? Math.round((durationMs / successes / 1_000) * 10) / 10 : null;
+  durationSamples > 0
+    ? Math.round((durationMs / durationSamples / 1_000) * 10) / 10
+    : null;
 
 const finalizeMetric = (metric: MutableMetric): ReliabilityMetric => {
   const judged = metric.success + metric.failure;
@@ -163,7 +171,10 @@ const finalizeMetric = (metric: MutableMetric): ReliabilityMetric => {
     unresolved: Math.max(0, metric.attempts - terminals),
     successRate: percent(metric.success, judged),
     failureRate: percent(metric.failure, judged),
-    averageFullAnswerSeconds: averageSeconds(metric.durationMs, metric.success),
+    averageFullAnswerSeconds: averageSeconds(
+      metric.durationMs,
+      metric.durationSamples
+    ),
   };
 };
 
@@ -173,12 +184,13 @@ const mergeMetric = (target: MutableMetric, source: MutableMetric): void => {
   target.failure += source.failure;
   target.excluded += source.excluded;
   target.durationMs += source.durationMs;
+  target.durationSamples += source.durationSamples;
 };
 
 const addMetric = (
   map: Map<string, MutableMetric>,
   key: string,
-  update: (metric: MutableMetric) => void,
+  update: (metric: MutableMetric) => void
 ): void => {
   const metric = map.get(key) ?? emptyMetric();
   update(metric);
@@ -203,7 +215,7 @@ function buildDayKeys(days: number, now: Date): string[] {
 }
 
 const finalizeBreakdowns = (
-  metrics: Map<string, MutableMetric>,
+  metrics: Map<string, MutableMetric>
 ): ReliabilityBreakdown[] =>
   Array.from(metrics.entries())
     .map(([label, metric]) => {
@@ -222,7 +234,7 @@ const finalizeBreakdowns = (
         b.success +
         b.failure +
         b.excluded -
-        (a.success + a.failure + a.excluded),
+        (a.success + a.failure + a.excluded)
     );
 
 export function responseReliabilityQueries(days: number): {
@@ -258,8 +270,8 @@ export function responseReliabilityQueries(days: number): {
         coalesce(nullIf(toString(properties.terminal_reason), ''), 'unknown') AS reason,
         coalesce(nullIf(toString(properties.route), ''), 'unknown') AS route,
         coalesce(nullIf(toString(properties.intent), ''), 'unknown') AS intent,
-        count() AS event_count,
-        sum(if(toString(properties.response_outcome) = 'success', toFloatOrZero(toString(properties.duration_ms)), 0)) AS duration_ms,
+        sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count,
+        sum(if(toString(properties.response_outcome) = 'success', toFloatOrZero(toString(properties.duration_ms)) * ${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}, 0)) AS duration_ms,
         'physical_shortcut' AS source,
         distinct_id AS actor_id
       FROM events
@@ -306,14 +318,14 @@ export function responseReliabilityQueries(days: number): {
  * those are real usage gaps.
  */
 export function trimDailyToCoverage(
-  daily: ReliabilityDailyPoint[],
+  daily: ReliabilityDailyPoint[]
 ): ReliabilityDailyPoint[] {
   const first = daily.findIndex(
     (point) =>
       point.chatSuccessRate != null ||
       point.voiceSuccessRate != null ||
       point.chatExcluded > 0 ||
-      point.voiceExcluded > 0,
+      point.voiceExcluded > 0
   );
   return first === -1 ? [] : daily.slice(first);
 }
@@ -325,6 +337,7 @@ export function buildResponseReliabilityPayload({
   chatAvailable,
   voiceAvailable,
   truncated = false,
+  coveragePartial = false,
   now = new Date(),
 }: {
   days: number;
@@ -333,6 +346,8 @@ export function buildResponseReliabilityPayload({
   chatAvailable: boolean;
   voiceAvailable: boolean;
   truncated?: boolean;
+  /** Stale, mismatched, or otherwise incomplete coverage. Never a healthy feed. */
+  coveragePartial?: boolean;
   now?: Date;
 }): ResponseReliabilitySeries {
   const safeDays = Math.min(Math.max(Math.trunc(days), 1), 90);
@@ -369,6 +384,7 @@ export function buildResponseReliabilityPayload({
         if (event === CHAT_COMPLETED) {
           metric.success += count;
           metric.durationMs += durationMs;
+          metric.durationSamples += count;
         }
         if (event === CHAT_FAILED) metric.failure += count;
         if (event === CHAT_CANCELLED) metric.excluded += count;
@@ -380,7 +396,7 @@ export function buildResponseReliabilityPayload({
         const key = `chat:${reason}`;
         failureReasonCounts.set(
           key,
-          (failureReasonCounts.get(key) ?? 0) + count,
+          (failureReasonCounts.get(key) ?? 0) + count
         );
       }
     }
@@ -394,7 +410,7 @@ export function buildResponseReliabilityPayload({
         Array.isArray(rawRow) &&
         textValue((rawRow as VoiceRow)[8], "physical_shortcut") ===
           "physical_shortcut" &&
-        numberValue((rawRow as VoiceRow)[6]) > 0,
+        numberValue((rawRow as VoiceRow)[6]) > 0
     );
     voiceSource = hasPhysicalVoiceRows ? "physical_shortcut" : "floating_voice";
     for (const rawRow of voiceRows) {
@@ -423,7 +439,18 @@ export function buildResponseReliabilityPayload({
       const reason = textValue(reasonRaw);
       const route = textValue(routeRaw);
       const count = numberValue(countRaw);
-      const durationMs = numberValue(durationMsRaw);
+      const durationOmitted = durationMsRaw == null || durationMsRaw === "";
+      const durationMs = durationOmitted ? 0 : numberValue(durationMsRaw);
+      // Backend emits latency_count: samples that actually carried a latency.
+      // Absent latency adds to success but neither to durationMs nor samples;
+      // where provided, samples = latency_count instead of the success count.
+      const latencyCountRaw = (rawRow as VoiceRow)[10];
+      const latencyCount =
+        typeof latencyCountRaw === "number" &&
+        Number.isInteger(latencyCountRaw) &&
+        latencyCountRaw >= 0
+          ? latencyCountRaw
+          : null;
       if (!date || count <= 0) continue;
 
       const update = (metric: MutableMetric) => {
@@ -431,7 +458,10 @@ export function buildResponseReliabilityPayload({
         if (healthEvent !== "voice_turn_terminal") return;
         if (outcome === "success") {
           metric.success += count;
-          metric.durationMs += durationMs;
+          if (!durationOmitted) {
+            metric.durationMs += durationMs;
+            metric.durationSamples += latencyCount ?? count;
+          }
         } else if (outcome === "failure") {
           metric.failure += count;
         } else if (outcome === "excluded") {
@@ -453,7 +483,7 @@ export function buildResponseReliabilityPayload({
           const key = `voice:${reason}`;
           failureReasonCounts.set(
             key,
-            (failureReasonCounts.get(key) ?? 0) + count,
+            (failureReasonCounts.get(key) ?? 0) + count
           );
         }
       }
@@ -487,7 +517,7 @@ export function buildResponseReliabilityPayload({
           ? voiceFinal.averageFullAnswerSeconds
           : null,
       };
-    },
+    }
   );
 
   const failureReasons = Array.from(failureReasonCounts.entries())
@@ -504,7 +534,7 @@ export function buildResponseReliabilityPayload({
   return {
     days: safeDays,
     generatedAt: now.getTime(),
-    partial: !chatAvailable || !voiceAvailable || truncated,
+    partial: !chatAvailable || !voiceAvailable || truncated || coveragePartial,
     voiceSource,
     availability: {
       chat: chatAvailable,
@@ -531,6 +561,7 @@ export function buildChannelReliabilityPayloads({
   voiceAvailable,
   channelByActor,
   truncated = false,
+  coveragePartial = false,
   now = new Date(),
 }: {
   days: number;
@@ -540,17 +571,18 @@ export function buildChannelReliabilityPayloads({
   voiceAvailable: boolean;
   channelByActor: Map<string, ReliabilityChannel>;
   truncated?: boolean;
+  coveragePartial?: boolean;
   now?: Date;
 }): Record<ReliabilityChannel, ResponseReliabilitySeries> {
   const rowsForChannel = (
     rows: unknown[],
     actorIndex: number,
-    channel: ReliabilityChannel,
+    channel: ReliabilityChannel
   ) =>
     rows.filter(
       (row) =>
         Array.isArray(row) &&
-        channelByActor.get(textValue(row[actorIndex])) === channel,
+        channelByActor.get(textValue(row[actorIndex])) === channel
     );
 
   const build = (channel: ReliabilityChannel) =>
@@ -561,6 +593,7 @@ export function buildChannelReliabilityPayloads({
       chatAvailable,
       voiceAvailable,
       truncated,
+      coveragePartial,
       now,
     });
 

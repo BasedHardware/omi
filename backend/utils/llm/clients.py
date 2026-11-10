@@ -1,14 +1,30 @@
 # ruff: noqa: F401
+"""LLM client construction and re-export seam: Luna/OpenAI instances, the
+desktop Anthropic path, and OpenRouter, with shared prompt-cache and usage
+callback wiring.
+
+The broad re-export surface (hence the noqa above) is deliberate -- feature
+modules construct clients through here so provider routing, caching and usage
+accounting stay one decision instead of per-feature copies
+(backend/utils/llm/ARCHITECTURE.md).
+"""
+
+from __future__ import annotations
+
 import hashlib
 import logging
 import os
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-import anthropic
 import httpx
 from cachetools import TTLCache
-from langchain_anthropic import ChatAnthropic
+
+if TYPE_CHECKING:
+    # Runtime imports of the Anthropic bindings are deferred through the
+    # materialization helpers below; they exist statically for type checking.
+    import anthropic
+    from langchain_anthropic import ChatAnthropic
 
 try:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -58,13 +74,59 @@ from utils.llm.model_config import (
     _get_model_config,
 )  # noqa: F401 - legacy clients-module QoS re-exports
 from utils.llm.providers import (
-    ChatGoogleGenerativeAI,
     GEMINI_OPENAI_BASE_URL,
     get_default_client,
     get_or_create_gemini_llm as _get_or_create_gemini_llm,
     get_or_create_openai_compatible_llm,
     _llm_cache,
 )  # noqa: F401 - legacy clients-module provider re-exports
+
+
+# The Anthropic bindings and the providers-module Gemini re-export are resolved
+# on first use: importing them eagerly drags the Anthropic SDK and the google
+# gRPC stack into every process that imports this module, and the backend unit
+# suite pays that once per isolated test file. Only constructing those clients
+# needs the classes. Resolution goes through these helpers (and module
+# ``__getattr__`` for external attribute access), so ``mock.patch`` of
+# ``utils.llm.clients.ChatAnthropic`` still sees the patched object.
+def _anthropic_module():
+    module = globals().get('anthropic')
+    if module is None:
+        import anthropic as _anthropic_sdk
+
+        module = globals()['anthropic'] = _anthropic_sdk
+    return module
+
+
+def _chat_anthropic_cls():
+    cls = globals().get('ChatAnthropic')
+    if cls is None:
+        from langchain_anthropic import ChatAnthropic as _chat_anthropic
+
+        cls = globals()['ChatAnthropic'] = _chat_anthropic
+    return cls
+
+
+def _chat_google_generative_ai_cls():
+    cls = globals().get('ChatGoogleGenerativeAI')
+    if cls is None:
+        from utils.llm.providers import ChatGoogleGenerativeAI as _chat_google_generative_ai
+
+        cls = globals()['ChatGoogleGenerativeAI'] = _chat_google_generative_ai
+    return cls
+
+
+def __getattr__(name: str) -> object:
+    if name == 'anthropic':
+        return _anthropic_module()
+    if name == 'ChatAnthropic':
+        return _chat_anthropic_cls()
+    if name == 'ChatGoogleGenerativeAI':
+        return _chat_google_generative_ai_cls()
+    if name == 'get_gateway_anthropic_client':
+        return _resolve_gateway_anthropic_client()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
 
 try:
     from utils.llm.providers import get_or_create_omi_gateway_llm
@@ -133,20 +195,37 @@ except ImportError:
         raise RuntimeError('BYOK gateway LangChain client is unavailable')
 
 
-try:
-    from utils.llm.gateway_anthropic import get_gateway_anthropic_client
-except ImportError:
+# The gateway Anthropic client is resolved on first use through the module
+# ``__getattr__`` hook: importing it eagerly pulls the Anthropic SDK into
+# every process that imports this module, once per isolated test file.
+def _fallback_get_gateway_anthropic_client(*, byok_api_key=None):
+    raise RuntimeError('Omi gateway Anthropic client is unavailable')
 
-    def get_gateway_anthropic_client(*, byok_api_key=None):
-        raise RuntimeError('Omi gateway Anthropic client is unavailable')
+
+def _resolve_gateway_anthropic_client():
+    try:
+        from utils.llm.gateway_anthropic import get_gateway_anthropic_client as _gateway_anthropic_client
+    except ImportError:
+        _gateway_anthropic_client = _fallback_get_gateway_anthropic_client
+    globals()['get_gateway_anthropic_client'] = _gateway_anthropic_client
+    return _gateway_anthropic_client
 
 
 from utils.llm.usage_tracker import get_usage_callback
+from utils.generated_compute import require_current_generated_compute, generated_compute_configured
+from utils.executors import db_executor, run_blocking
 
 logger = logging.getLogger(__name__)
 
 _usage_callback = get_usage_callback()
 _GEMINI_OPENAI_BASE_URL = GEMINI_OPENAI_BASE_URL
+
+
+def _require_client_budget(
+    feature: str, *, provider: str | None = None, allow_byok: bool = True, uid: str | None = None
+) -> None:
+    """Last budget guard for every client factory, including new feature names."""
+    require_current_generated_compute(feature, uid=uid, provider=provider, allow_byok=allow_byok)
 
 
 class _LLMErrorCallback(BaseCallbackHandler):
@@ -205,18 +284,19 @@ class _AnthropicClientProxy:
     def _default_client(self) -> anthropic.AsyncAnthropic:
         default = self._default
         if default is None:
-            default = anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)
+            default = _anthropic_module().AsyncAnthropic(timeout=120.0, max_retries=1)
             object.__setattr__(self, '_default', default)
         return default
 
     def _resolve(self) -> anthropic.AsyncAnthropic:
+        _require_client_budget('chat_agent', provider='anthropic')
         byok = get_byok_key('anthropic')
         # Only pin Anthropic Messages through the gateway when agentic chat is
         # itself on the gateway route. FEATURE_MODE alone must not force the
         # Anthropic Messages client onto omi:auto:chat-agent (surface mismatch
         # with the Luna/OpenAI lane).
         if should_route_chat_agent_through_gateway():
-            return get_gateway_anthropic_client(byok_api_key=byok)
+            return _resolve_gateway_anthropic_client()(byok_api_key=byok)
         if byok:
             return _cached_anthropic(byok)
         return self._default_client()
@@ -232,6 +312,7 @@ def get_direct_anthropic_client(*, byok_api_key: str | None = None) -> anthropic
     requests. Calling the module-level proxy there would re-enter the managed
     gateway whenever the global feature flag is enabled.
     """
+    _require_client_budget('chat_agent', provider='anthropic', allow_byok=bool(byok_api_key))
     if byok_api_key:
         return _cached_anthropic(byok_api_key)
     return anthropic_client._default_client()
@@ -284,6 +365,7 @@ class _OpenAIEmbeddingsProxy:
         object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
 
     def _default_client(self) -> OpenAIEmbeddings:
+        _require_client_budget('openai_embeddings', allow_byok=False)
         default = self._default
         if default is None:
             default = OpenAIEmbeddings(model=self._model, **self._ctor_kwargs)
@@ -372,6 +454,7 @@ class _OpenAIEmbeddingsProxy:
                     logger.warning(
                         "BYOK gateway OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
                     )
+                    _require_client_budget('openai_embeddings', allow_byok=False)
                     return invoke_openai_embeddings_gateway(texts)
             raise
 
@@ -388,10 +471,13 @@ class _OpenAIEmbeddingsProxy:
                     logger.warning(
                         "BYOK gateway OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
                     )
+                    if generated_compute_configured():
+                        await run_blocking(db_executor, _require_client_budget, 'openai_embeddings', allow_byok=False)
                     return await ainvoke_openai_embeddings_gateway(texts)
             raise
 
     def embed_query(self, text: str) -> List[float]:
+        _require_client_budget('openai_embeddings', provider='openai')
         if self._gateway_mode():
             try:
                 return self._gateway_embed_texts([text])[0]
@@ -409,6 +495,7 @@ class _OpenAIEmbeddingsProxy:
             raise
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        _require_client_budget('openai_embeddings', provider='openai')
         if self._gateway_mode():
             try:
                 return self._gateway_embed_texts(texts)
@@ -426,12 +513,14 @@ class _OpenAIEmbeddingsProxy:
             raise
 
     async def aembed_query(self, text: str) -> List[float]:
+        if generated_compute_configured():
+            await run_blocking(db_executor, _require_client_budget, 'openai_embeddings', provider='openai')
         if self._gateway_mode():
             try:
                 return (await self._agateway_embed_texts([text]))[0]
             except Exception as e:
                 self._reraise_unless_route_absent(e, 'aembed_query')
-        inst = self._resolve()
+        inst = await run_blocking(db_executor, self._resolve) if generated_compute_configured() else self._resolve()
         try:
             return await inst.aembed_query(text)
         except Exception as e:
@@ -441,16 +530,23 @@ class _OpenAIEmbeddingsProxy:
                 )
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                    return await self._default_client().aembed_query(text)
+                    client = (
+                        await run_blocking(db_executor, self._default_client)
+                        if generated_compute_configured()
+                        else self._default_client()
+                    )
+                    return await client.aembed_query(text)
             raise
 
     async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
+        if generated_compute_configured():
+            await run_blocking(db_executor, _require_client_budget, 'openai_embeddings', provider='openai')
         if self._gateway_mode():
             try:
                 return await self._agateway_embed_texts(texts)
             except Exception as e:
                 self._reraise_unless_route_absent(e, 'aembed_documents')
-        inst = self._resolve()
+        inst = await run_blocking(db_executor, self._resolve) if generated_compute_configured() else self._resolve()
         try:
             return await inst.aembed_documents(texts)
         except Exception as e:
@@ -460,7 +556,12 @@ class _OpenAIEmbeddingsProxy:
                 )
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                    return await self._default_client().aembed_documents(texts)
+                    client = (
+                        await run_blocking(db_executor, self._default_client)
+                        if generated_compute_configured()
+                        else self._default_client()
+                    )
+                    return await client.aembed_documents(texts)
             raise
 
     def __getattr__(self, name: str):
@@ -527,7 +628,7 @@ def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
     cache_key = _hash_key(api_key)
     inst = _anthropic_cache.get(cache_key)
     if inst is None:
-        inst = anthropic.AsyncAnthropic(api_key=api_key, timeout=120.0, max_retries=1)
+        inst = _anthropic_module().AsyncAnthropic(api_key=api_key, timeout=120.0, max_retries=1)
         _anthropic_cache[cache_key] = inst
     return inst
 
@@ -536,7 +637,7 @@ def _cached_anthropic_chat(model: str, api_key: str, ctor_kwargs: Dict[str, Any]
     cache_key = f"{model}:{_hash_key(api_key)}:{hash(frozenset((k, repr(v)) for k, v in ctor_kwargs.items()))}"
     inst = _anthropic_chat_cache.get(cache_key)
     if inst is None:
-        inst = ChatAnthropic(model=model, api_key=api_key, **ctor_kwargs)
+        inst = _chat_anthropic_cls()(model=model, api_key=api_key, **ctor_kwargs)
         _anthropic_chat_cache[cache_key] = inst
     return inst
 
@@ -610,6 +711,7 @@ anthropic_client = _AnthropicClientProxy()
 
 def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
     """Explicit factory; equivalent to using the module-level proxies."""
+    _require_client_budget('chat', provider='openai')
     kwargs = _with_llm_callbacks(kwargs, 'openai', model=model)
     byok = get_byok_key('openai')
     if byok:
@@ -664,6 +766,8 @@ def get_llm(
     prompt_cache_options: Optional[dict[str, str]] = None,
     request_timeout: float | None = None,
     max_retries: int | None = None,
+    *,
+    uid: str | None = None,
 ) -> BaseChatModel:
     """Get the LLM client for a feature based on the active Model QoS profile.
 
@@ -756,6 +860,8 @@ def get_llm(
             logger.debug('BYOK QoS upgrade: feature=%s %s/%s→%s/%s', feature, model, provider, byok_model, byok_prov)
             model, provider = byok_model, byok_prov
             byok_key = byok_key_for_profile
+
+    _require_client_budget(feature, uid=uid, provider=provider, allow_byok=bool(byok_key))
 
     # Managed generation never consults the rollout switches: it is always
     # dispatched through the gateway. Preserve optional gateway routing for
@@ -855,6 +961,7 @@ def get_llm_gateway_chat_structured(
     mandatory feature lane.
     """
 
+    _require_client_budget('chat_extraction', allow_byok=False)
     result = get_or_create_omi_gateway_llm(
         CHAT_STRUCTURED_AUTO_LANE_ID,
         streaming,
@@ -921,6 +1028,7 @@ class _LazyClientProxy:
         object.__setattr__(self, '_instance', None)
 
     def _resolve(self) -> Any:
+        _require_client_budget('learnings', allow_byok=False)
         instance = self._instance
         if instance is None:
             instance = self._factory()
@@ -987,6 +1095,7 @@ def gemini_embed_query(text: str) -> List[float]:
     key keeps the thin direct AI Studio path — the gateway Vertex adapter
     fail-closes BYOK — and FEATURE_MODE=off keeps the legacy direct path.
     """
+    _require_client_budget('gemini_embeddings', provider='gemini')
     byok_key = get_byok_key('gemini')
     if _embeddings_gateway_mode() and not byok_key:
         try:

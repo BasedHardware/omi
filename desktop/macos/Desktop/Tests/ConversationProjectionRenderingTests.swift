@@ -37,6 +37,20 @@ final class ConversationProjectionRenderingTests: XCTestCase {
     XCTAssertEqual(conversation.localSummary?.schemaVersion, 1)
   }
 
+  func testProjectionWithoutEmojiRendersNeutralFallback() throws {
+    // A server-stamped projection may omit the emoji (the backend applies the
+    // category fallback); a null/absent value must render 💬, never the old 🧠.
+    let conversation = try ProjectionRenderingFixture.decode {
+      var projection = ProjectionRenderingFixture.object($0, "client_processing")
+      var structure = ProjectionRenderingFixture.object(projection, "structure")
+      structure.removeValue(forKey: "emoji")
+      projection["structure"] = structure
+      $0["client_processing"] = projection
+    }
+    XCTAssertEqual(conversation.title, "On-device title")
+    XCTAssertEqual(conversation.structured.emoji, "💬")
+  }
+
   func testLegacyConversationWithoutProjectionKeepsCanonicalStructure() throws {
     let conversation = try ProjectionRenderingFixture.decode { $0.removeValue(forKey: "client_processing") }
     XCTAssertEqual(conversation.title, "I agree")

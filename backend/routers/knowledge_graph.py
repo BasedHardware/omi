@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_configured
 import importlib
 import sys
 from enum import Enum
@@ -14,7 +15,6 @@ from utils.memory.memory_service import MemoryService
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
-from utils.subscription import is_trial_paywalled
 
 router = APIRouter()
 Payload = Dict[str, Any]
@@ -237,7 +237,11 @@ def get_canonical_knowledge_graph(
     except canonical_graph_service.CanonicalGraphCursorError as exc:
         raise HTTPException(status_code=400, detail='invalid_or_stale_cursor') from exc
     except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
-        raise HTTPException(status_code=503, detail='canonical_graph_unavailable') from exc
+        # Positive absence is different from an unreadable/corrupt revision.
+        # Keep the released status/body contract; new clients may use this
+        # additive signal to distinguish a genuinely new account from outage.
+        headers = {'X-Omi-Knowledge-Graph-State': 'unestablished'} if str(exc) == 'missing_state_head' else None
+        raise HTTPException(status_code=503, detail='canonical_graph_unavailable', headers=headers) from exc
     return CanonicalKnowledgeGraphResponse(
         nodes=page.nodes,
         edges=page.edges,
@@ -251,6 +255,8 @@ def _rebuild_graph_task(uid: str, user_name: str) -> None:
     # The gate is re-checked here because it was last answered before the response
     # was returned. Bailing out must leave the graph exactly as it was, so nothing
     # upstream of `rebuild_knowledge_graph` may delete it.
+    if not generated_compute_allowed(uid, 'knowledge_graph'):
+        return
     if _legacy_graph_mutation_decision(uid) is not LegacyGraphMutation.ALLOWED:
         return
     memories: MemoryPayloads = [
@@ -266,6 +272,7 @@ def rebuild_graph(
     background_tasks: BackgroundTasks,
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
 ):
+    require_generated_compute(uid, 'knowledge_graph')
     _require_legacy_graph_mutation(uid)
     user_name = get_user_name(uid) or ""
     # No eager delete here: `rebuild_knowledge_graph` clears the graph itself as its
@@ -294,8 +301,8 @@ async def extract_knowledge_graph(
     closed (502) instead of returning 200 with an empty graph, which a client cannot
     tell apart from a genuine "no entities" answer.
     """
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'knowledge_graph')
     kg_mod = _knowledge_graph_llm_module()
     resolved_name = body.user_name or await run_blocking(db_executor, get_user_name, uid)
     user_name = (resolved_name or "User").strip() or "User"

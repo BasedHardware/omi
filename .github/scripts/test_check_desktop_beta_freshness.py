@@ -71,6 +71,8 @@ class FreshnessTests(unittest.TestCase):
         self.assertIn("Promotion lag", joined)
         self.assertIn("Desktop Release Recovery Required", joined)
         self.assertIn("https://example.test/codemagic", joined)
+        # The recovery workflow is dispatch-only, so the hint must say where the build_id comes from.
+        self.assertIn("from main) with build_id=<the 24-hex ID at the end of the check's Codemagic Details link", joined)
 
     def test_promotion_lag_success_points_at_recover_beta(self) -> None:
         with (

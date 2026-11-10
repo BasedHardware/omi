@@ -1,0 +1,16 @@
+{
+ "schema_version": 1,
+ "id": "FC-account-deletion-strands-local-audio",
+ "violated_contract": "Deleting an account from the phone must also remove that account's local recordings, and audio another account left on this phone must never count as this account's storage pressure. The delete-account flow cleared only the WAL index files (wals.json and its backup) while the live LocalWalSync still held the records in memory; clearUserData retired them, the next save rewrote them to disk, and the next account parked them as foreign-owner records forever. Three deleted accounts left 1,069 such files on one phone, every save re-serialized them, and _pendingDiskWalCount counted them, so a brand-new account sat at the admission count cap (storage_at_risk) from its first minute.",
+ "canonical_prevention": "Purge the deleted account's records (entries and files, active, retired and foreign) while the WAL session still belongs to that account, before clearUserState retires them; remember the deleted uid in a preference that survives sign-out and the deletion wipe; at index load, delete foreign-owner records whose owner is in that list instead of parking them; and exclude foreign-owner records from the pending count that drives retention pressure. Test it through the real paths: purgeAccountWals on a sync holding active, retired and foreign records of the deleted uid plus another account's record; a load with a remembered deleted uid; and retention pressure with only foreign records on disk.",
+ "canonical_prevention_artifact": [
+  "app/test/unit/local_wal_sync_test.dart"
+ ],
+ "evidence_prs": [],
+ "scope_hints": [
+  "app/lib/services/wals/local_wal_sync.dart",
+  "app/lib/utils/auth/clear_deleted_account_session.dart",
+  "app/lib/pages/settings/delete_account.dart"
+ ],
+ "status": "open"
+}

@@ -35,6 +35,14 @@ def source_label_for_path(path: PurePath, root_dir: PurePath = ROOT_DIR) -> str:
 # as the desktop Codable migration progresses. Each entry pulls in transitive
 # $ref dependencies automatically.
 TARGET_SCHEMAS = (
+    'ConnectorAccess',
+    'McpOauthGrantsResponse',
+    'McpApiKeyCreated',
+    'BudgetChoiceRequest',
+    'BudgetChoiceRecord',
+    'BudgetChoiceResponse',
+    'BudgetChoiceWriteResponse',
+    'StorefrontResponse',
     'ProactivityTarget',
     'ProactivityFeedItem',
     'ProactivityFeedResponse',
@@ -42,6 +50,7 @@ TARGET_SCHEMAS = (
     'ProactivityOutcomeResponse',
     'ScreenTaskGateRequest',
     'ScreenTaskGateResponse',
+    'ClientFlagsResponse',
     'Conversation',
     'Structured',
     'ActionItem',

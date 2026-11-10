@@ -8,7 +8,8 @@ import 'package:omi/env/env.dart';
 /// "show in app" switch. Every call returns a typed [ApiResult].
 ///
 /// Minting answers 403 while the channel gateway is off, outside the rollout cohort, or without
-/// the Pro entitlement. Listing and unlinking stay available after entitlement loss so a user can
+/// the Pro entitlement, and 409 when the channel's seats are full (the backend then puts the
+/// account on that channel's waitlist). Listing and unlinking stay available after entitlement loss so a user can
 /// always disconnect.
 class MessagingChannelsApi {
   const MessagingChannelsApi({this.send});
@@ -46,13 +47,15 @@ class MessagingChannelsApi {
         decode: (body) => wire.GeneratedChannelLinkProof.fromJson(_object(body)),
       );
 
-  Future<ApiResult<List<wire.GeneratedChannelLink>>> listLinks() => executeApi(
+  /// The links and, from newer backends, per-channel availability (`availability` is empty when
+  /// an older backend omits it).
+  Future<ApiResult<wire.GeneratedChannelLinksResponse>> listLinks() => executeApi(
         request: ApiRequest(
           url: '${Env.apiBaseUrl}v1/messaging/links',
           method: 'GET',
         ),
         send: send,
-        decode: (body) => wire.GeneratedChannelLinksResponse.fromJson(_object(body)).links,
+        decode: (body) => wire.GeneratedChannelLinksResponse.fromJson(_object(body)),
       );
 
   Future<ApiResult<void>> unlink(String linkId) => executeApi<void>(

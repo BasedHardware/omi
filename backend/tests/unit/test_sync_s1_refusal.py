@@ -47,14 +47,11 @@ def coordinator():
 @pytest.fixture(autouse=True)
 def env(monkeypatch):
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
-    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'true')
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
 
 def _request(monkeypatch, caplog, claims, filenames, *, s1_env='true', dark='true', metric_broken=False):
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', s1_env)
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', dark)
+
     metrics = MagicMock()
     if metric_broken:
         metrics.labels.side_effect = RuntimeError('metric backend down')
@@ -126,29 +123,19 @@ def test_refusal_reasons_emit_once_and_stay_bounded(monkeypatch, caplog, claims,
     assert 'job_ref=none' in lines[0]
 
 
-def test_dark_write_disabled_classifies_not_admitted(monkeypatch, caplog):
-    requested, outcomes, lines = _request(monkeypatch, caplog, VALID, [BIN_NAME], dark='false')
-    assert requested is False
-    assert outcomes == ['s1_refused']
-    assert 'reason=not_admitted' in lines[0]
+def test_http_wire_budget_still_refuses_oversized_header(monkeypatch, caplog):
+    import json
 
-
-def test_oversize_serialized_claim_set_is_parse_failed(monkeypatch, caplog):
     names = [f"{'a' * 240}{i:03d}.bin" for i in range(20)]
-    claims = {name: _claim() for name in names}
-    requested, outcomes, lines = _request(monkeypatch, caplog, claims, names)
-    assert requested is False
-    assert outcomes == ['s1_refused'] and 'reason=parse_failed' in lines[0]
+    wire = json.dumps({'version': 1, 'files': [dict(_claim(), name=name) for name in names]}, separators=(',', ':'))
+    assert len(wire.encode()) > 4096
+    with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
+        assert recording_lineage.parse_s1_upload_claims(wire, names) == {}
+    assert 'outcome=s1_refused reason=parse_failed stage=http_boundary' in caplog.text
 
 
 def test_valid_claims_pass_silently(monkeypatch, caplog):
     requested, outcomes, lines = _request(monkeypatch, caplog, VALID, [BIN_NAME])
-    assert requested is True
-    assert outcomes == [] and lines == []
-
-
-def test_s1_gate_off_bypasses_silently(monkeypatch, caplog):
-    requested, outcomes, lines = _request(monkeypatch, caplog, None, [], s1_env='off')
     assert requested is True
     assert outcomes == [] and lines == []
 
@@ -188,11 +175,11 @@ async def test_observed_map_count_mismatch_emits_one_s1_refusal(coordinator, mon
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
     refusals = []
     lineage_module = getattr(pipeline, 'sync_recording_lineage', recording_lineage)
-    monkeypatch.setattr(lineage_module, 'emit_s1_refusal', lambda reason: refusals.append(reason))
+    monkeypatch.setattr(lineage_module, 'emit_s1_refusal', lambda reason, **kw: refusals.append((reason, kw)))
 
     async def coverage(uid, source, should_lock, client_device_id, session, claims, wav_paths, decoded_frames, **kw):
         return (list(wav_paths), {}, False)
@@ -200,7 +187,37 @@ async def test_observed_map_count_mismatch_emits_one_s1_refusal(coordinator, mon
     pipeline.apply_sync_wal_audio_coverage = coverage
     spies = _s1_spies(pipeline, monkeypatch)
     await _run_batch(module, stubs, tmp_path)
-    assert refusals == ['count_mismatch']
+    assert refusals == [('count_mismatch', {'stage': 'coordinator', 'claim_count': 0, 'file_count': 1})]
     assert spies.plan_calls == []
     assert spies.resolver_calls == [_WHOLE_BATCH_ARGS]
     assert state.outcomes[-1].value == 'success'
+
+
+@pytest.mark.parametrize('stage', ['http_boundary', 'intake', 'batch_projection', 'coordinator', 'SECRET-stage'])
+@pytest.mark.parametrize(
+    'count,bucket', [(0, '0'), (1, '1'), (5, '2_5'), (10, '6_10'), (20, '11_20'), (999999, 'gt_20')]
+)
+def test_refusal_diagnostics_are_closed_and_content_free(monkeypatch, caplog, stage, count, bucket):
+    metrics = MagicMock()
+    monkeypatch.setattr(recording_lineage, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)
+    with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
+        emit_s1_refusal('count_mismatch', stage=stage, claim_count=count, file_count=0)
+    safe_stage = 'intake' if stage == 'SECRET-stage' else stage
+    metrics.labels.assert_called_once_with(
+        outcome='s1_refused', stage=safe_stage, claim_count_bucket=bucket, file_count_bucket='0'
+    )
+    line = caplog.records[-1].getMessage()
+    assert f'stage={safe_stage} claim_count_bucket={bucket} file_count_bucket=0 job_ref=none' in line
+    assert 'SECRET' not in line and 'capture_root' not in line and 'filename=' not in line
+
+
+def test_http_boundary_rejection_is_identifiable_without_header_content(monkeypatch, caplog):
+    metrics = MagicMock()
+    monkeypatch.setattr(recording_lineage, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)
+    with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
+        assert recording_lineage.parse_s1_upload_claims('SECRET-invalid-header', ['SECRET-name.bin']) == {}
+    metrics.labels.assert_called_once_with(
+        outcome='s1_refused', stage='http_boundary', claim_count_bucket='none', file_count_bucket='none'
+    )
+    assert 'reason=parse_failed stage=http_boundary' in caplog.text
+    assert 'SECRET' not in caplog.text

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/preferences.dart';
@@ -12,21 +15,85 @@ import 'package:omi/utils/logger.dart';
 
 typedef UsageRequest = Future<UserUsageResponse?> Function({required String period, required String? timeZone});
 
+typedef ProcessingBacklogRequest = Future<ProcessingBacklog?> Function({required String idempotencyKey});
+
 class UsageProvider with ChangeNotifier {
   UsageProvider({
     Future<String?> Function()? deviceTimeZone,
     UsageRequest? usageRequest,
     Future<UserSubscriptionResponse?> Function()? subscriptionRequest,
+    ProcessingBacklogRequest? processBacklogRequest,
     DateTime Function()? now,
   })  : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
         _usageRequest = usageRequest ?? getUserUsage,
         _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
+        _processBacklogRequest = processBacklogRequest ?? processProcessingBacklog,
         _now = now ?? DateTime.now;
 
   final Future<String?> Function() _deviceTimeZone;
   final UsageRequest _usageRequest;
   final Future<UserSubscriptionResponse?> Function() _subscriptionRequest;
   final DateTime Function() _now;
+  final ProcessingBacklogRequest _processBacklogRequest;
+  String? _backlogIdempotencyKey;
+  bool _isProcessingBacklog = false;
+  int _backlogMutationGeneration = 0;
+  Timer? _backlogRefreshTimer;
+
+  void _scheduleBacklogRefresh() {
+    _backlogRefreshTimer?.cancel();
+    _backlogRefreshTimer = null;
+    if (_subscription?.processingBacklog?.isProcessing != true) return;
+    _backlogRefreshTimer = Timer(const Duration(seconds: 15), () => unawaited(fetchSubscription()));
+  }
+
+  @override
+  void dispose() {
+    _backlogRefreshTimer?.cancel();
+    _sessionGeneration++;
+    super.dispose();
+  }
+
+  bool get isProcessingBacklog => _isProcessingBacklog;
+
+  /// A cancelled choice ends its retry identity. An in-flight request owns its
+  /// identity until it answers, even if another surface is postponed.
+  void cancelBacklogDecision() {
+    if (!_isProcessingBacklog) _backlogIdempotencyKey = null;
+  }
+
+  /// Called only after confirmation. Keep one UUID through transport errors,
+  /// lost replies and ordinary subscription refreshes, across A/B/C surfaces.
+  Future<bool> processBacklog() async {
+    if (_isProcessingBacklog || _subscription?.processingBacklog?.isWaitingChoice != true) return false;
+    final generation = _sessionGeneration;
+    final idempotencyKey = _backlogIdempotencyKey ??= const Uuid().v4();
+    _isProcessingBacklog = true;
+    _backlogMutationGeneration++;
+    notifyListeners();
+    try {
+      final snapshot = await _processBacklogRequest(idempotencyKey: idempotencyKey);
+      if (generation != _sessionGeneration || snapshot == null || _subscription == null) return false;
+      _backlogMutationGeneration++;
+      _subscription = UserSubscriptionResponse.fromJson({
+        ..._subscription!.toJson(),
+        'processing_backlog': snapshot.toJson(),
+      });
+      _backlogIdempotencyKey = null; // A validated success definitively acknowledges this action.
+      _scheduleBacklogRefresh();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      Logger.debug('Failed to process backlog: $e');
+      return false;
+    } finally {
+      if (generation == _sessionGeneration) {
+        _isProcessingBacklog = false;
+        notifyListeners();
+      }
+    }
+  }
+
   String? _usageTimeZone;
   String? get usageTimeZone => _usageTimeZone;
   bool _usageTimeZoneResolved = false;
@@ -76,8 +143,6 @@ class UsageProvider with ChangeNotifier {
   String? _error;
   String? get error => _error;
 
-  bool _forceOutOfCredits = false;
-
   /// Bumped on [clearUserData] so responses from a previous session's
   /// in-flight fetches are discarded instead of repopulating cleared state.
   int _sessionGeneration = 0;
@@ -88,20 +153,12 @@ class UsageProvider with ChangeNotifier {
   double get chatQuotaPercent => _subscription?.chatQuotaPercent ?? 0.0;
   bool get chatQuotaAllowed => _subscription?.chatQuotaAllowed ?? true;
 
-  // Phone call feature — derived from subscription response. Only consult
-  // the server-driven quota when the user is on the free tier or the
-  // subscription UI is hidden; paid users with the paywall visible skip
-  // straight to the existing unlimited behavior.
+  // Older servers omit the quota; preserve their paid-plan admission rule.
   PhoneCallQuota? get phoneCallQuota => _subscription?.phoneCallQuota;
 
   bool get _isPaidPlan => _subscription?.subscription.plan.isPaid ?? false;
 
-  bool get canAccessPhoneCalls {
-    if (_isPaidPlan) return true;
-    final quota = phoneCallQuota;
-    if (quota == null) return false;
-    return quota.hasAccess;
-  }
+  bool get canAccessPhoneCalls => phoneCallQuota?.hasAccess ?? _isPaidPlan;
 
   bool get shouldShowPhoneCallsEntry {
     if (_isPaidPlan) return true;
@@ -120,17 +177,20 @@ class UsageProvider with ChangeNotifier {
   bool get isLoadingPlans => _isLoadingPlans;
 
   bool get isOutOfCredits {
-    if (_forceOutOfCredits) return true;
-    if (_subscription == null) return false;
-    final plan = _subscription!.subscription.plan;
-    // Plus is paid but metered, so it falls through to the usage check below.
-    if (plan.hasUnlimitedTranscription) return false;
-    // For metered plans, check if used is >= limit and limit is not 0 (unlimited).
-    if (_subscription!.transcriptionSecondsLimit > 0 &&
-        _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {
-      return true;
+    final allowance = _subscription?.transcriptionAllowance;
+    if (allowance == null) {
+      // Older servers only send plan limits and usage counters.
+      final subscription = _subscription;
+      if (subscription == null || subscription.subscription.plan.hasUnlimitedTranscription) return false;
+      return subscription.transcriptionSecondsLimit > 0 &&
+          subscription.transcriptionSecondsUsed >= subscription.transcriptionSecondsLimit;
     }
-    return false;
+    if (allowance.isBlocked) return true;
+    if (!allowance.isOnDevice) return false;
+    // These reasons refuse a billed socket temporarily; they do not mean the
+    // user spent their credits and must not present an upgrade as the remedy.
+    if (allowance.reason == 'allowance_unavailable' || allowance.reason == 'usage_invalid') return false;
+    return true;
   }
 
   @visibleForTesting
@@ -171,6 +231,10 @@ class UsageProvider with ChangeNotifier {
   /// Wipes user-scoped state on logout so the next account doesn't inherit
   /// the previous account's subscription/usage (e.g. a stale Pro badge).
   void clearUserData() {
+    _backlogIdempotencyKey = null;
+    _backlogRefreshTimer?.cancel();
+    _backlogRefreshTimer = null;
+    _isProcessingBacklog = false;
     TranscriptionAllowanceCache.clear();
     _subscription = null;
     _todayUsage = null;
@@ -191,7 +255,6 @@ class UsageProvider with ChangeNotifier {
     _timeZoneLookupInFlight = null;
     _usageFetchInFlight = null;
     _availablePlans = null;
-    _forceOutOfCredits = false;
     _error = null;
     _sessionGeneration++;
     _isSubscriptionLoading = false;
@@ -202,31 +265,46 @@ class UsageProvider with ChangeNotifier {
   }
 
   Future<void> markAsOutOfCreditsAndRefresh() async {
-    if (!_forceOutOfCredits) {
-      _forceOutOfCredits = true;
-      notifyListeners(); // Immediate UI update
-    }
-    await fetchSubscription(); // Sync with backend
+    // The socket's existing invalidation signal requests a fresh server answer.
+    // Keep the last answer while it loads, including when the request fails.
+    await fetchSubscription();
   }
 
-  Future<void> fetchSubscription() async {
+  Future<void>? _subscriptionFetch;
+
+  /// Fetches the subscription; concurrent callers share the request in flight instead of
+  /// returning before it lands (the after-sign-up paywall gate awaits this right after sign-in,
+  /// while AppShell's own fetch is usually still running).
+  Future<void> fetchSubscription() {
+    final inflight = _subscriptionFetch;
+    if (inflight != null) return inflight;
+    final completer = Completer<void>();
+    _subscriptionFetch = completer.future;
+    _fetchSubscription().whenComplete(() {
+      _subscriptionFetch = null;
+      completer.complete();
+    });
+    return completer.future;
+  }
+
+  Future<void> _fetchSubscription() async {
     if (_isSubscriptionLoading) return;
 
     final generation = _sessionGeneration;
+    final backlogGeneration = _backlogMutationGeneration;
     _isSubscriptionLoading = true;
     _error = null;
     notifyListeners();
 
     try {
       final subscription = await _subscriptionRequest();
-      if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
+      if (generation != _sessionGeneration || backlogGeneration != _backlogMutationGeneration) return;
       if (subscription == null) {
         _error = 'Failed to load subscription data. Please try again later.';
         return;
       }
       _subscription = subscription;
       TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
-      await _releasePaywallOnDevicePin(subscription.subscription.plan);
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {
       if (generation != _sessionGeneration) return;
@@ -234,20 +312,30 @@ class UsageProvider with ChangeNotifier {
       Logger.debug('Failed to fetch subscription: $e');
     } finally {
       if (generation == _sessionGeneration) {
-        _isSubscriptionLoading = false;
-        _forceOutOfCredits = false; // Reset optimistic flag
-        notifyListeners();
+        try {
+          await _releasePaywallOnDevicePin();
+        } catch (e) {
+          Logger.debug('Failed to release paywall STT pin: $e');
+        }
+        if (generation == _sessionGeneration) {
+          _isSubscriptionLoading = false;
+          _scheduleBacklogRefresh();
+          notifyListeners();
+        }
       }
     }
   }
 
   /// The paywall's "switch to free" persists on-device STT with raw audio off, and a persisted
-  /// Custom STT outranks the plan. Once the user pays, release that pin so capture returns to Omi
+  /// Custom STT outranks the allowance. Once the server grants managed STT, release the pin so capture returns to Omi
   /// (and audio reaches Omi again, e.g. for audio-bytes webhooks) instead of staying on-device.
-  Future<void> _releasePaywallOnDevicePin(PlanType plan) async {
+  /// Older servers omit the allowance, so retain their paid-plan release rule.
+  Future<void> _releasePaywallOnDevicePin() async {
     final prefs = SharedPreferencesUtil();
     final pinned = prefs.paywallOnDeviceSttConfigId;
-    if (!plan.isPaid || pinned.isEmpty) return;
+    final allowance = _subscription?.transcriptionAllowance ?? TranscriptionAllowanceCache.current;
+    final canUseManaged = allowance?.isManaged ?? _isPaidPlan;
+    if (!canUseManaged || pinned.isEmpty) return;
     if (prefs.customSttConfig.sttConfigId == pinned) {
       await prefs.saveCustomSttConfig(CustomSttConfig.defaultConfig);
     }
@@ -469,7 +557,11 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({
+    required String priceId,
+    String? promotionCode,
+    int? trialDays,
+  }) async {
     if (_isPaymentLoading) return null;
 
     _isPaymentLoading = true;
@@ -477,7 +569,8 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final sessionData = await createCheckoutSession(priceId: priceId, promotionCode: promotionCode);
+      final sessionData =
+          await createCheckoutSession(priceId: priceId, promotionCode: promotionCode, trialDays: trialDays);
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';

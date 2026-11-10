@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from config.stt_provider_policy import SONIOX_PROVIDER
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.stt import streaming as st
 from utils.stt.language_policy import (
     MAX_DETECTION_CHARS,
@@ -87,8 +88,6 @@ def test_out_of_scope_sessions_keep_the_existing_selection_and_hints(monkeypatch
 def test_hint_vocabulary_filters_each_code_and_preserves_identification(monkeypatch):
     profile = LiveLanguageProfile.create('mt', multi=True, uid='u')
     assert soniox_hints('multi', profile) == ['en']
-    monkeypatch.setenv('STT_MULTI_LANGUAGE_HINTS', 'false')
-    assert soniox_hints('multi', profile) == []
 
 
 def test_soniox_hints_expand_equivalents_with_deduplication_and_cap():
@@ -221,6 +220,7 @@ def test_explicit_parakeet_preference_keeps_existing_fallback_order(monkeypatch)
 @pytest.mark.parametrize('configured_order', [True, False])
 @pytest.mark.asyncio
 async def test_failed_preferred_soniox_falls_into_normal_chain(monkeypatch, configured_order):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setattr('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     monkeypatch.setattr(st, '_soniox_circuit', ProviderCircuitBreaker(failure_threshold=2, cooldown_seconds=30))
@@ -397,3 +397,19 @@ def test_full_detector_queue_records_one_undetermined_segment():
     segment = {'text': 'a' * 24}
     observations.observe(segment, 'soniox', lambda _coro, name: pytest.fail(f'unexpected spawn: {name}'))
     assert observations.counts == {'undetermined': 1}
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_recorded_multilingual_hint_arm_keeps_its_policy_hash_and_hints(enabled):
+    from dataclasses import replace
+    from config.policy.listen import current_listen_policy, resolve_listen_policy, ListenSessionPolicy
+
+    original = replace(resolve_listen_policy('synthetic'), multi_language_hints=enabled)
+    recorded = ListenSessionPolicy.from_dict(original.to_dict())
+    assert recorded.policy_id == original.policy_id
+    token = current_listen_policy.set(recorded)
+    try:
+        profile = LiveLanguageProfile.create('pt', multi=True, uid='synthetic')
+        assert soniox_hints('multi', profile) == (['pt', 'en'] if enabled else [])
+    finally:
+        current_listen_policy.reset(token)

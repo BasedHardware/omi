@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-chat-apps-whatsapp-row.png",
+      "platform": "mobile-ios",
+      "description": "Chat Apps with a WhatsApp number configured: WhatsApp offers Connect instead of Notify Me",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-whatsapp-connect-code.png",
+      "platform": "mobile-ios",
+      "description": "WhatsApp connect sheet with the prefilled one-time code and Open WhatsApp",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-whatsapp-connect-waiting.png",
+      "platform": "mobile-ios",
+      "description": "Waiting step after opening WhatsApp, with the code to send by hand",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

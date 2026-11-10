@@ -1,0 +1,15 @@
+{
+  "schema": "orphan-repair-trace/1",
+  "name": "orphan_sealed_registered",
+  "source": "lead2 P0 freeze exemption bus 8c0822; stale sealed received capture without committed window",
+  "row": {
+    "status": "in_progress",
+    "record_lane_owner": "batch_live_v1",
+    "server_batch_only": true,
+    "record_audio_closed": true,
+    "server_batch_audio_closed": true,
+    "server_batch_audio_received": true
+  },
+  "retained_spans": [{"start": 100.0, "seconds": 2.0}],
+  "expect": {"job_state": "record_pending", "has_content": true}
+}

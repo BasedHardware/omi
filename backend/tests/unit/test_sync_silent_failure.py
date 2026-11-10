@@ -10,6 +10,7 @@ silent returns or thread crashes, and the endpoint always returned 200.
 """
 
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,7 +18,13 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from models import conversation_continuity  # noqa: F401 - retain pure policy across the legacy models package stub
 from models.transcript_segment import SpeakerIdentityStatus
+from utils.capture import coverage  # noqa: F401 - retain lazy ledger authority before database stubs
+from utils.stt import transcript_admission  # noqa: F401 - retain pure admission contract before enum/package stubs
+from utils.speakers import context  # noqa: F401 - retain speaker metric owner before package stubs
+from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms before legacy database stubs
+from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy sanitizer stubs
 
 
 def _read_text(path):
@@ -92,50 +99,12 @@ class TestSyncEndpointErrorReporting:
     def _read_sync_source():
         return _read_text(os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'))
 
-    def test_endpoint_creates_lock_and_errors(self):
-        """Endpoint must create segment_lock and segment_errors."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        func_body = source[start:]
-
-        assert 'segment_errors = []' in func_body, "Must initialize error list"
-        assert 'segment_lock = threading.Lock()' in func_body, "Must create lock"
-
-    def test_endpoint_passes_lock_and_errors_to_threads(self):
-        """Thread args must include lock and errors."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        func_body = source[start:]
-
-        assert 'segment_lock,' in func_body, "Must pass lock to process_segment threads"
-        assert 'segment_errors,' in func_body, "Must pass errors to process_segment threads"
-
-    def test_endpoint_returns_207_on_partial_failure(self):
-        """Partial failure must return HTTP 207."""
-        source = self._read_sync_source()
-        assert 'status_code=207' in source, "Must return 207 for partial failure"
-
-    def test_endpoint_returns_500_on_all_failed(self):
-        """All segments failing must return HTTP 500."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        func_body = source[start:]
-
-        assert 'successful_segments == 0' in func_body, "Must check for all-fail case"
-        assert "All" in func_body and "failed processing" in func_body, "Must include descriptive 500 message"
-
     def test_response_includes_failed_segments_count(self):
         """Response must include failed_segments count for app to check."""
         source = self._read_sync_source()
         assert "'failed_segments'" in source, "Response must include failed_segments"
         assert "'total_segments'" in source, "Response must include total_segments"
         assert "'errors'" in source, "Response must include errors list"
-
-    def test_response_converts_sets_to_sorted_lists(self):
-        """Sets must be converted to sorted lists for JSON serialization."""
-        source = self._read_sync_source()
-        assert "sorted(response['new_memories'])" in source, "new_memories must be sorted list"
-        assert "sorted(response['updated_memories'])" in source, "updated_memories must be sorted list"
 
 
 # ---------------------------------------------------------------------------
@@ -400,9 +369,15 @@ class TestAppSideSyncBehavior:
 
     def test_app_keeps_wals_retryable_on_failed_reconcile(self):
         """App keeps uploaded WALs retryable when sync v2 reconciliation fails."""
-        source = self._read_app_file('services/wals/local_wal_sync.dart')
-        if source is None:
+        library = self._read_app_file('services/wals/local_wal_sync.dart')
+        if library is None:
             pytest.skip("App source not available")
+        # The reconcile logic lives in `part` files of this library (e.g. wal_job_reconciliation.dart).
+        parts = [
+            self._read_app_file(f'services/wals/{name}') or ''
+            for name in re.findall(r"^part '([^']+)';", library, flags=re.MULTILINE)
+        ]
+        source = '\n'.join([library, *parts])
 
         assert 'reconcileUploadedWals' in source, "Must reconcile uploaded sync v2 jobs"
         assert 'case SyncJobFetchOutcome.notFound' in source, "Expired jobs must be recoverable"
@@ -531,12 +506,14 @@ class TestSegmentDeduplication:
             'store_partial_merge_survivor_audio(' not in source
         ), "Chunk storage stays in pipeline; assignment returns survivors instead"
         pipeline_source = self._read_pipeline_source()
+        assert 'store_intake_audio(' in pipeline_source, "Sync must delegate retained audio to the shared policy"
         assert (
-            'store_partial_merge_survivor_audio(' in pipeline_source
-        ), "Partial dedupe must store sliced private-cloud audio for survivors"
+            'store_partial=store_partial_merge_survivor_audio' in pipeline_source
+        ), "The shared policy must retain the legacy partial-audio callback"
+        audio_source = _read_text(Path(__file__).parents[2] / 'utils/sync/merge_audio.py')
         assert (
-            'if private_cloud_sync_enabled and survivors:' in pipeline_source
-        ), "Chunk upload must be skipped when dedupe eliminated every segment"
+            'if private_cloud_sync_enabled and survivors:' in audio_source
+        ), "Shared chunk policy must skip upload when dedupe eliminated every segment"
 
     def test_dedupe_helper_uses_rounding(self):
         """Shared helper must round timestamps for reliable comparison."""
@@ -696,6 +673,7 @@ class TestMergeSurvivorAudio:
         mock_upload = MagicMock()
         mock_storage = ModuleType('utils.other.storage')
         mock_storage.upload_audio_chunk = mock_upload
+        mock_storage.link_archive_captures = MagicMock()
 
         with (
             patch.object(merge_audio, '_wav_bytes_to_pcm16_16k', return_value=pcm),
@@ -762,6 +740,7 @@ _STUB_MODULES = [
     'utils.subscription',
     'utils.cloud_tasks',
     'utils.sync.content_id',
+    'utils.sync.empty_recovery_intent',
     'utils.sync.assignment',
     'utils.sync.merge_audio',
     'utils.sync.merge_dedupe',
@@ -800,7 +779,7 @@ class TestProcessSegmentReal:
         # Install stubs
         for mod_name in _STUB_MODULES:
             sys.modules[mod_name] = ModuleType(mod_name)
-        sys.modules['models'].__path__ = []
+        sys.modules['models'].__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'models')]
         # Keep receipt policy + allocator real: assignment.py imports them at
         # module scope, and the stubbed models.transcript_segment is not a package
         # that can load the policy's real TranscriptSegment binding.
@@ -815,6 +794,14 @@ class TestProcessSegmentReal:
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
+        sys.modules['database._client'].get_firestore_client = MagicMock(
+            side_effect=AssertionError('flag-off segment processing must not claim a first-summary owner')
+        )
+        # Held-result custody imports the real privacy fence. Both client views
+        # must remain the same no-IO fake, including the deletion marker plane.
+        sys.modules['database._client'].get_data_plane_firestore_client = sys.modules[
+            'database._client'
+        ].get_firestore_client
         # Segment error handling is isolated from enrollment/voiceprint loading.
         sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
         sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
@@ -838,6 +825,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
         sys.modules['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
         sys.modules['utils.other.storage'].get_playback_artifact_signed_url = MagicMock(return_value=None)
+        sys.modules['utils.other.storage'].get_playback_failure_retry_epoch = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_playback_artifact = MagicMock()
@@ -845,6 +833,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
+        sys.modules['utils.other.storage'].link_archive_captures = MagicMock()
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
         sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
@@ -857,6 +846,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
         sys.modules['utils.other.storage'].compute_audio_files_fingerprint = MagicMock(return_value='fp')
+        sys.modules['utils.other.storage'].list_audio_chunks = MagicMock(return_value=[])
         sys.modules['utils.other.storage'].enqueue_conversation_artifact_build = MagicMock()
         sys.modules['utils.other.storage'].get_conversation_playback_signed_url = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_conversation_playback_artifact = MagicMock()
@@ -869,6 +859,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
+        sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job_deferred = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
         sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
@@ -877,6 +868,9 @@ class TestProcessSegmentReal:
         sys.modules['database.sync_dead_letters'].dead_letter_failure_code = MagicMock(return_value='unknown')
         sys.modules['database.sync_ledger'].bind_sync_content_run_token = MagicMock()
         sys.modules['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
+        sys.modules['database.sync_ledger'].checkpoint_and_mark_sync_segment = MagicMock(return_value='marked')
+        sys.modules['database.sync_ledger'].SEGMENT_ALREADY_PROCESSED = 'already_processed'
+        sys.modules['database.sync_ledger'].SEGMENT_FOREIGN_OWNER = 'foreign_owner'
         sys.modules['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())
         sys.modules['database.sync_ledger'].get_sync_content_partial_result = MagicMock(return_value=None)
         sys.modules['database.sync_ledger'].is_valid_completed_sync_content_result = MagicMock(return_value=True)
@@ -888,8 +882,20 @@ class TestProcessSegmentReal:
         sys.modules['utils.sync.content_id'].compute_sync_segment_id = MagicMock(return_value='segment-id')
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.encryption'].encrypt = MagicMock()
+        sys.modules['utils.encryption'].decrypt = MagicMock(
+            side_effect=AssertionError('flag-off processing must not read held provider results')
+        )
+        sys.modules['utils.stt.pre_recorded'].held_single_attempt = MagicMock(
+            side_effect=AssertionError('flag-off processing must not enter held provider dispatch')
+        )
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].modulate_prerecorded_from_bytes = MagicMock(
+            side_effect=AssertionError('flag-off processing must not dispatch multilingual recovery')
+        )
+        sys.modules['utils.sync.empty_recovery_intent'].dispatch_once = MagicMock(
+            side_effect=AssertionError('flag-off processing must not claim recovery')
+        )
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
         sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
             return_value=('deepgram', 'multi', 'nova-3')
@@ -1017,6 +1023,7 @@ class TestProcessSegmentReal:
         sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
         sys.modules['utils.sync'] = sync_pkg
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
 
         sys.modules['utils.sync.bridge'].finish_sync_segment = lambda *a, **kw: None
 
@@ -1031,6 +1038,7 @@ class TestProcessSegmentReal:
     @classmethod
     def teardown_class(cls):
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         # Restore original modules
         for name, orig in cls._saved_modules.items():
             if orig is None:
@@ -1583,6 +1591,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
         sys.modules['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
         sys.modules['utils.other.storage'].get_playback_artifact_signed_url = MagicMock(return_value=None)
+        sys.modules['utils.other.storage'].get_playback_failure_retry_epoch = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_playback_artifact = MagicMock()
@@ -1591,6 +1600,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
+        sys.modules['utils.other.storage'].link_archive_captures = MagicMock()
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
         sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()

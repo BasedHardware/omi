@@ -285,6 +285,15 @@ async def test_openai_compatible_provider_keeps_seconds_form_retry_after(monkeyp
             FailureClass.PROVIDER_INVALID_REQUEST,
             ProviderRejection.INVALID_OTHER,
         ),
+        (
+            {
+                'code': 'invalid_value',
+                'param': 'messages[0].content[1].file.file_id',
+                'message': 'private provider detail',
+            },
+            FailureClass.PROVIDER_INVALID_REQUEST,
+            ProviderRejection.INVALID_ATTACHMENT,
+        ),
     ],
 )
 async def test_openai_provider_classifies_bounded_rejection_without_leaking_body(

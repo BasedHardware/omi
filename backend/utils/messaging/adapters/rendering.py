@@ -16,6 +16,8 @@ CITATION_PATTERN = (
     rf'(?:\[\s*+{_CITATION_LIST}\s*+\](?!\()|【\s*+{_CITATION_LIST}\s*+】|\[\^\s*+{_CITATION_LIST}\s*+\])'
 )
 CITATIONS = re.compile(CITATION_PATTERN)
+# Removing "details [3]." must not leave "details ." behind.
+_CITATIONS_WITH_SPACE = re.compile(r'[ \t\u00a0]*+(?:' + CITATION_PATTERN + ')')
 _MARKDOWN_LINK = re.compile(r'\[([^\]\n]*)\]\(([^)\n]*)\)')
 _UNSAFE_SCHEME = re.compile(r'(?i)(?:javascript|data|vbscript|file)\s*:[^\s<>()]*|\bhttp(?!s)\s*:[^\s<>()]*')
 _BUTTON_LABEL_LIMIT = 30
@@ -77,13 +79,17 @@ def _drop_unsafe_links(text):
     return _UNSAFE_SCHEME.sub('', _MARKDOWN_LINK.sub(replace, text))
 
 
+def strip_citations(text):
+    return _CITATIONS_WITH_SPACE.sub('', text or '')
+
+
 def source_phrases(text, sources=()):
     # Citations are UI chrome; even unknown or malformed indices cannot leak.
-    return _drop_unsafe_links(CITATIONS.sub('', text or ''))
+    return _drop_unsafe_links(strip_citations(text))
 
 
 def linked_items(response):
-    items, seen = [], set()
+    items, seen, cited = [], set(), []
     sources = (*response.get('conversations', ()), *response.get('memories', ()))
     for source in sources:
         kind = source.get('kind', 'conversation')
@@ -107,6 +113,8 @@ def linked_items(response):
             and block.get('id')
         ):
             kind, item_id = block['kind'], block['id']
+            if block.get('cited') is True:
+                cited.append((kind, item_id))
             if (kind, item_id) not in seen:
                 seen.add((kind, item_id))
                 items.append(
@@ -130,10 +138,16 @@ def linked_items(response):
                         'url': item_link(kind, item_id),
                     }
                 )
-    # Tool results are candidates, not evidence that the answer recommended them.
+    # Numbered citations are the answer's own evidence: they link in citation
+    # order even when the prose paraphrases the title.
+    by_key = {(item['kind'], item['id']): item for item in items}
+    first = [by_key[key] for key in dict.fromkeys(cited) if key in by_key]
+    # Other tool results are candidates, not evidence that the answer recommended them.
     answer = ' '.join(plain(response.get('text', '')).casefold().split())
     referenced = []
     for item in items:
+        if item in first:
+            continue
         title = ' '.join(plain(item['title']).casefold().split())
         needles = [item['url'].casefold(), str(item['id']).casefold()]
         if title and title not in {'task', 'memory', 'conversation'}:
@@ -145,7 +159,7 @@ def linked_items(response):
                 positions.append(match.start())
         if positions:
             referenced.append((min(positions), item))
-    return [item for _, item in sorted(referenced, key=lambda pair: pair[0])][:10]
+    return (first + [item for _, item in sorted(referenced, key=lambda pair: pair[0])])[:10]
 
 
 def button_label(title):

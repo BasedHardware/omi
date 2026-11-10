@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -54,6 +56,70 @@ void main() {
       );
 
   List<File> audioFiles() => tempDir.listSync().whereType<File>().where((f) => f.path.endsWith('.bin')).toList();
+
+  for (final nextCodec in [BleAudioCodec.opus, BleAudioCodec.pcm16]) {
+    test('packets arriving during a codec flush to $nextCodec survive on disk', () async {
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      var holdWrite = false;
+      final sync = LocalWalSyncImpl(
+        _MockListener(),
+        freeDiskBytes: () async => 1 << 40,
+        persistWals: (wals) async {
+          if (holdWrite) {
+            holdWrite = false;
+            entered.complete();
+            await release.future;
+          }
+          expect(await WalFileManager.saveWals(wals), isTrue);
+        },
+      );
+      addTearDown(() async {
+        if (!release.isCompleted) release.complete();
+        await sync.stop();
+      });
+      sync.start();
+      await sync.walReady;
+      await sync.onAudioCodecChanged(BleAudioCodec.opus);
+      sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+      for (var i = 0; i < 50; i++) {
+        sync.onFrameCaptured(frame(i, 0));
+      }
+
+      holdWrite = true;
+      final reconnect = sync.onAudioCodecChanged(nextCodec);
+      await entered.future;
+      expect(sync.currentCodec, nextCodec, reason: 'the new source boundary precedes asynchronous I/O');
+      // Native BLE keeps delivering orphan packets while the old WAL fsync is
+      // pending. Hold that exact boundary, rather than racing host file I/O.
+      for (var i = 50; i < 60; i++) {
+        sync.onFrameCaptured(frame(i, 0));
+      }
+      release.complete();
+      await reconnect;
+      await sync.finalizeCurrentSession();
+
+      final index = await WalFileManager.loadWals();
+      expect(index.fold<int>(0, (total, wal) => total + wal.totalFrames), 60);
+      expect(index.map((wal) => wal.codec), [BleAudioCodec.opus, nextCodec]);
+      expect(index.map((wal) => wal.totalFrames), [50, 10]);
+      expect(sync.testFrames, isEmpty);
+      final payloads = <int>[];
+      for (final wal in index) {
+        final bytes = await File('${tempDir.path}/${wal.filePath}').readAsBytes();
+        final header = ByteData.sublistView(bytes);
+        for (var offset = 0; offset < bytes.length;) {
+          final length = header.getUint32(offset, Endian.little);
+          offset += 4;
+          expect(length, 2);
+          expect(bytes[offset], 0xAA);
+          payloads.add(bytes[offset + 1]);
+          offset += length;
+        }
+      }
+      expect(payloads, orderedEquals(List<int>.generate(60, (i) => i)), reason: 'each packet exactly once on disk');
+    });
+  }
 
   test('finalizeCurrentSession produces a fsynced audio file AND a persisted index entry', () async {
     final sync = LocalWalSyncImpl(_MockListener());

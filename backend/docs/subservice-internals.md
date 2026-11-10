@@ -25,11 +25,9 @@ diarizer/               # Subservice: speaker audio analysis (separate Docker, G
 nllb_translation/       # Subservice: self-hosted NLLB translation (separate Docker, GPU/CUDA)
                         #   - POST /v1/translate — batch sentence translation (NLLB-200 + CTranslate2)
                         #   - Prometheus metrics at /metrics, health at /health, readiness at /ready
-                        #   - Fallback to Gemini 2.5 Flash-Lite when NLLB is unavailable
+                        #   - Fallback to Luna when NLLB is unavailable; retired in prod 2026-11-02 (dev only)
 
 modal/                  # Serverless GPU services (deployed on Modal) + Cloud Run Jobs
                         #   - VAD: voice activity detection (pyannote/voice-activity-detection)
                         #   - notifications-job: hourly push notifications + X sync (Cloud Run Job)
-                        #   - memory-maintenance-job: canonical ST→LT maintenance (Cloud Run Job)
-                        #   - knowledge-ledger-drain-job: bounded writer-mode migration (Cloud Run Job)
 ```

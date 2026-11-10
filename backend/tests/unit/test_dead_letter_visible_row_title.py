@@ -12,9 +12,12 @@ Row states (David's rule: a listed row always carries something useful, and a
 
 from __future__ import annotations
 
+from database import conversation_processing_recovery as processing_recovery
+
 import json
 import os
 import zlib
+from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -25,6 +28,8 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 from database import conversation_finalization_jobs as jobs
 from database import conversation_terminal_title as terminal_title
 from database import conversations as conversations_db
+from database import processing_attention as attention
+from tests.unit.fixtures.strict_firestore_transaction import ReadAfterWriteError, StrictFirestore
 from models.conversation import Conversation
 from utils import encryption
 
@@ -44,6 +49,7 @@ class _Photos:
 
     def stream(self, transaction=None):
         assert transaction is not None, 'photo probe must read inside the transaction'
+        transaction._assert_read_allowed()
         self.reads += 1
         return iter([SimpleNamespace(to_dict=lambda photo=photo: photo) for photo in self.photos])
 
@@ -56,8 +62,10 @@ class _Ref:
         self.photos = _Photos(child_photos or [])
 
     def get(self, transaction=None):
-        del transaction
-        return SimpleNamespace(exists=self.data is not None, id=self.id, to_dict=lambda: self.data)
+        if transaction is None:
+            return SimpleNamespace(exists=self.data is not None, id=self.id, to_dict=lambda: self.data)
+        self.parent = SimpleNamespace(parent=transaction.database.collection('users').document(_UID))
+        return transaction.document(self).get(transaction=transaction)
 
     def collection(self, name: str):
         assert name == 'photos'
@@ -65,11 +73,33 @@ class _Ref:
 
 
 class _Transaction:
+    """Keep title/photo fixtures while delegating document semantics to StrictFirestore."""
+
     def __init__(self):
+        self.database = StrictFirestore()
+        self.strict = self.database.transaction()
         self.updates: list[tuple[_Ref, dict]] = []
+        self.sets = []
+
+    def document(self, ref):
+        path = tuple(ref.path.split('/'))
+        if ref.data is not None and path not in self.database.rows:
+            self.database.rows[path] = deepcopy(ref.data)
+        return self.database.document(ref.path)
+
+    def _assert_read_allowed(self):
+        self.strict._assert_read_allowed()
+
+    def _assert_reference_belongs(self, ref):
+        self.strict._assert_reference_belongs(ref)
 
     def update(self, ref, data):
+        self.strict.update(self.document(ref), data)
         self.updates.append((ref, data))
+
+    def set(self, ref, data):
+        self.strict.set(ref, data)
+        self.sets.append((ref, data))
 
 
 def _job() -> _Ref:
@@ -91,6 +121,7 @@ def _conversation(extra: dict | None = None, *, child_photos: list[dict] | None 
         'conversation-1',
         {
             'status': 'processing',
+            'source': 'omi',
             'discarded': False,
             'finalization_job_id': 'job-1',
             'finalization_revision': 3,
@@ -121,10 +152,21 @@ def _dead_letter(conversation: _Ref, failure_code: str = 'final_attempt_failed',
         None,
         failure_code,
         zone_for,
+        terminal_title.prepare_calendar_probe(_UID, conversation.data),
     )
     conversation_writes = [patch for ref, patch in transaction.updates if ref is conversation]
     assert len(conversation_writes) == 1
     patch = conversation_writes[0]
+    assert len(transaction.sets) == 1
+    attention_ref, item = transaction.sets[0]
+    assert attention_ref.path == (
+        'users',
+        _UID,
+        'processing_attention_items',
+        attention.item_id(conversation.id, conversation.data),
+    )
+    assert item['conversation_id'] == conversation.id
+    assert item['retryable'] == bool(patch.get('summary_retryable'))
     patch['_zone_calls'] = zone_calls
     return patch
 
@@ -147,6 +189,8 @@ def test_transient_failure_with_transcript_is_titled_and_retryable(failure_code)
     # Only the title changes; the rest of the stored structured map survives.
     assert patch['structured'] == {'title': 'We picked the venue for Friday.', 'overview': '', 'category': 'other'}
     assert patch['summary_retryable'] is True
+    assert patch['relevance_decision']['verdict'] == 'keep'
+    assert patch['relevance_decision']['trigger'] == 'dead_letter'
     assert patch['_zone_calls'] == []  # a transcript title needs no zone lookup
 
 
@@ -306,6 +350,7 @@ def test_unbound_or_discarded_rows_are_not_touched():
         transaction, _job(), 3, 1, 5, _NOW, lambda uid, conversation_id: discarded, None, 'final_attempt_failed'
     )
     assert [ref for ref, _patch in transaction.updates if ref is discarded] == []
+    assert transaction.sets == []
 
 
 def test_titled_dead_letter_row_is_a_valid_api_conversation():
@@ -391,8 +436,10 @@ def test_dead_letter_at_the_document_limit_still_terminalizes_without_growth():
     patch = _dead_letter(conversation)
     patch.pop('_zone_calls')
 
-    # Exactly the pre-existing status-only terminal: nothing that grows the document.
-    assert patch == {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}
+    # Title is optional, but the decision must survive the headroom guard.
+    assert patch['status'] == 'completed'
+    assert patch['relevance_decision']['reason'] == 'dead_letter_default'
+    assert 'structured' not in patch
 
 
 def test_dead_letter_with_room_below_the_limit_keeps_title_and_retry():
@@ -412,8 +459,10 @@ def test_orphan_at_the_document_limit_still_terminalizes_without_growth():
     del orphan.data['finalization_job_id']
     transaction = _Transaction()
 
-    assert jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, _NOW, _UID) is True
-    assert transaction.updates == [(orphan, {'status': 'completed'})]
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, orphan, admitted, _NOW, _UID) is True
+    assert transaction.updates[0][0] is orphan
+    assert transaction.updates[0][1]['status'] == 'completed'
+    assert transaction.updates[0][1]['relevance_decision']['reason'] == 'orphan_terminal_default'
 
 
 def _reference_size(value) -> int:
@@ -486,6 +535,131 @@ def test_many_action_item_maps_near_the_limit_drop_the_title():
     patch = _dead_letter(near_limit)
     patch.pop('_zone_calls')
 
-    assert patch == {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}
+    assert patch == {'status': 'failed'}
     after = {**near_limit.data, **patch}
     assert _reference_document_size(after, near_limit.path) <= terminal_title.FIRESTORE_MAX_DOCUMENT_BYTES
+
+
+def test_attention_read_after_a_terminal_write_is_rejected():
+    transaction = _Transaction()
+    conversation = _conversation({'transcript_segments': _segments('Plan the offsite.')})
+    conversation.get(transaction=transaction)
+    job = _job()
+    job.get(transaction=transaction)
+    transaction.update(job, {'status': 'dead_letter'})
+    with pytest.raises(ReadAfterWriteError):
+        attention.create_in_transaction(
+            transaction,
+            _UID,
+            conversation,
+            conversation.data,
+            {'summary_retryable': True},
+            'final_attempt_failed',
+            _NOW,
+        )
+
+
+def test_legacy_undescribed_child_photo_blocks_new_terminal_discard(monkeypatch):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    conversation = _conversation(
+        {'transcript_segments': _segments('Huh?'), 'has_photos': False}, child_photos=[{'description': ''}]
+    )
+    patch = _dead_letter(conversation)
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['verdict'] == 'keep'
+
+
+def test_terminal_rule_discard_is_atomic_with_job_dead_letter(monkeypatch):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    conversation = _conversation({'transcript_segments': _segments('Huh?'), 'relevance_decision': {}})
+    patch = _dead_letter(conversation)
+    assert patch['status'] == 'completed'
+    assert patch['finalization_status'] == 'dead_letter'
+    assert patch['discarded'] is True
+    assert patch['relevance_decision']['reason'] == 'filler_only'
+
+
+def test_calendar_overlap_blocks_terminal_rule_discard(monkeypatch):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: True)
+    patch = _dead_letter(_conversation({'transcript_segments': _segments('Huh?')}))
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['reason'] == 'calendar_overlap'
+
+
+@pytest.mark.parametrize('segment', [None, 'unknown encoded content', {'text': None}, {'unknown': 'content'}])
+def test_malformed_segment_content_is_never_inferred_empty(monkeypatch, segment):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    patch = _dead_letter(_conversation({'transcript_segments': [segment]}))
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['verdict'] == 'keep'
+    assert patch['relevance_decision']['reason'] == 'dead_letter_default'
+
+
+@pytest.mark.parametrize('raw', [{}, '', b'', False, 0])
+def test_malformed_falsey_transcript_is_never_inferred_empty(monkeypatch, raw):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    patch = _dead_letter(_conversation({'transcript_segments': raw}))
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['reason'] == 'dead_letter_default'
+
+
+@pytest.mark.parametrize('include_discarded', [False, True])
+def test_failed_terminal_is_hidden_even_for_status_unfiltered_reader(include_discarded):
+    assert not conversations_db.is_visible_conversation(
+        {'status': 'failed', 'discarded': False}, include_discarded=include_discarded
+    )
+
+
+def test_calendar_timeout_still_commits_atomic_terminal_keep(monkeypatch):
+    def timeout(*_):
+        raise TimeoutError('provider timeout')
+
+    monkeypatch.setattr(terminal_title, 'calendar_retains', timeout)
+    patch = _dead_letter(_conversation({'transcript_segments': _segments('Huh?')}))
+    assert patch['status'] == 'completed'
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['verdict'] == 'keep'
+
+
+def test_calendar_probe_does_not_reuse_negative_evidence_after_window_change(monkeypatch):
+    monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
+    row = _conversation().data
+    probe = terminal_title.prepare_calendar_probe(_UID, row)
+    assert probe(row) is False
+    assert probe({**row, 'finished_at': _NOW}) is None
+
+
+def test_public_dead_letter_fetches_calendar_before_transaction_and_timeout_keeps(monkeypatch):
+    from unittest.mock import Mock
+
+    conversation = _conversation({'transcript_segments': _segments('Huh?')})
+    job = _job()
+    transaction = _Transaction()
+    events = []
+    client = Mock()
+    client.transaction.return_value = transaction
+    monkeypatch.setattr(jobs, '_job_ref', lambda *_: job)
+    monkeypatch.setattr(jobs, '_conversation_ref', lambda *_: conversation)
+    monkeypatch.setattr(jobs, '_record_projection_delta', lambda *_a, **_kw: None)
+    monkeypatch.setattr(jobs, 'user_time_zone', lambda *_: None)
+
+    def timeout(*_):
+        events.append('provider')
+        raise TimeoutError('provider deadline')
+
+    monkeypatch.setattr(terminal_title, 'calendar_retains', timeout)
+
+    def transactional(fn):
+        def run(*args):
+            events.append('transaction')
+            return fn(*args)
+
+        return run
+
+    monkeypatch.setattr(jobs.firestore, 'transactional', transactional)
+    assert jobs.mark_finalization_dead_letter('job-1', 3, 1, 5, firestore_client=client)
+    assert events == ['provider', 'transaction']
+    patch = next(patch for ref, patch in transaction.updates if ref is conversation)
+    assert patch['status'] == 'completed'
+    assert patch['discarded'] is False
+    assert patch['relevance_decision']['verdict'] == 'keep'

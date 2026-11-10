@@ -221,16 +221,8 @@ final class ChatDiscoverabilityTests: XCTestCase {
         declaredTools.insert(name)
       }
     }
-    // Derived from the same fixture, not hand-maintained. A hardcoded list is what broke
-    // this test: `look_at_frame` reached the registry in #12084 (2026-08-27) while the list
-    // had not changed since 2026-08-01, so a manifest addition became a test failure.
-    //
-    // A tool is exempt when the manifest says it is Local API only, and an alias inherits
-    // its canonical entry's exemption. main states the reason well: `look_at_frame` is
-    // `get_screenshot`'s alias on the local agent API and inherits its reach — the local
-    // API is the only adapter either is advertised to, so neither can appear in a chat
-    // adapter's declarations. Deriving that from the fixture rather than restating it as
-    // a literal is the only difference here.
+    // Derive Local API-only exemptions from the manifest so they cannot leak into
+    // chat-adapter declarations as the manifest changes.
     var localApiOnlyTools = Set<String>()
     for entry in fixture {
       guard let name = entry["name"] as? String,

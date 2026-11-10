@@ -2,6 +2,14 @@
 
 Self-hosted translation using **Meta NLLB-200** (No Language Left Behind) — a 200-language neural machine translation model running on GPU via CTranslate2. Replaces Gemini 2.5 Flash-Lite for realtime transcript translation in the Omi listen pipeline.
 
+## Logging and image build
+
+Build from the repository root: `docker build -f backend/nllb_translation/Dockerfile .`.
+The image copies the shared standalone logger into `/app`. GCP logs use JSON with
+service `nllb` and request trace context, including each inference executor submission.
+General access logs remain enabled until matching Gateway/Ingress coverage is proven;
+successful health, liveness, readiness and metrics requests are filtered.
+
 ## Architecture
 
 ```
@@ -140,18 +148,21 @@ See `TUNING_RESULTS.md` for the full tuning sweep across beam sizes, compute typ
 
 The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.py`. Provider is controlled exclusively by `TRANSLATION_SERVICE_MODELS` — the URL alone never changes provider.
 
+Prod retired this service on 2026-11-02: prod and dev listen run `TRANSLATION_SERVICE_MODELS=luna`, and the
+deploy workflow targets development only. The options below are for dev experiments.
+
 ```bash
-# 1. NLLB only (default — no config needed)
-# TRANSLATION_SERVICE_MODELS is unset
+# 1. Luna only (default — no config needed; prod/dev listen)
+TRANSLATION_SERVICE_MODELS=luna
 
-# 2. NLLB primary with Gemini fallback for capacity/outage only (prod/dev listen)
-TRANSLATION_SERVICE_MODELS=nllb,gemini
+# 2. NLLB primary with Luna fallback for capacity/outage only
+TRANSLATION_SERVICE_MODELS=nllb,luna
 
-# 3. NLLB only (errors stay retryable; no implicit Gemini fallback)
+# 3. NLLB only (errors stay retryable; no implicit Luna fallback)
 TRANSLATION_SERVICE_MODELS=nllb
 ```
 
-The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to NLLB. Gemini is tried only for NLLB timeout, 429, 5xx, or transport unavailability — not for unsupported languages or invalid responses. The legacy `google` configuration token is accepted during migration but resolves and emits as `gemini`.
+The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to Luna. Luna is tried after NLLB only for NLLB timeout, 429, 5xx, or transport unavailability — not for unsupported languages or invalid responses. The retired `gemini` and `google` tokens still parse as `luna`, with a warning and `omi_translation_deprecated_provider_tokens_total{token}`; metric labels always say `luna`.
 
 ## Deploy
 
@@ -186,7 +197,7 @@ After NLLB is deployed, set `HOSTED_TRANSLATION_API_URL` in the backend-listen H
   value: "http://dev-omi-nllb-translation:8080"
 ```
 
-Then set `TRANSLATION_SERVICE_MODELS=nllb,gemini` and restart the backend.
+Then set `TRANSLATION_SERVICE_MODELS=nllb,luna` and restart the backend.
 
 ## Local Development
 

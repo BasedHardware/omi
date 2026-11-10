@@ -1,0 +1,66 @@
+{
+  "products": [],
+  "prices": [],
+  "expected_create_calls": [
+    {
+      "call": "stripe.Price.create",
+      "kwargs": {
+        "product": "prod_Uu5HDt3sygCK8N",
+        "unit_amount": 1999,
+        "currency": "usd",
+        "recurring": {
+          "interval": "month"
+        },
+        "metadata": {
+          "plan_id": "plus",
+          "entitlement_version": "ladder_v1"
+        }
+      }
+    },
+    {
+      "call": "stripe.Price.create",
+      "kwargs": {
+        "product": "prod_Uu5HDt3sygCK8N",
+        "unit_amount": 19990,
+        "currency": "usd",
+        "recurring": {
+          "interval": "year"
+        },
+        "metadata": {
+          "plan_id": "plus",
+          "entitlement_version": "ladder_v1"
+        }
+      }
+    },
+    {
+      "call": "stripe.Price.create",
+      "kwargs": {
+        "product": "prod_ULep5SEo0pSdaM",
+        "unit_amount": 4999,
+        "currency": "usd",
+        "recurring": {
+          "interval": "month"
+        },
+        "metadata": {
+          "plan_id": "operator",
+          "entitlement_version": "ladder_v1"
+        }
+      }
+    },
+    {
+      "call": "stripe.Price.create",
+      "kwargs": {
+        "product": "prod_ULep5SEo0pSdaM",
+        "unit_amount": 49990,
+        "currency": "usd",
+        "recurring": {
+          "interval": "year"
+        },
+        "metadata": {
+          "plan_id": "operator",
+          "entitlement_version": "ladder_v1"
+        }
+      }
+    }
+  ]
+}

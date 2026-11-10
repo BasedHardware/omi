@@ -1,6 +1,7 @@
 """Unit tests for rate limiting config and logic."""
 
 import asyncio
+import ast
 import importlib
 import os
 import sys
@@ -110,6 +111,10 @@ def _rate_limit_stubs():
 class TestRatePolicies(unittest.TestCase):
     """Validate rate limit policy definitions."""
 
+    def test_snapshot_start_and_page_budgets_are_independent(self):
+        self.assertEqual(RATE_POLICIES['spaces:snapshot'], (30, 3600))
+        self.assertEqual(RATE_POLICIES['spaces:snapshot_page'], (600, 60))
+
     def test_all_policies_have_valid_structure(self):
         for name, (max_req, window) in RATE_POLICIES.items():
             self.assertIsInstance(max_req, int, f"{name}: max_requests must be int")
@@ -123,10 +128,18 @@ class TestRatePolicies(unittest.TestCase):
 
     def test_expensive_endpoints_have_low_limits(self):
         """Expensive endpoints should have lower limits."""
-        expensive = ['knowledge_graph:rebuild', 'wrapped:generate', 'conversations:reprocess']
+        expensive = ['knowledge_graph:rebuild', 'wrapped:generate']
         for name in expensive:
             max_req, _ = RATE_POLICIES[name]
             self.assertLessEqual(max_req, 5, f"{name} should have low base limit")
+
+    def test_reprocess_allows_template_exploration_below_create_ceiling(self):
+        """Reprocess must allow trying several templates but never exceed full-create spend."""
+        max_req, window = RATE_POLICIES['conversations:reprocess']
+        create_max, create_window = RATE_POLICIES['conversations:create']
+        self.assertEqual(window, 3600)
+        self.assertGreaterEqual(max_req, 10)
+        self.assertLessEqual(max_req / window, create_max / create_window)
 
     def test_bursty_endpoints_have_high_limits(self):
         """Agent/MCP endpoints should allow bursts."""
@@ -256,6 +269,10 @@ class TestBoostExemption(unittest.TestCase):
 def test_transcript_upload_budget_ignores_boost():
     assert 'import:upload' in BOOST_EXEMPT_POLICIES
     assert get_effective_limit('import:upload', boost=100) == (30, 3600)
+
+
+def test_task_presence_keeps_its_read_budget_under_production_boost():
+    assert get_effective_limit('conversations:task-presence', boost=100) == (120, 3600)
 
 
 class TestShadowMode(unittest.TestCase):
@@ -864,7 +881,21 @@ class TestRouterWiring(unittest.TestCase):
     def test_sensitive_read_page_caps(self):
         developer_source = open("routers/developer.py", encoding='utf-8').read()
         mcp_source = open("routers/mcp.py", encoding='utf-8').read()
-        self.assertIn("limit = max(1, min(limit, 200))", developer_source)
+        # Pin the route's shared-clamp cap independently of formatting.
+        # test_external_list_cache exercises its negative/oversized inputs.
+        tree = ast.parse(developer_source)
+        handler = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'get_conversations'
+        )
+        clamps = [
+            node
+            for node in ast.walk(handler)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == 'clamp_list_page'
+        ]
+        self.assertEqual(len(clamps), 1)
+        self.assertEqual(ast.literal_eval(clamps[0].args[2]), 200)
         self.assertIn("min(limit, 200)", mcp_source)
 
     def test_integration_router_has_rate_limits(self):
@@ -1016,7 +1047,7 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.assertTrue(allowed)
         self.assertEqual((remaining, retry), (7, 3600))
         self.real_module._RATE_LIMIT_RESERVE_LUA.assert_called_once_with(
-            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10]
+            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10], client=None
         )
 
         self.real_module._RATE_LIMIT_RESERVE_LUA.return_value = [0, 10, 1200]

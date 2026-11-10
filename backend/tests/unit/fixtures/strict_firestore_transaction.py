@@ -1,8 +1,11 @@
 """Narrow Firestore transaction fixture for ordering-sensitive unit tests.
 
 This fixture models document-reference ``get(transaction=...)`` plus transaction
-``create``, ``set``, and ``update``. It enforces Firestore's rule that every
+``create``, ``set``, ``update`` and ``delete``, plus the emulator-proven People
+generation merge increment. It enforces Firestore's rule that every
 transactional read must occur before the first transactional write.
+
+Parent reference navigation preserves the owning store and performs no IO.
 
 It also supports the direct-document is_locked projection used at dispatch,
 and equality-only, document-id projections with a positive limit,
@@ -10,7 +13,9 @@ proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
 Projected client BatchGet of folder membership is covered by
 test_folder_delete_concurrency_emulator.py; all of its reads obey the same
 read-before-write rule. BatchGet does not promise request-order results.
-It deliberately does not model other queries, deletes, commit/rollback visibility,
+Transaction deletes are proven by test_recurring_voice_privacy_firestore.py:
+removed profiles must disappear rather than leave documents outside TTL.
+It deliberately does not model other queries, standalone deletes, commit/rollback visibility,
 or retry and contention semantics. Extend it only when an incident proves that
 one of those boundaries needs a hermetic guard.
 
@@ -24,6 +29,9 @@ from __future__ import annotations
 from copy import deepcopy
 from threading import RLock
 from typing import Any
+
+from google.cloud.firestore_v1.transforms import Increment
+from google.cloud.firestore_v1.field_path import FieldPath
 
 
 class ReadAfterWriteError(RuntimeError):
@@ -54,7 +62,7 @@ def _assert_storable(value: Any, *, in_array: bool = False) -> None:
 
 
 _SUPPORTED_OPERATIONS = (
-    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries, '
+    'document get/create, transaction-bound document get, transaction create/set/update/delete, bounded equality id queries, '
     'projected client folder-membership BatchGet'
 )
 
@@ -79,12 +87,26 @@ class StrictFirestoreDocument:
         """The document's own id, as ``DocumentReference.id`` (e.g. the uid of ``users/{uid}``)."""
         return self.path[-1]
 
+    @property
+    def parent(self) -> StrictFirestoreCollection:
+        """Navigate to the owning collection without reading or changing stores."""
+        return StrictFirestoreCollection(self._database, self.path[:-1])
+
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self._database, (*self.path, name))
 
     def get(
-        self, transaction: StrictFirestoreTransaction | None = None, *, field_paths: list[str] | None = None
+        self,
+        transaction: StrictFirestoreTransaction | None = None,
+        *,
+        field_paths: list[str] | None = None,
+        timeout: float | None = None,
+        retry: Any = None,
     ) -> StrictFirestoreSnapshot:
+        # Callers on bounded-read boundaries (canonical apply control) pass
+        # ``retry=None`` to disable the SDK's own retry deadline; model the kwarg.
+        if timeout is not None:
+            assert 0 < timeout <= 3
         if transaction is not None:
             transaction._assert_reference_belongs(self)
             transaction._assert_read_allowed()
@@ -93,6 +115,83 @@ class StrictFirestoreDocument:
             if field_paths not in (
                 ["is_locked"],
                 ["folder_id"],
+                ["language"],
+                ["private_cloud_sync_enabled"],
+                ['uses_custom_stt', 'private_cloud_sync_enabled', 'data_protection_level'],
+                ['discarded', 'deleted', 'sync_merged_into'],
+                [
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'relevance_decision',
+                    'sync_relevance_user_kept',
+                    'has_photos',
+                    'photos',
+                    'user_title',
+                    'starred',
+                    'folder_user_set',
+                ],
+                [
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'relevance_decision',
+                    'sync_relevance_user_kept',
+                    'has_photos',
+                    'photos',
+                    'user_title',
+                    'starred',
+                    'folder_user_set',
+                    'record_lane_owner',
+                    'record_projection_revision',
+                    'record_upload_failed',
+                    'record_audio_partial',
+                    'status',
+                    'started_at',
+                    'finished_at',
+                    'structured',
+                ],
+                [
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'relevance_decision',
+                    'sync_relevance_user_kept',
+                    'has_photos',
+                    'photos',
+                    'user_title',
+                    'starred',
+                    'folder_user_set',
+                    'summary_blocked_reason',
+                    'record_lane_owner',
+                    'record_projection_revision',
+                    'record_upload_failed',
+                    'record_audio_partial',
+                    'status',
+                    'started_at',
+                    'finished_at',
+                    'structured',
+                ],
+                ['started_at', 'finished_at', 'discarded', 'deleted', 'sync_merged_into'],
+                [
+                    'started_at',
+                    'finished_at',
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'recorded_start',
+                    'recorded_end',
+                    'last_speech_at',
+                    'status',
+                    'capture_evidence',
+                    'relevance_decision',
+                    'sync_relevance_user_kept',
+                    'has_photos',
+                    'photos',
+                    'user_title',
+                    'starred',
+                    'folder_user_set',
+                ],
                 ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
                 [
                     'deleted',
@@ -103,7 +202,7 @@ class StrictFirestoreDocument:
                 ],
             ):
                 raise UnsupportedFirestoreOperationError(
-                    "only privacy, folder membership and speaker-receipt projections are supported"
+                    "only privacy, folder membership, language, episode visibility and speaker-receipt projections are supported"
                 )
             data = {key: value for key, value in data.items() if key in field_paths}
         return StrictFirestoreSnapshot(data)
@@ -122,6 +221,12 @@ class StrictFirestoreCollection:
     def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
         self._database = database
         self._path = path
+
+    @property
+    def parent(self) -> StrictFirestoreDocument | None:
+        if len(self._path) == 1:
+            return None
+        return StrictFirestoreDocument(self._database, self._path[:-1])
 
     def document(self, name: str) -> StrictFirestoreDocument:
         return StrictFirestoreDocument(self._database, (*self._path, name))
@@ -198,6 +303,7 @@ class StrictFirestoreTransaction:
         self.creates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.sets: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.updates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
+        self.deletes: list[tuple[str, ...]] = []
         self.has_written = False
         self._read_only = False
         self._max_attempts = 1
@@ -226,13 +332,25 @@ class StrictFirestoreTransaction:
         if ref._database is not self._database:
             raise ForeignTransactionError('Firestore transaction and document reference must belong to the same store')
 
-    def set(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
+    def set(self, ref: StrictFirestoreDocument, data: dict[str, Any], *, merge: bool = False) -> None:
         self._assert_reference_belongs(ref)
         _assert_storable(data)
         self.has_written = True
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
-        self._database.rows[ref.path] = payload
+        if merge:
+            # Proven by fsr_people_generation_emulator_test.py: set+Increment
+            # without merge replaces the counter and repeatedly stores 1.
+            # Keep this fixture narrow: only the People generation transform
+            # has an emulator proof; do not approximate arbitrary merge masks.
+            if set(data) != {'generation'} or not isinstance(data['generation'], Increment):
+                raise UnsupportedFirestoreOperationError('only the People generation merge transform is supported')
+            prior = dict(self._database.rows.get(ref.path) or {})
+            value = prior.get('generation', 0)
+            prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
+            self._database.rows[ref.path] = prior
+        else:
+            self._database.rows[ref.path] = payload
 
     def create(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
@@ -252,10 +370,22 @@ class StrictFirestoreTransaction:
             raise RuntimeError('missing row')
         payload = deepcopy(patch)
         self.updates.append((ref.path, payload))
-        self._database.rows[ref.path].update(payload)
+        # Emulator proof: test_conversation_terminal_family_firestore.py covers
+        # nested updates, quoted keys, and replacement of non-map ancestors.
+        for key, value in payload.items():
+            parts = FieldPath.from_api_repr(key).parts
+            parent = self._database.rows[ref.path]
+            for part in parts[:-1]:
+                if not isinstance(parent.get(part), dict):
+                    parent[part] = {}
+                parent = parent[part]
+            parent[parts[-1]] = value
 
-    def delete(self, *args: Any, **kwargs: Any) -> None:
-        raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+    def delete(self, ref: StrictFirestoreDocument) -> None:
+        self._assert_reference_belongs(ref)
+        self.has_written = True
+        self.deletes.append(ref.path)
+        self._database.rows.pop(ref.path, None)
 
     def get(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
@@ -292,8 +422,10 @@ class StrictFirestore:
             raise ValueError('Firestore document paths require an even number of non-empty segments')
         return StrictFirestoreDocument(self, segments)
 
-    def transaction(self) -> StrictFirestoreTransaction:
+    def transaction(self, max_attempts: int | None = None) -> StrictFirestoreTransaction:
         transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        if max_attempts is not None:
+            transaction._max_attempts = max_attempts
         self.transactions.append(transaction)
         return transaction
 

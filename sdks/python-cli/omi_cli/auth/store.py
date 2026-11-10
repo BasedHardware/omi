@@ -35,13 +35,19 @@ def store_oauth_tokens(
     id_token: str,
     refresh_token: str,
     expires_at: float,
+    api_key: Optional[str] = None,
     api_base: Optional[str] = None,
 ) -> cfg.Profile:
-    """Persist OAuth tokens to the named profile and return the updated Profile."""
+    """Persist OAuth tokens to the named profile and return the updated Profile.
+
+    ``api_key`` optionally keeps a minted developer key alongside the OAuth
+    session — the ``/v1/dev/*`` endpoints authenticate with the key while
+    ``omi chat`` requires the oauth session, so a browser login needs both.
+    """
     config = cfg.load()
     profile = config.get_profile(profile_name)
     profile.auth_method = "oauth"
-    profile.api_key = None
+    profile.api_key = api_key
     profile.id_token = id_token
     profile.refresh_token = refresh_token
     profile.id_token_expires_at = expires_at

@@ -6,7 +6,11 @@ windows are primary; equal windows use the document ID for stable ordering.
 
 A window match is only a proposal. When both captures also share speech
 (``shared_speech``), they join one capture group (``database.capture_groups``),
-which clients present as one event. Grouping is metadata only.
+which records their shared event identity. Grouping is metadata only. The
+former default-off desktop-call link that pinned the desktop primary was
+removed with the 2026-10-18 flag rulings (#22209); meeting identity now reaches
+the primary's notes through the members' calendar context and screen frames
+(``utils/conversations/capture_group_notes_refresh.py``).
 """
 
 from __future__ import annotations
@@ -15,9 +19,11 @@ import logging
 import math
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
+from config.recorded_time_tolerances import CLOCK_SKEW_SECONDS
+from utils.capture.coverage_crossdevice import reconcile as reconcile_cross_device
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from utils.conversations.capture_containment import (
@@ -26,9 +32,9 @@ from utils.conversations.capture_containment import (
     record_capture_containment,
 )
 from utils.conversations.shared_speech import measure_shared_speech
-from utils.conversations.capture_jev_shadow import submit_resummary, submit_same_scene
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
+from utils.episodes.finalize import schedule_group_attachments
 
 logger = logging.getLogger(__name__)
 MIN_OVERLAP_SECONDS = 60.0
@@ -54,13 +60,36 @@ class CaptureRecord:
         return (-self.duration_seconds, self.conversation_id)
 
 
-def capture_record(record: Any) -> CaptureRecord | None:
+def capture_record(record: Any, uid: str | None = None) -> CaptureRecord | None:
     def field(name):
         return record.get(name) if isinstance(record, Mapping) else getattr(record, name, None)
 
     if field('discarded') or field('status') != 'completed':
         return None
-    start, finish = field('started_at'), field('finished_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    row = (
+        dict(record)
+        if isinstance(record, Mapping)
+        else {
+            name: field(name)
+            for name in (
+                'started_at',
+                'finished_at',
+                'created_at',
+                'recorded_start',
+                'recorded_end',
+                'arrival_at',
+                'clock',
+                'last_speech_at',
+                'transcript_segments',
+                'status',
+                'source',
+            )
+        }
+    )
+    span = conversation_span(row)
+    start, finish = (span.recorded_start, span.recorded_end) if span else (None, None)
     if not isinstance(start, datetime) or not isinstance(finish, datetime):
         return None
     start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
@@ -95,20 +124,25 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
     The transaction rechecks both snapshots, including discard, before writing.
     A failed optional hint must not prevent the original capture from completing.
     """
-    candidate = capture_record(conversation)
+    candidate = capture_record(conversation, uid)
     if candidate is None:
         return
     try:
         seconds = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', MIN_OVERLAP_SECONDS)
         ratio = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_RATIO', MIN_WINDOW_COVERAGE, 1.0)
         rows = conversations_db.get_conversations_finished_after(
-            uid, status='completed', finished_after=candidate.started_at, limit=CANDIDATE_PAGE_LIMIT
+            uid,
+            status='completed',
+            # Only candidate discovery uses the legacy clock. Recorded spans
+            # and the transaction recheck remain the overlap authority.
+            finished_after=candidate.started_at - timedelta(seconds=CLOCK_SKEW_SECONDS),
+            limit=CANDIDATE_PAGE_LIMIT,
         )
         if len(rows) == CANDIDATE_PAGE_LIMIT:
             _record_degraded()
         # Largest windows first, so a secondary with several matches gets the
         # most complete observed capture. Existing pointers are idempotent.
-        others = sorted(filter(None, map(capture_record, rows)), key=lambda row: row.primary_rank)
+        others = sorted(filter(None, map(lambda row: capture_record(row, uid), rows)), key=lambda row: row.primary_rank)
         matches = []
         for other in others:
             match = overlap_match(candidate, other, seconds=seconds, ratio=ratio)
@@ -127,21 +161,19 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         # Exception strings can carry request data; keep telemetry content-free.
         _record_degraded()
         return
+    if reconcile_cross_device(
+        uid,
+        candidate.conversation_id,
+        [
+            other.conversation_id
+            for other in others
+            if other.conversation_id != candidate.conversation_id
+            and min(candidate.finished_at, other.finished_at) > max(candidate.started_at, other.started_at)
+        ],
+    ):
+        return
+    # refactor: superseded by utils.capture.coverage_crossdevice when CAPTURE_COVERAGE_MODE=serve
     _group_confirmed_captures(uid, conversation, candidate, matches[:MAX_CONTENT_CHECKS])
-    # The shadow sees overlapping candidates even when source, window threshold,
-    # or content threshold kept the shipped rule from grouping them.
-    shadow_candidates = 0
-    for other in others:
-        if other.conversation_id == candidate.conversation_id:
-            continue
-        overlap = (
-            min(candidate.finished_at, other.finished_at) - max(candidate.started_at, other.started_at)
-        ).total_seconds()
-        if overlap > 0:
-            submit_same_scene(uid, candidate.conversation_id, other.conversation_id)
-            shadow_candidates += 1
-            if shadow_candidates >= MAX_CONTENT_CHECKS:
-                break
 
 
 def _segments_of(record: Any):
@@ -177,7 +209,7 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
             if containment_mode != 'off':
                 try:
                     containment = measure_capture_containment(own_row or {}, other_row or {}, mode=containment_mode)
-                    record_capture_containment(containment, mode=containment_mode, phase='rule')
+                    record_capture_containment(containment, mode=containment_mode)
                 except Exception:
                     logger.warning('capture_group_containment detector failed')
                     _record_degraded(to_mode='separate_captures')
@@ -207,26 +239,9 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
                     other.conversation_id: other_fingerprint,
                 },
             )
+            if group_id:
+                schedule_group_attachments(uid, [candidate.conversation_id, other.conversation_id])
             record_product_event('capture_group_joined', outcome='applied' if group_id else 'conflict')
-            own_group = (
-                own_row.get('capture_group')
-                if isinstance(own_row, Mapping)
-                else getattr(own_row, 'capture_group', None)
-            ) or {}
-            other_group = (
-                other_row.get('capture_group')
-                if isinstance(other_row, Mapping)
-                else getattr(other_row, 'capture_group', None)
-            ) or {}
-            if group_id and own_group.get('id') != other_group.get('id'):
-                if own_group.get('id') == group_id:
-                    submit_resummary(
-                        uid, own_group.get('primary_id') or candidate.conversation_id, other.conversation_id
-                    )
-                elif other_group.get('id') == group_id:
-                    submit_resummary(
-                        uid, other_group.get('primary_id') or other.conversation_id, candidate.conversation_id
-                    )
             if group_id and isinstance(own_row, dict):
                 primary = min((candidate, other), key=lambda row: row.primary_rank)
                 own_row['capture_group'] = {'id': group_id, 'primary_id': primary.conversation_id}

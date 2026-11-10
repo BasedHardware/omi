@@ -102,9 +102,8 @@ def test_row_at_the_ceiling_is_closed_with_a_shrinking_status_only_write():
 
     assert outcome == 'closed'
     assert len(updates) == 1
-    # Status only: the transcript and every other field stay exactly as stored, and the
-    # optional deterministic title is dropped because it cannot fit.
-    assert updates[0][1] == {'status': 'completed'}
+    # No room for a decision: retain content outside the default list.
+    assert updates[0][1] == {'status': 'failed'}
     after = {**row, **updates[0][1]}
     assert estimate_firestore_document_bytes(after, _PATH) < estimate_firestore_document_bytes(row, _PATH)
 
@@ -143,8 +142,10 @@ def test_a_row_that_is_not_near_the_ceiling_keeps_normal_finalization():
 def test_lifecycle_owner_delegates_with_the_quiet_window(monkeypatch):
     calls = []
 
-    def fake(uid, conversation_id, *, quiet_for):
-        calls.append((uid, conversation_id, quiet_for))
+    def fake(
+        uid, conversation_id, *, quiet_for=None, firestore_client=None, recovery_fences=False, recovery_cutoff=None
+    ):
+        calls.append((uid, conversation_id, quiet_for, recovery_cutoff))
         return 'closed'
 
     monkeypatch.setattr(oversized_terminal_db, 'complete_oversized_in_progress_conversation', fake)
@@ -154,7 +155,7 @@ def test_lifecycle_owner_delegates_with_the_quiet_window(monkeypatch):
     )
 
     assert outcome == 'closed'
-    assert calls == [('uid-1', 'conv-1', timedelta(hours=1))]
+    assert calls == [('uid-1', 'conv-1', timedelta(hours=1), None)]
 
 
 def test_failure_reason_tokens_are_bounded_and_carry_no_message():
@@ -165,6 +166,10 @@ def test_failure_reason_tokens_are_bounded_and_carry_no_message():
     assert firestore_failure_reason(size) == 'document_size_limit'
     assert (
         firestore_failure_reason(InvalidArgument('The referenced transaction has expired or is no longer valid.'))
+        == 'expired_transaction'
+    )
+    assert (
+        firestore_failure_reason(Aborted('409 The referenced transaction has expired or is no longer valid.'))
         == 'expired_transaction'
     )
     assert firestore_failure_reason(ValueError('Failed to commit transaction in 5 attempts.')) == 'contention'
@@ -187,3 +192,176 @@ def test_only_a_rejection_of_the_rows_own_document_is_its_size_limit():
     assert not classify_finalization_failure(own, 'conv-2').conversation_at_size_limit
     contention = classify_finalization_failure(ValueError('Failed to commit transaction in 5 attempts.'), 'conv-1')
     assert contention == FinalizationFailure(reason='contention', document='none', names_conversation=False)
+
+
+def test_permanent_rejection_classifier_splits_the_write_classes():
+    """The live loop's permanent-rejection boundary must keep the split exact: the size
+    400, permission-denied and failed-precondition policy refusals are permanent for
+    the row, while contention, expired transactions and other 400s stay transient."""
+    from database._client import is_document_size_limit_error, is_permanent_firestore_write_rejection
+
+    size = InvalidArgument(
+        "Document 'projects/p/databases/(default)/documents/users/uid/conversations/conv' cannot be "
+        'written because its size (1,069,442 bytes) exceeds the maximum allowed size of 1,048,576 bytes.'
+    )
+    permission = InvalidArgument('403 The caller does not have permission for the requested document.')
+    precondition = InvalidArgument('400 The request must be modified to be a valid request.')
+    expired = InvalidArgument('400 The referenced transaction has expired or is no longer valid.')
+    other_400 = InvalidArgument('400 some other 400')
+
+    assert is_document_size_limit_error(size)
+    assert is_permanent_firestore_write_rejection(size)
+    assert is_permanent_firestore_write_rejection(permission), 'a denied row never accepts the same write'
+    assert is_permanent_firestore_write_rejection(precondition), 'a policy refusal never accepts the same write'
+    assert not is_permanent_firestore_write_rejection(expired), 'the storage boundary restarts expired ids'
+    assert not is_permanent_firestore_write_rejection(
+        Aborted('409 The referenced transaction has expired or is no longer valid.')
+    ), 'a streaming read reports the same retired id as Aborted 409'
+    assert not is_permanent_firestore_write_rejection(other_400)
+    assert not is_permanent_firestore_write_rejection(Aborted('Too much contention on these documents.'))
+    assert not is_permanent_firestore_write_rejection(RuntimeError('boom'))
+
+
+def test_typed_firestore_exceptions_are_classified_by_contract_not_type():
+    """Google ships dedicated exception types for these codes; the classifier must
+    recognise their messages wherever the envelope type lands, and must not wave
+    through unrelated codes just because they are also 4xx."""
+    from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound, PermissionDenied
+
+    from database._client import is_permanent_firestore_write_rejection
+
+    assert is_permanent_firestore_write_rejection(
+        FailedPrecondition('The request must be modified to be a valid request.')
+    ), 'the typed failed-precondition envelope is permanent'
+    assert is_permanent_firestore_write_rejection(
+        PermissionDenied('The caller does not have permission for the requested document.')
+    ), 'the typed permission-denied envelope is permanent'
+    # A missing row is not a permanent rejection of the write: the transaction
+    # exists-check already answers it, and the rollover path creates a fresh
+    # generation the same payload can land on.
+    assert not is_permanent_firestore_write_rejection(NotFound('no such document'))
+    assert not is_permanent_firestore_write_rejection(AlreadyExists('already exists'))
+
+
+class _MarkerSnapshot:
+    def __init__(self, exists: bool, data: dict | None = None) -> None:
+        self.exists = exists
+        self._data = data
+
+    def to_dict(self):
+        return dict(self._data) if self._data is not None else None
+
+
+class _MarkerRef:
+    def __init__(self, snapshot: _MarkerSnapshot) -> None:
+        self.snapshot = snapshot
+
+    def get(self, transaction=None):
+        assert transaction is not None, 'the deletion fence must be read inside the transaction'
+        return self.snapshot
+
+
+class _SessionCollection:
+    def __init__(self, session_row: dict | None = None) -> None:
+        self.session_row = session_row
+
+    def document(self, session_id):
+        return _MarkerRef(_MarkerSnapshot(self.session_row is not None, dict(self.session_row or {})))
+
+
+def _recovery_close(data, *, marker: _MarkerSnapshot | None = None, session_row: dict | None = None):
+    """Drive the terminal exactly as the recovery wrapper does, with its fences."""
+    ref = _Ref(_Snapshot(data, _QUIET_BEFORE - timedelta(days=5)))
+    transaction = _Transaction()
+    outcome = oversized_terminal_db._complete_oversized_in_progress_conversation_txn(
+        transaction,
+        ref,
+        _QUIET_BEFORE,
+        'uid-1',
+        conversation_id='conv-1',
+        recording_sessions_collection=_SessionCollection(session_row),
+        account_deletion_ref=_MarkerRef(marker) if marker is not None else None,
+        now=_NOW,
+    )
+    return outcome, transaction.updates
+
+
+_SESSION_OWNER = {'external_data': {'recording_session_id': 'session-1'}}
+
+
+def test_recovery_close_refuses_a_live_recording_lease_renewed_after_the_failed_admission():
+    session = {
+        'uid': 'uid-1',
+        'conversation_id': 'conv-1',
+        'recording_session_id': 'session-1',
+        'lifecycle_phase': 'in_progress',
+        'lease_expires_at': _NOW + timedelta(minutes=5),
+    }
+    # A lease renewed after the failed admission does not touch the row, so the
+    # quiet-window fence alone would close it; the recovery fence must refuse.
+    outcome, updates = _recovery_close(_at_ceiling(**_SESSION_OWNER), session_row=session)
+    assert outcome == 'recording_active'
+    assert updates == []
+
+
+def test_recovery_close_proceeds_once_the_lease_has_expired():
+    session = {
+        'uid': 'uid-1',
+        'conversation_id': 'conv-1',
+        'recording_session_id': 'session-1',
+        'lifecycle_phase': 'in_progress',
+        'lease_expires_at': _NOW - timedelta(minutes=5),
+    }
+    # Outcome only here; the shrinking status-only write itself is pinned above.
+    assert _recovery_close(_at_ceiling(**_SESSION_OWNER), session_row=session)[0] == 'closed'
+
+
+def test_recovery_close_treats_an_absent_session_document_as_no_lease():
+    # A gone session doc can never become known again; only a live lease refuses.
+    assert _recovery_close(_at_ceiling(**_SESSION_OWNER), session_row=None)[0] == 'closed'
+
+
+def test_recovery_close_refuses_a_blocking_account_deletion_marker():
+    marker = _MarkerSnapshot(True, {'wipe_status': 'pending'})
+    outcome, updates = _recovery_close(_at_ceiling(), marker=marker)
+    assert outcome == 'account_deleting'
+    assert updates == []
+
+
+def test_recovery_close_ignores_the_deletion_fence_when_no_marker_exists():
+    assert _recovery_close(_at_ceiling(), marker=_MarkerSnapshot(False))[0] == 'closed'
+
+
+def test_recovery_fences_are_opt_in_for_the_live_listen_sweep(monkeypatch):
+    """The wrapper only threads the recovery fences when asked, so the live-listen
+    path keeps its existing quiet-window-only contract (its own tests pin it)."""
+    calls = {}
+
+    def fake(
+        uid, conversation_id, *, quiet_for=None, firestore_client=None, recovery_fences=False, recovery_cutoff=None
+    ):
+        calls['recovery_fences'] = recovery_fences
+        calls['firestore_client'] = firestore_client
+        calls['recovery_cutoff'] = recovery_cutoff
+        calls['quiet_for'] = quiet_for
+        return 'closed'
+
+    monkeypatch.setattr(oversized_terminal_db, 'complete_oversized_in_progress_conversation', fake)
+
+    assert (
+        lifecycle_service.close_oversized_in_progress_conversation('uid-1', 'conv-1', quiet_for=timedelta(hours=1))
+        == 'closed'
+    )
+    assert calls['recovery_fences'] is False
+    cutoff = datetime(2026, 10, 22, 12, 0, tzinfo=timezone.utc)
+    assert (
+        lifecycle_service.close_oversized_in_progress_conversation(
+            'uid-1', 'conv-1', firestore_client='client', recovery_fences=True, recovery_cutoff=cutoff
+        )
+        == 'closed'
+    )
+    assert calls['recovery_fences'] is True
+    assert calls['firestore_client'] == 'client'
+    # The absolute cutoff is pinned through, not reconstructed from a duration.
+    assert calls['recovery_cutoff'] == cutoff
+    assert calls['quiet_for'] is None

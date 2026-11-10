@@ -7,6 +7,7 @@ This is the sanctioned Tier-2 "fake must precede import" case (see
 ``backend/docs/test_isolation.md`` and ``testing/import_isolation.load_module_fresh``).
 """
 
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -40,6 +41,14 @@ def _load_modules():
 
     legal_holds_stub = ModuleType("database.legal_holds")
     legal_holds_stub.assert_no_destructive_operation_transaction = lambda *_args, **_kwargs: None
+    legal_holds_stub.assert_destructive_gate_still_ours = lambda *_args, **_kwargs: None
+    legal_holds_stub.assert_destructive_operation_transaction = lambda *_args, **_kwargs: None
+    legal_holds_stub.current_destructive_operation_token = lambda *_args, **_kwargs: "test-token"
+
+    class _LegalHoldAuthorityUnavailable(RuntimeError):
+        pass
+
+    legal_holds_stub.LegalHoldAuthorityUnavailable = _LegalHoldAuthorityUnavailable
 
     google_pkg = ModuleType("google")
     google_pkg.__path__ = []  # type: ignore[attr-defined]
@@ -60,7 +69,9 @@ def _load_modules():
             "database.memory_ledger",
             os.path.join(str(_BACKEND), "database", "memory_ledger.py"),
         )
-        projection_repair = memory_ledger.projection_repair
+        projection_repair = load_module_fresh(
+            "database.projection_repair", str(_BACKEND / "database" / "projection_repair.py")
+        )
         globals()["memory_ledger"] = memory_ledger
         globals()["projection_repair"] = projection_repair
         yield
@@ -641,13 +652,7 @@ def test_contention_retry_rejects_invalid_attempt_count_before_transaction():
     assert opened is False
 
 
-def test_projection_repair_extracts_affected_fact_ids_and_metadata():
-    mutations = [
-        memory_ledger.add_fact({"id": "m1", "subject_entity_id": "user", "object_entity_ids": ["project"]}),
-        memory_ledger.supersede_fact("m2", by="m1"),
-    ]
-
-    assert projection_repair.affected_fact_ids(mutations) == ["m1", "m2"]
+def test_projection_metadata_preserves_fact_identity_and_tombstone_state():
     assert projection_repair.projection_metadata_for_fact(
         {
             "id": "m1",
@@ -687,8 +692,7 @@ def test_reconcile_projection_detects_and_repairs_drift_to_zero():
     assert repaired["projection_fail_count"] == 0
 
 
-def test_append_commit_enqueues_projection_repairs(monkeypatch):
-    queued = []
+def test_append_commit_does_not_enqueue_projection_repairs(monkeypatch):
     commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
 
     monkeypatch.setattr(
@@ -696,20 +700,15 @@ def test_append_commit_enqueues_projection_repairs(monkeypatch):
         "_append_commit_transaction",
         lambda *args, **kwargs: {"commit": commit, "applied": True},
     )
-    monkeypatch.setattr(
-        memory_ledger.projection_repair,
-        "enqueue_projection_repairs",
-        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
-    )
 
-    result = memory_ledger.append_commit("uid-1", None, commit["mutations"])
+    database = MagicMock()
+    result = memory_ledger.append_commit("uid-1", None, commit["mutations"], firestore_client=database)
 
     assert result["applied"] is True
-    assert queued == [("uid-1", commit)]
+    database.batch.assert_not_called()
 
 
-def test_append_commit_retries_precommit_contention_and_enqueues_projection_once(monkeypatch):
-    queued = []
+def test_append_commit_retries_precommit_contention_without_projection_queue(monkeypatch):
     calls = 0
     commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
 
@@ -731,21 +730,16 @@ def test_append_commit_retries_precommit_contention_and_enqueues_projection_once
 
     monkeypatch.setattr(memory_ledger, "_append_commit_transaction", append_transaction)
     monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
-    monkeypatch.setattr(
-        memory_ledger.projection_repair,
-        "enqueue_projection_repairs",
-        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
-    )
 
-    result = memory_ledger.append_commit("uid-1", None, commit["mutations"])
+    database = MagicMock()
+    result = memory_ledger.append_commit("uid-1", None, commit["mutations"], firestore_client=database)
 
     assert result["applied"] is True
     assert calls == 2
-    assert queued == [("uid-1", commit)]
+    database.batch.assert_not_called()
 
 
-def test_append_commit_with_builder_retries_contention_and_enqueues_projection_once(monkeypatch):
-    queued = []
+def test_append_commit_with_builder_retries_contention_without_projection_queue(monkeypatch):
     seen_transactions = []
     commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
     database = MagicMock()
@@ -768,11 +762,6 @@ def test_append_commit_with_builder_retries_contention_and_enqueues_projection_o
 
     monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
     monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
-    monkeypatch.setattr(
-        memory_ledger.projection_repair,
-        "enqueue_projection_repairs",
-        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
-    )
 
     result = memory_ledger.append_commit_with_builder(
         "uid-1",
@@ -784,11 +773,10 @@ def test_append_commit_with_builder_retries_contention_and_enqueues_projection_o
     assert result["applied"] is True
     assert len(seen_transactions) == 2
     assert seen_transactions[0] is not seen_transactions[1]
-    assert queued == [("uid-1", commit)]
+    database.batch.assert_not_called()
 
 
 def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeypatch):
-    queued = []
     database = MagicMock()
 
     def append_transaction(*args, **kwargs):
@@ -805,11 +793,6 @@ def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeyp
 
     monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
     monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
-    monkeypatch.setattr(
-        memory_ledger.projection_repair,
-        "enqueue_projection_repairs",
-        lambda *args, **kwargs: queued.append(args),
-    )
 
     with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted):
         memory_ledger.append_commit_with_builder(
@@ -820,111 +803,7 @@ def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeyp
         )
 
     assert database.transaction.call_count == firestore_transaction_retry.DEFAULT_MAX_ATTEMPTS
-    assert queued == []
-
-
-def test_process_projection_repairs_applies_queued_vector_repairs(monkeypatch):
-    updates = []
-
-    class FakeDoc:
-        id = "repair1"
-
-        @property
-        def reference(self):
-            return self
-
-        def to_dict(self):
-            return {"repair_id": "repair1", "fact_id": "m1", "status": "queued"}
-
-        def update(self, payload):
-            updates.append(payload)
-
-    class FakeQuery:
-        def limit(self, value):
-            return self
-
-        def stream(self):
-            return [FakeDoc()]
-
-    class FakeCollection:
-        def document(self, value):
-            return self
-
-        def collection(self, value):
-            return self
-
-        def where(self, *args):
-            return FakeQuery()
-
-    class FakeDB:
-        def collection(self, value):
-            return FakeCollection()
-
-    monkeypatch.setattr(projection_repair, "db", FakeDB())
-
-    result = projection_repair.process_projection_repairs(
-        "uid-1",
-        fact_loader=lambda fact_id: {"id": fact_id, "invalid_at": datetime(2026, 6, 1, tzinfo=timezone.utc)},
-        repair_func=lambda uid, fact: "delete" if fact and fact.get("invalid_at") else "upsert",
-    )
-
-    assert result == {"repaired": ["repair1"], "failed": [], "processed": 1}
-    assert updates[0]["status"] == "repaired"
-    assert updates[0]["repair_action"] == "delete"
-
-
-def test_process_projection_repairs_dead_letters_after_max_attempts(monkeypatch):
-    updates = []
-
-    class FakeDoc:
-        id = "repair1"
-
-        @property
-        def reference(self):
-            return self
-
-        def to_dict(self):
-            return {"repair_id": "repair1", "fact_id": "m1", "status": "failed", "attempt_count": 1}
-
-        def update(self, payload):
-            updates.append(payload)
-
-    class FakeQuery:
-        def limit(self, value):
-            return self
-
-        def stream(self):
-            return [FakeDoc()]
-
-    class FakeCollection:
-        def document(self, value):
-            return self
-
-        def collection(self, value):
-            return self
-
-        def where(self, *args):
-            return FakeQuery()
-
-    class FakeDB:
-        def collection(self, value):
-            return FakeCollection()
-
-    monkeypatch.setattr(projection_repair, "db", FakeDB())
-
-    def _failing_repair(uid, fact):
-        raise RuntimeError("repair failed")
-
-    result = projection_repair.process_projection_repairs(
-        "uid-1",
-        fact_loader=lambda fact_id: {"id": fact_id},
-        repair_func=_failing_repair,
-        max_attempts=2,
-    )
-
-    assert result == {"repaired": [], "failed": ["repair1"], "processed": 1}
-    assert updates[0]["status"] == "dead_letter"
-    assert updates[0]["attempt_count"] == 2
+    database.batch.assert_not_called()
 
 
 def test_legacy_commit_live_item_with_override_tombstone_is_fenced():
@@ -961,3 +840,237 @@ def test_legacy_commit_override_only_tombstone_is_fenced():
         )
 
     assert f"users/{uid}/memory_historical_overrides/m1" in database.gets
+
+
+def test_fold_commits_orders_mixed_naive_aware_iso_and_epoch_commit_times():
+    c_missing = {
+        "commit_id": "c0",
+        "commit_time": None,
+        "mutations": [memory_ledger.add_fact(_fact("m1", "Lives in Boston"))],
+    }
+    c_naive = {
+        "commit_id": "c1",
+        "commit_time": datetime(2026, 6, 1, 12, 0, 0),
+        "mutations": [memory_ledger.refine_fact("m1", {"content": {"to": "Lives in NYC"}})],
+    }
+    c_iso = {
+        "commit_id": "c2",
+        "commit_time": "2026-06-02T12:00:00Z",
+        "mutations": [memory_ledger.refine_fact("m1", {"content": {"to": "Lives in Austin"}})],
+    }
+    c_epoch = {
+        "commit_id": "c3",
+        "commit_time": datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc).timestamp(),
+        "mutations": [memory_ledger.refine_fact("m1", {"content": {"to": "Lives in SF"}})],
+    }
+    c_aware = {
+        "commit_id": "c4",
+        "commit_time": datetime(2026, 6, 4, 12, 0, 0, tzinfo=timezone.utc),
+        "mutations": [memory_ledger.refine_fact("m1", {"content": {"to": "Lives in Seattle"}})],
+    }
+
+    head = memory_ledger.fold_commits([c_aware, c_iso, c_missing, c_epoch, c_naive])
+
+    assert head["m1"]["content"] == "Lives in Seattle"
+
+
+def test_fold_commits_valid_time_enforces_iso_string_and_date_qualifiers():
+    fact = _fact("m1", "Lives in NYC", valid_from="2026-06-01", valid_to="2026-07-01T00:00:00Z")
+    commit = memory_ledger.build_commit(
+        None,
+        [memory_ledger.add_fact(fact)],
+        commit_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert "m1" not in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 5, 31, tzinfo=timezone.utc))
+    assert "m1" in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 6, 15, tzinfo=timezone.utc))
+    assert "m1" not in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 7, 2, tzinfo=timezone.utc))
+
+
+def test_fold_commits_valid_time_compares_naive_and_aware_bounds_without_type_error():
+    fact = _fact(
+        "m1",
+        "Lives in NYC",
+        valid_from=datetime(2026, 6, 1, 0, 0, 0),
+        valid_to=datetime(2026, 6, 30, 0, 0, 0),
+    )
+    commit = memory_ledger.build_commit(
+        None,
+        [memory_ledger.add_fact(fact)],
+        commit_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert "m1" in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 6, 15, tzinfo=timezone.utc))
+    assert "m1" in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 6, 15, 0, 0, 0))
+    assert "m1" not in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 5, 15, 0, 0, 0))
+
+
+def test_fold_commits_valid_time_ignores_malformed_qualifiers_and_bounds():
+    fact = _fact("m1", "Lives in NYC")
+    fact["qualifiers"] = "not-a-dict"
+    fact["valid_at"] = "not-a-timestamp"
+    commit = memory_ledger.build_commit(
+        None,
+        [memory_ledger.add_fact(fact)],
+        commit_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert "m1" in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 6, 15, tzinfo=timezone.utc))
+
+
+def _mixed_commit_time_docs():
+    return [
+        _LedgerSnapshot(
+            {
+                "commit_id": "c1",
+                "commit_time": datetime(2026, 6, 1, 0, 0, 0),
+                "mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+            }
+        ),
+        _LedgerSnapshot(
+            {
+                "commit_id": "c2",
+                "commit_time": "2026-06-02T00:00:00Z",
+                "mutations": [memory_ledger.add_fact(_fact("m2", "Lives in SF"))],
+            }
+        ),
+        _LedgerSnapshot(
+            {
+                "commit_id": "c3",
+                "commit_time": None,
+                "mutations": [memory_ledger.add_fact(_fact("m3", "Lives in Denver"))],
+            }
+        ),
+        _LedgerSnapshot(
+            {
+                "commit_id": "c4",
+                "commit_time": datetime(2026, 6, 5, 0, 0, 0, tzinfo=timezone.utc),
+                "mutations": [memory_ledger.add_fact(_fact("m4", "Lives in Chicago"))],
+            }
+        ),
+        _LedgerSnapshot(
+            {
+                "commit_id": "c5",
+                "commit_time": "not-a-timestamp",
+                "mutations": [memory_ledger.add_fact(_fact("m5", "Lives in Miami"))],
+            }
+        ),
+    ]
+
+
+def _stream_docs(monkeypatch, docs):
+    fake_db = MagicMock()
+    (
+        fake_db.collection.return_value.document.return_value.collection.return_value.order_by.return_value.stream.return_value
+    ) = docs
+    monkeypatch.setattr(memory_ledger, "db", fake_db)
+
+
+def test_replay_to_filters_mixed_commit_times_and_keeps_unusable_timestamps(monkeypatch, caplog):
+    _stream_docs(monkeypatch, _mixed_commit_time_docs())
+    caplog.set_level(logging.WARNING)
+
+    replayed = memory_ledger.replay_to(
+        "uid-1",
+        commit_time=datetime(2026, 6, 3, 0, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert set(replayed.keys()) == {"m1", "m2", "m3", "m5"}
+    warned = " ".join(r.getMessage() for r in caplog.records if r.name == memory_ledger.__name__)
+    assert "c3" in warned
+    assert "c5" in warned
+
+
+def test_replay_to_now_matches_full_fold_for_unusable_timestamps(monkeypatch):
+    docs = _mixed_commit_time_docs()
+    _stream_docs(monkeypatch, docs)
+
+    replayed = memory_ledger.replay_to("uid-1", commit_time=datetime(2100, 1, 1, tzinfo=timezone.utc))
+    folded = memory_ledger.fold_commits([doc.to_dict() for doc in docs])
+
+    assert replayed == folded
+    assert set(replayed.keys()) == {"m1", "m2", "m3", "m4", "m5"}
+
+
+def test_replay_to_unusable_cutoff_replays_every_commit(monkeypatch, caplog):
+    _stream_docs(monkeypatch, _mixed_commit_time_docs())
+    caplog.set_level(logging.WARNING)
+
+    replayed = memory_ledger.replay_to("uid-1", commit_time="not-a-timestamp")
+
+    assert set(replayed.keys()) == {"m1", "m2", "m3", "m4", "m5"}
+    assert any("replay cutoff" in r.getMessage() for r in caplog.records if r.name == memory_ledger.__name__)
+
+
+def test_fact_valid_at_treats_unusable_valid_time_as_unbounded():
+    fact = _fact(
+        "m1",
+        "Lives in NYC",
+        valid_from=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        valid_to=datetime(2026, 6, 30, tzinfo=timezone.utc),
+    )
+    commit = memory_ledger.build_commit(
+        None,
+        [memory_ledger.add_fact(fact)],
+        commit_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert memory_ledger._fact_valid_at(fact, "not-a-timestamp") is True
+    assert memory_ledger._fact_valid_at(fact, True) is True
+    assert "m1" in memory_ledger.fold_commits([commit], valid_time="not-a-timestamp")
+
+
+def test_replay_to_accepts_naive_commit_time_cutoff(monkeypatch):
+    docs = [
+        _LedgerSnapshot(
+            {
+                "commit_id": "c1",
+                "commit_time": datetime(2026, 6, 1, 0, 0, 0, tzinfo=timezone.utc),
+                "mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+            }
+        ),
+        _LedgerSnapshot(
+            {
+                "commit_id": "c2",
+                "commit_time": datetime(2026, 6, 4, 0, 0, 0, tzinfo=timezone.utc),
+                "mutations": [memory_ledger.add_fact(_fact("m2", "Lives in SF"))],
+            }
+        ),
+    ]
+    fake_db = MagicMock()
+    (
+        fake_db.collection.return_value.document.return_value.collection.return_value.order_by.return_value.stream.return_value
+    ) = docs
+    monkeypatch.setattr(memory_ledger, "db", fake_db)
+
+    replayed = memory_ledger.replay_to("uid-1", commit_time=datetime(2026, 6, 2, 0, 0, 0))
+
+    assert set(replayed.keys()) == {"m1"}
+
+
+def test_coerce_utc_datetime_rejects_booleans_and_invalid_strings():
+    assert memory_ledger._coerce_utc_datetime(True) is None
+    assert memory_ledger._coerce_utc_datetime(False) is None
+    assert memory_ledger._coerce_utc_datetime("") is None
+    assert memory_ledger._coerce_utc_datetime("   ") is None
+    assert memory_ledger._coerce_utc_datetime("not-a-date") is None
+
+
+def test_supersede_and_normalize_handle_none_qualifiers_without_error():
+    fact = _fact("m1", "Lives in NYC")
+    fact["qualifiers"] = None
+    fact["valid_at"] = "2026-06-01T00:00:00Z"
+    first = memory_ledger.build_commit(
+        None,
+        [memory_ledger.add_fact(fact)],
+        commit_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+    first["mutations"][0]["fact"]["qualifiers"] = None
+    second = memory_ledger.build_commit(
+        first["commit_id"],
+        [memory_ledger.supersede_fact("m1", by="m2", kind="contradict")],
+        commit_time=datetime(2026, 6, 2, tzinfo=timezone.utc),
+    )
+
+    assert "m1" in memory_ledger.fold_commits([first, second], valid_time=datetime(2026, 6, 1, 12, tzinfo=timezone.utc))
+    assert "m1" not in memory_ledger.fold_commits([first, second], valid_time=datetime(2026, 6, 3, tzinfo=timezone.utc))

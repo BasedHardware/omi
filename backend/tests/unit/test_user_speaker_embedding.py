@@ -308,6 +308,7 @@ class TestSpeechProfileEmbeddingExtraction:
 def live_owner_profile(monkeypatch):
     import routers.listen.runtime as runtime_module
     import routers.listen.speakers as speakers_module
+    from config.policy.listen import resolve_listen_policy
     from routers.listen.contracts import ListenRequest
     from utils.listen_session_bootstrap import ListenConnectBase
 
@@ -332,6 +333,12 @@ def live_owner_profile(monkeypatch):
     monkeypatch.setattr(speakers_module.user_db, 'get_people', world.people)
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
     monkeypatch.setattr(runtime_module, 'get_stt_service_for_language', lambda *a, **kw: ('test-stt', 'en', 'test'))
+    # Policy storage is outside this voiceprint storage-boundary regression.
+    monkeypatch.setattr(
+        runtime_module,
+        'initialize_session_policy',
+        AsyncMock(return_value=resolve_listen_policy('synthetic-owner', flags={})),
+    )
 
     async def start(*, private_sync=False, **request_options):
         request = ListenRequest(websocket=SimpleNamespace(headers={}), uid='synthetic-owner', **request_options)

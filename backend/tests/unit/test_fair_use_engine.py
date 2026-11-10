@@ -33,6 +33,7 @@ def _patch_fair_use_deps(monkeypatch):
     _mock_redis.eval.side_effect = None
     monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
     monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
+    monkeypatch.setattr(fair_use_mod, 'fair_use_caps_for_user', lambda _uid: fair_use_mod.fair_use_caps_for_plan())
     # The record_fallback patch is applied per-test (see
     # TestNormalizeExpiredRestrictionState.setup_method) and restored here so
     # it cannot leak into other test classes.
@@ -166,12 +167,12 @@ class TestRecordSpeechMs:
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_cutoff_boundary_zrangebyscore_args(self):
-        """zrangebyscore is called with inclusive range [0, cutoff_ts] for pruning."""
+        """Pruning fetches an inclusive, bounded stale-member batch."""
         import time
 
         pipe = MagicMock()
         _mock_redis.pipeline.return_value = pipe
-        _mock_redis.zrangebyscore.return_value = []
+        _mock_redis.zrangebyscore.return_value = [b'old-minute-1', b'old-minute-2']
         fair_use_mod.record_speech_ms('user1', 5000)
         # Verify zrangebyscore was called with correct cutoff
         zrange_call = _mock_redis.zrangebyscore.call_args
@@ -179,14 +180,15 @@ class TestRecordSpeechMs:
         # Args: (zset_key, min_score=0, max_score=cutoff_ts)
         _key, min_score, max_score = zrange_call[0]
         assert min_score == 0
+        assert zrange_call.kwargs == {'start': 0, 'num': 128}
         # cutoff = now - RETENTION; max_score should be close to that
         expected_cutoff = int(time.time()) - fair_use_mod.FAIR_USE_REDIS_RETENTION_SECONDS
         assert abs(max_score - expected_cutoff) <= 2  # within 2s tolerance
-        # zremrangebyscore in pipe uses same range (inclusive upper bound)
-        zrem_calls = [c for c in pipe.zremrangebyscore.call_args_list]
-        assert len(zrem_calls) == 1
-        assert zrem_calls[0][0][1] == 0  # min
-        assert abs(zrem_calls[0][0][2] - expected_cutoff) <= 2  # max
+        assert pipe.zrem.call_args_list == [
+            ((fair_use_mod._redis_key('user1', 'realtime'), b'old-minute-1'),),
+            ((fair_use_mod._redis_key('user1', 'realtime'), b'old-minute-2'),),
+        ]
+        assert pipe.hdel.call_args.args[1:] == ('old-minute-1', 'old-minute-2')
 
 
 class TestGetRollingSpeechMs:
@@ -393,6 +395,7 @@ class TestEscalateEnforcement:
     def test_warning_stays_warning_with_insufficient_violations(self, _):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
+        _fair_use_db.renew_fair_use_warning.return_value = ({'stage': 'warning'}, {'stage': 'warning'})
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
         classifier = {'misuse_score': 0.9, 'usage_type': 'audiobook'}
@@ -471,7 +474,10 @@ class TestIsHardRestricted:
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
     def test_non_restricted_user_is_not_hard_restricted(self):
-        _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'warning',
+            'warning_until': datetime.now(timezone.utc) + timedelta(days=1),
+        }
         assert fair_use_mod.is_hard_restricted('user1') is False
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
@@ -502,6 +508,7 @@ class TestEnforcementCache:
 
     def setup_method(self):
         _mock_redis.reset_mock()
+        _fair_use_db.update_fair_use_state.reset_mock()
 
     def test_returns_cached_stage(self):
         _mock_redis.get.return_value = b'warning'
@@ -510,10 +517,44 @@ class TestEnforcementCache:
 
     def test_falls_back_to_firestore_on_cache_miss(self):
         _mock_redis.get.return_value = None
-        _fair_use_db.get_fair_use_state.return_value = {'stage': 'throttle'}
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'throttle',
+            'throttle_until': datetime.now(timezone.utc) + timedelta(days=1),
+        }
         stage = fair_use_mod.get_enforcement_stage('user1')
         assert stage == 'throttle'
         _mock_redis.setex.assert_called_once()
+
+    def test_expired_restriction_reads_as_throttle_on_cache_miss(self):
+        """Live listen keys its restrict-stage DG budget cap on this stage, so a restriction
+        past restrict_until must expire here exactly as it does for sync and the status API."""
+        _mock_redis.get.return_value = None
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.now(timezone.utc) - timedelta(days=1),
+        }
+
+        stage = fair_use_mod.get_enforcement_stage('user1')
+
+        assert stage == 'throttle'
+        updates = _fair_use_db.update_fair_use_state.call_args.args[1]
+        assert updates['stage'] == 'throttle'
+        assert updates['restrict_until'] is None
+        assert updates['throttle_until'] > datetime.now(timezone.utc)
+        _mock_redis.setex.assert_called_once_with('fair_use:stage:user1', 60, 'throttle')
+
+    def test_active_restriction_stays_restrict_on_cache_miss(self):
+        _mock_redis.get.return_value = None
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.now(timezone.utc) + timedelta(days=1),
+        }
+
+        stage = fair_use_mod.get_enforcement_stage('user1')
+
+        assert stage == 'restrict'
+        _fair_use_db.update_fair_use_state.assert_not_called()
+        _mock_redis.setex.assert_called_once_with('fair_use:stage:user1', 60, 'restrict')
 
     def test_invalidate_cache_deletes_keys(self):
         fair_use_mod.invalidate_enforcement_cache('user1')
@@ -761,6 +802,11 @@ class TestNormalizeExpiredRestrictionState:
     """restrict_until expiry must always clear, even on malformed stored data."""
 
     NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=timezone.utc)
+
+    @pytest.fixture(autouse=True)
+    def _legacy_behavior(self, monkeypatch):
+        # Preserve coverage of the exact pre-decay contract behind the kill switch.
+        monkeypatch.setattr(fair_use_mod, 'FAIR_USE_THROTTLE_DECAY_ENABLED', False)
 
     def setup_method(self):
         _fair_use_db.update_fair_use_state.reset_mock()

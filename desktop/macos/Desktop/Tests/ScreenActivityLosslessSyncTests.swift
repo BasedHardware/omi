@@ -22,6 +22,18 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
     XCTAssertFalse(ScreenActivitySyncService.shouldUploadFrameRequest(state: "uploaded"))
   }
 
+  func testTerminalAuthAndAccountDeletionResponsesStopScreenSyncRetries() {
+    XCTAssertEqual(
+      ScreenActivitySyncService.terminalStopReason(statusCode: 401, responseBody: "{}"),
+      "unauthorized_after_refresh")
+    XCTAssertEqual(
+      ScreenActivitySyncService.terminalStopReason(
+        statusCode: 403, responseBody: #"{"detail":{"code":"account_deletion_in_progress"}}"#),
+      "account_deletion_in_progress")
+    XCTAssertNil(ScreenActivitySyncService.terminalStopReason(statusCode: 403, responseBody: "{}"))
+    XCTAssertNil(ScreenActivitySyncService.terminalStopReason(statusCode: 503, responseBody: "{}"))
+  }
+
   func testMigrationPreservesPopulatedLegacyRowsAndStartsThemPending() throws {
     let queue = try makeLegacyQueue()
     try queue.write { db in

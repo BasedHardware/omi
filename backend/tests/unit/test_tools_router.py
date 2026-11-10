@@ -49,7 +49,7 @@ def _stub_module(name):
 
 def _stub_package(name):
     mod = types.ModuleType(name)
-    mod.__path__ = []
+    mod.__path__ = [str(BACKEND_DIR / 'utils')] if name == 'utils' else []
     sys.modules[name] = mod
     if "." in name:
         parent_name, attr_name = name.rsplit(".", 1)
@@ -77,6 +77,7 @@ def _load_module_from_file(module_name, file_path):
 # They are restored right after the modules under test are imported.
 # ---------------------------------------------------------------------------
 _SYS_MODULE_NAMES = [
+    "utils.retrieval.tool_services.transcript_search",
     "firebase_admin",
     "firebase_admin.firestore",
     "firebase_admin.auth",
@@ -109,6 +110,7 @@ _SYS_MODULE_NAMES = [
     "utils.conversations.search",
     "utils.conversations.mcp_transcript_search",
     "utils.conversations.transcript_chunks",
+    "utils.conversations.transcript_for_llm",
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.calendar_tools",
@@ -122,7 +124,6 @@ _SYS_MODULE_NAMES = [
     "utils.other",
     "utils.other.endpoints",
     "utils.memory",
-    "utils.memory.belief_model",
     "utils.memory.chat_memory_adapter",
     "utils.memory.default_read_rollout",
     "utils.memory.memory_system",
@@ -159,6 +160,8 @@ for mod_name in [
     if mod_name not in sys.modules:
         _stub_module(mod_name)
 
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
+
 # Stub database packages
 _stub_package("database")
 sys.modules["database._client"].db = MagicMock()
@@ -167,6 +170,8 @@ sys.modules["database._client"].db = MagicMock()
 conversations_db = _stub_module("database.conversations")
 conversations_db.get_conversations = MagicMock(return_value=[])
 conversations_db.get_conversations_by_id = MagicMock(return_value=[])
+conversations_db.get_conversation = MagicMock(return_value=None)
+conversations_db.is_soft_deleted = MagicMock(side_effect=lambda c: bool(c and c.get('deleted')))
 
 # Stub database.users
 users_db = _stub_module("database.users")
@@ -193,6 +198,7 @@ action_items_db.update_action_item = MagicMock(return_value=True)
 # Stub database.notifications
 notifications_db = _stub_module("database.notifications")
 notifications_db.get_user_time_zone = MagicMock(return_value="UTC")
+importlib.import_module("database").notifications = notifications_db
 
 # Stub notifications
 notif_mod = _stub_module("utils.notifications")
@@ -207,15 +213,12 @@ _stub_package("utils.conversations")
 _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
 _stub_package("utils.retrieval.tool_services")
+direct_transcript_svc = _stub_module("utils.retrieval.tool_services.transcript_search")
+direct_transcript_svc.search_saved_transcripts_text = MagicMock(return_value="Direct transcript search result")
 _stub_package("utils.other")
 _stub_package("utils.memory")
-
-# This router suite exercises the released service contract. Temporal policy
-# and Beta traversal are covered by the memory service's dedicated suites.
-belief_model_stub = _stub_module("utils.memory.belief_model")
-belief_model_stub.belief_model_enabled = lambda: False
-belief_model_stub.memory_use_suppressed = lambda _memory: False
-belief_model_stub.normalize_temporal_read_view = lambda view: view
+transcript_for_llm_stub = _stub_module("utils.conversations.transcript_for_llm")
+transcript_for_llm_stub.owner_safe_transcript_segments = lambda segments, **_kwargs: (list(segments), "")
 
 memory_service_stub = _stub_module("utils.memory.memory_service")
 
@@ -342,7 +345,7 @@ transcript_search_mod.search_chat_transcript_chunks = MagicMock(return_value=_Ch
 transcript_chunks_mod = _stub_module("utils.conversations.transcript_chunks")
 
 
-def _hydrate_chunk_texts(_uid, conversations):
+def _hydrate_chunk_texts(_uid, conversations, *, clock=None):
     return conversations
 
 
@@ -444,6 +447,8 @@ memories_model_mod.MemoryDB = FakeMemoryDB
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Now load the shared service modules
+_load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
+_load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
 retrieval_safety = _load_module_from_file(
     "utils.retrieval.safety",
     BACKEND_DIR / "utils" / "retrieval" / "safety.py",
@@ -464,6 +469,7 @@ action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",
 )
+action_items_svc.conversations_db = conversations_db
 router_mod = _load_module_from_file(
     "routers.tools",
     BACKEND_DIR / "routers" / "tools.py",
@@ -476,6 +482,7 @@ rate_limit_config_mod = _load_module_from_file(
 # Restore sys.modules now that the modules under test are imported and bound to
 # their stubbed dependencies. Tests below patch those module objects directly.
 restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+importlib.import_module("database").notifications = notifications_db
 del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
@@ -584,7 +591,8 @@ class TestGetConversationsText:
             end_date="2024-01-31T23:59:59Z",
         )
         assert "No conversations found" in result
-        assert "2024-01" in result
+        assert "Mon 1 Jan 2024" in result
+        assert "Wed 31 Jan 2024" in result
 
     def test_invalid_start_date(self):
         result = conversations_svc.get_conversations_text(uid="test-uid", start_date="bad-date")
@@ -702,7 +710,9 @@ class TestSearchConversationsText:
             result = conversations_svc.search_conversations_text(
                 uid='test-uid', query='invoice amount', source_sink=sources
             )
-        conversations_db.get_conversations_by_id.assert_called_once_with('test-uid', ['spoken-only'])
+        conversations_db.get_conversations_by_id.assert_called_once_with(
+            'test-uid', ['spoken-only'], include_discarded=True
+        )
         assert embeddings.embed_query.call_count == 1
         assert vector_db.query_vectors.call_args.kwargs['query_vector'] == [0.5]
         assert transcript_search_mod.search_chat_transcript_chunks.call_args.kwargs['query_vector'] == [0.5]
@@ -767,7 +777,7 @@ class TestSearchConversationsText:
             {'id': 'conv-1', 'transcript_segments': []},
         ]
         result = conversations_svc.search_conversations_text(uid="test-uid", query="test query")
-        assert "Found" in result
+        assert "1 nearest conversations" in result
         assert "1 conversations formatted" in result
 
     def test_exact_reference_bypasses_keyword_and_vector_search(self):
@@ -785,7 +795,9 @@ class TestSearchConversationsText:
         assert "1 conversations formatted" in result
         search_mod.keyword_search_conversation_ids.assert_not_called()
         vector_db.query_vectors.assert_not_called()
-        conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
+        conversations_db.get_conversations_by_id.assert_called_once_with(
+            "test-uid", [conversation_id], include_discarded=True
+        )
 
     def test_exact_reference_respects_date_filter(self):
         conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
@@ -953,6 +965,37 @@ class TestCreateActionItemText:
         result = action_items_svc.create_action_item_text(uid="test-uid", description="Test", due_at="bad-date")
         assert "Error" in result
 
+    def test_missing_conversation_rejected(self):
+        conversations_db.get_conversation.reset_mock()
+        conversations_db.get_conversation.return_value = None
+        result = action_items_svc.create_action_item_text(
+            uid="test-uid", description="Test", conversation_id="conv-missing"
+        )
+        assert "Error" in result
+        assert "not found" in result.lower()
+        action_items_db.create_action_item.assert_not_called()
+
+    def test_soft_deleted_conversation_rejected(self):
+        conversations_db.get_conversation.reset_mock()
+        conversations_db.get_conversation.return_value = {'id': 'conv-del', 'deleted': True}
+        result = action_items_svc.create_action_item_text(
+            uid="test-uid", description="Test", conversation_id="conv-del"
+        )
+        assert "Error" in result
+        assert "not found" in result.lower()
+        action_items_db.create_action_item.assert_not_called()
+
+    def test_valid_conversation_accepted(self):
+        conversations_db.get_conversation.reset_mock()
+        conversations_db.get_conversation.return_value = {'id': 'conv-live', 'deleted': False}
+        result = action_items_svc.create_action_item_text(
+            uid="test-uid", description="Test", conversation_id="conv-live"
+        )
+        assert "Added" in result
+        action_items_db.create_action_item.assert_called_once()
+        call_args = action_items_db.create_action_item.call_args[0]
+        assert call_args[1]['conversation_id'] == 'conv-live'
+
 
 # ===========================================================================
 # Tests: update_action_item_text
@@ -978,6 +1021,13 @@ class TestUpdateActionItemText:
         action_items_db.get_action_item.return_value = {'id': 'ai-1', 'description': 'Test', 'is_locked': True}
         result = action_items_svc.update_action_item_text(uid="test-uid", action_item_id="ai-1", completed=True)
         assert "paid plan" in result.lower()
+
+    def test_soft_deleted_item_rejected(self):
+        action_items_db.get_action_item.return_value = {'id': 'ai-1', 'description': 'Test', 'deleted': True}
+        result = action_items_svc.update_action_item_text(uid="test-uid", action_item_id="ai-1", completed=True)
+        assert "Error" in result
+        assert "not found" in result.lower()
+        action_items_db.update_action_item.assert_not_called()
 
     def test_no_changes(self):
         action_items_db.get_action_item.return_value = {'id': 'ai-1', 'description': 'Test'}
@@ -1173,6 +1223,27 @@ class TestRouterEndpoints:
         assert body["tool_name"] == "update_action_item"
         assert "completed" in body["result_text"].lower()
 
+    def test_create_action_item_endpoint_with_soft_deleted_conversation(self):
+        conversations_db.get_conversation.return_value = {'id': 'conv-del', 'deleted': True}
+        resp = self.client.post(
+            "/v1/tools/action-items",
+            json={"description": "Test task", "conversation_id": "conv-del"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "create_action_item"
+        assert body["is_error"] is True
+        assert "not found" in body["result_text"].lower()
+
+    def test_update_action_item_endpoint_soft_deleted_task(self):
+        action_items_db.get_action_item.return_value = {'id': 'ai-del', 'description': 'Task', 'deleted': True}
+        resp = self.client.patch("/v1/tools/action-items/ai-del", json={"completed": True})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "update_action_item"
+        assert body["is_error"] is True
+        assert "not found" in body["result_text"].lower()
+
     def test_create_calendar_event_endpoint(self):
         resp = self.client.post(
             "/v1/tools/calendar-events",
@@ -1269,7 +1340,7 @@ class TestRouterEndpoints:
         vector_db.search_transcript_chunks.return_value = [
             {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 1722500000, 'score': 0.9},
         ]
-        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows, *, clock=None: [
             {
                 **r,
                 'text': '[Conversation on 01 Aug 2024, 08:53]\nUser: the beta shipped',
@@ -1313,7 +1384,9 @@ class TestSearchConversationChunksSources:
         return router_mod.ToolResponse.model_validate(result)
 
     def _hydrate_with(self, **fields):
-        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [{**r, **fields} for r in rows]
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows, *, clock=None: [
+            {**r, **fields} for r in rows
+        ]
 
     def test_sources_carry_parent_conversation_id_and_dedupe_by_conversation(self):
         vector_db.search_transcript_chunks.return_value = [
@@ -1518,19 +1591,19 @@ class TestErrorHandling:
         vector_db.query_vectors.side_effect = None
 
     def test_get_memories_db_error(self):
-        """DB failure in get_memories returns error text."""
+        """DB failures return a generic message without internal details."""
         memories_db.get_memories.side_effect = Exception("Firestore down")
         result = memories_svc.get_memories_text(uid="test-uid")
-        assert "Error" in result
-        assert "Firestore down" in result
+        assert result == "Error retrieving memories. Please try again."
+        assert "Firestore down" not in result
         memories_db.get_memories.side_effect = None
 
     def test_search_memories_vector_error(self):
-        """Vector DB failure in search_memories returns error text."""
+        """Vector DB failures do not expose internal exception details."""
         vector_db.find_similar_memories.side_effect = Exception("Vector timeout")
         result = memories_svc.search_memories_text(uid="test-uid", query="test")
-        assert "Error" in result
-        assert "Vector timeout" in result
+        assert result == "Error searching memories. Please try again."
+        assert "Vector timeout" not in result
         vector_db.find_similar_memories.side_effect = None
 
     def test_get_action_items_db_error(self):

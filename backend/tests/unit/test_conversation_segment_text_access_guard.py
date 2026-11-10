@@ -12,7 +12,8 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
-from database import conversations as conversations_db
+from database import conversations as conversations_db, users as users_db
+from models.users import PlanType, Subscription
 from routers import conversations as routes
 
 UID = "test-user-segment-text-guard"
@@ -31,6 +32,9 @@ def client():
 
 
 def _setup_mock_db(monkeypatch):
+    # The locked-access cases represent an actual Free owner. An unresolved
+    # subscription is now a retryable 503 rather than a purchase denial.
+    monkeypatch.setattr(users_db, 'get_user_valid_subscription', lambda *a, **k: Subscription(plan=PlanType.basic))
     mock_conversations = {
         CONV_LOCKED: {
             "id": CONV_LOCKED,

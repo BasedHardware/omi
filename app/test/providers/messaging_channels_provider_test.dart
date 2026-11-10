@@ -38,7 +38,15 @@ void main() {
         expect(config.endpoint(ChatChannel.telegram)?.address, '@OmiBot');
         expect(config.endpoint(ChatChannel.imessage)?.address, '+15550100100');
         expect(config.endpoint(ChatChannel.imessage)?.provider, 'linq');
+        expect(config.endpoint(ChatChannel.whatsapp), isNull);
       }
+      final whatsApp = ChatAppsConfig.fromPayload(
+        enabled: true,
+        payload: {
+          'whatsapp': {'provider': 'keiki', 'address': '+15550100100'},
+        },
+      );
+      expect(whatsApp.endpoint(ChatChannel.whatsapp)?.provider, 'keiki');
     });
 
     test(
@@ -101,23 +109,29 @@ void main() {
       expect(number.toString(), contains('+19995550100'));
     });
 
-    test('the gate passes the flag key to both reads', () async {
-      final keys = <String>[];
-      final config = await ChatAppsGate.read(
-        readFlag: (key) async {
-          keys.add(key);
-          return true;
-        },
-        readPayload: (key) async {
-          keys.add(key);
-          return {
-            'telegram': {'provider': 'telegram', 'address': 'OmiBot'},
-          };
-        },
-      );
-      expect(keys, [ChatAppsGate.enabledFlag, ChatAppsGate.enabledFlag]);
-      expect(config.endpoint(ChatChannel.telegram)?.address, 'OmiBot');
-    });
+    for (final privateChannels in [false, true]) {
+      test('the gate selects the ${privateChannels ? "private" : "public"} payload key', () async {
+        final keys = <String>[];
+        final config = await ChatAppsGate.read(
+          readFlag: (key) async {
+            keys.add(key);
+            return key == ChatAppsGate.enabledFlag || (privateChannels && key == ChatAppsGate.allChannelsFlag);
+          },
+          readPayload: (key) async {
+            keys.add(key);
+            return {
+              'telegram': {'provider': 'telegram', 'address': 'OmiBot'},
+            };
+          },
+        );
+        expect(keys, [
+          ChatAppsGate.enabledFlag,
+          ChatAppsGate.allChannelsFlag,
+          privateChannels ? ChatAppsGate.allChannelsFlag : ChatAppsGate.enabledFlag
+        ]);
+        expect(config.endpoint(ChatChannel.telegram)?.address, 'OmiBot');
+      });
+    }
   });
 
   group('ChannelLink.handle', () {
@@ -163,12 +177,24 @@ void main() {
       expect(off.showEntry, isFalse);
 
       backend.links = [linkJson(id: linkIdTelegram, channel: 'telegram')];
-      await off.load();
+      await off.refreshLinks();
       expect(off.showEntry, isTrue, reason: 'Disconnect stays reachable');
 
       final on = FakeMessagingBackend().provider();
       await on.load();
       expect(on.showEntry, isTrue);
+    });
+
+    test('repeated entry loads are cached; explicit refresh sees a newly linked account', () async {
+      final backend = FakeMessagingBackend();
+      final provider = backend.provider();
+      await provider.load();
+      await provider.load();
+      expect(backend.count('GET', 'v1/messaging/links'), 1);
+      backend.links = [linkJson(id: linkIdTelegram, channel: 'telegram')];
+      await provider.refreshLinks();
+      expect(backend.count('GET', 'v1/messaging/links'), 2);
+      expect(provider.links, hasLength(1));
     });
 
     test(
@@ -200,6 +226,80 @@ void main() {
         kind: 'token',
       );
       expect((denied as ApiFailure).problem.kind, ApiProblemKind.forbidden);
+    });
+
+    test('an older backend without availability leaves every channel undecided', () async {
+      final backend = FakeMessagingBackend();
+      final provider = backend.provider();
+      await provider.load();
+      expect(provider.availabilityFor(ChatChannel.telegram), isNull);
+      expect(provider.availabilityFor(ChatChannel.imessage), isNull);
+    });
+
+    test('availability is parsed per channel; unknown channels and malformed rows are skipped', () async {
+      final backend = FakeMessagingBackend()
+        ..availability = {
+          'telegram': availabilityJson(available: true),
+          'imessage': availabilityJson(reason: 'seat_cap', waitlisted: true),
+          'sms': availabilityJson(available: true),
+        };
+      final provider = backend.provider();
+      await provider.load();
+      expect(provider.availabilityFor(ChatChannel.telegram)?.access, ChannelAccess.open);
+      expect(provider.availabilityFor(ChatChannel.imessage)?.access, ChannelAccess.waitlisted);
+
+      backend.availability = {
+        'telegram': {'available': 'yes'},
+        'imessage': availabilityJson(reason: 'channel_plan'),
+      };
+      await provider.refreshLinks();
+      expect(provider.availabilityFor(ChatChannel.telegram), isNull);
+      expect(provider.availabilityFor(ChatChannel.imessage)?.access, ChannelAccess.channelPlan);
+    });
+
+    test('each reason maps to its card state', () {
+      ChannelAccess access(String? reason, {bool waitlisted = false}) =>
+          ChannelAvailability(available: false, reason: reason, waitlisted: waitlisted).access;
+      expect(const ChannelAvailability(available: true).access, ChannelAccess.open);
+      expect(access('paid_plan'), ChannelAccess.paidPlan);
+      expect(access('channel_plan'), ChannelAccess.channelPlan);
+      expect(access('seat_cap'), ChannelAccess.seatCap);
+      expect(access('seat_cap', waitlisted: true), ChannelAccess.waitlisted);
+      for (final reason in ['channel_disabled', 'account_deletion', 'unavailable', 'something_new', null]) {
+        expect(access(reason), ChannelAccess.unavailable, reason: '$reason');
+      }
+    });
+
+    test('a 409 on mint marks the channel waitlisted', () async {
+      final backend = FakeMessagingBackend()
+        ..availability = {'imessage': availabilityJson(available: true)}
+        ..seatCapped.add('imessage');
+      final provider = backend.provider();
+      await provider.load();
+      final result = await provider.mintProof(ChatChannel.imessage, kind: 'code');
+      expect((result as ApiFailure).problem.statusCode, 409);
+      expect(provider.availabilityFor(ChatChannel.imessage)?.access, ChannelAccess.waitlisted);
+    });
+
+    test('joining the waitlist treats the 409 as success; a free seat opens the channel', () async {
+      final backend = FakeMessagingBackend()
+        ..availability = {'imessage': availabilityJson(reason: 'seat_cap')}
+        ..seatCapped.add('imessage');
+      final provider = backend.provider();
+      await provider.load();
+      final joined = await provider.joinWaitlist(ChatChannel.imessage);
+      expect((joined as ApiSuccess<bool>).data, isTrue);
+      expect(provider.availabilityFor(ChatChannel.imessage)?.access, ChannelAccess.waitlisted);
+      expect(jsonDecode(backend.requests.last.body)['kind'], 'code');
+
+      backend.seatCapped.clear();
+      final opened = await provider.joinWaitlist(ChatChannel.imessage);
+      expect((opened as ApiSuccess<bool>).data, isFalse);
+      expect(provider.availabilityFor(ChatChannel.imessage)?.access, ChannelAccess.open);
+
+      backend.statusFor['POST v1/messaging/link-proofs'] = 503;
+      final failed = await provider.joinWaitlist(ChatChannel.imessage);
+      expect((failed as ApiFailure).problem.kind, ApiProblemKind.server);
     });
 
     test('mint is refused locally for a channel without an address', () async {
@@ -304,6 +404,32 @@ void main() {
         );
       },
     );
+
+    test('WhatsApp opens click-to-chat with the digits and a prefilled text', () {
+      const endpoint = ChatChannelEndpoint(provider: 'keiki', address: '+1 (555) 010-0100');
+      expect(
+        chatAppUri(ChatChannel.whatsapp, endpoint, body: 'Hi Omi, link code AB12', platform: TargetPlatform.iOS)
+            .toString(),
+        'https://wa.me/15550100100?text=Hi%20Omi%2C%20link%20code%20AB12',
+      );
+      expect(
+        chatAppProofUri(
+          channel: ChatChannel.whatsapp,
+          endpoint: endpoint,
+          body: 'code',
+          platform: TargetPlatform.android,
+        ).toString(),
+        'https://wa.me/15550100100?text=code',
+      );
+      expect(
+        chatAppUri(
+          ChatChannel.whatsapp,
+          const ChatChannelEndpoint(provider: 'keiki', address: 'none'),
+          platform: TargetPlatform.iOS,
+        ),
+        isNull,
+      );
+    });
 
     test('codes are grouped by four for reading', () {
       expect(groupedLinkCode('9F2C4A7B1D'), '9F2C 4A7B 1D');

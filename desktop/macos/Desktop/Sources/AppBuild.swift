@@ -13,8 +13,6 @@ enum AppBuild {
     productionBundleIdentifier, betaProductionBundleIdentifier,
   ]
   static let desktopDevBundleIdentifier = "com.omi.desktop-dev"
-  static let jitQABundleIdentifier = "com.omi.omi-jit-qa"
-  static let jitQADisableRealtimeEnvironmentKey = "OMI_JIT_QA_DISABLE_REALTIME"
   static let externalPreviewBundleIdentifierPrefix = "com.omi.preview."
   static let externalPreviewMarkerInfoKey = "OMIExternalPreview"
   static let externalPreviewBackendInfoKey = "OMIExternalPreviewBackend"
@@ -95,22 +93,6 @@ enum AppBuild {
 
   static var isNonProduction: Bool {
     buildConfiguration.isNonProduction
-  }
-
-  /// The QA spend-isolation switch is valid only for the exact JIT QA identity and the
-  /// explicit value `1`. All other bundles and values retain the normal realtime behavior.
-  static var shouldDisableJITQARealtime: Bool {
-    shouldDisableJITQARealtime(
-      bundleIdentifier: bundleIdentifier,
-      environment: ProcessInfo.processInfo.environment)
-  }
-
-  static func shouldDisableJITQARealtime(
-    bundleIdentifier: String,
-    environment: [String: String]
-  ) -> Bool {
-    bundleIdentifier == jitQABundleIdentifier
-      && environment[jitQADisableRealtimeEnvironmentKey] == "1"
   }
 
   /// True for every shipped production-family artifact (stable *and* the beta app).

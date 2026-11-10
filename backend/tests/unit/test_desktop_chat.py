@@ -30,6 +30,7 @@ def test_request_translates_openai_tool_history_and_alias():
             'max_completion_tokens': 20_000,
             'messages': [
                 {'role': 'developer', 'content': 'be concise'},
+                {'role': 'user', 'content': 'weather in NYC?'},
                 {
                     'role': 'assistant',
                     'tool_calls': [
@@ -53,8 +54,275 @@ def test_request_translates_openai_tool_history_and_alias():
     assert payload['model'] == 'claude-sonnet-4-6'
     assert payload['max_tokens'] == 16_384
     assert payload['system'] == 'be concise'
-    assert payload['messages'][1]['content'][0]['tool_use_id'] == 'call_1'
+    assert payload['messages'][2]['content'][0]['tool_use_id'] == 'call_1'
     assert payload['tool_choice'] == {'type': 'auto'}
+
+
+def test_request_drops_assistant_turn_with_no_text_or_tool_calls():
+    # Anthropic rejects an empty text block with 400 invalid_request_error, so a
+    # replayed assistant turn that carried nothing must not reach the wire as one.
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'first'},
+                {'role': 'assistant', 'content': ''},
+                {'role': 'assistant', 'content': None, 'tool_calls': []},
+                {'role': 'user', 'content': 'second'},
+            ],
+        }
+    )
+    assert [message['role'] for message in payload['messages']] == ['user', 'user']
+    assert [message['content'] for message in payload['messages']] == ['first', 'second']
+
+
+def test_request_rejects_messages_with_no_sendable_turn():
+    with pytest.raises(desktop_chat._RequestValidationError):
+        _authorized_request({'model': 'omi-sonnet', 'messages': [{'role': 'assistant', 'content': ''}]})
+
+
+def test_request_drops_user_turn_with_no_text_or_images():
+    # Anthropic rejects empty content and empty text blocks with 400
+    # invalid_request_error, so a replayed user turn that carried nothing must
+    # not reach the wire as one.
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'first'},
+                {'role': 'user', 'content': ''},
+                {'role': 'user', 'content': None},
+                {'role': 'user', 'content': [{'type': 'text', 'text': ''}]},
+                {'role': 'assistant', 'content': 'hello'},
+                {'role': 'user', 'content': 'question'},
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {'role': 'user', 'content': 'first'},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'hello'}]},
+        {'role': 'user', 'content': 'question'},
+    ]
+
+
+def test_request_keeps_image_when_empty_text_block_precedes_it():
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': [
+                        {'type': 'text', 'text': ''},
+                        {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,aGVsbG8='}},
+                    ],
+                },
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {
+            'role': 'user',
+            'content': [{'type': 'image', 'source': {'type': 'base64', 'media_type': 'image/png', 'data': 'aGVsbG8='}}],
+        }
+    ]
+
+
+def test_request_rejects_user_only_history_left_empty():
+    with pytest.raises(desktop_chat._RequestValidationError):
+        _authorized_request({'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': ''}]})
+
+
+def test_request_drops_leading_assistant_turn(monkeypatch):
+    # OpenAI-format histories may open with an assistant turn; Anthropic
+    # rejects a first message that is not role user (400 invalid_request_error).
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'assistant', 'content': 'Hi, I am Omi.'},
+                {'role': 'user', 'content': 'hello'},
+            ],
+        }
+    )
+    assert payload['messages'] == [{'role': 'user', 'content': 'hello'}]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'assistant_turn',
+            'to_mode': 'none',
+            'reason': 'local_heal',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_drops_leading_assistant_tool_round_with_its_results(monkeypatch):
+    # A leading assistant tool round cannot be repaired by keeping the results:
+    # Anthropic would reject them as orphaned once their tool_use is gone.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    with pytest.raises(desktop_chat._RequestValidationError):
+        _authorized_request(
+            {
+                'model': 'omi-sonnet',
+                'messages': [
+                    {
+                        'role': 'assistant',
+                        'tool_calls': [
+                            {'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}}
+                        ],
+                    },
+                    {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                ],
+            }
+        )
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'assistant_tool_round',
+            'to_mode': 'none',
+            'reason': 'local_heal',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_drops_tool_result_without_preceding_tool_use(monkeypatch):
+    # Anthropic rejects a tool_result that answers no tool_use in the
+    # immediately preceding assistant turn (400 invalid_request_error); a
+    # client-side history trim can start the window on a tool message.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'question'},
+                {'role': 'tool', 'tool_call_id': 'call_9', 'content': 'orphaned'},
+                {'role': 'assistant', 'content': 'answer'},
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {'role': 'user', 'content': 'question'},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'answer'}]},
+    ]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_result',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_strips_tool_use_whose_result_never_arrived(monkeypatch):
+    # A trim that keeps the assistant tool-call turn but cuts its tool result
+    # would leave an unanswered tool_use on the wire; the turn's text survives.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'check the weather'},
+                {
+                    'role': 'assistant',
+                    'content': 'Let me check.',
+                    'tool_calls': [{'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}}],
+                },
+                {'role': 'user', 'content': 'any luck?'},
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {'role': 'user', 'content': 'check the weather'},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'Let me check.'}]},
+        {'role': 'user', 'content': 'any luck?'},
+    ]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_use',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_strips_only_unanswered_tool_use_in_partial_round(monkeypatch):
+    # When one of two tool calls lost its result, the answered half of the
+    # round stays intact and the unanswered half is removed.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'weather and news'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [
+                        {'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}},
+                        {'id': 'call_2', 'type': 'function', 'function': {'name': 'n', 'arguments': '{}'}},
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                {'role': 'assistant', 'content': 'It is sunny.'},
+            ],
+        }
+    )
+    assert [message['role'] for message in payload['messages']] == ['user', 'assistant', 'user', 'assistant']
+    assert [block['id'] for block in payload['messages'][1]['content'] if block['type'] == 'tool_use'] == ['call_1']
+    assert payload['messages'][2]['content'][0]['tool_use_id'] == 'call_1'
+    assert payload['messages'][3]['content'] == [{'type': 'text', 'text': 'It is sunny.'}]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_use',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_drops_duplicate_tool_result(monkeypatch):
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'weather?'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [{'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}}],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny again'},
+                {'role': 'assistant', 'content': 'It is sunny.'},
+            ],
+        }
+    )
+    tool_results = [message for message in payload['messages'] if message['role'] == 'user'][1:]
+    assert len(tool_results) == 1
+    assert tool_results[0]['content'][0]['content'] == 'sunny'
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_result',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
 
 
 def test_request_injects_web_search_for_desktop_opt_in():
@@ -397,7 +665,6 @@ def test_request_reports_web_search_capability_fallback(monkeypatch):
     assert fallbacks == []
 
 
-@pytest.mark.asyncio
 async def test_record_usage_charges_web_search_requests(monkeypatch):
     calls = []
 
@@ -417,7 +684,6 @@ async def test_record_usage_charges_web_search_requests(monkeypatch):
     assert calls[0][1][-1] == 0.03
 
 
-@pytest.mark.asyncio
 async def test_record_usage_skips_byok_requests(monkeypatch):
     calls = []
     exclusions = []
@@ -2615,22 +2881,3 @@ async def test_desktop_chat_metric_failure_does_not_break_stream(monkeypatch):
         x_omi_request_id='request-4',
     )
     assert 'still delivered' in await _drain(response)
-
-
-@pytest.mark.asyncio
-async def test_retired_jit_request_returns_410_before_subscription_or_provider(monkeypatch):
-    def unexpected(*args, **kwargs):
-        raise AssertionError('retired request reached paid work')
-
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', unexpected)
-    with pytest.raises(desktop_chat.HTTPException) as exc:
-        await desktop_chat.chat_completions(
-            {'messages': []},
-            uid='fixture',
-            x_omi_chat_contract_version=None,
-            x_app_platform=None,
-            x_omi_request_id=None,
-            x_omi_jit_run_id='retired-run',
-        )
-    assert exc.value.status_code == 410
-    assert exc.value.detail == {'error': 'feature_retired'}

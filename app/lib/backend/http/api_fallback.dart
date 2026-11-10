@@ -1,8 +1,10 @@
 /// Mobile emitter for the shared fallback contract. Never accept payloads,
 /// URLs, record ids, exception messages, or arbitrary labels.
+library;
+
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
-enum ApiFallbackReason { partialDecode, staleData }
+enum ApiFallbackReason { partialDecode, staleData, timeout, error, offline }
 
 enum ApiFallbackOutcome { degraded, recovered, exhausted }
 
@@ -15,7 +17,12 @@ class ApiFallbackEvent {
         'area': 'other',
         'from': 'none',
         'to': 'none',
-        'reason': 'other',
+        'reason': switch (reason) {
+          ApiFallbackReason.timeout => 'timeout',
+          ApiFallbackReason.error => 'error',
+          ApiFallbackReason.offline => 'offline',
+          _ => 'other',
+        },
         'outcome': outcome.name,
       };
 }

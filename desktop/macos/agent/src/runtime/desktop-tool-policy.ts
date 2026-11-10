@@ -81,11 +81,7 @@ const TASK_WRITE_TOOLS = new Set([
   "complete_onboarding",
 ]);
 const MEMORY_WRITE_TOOLS = new Set(["create_memory"]);
-// JIT knowledge-ledger write verbs (save_playbook, create_standing_trigger,
-// close_fact) mutate the same backend memory/knowledge store as create_memory,
-// so they share its bundle rather than inventing a new one.
-const LEDGER_WRITE_TOOLS = new Set(["save_playbook", "create_standing_trigger", "close_fact"]);
-const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "look_at_frame", "capture_screen"]);
+const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "capture_screen"]);
 const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context"]);
 // Coordinator policy classifies this as a production user-approved operation;
 // ChatToolExecutor independently enforces the current-turn consent at execution.
@@ -115,10 +111,6 @@ const LOCAL_READ_TOOLS = new Set([
   "get_email_insights",
   "get_local_status",
   "get_product_kb",
-  "search_knowledge",
-  "read_playbook",
-  "search_historical_facts",
-  "get_entity_timeline_tool",
 ]);
 
 function isSqlWrite(sql: string): boolean {
@@ -154,7 +146,7 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   if (SCREEN_SUMMARY_TOOLS.has(tool.name)) bundles.add("desktop.context.screen_summary");
   if (SCREEN_IMAGE_TOOLS.has(tool.name)) bundles.add("desktop.context.screenshot_image");
   if (TASK_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.tasks.readwrite");
-  if (MEMORY_WRITE_TOOLS.has(tool.name) || LEDGER_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.memories.write");
+  if (MEMORY_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.memories.write");
   if (AUTOMATION_READ_TOOLS.has(tool.name)) bundles.add("desktop.automation.read");
   if (CONTACTS_READ_TOOLS.has(tool.name)) bundles.add("desktop.contacts.read");
   if (MESSAGING_READ_TOOLS.has(tool.name)) bundles.add("desktop.messaging.read");

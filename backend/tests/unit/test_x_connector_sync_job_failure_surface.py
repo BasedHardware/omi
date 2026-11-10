@@ -121,3 +121,48 @@ def test_x_connector_sync_job_allows_partial_success(monkeypatch, x_connector_sy
     monkeypatch.setattr(x_connector_sync_job, "run_x_sync_job", ok_run)
 
     x_connector_sync_job.main()
+
+
+def test_x_connector_sync_job_initializes_firebase_with_adc(monkeypatch, x_connector_sync_job):
+    calls = []
+    monkeypatch.setenv("OMI_CUSTOMER_DATA_PROJECT", "based-hardware")
+    monkeypatch.delenv("SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setattr(
+        x_connector_sync_job.firebase_admin,
+        "initialize_app",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    x_connector_sync_job._init_firebase()
+
+    assert calls == [((), {"options": {"projectId": "based-hardware"}})]
+
+
+@pytest.mark.parametrize('fail', [False, True])
+def test_entrypoint_logs_terminal_probe_totals_on_success_and_error(monkeypatch, x_connector_sync_job, caplog, fail):
+    import json
+    import logging
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS_BY_CALLER
+
+    async def run():
+        FIRESTORE_BILLED_READS_BY_CALLER.labels('other', 'lookup', 'tests:x_terminal').inc(3)
+        if fail:
+            raise RuntimeError('synthetic job failure')
+        return {'users': 0, 'synced': 0, 'failed': 0, 'errors': []}
+
+    monkeypatch.setattr(x_connector_sync_job, '_init_firebase', lambda: None)
+    monkeypatch.setattr(x_connector_sync_job, 'run_x_sync_job', run)
+    caplog.set_level(logging.INFO, logger='utils.observability.firestore_probe_export')
+    if fail:
+        with pytest.raises(RuntimeError, match='synthetic job failure'):
+            x_connector_sync_job.main()
+    else:
+        x_connector_sync_job.main()
+    samples = [json.loads(r.message) for r in caplog.records if r.name == 'utils.observability.firestore_probe_export']
+    assert any(
+        s.get('labels', {}).get('caller') == 'tests:x_terminal'
+        and s['service'] == 'x-connector-sync-job'
+        and s['value'] >= 3
+        for s in samples
+    )

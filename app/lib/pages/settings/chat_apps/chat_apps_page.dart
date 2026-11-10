@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/pages/settings/chat_apps/channel_settings_page.dart';
 import 'package:omi/pages/settings/chat_apps/chat_app_widgets.dart';
+import 'package:omi/pages/settings/chat_apps/chat_apps_problem.dart';
 import 'package:omi/pages/settings/chat_apps/imessage_connect_sheet.dart';
 import 'package:omi/pages/settings/chat_apps/telegram_connect_sheet.dart';
 import 'package:omi/pages/settings/chat_apps/whatsapp_waitlist_sheet.dart';
@@ -61,7 +63,8 @@ class ChatAppsIntegrationsEntry extends StatelessWidget {
 /// Whether the account holds the plan the gateway admits. Unknown until the subscription loads.
 enum _ProStatus { unknown, pro, free }
 
-/// Connect Telegram and iMessage, see what is connected, and join the WhatsApp waitlist.
+/// Connect Telegram, iMessage and WhatsApp, see what is connected, and join the WhatsApp waitlist
+/// while WhatsApp is not configured.
 class ChatAppsPage extends StatefulWidget {
   const ChatAppsPage({super.key});
 
@@ -72,6 +75,9 @@ class ChatAppsPage extends StatefulWidget {
 class _ChatAppsPageState extends State<ChatAppsPage> {
   /// Set when a connect sheet just finished, for the success banner and the open button.
   ChatChannel? _justConnected;
+
+  /// The line the connect sheet texted. Omi has several, so the flag's address may be another one.
+  String? _connectedAddress;
 
   @override
   void initState() {
@@ -102,23 +108,53 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     final sheet = switch (channel) {
       ChatChannel.telegram => showTelegramConnectSheet(context),
       ChatChannel.imessage => showIMessageConnectSheet(context),
-      ChatChannel.whatsapp => Future<ChannelLink?>.value(),
+      ChatChannel.whatsapp => showCodeConnectSheet(context, ChatChannel.whatsapp),
     };
     final link = await sheet;
-    if (link != null && mounted) setState(() => _justConnected = channel);
+    if (link != null && mounted) {
+      setState(() {
+        _justConnected = channel;
+        _connectedAddress = link.address;
+      });
+    }
+  }
+
+  /// Channels whose waitlist request is in flight.
+  final Set<ChatChannel> _joining = {};
+
+  Future<void> _joinWaitlist(ChatChannel channel) async {
+    setState(() => _joining.add(channel));
+    final result = await context.read<MessagingChannelsProvider>().joinWaitlist(channel);
+    if (!mounted) return;
+    setState(() => _joining.remove(channel));
+    final l10n = context.l10n;
+    switch (result) {
+      case ApiSuccess(data: true):
+        OmiFeedback.confirm(context, l10n.chatAppsWaitlistJoined);
+      case ApiSuccess():
+        break; // A seat was free after all; the row now offers Connect.
+      case ApiFailure(:final problem):
+        OmiFeedback.error(context, ChatAppsProblem.fromApi(problem).message(context));
+    }
   }
 
   Future<void> _openWaitlist(MessagingChannelsProvider provider) async {
+    final telegramAccess = provider.availabilityFor(ChatChannel.telegram)?.access;
     final offerTelegram = provider.linkFor(ChatChannel.telegram) == null &&
         provider.config.endpoint(ChatChannel.telegram) != null &&
-        _proStatus(context.read<UsageProvider>()) != _ProStatus.free;
+        (telegramAccess == null
+            ? _proStatus(context.read<UsageProvider>()) != _ProStatus.free
+            : telegramAccess == ChannelAccess.open);
     final action = await showWhatsAppWaitlistSheet(context, offerTelegram: offerTelegram);
     if (action == WhatsAppWaitlistAction.useTelegram && mounted) await _connect(ChatChannel.telegram);
   }
 
   Future<void> _openChannel(ChatChannel channel) async {
     final endpoint = context.read<MessagingChannelsProvider>().config.endpoint(channel);
-    final opened = endpoint != null && await openChatApp(channel, endpoint);
+    final line = _connectedAddress;
+    final target =
+        endpoint == null || line == null ? endpoint : ChatChannelEndpoint(provider: endpoint.provider, address: line);
+    final opened = target != null && await openChatApp(channel, target);
     if (opened || !mounted) return;
     final l10n = context.l10n;
     OmiFeedback.error(
@@ -134,7 +170,7 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     final pro = _proStatus(context.watch<UsageProvider>());
     final online = context.watch<ConnectivityProvider>().isConnected;
     final justConnected = _justConnected;
-    final anyConnected = [ChatChannel.telegram, ChatChannel.imessage].any((c) => provider.linkFor(c) != null);
+    final anyConnected = ChatChannel.values.any((c) => provider.linkFor(c) != null);
 
     final Widget body;
     if (!provider.linksLoaded && provider.linksProblem == null) {
@@ -218,7 +254,8 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
         onTap: () => routeToPage(context, ChannelSettingsPage(linkId: link.id)),
       );
     }
-    if (channel == ChatChannel.whatsapp) {
+    // WhatsApp stays a waitlist until the server config names its number.
+    if (channel == ChatChannel.whatsapp && provider.config.endpoint(channel) == null) {
       final joined = provider.whatsAppWaitlisted;
       return OmiSettingsRow(
         key: key,
@@ -234,7 +271,10 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     }
     final endpoint = provider.config.endpoint(channel);
     final subtitle = channel == ChatChannel.telegram ? l10n.chatAppsTelegramSubtitle : l10n.chatAppsIMessageSubtitle;
-    if (endpoint == null) {
+    // The flag payload decides first; then the backend's availability; without one (older
+    // backends) the plan decides as before.
+    final access = provider.availabilityFor(channel)?.access;
+    if (endpoint == null || access == ChannelAccess.unavailable) {
       return OmiSettingsRow(
         key: key,
         leading: logo,
@@ -243,7 +283,38 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
         trailing: IntegrationStatusChip(l10n.comingSoon, tone: IntegrationChipTone.muted),
       );
     }
-    if (pro == _ProStatus.free) {
+    if (access == ChannelAccess.channelPlan) {
+      return OmiSettingsRow(
+        key: key,
+        leading: logo,
+        title: channel.displayName,
+        subtitle: l10n.chatAppsChannelPlanRequired,
+        trailing: IntegrationStatusChip(l10n.upgrade),
+        onTap: _openPlans,
+      );
+    }
+    if (access == ChannelAccess.seatCap) {
+      return OmiSettingsRow(
+        key: key,
+        leading: logo,
+        title: channel.displayName,
+        subtitle: l10n.chatAppsAtCapacity(channel.displayName),
+        trailing: _joining.contains(channel)
+            ? const OmiSpinner(size: OmiSpinnerSize.small)
+            : IntegrationStatusChip(l10n.chatAppsJoinWaitlist),
+        onTap: _joining.contains(channel) ? null : () => _joinWaitlist(channel),
+      );
+    }
+    if (access == ChannelAccess.waitlisted) {
+      return OmiSettingsRow(
+        key: key,
+        leading: logo,
+        title: channel.displayName,
+        subtitle: l10n.chatAppsOnWaitlist,
+        trailing: IntegrationStatusChip(l10n.chatAppsOnTheList, tone: IntegrationChipTone.muted),
+      );
+    }
+    if (access == ChannelAccess.paidPlan || (access == null && pro == _ProStatus.free)) {
       return Opacity(
         opacity: 0.55,
         child: OmiSettingsRow(

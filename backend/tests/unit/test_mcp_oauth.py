@@ -243,6 +243,34 @@ def _fake_redis(monkeypatch):
     return fake
 
 
+def test_first_party_chatgpt_narrow_scope_request_is_widened_to_read_floor():
+    """ChatGPT's directory flow requests only `memories.read`; the hosted
+    registry and the Connect-an-Agent screens expect the standard read set, so
+    normalization widens first-party ChatGPT requests to the read floor (and
+    re-consent can then upgrade legacy narrow grants via scope union)."""
+    client = mcp_oauth.get_client('omi-chatgpt-prod')
+    assert mcp_oauth.normalize_scopes('memories.read', client) == sorted(mcp_oauth.CHATGPT_READ_SCOPE_FLOOR)
+    # Even a request that already names two floor scopes comes back complete.
+    assert mcp_oauth.normalize_scopes('memories.read conversations.read', client) == sorted(
+        mcp_oauth.CHATGPT_READ_SCOPE_FLOOR
+    )
+    # Write scopes are never implied by the floor: a narrow read-only request
+    # widens to read scopes only, never adds memories.write on its own.
+    assert 'memories.write' not in mcp_oauth.normalize_scopes('memories.read', client)
+    # Third-party and public clients are untouched: what they ask for is what
+    # they get.
+    public = mcp_oauth.get_client('omi-mcp-public')
+    assert mcp_oauth.normalize_scopes('memories.read', public) == ['memories.read']
+    assert mcp_oauth.normalize_scopes(None, public) == sorted(
+        item for item in public['allowed_scopes'] if item.endswith('.read')
+    )
+    third_party = {
+        'id': 'https://cursor.com/oauth/mcp-client.json',
+        'allowed_scopes': ['memories.read', 'conversations.read'],
+    }
+    assert mcp_oauth.normalize_scopes('memories.read', third_party) == ['memories.read']
+
+
 def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
     client = mcp_oauth.get_client('omi-chatgpt-prod')
     assert client['token_endpoint_auth_method'] == 'none'
@@ -284,7 +312,10 @@ def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
 
     auth_context = mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
     assert auth_context['uid'] == 'user-1'
-    assert auth_context['scopes'] == ['conversations.read', 'memories.read']
+    # First-party ChatGPT clients get the read-scope floor widened onto any
+    # narrow explicit request, so a memories.read+conversations.read request
+    # yields the whole floor (see test_first_party_chatgpt_narrow_scope_request_is_widened_to_read_floor).
+    assert auth_context['scopes'] == sorted(mcp_oauth.CHATGPT_READ_SCOPE_FLOOR)
 
 
 def test_consent_transaction_creates_grant_and_code_together():
@@ -1151,16 +1182,17 @@ def test_refresh_rotation_does_not_retry_permanent_errors(monkeypatch, error):
 
 
 def test_refresh_replay_grace_reissues_valid_pair_without_extending_window(caplog):
+    # Claude's client has no implied scopes, so an explicit narrower refresh scope is honoured.
     scopes = ['memories.read', 'conversations.read']
-    grant = mcp_oauth.create_or_update_grant('grace-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    grant = mcp_oauth.create_or_update_grant('grace-user', 'omi-claude-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
     first = mcp_oauth.issue_token_pair(grant, scopes=scopes)
-    rotated = mcp_oauth.rotate_refresh_token(first['refresh_token'], 'omi-chatgpt-prod', None)
+    rotated = mcp_oauth.rotate_refresh_token(first['refresh_token'], 'omi-claude-prod', None)
     old = mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(mcp_oauth.hash_secret(first['refresh_token']))
     original_used_at = old.get().to_dict()['used_at']
     outcomes = []
 
     reissued = mcp_oauth.rotate_refresh_token(
-        first['refresh_token'], 'omi-chatgpt-prod', None, 'memories.read', on_outcome=outcomes.append
+        first['refresh_token'], 'omi-claude-prod', None, 'memories.read', on_outcome=outcomes.append
     )
 
     assert outcomes == ['replay_grace_reissued']
@@ -1176,7 +1208,7 @@ def test_refresh_replay_grace_reissues_valid_pair_without_extending_window(caplo
     assert 'replay grace reissue' in caplog.text
     assert first['refresh_token'] not in caplog.text
     assert 'grace-user' not in caplog.text
-    assert mcp_oauth.rotate_refresh_token(reissued['refresh_token'], 'omi-chatgpt-prod', None) is not None
+    assert mcp_oauth.rotate_refresh_token(reissued['refresh_token'], 'omi-claude-prod', None) is not None
 
 
 def test_refresh_replay_without_used_at_revokes_grant():
@@ -1224,6 +1256,58 @@ def test_refresh_replay_grace_rejects_scope_escalation():
     )
     assert outcomes == ['invalid']
     assert mcp_oauth.get_active_grant(grant['id']) is not None
+
+
+def test_refresh_upgrades_legacy_narrow_chatgpt_grant_to_read_floor():
+    # Grants approved before the ChatGPT read floor carry memories.read only.
+    # Refresh upgrades the grant and the rotated token family server-side.
+    grant = mcp_oauth.create_or_update_grant(
+        'legacy-chatgpt', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    rotated = mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL)
+    floor = sorted(mcp_oauth.CHATGPT_READ_SCOPE_FLOOR)
+    assert rotated['scope'].split(' ') == floor
+    stored = mcp_oauth.db.collection('mcp_oauth_grants').document(grant['id']).get().to_dict()
+    assert stored['scopes'] == floor
+    assert stored['scopes_upgraded_at'] is not None
+    identity = mcp_oauth.validate_access_token(rotated['access_token'], mcp_oauth.MCP_RESOURCE_URL)
+    assert identity['scopes'] == floor
+    again = mcp_oauth.rotate_refresh_token(rotated['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL)
+    assert again['scope'].split(' ') == floor
+
+
+def test_refresh_with_explicit_narrow_scope_still_carries_chatgpt_floor():
+    grant = mcp_oauth.create_or_update_grant(
+        'legacy-chatgpt-scope', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    rotated = mcp_oauth.rotate_refresh_token(
+        pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, 'memories.read'
+    )
+    assert rotated['scope'].split(' ') == sorted(mcp_oauth.CHATGPT_READ_SCOPE_FLOOR)
+
+
+def test_refresh_upgrade_keeps_existing_write_scopes_and_never_implies_writes():
+    scopes = ['memories.read', 'memories.write']
+    grant = mcp_oauth.create_or_update_grant('chatgpt-writer', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+    rotated = mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL)
+    issued = set(rotated['scope'].split(' '))
+    assert issued == set(mcp_oauth.CHATGPT_READ_SCOPE_FLOOR) | {'memories.write'}
+    assert not any(scope.endswith('.write') and scope != 'memories.write' for scope in issued)
+
+
+def test_refresh_does_not_upgrade_non_chatgpt_grants():
+    grant = mcp_oauth.create_or_update_grant(
+        'claude-narrow', 'omi-claude-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    rotated = mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-claude-prod', mcp_oauth.MCP_RESOURCE_URL)
+    assert rotated['scope'] == 'memories.read'
+    stored = mcp_oauth.db.collection('mcp_oauth_grants').document(grant['id']).get().to_dict()
+    assert stored['scopes'] == ['memories.read']
+    assert 'scopes_upgraded_at' not in stored
 
 
 def test_refresh_replay_grace_reissues_are_count_capped_then_revoke_grant():
@@ -1533,3 +1617,13 @@ def test_revoke_user_grant_leaves_other_clients_and_hosts_untouched():
     survivors = {grant['id']: grant for grant in mcp_oauth.list_user_grants(uid)}
     assert survivors[other_client['id']]['status'] == 'active'
     assert survivors[other_host['id']]['status'] == 'active'
+
+
+def test_registry_preserves_chatgpt_read_floor_exactly():
+    from config.mcp_scopes import CONNECTOR_ACCESS_REGISTRY
+
+    assert mcp_oauth.CHATGPT_READ_SCOPE_FLOOR == frozenset(
+        {"memories.read", "conversations.read", "action_items.read", "goals.read"}
+    )
+    assert mcp_oauth.CHATGPT_READ_SCOPE_FLOOR == frozenset(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["required_scopes"])
+    assert mcp_oauth.PUBLIC_CHATGPT_CLIENT_IDS == set(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["client_ids"])

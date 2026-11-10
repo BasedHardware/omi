@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/integrations/connection_wait.dart';
 import 'package:omi/pages/apps/add_mcp_server_page.dart';
 import 'package:omi/pages/apps/explore_install_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/pages/settings/apple_health_detail_page.dart';
 import 'package:omi/pages/settings/chat_apps/chat_apps_page.dart';
 import 'package:omi/pages/settings/integration_selection_card.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
@@ -114,6 +117,8 @@ class IntegrationsPage extends StatefulWidget {
 
 class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBindingObserver {
   final Map<IntegrationApp, ProductAttempt> _pendingIntegrationAttempts = {};
+  final Map<IntegrationApp, ConnectionWait> _connectionWaits = {};
+  bool _startingAuth = false;
 
   @override
   void initState() {
@@ -142,6 +147,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       attempt.complete(ProductOutcome.unobserved, failure: ProductFailure.incomplete);
     }
     _pendingIntegrationAttempts.clear();
+    for (final wait in _connectionWaits.values) {
+      wait.cancel();
+    }
+    _connectionWaits.clear();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -150,63 +159,110 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh when app comes back from background (e.g., after OAuth)
-      _loadFromBackend().then((_) => _resolvePendingIntegrationAttempts());
+      for (final wait in _connectionWaits.values) {
+        wait.refresh();
+      }
+      _loadFromBackend(forceRefresh: true);
     }
   }
 
-  Future<void> _loadFromBackend() async {
+  Future<void> _loadFromBackend({bool forceRefresh = false}) async {
+    if (!mounted) return;
     unawaited(context.read<MessagingChannelsProvider>().load());
     // IntegrationProvider.loadFromBackend() already fetches all connection statuses
     // and syncs SharedPreferences for backward compatibility with services
-    await context.read<IntegrationProvider>().loadFromBackend();
+    await context.read<IntegrationProvider>().loadFromBackend(forceRefresh: forceRefresh);
     _resolvePendingIntegrationAttempts();
   }
 
   void _resolvePendingIntegrationAttempts() {
-    if (!mounted || _pendingIntegrationAttempts.isEmpty) return;
-    final provider = context.read<IntegrationProvider>();
-    for (final entry in Map<IntegrationApp, ProductAttempt>.from(_pendingIntegrationAttempts).entries) {
-      if (provider.isAppConnected(entry.key)) {
-        entry.value.complete(ProductOutcome.success);
-        _pendingIntegrationAttempts.remove(entry.key);
-      }
+    // The waiter's fresh probe owns attempt completion; these calls only request
+    // another read after lifecycle/catalog changes.
+    for (final wait in _connectionWaits.values) {
+      wait.refresh();
     }
+  }
+
+  void _waitForIntegration(IntegrationApp app, ProductAttempt attempt) {
+    _connectionWaits.remove(app)?.cancel();
+    _pendingIntegrationAttempts.remove(app)?.complete(ProductOutcome.superseded);
+    _pendingIntegrationAttempts[app] = attempt;
+    final uid = SharedPreferencesUtil().uid;
+    final provider = context.read<IntegrationProvider>();
+    final wait = ConnectionWait(
+      isCurrent: () => mounted && SharedPreferencesUtil().uid == uid,
+      // A probe waits for every integration's status read; it must outlive their shared budget.
+      probeTimeout: provider.statusTimeout + const Duration(seconds: 5),
+      probe: () async {
+        await provider.loadFromBackend(forceRefresh: true, silent: true);
+        if (provider.hasStatusError(app)) return ConnectionProbe.failed;
+        if (provider.isLoading) return ConnectionProbe.pending;
+        return provider.isAppConnected(app) ? ConnectionProbe.connected : ConnectionProbe.pending;
+      },
+    );
+    _connectionWaits[app] = wait;
+    unawaited(wait.start().then((outcome) {
+      if (!mounted || !identical(_connectionWaits[app], wait)) return;
+      _connectionWaits.remove(app);
+      _pendingIntegrationAttempts.remove(app);
+      if (outcome == ConnectionWaitOutcome.connected) {
+        attempt.complete(ProductOutcome.success);
+        PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: app.displayName);
+        OmiFeedback.confirm(context, context.l10n.connectedToApp(app.displayName));
+      } else if (outcome == ConnectionWaitOutcome.cancelled) {
+        attempt.complete(ProductOutcome.superseded);
+      } else {
+        attempt.complete(ProductOutcome.failure,
+            failure: outcome == ConnectionWaitOutcome.timedOut ? ProductFailure.timeout : ProductFailure.network);
+        OmiFeedback.error(context, context.l10n.connectionErrorDesc);
+      }
+    }));
   }
 
   Future<void> _connectApp(IntegrationApp app) async {
     if (!app.isAvailable) {
       return;
     }
-    final attempt = ProductTelemetry.instance.start(
-      ProductJourney.integrationConnect,
-      surface: ProductSurface.integration,
-    );
-    PlatformManager.instance.analytics.integrationConnectAttempted(integrationName: app.displayName);
+    if (_startingAuth) return;
+    _startingAuth = true;
+    try {
+      final attempt = ProductTelemetry.instance.start(
+        ProductJourney.integrationConnect,
+        surface: ProductSurface.integration,
+      );
+      PlatformManager.instance.analytics.integrationConnectAttempted(integrationName: app.displayName);
 
-    if (app == IntegrationApp.googleCalendar) {
-      final service = GoogleCalendarService();
-      final outcome = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
-      _completeIntegrationAttempt(attempt, app, outcome);
-      return;
-    }
-
-    if (app == IntegrationApp.gmail) {
-      final service = GmailService();
-      final outcome = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
-      _completeIntegrationAttempt(attempt, app, outcome);
-      return;
-    }
-
-    if (app == IntegrationApp.appleHealth) {
-      await _openAppleHealthDetail();
-      if (mounted && context.read<IntegrationProvider>().isAppConnected(app)) {
-        attempt.complete(ProductOutcome.success);
-      } else {
-        attempt.complete(ProductOutcome.failure, failure: ProductFailure.permissionDenied);
+      if (app == IntegrationApp.googleCalendar) {
+        final service = GoogleCalendarService();
+        final uid = SharedPreferencesUtil().uid;
+        final outcome = await _handleAuthFlow(app, service.isAuthenticated,
+            () => service.authenticate(isCurrent: () => mounted && SharedPreferencesUtil().uid == uid));
+        _completeIntegrationAttempt(attempt, app, outcome);
+        return;
       }
-      return;
+
+      if (app == IntegrationApp.gmail) {
+        final service = GmailService();
+        final uid = SharedPreferencesUtil().uid;
+        final outcome = await _handleAuthFlow(app, service.isAuthenticated,
+            () => service.authenticate(isCurrent: () => mounted && SharedPreferencesUtil().uid == uid));
+        _completeIntegrationAttempt(attempt, app, outcome);
+        return;
+      }
+
+      if (app == IntegrationApp.appleHealth) {
+        await _openAppleHealthDetail();
+        if (mounted && context.read<IntegrationProvider>().isAppConnected(app)) {
+          attempt.complete(ProductOutcome.success);
+        } else {
+          attempt.complete(ProductOutcome.failure, failure: ProductFailure.permissionDenied);
+        }
+        return;
+      }
+      attempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
+    } finally {
+      _startingAuth = false;
     }
-    attempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
   }
 
   void _completeIntegrationAttempt(ProductAttempt attempt, IntegrationApp app, _IntegrationAuthOutcome outcome) {
@@ -214,13 +270,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       case _IntegrationAuthOutcome.alreadyAuthenticated:
         attempt.complete(ProductOutcome.success);
       case _IntegrationAuthOutcome.started:
-        if (mounted && context.read<IntegrationProvider>().isAppConnected(app)) {
-          attempt.complete(ProductOutcome.success);
+        if (mounted) {
+          _waitForIntegration(app, attempt);
         } else {
-          // OAuth has handed off to the browser. Keep this attempt open until
-          // the returning app observes the persisted connection state.
-          _pendingIntegrationAttempts.remove(app)?.complete(ProductOutcome.superseded);
-          _pendingIntegrationAttempts[app] = attempt;
+          attempt.complete(ProductOutcome.unobserved, failure: ProductFailure.incomplete);
         }
       case _IntegrationAuthOutcome.cancelled:
         attempt.complete(ProductOutcome.cancelled);
@@ -253,9 +306,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     final success = await authenticate();
     if (success) {
-      PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: app.displayName);
       if (mounted) OmiFeedback.info(context, context.l10n.completeAuthInBrowser);
-      await _loadFromBackend();
       Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
       return _IntegrationAuthOutcome.started;
     } else {
@@ -370,11 +421,14 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
   Widget _buildAppTile(IntegrationApp app, bool isLoading) {
     final isConnected = _isAppConnected(app);
+    final statusError = context.read<IntegrationProvider>().hasStatusError(app);
     final isAvailable = app.isAvailable;
 
     final Widget trailing;
     if (isLoading) {
       trailing = _buildShimmerButton();
+    } else if (statusError) {
+      trailing = IntegrationStatusChip(context.l10n.tryAgain, tone: IntegrationChipTone.muted);
     } else if (!isAvailable) {
       trailing = IntegrationStatusChip(context.l10n.comingSoon, tone: IntegrationChipTone.muted);
     } else if (!isConnected) {
@@ -401,6 +455,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       onTap: isAvailable
           ? () {
               if (isLoading) return;
+              if (statusError) {
+                _loadFromBackend();
+                return;
+              }
 
               if (app == IntegrationApp.appleHealth) {
                 _openAppleHealthDetail();
@@ -463,7 +521,21 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
               sliver: SliverList.list(
                 children: [
+                  if (provider.hasLoadError)
+                    Padding(
+                        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                        child: Semantics(
+                            liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead))),
                   const ChatAppsIntegrationsEntry(),
+                  OmiSettingsGroup(children: [
+                    OmiSettingsRow(
+                      key: const ValueKey('task_integrations_entry'),
+                      leading: const Icon(Icons.checklist_rounded),
+                      title: context.l10n.taskIntegrations,
+                      onTap: () => routeToPage(context, const TaskIntegrationsPage()),
+                    ),
+                  ]),
+                  const SizedBox(height: OmiSpacing.md),
                   ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),

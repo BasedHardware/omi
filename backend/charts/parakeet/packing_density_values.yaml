@@ -1,0 +1,8 @@
+# SEPARATE opt-in step after the packing/HPA train, never a default values file.
+# Dev public mixed-load n3 passed delivery p95=2.453s and nonzero final DCGM.
+# Receipt: backend/docs/operational/parakeet-packing-qualification-2026-10-16.json
+# Repeat on the deployed immutable artifact before a <=5% / >=3h prod canary.
+# Roll back to requestsPerPod: 2. GPU35 and warm min3/max12 are unchanged.
+autoscaling:
+  requestsPerPod: 3
+  targetGPUUtilization: 35

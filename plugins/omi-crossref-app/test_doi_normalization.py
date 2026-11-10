@@ -32,9 +32,14 @@ def module(name, **attributes):
     return value
 
 
+class HTTPStatusError(Exception):
+    def __init__(self, status_code):
+        self.response = SimpleNamespace(status_code=status_code)
+
+
 stubs = {
     "fastapi": module("fastapi", FastAPI=Framework),
-    "httpx": module("httpx", AsyncClient=object),
+    "httpx": module("httpx", AsyncClient=object, HTTPStatusError=HTTPStatusError),
     "models": module(
         "models",
         AuthorWorksInput=Framework,
@@ -43,9 +48,7 @@ stubs = {
         SearchWorksInput=Framework,
     ),
 }
-spec = importlib.util.spec_from_file_location(
-    "crossref_under_test", Path(__file__).with_name("main.py")
-)
+spec = importlib.util.spec_from_file_location("crossref_under_test", Path(__file__).with_name("main.py"))
 crossref = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, stubs):
     spec.loader.exec_module(crossref)
@@ -59,14 +62,10 @@ class NormalizeDoiTests(unittest.TestCase):
         self.assertEqual(crossref.normalize_doi(" doi:10.5555/ABC "), "10.5555/ABC")
 
     def test_accepts_doi_org_resolver(self):
-        self.assertEqual(
-            crossref.normalize_doi("https://doi.org/10.5555/ABC"), "10.5555/ABC"
-        )
+        self.assertEqual(crossref.normalize_doi("https://doi.org/10.5555/ABC"), "10.5555/ABC")
 
     def test_accepts_dx_doi_org_case_insensitively(self):
-        self.assertEqual(
-            crossref.normalize_doi("HTTPS://DX.DOI.ORG/10.5555/ABC"), "10.5555/ABC"
-        )
+        self.assertEqual(crossref.normalize_doi("HTTPS://DX.DOI.ORG/10.5555/ABC"), "10.5555/ABC")
 
     def test_strips_query_and_fragment(self):
         self.assertEqual(
@@ -82,9 +81,7 @@ class NormalizeDoiTests(unittest.TestCase):
 
     def test_accepts_encoded_reserved_suffix_characters(self):
         self.assertEqual(
-            crossref.normalize_doi(
-                "https://doi.org/10.5555/a%26b%3Fc%3Dd%40e%2Bf%25g"
-            ),
+            crossref.normalize_doi("https://doi.org/10.5555/a%26b%3Fc%3Dd%40e%2Bf%25g"),
             "10.5555/a&b?c=d@e+f%g",
         )
 
@@ -145,18 +142,14 @@ class NormalizeDoiTests(unittest.TestCase):
     def test_rejects_non_graphic_suffix_code_points(self):
         for character in ("\x00", "\x7f", "\N{ZERO WIDTH SPACE}", "\u0378"):
             with self.subTest(character=ascii(character)):
-                self.assertIsNone(
-                    crossref.normalize_doi(f"10.5555/abc{character}def")
-                )
+                self.assertIsNone(crossref.normalize_doi(f"10.5555/abc{character}def"))
 
 
 class HttpBoundaryTests(unittest.TestCase):
     def invoke(self, value):
         request = AsyncMock(return_value={"message": {"DOI": "10.5555/ABC"}})
         with patch.object(crossref, "crossref_get", new=request):
-            result = asyncio.run(
-                crossref.get_crossref_work(SimpleNamespace(doi=value))
-            )
+            result = asyncio.run(crossref.get_crossref_work(SimpleNamespace(doi=value)))
         return result, request
 
     def test_bare_doi_is_quoted_as_one_path_segment(self):
@@ -170,13 +163,9 @@ class HttpBoundaryTests(unittest.TestCase):
         request.assert_awaited_once_with("/works/10.5555%2Fa%2Fb%23c", {})
 
     def test_reserved_suffix_characters_are_quoted_as_one_path_segment(self):
-        result, request = self.invoke(
-            "https://doi.org/10.5555/a%26b%3Fc%3Dd%40e%2Bf%25g"
-        )
+        result, request = self.invoke("https://doi.org/10.5555/a%26b%3Fc%3Dd%40e%2Bf%25g")
         self.assertIsNone(result.error)
-        request.assert_awaited_once_with(
-            "/works/10.5555%2Fa%26b%3Fc%3Dd%40e%2Bf%25g", {}
-        )
+        request.assert_awaited_once_with("/works/10.5555%2Fa%26b%3Fc%3Dd%40e%2Bf%25g", {})
 
     def test_dot_segments_are_quoted_inside_the_doi_path_segment(self):
         result, request = self.invoke("10.5555/a/../b")
@@ -192,6 +181,41 @@ class HttpBoundaryTests(unittest.TestCase):
         result, request = self.invoke("not-a-doi")
         self.assertEqual(result.error, "Invalid DOI format. Example: 10.1038/nphys1170")
         request.assert_not_awaited()
+
+
+class ErrorSanitizationTests(unittest.TestCase):
+    def test_get_work_404_reports_not_found_without_leaking_exception(self):
+        error = HTTPStatusError(404)
+        request = AsyncMock(side_effect=error)
+        with patch.object(crossref, "crossref_get", new=request):
+            result = asyncio.run(crossref.get_crossref_work(SimpleNamespace(doi="10.5555/ABC")))
+        self.assertEqual(result.error, "No Crossref record found for DOI '10.5555/ABC'.")
+
+    def test_get_work_server_error_is_sanitized(self):
+        error = RuntimeError("connection reset by proxy 10.0.0.5:443")
+        request = AsyncMock(side_effect=error)
+        with patch.object(crossref, "crossref_get", new=request):
+            result = asyncio.run(crossref.get_crossref_work(SimpleNamespace(doi="10.5555/ABC")))
+        self.assertEqual(result.error, crossref._REQUEST_FAILED_MESSAGE)
+        self.assertNotIn("10.0.0.5", result.error)
+
+    def test_search_works_error_is_sanitized(self):
+        error = RuntimeError("internal hostname leak crossref-proxy.internal")
+        request = AsyncMock(side_effect=error)
+        with patch.object(crossref, "crossref_get", new=request):
+            result = asyncio.run(crossref.search_crossref_works(SimpleNamespace(query="neuroscience", max_results=5)))
+        self.assertEqual(result.error, crossref._REQUEST_FAILED_MESSAGE)
+        self.assertNotIn("crossref-proxy.internal", result.error)
+
+    def test_works_by_author_error_is_sanitized(self):
+        error = RuntimeError("dns timeout at 10.0.0.9")
+        request = AsyncMock(side_effect=error)
+        with patch.object(crossref, "crossref_get", new=request):
+            result = asyncio.run(
+                crossref.get_crossref_works_by_author(SimpleNamespace(author="Jane Doe", max_results=5))
+            )
+        self.assertEqual(result.error, crossref._REQUEST_FAILED_MESSAGE)
+        self.assertNotIn("10.0.0.9", result.error)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ from hashlib import sha256
 from typing import Any
 
 from config.action_item_identity_key import identity_key
+from config.action_item_similarity import near_duplicate_tokens, tokens
 
 LIMIT = 200
 RECEIPT = 'action_item_refresh'
@@ -27,6 +28,30 @@ def enroll(ledger: dict[str, list[str]], rows: dict[str, dict]) -> None:
         identity = key(row.get('description'))
         if identity and task_id not in ledger.setdefault(identity, []):
             ledger[identity].append(task_id)
+
+
+def protected_donor(row: dict, aliases: list[str]) -> bool:
+    """Keep manual, edited, linked or curated rows. Uncertain historical edits stay kept."""
+    if row.get('source') not in (None, 'legacy', 'conversation') or len(aliases) > 1:
+        return True
+    if any(
+        row.get(field)
+        for field in (
+            'folder_id',
+            'manual_assignment',
+            'apple_reminder_id',
+            'external_task_id',
+            'goal_id',
+            'workstream_id',
+            'recurrence_rule',
+            'priority',
+        )
+    ):
+        return True
+    created, updated = row.get('created_at'), row.get('updated_at')
+    # All user updates stamp updated_at, including pre-receipt edits. Export and
+    # completion updates can also do so: retain these ambiguous rows conservatively.
+    return not created or not updated or updated != created
 
 
 def plan(
@@ -61,40 +86,65 @@ def plan(
             # pre-claim retry marker before the survivor can observe it.
             if row.get('refresh_delivery') == 'pending':
                 patch['refresh_delivery'] = 'transferred'
-            # Retain original evidence and every user/external field on the donor.
-            # Exact text does not prove two live rows have interchangeable user
-            # state. Keep both visible; only user-deleted targets suppress a donor.
+            # Only ordinary unedited generated duplicates can be hidden. Never
+            # delete a user-created/edited task or discard a separate external link.
             if matches:
                 target_id = matches[0]
                 patch['refresh_duplicate_of'] = target_id
-                if target_id not in rows or rows[target_id].get('deleted'):
+                target = rows.get(target_id) or donor_rows.get(target_id) or {}
+                if not protected_donor(row, aliases):
                     patch['deleted'] = True
-                for ids in available.values():
-                    if target_id in ids:
-                        ids.remove(target_id)
+                if (
+                    (row.get('completed') or row.get('status') == 'completed')
+                    and target
+                    and key(target.get('description')) == identity
+                    and not (
+                        target.get('deleted')
+                        or target.get('status') in ('cancelled', 'superseded')
+                        or target.get('completed')
+                        or target.get('status') == 'completed'
+                    )
+                ):
+                    updates.setdefault(target_id, {}).update(
+                        completed=True, status='completed', completed_at=row.get('completed_at')
+                    )
                 counts['skipped_duplicate'] += 1
-            updates[task_id] = patch
+            else:
+                enroll(available, {task_id: row})
+            updates.setdefault(task_id, {}).update(patch)
             counts['transferred_from_donor'] += 1
     else:
-        occurrences: dict[str, int] = {}
+        existing_tokens = {task_id: tokens(row.get('description')) for task_id, row in rows.items()}
         for item in items:
             identity = key(item.get('description'))
             if not identity:
                 raise ValueError('refresh requires a nonempty exact task identity')
-            ordinal = occurrences.get(identity, 0)
-            occurrences[identity] = ordinal + 1
-            slots = ledger.setdefault(identity, [])
-            if ordinal < len(slots):
+            if ledger.get(identity):
                 counts['skipped_duplicate'] += 1
                 continue
+            candidate_tokens = tokens(item.get('description'))
+            match = next(
+                (
+                    task_id
+                    for task_id, words in existing_tokens.items()
+                    if near_duplicate_tokens(candidate_tokens, words)
+                ),
+                None,
+            )
+            if match is not None:
+                ledger[identity] = [match]  # Enroll this rewording as an edit/delete suppressor.
+                counts['skipped_duplicate'] += 1
+                continue
+            ordinal = 0
             task_id = 'refresh-' + sha256(f'{conversation_id}:{generation}:{identity}:{ordinal}'.encode()).hexdigest()
-            slots.append(task_id)
+            ledger[identity] = [task_id]
             creates[task_id] = {**item, 'account_generation': generation, 'refresh_delivery': 'pending'}
+            existing_tokens[task_id] = candidate_tokens
             counts['added_new'] += 1
     if (
         len(ledger) > LIMIT
         or sum(map(len, ledger.values())) > LIMIT * 2
-        or len(rows) + len(creates) + len(updates) > LIMIT
+        or len(rows.keys() | creates.keys() | updates.keys()) > LIMIT
     ):
         raise ValueError('refresh task budget exceeded')
     return {'generation': generation, 'keys': ledger}, creates, updates, counts

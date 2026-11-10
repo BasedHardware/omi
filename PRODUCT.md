@@ -71,6 +71,12 @@ describes the capture, memory consent, and quality boundaries.
 
 ## Before you build
 
+Missing Daily Recaps must have a user-initiated recovery path for older dates,
+including accounts without push notifications. Reuse the shared date-based
+creation authority, preserve existing recaps and conversations, and distinguish
+empty days, ongoing generation, cooldowns, and failures. The cross-client flow
+and verification checklist live in `app/docs/recap-recovery.md`.
+
 - Large or ambiguous features start as a GitHub issue
   ([Contribution guide](docs/doc/developer/Contribution.mdx)).
 - Check the [invariant registry](product/invariants/) for locked rules that
@@ -102,6 +108,11 @@ must remain available. Uncertain content stays kept. Long narration is not relia
 evidence of irrelevance, so it remains one retained recording rather than being
 silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.md`.
 
+Selecting Process Now for a saved phone Transcribe Later recording is an explicit
+keep choice. Once transcription produces speech, preserve that choice across
+enrichment and later refreshes. Silence or an empty transcription creates no
+conversation. Automatic offline fallback continues to assess content normally.
+
 Silence-only audio creates nothing and cannot bridge conversations.
 Without an existing explicit target, sync intake groups connected speech intervals
 independently of arrival order within the same source/device/lock partition. Missing
@@ -127,3 +138,15 @@ Realtime reconnects with the same durable origin now reuse a compatible in-progr
 continuation inside the window without rebinding a completed original. Expired empty
 continuations are reaped through content/lock/revision fences on reconnect. Historical
 distinct targets and anonymous cross-device discovery remain separate follow-ups.
+
+
+## Proposed recorded-time episode policy
+
+Every capture belongs on the user's timeline at its recorded time, regardless
+of device or upload delay (David, 2026-10-29). A late capture joins an episode
+covering that recorded interval, including a closed episode. If none covers it,
+it forms a closed historical episode. Episodes use a four-hour recorded span
+cap and a thirty-minute recorded quiet close. Processing timestamps never own
+episode boundaries, activity or live elapsed time. Ownership is exposed by
+`backend/utils/episodes/timeline.py`; behavior and rollback are documented in
+`backend/utils/episodes/ARCHITECTURE.md`.

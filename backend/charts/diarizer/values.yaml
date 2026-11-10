@@ -1,9 +1,20 @@
+# Operator-controlled maintenance; zero replicas retains the positive-minimum HPA.
+maintenanceMode: false
+# A separately named, digest-only release with no production routing resources.
+shadowCanary: false
 # Default values for diarizer.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
+
+# One fixed warm Deployment in this SAME Helm release. Derives its image,
+# runtime settings and probes from the primary, so every deploy rolls both.
+warmFallback:
+  enabled: false
+  maxTotalReplicas: 18
+  nodeSelector: {}
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
@@ -12,6 +23,8 @@ image:
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
+  # Batch installation pins the published artifact, while standard keeps SHA tags.
+  digest: ""
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -51,6 +64,9 @@ securityContext: {}
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
+  # A shared selector can include an independently owned warm fallback release.
+  # Empty retains this release's name/instance selector.
+  selectorLabels: {}
   # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
   type: ClusterIP
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
@@ -97,6 +113,8 @@ resources: {}
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
+  # Optional Pods metric; requires a Prometheus custom-metrics adapter mapping.
+  queueDepthAverageValue: null
   enabled: false
   minReplicas: 1
   maxReplicas: 100
@@ -121,3 +139,27 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Additive metrics discovery; enable only where the GMP CRD is installed.
+podMonitoring:
+  enabled: false
+  interval: 30s
+
+# Raise for long final-pass requests when enabling a cohort behind the ingress.
+backendConfig:
+  enabled: true
+  name: diarizer-backend-config
+  timeoutSeconds: 30
+
+# Empty keeps the image entrypoint serving concurrent legacy embeddings/v1.
+command: []
+
+# Shared internal Gateway is opt-in; old Service/Ingress remain rollback paths.
+gateway:
+  enabled: false
+  name: ""
+  listenerName: http
+  pathPrefix: /diarizer
+  healthCheckPath: /health
+  timeoutSeconds: 30
+  connectionDrainingSeconds: 0

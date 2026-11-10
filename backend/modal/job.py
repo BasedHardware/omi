@@ -9,6 +9,7 @@ from prometheus_client import start_http_server
 
 import firebase_admin
 
+from database.firestore_read_origin import read_origin
 from utils.env_loader import firebase_admin_options
 from utils.other.jobs import start_job
 
@@ -17,6 +18,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+@read_origin('job:notifications')
 def main() -> None:
     metrics_server = None
     if os.environ.get('PROMETHEUS_SIDECAR_PORT'):

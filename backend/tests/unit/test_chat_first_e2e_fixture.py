@@ -221,6 +221,10 @@ def test_prepare_resets_fixed_canonical_fixture_rows_atomically(firestore):
     assert task['source'] == 'transcription:omi'
     assert task['conversation_id'] == 'chat-first-e2e-capture-v1'
     assert ('users', ENABLED_UID, 'conversations', 'chat-first-e2e-capture-v1') in firestore.rows
+    capture = firestore.rows[('users', ENABLED_UID, 'conversations', 'chat-first-e2e-capture-v1')]
+    assert capture['relevance_decision']['verdict'] == 'keep'
+    assert capture['relevance_decision']['trigger'] == 'fixture_seed'
+    assert capture['relevance_decision']['reason'] == 'fixture_seed_default'
     assert daily_opener['source'] == 'daily_opener'
     assert daily_opener['blocks'] == [
         {'type': 'goalLink', 'goal_id': 'chat-first-e2e-goal-v1', 'summary': 'E2E fixture goal'},

@@ -33,6 +33,9 @@ class AppProvider extends BaseProvider {
   @visibleForTesting
   AppsSearchRequest? searchAppsOverride;
 
+  @visibleForTesting
+  Future<Map<String, dynamic>?> Function(String)? appDetailsOverride;
+
   /// Test seam — overrides [enableAppServer] in [toggleApp].
   @visibleForTesting
   Future<(bool, String)> Function(String appId)? enableAppOverride;
@@ -51,6 +54,20 @@ class AppProvider extends BaseProvider {
   Future<List<App>> Function()? retrievePopularAppsOverride;
 
   List<App> apps = [];
+  List<App>? _cachedApps;
+  int? _cachedAppsRevision;
+
+  // Decode persisted models once per catalog/account revision. Keep this
+  // snapshot separate from the server search/grouped catalog.
+  List<App> get _appsFromCache {
+    final prefs = SharedPreferencesUtil();
+    if (_cachedApps == null || _cachedAppsRevision != prefs.appsListRevision) {
+      _cachedApps = prefs.appsList;
+      _cachedAppsRevision = prefs.appsListRevision;
+    }
+    return _cachedApps!;
+  }
+
   List<App> popularApps = [];
   // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
   List<Map<String, dynamic>> groupedApps = [];
@@ -77,6 +94,7 @@ class AppProvider extends BaseProvider {
   Future<void>? _appsLoad;
   Future<void>? _popularAppsLoad;
   int _activeCatalogLoads = 0;
+  int _detailSession = 0;
 
   List<Category> categories = [];
   List<AppCapability> capabilities = [];
@@ -91,7 +109,7 @@ class AppProvider extends BaseProvider {
 
   Future<App?> getAppFromId(String id) async {
     if (apps.isEmpty) {
-      apps = SharedPreferencesUtil().appsList;
+      apps = List<App>.of(_appsFromCache);
     }
     var app = apps.firstWhereOrNull((app) => app.id == id);
     if (app == null) {
@@ -105,18 +123,18 @@ class AppProvider extends BaseProvider {
   }
 
   Future<App?> getAppDetails(String id) async {
-    var appData = await getAppDetailsServer(id);
-    if (appData != null) {
-      var freshApp = App.fromJson(appData);
-      var oldApp = apps.where((element) => element.id == id).firstOrNull;
-      if (oldApp != null) {
-        var idx = apps.indexOf(oldApp);
-        apps[idx] = freshApp;
-        notifyListeners();
-      }
-      return freshApp;
+    final session = _detailSession;
+    final uid = SharedPreferencesUtil().uid;
+    final data = await (appDetailsOverride ?? getAppDetailsServer)(id);
+    if (data == null || session != _detailSession || uid != SharedPreferencesUtil().uid) return null;
+    final fresh = App.fromJson(data);
+    if (fresh.id != id) return null;
+    final index = apps.indexWhere((app) => app.id == id);
+    if (index >= 0) {
+      apps[index] = fresh;
+      notifyListeners();
     }
-    return null;
+    return fresh;
   }
 
   void updateInstalledAppsOptionSelected(bool value) {
@@ -220,6 +238,10 @@ class AppProvider extends BaseProvider {
   }
 
   void clearUserData() {
+    _detailSession++;
+    _cachedApps = null;
+    _cachedAppsRevision = null;
+    _prefsUpdateTimer?.cancel();
     apps = [];
     popularApps = [];
     groupedApps = [];
@@ -683,7 +705,7 @@ class AppProvider extends BaseProvider {
         );
         notifyListeners();
       } else {
-        print("Warning: Tried to delete app $appId but it wasn't found in the 'apps' list.");
+        Logger.debug("Warning: Tried to delete app $appId but it wasn't found in the 'apps' list.");
       }
     } else {
       final context = globalNavigatorKey.currentState?.context;
@@ -791,8 +813,9 @@ class AppProvider extends BaseProvider {
   }
 
   void setAppsFromCache() {
-    if (SharedPreferencesUtil().appsList.isNotEmpty) {
-      apps = SharedPreferencesUtil().appsList;
+    final cachedApps = _appsFromCache;
+    if (cachedApps.isNotEmpty) {
+      apps = List<App>.of(cachedApps);
       filterApps();
       notifyListeners();
     }
@@ -816,7 +839,7 @@ class AppProvider extends BaseProvider {
   }
 
   void setApps() {
-    apps = SharedPreferencesUtil().appsList;
+    apps = List<App>.of(_appsFromCache);
     filterApps();
     notifyListeners();
   }
@@ -972,7 +995,7 @@ class AppProvider extends BaseProvider {
         }
       }
     } catch (e) {
-      print('Error toggling app $appId: $e');
+      Logger.debug('Error toggling app $appId: $e');
       success = false;
       final context = globalNavigatorKey.currentState?.context;
       errorMessage = context != null && context.mounted

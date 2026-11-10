@@ -23,27 +23,22 @@ from models.product_memory import (
     MemoryItem,
     is_archive_access_eligible,
 )
-from utils.memory.belief_model import (
-    belief_model_enabled,
-    memory_use_suppressed,
-    normalize_temporal_read_view,
-    temporal_view_allows_record,
-)
-from utils.memory.ledger_history_policy import is_temporal_history_access_eligible
 
 MemoryResult = Dict[str, Any]
 
 
 def _tokens(query: str) -> set[str]:
-    return {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split() if len(token) > 2}
+    words = {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split()}
+    # Words of two characters or fewer drop only beside a longer word, so "AI" alone still filters.
+    return {token for token in words if len(token) > 2} or words
 
 
 def _matches(query: str, content: str) -> bool:
-    query_tokens = _tokens(query)
-    if not query_tokens:
+    # Only a blank query matches everything; a query with no searchable word matches nothing.
+    if not (query or "").strip():
         return True
     content_lower = (content or "").lower()
-    return any(token in content_lower for token in query_tokens)
+    return any(token in content_lower for token in _tokens(query))
 
 
 def _risk_flags(raw: Any) -> List[str]:
@@ -128,8 +123,6 @@ def _product_memory_result(
     access_reason: str,
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    from utils.memory.belief_model import public_belief_overlay_json
-
     return {
         "memory_id": item.memory_id,
         "memory_layer": "product_memory",
@@ -148,18 +141,7 @@ def _product_memory_result(
         "agent_use": agent_use,
         "access_reason": access_reason,
         "superseded_by": None,
-        **public_belief_overlay_json(item, now=now or datetime.now(timezone.utc)),
     }
-
-
-def _temporal_product_item_accessible(
-    item: MemoryItem,
-    *,
-    policy: MemoryAccessPolicy,
-    now: datetime,
-) -> bool:
-    """Apply explicit temporal access fences without current-state collapse."""
-    return is_temporal_history_access_eligible(item, policy, now=now, include_archive=False)
 
 
 def query_default_product_memory_items(
@@ -178,25 +160,9 @@ def query_default_product_memory_items(
     """
 
     items = [_coerce_product_memory_item(record) for record in records]
-    requested_view = normalize_temporal_read_view(view)
-    temporal_view = requested_view if belief_model_enabled() else 'released'
     report = filter_default_product_memory_items(items, policy=policy, now=now)
     current_time = now or datetime.now(timezone.utc)
-    if temporal_view == 'released':
-        visible_items = filter_canonical_default_visible_items(items, policy=policy, now=current_time)
-    else:
-        # The temporal beta is a read-side presentation policy.  Reuse the
-        # existing access predicate and processing fence, then allow currency
-        # to decide whether an otherwise readable row is current, fading, or
-        # unknown.  No lifecycle/status mutation occurs here.
-        visible_items = [
-            item
-            for item in items
-            if _temporal_product_item_accessible(item, policy=policy, now=current_time)
-            and temporal_view_allows_record(item, view=temporal_view, now=current_time)
-            and (item.promotion or {}).get("user_review") is not False
-            and not (belief_model_enabled() and memory_use_suppressed(item))
-        ]
+    visible_items = filter_canonical_default_visible_items(items, policy=policy, now=current_time)
     matching_items: List[MemoryItem] = []
     for item in visible_items:
         content = item.content or ""
@@ -205,14 +171,10 @@ def query_default_product_memory_items(
         matching_items.append(item)
 
     results: List[MemoryResult] = []
-    selected_items = (
-        matching_items
-        if temporal_view in {"history", "all"}
-        else collapse_canonical_lineages(
-            matching_items,
-            lineage_context=items,
-            survivor_context=visible_items,
-        )
+    selected_items = collapse_canonical_lineages(
+        matching_items,
+        lineage_context=items,
+        survivor_context=visible_items,
     )
     for item in selected_items:
         decision = report.decisions[item.memory_id]
@@ -238,7 +200,6 @@ def query_archive_product_memory_items(
 ) -> List[Dict[str, Any]]:
     """Search Archive product memory only for explicit archive-capable callers."""
 
-    normalize_temporal_read_view(view)
     results: List[MemoryResult] = []
     for item in [_coerce_product_memory_item(record) for record in records]:
         if item.tier != MemoryLayer.archive:

@@ -20,16 +20,20 @@ BACKEND = Path(__file__).resolve().parents[2]
 # Existing sparse series are debt, not healthy zeroes. Remove entries as their
 # startup paths are added; don't mask new alert metrics with a blanket exception.
 DECLARED_SPARSE = {
-    'llm_gateway_request_rejections_total': 'Children appear only on pre-route validation rejection.',
     'llm_gateway_requests_total': 'Route/outcome children appear only when a real request finishes.',
-    'llm_gateway_chat_extraction_requests_total': 'Client extraction outcome children appear on requests.',
-    'llm_gateway_client_first_byte_seconds_bucket': 'Client first-byte histogram children appear on gateway traffic.',
-    'chat_first_proactive_total': 'Proactive result children appear only when the proactive job runs.',
     'omi_sync_dispatch_attempts_total': 'Dispatch lane/outcome children appear only on sync dispatch.',
     'omi_live_stt_terminal_failures_total': 'Provider/phase failure children appear only on live-STT failure.',
     'omi_live_stt_accepted_total': 'Provider/platform/environment children appear only on accepted STT traffic.',
     'omi_live_stt_terminal_total': 'Provider/outcome/phase children appear only at live-STT termination.',
+    'omi_sync_transcription_job_total': (
+        'Service/outcome children appear only when a sync job reaches a terminal outcome; the failure-reason '
+        'step rule needs >= 50 reason jobs per 60m and treats a missing baseline as new.'
+    ),
     'omi_listen_accepted_total': 'Source/platform children appear only when a listen session is accepted.',
+    'omi_client_journey_terminal_total': (
+        'Client journey children are traffic-created to bound cardinality. Journey SLOs zero-fill only the '
+        'bad numerator against an observed valid denominator; absence is owned by scrape/signal health.'
+    ),
 }
 
 
@@ -135,3 +139,10 @@ def test_close_initializer_is_wired_for_streaming_and_direct_vendor_users():
     initializer = 'initialize_stt_stream_close_children'
     assert initializer in _module_calls(BACKEND / 'utils/stt/streaming.py')
     assert initializer in _module_calls(BACKEND / 'utils/stt/stream_close.py')
+
+
+def test_queue_wait_starts_with_both_lanes_and_no_fabricated_observations(startup_inventory):
+    metric = startup_inventory['omi_sync_queue_wait_seconds_count']
+    samples = [sample for family in metric.collect() for sample in family.samples]
+    assert {sample.labels['lane'] for sample in samples} == {'fresh', 'backfill'}
+    assert all(sample.value == 0 for sample in samples if sample.name.endswith(('_count', '_sum')))

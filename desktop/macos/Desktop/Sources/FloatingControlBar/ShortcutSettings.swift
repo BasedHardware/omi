@@ -536,8 +536,18 @@ class ShortcutSettings: ObservableObject {
     NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
   }
 
-  private static let askOmiShortcutDefaultsKey = "shortcut_askOmiKey"
-  private static let pttShortcutDefaultsKey = "shortcut_pttKey"
+  static let askOmiShortcutDefaultsKey = "shortcut_askOmiKey"
+  static let pttShortcutDefaultsKey = "shortcut_pttKey"
+
+  /// Reuse persisted (including legacy) choices when setup resumes; an unset key needs a recommendation.
+  static func savedOnboardingShortcut(isTalk: Bool, defaults: UserDefaults = .standard) -> KeyboardShortcut? {
+    let saved = loadShortcut(
+      forKey: isTalk ? pttShortcutDefaultsKey : askOmiShortcutDefaultsKey,
+      legacyMapper: isTalk ? legacyPTTShortcut : legacyAskOmiShortcut,
+      defaults: defaults
+    )
+    return saved.flatMap { isSafePushToTalkShortcut($0) ? $0 : nil }
+  }
 
   private init() {
     let restoredPTT = Self.loadShortcut(
@@ -605,9 +615,9 @@ class ShortcutSettings: ObservableObject {
 
   private static func loadShortcut(
     forKey key: String,
-    legacyMapper: (String) -> KeyboardShortcut?
+    legacyMapper: (String) -> KeyboardShortcut?,
+    defaults: UserDefaults = .standard
   ) -> KeyboardShortcut? {
-    let defaults = UserDefaults.standard
     if let data = defaults.data(forKey: key),
       let decoded = try? JSONDecoder().decode(KeyboardShortcut.self, from: data)
     {

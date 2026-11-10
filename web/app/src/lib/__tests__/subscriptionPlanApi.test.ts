@@ -38,7 +38,11 @@ describe('getUserSubscription plan decoding', () => {
                 status: 'active',
                 features: [],
                 cancel_at_period_end: false,
+                future_subscription_field: { enabled: true },
               },
+              transcription_seconds_limit: 90000,
+              transcription_seconds_used: 45000,
+              future_response_field: ['safe'],
             }),
             { headers: { 'content-type': 'application/json' } },
           ),
@@ -52,6 +56,8 @@ describe('getUserSubscription plan decoding', () => {
     expect(headers.get('X-App-Version')).toBe(webAppVersion);
     expect(headers.get('X-Omi-Plan-Identity')).toBe('1');
     expect(result).not.toBeNull();
+    expect(result?.transcription_seconds_limit).toBe(90000);
+    expect(result?.transcription_seconds_used).toBe(45000);
     expect(result?.plan).toBe(raw);
     expect(result?.plan_identity).toEqual(decodePlan(raw));
     expect(result?.is_unlimited).toBe(expectedPaid);

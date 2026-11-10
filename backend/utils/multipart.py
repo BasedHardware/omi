@@ -4,6 +4,8 @@ from typing import Any, TypeVar, cast
 
 from fastapi import HTTPException, Request
 from fastapi.routing import APIRoute
+from python_multipart.exceptions import MultipartParseError
+from starlette.responses import JSONResponse
 from starlette.datastructures import FormData
 from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
 
@@ -85,15 +87,43 @@ class MultipartMaxPartSizeRoute(APIRoute):
                 # and before auth, by the route's own form handling.
                 raise HTTPException(status_code=415, detail='Upload the file as multipart/form-data.')
             if self.multipart_max_part_size is not None and _is_multipart(request):
-                await parse_multipart_form(
-                    request, max_part_size=self.multipart_max_part_size, limits=self.multipart_limits
-                )
+                try:
+                    await parse_multipart_form(
+                        request, max_part_size=self.multipart_max_part_size, limits=self.multipart_limits
+                    )
+                except HTTPException as error:
+                    if self.path != '/v2/sync-local-files' or error.status_code != 400:
+                        raise
+                    detail = str(error.detail)
+                    code = (
+                        'too_large'
+                        if detail.startswith('Part exceeded maximum size')
+                        else (
+                            'too_many_parts'
+                            if detail.startswith(('Too many files', 'Too many fields'))
+                            else 'malformed_multipart'
+                        )
+                    )
+                    return JSONResponse(
+                        status_code=400, content={'code': code, 'detail': 'Invalid sync multipart upload'}
+                    )
             return await original_route_handler(request)
 
         return custom_route_handler
 
 
 class FileSizeLimitedMultiPartParser(MultiPartParser):
+    async def parse(self) -> FormData:
+        try:
+            return await super().parse()
+        except MultipartParseError as error:
+            # Starlette closes spool files for MultiPartException only. Own
+            # the library error at the parser boundary so that cleanup also
+            # runs when python-multipart rejects a malformed small body.
+            for file in self._files_to_close_on_error:
+                file.close()
+            raise MultiPartException('Malformed multipart body') from error
+
     def on_part_begin(self) -> None:
         super().on_part_begin()
         self._current_file_part_size = 0

@@ -286,10 +286,13 @@ def test_corrupted_entry_is_a_clean_miss(monkeypatch, fake_redis, payload):
 
 def test_oversized_entry_is_a_miss_and_oversized_result_is_not_stored(monkeypatch, fake_redis):
     fake, _now = fake_redis
+    # Exercise both oversized paths with a small configured ceiling; building
+    # 30,000 entries made this boundary test exceed the fast-unit CPU budget.
+    monkeypatch.setattr(people_stats_cache, 'PEOPLE_STATS_MAX_ENTRY_BYTES', 1024)
     generation = people_stats_cache.current_generation(UID)
     big = {
         'schema_version': 1,
-        'stats': {'p' * 300000: {'conversation_count': 1, 'auto_conversation_count': 0, 'talk_seconds': 0.0}},
+        'stats': {'p' * 2000: {'conversation_count': 1, 'auto_conversation_count': 0, 'talk_seconds': 0.0}},
     }
     _seed_entry(fake, UID, generation, big)
     rows, pulled = _pull_counted([_conv('p1')])
@@ -303,7 +306,7 @@ def test_oversized_entry_is_a_miss_and_oversized_result_is_not_stored(monkeypatc
             'talk_seconds': 0.0,
             'auto_conversation_count': 0,
         }
-        for i in range(30000)
+        for i in range(128)
     }
     people_stats_cache.write_people_stats_cache(UID, generation, 500, huge_stats)
     assert _cache_key(people_stats_cache._entry_path(UID, generation, 500)) not in fake._store
@@ -498,6 +501,10 @@ class _DirectQuery:
     def where(self, *args, filter=None, **_kwargs):
         assert filter is not None and not args
         return _DirectQuery(self._database, self._path, self._filters + (filter,), self._limit)
+
+    def select(self, fields):
+        assert fields == []
+        return self
 
     def limit(self, count):
         return _DirectQuery(self._database, self._path, self._filters, count)
@@ -700,7 +707,11 @@ def test_delete_conversation_invalidates_cache_when_proactivity_cleanup_fails(wr
 def test_transition_conversation_status_invalidates(writer_env):
     store, invalidated = writer_env
     store.seed_conv('u1', 'c1', status='in_progress')
-    conversations_db.transition_conversation_status('u1', 'c1', 'processing')
+    from models.conversation_enums import ConversationStatus
+
+    assert conversations_db.claim_conversation_status(
+        'u1', 'c1', ConversationStatus.in_progress, ConversationStatus.processing
+    )
     assert store.rows[store.conv_path('u1', 'c1')]['status'] == 'processing'
     assert invalidated == ['u1']
 
@@ -710,7 +721,9 @@ def test_claim_conversation_status_invalidates_on_claim_including_discard(writer
     from models.conversation_enums import ConversationStatus
 
     monkeypatch.setattr(
-        conversations_db, 'extra_updates_with_bound_client_processing', lambda uid, current, extra: dict(extra)
+        conversations_db,
+        'extra_updates_with_bound_client_processing',
+        lambda uid, current, extra, *, transcript_corrections=None: dict(extra),
     )
     store.seed_conv('u1', 'c1', status=ConversationStatus.in_progress.value)
     claimed = conversations_db.claim_conversation_status(
@@ -770,6 +783,8 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
     store, invalidated = writer_env
     import database.speaker_assignment_effects as effects
     import database.speaker_learning_jobs as learning
+    import database.people_stats_cache as stats_cache
+    from utils.observability import speaker_identification
 
     events = []
 
@@ -777,12 +792,12 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
         invalidated.append(uid)
         events.append(('invalidate', uid))
 
-    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', record_invalidation)
+    monkeypatch.setattr(stats_cache, 'invalidate_people_stats_cache', record_invalidation)
     current = {'id': 'c1', 'transcript_segments': [{'id': 's0', 'person_id': 'p1'}]}
     monkeypatch.setattr(
         effects,
         'run_assignment_transaction',
-        lambda client, assign: (current, {'person_id': 'p1'}, [], [{'id': 's0'}]),
+        lambda client, assign, **kwargs: (current, {'person_id': 'p1'}, [], [{'id': 's0'}]),
     )
     monkeypatch.setattr(learning, 'extract_learning_receipt_markers', lambda *a, **k: None)
     monkeypatch.setattr(
@@ -791,7 +806,7 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
         lambda *_a, **_k: events.append(('learning_events', None)),
     )
     monkeypatch.setattr(
-        conversations_db,
+        speaker_identification,
         'record_speaker_review',
         lambda uid, *_a, **_k: events.append(('speaker_review', uid)),
     )
@@ -868,7 +883,19 @@ def test_assign_sync_conversation_invalidates_once_after_size_limit_retry(writer
     assert invalidated == ['u1']
 
 
-def test_unlock_all_conversations_invalidates_after_every_batch_commit(writer_env):
+def _allow_unlocked_data_plane(monkeypatch):
+    from database import _client
+
+    miss = SimpleNamespace(exists=False, to_dict=lambda: None)
+    monkeypatch.setattr(
+        _client,
+        'get_data_plane_firestore_client',
+        lambda: SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda *args, **kwargs: miss)),
+    )
+
+
+def test_unlock_all_conversations_invalidates_after_every_batch_commit(writer_env, monkeypatch):
+    _allow_unlocked_data_plane(monkeypatch)
     store, invalidated = writer_env
     for index in range(600):
         store.seed_conv('u1', f'l{index}', status='completed', is_locked=True)
@@ -876,7 +903,8 @@ def test_unlock_all_conversations_invalidates_after_every_batch_commit(writer_en
     assert invalidated == ['u1', 'u1']
 
 
-def test_smart_merge_absorb_invalidates_after_absorbed_commit(writer_env, monkeypatch):
+def test_smart_merge_absorb_invalidates_after_absorbed_commit(writer_env, monkeypatch, caplog):
+    caplog.set_level('INFO')
     store, invalidated = writer_env
     monkeypatch.setattr(smart_merge_db, 'invalidate_people_stats_cache', lambda uid: invalidated.append(uid))
     store.seed_conv(
@@ -900,6 +928,7 @@ def test_smart_merge_absorb_invalidates_after_absorbed_commit(writer_env, monkey
     )
     assert result.outcome == 'absorbed'
     assert invalidated == ['u1']
+    assert not any('stage=bridge' in record.message for record in caplog.records)
 
 
 @pytest.mark.parametrize('deleted', [True, False])
@@ -1031,3 +1060,16 @@ def test_unconfigured_redis_disables_the_cache_without_error(monkeypatch):
     assert people_stats_cache.read_people_stats_cache('u1', 'g1', 1000) is None
     people_stats_cache.write_people_stats_cache('u1', 'g1', 1000, {})
     people_stats_cache.invalidate_people_stats_cache('u1')
+
+
+def test_reset_unlock_conversations_is_bounded_and_repairs_cache_on_empty_retry(writer_env, monkeypatch):
+    _allow_unlocked_data_plane(monkeypatch)
+    store, invalidated = writer_env
+    for index in range(101):
+        store.seed_conv('u1', f'l{index}', status='completed', is_locked=True)
+    assert conversations_db.unlock_all_conversations('u1', limit=100) == 100
+    assert sum(row.get('is_locked', False) for row in store.rows.values()) == 1
+    assert conversations_db.unlock_all_conversations('u1', limit=100) == 1
+    invalidated.clear()
+    assert conversations_db.unlock_all_conversations('u1', limit=100) == 0
+    assert invalidated == ['u1']

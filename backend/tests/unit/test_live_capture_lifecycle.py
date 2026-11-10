@@ -67,6 +67,9 @@ def _stub_process(calls, processed=None):
 
 def test_reprocess_conversation_preserves_capture_and_identity(world, monkeypatch):
     store, path, _ = world
+    from database import processing_attention as attention
+
+    monkeypatch.setattr(attention, 'db', store)
     store.rows[path] = _row()
     calls = []
     monkeypatch.setattr(speaker_stage, 'resolution_enabled', lambda: False)

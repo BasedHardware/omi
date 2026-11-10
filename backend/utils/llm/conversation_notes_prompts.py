@@ -2,8 +2,44 @@
 
 SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the account owner.\nTreat the supplied transcript and capture metadata as the sole source of truth. Preserve attribution and uncertainty.\nThe conversation context below is shared by several independent tasks. Do not perform a task until you read the\ntask-specific instructions that follow it.'
 
+# Notes-only instructions travel after the shared cacheable prefix. Keep the
+# baseline static/volatile prompt contracts independent of feature-specific rules.
+ACTION_ITEM_EXTRACTION_RULES = '''ACTION ITEM EXTRACTION RULES
+- Write a self-contained description of the action and its object or outcome. Resolve references
+  using cited source/context and the supplied speaker-role map, never a speaker number or a guessed name.
+  Do not invent a counterpart or object when unresolved; omit that candidate. A simple task such as
+  "Buy milk" is complete without a person's name. Keep exact supporting source_segment_ids.
+- Extract only tasks the account owner committed to or was directly asked to do.
+  Use the account owner identity in the supplied evidence; never infer it from a speaker number.
+  Another attendee's "Ask Riley for the download link" or "Email Riley" is that attendee's task,
+  not Riley's. If Riley (the account owner) agreed to deliver it, extract "Send the download link to Morgan"
+  with Riley as owner_name instead. Do not extract other attendees' tasks toward the owner.
+- An explicit "remind me to ..." or "don't let me forget ..." from the owner is a
+  direct task request, including ordinary errands. Extract the requested action,
+  preserve any explicit date/time and timezone, and keep its exact supporting IDs.
+  A reminder request is not merely a durable memory. Never invent a time for a date-only request;
+  preserve the date in context when due_at cannot represent it without guessing an hour.
+- Instructions to an AI assistant to inspect, implement, or report something in the
+  current session are not personal follow-up tasks unless the owner explicitly asks
+  for a reminder or commits to later follow-up. Do not turn incidental narration
+  of routine actions into tasks; an explicit reminder remains actionable.
+- Exclude observations and status statements such as "User is testing the new memory feature"
+  or "Morgan is working on the proposal". An ongoing activity alone is not a commitment or request.'''
 
-def conversation_notes_static_instructions(format_instructions: str) -> str:
+
+NOTE_BODY_OPENING = "- Write section bodies as '- ' bullets in plain, readable sentences. Each bullet should group one\n  coherent point with its useful supporting details. Separate distinct points when combining them\n  makes reading harder; do not force terse fragments or one bullet per sentence."
+
+
+SELECT_THREADS = '- Select the main meaningful threads, including social experiences, problems, reasons, proposals,\n  decisions, and unresolved questions. Keep concrete details that help recall them. Omit repetition,\n  incidental tangents, and unclear fragments; do not retain something just because it contains a name\n  or number. Understandable multilingual content is not noise.'
+
+
+def conversation_notes_static_instructions(
+    format_instructions: str,
+    *,
+    note_body_opening: str = NOTE_BODY_OPENING,
+    select_threads: str = SELECT_THREADS,
+    extra_rules: str = '',
+) -> str:
     """Task rules with no per-call interpolations.
 
     Production notes v2 used to mark the unique transcript as the cached prefix, so
@@ -16,15 +52,10 @@ def conversation_notes_static_instructions(format_instructions: str) -> str:
 Create the canonical conversation note and return JSON matching the schema below.
 
 NOTE BODY — READABLE, GROUNDED RECAP
-- Write section bodies as '- ' bullets in plain, readable sentences. Each bullet should group one
-  coherent point with its useful supporting details. Separate distinct points when combining them
-  makes reading harder; do not force terse fragments or one bullet per sentence.
+{note_body_opening}
 - Use short, specific headings. Order topics so the note is easy to follow, without inventing links
   between them. No preamble, repeated points, or concluding recap.
-- Select the main meaningful threads, including social experiences, problems, reasons, proposals,
-  decisions, and unresolved questions. Keep concrete details that help recall them. Omit repetition,
-  incidental tangents, and unclear fragments; do not retain something just because it contains a name
-  or number. Understandable multilingual content is not noise.
+{select_threads}
 - Balance the main threads before elaborating one of them. Clear everyday experiences and personal
   boundaries can matter as much as work decisions; do not let a longer business or planning thread
   crowd out a meaningful shared activity or interpersonal moment.
@@ -35,6 +66,12 @@ FACTUAL FIDELITY
   reported actions, and completed work distinct. Preserve tense and qualifications. A suggestion
   is not a decision; agreement is not execution; a reported past action is not a new commitment.
   For example, "I'll add it" means the speaker intends to add it, not that it was added.
+- Calendar titles, scheduled times, and attendee lists describe plans and context.
+  They do not prove attendance, completion, pickup, purchase, or any other outcome.
+  Describe a completed outcome only when the transcript supports it; preserve an
+  explicit cancellation, delay, or incomplete action even when the invite title implies completion.
+- Nearby speech and media playback are not automatically the account owner's activity.
+  Do not attribute a background meeting to the owner without participation evidence.
 - Keep past anecdotes, current plans, and unrelated threads separate. Do not transfer people,
   relationships, events, or problems between them. Do not turn jokes into factual claims.
 - Keep different companies and products separate. Do not attach a price, role, feature, or description
@@ -54,7 +91,7 @@ FACTUAL FIDELITY
   `[segment-id k]` turn headers identify clusters (`?` = unresolved). Prose may use a name
   bound in the map. NEVER write a bare cluster key, `spk`, `Speaker N`, or `SPEAKER_00` into
   the title, overview, sections, or action items, whether or not calendar or screen context
-  exists. Attribute an unresolved cluster as "one speaker" / "another speaker" or write the
+  exists. Attribute an unresolved cluster as "someone said" or write the
   fact without a speaker label; never invent a name, and never infer who the account owner is
   from a cluster key.
 - For selected details, preserve supported proper nouns, numbers, dates, and unusual spellings.
@@ -73,7 +110,9 @@ OVERVIEW
 - Also emit a short compatibility overview. The server will project sections to markdown for legacy clients.
 
 ACTION ITEMS
-- Keep description timeless, specific, verb-led, and at most 15 words. Put timing only in due_at.
+- Keep description timeless, specific, verb-led, and at most 15 words. Keep timing out of description.
+- Put explicit date-and-time deadlines in due_at; retain an explicit date-only request in context
+  without inventing an hour.
 - Set owner_name to the actual name when known and context to one line explaining why/detail.
 - LEAVE due_at EMPTY BY DEFAULT. Only set it when the speakers explicitly committed to a specific
   calendar date for completing the item. A date that was merely discussed, proposed, or floated is
@@ -87,7 +126,7 @@ EVENTS AND CONSISTENCY
 - A tentative plan may be an action item with due_certainty=tentative, but must not also be emitted as a confirmed event.
 - The same fact must never have conflicting certainty between events and action items.
 
-{format_instructions}'''
+{extra_rules}{format_instructions}'''
 
 
 def conversation_note_density(word_count: int, rich: bool) -> str:
@@ -96,42 +135,3 @@ def conversation_note_density(word_count: int, rich: bool) -> str:
     if word_count < 2500:
         return f'Use 2-4 sections; target ~{240 if rich else 200} words across the entire note.'
     return f'Use 4-6 sections; target ~{480 if rich else 400} words across the entire note.'
-
-
-def conversation_notes_volatile_instructions(
-    *,
-    response_language: str,
-    density: str,
-    task_intelligence_capture: bool,
-    existing_context: str,
-    started_local_iso: str,
-    current_local_iso: str,
-    tz_label: str,
-    conversation_context: str,
-    wake_word_rules: str = '',
-) -> str:
-    """Per-call suffix: language, density, dates, open tasks, and the transcript."""
-    task_filter = (
-        'capture clear commitments and direct requests'
-        if task_intelligence_capture
-        else 'apply the conservative legacy task filter'
-    )
-    text = f'''Respond entirely in {response_language}.
-
-- {density} These are flexible guides, not quotas. Prefer one or two substantial bullets per section,
-  with connected sentences rather than splitting every sentence into its own bullet.
-  Give distinct subtopics room instead of cramming them into a final bullet. Keep the main threads
-  while removing minor details if the note grows much beyond the target.
-- For task-intelligence capture, {task_filter}.
-- Potentially related open tasks:
-{existing_context}
-
-DATE CONTEXT
-- Conversation local time: {started_local_iso}
-- Current local time: {current_local_iso}
-- Timezone: {tz_label}
-
-{conversation_context}'''
-    if wake_word_rules:
-        text = f'{text}\n\n{wake_word_rules}'
-    return text

@@ -1,9 +1,11 @@
 """Datetime options preserve ISO offsets and fractions in outgoing API requests."""
 
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from omi_cli.datetime_options import as_utc
 from omi_cli.main import app
 
 CASES = [
@@ -72,3 +74,24 @@ def test_invalid_datetime_never_calls_api(authed_profile, respx_mock, cli_runner
     assert result.exit_code != 0
     assert "Invalid value" in result.stderr
     assert len(respx_mock.calls) == 0
+
+
+def test_as_utc_reads_naive_inputs_as_utc():
+    naive = datetime(2026, 10, 1, 12, 0, 0)
+    converted = as_utc(naive)
+    assert converted.tzinfo is timezone.utc
+    assert converted.replace(tzinfo=None) == naive
+
+
+def test_as_utc_converts_aware_inputs_to_utc():
+    ist = timezone(timedelta(hours=5, minutes=30))
+    converted = as_utc(datetime(2026, 10, 1, 12, 0, 0, tzinfo=ist))
+    assert converted.tzinfo is timezone.utc
+    assert converted == datetime(2026, 10, 1, 6, 30, 0, tzinfo=timezone.utc)
+
+
+def test_as_utc_makes_naive_and_aware_comparable():
+    naive = datetime(2026, 10, 1, 23, 30, 0)
+    aware = datetime(2026, 10, 1, 20, 0, 0, tzinfo=timezone.utc)
+    # The raw comparison raises TypeError; on the UTC axis this is simply inverted.
+    assert as_utc(naive) > as_utc(aware)

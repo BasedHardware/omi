@@ -21,6 +21,7 @@ from models.speaker_tag_prompts import (
     VoiceProfileSettings,
     VoiceProfileSettingsUpdate,
 )
+from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.speaker_tag_prompts import service
 from utils.speaker_tag_prompts.clips import (
@@ -74,12 +75,18 @@ def answer_speaker_tag_prompt(
         return service.apply_answer(uid, data, schedule=background_tasks.add_task)
     except service.TagPromptInvalid as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    except StaleOwnerConfirmation as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        # KeyError and storage-layer lookups carry stored field names; keep the detail server-side.
+        logger.warning('speaker tag prompt answer lookup failed uid=%s: %s', uid, sanitize(str(error)))
+        raise HTTPException(status_code=404, detail='Person or conversation not found') from error
     except PermissionError as error:
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
     except ValueError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+        # Stored-document decode failures (JSON, hex, unicode, pydantic) are ValueErrors too.
+        logger.warning('speaker tag prompt answer rejected uid=%s: %s', uid, sanitize(str(error)))
+        raise HTTPException(status_code=409, detail='Speaker tag prompt answer could not be applied') from error
 
 
 @router.get('/v1/speaker-tag-prompts/clip', tags=['speaker-tag-prompts'], response_model=SpeakerTagPromptClip)

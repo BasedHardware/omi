@@ -8,6 +8,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import unittest
 import urllib.request
 from unittest import mock
@@ -25,6 +26,16 @@ ENV = {
 
 
 def flag(key: str, role: str = "enable", row: str = "expected", **overrides: object) -> dict[str, object]:
+    lifecycle = overrides.get("lifecycle", "rollout")
+    decision = overrides.get("decision", "pending")
+    terminal = overrides.get(
+        "terminal",
+        (
+            "keep"
+            if lifecycle in {"ops_kill", "config_switch"}
+            else {"graduate": "on", "ship": "on", "kill": "off", "keep": "keep"}.get(decision, "undecided")
+        ),
+    )
     entry: dict[str, object] = {
         "key": key,
         "aliases": [],
@@ -33,10 +44,11 @@ def flag(key: str, role: str = "enable", row: str = "expected", **overrides: obj
         "surfaces": ["backend"],
         "summary": "Fixture gate",
         "fail": "closed",
-        "owner": "unowned",
+        "owner": "tester",
         "created": "2026-08-01",
         "review_by": "2026-10-15",
         "decision": "pending",
+        "terminal": terminal,
         "posthog": {"row": row, "role": role},
     }
     entry.update(overrides)
@@ -45,7 +57,9 @@ def flag(key: str, role: str = "enable", row: str = "expected", **overrides: obj
     return entry
 
 
-def registry(flags: list[dict[str, object]], retired: list[dict[str, object]] | None = None) -> dict[str, list[dict[str, object]]]:
+def registry(
+    flags: list[dict[str, object]], retired: list[dict[str, object]] | None = None
+) -> dict[str, list[dict[str, object]]]:
     return {"flags": flags, "ignore": [], "retired": retired or []}
 
 
@@ -219,6 +233,10 @@ class MissingKillsTest(unittest.TestCase):
 
 
 class ApplyTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory(prefix="omi-posthog-registry-")
+        self.addCleanup(self.temp.cleanup)
+
     def test_apply_prints_all_writes_before_any_post_and_posts_only_missing_kills(self) -> None:
         reg = registry(
             [
@@ -244,7 +262,7 @@ class ApplyTest(unittest.TestCase):
                 return {"key": body["key"]}
             return {"results": [armed_kill("already-kill")], "next": None}
 
-        argv = ["posthog_flag_sync.py", "--apply-missing-kills"]
+        argv = ["posthog_flag_sync.py", "--root", self.temp.name, "--apply-missing-kills"]
         with (
             mock.patch.object(sync, "_default_transport", side_effect=fake_transport),
             mock.patch.dict(os.environ, ENV, clear=False),
@@ -280,7 +298,7 @@ class ApplyTest(unittest.TestCase):
         with (
             mock.patch.object(sync, "_default_transport", side_effect=fake_transport),
             mock.patch.dict(os.environ, ENV, clear=False),
-            mock.patch.object(sys, "argv", ["posthog_flag_sync.py"]),
+            mock.patch.object(sys, "argv", ["posthog_flag_sync.py", "--root", self.temp.name]),
             mock.patch.object(sync, "_parse_yaml_subset", return_value=reg),
             contextlib.redirect_stdout(stdout),
         ):

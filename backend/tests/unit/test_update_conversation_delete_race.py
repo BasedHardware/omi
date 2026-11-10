@@ -57,6 +57,7 @@ from google.api_core.exceptions import NotFound
 from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
+from utils import pusher_audio_projection
 
 UID = 'uid'
 CONVERSATION_ID = 'conversation'
@@ -291,6 +292,9 @@ class SequencedWebSocket:
 
 @pytest.fixture
 def raced_pusher_session(monkeypatch):
+    monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     """Drive the pusher's private-cloud worker where update_conversation hits
     the read-then-delete race (False) on the first flush."""
     import routers.pusher as pusher
@@ -298,7 +302,6 @@ def raced_pusher_session(monkeypatch):
 
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
-    monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda uid: 'standard')
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
@@ -313,20 +316,28 @@ def raced_pusher_session(monkeypatch):
     uploaded: list[str] = []
     fallbacks: list[dict] = []
 
-    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate):
+    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate, **_kwargs):
+        # The pusher upload path passes flush-policy keywords (reconcile_prefix);
+        # this mock records the admission without binding the call signature.
         assert sample_rate == SAMPLE_RATE
         uploaded.append(conversation_id)
 
     def run(update_result: bool):
-        def update_conversation(uid, conversation_id, update_data):
+        def update_conversation(uid, conversation_id, update_data, *, record_owner_out=None):
+            # This fixture models an unowned conversation; accept the result-out
+            # seam without fabricating a lane owner for the pusher drain.
+            if record_owner_out is not None:
+                assert record_owner_out == {}
             first_flush_handled.set()
             return update_result
 
         monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
         monkeypatch.setattr(
-            pusher.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: [_AudioFile()]
+            pusher_audio_projection.conversations_db,
+            'create_audio_files_from_chunks',
+            lambda uid, conversation_id: [_AudioFile()],
         )
-        monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update_conversation)
+        monkeypatch.setattr(pusher_audio_projection.conversations_db, 'update_conversation', update_conversation)
         monkeypatch.setattr(pusher, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
         return SequencedWebSocket(first_flush_handled)
 
@@ -387,7 +398,7 @@ async def test_pusher_flush_still_errors_on_a_real_storage_failure(raced_pusher_
         raise RuntimeError('storage exploded')
 
     mp = pytest.MonkeyPatch()
-    mp.setattr(pusher_mod.conversations_db, 'create_audio_files_from_chunks', flaky_create)
+    mp.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', flaky_create)
     try:
         with caplog.at_level(logging.ERROR, logger='routers.pusher'):
             await pusher_mod._websocket_util_trigger(websocket, UID, SAMPLE_RATE)

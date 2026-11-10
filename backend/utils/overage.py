@@ -29,7 +29,10 @@ from utils.subscription import get_plan_limits
 # 1.15 = 15 % on top of true cost (covers variance + infra).
 OVERAGE_MARKUP_MULTIPLIER = float(os.getenv('OVERAGE_MARKUP_MULTIPLIER', '1.15'))
 
-# Per-1M-token reference rates shown in the explainer UI. These are NOT used
+# Per-1M-token reference rates shown in the explainer UI. Gemini Flash prices
+# are the Vertex AI Gemini 2.5 Standard tab rates verified 2026-10-18 at
+# https://cloud.google.com/vertex-ai/generative-ai/pricing (the earlier values
+# were the Priority tier). These are not used
 # for live computation — live cost is taken from the already-tracked
 # `desktop_chat.cost_usd` which the LLM clients compute per-call from
 # actual provider token counts. Rates here are purely informational.

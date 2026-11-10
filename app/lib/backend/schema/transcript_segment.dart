@@ -15,6 +15,7 @@ class TranscriptSegment {
   late int idx;
 
   String text;
+  String? originalText;
   String? speaker;
   late int speakerId;
   bool isUser;
@@ -24,6 +25,21 @@ class TranscriptSegment {
   List<Translation> translations = [];
   bool speechProfileProcessed;
   String? sttProvider;
+  String? speakerIdScope;
+
+  static final _streamSpeakerNumber = RegExp(r'^SPEAKER_(\d+)$');
+
+  (String, String)? get recordingVoice {
+    final scope = speakerIdScope;
+    final label = speaker;
+    if (scope == null || scope.isEmpty || label == null || label.isEmpty) return null;
+    final match = _streamSpeakerNumber.firstMatch(label);
+    return (scope, match == null ? label : 'SPEAKER_${int.parse(match[1]!)}');
+  }
+
+  bool sameRecordingVoice(TranscriptSegment other) => recordingVoice == null
+      ? other.recordingVoice == null && speakerId == other.speakerId
+      : recordingVoice == other.recordingVoice;
 
   /// How this label was made: `manual`, `auto`, `carried`, or null for an unnamed speaker.
   String? speakerLabelSource;
@@ -31,6 +47,7 @@ class TranscriptSegment {
   TranscriptSegment({
     required this.id,
     required this.text,
+    this.originalText,
     required this.speaker,
     required this.isUser,
     required this.personId,
@@ -39,6 +56,7 @@ class TranscriptSegment {
     required this.translations,
     this.speechProfileProcessed = true,
     this.sttProvider,
+    this.speakerIdScope,
     this.speakerLabelSource,
     int? speakerId,
   }) {
@@ -67,6 +85,7 @@ class TranscriptSegment {
     return TranscriptSegment(
       id: generated.id ?? '',
       text: generated.text,
+      originalText: generated.originalText,
       speakerId: generated.speakerId,
       speaker: generated.speaker ?? 'SPEAKER_00',
       isUser: generated.isUser,
@@ -76,6 +95,7 @@ class TranscriptSegment {
       translations: generated.translations ?? const [],
       speechProfileProcessed: generated.speechProfileProcessed,
       sttProvider: generated.sttProvider,
+      speakerIdScope: generated.speakerIdScope,
       speakerLabelSource: generated.speakerLabelSource,
     );
   }
@@ -84,6 +104,7 @@ class TranscriptSegment {
     return wire.GeneratedTranscriptSegment(
       id: id,
       text: text,
+      originalText: originalText,
       speaker: speaker,
       speakerId: speakerId,
       isUser: isUser,
@@ -93,6 +114,7 @@ class TranscriptSegment {
       translations: translations,
       speechProfileProcessed: speechProfileProcessed,
       sttProvider: sttProvider,
+      speakerIdScope: speakerIdScope,
       speakerLabelSource: speakerLabelSource,
     );
   }
@@ -202,19 +224,25 @@ class TranscriptSegment {
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (final segment in segments) {
       final timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
-      buffer.write('$timestampStr ${names.forSegment(segment)}: ${segment.text.trim()} ');
+      final name = names.forSegment(segment);
+      final label = name.isEmpty ? '' : '$name: ';
+      buffer.write('$timestampStr $label${segment.text.trim()} ');
       buffer.write('\n\n');
     }
     return buffer.toString().trim();
   }
 
+  /// Whether no segment starts or ends after a later one: the pairwise check
+  /// `a.start > b.end || a.end > b.start` for every earlier `a`, in one pass
+  /// against the largest earlier start and end (opening a 1,200-line
+  /// conversation used to cost 720k pair comparisons on the UI isolate).
   static bool canDisplaySeconds(List<TranscriptSegment> segments) {
-    for (var i = 0; i < segments.length; i++) {
-      for (var j = i + 1; j < segments.length; j++) {
-        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
-          return false;
-        }
-      }
+    var maxStart = double.negativeInfinity;
+    var maxEnd = double.negativeInfinity;
+    for (final segment in segments) {
+      if (maxStart > segment.end || maxEnd > segment.start) return false;
+      if (segment.start > maxStart) maxStart = segment.start;
+      if (segment.end > maxEnd) maxEnd = segment.end;
     }
     return true;
   }

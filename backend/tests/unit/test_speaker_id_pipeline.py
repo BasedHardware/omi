@@ -532,6 +532,42 @@ class TestDetectSpeakerFromText:
         """Empty string input returns None."""
         assert detect_speaker_from_text("") is None
 
+    # Names keep their diacritics. The Latin-script name class was ASCII-only
+    # ([A-Z][a-zA-Z]*) and the Russian one had no Ё/ё, so none of these matched:
+    # live never suggested, resolved or created the person, and sync never resolved one.
+    ACCENTED_NAME_CASES = [
+        ("es", "Me llamo José", "José", True),
+        ("de", "Ich heiße Jürgen", "Jürgen", True),
+        ("fr", "Je m'appelle Hélène", "Hélène", True),
+        ("fr", "Je m'appelle Émile", "Émile", True),
+        ("pl", "Nazywam się Łukasz", "Łukasz", True),
+        ("sv", "Jag heter Åsa", "Åsa", True),
+        ("cs", "Jmenuji se Šárka", "Šárka", True),
+        ("tr", "Benim adım Özgür", "Özgür", True),
+        ("ro", "Mă numesc Ștefan", "Ștefan", True),
+        ("vi", "Tên tôi là Nguyễn Văn An", "Nguyễn", True),
+        ("vi", "Tên tôi là Đức", "Đức", True),
+        ("vi", "Tôi là Ứng", "Ứng", False),
+        ("en", "My name is Zoë", "Zoë", True),
+        ("es", "José es mi nombre", "José", True),
+        ("hu", "Ádám vagyok", "Ádám", False),
+        ("ru", "Меня зовут Фёдор", "Фёдор", True),
+        ("ru", "Я Пётр", "Пётр", False),
+    ]
+
+    @pytest.mark.parametrize("lang,text,expected_name,explicit", ACCENTED_NAME_CASES)
+    def test_accented_names_are_detected(self, lang, text, expected_name, explicit):
+        for language in (lang, None):
+            detection = detect_speaker_introduction(text, language=language)
+            assert detection is not None, f"Failed to detect name in {text!r} (language={language})"
+            assert detection.name == expected_name
+            assert detection.explicit is explicit
+        assert detect_speaker_from_text(text) == expected_name
+
+    @pytest.mark.parametrize("text", ["Ich bin müde", "Je suis épuisé", "Jestem żołnierzem", "Tôi là đàn ông"])
+    def test_lowercase_accented_word_after_lead_in_is_not_a_name(self, text):
+        assert detect_speaker_introduction(text) is None
+
     # A bare copula is not an introduction. These all produced a permanent Person
     # record in a real account: nationalities, brands and sentence-cased fillers
     # that happened to follow "I'm". The name may still resolve someone the user
@@ -609,6 +645,27 @@ class TestDetectSpeakerFromText:
         result = detect_speaker_from_text("I am John")
         assert result == "John"
         assert result[0].isupper()
+
+    # People are looked up by exact name, so a detected name must keep the casing it
+    # was transcribed with. str.capitalize() returned "Mcdonald" for "McDonald".
+    MIXED_CASE_CASES = [
+        (None, "My name is McDonald", "McDonald"),
+        (None, "I'm DeShawn, nice to meet you.", "DeShawn"),
+        (None, "LeBron is my name", "LeBron"),
+        (None, "I am AJ", "AJ"),
+        ("fr", "Je m'appelle MacKenzie", "MacKenzie"),
+    ]
+
+    @pytest.mark.parametrize("lang,text,expected_name", MIXED_CASE_CASES)
+    def test_mixed_case_name_keeps_its_casing(self, lang, text, expected_name):
+        detection = detect_speaker_introduction(text, language=lang)
+        assert detection is not None, f"Failed to detect name in {text!r}"
+        assert detection.name == expected_name
+        assert detect_speaker_from_text(text, language=lang) == expected_name
+
+    def test_lowercase_first_letter_is_still_capitalized(self):
+        """The Greek pattern accepts a lowercase name; only its first letter changes."""
+        assert detect_speaker_from_text("Με λένε νίκος", language="el") == "Νίκος"
 
     def test_all_languages_have_patterns(self):
         """Verify all 33 language codes have patterns defined."""

@@ -1,0 +1,110 @@
+{
+  "description": "Frozen importers of legacy sync modules scheduled for retirement (plan C class (a)). May only shrink. Owned by tests/unit/test_sync_legacy_import_ratchet.py.",
+  "modules": {
+    "database.sync_backfill_sequencer": {
+      "retire_in": "C10",
+      "importers": {
+        "scripts/recover_dev_failed_sync_backfill.py": "Dev-only operator recovery for the backfill sequencer; deleted with the sequencer in C10.",
+        "scripts/repair_sync_backfill_owners.py": "Operator repair for sequencer owner rows; deleted with the sequencer in C10.",
+        "scripts/staging/syncsplit.py": "Staging-only sync pull-worker control-plane proof drives the sequencer registry directly as its subject; retires with the sequencer in C10.",
+        "utils/sync/worker_control.py": "Legacy backfill worker control plane claims and releases jobs through the sequencer registry; deleted with the sequencer in C10."
+      }
+    },
+    "database.sync_dead_letters": {
+      "retire_in": "C10",
+      "importers": {
+        "database/sync_jobs.py": "Legacy Redis sync job records write dead letters on terminal failure; both retire with legacy transcription (C10/C11).",
+        "utils/sync/worker_job.py": "Legacy worker terminal cleanup confirms the failed job dead letter before retiring state; deleted with the dead-letter store in C10."
+      }
+    },
+    "database.sync_empty_recovery": {
+      "retire_in": "C11",
+      "importers": {}
+    },
+    "database.sync_redrive": {
+      "retire_in": "C10",
+      "importers": {}
+    },
+    "utils.sync.backfill_cutover": {
+      "retire_in": "C10",
+      "importers": {
+        "utils/sync/recording_session_target.py": "Function-local import of uid_hash for privacy-safe failure logging only; C10 replaces it with a shared hash helper when backfill_cutover is deleted."
+      }
+    },
+    "utils.sync.backfill_order": {
+      "retire_in": "C10",
+      "importers": {
+        "utils/cloud_tasks.py": "Shared Cloud Tasks client computes direct backfill schedule_at; the call is cut when sync-backfill is deleted in C10."
+      }
+    },
+    "utils.sync.completed_status": {
+      "retire_in": "C10",
+      "importers": {}
+    },
+    "utils.sync.empty_recovery": {
+      "retire_in": "C11",
+      "importers": {
+        "utils/sync/empty_success_guard.py": "Empty-success guard inspects strict empty recovery via inspect_strict when its lever is on; retires with legacy empty recovery in C11."
+      }
+    },
+    "utils.sync.empty_recovery_intent": {
+      "retire_in": "C11",
+      "importers": {}
+    },
+    "utils.sync.owner_prefetch": {
+      "retire_in": "C10",
+      "importers": {}
+    },
+    "utils.sync.pipeline": {
+      "retire_in": "C11",
+      "importers": {
+        "scripts/cap_hold_durability_emulator_test.py": "Loopback cap-hold durability proof drives legacy pipeline restart as its crash-recovery subject; retires with cap-hold-on-legacy in C11.",
+        "testing/e2e/test_sync_lifecycle.py": "Hermetic e2e for the legacy sync lifecycle; deleted with legacy transcription in C11.",
+        "testing/e2e/test_watch_recovery_process_now.py": "Hermetic e2e for watch-driven process-now recovery exercises the legacy sync pipeline as its subject; deleted with legacy transcription in C11.",
+        "testing/replay_harness_phase0a/apps.py": "Replay harness serves the legacy sync worker; drop the legacy app in C11.",
+        "testing/sync_cloud_tasks_stack/app.py": "Gauntlet (GA) stack serves the legacy sync worker; drop it in C11 once the gauntlet is batch-only.",
+        "utils/sync/cap_hold_recovery.py": "Cap-hold core (a C11 survivor) drives legacy pipeline transcription for held-audio recovery; C11 re-points recovery at the batch pipeline.",
+        "utils/sync/cap_recovery_audio.py": "Cap-hold audio replay borrows legacy VAD retrieval and cleanup; C11 swaps these helpers for batch-pipeline equivalents.",
+        "utils/sync/worker_job.py": "Legacy worker job drives pipeline download/run/delete-staged-blobs for transcription execution and cleanup; re-pointed or deleted when legacy transcription retires in C11."
+      }
+    },
+    "utils.sync.redrive_policy": {
+      "retire_in": "C10",
+      "importers": {}
+    },
+    "utils.sync.safety_wal_coverage": {
+      "retire_in": "C11",
+      "importers": {
+        "utils/sync/cap_recovery_audio.py": "Held-capture replay replays ordinary WAL/safety-WAL coverage via the legacy appliers; C11 replaces them with batch-pipeline coverage reporting."
+      }
+    },
+    "utils.sync.safety_wal_metrics": {
+      "retire_in": "C11",
+      "importers": {}
+    },
+    "utils.sync.staged_prefetch": {
+      "retire_in": "C10",
+      "importers": {
+        "utils/other/storage.py": "Storage download path consumes legacy staged prefetch bytes; cut when the sequencer prefetch is deleted in C10."
+      }
+    },
+    "utils.sync.uid_sequencer": {
+      "retire_in": "C10",
+      "importers": {
+        "scripts/recover_dev_failed_sync_backfill.py": "Dev-only operator recovery kicks the sequencer; deleted with the sequencer in C10.",
+        "utils/sync/worker_control.py": "Legacy worker control kicks the per-uid sequencer after releasing a claim; both are legacy-worker machinery retired in C10."
+      }
+    },
+    "utils.sync.wal_audio_coverage": {
+      "retire_in": "C11",
+      "importers": {
+        "utils/capture/batch_coverage.py": "Batch capture coverage reuses the WAL coverage frame-map builder while the coverage lane shadows the WAL; retires with wal_audio_coverage in C11.",
+        "utils/capture/sync_coverage.py": "Sync capture coverage materializes audio through the WAL coverage materializer during the S1 shadow; retires with wal_audio_coverage in C11."
+      }
+    },
+    "utils.sync.wal_audio_coverage_metrics": {
+      "retire_in": "C11",
+      "importers": {}
+    }
+  }
+}

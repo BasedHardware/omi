@@ -232,6 +232,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.captureGroup == rhs.captureGroup
       && lhs.audioTimelineVersion == rhs.audioTimelineVersion
       && lhs.createdFromSegments == rhs.createdFromSegments
+      && lhs.meetingIdentity == rhs.meetingIdentity
   }
 
   let id: String
@@ -262,6 +263,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let audioTimelineVersion: Int?
   /// Desktop `/from-segments` conversations anchor offsets to the client session start.
   let createdFromSegments: Bool
+  /// Only explicit calendar identity can qualify a conversation as prior-meeting evidence.
+  let meetingIdentity: ConversationMeetingIdentity?
 
   let status: ConversationStatus
   let discarded: Bool
@@ -341,6 +344,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     audioTimelineVersion = wire.audioTimeline?.version
     createdFromSegments =
       (wire.externalData?["from_segments_client_session_id"]?.value as? String)?.isEmpty == false
+    meetingIdentity =
+      ConversationMeetingIdentity(calendarContext: wire.externalData?["calendar_meeting_context"]?.value)
+      ?? wire.calendarEvent.map(ConversationMeetingIdentity.init)
     status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
@@ -408,6 +414,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     conversationAudio: CaptureConversationAudio? = nil,
     audioTimelineVersion: Int? = nil,
     createdFromSegments: Bool = false,
+    meetingIdentity: ConversationMeetingIdentity? = nil,
     status: ConversationStatus,
     discarded: Bool,
     deleted: Bool,
@@ -438,6 +445,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.conversationAudio = conversationAudio
     self.audioTimelineVersion = audioTimelineVersion
     self.createdFromSegments = createdFromSegments
+    self.meetingIdentity = meetingIdentity
     self.status = status
     self.discarded = discarded
     self.deleted = deleted
@@ -475,6 +483,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     if isLocked {
       return .locked
     }
+    // This is a bounded server transcription wait, not a running summary job.
+    // Keep its explicit title and do not offer the summary stall's Reprocess.
+    if isAwaitingTranscription {
+      return .titled(structured.title)
+    }
     switch status {
     case .inProgress, .processing, .merging:
       // A deferred row wears `processing` on the wire only so the client
@@ -484,8 +497,13 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case .failed:
       return .failed
     case .completed:
-      if !structured.title.isEmpty {
-        return .titled(structured.title)
+      // Display-only citation repair (`[s01234]`, `Speaker_00` in legacy titles); rename
+      // edits `structured.title`. A title that is only debris reads as untitled.
+      let title = ConversationSummarySelection.presentableTitle(
+        structured.title, segments: transcriptSegments
+      ).trimmingCharacters(in: .whitespacesAndNewlines)
+      if !title.isEmpty {
+        return .titled(title)
       }
       // Heuristic: a "real" conversation has at least one transcript segment
       // long enough to plausibly have content (≥ 5 words). Below that, it's
@@ -516,12 +534,24 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     return f
   }()
 
+  /// The server's presentation-only batch wait must not start the summary stall clock.
+  var isAwaitingTranscription: Bool {
+    !isLocked && !deferred && status == .processing && structured.title == "Transcribing…" && transcriptSegments.isEmpty
+  }
+
+  var showsSummaryProcessing: Bool {
+    !isAwaitingTranscription && (deferred || status == .processing)
+  }
+
   /// The string a row/header should display in the title slot.
   var displayTitle: String {
     switch displayState {
     case .titled(let title): return title
     case .processing, .awaitingFirstOpen: return provisionalTitle
-    case .locked: return "Locked"
+    // Matches the badge's waiting copy; rows/header that show the badge skip
+    // the title text so the pill is not duplicated beside itself. Plain-string
+    // callers (Spine tiles, link lists, accessibility) still get honest copy.
+    case .locked: return "Waiting"
     case .failed: return "Failed to process"
     case .untitledRecoverable, .untitledEmpty: return "Untitled"
     }
@@ -681,8 +711,10 @@ struct Structured: Codable, Equatable {
       OmiAPI.ActionItem(
         candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: $0.captureOwner,
         completed: $0.completed,
-        completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description,
-        dueAt: nil, ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
+        completedAt: nil, concreteDeliverable: nil, context: $0.context, conversationId: nil, createdAt: nil,
+        description_: $0.description,
+        dueAt: $0.dueAt.map(Event.encodeDateForWire), dueCertainty: $0.dueCertainty, ownerName: $0.ownerName,
+        ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
         targetTaskId: $0.targetTaskID, updatedAt: nil)
     }
     let eventsWire = events.map {
@@ -733,7 +765,7 @@ struct Structured: Codable, Equatable {
 struct ActionItem: Codable, Identifiable, Equatable {
   var id: String { description }
   let description: String
-  let completed: Bool
+  var completed: Bool
   let deleted: Bool
   /// Extraction ownership from the backend (`capture_owner`), e.g. "user" when
   /// the item is the user's own commitment. Optional: legacy captures and
@@ -744,6 +776,12 @@ struct ActionItem: Codable, Identifiable, Equatable {
   /// rather than inferring a task from the description.
   let targetTaskID: String?
   let sourceSegmentIDs: [String]
+  /// The owner's display name when the extraction names one (`owner_name`).
+  let ownerName: String?
+  let dueAt: Date?
+  let dueCertainty: String?
+  /// One line on why the item exists (`context`).
+  let context: String?
 
   init(
     description: String,
@@ -751,7 +789,11 @@ struct ActionItem: Codable, Identifiable, Equatable {
     deleted: Bool,
     captureOwner: String? = nil,
     targetTaskID: String? = nil,
-    sourceSegmentIDs: [String] = []
+    sourceSegmentIDs: [String] = [],
+    ownerName: String? = nil,
+    dueAt: Date? = nil,
+    dueCertainty: String? = nil,
+    context: String? = nil
   ) {
     self.description = description
     self.completed = completed
@@ -759,6 +801,10 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.captureOwner = captureOwner
     self.targetTaskID = targetTaskID
     self.sourceSegmentIDs = sourceSegmentIDs
+    self.ownerName = ownerName
+    self.dueAt = dueAt
+    self.dueCertainty = dueCertainty
+    self.context = context
   }
 
   /// Adapter from the generated wire DTO (OmiAPI.ActionItem). `deleted` is a
@@ -771,16 +817,14 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.captureOwner = wire.captureOwner
     self.targetTaskID = wire.targetTaskId
     self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
+    self.ownerName = wire.ownerName
+    self.dueAt = wire.dueAt.flatMap(Event.parseWireDate)
+    self.dueCertainty = wire.dueCertainty
+    self.context = wire.context
   }
 
   init(from decoder: Decoder) throws {
-    let wire = try OmiAPI.ActionItem(from: decoder)
-    self.description = wire.description_
-    self.completed = wire.completed ?? false
-    self.deleted = false
-    self.captureOwner = wire.captureOwner
-    self.targetTaskID = wire.targetTaskId
-    self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
+    self.init(try OmiAPI.ActionItem(from: decoder))
   }
 
   func encode(to encoder: Encoder) throws {
@@ -792,10 +836,13 @@ struct ActionItem: Codable, Identifiable, Equatable {
       completed: completed,
       completedAt: nil,
       concreteDeliverable: nil,
+      context: context,
       conversationId: nil,
       createdAt: nil,
       description_: description,
-      dueAt: nil,
+      dueAt: dueAt.map(Event.encodeDateForWire),
+      dueCertainty: dueCertainty,
+      ownerName: ownerName,
       ownershipConfidence: nil,
       sourceSegmentIds: sourceSegmentIDs,
       targetTaskId: targetTaskID,
@@ -877,6 +924,11 @@ struct Event: Codable, Identifiable, Equatable {
     fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s)
   }
 
+  /// The wire's ISO-8601 instant, with or without fractional seconds; nil when unparseable.
+  fileprivate static func parseWireDate(_ s: String) -> Date? {
+    parseDate(s)
+  }
+
   private static func decodeDate(_ s: String, using decoder: Decoder) throws -> Date {
     if let date = parseDate(s) { return date }
     let context = DecodingError.Context(
@@ -903,6 +955,7 @@ struct TranscriptSegment: Codable, Identifiable {
   let id: String
   let backendId: String?
   let text: String
+  let originalText: String?
   let speaker: String?
   let isUser: Bool
   let personId: String?
@@ -921,6 +974,7 @@ struct TranscriptSegment: Codable, Identifiable {
 
   enum CodingKeys: String, CodingKey {
     case id, text, speaker
+    case originalText = "original_text"
     case isUser = "is_user"
     case personId = "person_id"
     case start, end, translations
@@ -932,6 +986,7 @@ struct TranscriptSegment: Codable, Identifiable {
     id = decodedId ?? UUID().uuidString
     backendId = decodedId
     text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+    originalText = try container.decodeIfPresent(String.self, forKey: .originalText)
     speaker = try container.decodeIfPresent(String.self, forKey: .speaker)
     isUser = try container.decodeIfPresent(Bool.self, forKey: .isUser) ?? false
     personId = try container.decodeIfPresent(String.self, forKey: .personId)
@@ -949,6 +1004,7 @@ struct TranscriptSegment: Codable, Identifiable {
     self.id = decodedId ?? UUID().uuidString
     self.backendId = decodedId
     self.text = wire.text
+    self.originalText = wire.originalText
     self.speaker = wire.speaker
     self.isUser = wire.isUser
     self.personId = wire.personId
@@ -962,6 +1018,7 @@ struct TranscriptSegment: Codable, Identifiable {
     id: String,
     backendId: String? = nil,
     text: String,
+    originalText: String? = nil,
     speaker: String?,
     isUser: Bool,
     personId: String?,
@@ -972,6 +1029,7 @@ struct TranscriptSegment: Codable, Identifiable {
     self.id = id
     self.backendId = backendId
     self.text = text
+    self.originalText = originalText
     self.speaker = speaker
     self.isUser = isUser
     self.personId = personId

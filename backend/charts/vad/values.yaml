@@ -1,3 +1,5 @@
+# Operator-controlled maintenance; zero replicas retains the positive-minimum HPA.
+maintenanceMode: false
 # Default values for vad.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -121,3 +123,13 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Shared internal Gateway is opt-in; old Service/Ingress remain rollback paths.
+gateway:
+  enabled: false
+  name: ""
+  listenerName: http
+  pathPrefix: /vad
+  healthCheckPath: /health
+  timeoutSeconds: 30
+  connectionDrainingSeconds: 0

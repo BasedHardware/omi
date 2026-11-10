@@ -86,7 +86,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
-        final cantFind = provider.deviceList.isEmpty && provider.enableInstructions;
+        final cantFind =
+            provider.deviceList.isEmpty && provider.enableInstructions && provider.pairingFailureReason == null;
         final notNow = widget.includeSkip
             ? OmiButton.tertiary(
                 key: const Key('find_devices_not_now'),
@@ -111,7 +112,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
               goNext: widget.goNext,
               isFromOnboarding: widget.isFromOnboarding,
               onRescan: _scanAgain,
-              showStatus: !cantFind,
+              showStatus: !cantFind && provider.pairingFailureReason == null,
             ),
             // Nothing found after a while: troubleshooting first, support last (onboarding-home #13).
             // The pairing guide has no support route, so Contact Support stays as a small link.
@@ -126,12 +127,17 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                   children: [
                     OmiButton(
                       key: const Key('find_devices_scan_again'),
+                      labelStyle: OmiType.callout.copyWith(
+                          fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                       label: context.l10n.scanAgain,
                       icon: Icons.refresh,
                       onPressed: _scanAgain,
                     ),
                     const SizedBox(height: OmiSpacing.xs),
-                    OmiButton.secondary(
+                    OmiButton(
+                      variant: OmiButtonVariant.secondary,
+                      labelStyle: OmiType.callout.copyWith(
+                          fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                       key: const Key('find_devices_how_to_pair'),
                       label: context.l10n.howToPair,
                       onPressed: _showConnectionGuide,
@@ -144,7 +150,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                         style: TextButton.styleFrom(
                           foregroundColor: OmiColors.textSecondary,
                           minimumSize: const Size(kOmiMinTapTarget, kOmiMinTapTarget),
-                          textStyle: OmiType.footnote,
+                          textStyle:
+                              OmiType.footnote.copyWith(fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                         ),
                         child: Text(context.l10n.contactSupportAction),
                       ),

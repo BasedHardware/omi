@@ -177,6 +177,10 @@ abstract class BleHostApi {
   @SwiftFunction('manageDevice(uuid:requiresBond:)')
   void manageDevice(String uuid, bool requiresBond);
 
+  /// Saved pairing authorizes cold-start retries; false restores legacy policy.
+  @SwiftFunction('configureSavedReconnect(uuid:enabled:)')
+  void configureSavedReconnect(String uuid, bool enabled);
+
   @SwiftFunction('unmanageDevice(uuid:)')
   void unmanageDevice(String uuid);
 
@@ -251,6 +255,8 @@ abstract class BleHostApi {
 abstract class BleFlutterApi {
   void onBluetoothStateChanged(String state);
 
+  void onSavedReconnect(String peripheralUuid, int attempt, String result, int disconnectedMs);
+
   void onPeripheralDiscovered(BlePeripheral peripheral);
 
   void onDeviceReady(String peripheralUuid, List<BleService> services);
@@ -274,6 +280,10 @@ abstract class BleFlutterApi {
   /// Native batch writer finalized a recording file (rotation / gap / stop) so
   /// Dart can rescan the recordings dir without waiting for a disconnect.
   void onBatchRecordingFinalized(String fileName);
+
+  /// Android `startScan` returned before discovery started.
+  /// `reason` is `no_adapter`, `bluetooth_off`, `nearby_devices_denied`, or `scanner_unavailable`.
+  void onScanBlocked(String reason);
 }
 
 // =============================================================================

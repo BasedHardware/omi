@@ -9,13 +9,14 @@ from functools import lru_cache
 
 import pytest
 
-from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
+from config.live_stt_registry import Target, assigned
+from tests.unit.fixtures.live_stt_registry import ENABLED_TARGETS as DEFAULT_TARGETS
 from utils.stt import live_cost_health, live_failure, live_chain, live_health, live_router, streaming as st
 from config import live_stt_state
 from utils.stt.live_gate import GateState, begin_trial, transition, gate_rate
 from utils.stt.live_signal import provider_observation
 from utils.stt.live_metrics import COST_STAGE, COST_STATE_KNOWN, COST_EVENTS, COST_SNAPSHOT_AT, COST_ALL_DEGRADED
-from tests.unit.test_live_cost_router import MemoryRedis, controls
+from tests.unit.test_live_cost_router import MemoryRedis, controls  # noqa: F401 -- autouse fixture
 
 
 @pytest.mark.parametrize('sessions', [2000, pytest.param(20000, marks=pytest.mark.slow)])
@@ -199,18 +200,28 @@ def test_rnnt_outcomes_cannot_alias_window_health():
     assert not live_chain.health._cost_local
 
 
-def test_trial_terminal_remains_a_failover_leg_when_cheaper_healthy_target_exists():
+@pytest.mark.parametrize('guarded', [True, False])
+def test_soniox_trial_joins_guarded_escape_or_remains_a_last_resort(monkeypatch, guarded):
+    monkeypatch.setenv('LISTEN_STT_SOLE_PRIMARY_HOLD_ENABLED', 'true' if guarded else 'false')
     health = live_chain.health
     health._cost_local[('soniox', 'all')] = GateState(stage=5)
     health._cost_fresh.update({(t.id, lang): 0.0 for t in DEFAULT_TARGETS for lang in ('all', 'en')})
     uid = next(str(i) for i in range(1000) if not assigned(str(i), 'stt-reentry:soniox', 5))
     tail = []
-    chain = live_router.propose(health, ['modulate', 'soniox'], uid, 'en', 'modulate', last_resorts=tail)
-    assert [target.id for target in chain] == ['modulate-velma-2']
-    assert [target.id for target in tail] == ['soniox']
+    decision = {}
+    chain = live_router.propose(
+        health, ['modulate', 'soniox'], uid, 'en', 'modulate', last_resorts=tail, decision=decision
+    )
+    # With the hold on, Modulate is projected below full share and the actual
+    # two-provider chain escapes with Soniox included despite its trial cohort.
+    assert [target.id for target in chain] == ['modulate-velma-2', *(['soniox'] if guarded else [])]
+    assert [target.id for target in tail] == ([] if guarded else ['soniox'])
+    assert decision['states']['modulate-velma-2'].stage == (25 if guarded else 100)
 
 
-def test_terminal_share_is_unrestricted_and_all_degraded_chain_uses_health_order():
+@pytest.mark.parametrize('exclude_benched', [True, False])
+def test_terminal_share_is_unrestricted_and_all_degraded_chain_uses_health_order(monkeypatch, exclude_benched):
+    monkeypatch.setenv('LISTEN_STT_ESCAPE_EXCLUDES_BENCHED_ENABLED', 'true' if exclude_benched else 'false')
     target = DEFAULT_TARGETS[-1]
     for stage in (0, 5, 25):
         for uid in map(str, range(100)):
@@ -227,10 +238,11 @@ def test_terminal_share_is_unrestricted_and_all_degraded_chain_uses_health_order
         for i in range(1000)
         if not any(assigned(str(i), 'stt-reentry:' + t.id, states[t.id].stage) for t in DEFAULT_TARGETS)
     )
+    # The benched window stays out while stage>0 targets can serve (2026-10-20).
     assert [target.id for target in live_router.select(DEFAULT_TARGETS, states, uid, 'en')] == [
         'soniox',
         'modulate-velma-2',
-        'parakeet-window',
+        *([] if exclude_benched else ['parakeet-window']),
     ]
     assert metric._value.get() == before + 1
     states = {target.id: GateState(stage=0, n=100, failures=10) for target in DEFAULT_TARGETS}

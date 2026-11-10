@@ -261,7 +261,7 @@ def test_stale_heads_and_pending_retirement_never_replay(store, caplog):
     assert claimed[0] == fresh
     stale_row = store.db.document(stale).get().to_dict()
     assert stale_row['fifo_settled_at'] and stale_row['retired_reason'] == 'stale_running'
-    assert store.db.document(old_pending).get().to_dict()['status'] == 'done'
+    assert store.db.document(old_pending).get().to_dict()['status'] == 'expired'
     assert store.claim(stale) is None
     assert store.claim_next(fresh) is None  # fresh running turn remains exclusive
     with pytest.raises(PermissionError):
@@ -303,7 +303,7 @@ def test_newest_wake_drains_older_pending_in_order_once(store, monkeypatch):
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     assert asyncio.run(gateway.process(paths[-1]))
     assert seen == ['0', '1', '2'] and len(adapter.sent) == 3
     assert not asyncio.run(gateway.process(paths[-1]))

@@ -194,6 +194,23 @@ def validate_catalog(catalog, policy, root=ROOT, prior=None):
     return errors
 
 
+def read_repo_json(root, relative):
+    """Parsed JSON from disk, falling back to the HEAD blob.
+
+    Cone-mode sparse checkouts keep out-of-cone files in the index without
+    materialising them, and the OpenAPI doc lives in docs/, outside every
+    code surface's cone. Absent from both disk and HEAD, re-read the disk
+    path so the original failure surfaces.
+    """
+    path = root / relative
+    if path.is_file():
+        return json.loads(path.read_text())
+    blob = subprocess.run(['git', '-C', str(root), 'show', f'HEAD:{relative}'], capture_output=True, text=True)
+    if blob.returncode != 0:
+        return json.loads(path.read_text())
+    return json.loads(blob.stdout)
+
+
 def check_against_head(catalog, policy, root, head):
     issues = []
     for row in catalog['releases']:
@@ -212,7 +229,7 @@ def main():
     old = subprocess.run(['git', 'show', f'{args.base}:{CATALOG}'], cwd=ROOT, capture_output=True, text=True)
     errors = validate_catalog(catalog, policy, prior=json.loads(old.stdout) if old.returncode == 0 else None)
     if not errors:
-        errors += check_against_head(catalog, policy, ROOT, json.loads((ROOT / 'docs/api-reference/app-client-openapi.json').read_text()))
+        errors += check_against_head(catalog, policy, ROOT, read_repo_json(ROOT, 'docs/api-reference/app-client-openapi.json'))
     for error in errors:
         print(error)
     if not errors:

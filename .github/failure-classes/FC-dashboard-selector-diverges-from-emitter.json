@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-dashboard-selector-diverges-from-emitter",
+  "violated_contract": "A monitoring panel must query the metric family, emitting job and label values that actually represent the named result. Pre-initialized series from unrelated jobs must not enter the result, client and server journey names are not interchangeable, and absent telemetry must remain not measured rather than a fabricated zero or healthy success rate.",
+  "canonical_prevention": "Keep dashboard selector and missing-data contracts beside the dashboard tests, anchored to observed production label values and emitter ownership. Preserve denominator-backed zero fallbacks only for measured populations, and record per-panel verification against the production datasource separately from static checks.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_core_feature_headline_contract.py",
+    "backend/tests/unit/test_monitoring_dashboard_query_budget.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/charts/monitoring/dashboards/general/omi-core-features.json",
+    "backend/tests/unit/test_core_feature_headline_contract.py",
+    "backend/tests/unit/test_monitoring_dashboard_query_budget.py"
+  ],
+  "status": "open"
+}

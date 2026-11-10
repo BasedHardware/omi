@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "viewport_logical": [
+    393,
+    852
+  ],
+  "pixel_ratio": 3,
+  "theme": "light",
+  "fonts": "App FontManifest, SF Pro Display, SDK Roboto",
+  "command": "ONB_POLISH_RENDER=1 flutter test test/widgets/onboarding_polish_test.dart",
+  "images": [
+    {
+      "file": "001-mobile-ios-watch.png",
+      "platform": "mobile-ios",
+      "description": "ios watch",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-connect-bluetooth-off.png",
+      "platform": "mobile-ios",
+      "description": "ios connect bluetooth off",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-connect-bluetooth-permission-denied.png",
+      "platform": "mobile-ios",
+      "description": "ios connect bluetooth permission denied",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-connect-nearby-devices-denied.png",
+      "platform": "mobile-ios",
+      "description": "ios connect nearby devices denied",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-connect-location-permission-missing.png",
+      "platform": "mobile-ios",
+      "description": "ios connect location permission missing",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-connect-not-found-or-dropped.png",
+      "platform": "mobile-ios",
+      "description": "ios connect not found or dropped",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-connect-stale-bond.png",
+      "platform": "mobile-ios",
+      "description": "ios connect stale bond",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-connect-unknown.png",
+      "platform": "mobile-ios",
+      "description": "ios connect unknown",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-find-us.png",
+      "platform": "mobile-ios",
+      "description": "ios find us",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-find-us-large.png",
+      "platform": "mobile-ios",
+      "description": "ios find us large",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-find-us-large-end.png",
+      "platform": "mobile-ios",
+      "description": "ios find us large end",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-android-connect-bluetooth-off.png",
+      "platform": "mobile-android",
+      "description": "android connect bluetooth off",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-android-connect-bluetooth-permission-denied.png",
+      "platform": "mobile-android",
+      "description": "android connect bluetooth permission denied",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-android-connect-nearby-devices-denied.png",
+      "platform": "mobile-android",
+      "description": "android connect nearby devices denied",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-android-connect-location-permission-missing.png",
+      "platform": "mobile-android",
+      "description": "android connect location permission missing",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-android-connect-not-found-or-dropped.png",
+      "platform": "mobile-android",
+      "description": "android connect not found or dropped",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-android-connect-stale-bond.png",
+      "platform": "mobile-android",
+      "description": "android connect stale bond",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-android-connect-unknown.png",
+      "platform": "mobile-android",
+      "description": "android connect unknown",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-android-find-us.png",
+      "platform": "mobile-android",
+      "description": "android find us",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-android-find-us-large.png",
+      "platform": "mobile-android",
+      "description": "android find us large",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-android-find-us-large-end.png",
+      "platform": "mobile-android",
+      "description": "android find us large end",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "022-mobile-ios-connect-empty-scan.png",
+      "platform": "mobile-ios",
+      "description": "ios real provider after the 10-second empty scan, scrolled to show instructions and Contact Support",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-mobile-android-connect-empty-scan.png",
+      "platform": "mobile-android",
+      "description": "android real provider after the 10-second empty scan, scrolled to show instructions and Contact Support",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ],
+  "empty_scan_command": "ONB_POLISH_RENDER=1 flutter test test/providers/onboarding_provider_pairing_presentation_test.dart"
+}

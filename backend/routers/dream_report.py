@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from config.dream_agent import PASS_TIMEOUT_SECONDS, DRAIN_TIMEOUT_SECONDS
 
 from database.dream_store import AdmissionDenied
 from models.dream_report import DreamRun, DreamRunRequest, DreamRunsResponse
@@ -24,9 +25,9 @@ async def get_runs(limit: int = Query(default=10, ge=1, le=20), uid: str = Depen
 @router.post('/v1/dream/runs', response_model=DreamRun)
 async def run_now(body: DreamRunRequest, uid: str = Depends(auth.get_current_user_uid)):
     try:
-        async with asyncio.timeout(MANUAL_DEADLINE_SECONDS):
+        async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
             await run_blocking(db_executor, dream_report.require_owner, uid)
-            report = await dream_agent.run_pass(uid, trigger='manual', timeout_seconds=70)
+            report = await dream_agent.run_pass(uid, trigger='manual', timeout_seconds=PASS_TIMEOUT_SECONDS)
             if report.get('run_id'):
                 return await run_blocking(db_executor, dream_report.finished_run, uid, report['run_id'])
             if report.get('status') == 'waiting':

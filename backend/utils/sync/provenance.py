@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from database import conversations as conversations_db
 from utils.sync.lanes import capture_times_within_window
+from utils.sync.fsr_metadata import read_metadata
 
 _CAPTURE_PROVENANCE_SLOP_SECONDS = 30 * 60
 
@@ -12,11 +13,15 @@ def capture_matches_server_conversation(
     conversation_id: Optional[str],
     filenames: List[str],
     client_device_id: Optional[str],
+    *,
+    snapshot_out: dict | None = None,
 ) -> bool:
     """Bind fresh classification to a server-created conversation time window."""
     if not conversation_id or not client_device_id:
         return False
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_metadata(conversations_db, uid, conversation_id, operation='provenance')
+    if snapshot_out is not None and conversation:
+        snapshot_out.update(conversation)
     if not conversation or conversation.get('client_device_id') != client_device_id:
         return False
     started_at = conversation.get('started_at')

@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from datetime import tzinfo
 from typing import Any, Callable, Iterable, List, Optional, cast
 
+from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
 
@@ -139,18 +140,32 @@ def deterministic_minimum_title(
 def build_deterministic_minimum_structured(
     conversation: Any,
     *,
+    uid: Optional[str] = None,
     source_label: str = DEFAULT_SOURCE_LABEL,
     tz_name_provider: Optional[Callable[[], Optional[str]]] = None,
 ) -> Structured:
     """The whole §1.7 row: deterministic title, empty overview, category ``other``,
-    no action items, no events. Every other field keeps its model default."""
+    the category's fallback emoji, no action items, no events. Every other field
+    keeps its model default.
+
+    ``uid`` is the owner. Stamp raw-title provenance for every known owner,
+    so a minimum never masquerades as historical full processing.
+    An unknown owner (None) gets no stamp.
+    """
+    raw_provenance = uid is not None
+    metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if raw_provenance else {}
     return Structured(
+        **metadata,
         title=deterministic_minimum_title(
             conversation,
             source_label=source_label,
             tz_name_provider=tz_name_provider,
         ),
         overview='',
+        # The category's deterministic emoji, not whatever the schema default is:
+        # an intake minimum that omitted this pinned the "unset" brain on every
+        # sync-created conversation (2026-10-24).
+        emoji=fallback_emoji('', MINIMUM_CATEGORY),
         # The typed SDK model owns an equivalent CategoryEnum class while the
         # backend's canonical enum remains the public domain authority. Pydantic
         # converts the canonical str-enum at this boundary before validation.
@@ -159,3 +174,19 @@ def build_deterministic_minimum_structured(
         action_items=[],
         events=[],
     )
+
+
+def build_deferred_structured(conversation: Any) -> Structured:
+    """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
+    the first few words of the transcript so the conversation list stays usable until the user
+    opens it (which triggers the real enrichment). A non-empty title is required — an empty one
+    marks the conversation discarded in `_get_conversation_obj`."""
+    text = ''
+    for seg in list(getattr(conversation, 'transcript_segments', None) or []):
+        seg_text = (getattr(seg, 'text', '') or '').strip()
+        if seg_text:
+            text = seg_text
+            break
+    words = text.split()
+    title = ' '.join(words[:8]).strip() if words else ''
+    return Structured(title=title or 'Recording')

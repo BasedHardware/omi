@@ -11,6 +11,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/lag_recorder.dart';
 
 class HomeProvider extends ChangeNotifier {
   /// The two pages of the Home shell, switched at the top of the screen.
@@ -94,6 +95,7 @@ class HomeProvider extends ChangeNotifier {
     'Marathi': 'mr',
     'Norwegian': 'no',
     'Persian': 'fa',
+    'Punjabi': 'pa',
     'Polish': 'pl',
     'Romanian': 'ro',
     'Serbian': 'sr',
@@ -197,6 +199,7 @@ class HomeProvider extends ChangeNotifier {
   void setIndex(int index) {
     selectedIndex = index;
     onSelectedIndexChanged?.call(index);
+    lagHomeTabChanged?.call(index);
     notifyListeners();
   }
 
@@ -258,23 +261,27 @@ class HomeProvider extends ChangeNotifier {
     await setupUserPrimaryLanguage();
   }
 
-  Future<void> setupUserPrimaryLanguage() async {
+  Future<void> setupUserPrimaryLanguage({Future<String?> Function()? fetchPrimaryLanguage}) async {
     if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
       return;
     }
 
     final generation = _sessionGeneration;
     try {
-      final language = await getUserPrimaryLanguage();
+      final language = await (fetchPrimaryLanguage ?? getUserPrimaryLanguage)();
       if (generation != _sessionGeneration) return;
       if (language == null) {
         // User hasn't set a primary language yet
         userPrimaryLanguage = '';
         hasSetPrimaryLanguage = false;
 
-        // Show language dialog after a short delay to ensure UI is ready
+        // Show language dialog after a short delay to ensure UI is ready. Not during onboarding:
+        // it has its own language step, and the required sheet would cover whichever step a
+        // relaunch resumed on, consent included (#20788).
         Future.delayed(const Duration(milliseconds: 500), () {
-          if (generation == _sessionGeneration && globalNavigatorKey.currentContext != null) {
+          if (generation == _sessionGeneration &&
+              SharedPreferencesUtil().onboardingCompleted &&
+              globalNavigatorKey.currentContext != null) {
             showLanguageDialogIfNeeded(globalNavigatorKey.currentContext!);
           }
         });

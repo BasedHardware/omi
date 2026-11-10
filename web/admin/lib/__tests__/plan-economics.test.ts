@@ -3,15 +3,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { BigQueryDate } from "@google-cloud/bigquery";
 import {
   buildPlanEconomics,
+  PLAN_ECONOMICS_QUERY,
   type EconomicsSnapshot,
 } from "@/lib/services/plan-economics";
+import { testIdentity } from "./support/test-identity";
 
 const query = vi.hoisted(() => vi.fn());
-const verifyAdmin = vi.hoisted(() => vi.fn());
+const requireScope = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/services/gcp-billing", () => ({
   getGcpBillingClient: () => ({ query }),
 }));
-vi.mock("@/lib/auth", () => ({ verifyAdmin }));
+vi.mock("@/lib/auth", () => ({ requireScope }));
 
 function fixture(): EconomicsSnapshot {
   const snapshot: EconomicsSnapshot = {
@@ -166,6 +168,27 @@ describe("plan economics snapshot", () => {
     );
   });
 
+  it("does not fail-close on a measured STT row with no allocation delta", () => {
+    const s = fixture();
+    s.reconciliation.push({
+      day: "2026-09-16",
+      pool: "stt_soniox_measured",
+      delta_pct: Number.NaN,
+      run_id: "other-run",
+      inputs_settled: false,
+    });
+    const result = buildPlanEconomics(s, "2026-09-18");
+    expect(result.partial).toBe(false);
+    expect(result.rows[0].estimatedCostMonthly).toBe(330);
+    for (const pool of [
+      "llm_openai_ledger_coverage",
+      "stt_soniox_measured",
+      "stt_deepgram_measured",
+    ]) {
+      expect(PLAN_ECONOMICS_QUERY).toContain(pool);
+    }
+  });
+
   it("retains valid cost but never fabricates revenue or margin from a missing/stale revenue book", () => {
     for (const revenue of [
       [],
@@ -237,11 +260,11 @@ describe("plan economics route", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    verifyAdmin.mockResolvedValue({ uid: "admin" });
+    requireScope.mockResolvedValue(testIdentity(undefined, "admin"));
   });
   it("authenticates before reading billing data and rejects platform mislabelling", async () => {
     const { GET } = await import("@/app/api/omi/stats/plan-economics/route");
-    verifyAdmin.mockResolvedValueOnce(
+    requireScope.mockResolvedValueOnce(
       NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     );
     expect(

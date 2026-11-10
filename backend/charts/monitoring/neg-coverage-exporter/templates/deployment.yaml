@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neg-coverage-exporter
+  labels:
+    app.kubernetes.io/name: neg-coverage-exporter
+    app.kubernetes.io/instance: prod-omi-neg-coverage-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: neg-coverage-exporter
+      app.kubernetes.io/instance: prod-omi-neg-coverage-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: neg-coverage-exporter
+        app.kubernetes.io/instance: prod-omi-neg-coverage-exporter
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [python, -B, -u, scripts/neg_coverage_exporter.py]
+          env:
+            - name: PORT
+              value: {{ .Values.port | quote }}
+            - name: NEG_COVERAGE_PROJECT
+              value: {{ .Values.project | quote }}
+            - name: NEG_COVERAGE_BACKEND_SERVICE
+              value: {{ .Values.backendService | quote }}
+            - name: NEG_COVERAGE_NEG_NAME
+              value: {{ .Values.negName | quote }}
+            - name: NEG_COVERAGE_K8S_NAMESPACE
+              value: {{ .Values.backendNamespace | quote }}
+            - name: NEG_COVERAGE_POD_SELECTOR
+              value: {{ .Values.podSelector | quote }}
+            - name: NEG_COVERAGE_ZONES
+              value: {{ .Values.zones | quote }}
+            - name: NEG_COVERAGE_INTERVAL_SECONDS
+              value: {{ .Values.intervalSeconds | quote }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 15
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 30
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neg-coverage-exporter
+  labels:
+    app.kubernetes.io/name: neg-coverage-exporter
+    app.kubernetes.io/instance: prod-omi-neg-coverage-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: neg-coverage-exporter
+    app.kubernetes.io/instance: prod-omi-neg-coverage-exporter
+  ports:
+    - name: metrics
+      port: {{ .Values.port }}
+      targetPort: metrics
+      protocol: TCP

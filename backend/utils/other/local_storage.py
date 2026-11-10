@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import threading
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import quote
+from utils.other.owned_paths import owned_scratch_path
 
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
+from google.api_core.exceptions import PreconditionFailed
 from google.oauth2 import service_account
 
 LOCAL_STORAGE_ROOT_ENV = 'OMI_LOCAL_STORAGE_ROOT'
@@ -53,12 +56,27 @@ def _safe_relative_path(value: str, *, label: str) -> PurePosixPath:
 
 
 class LocalBlob:
-    def __init__(self, bucket: 'LocalBucket', name: str):
+    def __init__(self, bucket: 'LocalBucket', name: str, generation: int | None = None):
         self.bucket = bucket
         self.name = _safe_relative_path(name, label='blob name').as_posix()
         self.metadata = None
         self.cache_control = None
         self.content_type = None
+        self._expected_generation = generation
+
+    @property
+    def generation(self) -> int | None:
+        return self.path.stat().st_mtime_ns if self.path.is_file() else None
+
+    @property
+    def _metadata_path(self) -> Path:
+        # Keep adapter metadata outside bucket listings and HTTP media paths.
+        return self.bucket.root / '.metadata' / self.bucket.name / f'{self.name}.json'
+
+    def _check_generation(self, requested: int | None = None) -> None:
+        expected = requested if requested is not None else self._expected_generation
+        if expected is not None and self.generation != int(expected):
+            raise PreconditionFailed('local storage generation mismatch')
 
     @property
     def path(self) -> Path:
@@ -78,32 +96,53 @@ class LocalBlob:
     def reload(self, *_args, **_kwargs) -> None:
         if not self.exists():
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
+        self._check_generation()
+        if self._metadata_path.exists():
+            self.metadata = json.loads(self._metadata_path.read_text())
 
     def upload_from_filename(self, filename: str, *_args, **_kwargs) -> None:
+        source = owned_scratch_path(filename, include_harness=True)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(filename, self.path)
+        shutil.copyfile(source, self.path)
 
     def download_to_filename(self, filename: str, *_args, **_kwargs) -> None:
         if not self.exists():
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
-        destination = Path(filename)
+        destination = Path(owned_scratch_path(filename, include_harness=True))
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(self.path, destination)
 
     def upload_from_string(self, data: bytes | str, content_type: str | None = None, *_args, **_kwargs) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.content_type = content_type
-        self.path.write_bytes(data.encode() if isinstance(data, str) else data)
+        # The offline adapter models GCS's create-only/generation contract. It
+        # is not a production custodian: env guards restrict it to an owned
+        # emulator harness, and a torn media/metadata write issues no receipt.
+        match = _kwargs.get('if_generation_match')
+        if match not in (None, 0):
+            self._check_generation(int(match))
+        try:
+            with self.path.open('xb' if match == 0 else 'wb') as target:
+                target.write(data.encode() if isinstance(data, str) else data)
+        except FileExistsError as error:
+            raise PreconditionFailed('local storage create-only object exists') from error
+        self.patch()
 
     def download_as_bytes(self, *_args, **_kwargs) -> bytes:
         if not self.exists():
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
-        return self.path.read_bytes()
+        self._check_generation(_kwargs.get('if_generation_match'))
+        generation = self.generation
+        data = self.path.read_bytes()
+        self._check_generation(generation)
+        return data
 
     def delete(self, *_args, **_kwargs) -> None:
         if not self.exists():
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
+        self._check_generation(_kwargs.get('if_generation_match'))
         self.path.unlink()
+        self._metadata_path.unlink(missing_ok=True)
 
     def open(self, mode: str = 'rb', *_args, **_kwargs):
         if mode not in {'rb', 'wb'}:
@@ -126,7 +165,8 @@ class LocalBlob:
         return None
 
     def patch(self, *_args, **_kwargs) -> None:
-        return None
+        self._metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        self._metadata_path.write_text(json.dumps(self.metadata))
 
 
 class LocalBucket:
@@ -141,19 +181,22 @@ class LocalBucket:
     def path(self) -> Path:
         return self.root / self.name
 
-    def blob(self, name: str) -> LocalBlob:
-        return LocalBlob(self, name)
+    def blob(self, name: str, generation: int | None = None) -> LocalBlob:
+        return LocalBlob(self, name, generation)
 
     def list_blobs(self, prefix: str = '', *_args, **_kwargs) -> Iterable[LocalBlob]:
         if prefix:
             _safe_relative_path(prefix.rstrip('/'), label='blob prefix')
         if not self.path.exists():
             return []
-        return [
+        blobs = [
             LocalBlob(self, path.relative_to(self.path).as_posix())
             for path in sorted(self.path.rglob('*'))
             if path.is_file() and path.relative_to(self.path).as_posix().startswith(prefix)
         ]
+        for blob in blobs:
+            blob.reload()
+        return blobs
 
     def copy_blob(self, blob: LocalBlob, destination_bucket: 'LocalBucket', new_name: str) -> LocalBlob:
         destination = destination_bucket.blob(new_name)
@@ -196,9 +239,45 @@ def create_storage_client():
     if os.environ.get('SERVICE_ACCOUNT_JSON'):
         service_account_info = json.loads(os.environ['SERVICE_ACCOUNT_JSON'])
         credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
-        return storage.Client(credentials=credentials)
+        return _size_http_pool(storage.Client(credentials=credentials))
     project = storage_client_project()
-    return storage.Client(project=project) if project else storage.Client()
+    client = storage.Client(project=project) if project else storage.Client()
+    return _size_http_pool(client)
+
+
+def gcs_http_pool_maxsize() -> int:
+    """Connections per GCS host for one process's shared client (default 128).
+
+    urllib3's default pool keeps 10 connections per host, while one process's
+    storage executor runs 128 workers against the same client. The overflow
+    opened and discarded a connection per call ("Connection pool is full"), which
+    slowed pusher teardown drains past their bounds (2026-11-04 admission jam).
+    """
+    try:
+        value = int(os.getenv('GCS_HTTP_POOL_MAXSIZE', '128'))
+    except ValueError:
+        return 128
+    return max(10, min(value, 512))
+
+
+def _size_http_pool(client):
+    """Mount a pool sized to executor concurrency; keep the default on failure."""
+    try:
+        size = gcs_http_pool_maxsize()
+        session = client._http  # AuthorizedSession, created once per client
+        current = session.get_adapter('https://storage.googleapis.com/')
+        adapter_class = type(current)
+        # Only replace the plain default adapter (no `requests` import in utils);
+        # a subclass such as google-auth's mTLS adapter carries client-certificate
+        # state that must be kept.
+        if (adapter_class.__module__, adapter_class.__name__) != ('requests.adapters', 'HTTPAdapter'):
+            return client
+        session.mount('https://', adapter_class(pool_connections=4, pool_maxsize=size))
+    except Exception as error:  # an unsized pool is the previous behaviour, never a startup failure
+        logging.getLogger(__name__).warning(
+            'event=gcs_http_pool outcome=default exception_type=%s', type(error).__name__
+        )
+    return client
 
 
 _signing_token_lock = threading.Lock()

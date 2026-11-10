@@ -13,8 +13,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
+from config.server_batch import owned as server_batch_owned
 
-from database import conversations as conversations_db
+from database import conversations as conversations_db, transcript_pointer
+from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client
 from database.people_stats_cache import invalidate_people_stats_cache
 
@@ -252,6 +254,10 @@ def tombstone_and_delete_empty_conversation(
     *,
     firestore_client: Any = None,
     deleted_conversation: dict[str, Any] | None = None,
+    recovery_cutoff: datetime | None = None,
+    require_expired_recording_lease: bool = False,
+    allow_empty_server_batch: bool = False,
+    transaction_guard: Any = None,
 ) -> bool:
     """Atomically delete an empty live row and terminalize its bound session.
 
@@ -271,23 +277,61 @@ def tombstone_and_delete_empty_conversation(
         client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
     )
     session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
-    transaction = client.transaction()
 
     @firestore.transactional
     def _delete_empty(transaction: Any) -> bool:
+        # The guard authorizes the owner before even reading the row. It may
+        # enroll its own row/job reads in the same transaction conflict set.
+        if transaction_guard is not None:
+            transaction_guard(transaction, None)
         snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(snapshot, 'exists', False):
             return False
         conversation = snapshot.to_dict() or {}
+        closed_empty_batch = bool(
+            server_batch_owned(conversation)
+            and (
+                (allow_empty_server_batch and conversation.get('server_batch_audio_closed') is True)
+                or (require_expired_recording_lease and conversation.get('server_batch_audio_received') is False)
+            )
+            and conversation.get('server_batch_audio_received') is False
+            and conversation.get('server_batch_audio_start') is None
+            and conversation.get('server_batch_audio_end') is None
+        )
         if (
-            conversation.get('status') != 'in_progress'
+            conversation.get('status') not in ({'in_progress', 'processing'} if closed_empty_batch else {'in_progress'})
             or conversation.get('discarded')
             or conversation.get('deleted')
             or conversation.get('is_locked')
             or conversation.get('sync_content_revision')
+            or (server_batch_owned(conversation) and not closed_empty_batch)
             or conversations_db.raw_conversation_has_content(uid, conversation)
         ):
             return False
+
+        if require_expired_recording_lease:
+            from database import conversation_finalization_jobs as jobs_db
+            from utils.conversations.lifecycle_clocks import speech_clock
+
+            now = _now()
+            speech = speech_clock(uid, conversation)
+            expiry = jobs_db.recording_session_lease_expiry(
+                transaction,
+                conversation_ref.parent.parent.collection(RECORDING_SESSIONS_COLLECTION),
+                uid,
+                conversation_id,
+                conversation,
+                now,
+            )
+            if (
+                recovery_cutoff is None
+                or speech is None
+                or speech > recovery_cutoff
+                or expiry is None
+                or expiry > now
+                or (conversation.get('external_data') or {}).get('recording_session_id') != recording_session_id
+            ):
+                return False
 
         if session_ref is not None:
             session_snapshot = session_ref.get(transaction=transaction)
@@ -316,8 +360,9 @@ def tombstone_and_delete_empty_conversation(
         transaction.delete(conversation_ref)
         return True
 
-    deleted = _delete_empty(transaction)
+    deleted = transcript_pointer.run_preloaded_transactional(client, _delete_empty)
     if deleted:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
         invalidate_people_stats_cache(uid)
     return deleted
 

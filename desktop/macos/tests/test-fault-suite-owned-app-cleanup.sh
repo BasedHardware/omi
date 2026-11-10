@@ -176,19 +176,24 @@ set -euo pipefail
 app_path="/Applications/${OMI_APP_NAME}.app"
 executable_path="$app_path/Contents/MacOS/Omi Computer"
 bundle_id="com.omi.${OMI_APP_NAME}"
-server='import http.server,json,sys; port=int(sys.argv[1]); bundle=sys.argv[2];
+server='import http.server,json,os,sys; from pathlib import Path; port=int(sys.argv[1]); bundle=sys.argv[2];
 class H(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
   body=json.dumps({"ok":True,"bundleIdentifier":bundle,"sourceIdentity":{"revision":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","schemaVersion":1,"workingTreeState":"clean"}}).encode(); self.send_response(200); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
  def log_message(self,*args): pass
-http.server.ThreadingHTTPServer(("127.0.0.1",port),H).serve_forever()'
+httpd=http.server.ThreadingHTTPServer(("127.0.0.1",port),H)
+ready=Path(os.environ["OMI_TEST_OWNED_PID_FILE"]); temporary=ready.with_name(f"{ready.name}.tmp.{os.getpid()}")
+temporary.write_text(str(os.getpid())); temporary.replace(ready)
+httpd.serve_forever()'
 # The executable path is an explicit argv value in this portable model; on macOS
 # the real `open ... --args` process exposes it as argv[0]. Both are checked by
 # the harness alongside the unguessable token.
 python3 -c "$server" "$OMI_AUTOMATION_PORT" "$bundle_id" "$executable_path" "--omi-launch-token=${OMI_DESKTOP_LAUNCH_TOKEN}" >"$OMI_TEST_SERVER_ERROR_FILE" 2>&1 &
 owned_pid=$!
-# If another local test owns the selected port, fail before writing launch
-# ownership evidence so the caller can retry with a new port.
+# The server atomically writes its PID only after bind succeeds. Waiting for
+# that latched readiness signal avoids an unconditional 100-process sleep loop
+# delaying ownership proof even while the bridge is already serving health.
+# A collision still fails before any PID/launch ownership evidence is written.
 for _ in $(seq 1 100); do
   if [[ -s "$OMI_TEST_SERVER_ERROR_FILE" ]]; then
     wait "$owned_pid" 2>/dev/null || true
@@ -198,9 +203,14 @@ for _ in $(seq 1 100); do
     wait "$owned_pid" 2>/dev/null || true
     exit 98
   fi
+  [[ -f "${OMI_TEST_OWNED_PID_FILE:?}" ]] && break
   sleep 0.01
 done
-printf '%s\n' "$owned_pid" >"${OMI_TEST_OWNED_PID_FILE:?}"
+if [[ ! -f "${OMI_TEST_OWNED_PID_FILE:?}" ]]; then
+  kill "$owned_pid" 2>/dev/null || true
+  wait "$owned_pid" 2>/dev/null || true
+  exit 98
+fi
 # Same executable path and bundle identity, but a different capability token.
 python3 -c 'import time; time.sleep(300)' "$executable_path" "--omi-launch-token=foreign-process-token" &
 foreign_pid=$!
@@ -228,7 +238,9 @@ run_case_once() {
   fi
   local status=0 harness_pid=""
   local bundle="omi-fault-owned-cleanup-${mode}-${attempt}"
-  local token="fault-owned-cleanup-token-${mode}-${attempt}-123456"
+  # Concurrent worktrees must not reuse the same ownership capability. The
+  # fixture root is unique even when both runs exercise the same mode/attempt.
+  local token="fault-owned-cleanup-token-${mode}-${attempt}-${TMP_ROOT##*.}"
   make_fixture "$fixture" "$bin_dir" "$mode"
 
   if [[ "$mode" == term ]]; then

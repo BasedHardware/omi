@@ -17,12 +17,18 @@ extension AppState {
   /// path and the preferred-microphone swap in startMicCaptureIfNeeded().
   func configureSharedCaptureWatchdog(_ service: AudioCaptureService) {
     SharedCaptureSilentMicRecoveryPolicy.configure(service)
+    service.onLiveMicRecovered = { [weak self, weak service] in
+      Task { @MainActor in
+        guard let self, let service else { return }
+        self.handleSharedMicrophoneSignalRecovered(from: service)
+      }
+    }
     service.onSilentMicDetected = { [weak self, weak service] detection in
       Task { @MainActor in
         // A swapped-out capture service (preferred-mic reapply, silent-mic
         // fallback) can still deliver a queued detection — it must not rebuild
         // the replacement service's stack.
-        guard let self, self.audioCaptureService === service else { return }
+        guard let self, let service, self.audioCaptureService === service, service.capturing else { return }
         switch detection.suggestedAction {
         case .fallbackToBuiltIn:
           await self.handleSilentMicFallback(detection: detection)

@@ -116,7 +116,7 @@
     ],
     "updated": "2026-06-20T02:27:39Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -131,7 +131,16 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -139,7 +148,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "dew9ala448r9cc",
       "component": "speech-processing",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -259,7 +271,7 @@
     ],
     "updated": "2026-06-20T02:27:41Z",
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -277,11 +289,23 @@
       "severity": "critical",
       "alert_identity": "few9anlyv16v4a",
       "component": "speech-processing",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -402,7 +426,7 @@
     ],
     "updated": "2026-06-23T01:20:17Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -417,7 +441,16 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -425,7 +458,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "bew9aeqgx2w3kf",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -550,7 +586,7 @@
     ],
     "updated": "2026-06-20T02:27:42Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -565,7 +601,16 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -573,7 +618,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "cew9aupbed0xsd",
       "component": "speech-processing",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -693,7 +741,7 @@
     ],
     "updated": "2026-06-20T02:27:42Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -708,7 +756,16 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -716,7 +773,10 @@
       "instatus_component": "speech-processing",
       "alert_identity": "eew9ai0vlsyrke",
       "component": "speech-processing",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   }
 ]

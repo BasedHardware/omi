@@ -595,4 +595,245 @@ void main() {
       service.stop();
     });
   });
+
+  _iosHealthyWatchdogPacingTests();
+}
+
+/// iOS healthy-state pacing. The unpaced 1s poll (Android, and the tests above)
+/// stays the default; these cover the deadline cap and the snap back to 1s.
+void _iosHealthyWatchdogPacingTests() {
+  group('iOS healthy-state watchdog pacing', () {
+    late FakePhoneMicHostApi host;
+    late NativeMicRecorderService service;
+    late Callbacks cb;
+
+    setUp(() {
+      host = FakePhoneMicHostApi();
+      service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false, paceHealthyChecks: true);
+      cb = Callbacks();
+    });
+
+    Future<void> startStream(DateTime Function() now) {
+      service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false, now: now, paceHealthyChecks: true);
+      return service.start(
+        onByteReceived: cb.bytes.add,
+        onRecording: () => cb.recording++,
+        onStop: () => cb.stops++,
+        onStalled: () => cb.stalls++,
+        onInterruption: cb.interruptions.add,
+      );
+    }
+
+    Future<void> startBatch(DateTime Function() now) {
+      service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false, now: now, paceHealthyChecks: true);
+      return service.startBatch(
+        onStop: () => cb.stops++,
+        onInterruption: cb.interruptions.add,
+        onBatchStalled: () => cb.batchStalls++,
+        onError: (code, message) => cb.errors.add(code),
+      );
+    }
+
+    /// The one timer the paced batch watchdog has armed. Length and duration
+    /// are the pin: a 1s periodic poll or a different healthy interval fails.
+    Duration pacedDeadline(FakeAsync async) {
+      final timers = async.pendingTimers;
+      expect(timers, hasLength(1), reason: 'paced batch watchdog arms exactly one timer');
+      return timers.single.duration;
+    }
+
+    test('stream stall still trips at the 3s deadline, not after a 5s poll', () {
+      fakeAsync((async) {
+        var now = DateTime(2026, 1, 1);
+        void elapse(Duration d) {
+          now = now.add(d);
+          async.elapse(d);
+        }
+
+        startStream(() => now);
+        async.flushMicrotasks();
+        final id = host.lastStartSessionId;
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+
+        elapse(const Duration(seconds: 2));
+        expect(cb.stalls, 0);
+        elapse(const Duration(seconds: 1));
+        expect(cb.stalls, 1, reason: 'paced checks are capped at the 3s threshold');
+
+        service.stop();
+      });
+    });
+
+    test('fresh frames keep the healthy cadence quiet, then a new gap trips at 3s', () {
+      fakeAsync((async) {
+        var now = DateTime(2026, 1, 1);
+        void elapse(Duration d) {
+          now = now.add(d);
+          async.elapse(d);
+        }
+
+        startStream(() => now);
+        async.flushMicrotasks();
+        final id = host.lastStartSessionId;
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+
+        for (var t = 1; t <= 12; t++) {
+          elapse(const Duration(seconds: 1));
+          service.onAudioFrame(Uint8List.fromList([1]), id);
+        }
+        expect(cb.stalls, 0);
+
+        elapse(const Duration(seconds: 2));
+        expect(cb.stalls, 0);
+        elapse(const Duration(seconds: 1));
+        expect(cb.stalls, 1);
+
+        service.stop();
+      });
+    });
+
+    test('batch progress every 5s does not false-stall; silence still stalls at 10s', () {
+      fakeAsync((async) {
+        var now = DateTime(2026, 1, 1);
+        void elapse(Duration d) {
+          now = now.add(d);
+          async.elapse(d);
+        }
+
+        startBatch(() => now);
+        async.flushMicrotasks();
+        final id = host.lastStartSessionId;
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+
+        for (var i = 0; i < 6; i++) {
+          elapse(const Duration(seconds: 5));
+          expect(cb.batchStalls, 0);
+          service.onBatchProgress(i.toDouble(), id);
+        }
+
+        elapse(const Duration(seconds: 9));
+        expect(cb.batchStalls, 0);
+        elapse(const Duration(seconds: 1));
+        expect(cb.batchStalls, 1, reason: '10s batch deadline is unchanged');
+
+        service.stop();
+      });
+    });
+
+    test('interruption and foreground snap back to the fast poll', () {
+      fakeAsync((async) {
+        var now = DateTime(2026, 1, 1);
+        void elapse(Duration d) {
+          now = now.add(d);
+          async.elapse(d);
+        }
+
+        startBatch(() => now);
+        async.flushMicrotasks();
+        final id = host.lastStartSessionId;
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+        service.onStateChanged(PhoneMicCaptureState.interrupted, id);
+
+        // Progress through the interruption keeps the fast poll quiet.
+        elapse(const Duration(seconds: 3));
+        service.onBatchProgress(1, id);
+        elapse(const Duration(seconds: 3));
+        service.onBatchProgress(1, id);
+        expect(cb.batchStalls, 0);
+
+        // Silence during the interruption still hits the 10s deadline.
+        elapse(const Duration(seconds: 9));
+        expect(cb.batchStalls, 0);
+        elapse(const Duration(seconds: 1));
+        expect(cb.batchStalls, 1);
+
+        service.onBatchProgress(2, id);
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+        expect(cb.batchStalls, 1);
+
+        // Foreground re-arms fast. A 10s gap from the re-arm still stalls;
+        // it must not wait out an extra healthy interval.
+        service.probeStallAfterForeground();
+        elapse(const Duration(seconds: 9));
+        expect(cb.batchStalls, 1);
+        elapse(const Duration(seconds: 1));
+        expect(cb.batchStalls, 2);
+
+        service.stop();
+      });
+    });
+
+    test('batch healthy cadence is 5s until a beat goes stale', () {
+      fakeAsync((async) {
+        var now = DateTime(2026, 1, 1);
+        void elapse(Duration d) {
+          now = now.add(d);
+          async.elapse(d);
+        }
+
+        startBatch(() => now);
+        async.flushMicrotasks();
+        final id = host.lastStartSessionId;
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+
+        expect(pacedDeadline(async), const Duration(seconds: 5));
+
+        // A beat that arrives on the healthy cadence keeps the 5s poll.
+        elapse(const Duration(seconds: 5));
+        expect(cb.batchStalls, 0);
+        service.onBatchProgress(5, id);
+        expect(pacedDeadline(async), const Duration(seconds: 5));
+
+        // Silence through the healthy interval is a stale beat: snap to 1s,
+        // still short of the 10s stall deadline.
+        elapse(const Duration(seconds: 5));
+        expect(cb.batchStalls, 0);
+        expect(pacedDeadline(async), const Duration(seconds: 1));
+
+        service.stop();
+      });
+    });
+
+    test('batch rebuild snaps the poll from 5s back to 1s', () {
+      fakeAsync((async) {
+        var now = DateTime(2026, 1, 1);
+
+        startBatch(() => now);
+        async.flushMicrotasks();
+        final id = host.lastStartSessionId;
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+        expect(pacedDeadline(async), const Duration(seconds: 5));
+
+        service.onStateChanged(PhoneMicCaptureState.rebuilding, id);
+        expect(cb.batchStalls, 0);
+        expect(pacedDeadline(async), const Duration(seconds: 1),
+            reason: 'rebuild is an anomaly; the fast poll must be armed immediately');
+
+        service.stop();
+      });
+    });
+
+    test('rebuilding grants stream grace and still stalls at 3s without frames', () {
+      fakeAsync((async) {
+        var now = DateTime(2026, 1, 1);
+        void elapse(Duration d) {
+          now = now.add(d);
+          async.elapse(d);
+        }
+
+        startStream(() => now);
+        async.flushMicrotasks();
+        final id = host.lastStartSessionId;
+        service.onStateChanged(PhoneMicCaptureState.running, id);
+        elapse(const Duration(seconds: 2));
+        service.onStateChanged(PhoneMicCaptureState.rebuilding, id);
+        elapse(const Duration(seconds: 2));
+        expect(cb.stalls, 0, reason: 'rebuild resets the stall clock');
+        elapse(const Duration(seconds: 1));
+        expect(cb.stalls, 1);
+
+        service.stop();
+      });
+    });
+  });
 }

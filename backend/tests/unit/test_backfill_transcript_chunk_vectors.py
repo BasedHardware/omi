@@ -6,6 +6,7 @@ import database.vector_db as vector_db
 from scripts import backfill_transcript_chunk_vectors as script
 from scripts.backfill_transcript_chunk_vectors import backfill_user, chunks_for
 from utils.conversations.transcript_chunks import build_transcript_chunks
+from utils.model_text import DisplayClock
 
 STARTED = datetime(2026, 3, 10, 15, 0, tzinfo=timezone.utc)
 
@@ -38,6 +39,16 @@ def test_chunks_match_what_search_readers_rebuild():
     written = chunks_for(row)
     assert written and all(reader[c['chunk_index']] == c['text'] for c in written)
     assert 'forty-seven dollars' in written[0]['text']
+
+
+def test_chunk_header_uses_and_labels_requested_clock():
+    started = datetime(2026, 9, 26, 7, 18, tzinfo=timezone.utc)
+    chunk = build_transcript_chunks(
+        [{'text': 'Morning update', 'is_user': True, 'start': 0, 'end': 1}],
+        started,
+        clock=DisplayClock.from_name('Asia/Ho_Chi_Minh'),
+    )[0]
+    assert 'Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)' in chunk['text']
 
 
 def test_ineligible_rows_are_skipped():

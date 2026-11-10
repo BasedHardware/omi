@@ -185,7 +185,7 @@ async def test_shared_recovery_policy_matrix_through_gateway(monkeypatch, stream
             200, content=b'data: ' + json.dumps(payload).encode() + b'\n\n' if stream else json.dumps(payload).encode()
         )
 
-    states = {TARGET: State.ACTIVE} if active else {}
+    states = {ptr.PT_MODEL_CURRENT: State.ACTIVE} if active else {}
     store = ReservationState()
     note_request = Mock(wraps=store.note_request)
     monkeypatch.setattr(store, 'note_request', note_request)
@@ -213,10 +213,14 @@ async def test_shared_recovery_policy_matrix_through_gateway(monkeypatch, stream
                     {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
                 )
         except ProviderFailure:
-            assert not active or case in statuses or case in {'empty', 'malformed', 'timeout', 'connection'}
-        expected = ['dedicated'] if active else []
+            assert (
+                not active or case in statuses or case in {'empty', 'malformed', 'timeout', 'connection', 'on_demand'}
+            )
+        expected = ['dedicated']  # UNKNOWN old-order evidence retains 2.5 dedicated.
         assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == expected
         assert note_request.call_count == len(seen)
         assert [call.args[1] for call in note_request.call_args_list] == expected
-        assert all(f'/models/{TARGET}:' in str(r.url) for r in seen)
-        assert (TARGET in store._positive) == (active and case == 'valid')
+        expected_model = ptr.PT_MODEL_CURRENT
+        assert all(f'/models/{expected_model}:' in str(r.url) for r in seen)
+        assert (ptr.PT_MODEL_CURRENT in store._positive) == (case == 'valid')
+        assert TARGET not in store._positive

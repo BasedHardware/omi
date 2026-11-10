@@ -78,6 +78,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         deviceConnected: context.read<DeviceProvider>().isConnected,
         supportLinks: PlatformService.isIntercomSupported,
         android: PlatformService.isAndroid,
+        rememberedDevice: context.read<DeviceProvider>().hasRememberedDevice,
       );
 
   // ---------------------------------------------------------------------------------------------
@@ -113,9 +114,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     return currentPlanDisplayName(context, usage.subscription);
   }
 
+  /// Free readers who can still start a trial get Pocket's Upgrade row above Plan & Usage.
+  bool _showUpgradeRow(UsageProvider usage) {
+    final subscription = usage.subscription;
+    if (subscription == null || subscription.subscription.plan.isPaid) return false;
+    if (subscription.trialEligible != true) return false;
+    return usage.showSubscriptionUI;
+  }
+
   Widget _buildSettings(BuildContext context) {
     final l10n = context.l10n;
-    final planValue = _planValue(context.watch<UsageProvider>());
+    final usage = context.watch<UsageProvider>();
+    final planValue = _planValue(usage);
+    final showUpgrade = _showUpgradeRow(usage);
     final prefs = SharedPreferencesUtil();
     final name = prefs.givenName;
     final email = prefs.email;
@@ -137,6 +148,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         // Plan, referrals and feedback stay one tap from the sheet (David, 2026-09-24).
         OmiSettingsGroup(
           children: [
+            if (showUpgrade)
+              _row(
+                SettingsDestination.upgrade,
+                key: 'settings_row_upgrade',
+                icon: FontAwesomeIcons.crown,
+                title: l10n.upgrade,
+                subtitle: l10n.settingsUpgradeTrialSubtitle(7),
+              ),
             _row(
               SettingsDestination.planAndUsage,
               key: 'settings_row_planAndUsage',
@@ -186,6 +205,12 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               icon: FontAwesomeIcons.networkWired,
               title: l10n.integrations,
               tag: SettingsTag(l10n.beta, OmiColors.warning),
+            ),
+            _row(
+              SettingsDestination.connectAgent,
+              key: 'settings_row_connect_agent',
+              icon: FontAwesomeIcons.terminal,
+              title: l10n.connectAnAgent,
             ),
             _row(
               SettingsDestination.privacyGroup,
@@ -270,39 +295,47 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   Widget _buildHeader(BuildContext context) {
     final l10n = context.l10n;
     if (_isSearching) {
-      return Padding(
+      // One header height (48 pt) and 20 pt left padding (OmiSpacing.lg) so opening search
+      // never shifts the settings rows below it and the field aligns with the cards (#19241).
+      return SizedBox(
         key: const ValueKey('search-header'),
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.xs, OmiSpacing.xs),
-        child: Row(
-          children: [
-            Expanded(
-              child: OmiSearchField(
-                placeholder: l10n.searchSettings,
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                autofocus: true,
-                onChanged: (value) => setState(() => _searchQuery = value),
+        height: 48,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.xs, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: OmiSearchField(
+                  placeholder: l10n.searchSettings,
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  autofocus: true,
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                ),
               ),
-            ),
-            OmiButton.tertiary(label: l10n.cancel, size: OmiButtonSize.compact, onPressed: _stopSearch),
-          ],
+              OmiButton.tertiary(label: l10n.cancel, size: OmiButtonSize.compact, onPressed: _stopSearch),
+            ],
+          ),
         ),
       );
     }
-    return Padding(
+    return SizedBox(
       key: const ValueKey('normal-header'),
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
-      child: Row(
-        children: [
-          OmiIconButton(icon: const Icon(Icons.search), label: l10n.search, onPressed: _startSearch),
-          Expanded(
-            child: Semantics(
-              header: true,
-              child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
+      height: 48,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+        child: Row(
+          children: [
+            OmiIconButton(icon: const Icon(Icons.search), label: l10n.search, onPressed: _startSearch),
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
+              ),
             ),
-          ),
-          const OmiCloseButton(),
-        ],
+            const OmiCloseButton(),
+          ],
+        ),
       ),
     );
   }

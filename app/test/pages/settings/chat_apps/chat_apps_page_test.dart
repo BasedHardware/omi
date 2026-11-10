@@ -8,6 +8,7 @@ import 'package:omi/pages/settings/chat_apps/chat_apps_page.dart';
 import 'package:omi/pages/settings/chat_apps/channel_link_waiter.dart';
 import 'package:omi/pages/settings/chat_apps/imessage_connect_sheet.dart';
 import 'package:omi/providers/messaging_channels_provider.dart';
+import 'package:omi/ui/ui.dart';
 
 import 'chat_apps_fixture.dart';
 
@@ -81,7 +82,7 @@ void main() {
         ..links = [linkJson(id: linkIdIMessage, channel: 'imessage', externalId: '+15550100')];
       await pumpPage(tester, backend: backend, plan: PlanType.basic);
       expect(find.byKey(const ValueKey('chat_apps_pro_card')), findsOneWidget);
-      expect(find.text('Chat apps are part of Pro'), findsOneWidget);
+      expect(find.text('Chat apps are part of Omi Pro'), findsOneWidget);
       expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget); // Telegram is locked.
       expect(find.text('Connected as +15550100'), findsOneWidget);
       expect(find.text('Connect'), findsNothing);
@@ -163,6 +164,44 @@ void main() {
     });
   });
 
+  group('WhatsApp connect', () {
+    testWidgets('a configured number replaces the waitlist with the code flow', (tester) async {
+      const config = ChatAppsConfig(
+        enabled: true,
+        endpoints: {
+          ChatChannel.telegram: telegramEndpoint,
+          ChatChannel.imessage: imessageEndpoint,
+          ChatChannel.whatsapp: ChatChannelEndpoint(provider: 'keiki', address: '+15550100200'),
+        },
+      );
+      final backend = await pumpPage(tester, config: config);
+      expect(find.text('Notify Me'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('chat_apps_row_whatsapp')));
+      await settle(tester);
+      expect(find.text('Text Omi to connect'), findsOneWidget);
+      expect(find.textContaining('Hi Omi, link code 9F2C4A7B'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('chat_apps_open_messages')));
+      await settle(tester);
+      expect(launched.single.host, 'wa.me');
+      expect(launched.single.path, '/15550100200');
+      expect(launched.single.toString(), contains('link%20code%209F2C4A7B'));
+      expect(find.text('Send the message in WhatsApp. This screen updates as soon as Omi gets it.'), findsOneWidget);
+      expect(find.text('Open WhatsApp'), findsOneWidget);
+
+      backend.links = [linkJson(id: linkIdIMessage, channel: 'whatsapp', externalId: 'wa:+15550100')];
+      await tester.pump(const Duration(milliseconds: 150));
+      await settle(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('WhatsApp is connected'), findsOneWidget);
+    });
+
+    testWidgets('without a configured number WhatsApp stays a waitlist', (tester) async {
+      await pumpPage(tester);
+      expect(find.text('Notify Me'), findsOneWidget);
+    });
+  });
+
   group('iMessage connect', () {
     testWidgets('prefills Messages with the code, then waits and connects', (tester) async {
       final backend = await pumpPage(tester);
@@ -187,6 +226,25 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('iMessage is connected'), findsOneWidget);
       expect(find.text('Open Messages'), findsOneWidget);
+    });
+
+    testWidgets('Open Messages after connecting texts the assigned line, not the flag address', (tester) async {
+      final backend = await pumpPage(tester);
+      backend.proofAddress = '+15550100222';
+      await tester.tap(find.byKey(const ValueKey('chat_apps_row_imessage')));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('chat_apps_open_messages')));
+      await settle(tester);
+      expect(launched.single.toString(), contains('+15550100222'));
+
+      backend.links = [linkJson(id: linkIdIMessage, channel: 'imessage', externalId: '+15550100')];
+      await tester.pump(const Duration(milliseconds: 150));
+      await settle(tester);
+      await tester.pumpAndSettle();
+      launched.clear();
+      await tester.tap(find.byKey(const ValueKey('chat_apps_open_connected')));
+      await settle(tester);
+      expect(launched.single.toString(), contains('+15550100222'));
     });
 
     testWidgets('an expired code offers a new one', (tester) async {
@@ -228,6 +286,142 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('chat_apps_whatsapp_notify')));
       await settle(tester);
       expect(find.text('On the List'), findsWidgets);
+    });
+  });
+
+  group('Availability', () {
+    OmiSettingsRow row(WidgetTester tester, String channel) =>
+        tester.widget<OmiSettingsRow>(find.byKey(ValueKey('chat_apps_row_$channel')));
+
+    Future<FakeMessagingBackend> pumpWith(
+      WidgetTester tester,
+      Map<String, Map<String, dynamic>> availability, {
+      PlanType plan = PlanType.operator,
+    }) =>
+        pumpPage(tester, backend: FakeMessagingBackend()..availability = availability, plan: plan);
+
+    testWidgets('available on both: today\'s connect flow', (tester) async {
+      await pumpWith(tester, {
+        'telegram': availabilityJson(available: true),
+        'imessage': availabilityJson(available: true),
+      });
+      expect(find.text('Connect'), findsNWidgets(2));
+      await tester.tap(find.byKey(const ValueKey('chat_apps_row_imessage')));
+      await settle(tester);
+      expect(find.text('Text Omi to connect'), findsOneWidget);
+    });
+
+    testWidgets('paid_plan keeps the Pro lock even if the plan has not loaded', (tester) async {
+      final backend = FakeMessagingBackend()
+        ..availability = {
+          'telegram': availabilityJson(reason: 'paid_plan'),
+          'imessage': availabilityJson(reason: 'paid_plan'),
+        };
+      await pumpPage(tester, backend: backend, plan: null);
+      expect(find.byIcon(Icons.lock_outline_rounded), findsNWidgets(2));
+      expect(find.text('Connect'), findsNothing);
+    });
+
+    testWidgets('channel_plan: iMessage offers an upgrade, Telegram still connects', (tester) async {
+      await pumpWith(
+          tester,
+          {
+            'telegram': availabilityJson(available: true),
+            'imessage': availabilityJson(reason: 'channel_plan'),
+          },
+          plan: PlanType.plus);
+      expect(find.text('Available on Omi Pro'), findsOneWidget);
+      expect(find.text('Upgrade'), findsOneWidget);
+      expect(row(tester, 'imessage').onTap, isNotNull);
+      expect(find.text('Connect'), findsOneWidget);
+      expect(find.byIcon(Icons.lock_outline_rounded), findsNothing);
+    });
+
+    testWidgets('seat_cap: Join Waitlist mints, takes the 409 as success, then shows waitlisted', (tester) async {
+      final backend = await pumpWith(tester, {
+        'telegram': availabilityJson(available: true),
+        'imessage': availabilityJson(reason: 'seat_cap'),
+      });
+      backend.seatCapped.add('imessage');
+      expect(find.text('iMessage is at capacity'), findsOneWidget);
+      expect(find.text('Join Waitlist'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('chat_apps_row_imessage')));
+      await settle(tester);
+      expect(backend.count('POST', 'v1/messaging/link-proofs'), 1);
+      expect(find.text("You're on the waitlist. We'll let you know when there's room."), findsOneWidget);
+      expect(find.text("You're on the waitlist"), findsOneWidget);
+      expect(find.text('Join Waitlist'), findsNothing);
+      expect(find.text('Something went wrong. Try again.'), findsNothing);
+      expect(row(tester, 'imessage').onTap, isNull);
+    });
+
+    testWidgets('seat_cap already waitlisted: no button', (tester) async {
+      await pumpWith(tester, {
+        'telegram': availabilityJson(available: true),
+        'imessage': availabilityJson(reason: 'seat_cap', waitlisted: true),
+      });
+      expect(find.text("You're on the waitlist"), findsOneWidget);
+      expect(find.text('On the List'), findsOneWidget);
+      expect(find.text('Join Waitlist'), findsNothing);
+      expect(row(tester, 'imessage').onTap, isNull);
+    });
+
+    for (final reason in ['channel_disabled', 'unavailable', 'account_deletion']) {
+      testWidgets('$reason reads as coming soon', (tester) async {
+        await pumpWith(tester, {
+          'telegram': availabilityJson(reason: reason),
+          'imessage': availabilityJson(available: true),
+        });
+        expect(find.text('Coming Soon'), findsOneWidget);
+        expect(row(tester, 'telegram').onTap, isNull);
+        expect(find.text('Connect'), findsOneWidget);
+      });
+    }
+
+    testWidgets('a channel the flag hides stays coming soon whatever availability says', (tester) async {
+      final backend = FakeMessagingBackend()
+        ..availability = {
+          'telegram': availabilityJson(available: true),
+          'imessage': availabilityJson(reason: 'seat_cap'),
+        };
+      await pumpPage(tester,
+          backend: backend,
+          config: const ChatAppsConfig(enabled: true, endpoints: {ChatChannel.telegram: telegramEndpoint}));
+      expect(find.text('Coming Soon'), findsOneWidget);
+      expect(find.text('Join Waitlist'), findsNothing);
+    });
+
+    testWidgets('a 409 on a normal iMessage connect closes the sheet into the waitlist state', (tester) async {
+      final backend = await pumpWith(tester, {
+        'telegram': availabilityJson(available: true),
+        'imessage': availabilityJson(available: true),
+      });
+      backend.seatCapped.add('imessage');
+      await tester.tap(find.byKey(const ValueKey('chat_apps_row_imessage')));
+      await settle(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Text Omi to connect'), findsNothing);
+      expect(find.byKey(const ValueKey('chat_apps_problem_failed')), findsNothing);
+      expect(find.text("You're on the waitlist. We'll let you know when there's room."), findsOneWidget);
+      expect(find.text("You're on the waitlist"), findsOneWidget);
+    });
+
+    testWidgets('a 409 on a Telegram connect closes the sheet into the waitlist state', (tester) async {
+      final backend = await pumpWith(tester, {
+        'telegram': availabilityJson(available: true),
+        'imessage': availabilityJson(available: true),
+      });
+      backend.seatCapped.add('telegram');
+      await tester.tap(find.byKey(const ValueKey('chat_apps_row_telegram')));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('chat_apps_open_telegram')));
+      await settle(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Connect Telegram'), findsNothing);
+      expect(find.text('Telegram is at capacity'), findsNothing);
+      expect(find.text("You're on the waitlist"), findsOneWidget);
+      expect(launched, isEmpty);
     });
   });
 }

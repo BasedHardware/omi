@@ -40,6 +40,7 @@ Rollback: ``ACTION_ITEMS_LIST_CACHE_TTL_SECONDS=0`` disables the cache entirely
 from __future__ import annotations
 
 import hashlib
+from functools import lru_cache
 import json
 import logging
 import os
@@ -48,6 +49,7 @@ from typing import Any, Dict, Optional
 import redis as redis_pkg
 
 from database import redis_db
+from config.firestore_read_levers import lever_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,7 @@ logger = logging.getLogger(__name__)
 # misconfigured value cannot make the list arbitrarily stale.
 _TTL_MAX_SECONDS = 300
 _TTL_DEFAULT_SECONDS = 30
+_PAGE_LEVER_DEFAULT_TTL_SECONDS = 120
 
 # The version counter must outlive any response entry by a wide margin: if it
 # expired while a cached page was still live, the counter would restart at 1 and
@@ -65,7 +68,13 @@ _VERSION_KEY_PREFIX = 'ail:ver'
 _ENTRY_KEY_PREFIX = 'ail'
 
 
-def list_cache_ttl_seconds() -> int:
+@lru_cache(maxsize=1)
+def _redis():
+    """Lazy, bounded I/O for every best-effort cache operation."""
+    return redis_db.create_bounded_redis_client(0.1)
+
+
+def list_cache_ttl_seconds(uid: str = '') -> int:
     """Read the TTL at call time so the env var is a live operational knob."""
     raw = os.getenv('ACTION_ITEMS_LIST_CACHE_TTL_SECONDS', str(_TTL_DEFAULT_SECONDS)).strip()
     try:
@@ -75,7 +84,19 @@ def list_cache_ttl_seconds() -> int:
         return _TTL_DEFAULT_SECONDS
     if ttl <= 0:
         return 0
-    return min(ttl, _TTL_MAX_SECONDS)
+    if uid and lever_enabled('action_items_page', uid):
+        # Version-bumped on every write, so a longer TTL only lengthens reuse of an
+        # unchanged list. Lever action_items_ttl120 lifts the default to 120s, cutting the
+        # repeat-poll misses of the 30s base (cl2-infracost 2026-11-04).
+        override = os.getenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', str(ttl)).strip()
+        try:
+            ttl = int(override)
+        except ValueError:
+            logger.warning('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS is not an integer; using base TTL')
+        if ttl > 0 and lever_enabled('action_items_ttl120', uid):
+            # Wins over the deployed page override (30s in prod); 0 still disables.
+            ttl = max(ttl, _PAGE_LEVER_DEFAULT_TTL_SECONDS)
+    return max(0, min(ttl, _TTL_MAX_SECONDS))
 
 
 def _version_key(uid: str) -> str:
@@ -93,7 +114,7 @@ def bump_action_items_list_version(uid: str) -> None:
         return
     try:
         key = _version_key(uid)
-        pipe = redis_db.r.pipeline()
+        pipe = _redis().pipeline()
         pipe.incr(key)
         pipe.expire(key, _VERSION_TTL_SECONDS)
         pipe.execute()
@@ -108,7 +129,7 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
     as version 0, which is a legitimate never-written-yet user.
     """
     try:
-        raw = redis_db.r.get(_version_key(uid))
+        raw = _redis().get(_version_key(uid))
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: version read failed uid=%s: %s', uid, e)
         return None
@@ -137,7 +158,7 @@ def compute_etag(body: Dict[str, Any]) -> str:
 def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
     """Return ``{"etag": str, "body": dict}`` or ``None``. Never raises."""
     try:
-        raw = redis_db.r.get(key)
+        raw = _redis().get(key)
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: read failed: %s', e)
         return None
@@ -157,7 +178,7 @@ def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) ->
     if ttl <= 0:
         return
     try:
-        redis_db.r.set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=ttl)
+        _redis().set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=ttl)
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: write failed: %s', e)
     except (TypeError, ValueError) as e:

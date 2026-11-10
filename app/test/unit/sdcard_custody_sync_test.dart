@@ -61,10 +61,11 @@ class _FakeLocalSync implements LocalWalSync {
 }
 
 class _FakeSdCard implements DeviceConnection {
-  _FakeSdCard({required this.packets, this.clearAccepted = true});
+  _FakeSdCard({required this.packets, this.clearAccepted = true, this.onCancel});
 
   final List<List<int>> packets;
   final bool clearAccepted;
+  final Future<void> Function()? onCancel;
   final writes = <List<int>>[];
   void Function(List<int>)? _onBytes;
   int firstWriteEvent = -1;
@@ -78,7 +79,9 @@ class _FakeSdCard implements DeviceConnection {
     required void Function(List<int>) onStorageBytesReceived,
   }) async {
     _onBytes = onStorageBytesReceived;
-    return null;
+    return onCancel == null
+        ? null
+        : StreamController<List<int>>(onCancel: onCancel).stream.listen(onStorageBytesReceived);
   }
 
   @override
@@ -178,6 +181,118 @@ void main() {
     return sync;
   }
 
+  for (final firmware in ['3.0.10', '3.0.16']) {
+    for (final ack in [
+      [1, 6],
+      [3],
+      [6]
+    ]) {
+      test('$firmware rejection $ack fails immediately and cannot retry until reconnect', () async {
+        final wal = makeWal(totalBytes: 80);
+        final local = _FakeLocalSync();
+        final card = _FakeSdCard(packets: [ack]);
+        final sync = syncWith(local, card, wal, firmware: firmware);
+        final rejected = throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'reason',
+          contains('SD read rejected by device: status=0x'),
+        ));
+
+        await expectLater(sync.syncWal(wal: wal).timeout(const Duration(seconds: 1)), rejected);
+        expect(wal.status, WalStatus.miss);
+        expect(wal.isSyncing, isFalse);
+        expect(sync.isSyncing, isFalse);
+        expect(local.added, isEmpty);
+        expect(card.cleared, isFalse);
+        expect(card.writes, [
+          [1, 0, 0]
+        ]);
+
+        await expectLater(sync.syncAll().timeout(const Duration(seconds: 1)), rejected);
+        await expectLater(sync.syncWal(wal: wal).timeout(const Duration(seconds: 1)), rejected);
+        expect(card.writes, hasLength(1), reason: 'no retry on the same connection');
+
+        sync.setDevice(null);
+        sync.testDevice = BtDevice(
+          id: 'devkit-1',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -40,
+          firmwareRevision: firmware,
+        );
+        sync.testWals = [wal];
+        await expectLater(sync.syncWal(wal: wal).timeout(const Duration(seconds: 1)), rejected);
+        expect(card.writes, hasLength(2), reason: 'disconnect clears the rejection latch');
+      });
+    }
+  }
+
+  for (final firmware in ['3.0.10', '3.0.16']) {
+    for (final ack in [
+      [1, 6],
+      [6]
+    ]) {
+      test('$firmware rejection $ack survives disconnect during stream cancellation', () async {
+        final cancelling = Completer<void>();
+        final cancelled = Completer<void>();
+        final wal = makeWal(totalBytes: 80);
+        final local = _FakeLocalSync();
+        final card = _FakeSdCard(
+            packets: [ack],
+            onCancel: () {
+              cancelling.complete();
+              return cancelled.future;
+            });
+        final sync = syncWith(local, card, wal, firmware: firmware);
+        final result = expectLater(
+          sync.syncWal(wal: wal).timeout(const Duration(seconds: 1)),
+          throwsA(isA<StateError>().having((e) => e.message, 'reason', contains('status=0x06'))),
+        );
+
+        await cancelling.future.timeout(const Duration(seconds: 1));
+        sync.setDevice(null);
+        cancelled.complete();
+        await result;
+
+        expect(wal.status, WalStatus.miss);
+        expect(wal.isSyncing, isFalse);
+        expect(sync.isSyncing, isFalse);
+        expect(local.added, isEmpty);
+        expect(
+            card.writes,
+            [
+              [1, 0, 0]
+            ],
+            reason: 'never clear a rejected recording');
+      });
+    }
+
+    test('$firmware accepts a zero ACK and still completes a normal legacy read', () async {
+      final wal = makeWal(totalBytes: 80, seconds: 1);
+      final local = _FakeLocalSync();
+      final card = _FakeSdCard(packets: [
+        [1, 0],
+        _legacyPacket(10),
+        [100]
+      ]);
+      final sync = syncWith(local, card, wal, firmware: firmware);
+      await sync.syncWal(wal: wal);
+      expect(wal.status, WalStatus.synced);
+      expect(local.added, hasLength(1));
+      expect(card.cleared, isTrue);
+    });
+  }
+
+  test('ring firmware rejects direct legacy start and read without consulting the device', () async {
+    final wal = makeWal(totalBytes: 80);
+    final card = _FakeSdCard(packets: []);
+    final sync = syncWith(_FakeLocalSync(), card, wal, firmware: '3.0.21');
+    await sync.start();
+    expect(await sync.getMissingWals(), isEmpty);
+    await expectLater(sync.syncWal(wal: wal), throwsStateError);
+    expect(card.writes, isEmpty);
+  });
+
   test('admission is consulted before any chunk file is written; refusal writes nothing and keeps the card', () async {
     const packets = 5; // 5 * 80 bytes of legacy packets
     final wal = makeWal(totalBytes: packets * 80, seconds: 1);
@@ -241,7 +356,7 @@ void main() {
 
   test('a failed chunk keeps the restart cursor at the original offset and the card intact', () async {
     const frameLen = 40;
-    const epochMarker = 1700000000;
+    const epochMarker = 1767225600; // 2026-01-02T00:00:00Z — inside the plausibility window
     final wal = makeWal(totalBytes: 3 * 440, seconds: 1);
     final local = _FakeLocalSync()..failOnChunk = 2;
     final card = _FakeSdCard(
@@ -281,7 +396,7 @@ void main() {
 
   test('marker path: timestamp marker splits chunks and applies its epoch to the next segment', () async {
     const frameLen = 40;
-    const epochMarker = 1700000000;
+    const epochMarker = 1767225600; // 2026-01-02T00:00:00Z — inside the plausibility window
     final packets = <List<int>>[
       _packed440(List.filled(2, frameLen)),
       _packed440(List.filled(2, frameLen)),
@@ -303,5 +418,111 @@ void main() {
     expect(local.added[1].timerStart, epochMarker);
     expect(card.cleared, isTrue);
     expect(wal.status, WalStatus.synced);
+  });
+
+  test('marker path: a years-in-the-future marker is ignored and the recording is not split', () async {
+    const frameLen = 40;
+    const bogusFutureEpoch = 2051222400; // 2035-01-01 — audio bytes, not a clock
+    final packets = <List<int>>[
+      _packed440(List.filled(2, frameLen)),
+      _packed440(List.filled(2, frameLen)),
+      _packed440(List.filled(3, frameLen), markerEpoch: bogusFutureEpoch, markerAt: 0),
+      [100],
+    ];
+    final wal = makeWal(totalBytes: 3 * 440, seconds: 1);
+    wal.timerStart = 1111;
+    final local = _FakeLocalSync();
+    final card = _FakeSdCard(packets: packets);
+    final sync = syncWith(local, card, wal, firmware: '3.0.17');
+
+    await sync.syncWal(wal: wal);
+
+    expect(local.added, hasLength(1), reason: 'a garbage marker must not split the recording');
+    expect(local.added.first.totalFrames, 7);
+    expect(local.added.first.timerStart, 1111, reason: 'the estimated clock stays');
+    expect(card.cleared, isTrue);
+    expect(wal.status, WalStatus.synced);
+  });
+
+  test('marker path: a pre-2024 marker is ignored and the recording is not split', () async {
+    const frameLen = 40;
+    const bogusPastEpoch = 1700000000; // 2023-11-14 — before the plausibility floor
+    final packets = <List<int>>[
+      _packed440(List.filled(2, frameLen)),
+      _packed440(List.filled(2, frameLen)),
+      _packed440(List.filled(3, frameLen), markerEpoch: bogusPastEpoch, markerAt: 0),
+      [100],
+    ];
+    final wal = makeWal(totalBytes: 3 * 440, seconds: 1);
+    wal.timerStart = 1111;
+    final local = _FakeLocalSync();
+    final card = _FakeSdCard(packets: packets);
+    final sync = syncWith(local, card, wal, firmware: '3.0.17');
+
+    await sync.syncWal(wal: wal);
+
+    expect(local.added, hasLength(1), reason: 'a garbage past marker must not split the recording either');
+    expect(local.added.first.totalFrames, 7);
+    expect(local.added.first.timerStart, 1111);
+    expect(card.cleared, isTrue);
+    expect(wal.status, WalStatus.synced);
+  });
+
+  test('markerEpochPlausible accepts the floor and rejects garbage on both sides', () {
+    final now = DateTime.utc(2026, 10, 27);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(1704067200, now: now), isTrue, reason: '2024-01-01 is the floor');
+    expect(SDCardWalSyncImpl.markerEpochPlausible(1704067199, now: now), isFalse);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(0, now: now), isFalse);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(-1, now: now), isFalse);
+    // now + 1 day is the ceiling; beyond it a value cannot be a real clock.
+    final nowSeconds = now.millisecondsSinceEpoch ~/ 1000;
+    expect(SDCardWalSyncImpl.markerEpochPlausible(nowSeconds + 24 * 60 * 60, now: now), isTrue);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(nowSeconds + 24 * 60 * 60 + 1, now: now), isFalse);
+    expect(SDCardWalSyncImpl.markerEpochPlausible(2051222400, now: now), isFalse, reason: '2035 is not a clock');
+  });
+
+  test('a recording opened before a reconnect still transfers the relisted recording', () async {
+    const packets = 3;
+    final opened = makeWal(totalBytes: packets * 80, seconds: 1);
+    final local = _FakeLocalSync();
+    final card = _FakeSdCard(
+      packets: [
+        for (var i = 0; i < packets; i++) _legacyPacket(10),
+        [100],
+      ],
+    );
+    final sync = syncWith(local, card, opened);
+    // The reconnect's setDevice() lists the same recording again as a new Wal.
+    final relisted = makeWal(totalBytes: packets * 80, seconds: 1);
+    sync.testWals = [relisted];
+
+    await sync.syncWal(wal: opened);
+
+    expect(local.added, hasLength(1));
+    expect(card.cleared, isTrue);
+    expect(relisted.status, WalStatus.synced);
+    expect(relisted.isSyncing, isFalse);
+  });
+
+  test('a recording the sync does not list fails the transfer and leaves the card untouched', () async {
+    final listed = makeWal(totalBytes: 3 * 80, seconds: 1);
+    final local = _FakeLocalSync();
+    final card = _FakeSdCard(
+      packets: [
+        _legacyPacket(10),
+        [100],
+      ],
+    );
+    final sync = syncWith(local, card, listed);
+    final unlisted = makeWal(totalBytes: 3 * 80, seconds: 1)..timerStart = 2000;
+    // The phone copy of the listed recording shares its id.
+    final phoneCopy = makeWal(totalBytes: 3 * 80, seconds: 1)..storage = WalStorage.disk;
+
+    await expectLater(sync.syncWal(wal: unlisted), throwsA(isA<Exception>()));
+    await expectLater(sync.syncWal(wal: phoneCopy), throwsA(isA<Exception>()));
+
+    expect(card.writes, isEmpty);
+    expect(local.added, isEmpty);
+    expect(listed.status, WalStatus.miss);
   });
 }

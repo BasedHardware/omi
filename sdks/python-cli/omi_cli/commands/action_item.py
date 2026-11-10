@@ -9,9 +9,10 @@ import typer
 from rich.markup import escape
 
 from omi_cli.client import path_segment
-from omi_cli.datetime_options import ISO_DATETIME_FORMATS
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS, as_utc
 from omi_cli.errors import NotFoundError, UsageError
 from omi_cli.output import shorten
+from omi_cli.validation import bounded_text
 
 if TYPE_CHECKING:
     from omi_cli.main import AppContext
@@ -41,6 +42,12 @@ def list_action_items(
     offset: int = typer.Option(0, "--offset", min=0),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if start_date is not None and end_date is not None and as_utc(start_date) > as_utc(end_date):
+        raise UsageError(
+            message="Invalid date range",
+            detail="--start-date cannot be later than --end-date.",
+        )
+
     params: dict[str, object] = {"limit": limit, "offset": offset}
     if completed is not None:
         params["completed"] = completed
@@ -58,16 +65,20 @@ def list_action_items(
         ctx.renderer.emit(items)
         return
     rows = []
-    for it in items or []:
-        rows.append(
-            {
-                "id": it.get("id"),
-                "completed": it.get("completed"),
-                "description": shorten(it.get("description"), 60),
-                "due_at": it.get("due_at"),
-                "created_at": it.get("created_at"),
-            }
-        )
+    if isinstance(items, list):
+        for it in items:
+            if isinstance(it, dict):
+                rows.append(
+                    {
+                        "id": it.get("id"),
+                        "completed": it.get("completed"),
+                        "description": shorten(it.get("description"), 60),
+                        "due_at": it.get("due_at"),
+                        "created_at": it.get("created_at"),
+                    }
+                )
+    elif items is not None:
+        ctx.renderer.warn("Unexpected API response envelope; expected a list.")
     ctx.renderer.emit(rows, columns=_LIST_COLUMNS, title=f"action items (limit={limit})")
 
 
@@ -89,10 +100,10 @@ def get_action_item(
         max_offset = 10_000
         while offset <= max_offset:
             page = client.get("/v1/dev/user/action-items", params={"limit": page_size, "offset": offset})
-            if not page:
+            if not page or not isinstance(page, list):
                 break
             for item in page:
-                if item.get("id") == action_item_id:
+                if isinstance(item, dict) and item.get("id") == action_item_id:
                     ctx.renderer.emit(item, title="action item")
                     return
             offset += page_size
@@ -109,6 +120,7 @@ def create_action_item(
     due_at: Optional[datetime] = typer.Option(None, "--due-at", formats=ISO_DATETIME_FORMATS, help="ISO datetime."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    description = bounded_text(description, label="description")
     body: dict[str, object] = {"description": description, "completed": completed}
     if due_at is not None:
         body["due_at"] = due_at.isoformat()
@@ -130,9 +142,14 @@ def update_action_item(
     ctx = _ctx(typer_ctx)
     if clear_due_at and due_at is not None:
         raise UsageError(message="Conflicting options", detail="--due-at and --clear-due-at are mutually exclusive.")
+    if description is not None and not description.strip():
+        raise UsageError(
+            message="Invalid description",
+            detail="Description cannot be empty or whitespace.",
+        )
     body: dict[str, object] = {}
     if description is not None:
-        body["description"] = description
+        body["description"] = bounded_text(description, label="description")
     if completed is not None:
         body["completed"] = completed
     if clear_due_at:
@@ -172,7 +189,7 @@ def delete_action_item(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete action item {action_item_id}?", abort=True)
+        typer.confirm(f"Delete action item {action_item_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/action-items/{path_segment(action_item_id)}")
     if ctx.renderer.json_mode:
