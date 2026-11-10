@@ -145,8 +145,8 @@ rechecks repair eligibility and transcript revision. No new finalization job or
 revision is manufactured. The original backfill worker binding is retained.
 
 Default worst-case document-read budget, excluding transaction retries: 100 scan reads
-+ 1 cursor claim + 1 cursor finish + 10 × 8 admission reads = **182 per winning
-tick, 131,040/day** at the existing scheduled two-minute cadence. At the maximum
++ 1 cursor claim + 1 cursor finish + 8 × 8 admission reads = **166 per winning
+tick, 119,520/day** at the existing scheduled two-minute cadence. At the maximum
 configured 60 attempts, the same formula is 582 reads/tick; owner shares and
 short pages can lower actual work. These are calculated ceilings, not measured
 throughput or spend. Duplicate scheduler deliveries cost one cursor read each and are refused by the durable
