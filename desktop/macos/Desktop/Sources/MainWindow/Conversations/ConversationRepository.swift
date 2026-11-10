@@ -605,12 +605,11 @@ final class ConversationRepository {
   /// Replace a conversation in local state with a freshly-fetched server
   /// version. Used after reprocess so the row sees the new `status` and full
   /// `structured` payload (not just title), which matters when reprocess
-  /// transitions a `.failed` conversation back to `.completed`.
+  /// restarts processing or completes. Unlike ordinary detail reads, this response
+  /// acknowledges recovery even when it omits the list-only `home_step` field.
   func replace(_ conversation: ServerConversation) {
-    let conversation = ConversationReconciliationPolicy.retainingHomeFailure(
-      server: conversation, current: conversations.first { $0.id == conversation.id })
     let session = cacheWriteScope.capture()
-    replaceVisible(conversation)
+    replaceVisible(conversation, preserveHomeFailure: false)
     emit(.server)
     Task {
       try? await local.store(conversation, scope: cacheWriteScope, generation: session)
@@ -835,7 +834,7 @@ final class ConversationRepository {
     )
   }
 
-  private func replaceVisible(_ conversation: ServerConversation) {
+  private func replaceVisible(_ conversation: ServerConversation, preserveHomeFailure: Bool = true) {
     guard matchesCurrentQuery(conversation) else {
       let removedVisibleRow = conversations.contains { $0.id == conversation.id }
       conversations.removeAll { $0.id == conversation.id }
@@ -858,8 +857,10 @@ final class ConversationRepository {
     {
       return
     }
-    conversations[index] = ConversationReconciliationPolicy.retainingHomeFailure(
-      server: conversation, current: existing)
+    conversations[index] =
+      preserveHomeFailure
+      ? ConversationReconciliationPolicy.retainingHomeFailure(server: conversation, current: existing)
+      : conversation
   }
 
   private func matchesCurrentQuery(_ conversation: ServerConversation) -> Bool {

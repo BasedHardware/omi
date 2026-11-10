@@ -88,3 +88,31 @@ Web and native Activity retain account-scoped failures from loaded Home pages an
 Final filter-supplement verification (2026-11-10 13:34Z, code checkpoint 7e9c6f6af99faae6f2445eeeee81e072a5931a8a): all 88 repository preflight checks pass; 1,039 web Vitest tests with typecheck/smoke and 103 selected native tests pass. The main revert required by relay 714b03 has not landed, so no follow-up push/full push hook has occurred. See handoff.md for exact remaining integration and publication steps. All local test/render/watcher processes have ended.
 
 Post-revert integration: #25037 landed as d24d101cae0239838413bf537a80d5d68cf52018. Fresh main 35e63b5d701f94396cd166ef22db8df37aa947d4 was merged in 474edfb1b3efe9e6902e005c0699df9bee8627c1 with the adapted #25013 source/test/changelog files preserved exactly from the tested checkpoint. Old rejected Home screenshots remain deleted. This supersedes the earlier blocked status; post-integration test and normal push-hook results are recorded in the PR body. Anx is intentionally skipped at refactor-lead’s request.
+
+## Luna retry-projection regression follow-up
+
+Native authoritative replacements clear the old failed projection when retry
+returns an active status without `home_step`; ordinary detail reads preserve it.
+`ConversationRepositoryTests.testAuthoritativeReplacementClearsFailureWhenRetryOmitsHomeStep`
+exercises stored/projected failures, active statuses and completion against the
+real repository and Activity placement store. Explicit failed responses stay
+failed. Approved PNGs are unchanged: this follow-up changes state reconciliation,
+with no layout, copy or fixture edits.
+
+Verification via `omi-heavy run --`:
+
+- From desktop/macos: the five-suite Swift command above passed 104 tests with
+  zero failures (105 executed, one opt-in PNG test skipped).
+- From web/app: `bun run check` passed typechecking, six smoke tests and 1,041
+  Vitest tests. Added list/cache/Activity and search-only/Activity retry cases
+  using a processing response that omits `home_step`.
+- From app: `flutter test --no-pub --reporter expanded
+  test/providers/conversation_home_projection_replacement_test.dart
+  test/providers/conversation_provider_processing_reconcile_test.dart
+  test/widgets/conversation_summary_retry_row_test.dart
+  test/widgets/conversation_detail_summary_retry_test.dart` passed all 148 tests.
+  The new test checks failure clearing and Activity admission for in-progress,
+  processing and merging without changing mobile's existing list ownership.
+
+Full preflight and the one normal full-hook push are recorded in the PR body.
+No production network, bundle launch, merge or deploy was performed.

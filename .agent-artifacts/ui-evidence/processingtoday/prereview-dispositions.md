@@ -54,3 +54,28 @@ Schema inventory: main run [42812549326](https://github.com/BasedHardware/omi/ac
 Renders 015/016 exercise actual web tabs/gallery/tiles and admission, with external requests blocked; 017/018 render the actual native SwiftUI components used by their destinations. They are component evidence rather than a signed full-app session. Fixture retry proves the web failure leaves Activity after success. Native retry and read-failure tests exercise injected dependencies with no network. The main revert and final merge/re-land order are recorded above and in the PR body.
 
 Web completion hardening: authoritative retry results replace list/search state and the list cache before refresh; older in-flight reads are fenced. Failed refresh/cache remount and older list/search response regressions pass. Native Activity observes AppState changes and the spine ingests the emitted placement value, preserving exclusive placement as the switch changes.
+
+## Luna FIX-FIRST on published head 591c10fc
+
+Fixed the native retry replacement retaining a stale `home_step: failed` when the
+reprocess response is active and omits that list-only field. Authoritative
+`ConversationRepository.replace` now replaces the projection at both replacement
+layers. Ordinary detail/cache reads still retain known failures; explicit incoming
+failure projections remain authoritative. The native regression covers failed
+stored and projected rows restarting as in-progress, processing or merging, plus
+completion, immediate Activity removal, Home admission and processing display.
+
+Mobile Activity already uses `applyConversationReprocessResult`, which clears the
+remembered failure id before placing the response in processing; detail retry uses
+`preserveHomeStep: false`. Web list/search retry already replaces whole objects
+and the list cache, fencing older reads. Added regressions for projection-omitting
+processing responses on mobile and both web paths, including Activity removal and
+web failed-refresh/cache-remount survival. No mobile/web production change was
+needed. No layout, copy or render fixture changed; the approved PNGs are unchanged.
+Fresh main was fetched; its newer backend-only work does not overlap this native
+replacement fix, so no additional merge was needed.
+
+Follow-up verification: 104 native tests passed (105 executed, one opt-in PNG
+skip); web typecheck, six smoke tests and 1,041 Vitest tests passed; all 148
+focused Flutter tests passed. Full preflight and normal push result are recorded
+in the PR body. The PCM CPU guard remains unchanged.

@@ -6,6 +6,8 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
+import 'package:omi/pages/activity/past_processing_section.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
 ServerConversation row(
@@ -92,6 +94,34 @@ void main() {
     provider.updateConversation(row());
     expect(provider.conversations.single.homeStep, 'failed');
   });
+  for (final status in [ConversationStatus.in_progress, ConversationStatus.processing, ConversationStatus.merging]) {
+    test('retry to $status without home_step immediately clears the failure', () {
+      final failed = row(step: 'failed');
+      final provider = ConversationProvider(isSignedIn: () => false)
+        ..conversations = [failed]
+        ..searchedConversations = [failed];
+      addTearDown(provider.dispose);
+      // Also exercise the remembered failure id, beyond the row's wire field.
+      provider.addProcessingConversation(failed);
+      provider.applyConversationReprocessResult(row(status: status));
+      if (status != ConversationStatus.in_progress) {
+        expect(provider.conversations, isEmpty);
+        expect(provider.searchedConversations, isEmpty);
+        expect(provider.processingConversations, hasLength(1));
+      }
+      final updated = [...provider.processingConversations, ...provider.conversations].single;
+      expect(updated.homeStep, isNull);
+      expect(updated.status, status);
+      expect(isFailedHomeConversation(updated), isFalse);
+      expect(
+          failedActivityConversations(pending: [], conversations: [
+            ...provider.searchedConversations,
+            ...provider.processingConversations,
+            ...provider.conversations
+          ]),
+          isEmpty);
+    });
+  }
   test('fresh completed reprocess clears a failed projection on an already completed row', () {
     final provider = ConversationProvider(isSignedIn: () => false)
       ..conversations = [row(step: 'failed', status: ConversationStatus.completed)];

@@ -1,4 +1,9 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import {
+  conversationsForSurface,
+  isConversationProcessing,
+} from '@/lib/conversationHome';
+import { useActivityFailures } from '@/hooks/useActivityFailures';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearAllCache,
@@ -68,6 +73,36 @@ afterEach(() => {
 });
 
 describe('useConversations', () => {
+  it('restarts processing without home_step and immediately removes the Activity failure', async () => {
+    const failed = { ...page(0, 1)[0], status: 'processing', home_step: 'failed' };
+    vi.mocked(getConversations).mockResolvedValueOnce([failed] as never);
+    const empty: import('@/types/conversation').Conversation[] = [];
+    const { result, unmount } = renderHook(() => {
+      const list = useConversations({ limit: 50 });
+      const activity = useActivityFailures(list.conversations, empty, 'owner');
+      return { ...list, failures: activity.failures };
+    });
+    await waitFor(() => expect(result.current.failures).toHaveLength(1));
+    // The retry endpoint omits the list-only home_step field.
+    const processing = {
+      ...page(0, 1)[0],
+      status: 'processing',
+    } as import('@/types/conversation').Conversation;
+    act(() => result.current.replaceConversation(processing));
+    expect(result.current.conversations[0].home_step).toBeUndefined();
+    expect(isConversationProcessing(result.current.conversations[0])).toBe(true);
+    expect(result.current.failures).toEqual([]);
+    expect(conversationsForSurface(result.current.conversations, false, true)).toEqual([
+      processing,
+    ]);
+    vi.mocked(getConversations).mockRejectedValueOnce(new Error('offline'));
+    await act(async () => result.current.refresh());
+    expect(result.current.failures).toEqual([]);
+    unmount();
+    const remounted = renderConversations({});
+    expect(remounted.result.current.conversations[0]).toEqual(processing);
+  });
+
   it('does not let a pre-retry refresh resurrect a completed Activity row', async () => {
     const failed = { ...page(0, 1)[0], status: 'processing', home_step: 'failed' };
     vi.mocked(getConversations).mockResolvedValueOnce([failed] as never);

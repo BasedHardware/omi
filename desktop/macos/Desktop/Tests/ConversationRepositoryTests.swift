@@ -1114,7 +1114,7 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(repository.conversations.first?.displayState, .processing)
   }
 
-  func testDetailAndReplacementRetainFailedHomeProjection() async throws {
+  func testDetailRetainsFailedHomeProjection() async throws {
     let failed = makeConversation(status: .processing, homeStep: "failed", revision: 1)
     let detail = makeConversation(title: "Fresh detail", status: .merging, revision: 2, transcript: "Loaded content")
     let remote = FakeConversationRemote(listResult: .success([failed]))
@@ -1129,8 +1129,45 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(received.title, "Fresh detail")
     XCTAssertEqual(received.transcriptSegments.first?.text, "Loaded content")
     XCTAssertEqual(repository.conversations.first?.displayState, .failed)
-    repository.replace(detail)
-    XCTAssertEqual(repository.conversations.first?.homeStep, "failed")
+  }
+
+  func testAuthoritativeReplacementClearsFailureWhenRetryOmitsHomeStep() async throws {
+    for previousStatus: ConversationStatus in [.failed, .processing] {
+      for status: ConversationStatus in [.inProgress, .processing, .merging, .completed] {
+        let failed = makeConversation(status: previousStatus, homeStep: "failed", revision: 1)
+        let repository = ConversationRepository(
+          remote: FakeConversationRemote(listResult: .success([failed])), local: FakeConversationLocal())
+        await repository.load(query: .all, includeCache: false)
+        let placement = HomeFailurePlacementStore(load: { true }, owner: { "fixture" })
+        await placement.refresh()
+        placement.remember([failed], for: "fixture")
+        XCTAssertEqual(placement.activity(repository.conversations).map(\.id), [failed.id])
+
+        // Reprocess can return an active status without the list-only projection.
+        let retried = makeConversation(status: status, revision: 2)
+        repository.replace(retried)
+        placement.remember([retried], for: "fixture")
+        let updated = try XCTUnwrap(repository.conversations.first)
+        XCTAssertNil(updated.homeStep)
+        XCTAssertEqual(updated.status, status)
+        XCTAssertFalse(ConversationFailurePlacement.isFailed(updated))
+        XCTAssertTrue(placement.activity(repository.conversations).isEmpty)
+        XCTAssertEqual(ConversationFailurePlacement.home(repository.conversations, confirmed: true), [updated])
+        if status == .processing {
+          XCTAssertEqual(updated.displayState, .processing)
+          XCTAssertTrue(updated.needsProcessingDetailRefresh)
+        }
+      }
+    }
+  }
+
+  func testAuthoritativeReplacementHonorsExplicitFailureProjection() async {
+    let failed = makeConversation(status: .processing, homeStep: "failed", revision: 1)
+    let repository = ConversationRepository(
+      remote: FakeConversationRemote(listResult: .success([failed])), local: FakeConversationLocal())
+    await repository.load(query: .all, includeCache: false)
+    repository.replace(makeConversation(status: .processing, homeStep: "failed", revision: 2))
+    XCTAssertEqual(repository.conversations.first?.displayState, .failed)
   }
 
   func testFailedDetailWithoutCacheReturnsCurrentHomeProjection() async throws {
