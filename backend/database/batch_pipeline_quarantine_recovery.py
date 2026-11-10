@@ -18,6 +18,7 @@ from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import Scheduler, held_redrive_budget_spent, owner_key
+from utils.batch_pipeline.input_retention import held_input_leg, staged_at, staged_enqueue, TERMINAL_SECONDS
 from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
 
 # A receipt proves words existed, but deliberately contains no transcript.
@@ -123,11 +124,13 @@ class RecoveryStore:
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
+            if expire_input_in_transaction(tx, job, now):
+                return 'expired'
             return expire_held_in_transaction(tx, job, now)
 
         return self.store.run(commit)
 
-    def requeue_quarantined(self, segment_id, now, *, dead_before=None):
+    def requeue_quarantined(self, segment_id, now, *, dead_before=None, expected_job=None):
         """Operator and nightly entry: retain the content/privacy ownership CAS.
 
         An operator requeue (dead_before=None) that starts at or over the held
@@ -140,6 +143,8 @@ class RecoveryStore:
         def commit(tx):
             spent[0] = False
             job, _ = self.checked(tx, segment_id)
+            if expected_job is not None and job != expected_job:
+                return False
             if dead_before is not None:
                 expired_at = job.get('held_expired_at')
                 if (
@@ -633,6 +638,67 @@ class RecoveryStore:
         return changed
 
 
+def expire_input_in_transaction(tx, job, now):
+    """Use the existing held scan and content/privacy CAS; never delete retained artifacts."""
+    from config.refactor_modes import batch_input_expiring_enabled
+    from utils.batch_pipeline.input_retention import held_input_leg, staged_enqueue, TERMINAL_SECONDS, REASON
+    from database.batch_pipeline_projection import assignment_held_without_recovery
+
+    if not batch_input_expiring_enabled():
+        return False
+    stamp = staged_enqueue(job)
+    leg = held_input_leg(job)
+    lease = job.get('lease_until', 0)
+    if (
+        stamp is None
+        or not leg
+        or not math.isfinite(now)
+        or now < stamp + TERMINAL_SECONDS
+        or job.get('token')
+        or type(lease) not in (int, float)
+        or not math.isfinite(lease)
+        or lease > now
+    ):
+        return False
+    if leg == 'gpu':
+        if not Scheduler.held_requeue_eligible(tx, job, now, allow_dead=False):
+            return False
+    else:
+        entry = tx.get('results', job['segment_id'])
+        receipts = [entry.get('projection') or {}, *(entry.get('projection_parts') or {}).values()]
+        if (
+            entry.get('projection_state') != 'quarantine_held'
+            or entry.get('owner_key') != owner_key(job['owner_id'])
+            or entry.get('segment_id') != job['segment_id']
+            or entry.get('projection_privacy_refusal')
+            or any(part.get('privacy_reason') for part in receipts)
+            or not any(
+                part.get('disposition') == 'ambiguous_generation'
+                and assignment_held_without_recovery(job, {**entry, 'projection': part})
+                for part in receipts
+            )
+        ):
+            return False
+    if leg == 'gpu':
+        binding = normalized_binding(job['projection_binding'])
+        if not (binding.native_record or binding.record_origin or binding.partial_record):
+            ledger_key = f'{binding.owner_id}/{binding.content_id}'
+            ledger = tx.get('content', ledger_key)
+            ledger['artifact_missing_units'] = sorted(
+                set(ledger.get('artifact_missing_units') or []) | {job['segment_id']}
+            )
+            tx.put('content', ledger_key, ledger)
+    job.update(
+        state='dead',
+        merge_pending=leg == 'gpu',
+        dead_letter_reason=REASON,
+        input_expiring_at=now,
+        input_expiring_leg=leg,
+    )
+    tx.put('jobs', job['segment_id'], job)
+    return True
+
+
 def expire_held_in_transaction(tx, job, now):
     """CAS a dormant compute hold into a retained, reasoned dead letter.
 
@@ -705,6 +771,48 @@ def held_candidates(client, namespace: str, limit: int = 32, *, after_id: str | 
         # A document-reference cursor requires no extra document read.
         query = query.start_after({'__name__': collection.document(after_id)})
     return [(doc.id, doc.to_dict() or {}) for doc in query.limit(max(1, min(limit, 64))).stream()]
+
+
+@read_origin('job:batch_pipeline_quarantine_recovery:input_expiring_candidates')
+def input_expiring_candidates(client, namespace, now, *, after=None):
+    """Two indexed clock streams, each at most 128 snapshots; no legacy backfill.
+
+    Legacy enqueue rows and stamped replacements have different expiry anchors.
+    Advance independent age cursors even over filtered/fenced rows: fresh
+    replacements in the legacy index must never pin its oldest prefix.
+    """
+    collection = client.collection(f'{namespace}_jobs')
+    cutoff = now - TERMINAL_SECONDS
+    candidates, cursors = [], {}
+    for field in ('enqueued_at', 'audio_staged_at'):
+        query = (
+            collection.where('state', 'in', ['quarantined', 'committed'])
+            .where('recovery_state', 'in', ['held', 'failed_held'])
+            .where(field, '<=', cutoff)
+            .order_by(field)
+            .order_by('__name__')
+        )
+        cursor = (after or {}).get(field)
+        if cursor:
+            query = query.start_after({field: cursor['at'], '__name__': collection.document(cursor['id'])})
+        docs = list(query.limit(128).stream())
+        for doc in docs:
+            job = doc.to_dict() or {}
+            # Route by clock validity, not field presence. Malformed replacements
+            # retain the earlier enqueue protection, without duplicate candidates.
+            restaged = staged_at(job) is not None
+            if field == 'enqueued_at' and restaged:
+                continue
+            if field == 'audio_staged_at' and not restaged:
+                continue
+            try:
+                stamp, leg = staged_enqueue(job), held_input_leg(job)
+            except (TypeError, AttributeError):
+                continue  # Malformed eligibility metadata cannot pin the age cursor.
+            if stamp is not None and stamp <= cutoff and leg:
+                candidates.append((doc.id, job))
+        cursors[field] = {'at': docs[-1].to_dict()[field], 'id': docs[-1].id} if len(docs) == 128 else None
+    return sorted(candidates, key=lambda pair: (staged_enqueue(pair[1]), pair[0])), cursors
 
 
 def cancel_fenced_recovery(store, segment_id):

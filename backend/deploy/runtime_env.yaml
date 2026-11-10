@@ -50,12 +50,14 @@ environments:
           BATCH_HELD_DEAD_LETTER_ENABLED:
             value: 'true'
             category: ops_kill
+          BATCH_INPUT_EXPIRING_ENABLED:
+            value: 'true'
+            category: ops_kill
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
             value: g1
             category: config
           BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED:
             value: 'true'
@@ -85,7 +87,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -399,7 +400,6 @@ environments:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -422,7 +422,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -840,12 +839,14 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
@@ -878,7 +879,6 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -1033,7 +1033,6 @@ environments:
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               category: ops_kill
               value: '0'
-            CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
@@ -1133,12 +1132,14 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
@@ -1171,7 +1172,6 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -1444,12 +1444,14 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
@@ -1482,7 +1484,6 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -1726,12 +1727,14 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
@@ -1764,7 +1767,6 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -2262,12 +2264,14 @@ environments:
           BATCH_HELD_DEAD_LETTER_ENABLED:
             value: 'true'
             category: ops_kill
+          BATCH_INPUT_EXPIRING_ENABLED:
+            value: 'true'
+            category: ops_kill
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
             value: g1
             category: config
           BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED:
             value: 'true'
@@ -2297,7 +2301,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -2588,7 +2591,6 @@ environments:
             value: omi-flags
             category: service_discovery
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           SONIOX_IDLE_COHORT_CLOSE_SECONDS: {value: '10', category: rollout}
           SONIOX_IDLE_COHORT_REARM_SECONDS: {value: '2', category: rollout}
           SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR: {value: '120', category: rollout}
@@ -2617,7 +2619,6 @@ environments:
           SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
           SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
             value: '12'
@@ -2717,7 +2718,6 @@ environments:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -2740,7 +2740,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -2822,7 +2821,6 @@ environments:
             value: omi-flags
             category: service_discovery
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -2865,7 +2863,6 @@ environments:
           SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
           SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -3181,12 +3178,14 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
@@ -3219,7 +3218,6 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -3374,7 +3372,6 @@ environments:
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               category: ops_kill
               value: '100'
-            CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
@@ -3431,7 +3428,6 @@ environments:
               value: omi-flags
               category: service_discovery
             OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -3475,7 +3471,6 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
               value: backend-runtime@based-hardware.iam.gserviceaccount.com
@@ -3602,12 +3597,14 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
@@ -3640,7 +3637,6 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -3906,7 +3902,6 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: {value: 'true', category: rollout}
             LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
@@ -3956,7 +3951,6 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
             SYNC_BACKFILL_ORDER_PERCENT: {value: '100', category: rollout}
             SYNC_BACKFILL_ROUTING_ENABLED: {value: 'true', category: rollout}
@@ -4043,12 +4037,14 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
@@ -4081,7 +4077,6 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -4308,7 +4303,6 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -4359,7 +4353,6 @@ environments:
               value: '100'
               category: ops_kill
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
             SYNC_BACKFILL_ORDER_PERCENT: {value: '0', category: rollout}
             SYNC_BACKFILL_ROUTING_ENABLED: {value: 'true', category: rollout}
@@ -4442,12 +4435,14 @@ environments:
             BATCH_HELD_DEAD_LETTER_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
               value: g1
               category: config
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             RECORD_SEAL_OVERLAP_TRIM_ENABLED:
               value: 'true'
@@ -4480,7 +4475,6 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
@@ -4691,7 +4685,6 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             ACCOUNT_DELETION_DISPATCH_MODE:
@@ -4727,7 +4720,6 @@ environments:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED

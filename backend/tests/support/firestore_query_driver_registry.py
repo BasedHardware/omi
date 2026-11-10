@@ -3922,7 +3922,24 @@ _add(
     DriverEntry(
         'database.summary_debt_queries.due_conversations',
         neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
-        domains={'after': [None, {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'}]},
+        domains={
+            'after': [
+                None,
+                {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'},
+                {'due': T0.timestamp(), 'pending': T0.timestamp() - 60, 'path': 'users/synthetic/conversations/c'},
+                {
+                    'due': T0.timestamp() - 300000,
+                    'pending': T0.timestamp() - 300000,
+                    'path': 'users/synthetic/conversations/c',
+                },
+            ]
+        },
+        trials=2,
+        patchers=(
+            lambda _: unittest.mock.patch(
+                'database.summary_debt_queries.max_age_seconds', side_effect=cycle((72 * 3600, 0))
+            ),
+        ),
     )
 )
 

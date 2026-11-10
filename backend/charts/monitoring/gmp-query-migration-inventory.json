@@ -198,6 +198,20 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "max(omi_batch_held_oldest_age_seconds{leg=\"staged_input\"} and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900))",
+      "file": "alerts/batch-input-retention.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_held_oldest_age_seconds",
+        "omi_batch_timeliness_observed_at_seconds"
+      ],
+      "owner_title": "Held batch staging input older than 21 days",
+      "owner_uid": "omi-batch-staged-input-age",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 900) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
       "file": "alerts/batch-queue-safety.json",
       "issues": [],
@@ -4029,7 +4043,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 270
+    "query_consumers": 271
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

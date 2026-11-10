@@ -240,6 +240,20 @@ def entries():
             neutrals={'limit': (32, 'bounded page size')},
         ),
         DriverEntry(
+            'database.batch_pipeline_quarantine_recovery.input_expiring_candidates',
+            domains={
+                'namespace': namespaces,
+                'after': [
+                    None,
+                    {
+                        'enqueued_at': {'at': 1.0, 'id': 'held-09'},
+                        'audio_staged_at': {'at': 1.0, 'id': 'held-10'},
+                    },
+                ],
+            },
+            neutrals={'now': (3000000.0, 'expiry cutoff operand only')},
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.projection_page',
             domains={
                 'namespace': namespaces,

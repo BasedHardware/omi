@@ -23,7 +23,6 @@ from prometheus_client import Counter
 from pydantic import BaseModel
 from models.structured import Structured
 
-from config.summary_guarantee import enabled as summary_enabled
 from utils.conversations.summary_delivery import present as summary_present
 from config.sync_reprocess import dedupe_enabled
 
@@ -174,9 +173,7 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
 
         try:
             candidate = Structured.model_validate(row.get('structured'))
-            if row[NOTES_OUTPUT_HASH] == output_fingerprint(candidate) and (
-                not summary_enabled(uid) or summary_present(candidate)
-            ):
+            if row[NOTES_OUTPUT_HASH] == output_fingerprint(candidate) and summary_present(candidate):
                 saved = candidate
         except ValidationError:
             pass  # An unusable optional checkpoint is an ordinary cache miss.

@@ -5582,12 +5582,8 @@ value. The kill switch retains the same permission checks.
 
 ### Internal voice-match score snapshots
 
-`SPEAKER_MATCH_SCORES_ENABLED` defaults on for `OMI_ENV_STAGE=dev|local|offline`
-and off otherwise. Production explicitly pins it true at merge+deploy on
-backend-listen, pusher, backend, backend-sync, backend-sync-backfill and
-backend-integration (the main image also serves developer processing there).
-Rollback: set the flag false on all six hosts. Explicit `true|1|on|yes` enables
-it on any host. Capture,
+Voice-match score snapshots are permanent on every host (David 2026-11-09).
+Capture,
 sync and conversation resolution snapshot existing cosine comparisons without
 new model calls, audio reads or Firestore operations. Jev does not consume them.
 
@@ -6667,14 +6663,11 @@ provisioned by its queue bootstrap helper before deployment.
 Existing valid bindings survive rollback; leave both queues running to drain.
 See [the rollout note](listen_pusher_pipeline/changes/2026-11-04-fresh-title-priority.md).
 
-### First-summary deadline and repair (dark)
+### First-summary deadline and independent repair
 
-`FIRST_SUMMARY_DEADLINE_ENABLED` (default false) caps the existing outbox's first
-summary dispatch at original pending time + `FIRST_SUMMARY_DEADLINE_SECONDS`
-(default 120, bounded 60–120); the private `first-summary` cohort supports a
-canary. A nonempty old UID env list remains a migration fallback; both empty
-and absent keys deny nonmembers unless the independent percentage ramp admits
-them, preserving main #22113.
+First-summary deadlines apply to every conversation (David 2026-11-09). The
+existing outbox dispatch is capped at original pending time plus
+`FIRST_SUMMARY_DEADLINE_SECONDS` (default 120, bounded 60–120).
 First-summary work bypasses demand-tier waiting and uses a 120s lease, renewed
 every 30s for the same owner/task token while the request is alive. Only a
 replacement conversation owner fences persistence; the same owner's result can
@@ -6685,8 +6678,7 @@ without clearing any structured content. Intake discards never enter that index.
 Appends and retries preserve the original time; later enriched revisions retain coalescing.
 
 `FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED=false` is an independent dark drain
-control on integration and both sync task handlers. With the deadline master switch
-still on, an existing finite `summary_deadline_at` keeps its dispatch ceiling,
+control on integration and both sync task handlers. With universal deadlines, an existing finite `summary_deadline_at` keeps its dispatch ceiling,
 demand bypass, short lease/heartbeat, repair cadence and output requirement after
 percent/allowlist rollback. A scoped owner context carries that policy through the
 synchronous processing/persistence callback and resets on every exit. New outbox
@@ -6696,8 +6688,8 @@ three-empty-model-result budget. A confirmed persisted rule discard settles norm
 retain their existing coalescing behavior. No read, new queue or paid-intent reset
 is added. It cannot reconstruct already-deleted outboxes; existing debt repair
 requires its own explicit enablement and eligible owner cohort. Turning the
-preserve control off restores legacy rollout behavior; turning the deadline master
-off disables deadline handling entirely.
+preserve control off stops preservation-specific handling. Deadline admission
+itself remains universal after the 2026-11-09 graduation.
 
 `SUMMARY_DEBT_REPAIR_ENABLED` (default false) adds completed server-minimum debt
 to the existing repair owner: one globally leased two-minute page, at most 100
@@ -6992,9 +6984,8 @@ assignment, bridge, private playback, enrichment scheduling, accounting, complet
 and publication. Durations use the monotonic clock. No owner, segment, conversation,
 payload, or exception message is logged. A started phase without its terminal event
 helps locate a stalled RPC or process shutdown; it is not a completed latency sample.
-Keep first-summary eligibility and repair enabled for admitted owners while rolling
-back batch admission: lowering `FIRST_SUMMARY_DEADLINE_PERCENT` also removes their
-short dispatch/repair/lease policy, even when durable summary debt already exists.
+First-summary eligibility is permanent and remains independent of batch admission
+rollback. Debt repair retains its separate control.
 These controls do not bypass predecessor ordering or the all-sibling completion fence.
 
 `BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED=false` is the dark default on every serving role.
@@ -7521,18 +7512,10 @@ or zero capture exposure cannot establish savings. Paid failover remains visible
 in the admitted arm. Disabling the ramp takes effect on reconnect; drain existing
 WebSockets before claiming rollback complete.
 
-`FIRST_SUMMARY_DEADLINE_PERCENT` admits its percentage bucket independently of
-batch admission, under `FIRST_SUMMARY_DEADLINE_ENABLED`; `0` admits nobody and
-`100` admits all owners. The former `FIRST_SUMMARY_UID_ALLOWLIST` cohort was
-retired on 2026-11-09 (flag docket ruling 3) while production served 100.
-Production config sets `FIRST_SUMMARY_DEADLINE_ENABLED=true` and
-`FIRST_SUMMARY_DEADLINE_PERCENT=100` on backend-listen, pusher, backend,
-backend-sync, backend-sync-backfill and backend-integration. This prevents
-fleet traffic outside a canary from retaining the 600-second trailing settle
-and 1,800-second first-summary lease/repair policy. Later revisions and
-effects-only obligations retain their existing coalescing policy. The global
-enabled flag is the kill switch; setting the percentage to zero restores the
-explicit allowlist cohort.
+First-summary deadline admission is permanent at 100% across all producers and
+workers. Later revisions and effects-only obligations retain their existing
+coalescing policy. The former enable and percentage controls were graduated and
+the `FIRST_SUMMARY_UID_ALLOWLIST` cohort was retired on 2026-11-09 (flag rulings).
 
 The scheduled backend-sync sweep is held off in production
 (`SUMMARY_DEBT_REPAIR_ENABLED=false`, deferred 2026-10-20). When enabled, it admits at most ten eligible completed server-minimum rows per two-minute
@@ -9530,3 +9513,36 @@ Successful final rebuild or permanent owner revocation clears only the observed
 marker version; a replacement marker always wins. No PCM or audio-object
 mutation occurs. The [phase 5C change note](./listen_pusher_pipeline/changes/2026-11-06-durable-projection-debt.md)
 records scope and verification limits.
+
+### Held staging input expiry
+
+`BATCH_INPUT_EXPIRING_ENABLED` defaults on via `config/refactor_modes.py`;
+`false` is the kill for new day-29 transitions in the existing held sweep.
+Eligible GPU-quarantined and assignment-held staging inputs use `audio_staged_at`
+for replacement objects with a finite positive numeric clock, else `enqueued_at`
+as the earlier admission/staging proxy, including when the replacement clock is
+present but malformed. Two unusable clocks never authorize `input_expiring`.
+Exact-bundle repair stamps the new object time without changing original enqueue.
+The kill is explicitly true in base/prod runtime bindings and listen/worker charts. At 29 days the job retains its audio,
+results and paid history as `state=dead`, `dead_letter_reason=input_expiring`,
+with `input_expiring_at` and `input_expiring_leg` (`gpu` or `assignment`).
+Before the ordinary held name page, two indexed urgency streams (legacy enqueue
+and current restage clocks, limit 128 each) use independent age cursors. The
+restage-clock composites are declared in the index registry and generated
+manifest; index readiness precedes rollout. No legacy backfill, record-pending
+or sweep cadence change is involved. The existing
+`BATCH_HELD_DEAD_LETTER_ENABLED` sweep kill also remains effective.
+
+The existing `failed/batch_artifact_missing` upload wire shape and exact-bundle
+custody-repair protocol carry needs-attention and GPU re-upload; legacy readers
+retain their existing custody-safe response. Checked operator GPU requeue or
+target-restorable assignment release is the manual exit, even with the new kill
+off. Status polling and nightly held-expired redrive never reopen this reason.
+`omi_batch_held_oldest_age_seconds{leg="staged_input"}` warns above 21 days with
+fresh sample evidence. The 30-day privacy ceiling is unchanged. See the
+[operator runbook](runbooks/held-staging-inputs.md) for approved manual execution.
+`omi_batch_staged_input_clock_invalid_total` counts malformed clock observations
+in completed bounded age samples and existing held sweep pages, including
+missing clocks excluded by age ordering. Neither clock usable in an age sample also sets
+`omi_batch_timeliness_scan_truncated{leg="staged_input"}` to 1 for the existing
+scan-blind warning. These observations are not a distinct-row fleet census.

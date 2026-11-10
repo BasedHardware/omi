@@ -103,6 +103,7 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
         # pusher does not run the held maintenance loop or worker failure writer.
         'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'BATCH_INPUT_EXPIRING_ENABLED',
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
@@ -246,9 +247,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Same listen-only admission path for learned auto-language mobile/web captures.
             "SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT",
             "SERVER_BATCH_ONLY_WEB_PERCENT",
-            # Only listen opens visibility-gated Modulate previews; pusher
-            # retains raw custody/finalization and never evaluates this cohort.
-            "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -659,7 +657,7 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or '').partition('\n')[0])
     parser.add_argument(
         "--root",
         type=Path,

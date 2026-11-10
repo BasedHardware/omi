@@ -123,7 +123,6 @@ from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD
 from utils.conversations.reprocess_contract import (
     DERIVED_EFFECTS_TRANSCRIPT_FIELD,
     derived_effects_transcript_digest,
-    reprocess_result_contract_enabled,
 )
 from config.jev_decisions import relevance_arm, relevance_experiment_active
 from utils.conversations.relevance_io import (
@@ -342,13 +341,6 @@ class ExplicitAppSelectionFailedError(RuntimeError):
     selection the user made, so the reprocess boundary must surface a real
     error instead of returning success with empty `apps_results` (SCA-359).
     """
-
-
-APP_RESULT_FAILED_CODE = 'app_result_failed'
-APP_RESULT_FAILED_ERROR_DETAIL = {
-    'code': APP_RESULT_FAILED_CODE,
-    'message': 'The selected app could not finish this summary. Please try again.',
-}
 
 
 def _stored_meeting_lookup_enabled() -> bool:
@@ -3002,8 +2994,7 @@ def process_conversation(
     # app failures propagate after the bundle; automatic selection is fail-open.
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
     user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
-    # User reprocess preserves template results on failure; the flag selects 502.
-    result_contract = user_reprocess and reprocess_result_contract_enabled()
+    # User reprocess preserves template results on failure.
 
     def _emit_derived_effects() -> None:
         assigned_folder_id = None
@@ -3188,11 +3179,6 @@ def process_conversation(
         # processing step is a real error, never a 200 whose payload quietly
         # substitutes first-party notes for the selected app's summary (SCA-359).
         failure = explicit_selection_failures[0]
-        if result_contract:
-            # Distinguishable from a notes/structure failure so clients can say
-            # "<App> couldn't finish" while the regenerated notes stay persisted.
-            logger.error('Conversation processing failed: %s', type(failure).__name__)
-            raise HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL) from failure
         raise conversation_processing_http_exception(failure, route='conversation_processing/app_result') from failure
     complete_explicit(uid, conversation, trigger)
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')

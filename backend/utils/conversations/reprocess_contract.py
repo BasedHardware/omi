@@ -14,19 +14,13 @@ Always on for ``POST /v1/conversations/{id}/reprocess``:
   stored memories/tasks/goals were derived) does not re-derive them, and a
   failed explicit app never rewrites tasks or goal progress.
 
-``CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED`` (default off) now gates
-only the error code of an explicit app selection that produced no result:
-502 ``app_result_failed`` instead of the generic 500. Every released client
-treats any non-200 reprocess answer as failure. The value is read at the call
-boundary, never snapshotted at import.
+An explicit app selection that produces no result retains the generic 500
+processing failure used by production at graduation on 2026-11-09.
 """
 
-import os
 from typing import Any, Iterable, Optional
 
 from utils.conversations.transcript_hash import transcript_sha256
-
-RESULT_CONTRACT_FLAG = 'CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED'
 
 # ``source`` query value that forces Omi's own summary on reprocess.
 FIRST_PARTY_SUMMARY_SOURCE = 'omi'
@@ -35,15 +29,6 @@ FIRST_PARTY_SUMMARY_SOURCE = 'omi'
 # action items and goal progress were last derived from. Absent means
 # unknown, so derived effects run.
 DERIVED_EFFECTS_TRANSCRIPT_FIELD = 'derived_effects_transcript_sha256'
-
-
-def reprocess_result_contract_enabled() -> bool:
-    return os.getenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', '').strip().casefold() in {
-        '1',
-        'true',
-        'yes',
-        'on',
-    }
 
 
 def derived_effects_transcript_digest(segments: Optional[Iterable[Any]]) -> str:

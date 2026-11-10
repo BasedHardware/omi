@@ -144,14 +144,14 @@ env:
     value: ""
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
+  - name: BATCH_INPUT_EXPIRING_ENABLED
+    value: "true"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
     value: ""
-  - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "0"
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
@@ -222,8 +222,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT

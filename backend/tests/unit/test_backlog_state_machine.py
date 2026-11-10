@@ -187,6 +187,7 @@ def test_nightly_pass_reports_a_spent_budget_only_with_the_counter_on(monkeypatc
     store.run.side_effect = lambda fn: fn(Mock(get=Mock(return_value={})))
     runner = sweep.HeldDeadLetter(store)
     spent = {'held_expired_at': 1, 'held_redrives': sm.MAX_HELD_REDRIVES}
+    monkeypatch.setattr(sweep, 'input_expiring_candidates', lambda *a, **k: ([], {}))
     monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **k: [])
     monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('a', spent)])
     monkeypatch.setattr(runner.recovery, 'requeue_quarantined', lambda *a, **k: False)
@@ -427,6 +428,7 @@ def nightly_counter_samples(monkeypatch, nights, prior):
     store.run.side_effect = lambda fn: fn(Mock(get=Mock(return_value={})))
     runner = sweep.HeldDeadLetter(store)
     job = {'held_expired_at': 1, 'held_redrives': prior}
+    monkeypatch.setattr(sweep, 'input_expiring_candidates', lambda *a, **k: ([], {}))
     monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **k: [])
     monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **k: [('one-recording', dict(job))])
 
