@@ -2958,6 +2958,8 @@
     "syncCardThrottlePaused": "同步暂时暂停 — 将自动恢复",
     "syncCardBackendBusy": "Omi 服务器繁忙 — 容量恢复后将自动同步你的录音",
     "unableToDetermineFirmwareVersion": "无法确定当前固件版本",
+    "applyCodeToCurrentPlan": "应用于当前套餐",
+    "subscriptionCodeResult": "{result, select, applied{代码已应用于您当前的套餐。} refused{无法应用此代码。请检查代码及其适用套餐。} conflict{代码已使用，或您的套餐已有折扣。} rateLimited{尝试次数过多。请稍后重试。} other{无法应用此代码。请重试。}}",
     "promoCode": "促销代码",
     "enterPromoCode": "输入促销代码",
     "invalidPromotionCode": "促销代码无效。",

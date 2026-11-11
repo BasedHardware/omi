@@ -9183,6 +9183,24 @@ class AppLocalizationsMr extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'सद्य फर्मवेअर आवृत्ती निर्धारित करता आली नाही';
 
   @override
+  String get applyCodeToCurrentPlan => 'सध्याच्या योजनेवर लागू करा';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'कोड तुमच्या सध्याच्या योजनेवर लागू झाला.',
+        'refused': 'हा कोड लागू होऊ शकत नाही. कोड आणि आवश्यक योजना तपासा.',
+        'conflict': 'कोड आधीच वापरला आहे किंवा तुमच्या योजनेवर आधीच सवलत आहे.',
+        'rateLimited': 'खूप प्रयत्न झाले. थांबा आणि नंतर पुन्हा प्रयत्न करा.',
+        'other': 'कोड लागू झाला नाही. पुन्हा प्रयत्न करा.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'प्रोमो कोड';
 
   @override

@@ -2990,6 +2990,8 @@
     "syncCardThrottlePaused": "Synchronisation brièvement suspendue — elle reprendra automatiquement",
     "syncCardBackendBusy": "Les serveurs Omi sont saturés — vos enregistrements se synchroniseront dès que la capacité sera rétablie",
     "unableToDetermineFirmwareVersion": "Impossible de déterminer la version actuelle du firmware",
+    "applyCodeToCurrentPlan": "Appliquer à l'offre actuelle",
+    "subscriptionCodeResult": "{result, select, applied{Code appliqué à votre offre actuelle.} refused{Ce code ne peut pas être appliqué. Vérifiez le code et l'offre requise.} conflict{Code déjà utilisé, ou votre offre bénéficie déjà d'une réduction.} rateLimited{Trop de tentatives. Patientez et réessayez plus tard.} other{Impossible d'appliquer ce code. Réessayez.}}",
     "promoCode": "Code promo",
     "enterPromoCode": "Entrez le code promo",
     "invalidPromotionCode": "Code promo invalide.",

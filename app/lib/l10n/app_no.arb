@@ -2955,6 +2955,8 @@
     "syncCardThrottlePaused": "Synkronisering er satt kort på pause — den fortsetter automatisk",
     "syncCardBackendBusy": "Omis servere er travle — opptakene dine synkroniseres så snart kapasiteten er tilbake",
     "unableToDetermineFirmwareVersion": "Kan ikke bestemme gjeldende fastvareversjon",
+    "applyCodeToCurrentPlan": "Bruk på nåværende abonnement",
+    "subscriptionCodeResult": "{result, select, applied{Koden er brukt på ditt nåværende abonnement.} refused{Koden kan ikke brukes. Sjekk koden og abonnementet som kreves.} conflict{Koden er allerede brukt, eller abonnementet ditt har allerede rabatt.} rateLimited{For mange forsøk. Vent og prøv igjen senere.} other{Koden kunne ikke brukes. Prøv igjen.}}",
     "promoCode": "Kampanjekode",
     "enterPromoCode": "Skriv inn kampanjekode",
     "invalidPromotionCode": "Ugyldig kampanjekode.",

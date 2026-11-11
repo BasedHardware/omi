@@ -9198,6 +9198,24 @@ class AppLocalizationsSl extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Trenutne različice vdelane programske opreme ni mogoče določiti';
 
   @override
+  String get applyCodeToCurrentPlan => 'Uporabi za trenutni paket';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koda je uporabljena za vaš trenutni paket.',
+        'refused': 'Te kode ni mogoče uporabiti. Preverite kodo in zahtevani paket.',
+        'conflict': 'Koda je že uporabljena ali pa vaš paket že ima popust.',
+        'rateLimited': 'Preveč poskusov. Počakajte in poskusite pozneje.',
+        'other': 'Kode ni bilo mogoče uporabiti. Poskusite znova.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promocijska koda';
 
   @override

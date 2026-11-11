@@ -17061,6 +17061,18 @@ abstract class AppLocalizations {
   /// **'Unable to determine current firmware version'**
   String get unableToDetermineFirmwareVersion;
 
+  /// Apply a code only to the existing subscription, regardless of highlighted checkout plan; never changes plans.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to Current Plan'**
+  String get applyCodeToCurrentPlan;
+
+  /// Existing-subscription code application result; never promises payment or entitlement. result: applied, refused, conflict, rateLimited, other.
+  ///
+  /// In en, this message translates to:
+  /// **'{result, select, applied{Code applied to your current plan.} refused{This code cannot be applied. Check the code and its required plan.} conflict{Code already used, or your plan already has a discount.} rateLimited{Too many tries. Please wait and try again later.} other{Could not apply this code. Please try again.}}'**
+  String subscriptionCodeResult(String result);
+
   /// No description provided for @promoCode.
   ///
   /// In en, this message translates to:

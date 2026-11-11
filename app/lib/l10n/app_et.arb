@@ -2955,6 +2955,8 @@
     "syncCardThrottlePaused": "Sünkroonimine on korraks peatatud — see jätkub automaatselt",
     "syncCardBackendBusy": "Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb",
     "unableToDetermineFirmwareVersion": "Praeguse püsivara versiooni ei õnnestunud tuvastada",
+    "applyCodeToCurrentPlan": "Rakenda praegusele paketile",
+    "subscriptionCodeResult": "{result, select, applied{Kood rakendati sinu praegusele paketile.} refused{Seda koodi ei saa rakendada. Kontrolli koodi ja nõutavat paketti.} conflict{Koodi on juba kasutatud või paketil on juba soodustus.} rateLimited{Liiga palju katseid. Oota ja proovi hiljem uuesti.} other{Koodi ei saanud rakendada. Proovi uuesti.}}",
     "promoCode": "Sooduskood",
     "enterPromoCode": "Sisestage sooduskood",
     "invalidPromotionCode": "Kehtetu sooduskood.",

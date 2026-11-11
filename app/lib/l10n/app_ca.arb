@@ -2946,6 +2946,8 @@
     "syncCardThrottlePaused": "La sincronització s'ha pausat breument — es reprendrà automàticament",
     "syncCardBackendBusy": "Els servidors d'Omi estan saturats — els enregistraments se sincronitzaran quan hi hagi capacitat disponible",
     "unableToDetermineFirmwareVersion": "No s'ha pogut determinar la versió actual del firmware",
+    "applyCodeToCurrentPlan": "Aplica al pla actual",
+    "subscriptionCodeResult": "{result, select, applied{Codi aplicat al teu pla actual.} refused{No es pot aplicar aquest codi. Comprova el codi i el pla necessari.} conflict{El codi ja s'ha utilitzat o el pla ja té un descompte.} rateLimited{Massa intents. Espera i torna-ho a provar més tard.} other{No s'ha pogut aplicar el codi. Torna-ho a provar.}}",
     "promoCode": "Codi promocional",
     "enterPromoCode": "Introduïu el codi promocional",
     "invalidPromotionCode": "Codi promocional no vàlid.",
