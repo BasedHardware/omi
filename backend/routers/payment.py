@@ -74,6 +74,7 @@ from utils.subscription import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.subscription_events import record_subscription_event
+from utils.observability.renewal_observations import observe_verified_event
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -88,6 +89,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.apps import find_app_subscription, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
+from starlette.background import BackgroundTask
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
 from utils import subscription as subscription_utils
@@ -1266,7 +1268,12 @@ async def stripe_webhook(
     async def run_db(function, *args, **kwargs):
         return await run_blocking(db_executor, function, *args, **kwargs)
 
-    return await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
+    result = await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
+    if background_tasks is not None:
+        background_tasks.tasks.insert(0, BackgroundTask(observe_verified_event, event))
+    else:
+        await observe_verified_event(event)
+    return result
 
 
 @fresh_reader

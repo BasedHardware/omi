@@ -424,9 +424,59 @@ STATES = (
             'utils/pusher_record_barrier.py:PusherRecordBarrier.abandon_recordings). '
             'The kill switch can disable this conditional exit. When bounded abandon admission is full, '
             'outcome=abandon_overflow leaves the token capturing/fenced with no new coordinator; '
-            'the existing process/pod-death repair proof remains its exit. Live tokens never expire by age. '
+            'the existing process/pod-death repair proof remains its exit. Off-mode frame tokens never expire by age; '
+            'serve-created custody tokens retain their own lease exit after rollback. The leased per-token view is separate. '
             'Refused seals have a separate first-entry clock and bounded job-page visibility in seal_refused; '
             'general live-producer dwell visibility remains required',
+        ),
+        row(
+            'record_token',
+            'capturing',
+            ('record_upload_sessions',),
+            entry_writers=(
+                Writer('database/record_audio.py', 'set_record_upload_pending.commit'),
+                Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+                Writer('database/record_custody_append.py', 'begin.commit'),
+            ),
+            exit=Exit('lease', 'utils/batch_pipeline/record_producer_proof.py:producer_tokens_dead'),
+            derived=True,
+            metric='omi_record_token_lease_active',
+            alert=Alert('omi-record-token-lease-late-append', 'page'),
+            deadline_exemption='Nested per-token lease_expires_at, stamped only when lease mode is enabled',
+            note='Exact-token finish clear (including record_custody_append.finish after durable acceptance or refusal); '
+            'custody lease covers the configured sync request timeout plus a named margin. '
+            'abandon attestation; or computed lease lapse. Off preserves original producer proof.',
+        ),
+        row(
+            'record_token',
+            'lease_lapsed',
+            ('record_upload_sessions',),
+            entry_writers=(
+                Writer('database/record_audio.py', 'set_record_upload_pending.commit'),
+                Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+            ),
+            exit=Exit(
+                'sweeper',
+                'utils/batch_pipeline/record_seal_repair.py:apply_seals',
+                (
+                    Writer('utils/batch_pipeline/record_seal_repair.py', 'apply_seals.commit'),
+                    Writer('database/record_partial.py', 'finish_partial.commit'),
+                    Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+                ),
+            ),
+            derived=True,
+            metric='omi_record_token_lease_active',
+            alert=Alert('omi-record-token-lease-late-append', 'page'),
+            deadline_exemption='Computed from nested lease clocks; never persisted as expiry state',
+            note='Named exits: seal via apply_seals after retained-tail proof; partial finish via finish_partial '
+            'clears token map and re-arms hourly inventory; late frames re-activate via renew_record_token_lease. '
+            'Custody uploads first fence via record_custody_append.begin, then bump record_upload_revision '
+            'only after durable acceptance in finish, including after rollback. A lost accepted fence recovers via '
+            'record_custody_append.recover_committed with an exact-request durable receipt and partial continuation. '
+            'Separate recovery is parked as record_recovery_waiting until record_recovery_gate.promote '
+            'transactionally observes the original publication complete; promotion runs off/shadow/serve. '
+            'Recovery is independent of '
+            'conversation status; uncaptured input reopens for normal admission of the newer revision. Never deletes audio.',
         ),
         row(
             'record_audio',

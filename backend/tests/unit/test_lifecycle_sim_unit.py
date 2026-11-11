@@ -23,6 +23,7 @@ from testing.lifecycle_sim import listener_faults
 from testing.lifecycle_sim import run as simulator_runner
 from testing.lifecycle_sim.storage import LifecycleBucket
 from testing.lifecycle_sim.producers import CaptureRefused, begin_capture
+from testing.listen_pusher_stack import run as stack_runner
 
 
 @pytest.fixture
@@ -37,6 +38,23 @@ def environment(tmp_path):
 
 def test_preflight_accepts_only_isolated_loopback(environment, tmp_path):
     preflight(tmp_path, environ=environment)
+
+
+def test_isolated_children_bound_numerical_pools_after_dropping_ambient_environment(monkeypatch, tmp_path):
+    limits = (
+        'OMP_NUM_THREADS',
+        'OPENBLAS_NUM_THREADS',
+        'MKL_NUM_THREADS',
+        'VECLIB_MAXIMUM_THREADS',
+        'NUMEXPR_NUM_THREADS',
+        'BLIS_NUM_THREADS',
+    )
+    for key in limits:
+        monkeypatch.setenv(key, '128')
+    monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8081')
+    monkeypatch.setattr(stack_runner.firestore, 'Client', Mock())
+    child_env = stack_runner.Stack(tmp_path).env
+    assert {key: child_env.get(key) for key in limits} == dict.fromkeys(limits, '1')
 
 
 @pytest.mark.parametrize(
