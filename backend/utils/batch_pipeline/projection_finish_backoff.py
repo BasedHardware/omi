@@ -20,6 +20,11 @@ class FinishBackoff:
         self.projector = projector
         # One unfiltered pass per process after the lever turns on.
         self.surveyed = False
+        # A short page ends the legacy walk, but the survey may only close once
+        # every row on it carries a clock: the filtered page cannot see a row
+        # whose stamp failed, so closing early would lose that obligation.
+        self.survey_short = False
+        self.stamp_failed = False
 
     def page(self, size: int) -> list[str]:
         """The finish page: legacy while the lever is off, clock-filtered when on."""
@@ -29,13 +34,21 @@ class FinishBackoff:
             # Rows written while the lever was off carry no clock, so the next
             # enable must survey again before it filters.
             self.surveyed = False
+            self.survey_short = False
             return discovery.next(limit=size)
         due_before = self.projector.clock() if self.surveyed else None
         page = discovery.next(limit=size, due_before=due_before)
-        if due_before is None and len(page) < max(1, min(size, 200)):
+        if due_before is None:
             # A short survey page means the legacy range was walked once.
-            self.surveyed = True
+            self.survey_short = len(page) < max(1, min(size, 200))
         return page
+
+    def survey_done(self) -> None:
+        """Close the survey only after its last page is durably stamped."""
+        if self.survey_short and not self.stamp_failed:
+            self.surveyed = True
+        self.survey_short = False
+        self.stamp_failed = False
 
     def settled(self, segment_id: str, entry: dict | None, result) -> None:
         """Defer this row only after a walk that produced no completion.
@@ -47,4 +60,9 @@ class FinishBackoff:
         if not projection_finish_backoff_enabled() or result is not None:
             return
         state = entry.get('projection_state') if entry else None
-        self.projector.store.defer_finish(segment_id, state, self.projector.clock())
+        try:
+            self.projector.store.defer_finish(segment_id, state, self.projector.clock())
+        except Exception:
+            # The row keeps no clock, so the next tick must survey it again.
+            self.stamp_failed = True
+            raise

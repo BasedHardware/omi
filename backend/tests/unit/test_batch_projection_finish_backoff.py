@@ -348,6 +348,39 @@ def test_stamped_rows_the_lever_did_not_see_are_surveyed_before_filtering(monkey
     assert PROJECTION_FINISH_DUE_FIELD in log.results[legacy]
 
 
+def test_a_stamp_failure_keeps_the_survey_open_for_the_next_tick(monkeypatch):
+    """A failed stamp leaves no clock, so the survey must not close behind it."""
+    monkeypatch.setenv(LEVER, 'true')
+    log, ids = finish_log(persisted=2)
+    now = [1000.0]
+    projector = silent_projector(log)
+    projector.clock = lambda: now[0]
+    failing = ids[0]
+    real, attempts = log.defer_finish, []
+
+    def defer_finish(sid, state, at):
+        attempts.append(sid)
+        if sid == failing and len(attempts) <= 2:
+            raise RuntimeError('synthetic stamp failure')
+        return real(sid, state, at)
+
+    log.defer_finish = defer_finish
+    counts = projector.sweep(limit=10)
+    # A deferral failure is its own error, not a second walk error.
+    assert counts == {'completed': 0, 'waiting': 2, 'blocked': 0, 'error': 0}
+    assert projector.finish_backoff.surveyed is False
+    assert PROJECTION_FINISH_DUE_FIELD not in log.results[failing]
+    assert PROJECTION_FINISH_DUE_FIELD in log.results[ids[1]]
+    # Still surveying, so the unfiltered legacy page discovers the row again.
+    now[0] += 60
+    walked = []
+    projector._finish = Mock(side_effect=lambda sid, *_a: walked.append(sid))
+    projector.sweep(limit=10)
+    assert failing in walked
+    assert PROJECTION_FINISH_DUE_FIELD in log.results[failing]
+    assert projector.finish_backoff.surveyed is True
+
+
 def test_projection_page_due_cursor_and_seed_shapes():
     class Query:
         def __init__(self):

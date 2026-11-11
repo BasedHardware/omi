@@ -1745,4 +1745,7 @@ class Projector:
                             error_type(error),
                             error_site_field(error),
                         )
+        # The survey closes only when its last page is durably stamped; a failed
+        # stamp leaves it open so the next tick's unfiltered page finds the row.
+        self.finish_backoff.survey_done()
         return contention
