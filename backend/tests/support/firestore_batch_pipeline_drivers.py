@@ -318,8 +318,9 @@ def entries():
             covered_by=('database.batch_pipeline_store.projection_page',),
             reason='store adapter forwards namespace, limit, keyset cursor, drain states and the optional finish clock unchanged',
             expect_observed=False,
-            # Re-reviewed 2026-11-11: the cursor parameter is now typed `tuple | None`; no query, read or
-            # bound changed, and the forwarded shape is still the recorded `projection_page` driver.
+            # Re-reviewed 2026-11-11: the adapter gained the optional `due_before` finish clock and
+            # forwards it unchanged; the cursor is now typed `tuple | None`. No query, read or bound
+            # changed, and the forwarded shape is still the recorded `projection_page` driver.
             body_digest='93b2b60f115fd6139a36a571d40468e76d7962b5ffa8ca861e9572cfc0790785',
         ),
         CoveredByEntry(

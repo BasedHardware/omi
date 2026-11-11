@@ -46,6 +46,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projecti
 from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
+from utils.batch_pipeline.metrics import PROJECTION_FINISH_COMPLETED, PROJECTION_FINISH_READS
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict, log_conflict_hold
 from database.batch_pipeline_projection_claim import projection_claim
@@ -1705,16 +1706,22 @@ class Projector:
         for segment_id in self.finish_backoff.page(size):
             if segment_id in touched:
                 continue
+            PROJECTION_FINISH_READS.inc()
+            entry = None
+            result = None
+            defer = True
             try:
                 job, entry, binding = self.store.read(segment_id)
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 contention = contention or policy.projection_contention
                 if policy.async_projection:
                     self.has_async_followups = True
+                    defer = False
                     continue
                 result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
-                self.finish_backoff.settled(segment_id, entry, result)
+                if result is not None:
+                    PROJECTION_FINISH_COMPLETED.inc()
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1
             except Exception as error:
@@ -1724,4 +1731,18 @@ class Projector:
                     error_type(error),
                     error_site_field(error),
                 )
+            finally:
+                if defer:
+                    # A blocked or failed walk must still stamp the row: the
+                    # filtered page cannot see a row without a clock, and the
+                    # survey runs once per process. A deferral failure is its
+                    # own error, not a second walk error.
+                    try:
+                        self.finish_backoff.settled(segment_id, entry, result)
+                    except Exception as error:
+                        logger.error(
+                            'event=batch_projection action=sweep outcome=defer_error exception_type=%s%s',
+                            error_type(error),
+                            error_site_field(error),
+                        )
         return contention

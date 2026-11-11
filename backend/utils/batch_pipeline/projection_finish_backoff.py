@@ -25,6 +25,10 @@ class FinishBackoff:
         """The finish page: legacy while the lever is off, clock-filtered when on."""
         discovery = self.projector.finish_discovery
         if not projection_finish_backoff_enabled():
+            # A rollback can be followed by a re-enable in the same process.
+            # Rows written while the lever was off carry no clock, so the next
+            # enable must survey again before it filters.
+            self.surveyed = False
             return discovery.next(limit=size)
         due_before = self.projector.clock() if self.surveyed else None
         page = discovery.next(limit=size, due_before=due_before)
@@ -33,12 +37,14 @@ class FinishBackoff:
             self.surveyed = True
         return page
 
-    def settled(self, segment_id: str, entry: dict, result) -> None:
+    def settled(self, segment_id: str, entry: dict | None, result) -> None:
         """Defer this row only after a walk that produced no completion.
 
         The store fences on the row's own state, so a row that moved on instead
-        of being deferred is left alone.
+        of being deferred is left alone. ``entry`` is ``None`` when the row read
+        itself failed; the store then stamps only a row still in a finish state.
         """
         if not projection_finish_backoff_enabled() or result is not None:
             return
-        self.projector.store.defer_finish(segment_id, entry.get('projection_state'), self.projector.clock())
+        state = entry.get('projection_state') if entry else None
+        self.projector.store.defer_finish(segment_id, state, self.projector.clock())

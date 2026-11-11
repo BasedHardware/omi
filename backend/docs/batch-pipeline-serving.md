@@ -1249,9 +1249,20 @@ before the lever have no clock and are outside every range filter: the first
 pass after enablement is the unfiltered legacy page, which stamps them, and
 only then does the page filter. Every `projection_state` write (session
 receipts and part summaries, quarantine hold and restore, release, sibling
-wake, completion) clears both fields in the same transaction, so no obligation
-waits on a stale clock. Rollback is the one switch; the fields are additive and
-unread when off, so no backfill is needed.
+wake, completion) writes both fields in the same transaction: a move into
+`persisted`/`ready` stamps due now and step 0, and any other state deletes
+them, so no obligation waits on a stale clock. A blocked or failed survey walk
+also stamps the row, because the filtered page cannot see a row without a
+clock. Rollback is the one switch; the fields are additive and unread when off,
+so no backfill is needed.
+
+The existing oldest-age and over-SLA guards cannot detect a sub-900 s delay
+introduced by this lever: the oldest-age max is already saturated by a
+multi-week held obligation, and the over-SLA stock is large enough that a few
+hundred units crossing the boundary is inside its noise. The finish-page
+reads-per-completion ratio (`omi_batch_projection_finish_reads_total` over
+`omi_batch_projection_finish_completed_total`) is the guard that can move; see
+`charts/monitoring/batch-projection/alerts.yaml`.
 
 ### Per-owner projection drain (Phase 1)
 

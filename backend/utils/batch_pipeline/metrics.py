@@ -29,6 +29,14 @@ from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
 
+PROJECTION_FINISH_READS = Counter(
+    'omi_batch_projection_finish_reads_total',
+    'Finish-page rows read by the projection sweep',
+)
+PROJECTION_FINISH_COMPLETED = Counter(
+    'omi_batch_projection_finish_completed_total',
+    'Finish-page rows completed by the projection sweep',
+)
 PROJECTION_DRAIN_CLAIM_HELD = Counter(
     'omi_batch_projection_drains_skipped_total', 'Owner drain admissions deferred because the fleet claim is held'
 )

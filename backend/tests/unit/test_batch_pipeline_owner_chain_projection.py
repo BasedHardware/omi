@@ -129,7 +129,12 @@ class ResultLog:
                 key(sid)
                 for sid, row in self.results.items()
                 if row['projection_state'] in states
-                and (due_before is None or (row.get('projection_finish_due_at') or 0) <= due_before)
+                # Firestore range filters exclude a document missing the field;
+                # a missing clock is not due.
+                and (
+                    due_before is None
+                    or ('projection_finish_due_at' in row and row['projection_finish_due_at'] <= due_before)
+                )
             )
         )
         if after is not None:

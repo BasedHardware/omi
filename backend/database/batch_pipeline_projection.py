@@ -21,6 +21,7 @@ from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
+    PROJECTION_FINISH_STATES,
     PROJECTION_FINISH_STEP_FIELD,
     projection_finish_state_fields,
 )
@@ -230,7 +231,10 @@ class ProjectionStore:
         that moved on is left untouched: its own state write already stamped it
         due now, so a stale write can never defer a row with new work. Repeats
         escalate 60 s, 300 s, 900 s and stay capped; only the lever's sweep
-        calls this, and a lever-off caller writes nothing.
+        calls this, and a lever-off caller writes nothing. ``state`` is ``None``
+        when the sweep could not read the row: the clock is then stamped only
+        while the row is still in a finish state, so a failed read cannot strand
+        it and cannot touch a completed or pending row.
         """
         from config.batch_pipeline import PROJECTION_FINISH_BACKOFF_SECONDS, projection_finish_backoff_delay
 
@@ -238,7 +242,10 @@ class ProjectionStore:
         def commit(transaction):
             ref = self.ref('results', segment_id)
             row = ref.get(transaction=transaction).to_dict() or {}
-            if row.get('projection_state') != state:
+            current = row.get('projection_state')
+            if state is not None and current != state:
+                return False
+            if current not in PROJECTION_FINISH_STATES:
                 return False
             previous = row.get(PROJECTION_FINISH_STEP_FIELD)
             cap = len(PROJECTION_FINISH_BACKOFF_SECONDS) - 1

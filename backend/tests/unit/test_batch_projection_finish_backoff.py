@@ -15,7 +15,7 @@ from unittest.mock import Mock
 from google.cloud import firestore
 import pytest
 
-from database.batch_pipeline_projection import ProjectionStore
+from database.batch_pipeline_projection import ProjectionBlocked, ProjectionStore
 from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STEP_FIELD,
@@ -154,6 +154,14 @@ def test_a_state_change_clears_both_fields_in_the_same_write(monkeypatch):
     patches = [dict(patch) for _path, patch in client.transactions[-1].updates]
     stamped = [patch for patch in patches if patch.get(PROJECTION_FINISH_DUE_FIELD) == 200.0]
     assert stamped and stamped[0][PROJECTION_FINISH_STEP_FIELD] == 0
+    # A clearing transition writes DELETE_FIELD, not a fresh timestamp.
+    ledger = client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]
+    ledger['status'] = 'completed'
+    ledger['result'] = {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'}
+    store.acknowledge('good', binding, 300)
+    patches = [dict(patch) for _path, patch in client.transactions[-1].updates]
+    cleared = [patch for patch in patches if patch.get(PROJECTION_FINISH_DUE_FIELD) is firestore.DELETE_FIELD]
+    assert cleared and cleared[0][PROJECTION_FINISH_STEP_FIELD] is firestore.DELETE_FIELD
     # Off, the same write carries no backoff field at all.
     monkeypatch.setenv(LEVER, 'false')
     assert projection_finish_state_fields('ready', 5.0) == {}
@@ -208,22 +216,94 @@ def test_replay_still_completes_and_is_counted_not_lost(monkeypatch):
 
 
 def test_same_output_with_the_flag_on_and_off():
-    """Parity: the same log yields the same walk order and counts either way."""
+    """Parity: the filtered tick walks the same rows in the same order."""
     outcomes = []
     for enabled in (False, True):
         log, ids = finish_log(persisted=3)
         now = [1000.0]
-        projectors = silent_projector(log)
-        projectors.clock = lambda: now[0]
-        (monkeypatch := pytest.MonkeyPatch()).setenv(LEVER, 'true' if enabled else 'false')
+        projector = silent_projector(log)
+        projector.clock = lambda: now[0]
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setenv(LEVER, 'true' if enabled else 'false')
         try:
-            counts = projectors.sweep(limit=10)
-            walked = [call.args[0] for call in projectors._finish.call_args_list]
+            # The first tick is the survey; the second is the filtered page when
+            # the lever is on, so this exercises the path the first tick skips.
+            projector.sweep(limit=10)
+            now[0] += 60
+            projector._finish.reset_mock()
+            recorder = Recording(log)
+            projector.store = recorder
+            projector.finish_discovery.store = recorder
+            counts = projector.sweep(limit=10)
+            walked = [call.args[0] for call in projector._finish.call_args_list]
+            pages = [
+                dict(call[2])
+                for call in recorder.calls
+                if call[0] == 'projection_page' and dict(call[2])['states'] == ('persisted', 'ready')
+            ]
         finally:
             monkeypatch.undo()
-        outcomes.append((counts, walked, ids))
-    assert outcomes[0] == outcomes[1]
+        outcomes.append((counts, walked, ids, pages))
+    assert outcomes[0][:3] == outcomes[1][:3]
     assert outcomes[0][0] == {'completed': 0, 'waiting': 3, 'blocked': 0, 'error': 0}
+    # Off never filters; on filters on the clock after the survey.
+    assert all('due_before' not in page for page in outcomes[0][3])
+    assert any(page.get('due_before') is not None for page in outcomes[1][3])
+
+
+def test_a_blocked_survey_row_is_stamped_so_the_filtered_page_can_see_it(monkeypatch):
+    monkeypatch.setenv(LEVER, 'true')
+    log, ids = finish_log(persisted=2)
+    now = [1000.0]
+    projector = silent_projector(log)
+    projector.clock = lambda: now[0]
+    blocked = ids[0]
+
+    def finish(sid, *_args):
+        if sid == blocked:
+            raise ProjectionBlocked('synthetic block')
+        return None
+
+    projector._finish = Mock(side_effect=finish)
+    counts = projector.sweep(limit=10)
+    assert counts['blocked'] == 1
+    # The survey is once per process; a blocked row must still carry a clock.
+    assert log.results[blocked][PROJECTION_FINISH_DUE_FIELD] == 1060.0
+    now[0] += 60
+    projector._finish = Mock(return_value=None)
+    projector.sweep(limit=10)
+    assert blocked in [call.args[0] for call in projector._finish.call_args_list]
+
+
+def test_reenable_after_rollback_surveys_rows_written_while_off(monkeypatch):
+    monkeypatch.setenv(LEVER, 'true')
+    log, _ids = finish_log(persisted=1)
+    now = [1000.0]
+    projector = silent_projector(log)
+    projector.clock = lambda: now[0]
+    projector.sweep(limit=10)
+    assert projector.finish_backoff.surveyed is True
+    # Roll back: the next tick is the legacy page and clears the survey flag.
+    monkeypatch.setenv(LEVER, 'false')
+    now[0] += 1
+    projector.sweep(limit=10)
+    assert projector.finish_backoff.surveyed is False
+    # A row written while the lever was off has no clock.
+    log.commit(BURST, 'b', 'off-window', ['off-window'], state='persisted')
+    log.results['off-window']['projection'] = {
+        'state': 'persisted',
+        'conversation_id': None,
+        'enrichment_required': False,
+    }
+    assert PROJECTION_FINISH_DUE_FIELD not in log.results['off-window']
+    # Re-enable in the same process: the survey runs again and stamps it.
+    monkeypatch.setenv(LEVER, 'true')
+    now[0] += 1
+    walked = []
+    projector._finish = Mock(side_effect=lambda sid, *_a: walked.append(sid))
+    projector.sweep(limit=10)
+    assert 'off-window' in walked
+    assert PROJECTION_FINISH_DUE_FIELD in log.results['off-window']
 
 
 def test_kill_switch_flip_restores_the_legacy_page_on_the_next_tick(monkeypatch):

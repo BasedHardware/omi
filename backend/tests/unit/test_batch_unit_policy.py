@@ -115,6 +115,14 @@ def test_cohort_registry_and_live_switch_contract():
     )
 
 
+def test_default_off_switches_stay_off_in_serve_mode():
+    """The serve-mode parser must not turn an unset default-off lever on."""
+    for key, default in KILL_SWITCHES.items():
+        if default:
+            continue
+        assert kill_switch(key, flags={'CAPTURE_COVERAGE_MODE': 'serve'}) is False, key
+
+
 @pytest.mark.parametrize(
     'name',
     [

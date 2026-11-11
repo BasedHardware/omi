@@ -438,7 +438,10 @@ class ProjectionSession:
             parts = {**(self.entry.get('projection_parts') or {}), str(self.part_index): receipt}
             changes: dict[str, Any] = {'projection_parts': parts, 'projection_part_count': self.part_count}
             if privacy_replay:
-                changes['projection_state'] = 'pending'
+                changes.update(
+                    projection_state='pending',
+                    **projection_finish_state_fields('pending', self.now),
+                )
             if quarantined:
                 # Old projector binaries require result protocol 1. Fence them
                 # before they can turn an unknown held receipt into ready.
