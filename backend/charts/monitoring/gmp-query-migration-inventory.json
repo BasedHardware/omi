@@ -1435,6 +1435,45 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "max by (stage) (omi_pipeline_ledger_stuck_rows)",
+      "file": "alerts/pipeline-ledger.json",
+      "issues": [],
+      "metrics": [
+        "omi_pipeline_ledger_stuck_rows"
+      ],
+      "owner_title": "Pipeline ledger rows are stuck past their stage deadline",
+      "owner_uid": "omi-pipeline-ledger-stuck",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_pipeline_ledger_refreshed_at_seconds)) or vector(1e9)",
+      "file": "alerts/pipeline-ledger.json",
+      "issues": [],
+      "metrics": [
+        "omi_pipeline_ledger_refreshed_at_seconds"
+      ],
+      "owner_title": "Pipeline ledger census sample is stale or never taken",
+      "owner_uid": "omi-pipeline-ledger-sample-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_pipeline_ledger_gate_receipt_generated_at_seconds)) or vector(1e9)",
+      "file": "alerts/pipeline-ledger.json",
+      "issues": [],
+      "metrics": [
+        "omi_pipeline_ledger_gate_receipt_generated_at_seconds"
+      ],
+      "owner_title": "Pipeline census gate receipt is older than one hour",
+      "owner_uid": "omi-pipeline-ledger-gate-receipt-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0)) + ((max(omi_audio_custody_last_risk_timestamp_seconds) > time() - 300) or vector(0))",
       "file": "alerts/pusher.json",
       "issues": [],
@@ -4043,7 +4082,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 271
+    "query_consumers": 274
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
