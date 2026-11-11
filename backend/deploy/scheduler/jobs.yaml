@@ -430,7 +430,7 @@ environments:
       - name: app-review-config-sweep-hourly
         lifecycle: planned
         region: us-central1
-        schedule: "0 * * * *"
+        schedule: "17 * * * *"
         time_zone: Etc/UTC
         state: PAUSED
         target:

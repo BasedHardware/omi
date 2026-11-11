@@ -20,7 +20,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_app_review_config_alert_total[15m])) > bool 0",
+          "expr": "sum(increase(omi_app_review_config_alert_total{reason=~\"credentials_unavailable|store_api_error\"}[15m])) > bool 0",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -120,12 +120,12 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "The app-review lifecycle found an API/credential failure or repaired/cleared a version hide in the last 15 minutes",
-      "threshold": "sum(increase(omi_app_review_config_alert_total[15m])) > 0",
+      "summary": "The app-review lifecycle could not read store state because credentials are unavailable or the store API failed",
+      "threshold": "sum(increase(omi_app_review_config_alert_total{reason=~\"credentials_unavailable|store_api_error\"}[15m])) > 0",
       "user_impact": "A store review state may not match subscription visibility; API outages also reduce this platform to TTL-only cleanup.",
       "scope": "Hourly app-review config sweep on backend-sync and Codemagic submission receipt hook.",
       "verification": "Check backend-sync logs for app_review_config platform/reason, then inspect the Secret Manager bindings and store API key scopes in backend/docs/runbooks/app-review-config.md.",
-      "safe_next_action": "Restore read-only store credentials or inspect the reported version. Existing legacy hides are not automatically removed.",
+      "safe_next_action": "Restore read-only store credentials or resolve the store API error. Routine reconciliation repairs and clears do not page.",
       "runbook": "backend/docs/runbooks/app-review-config.md"
     },
     "labels": {

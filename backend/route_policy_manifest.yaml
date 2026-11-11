@@ -140,7 +140,7 @@ routes:
       review_status: reviewed
       auth: {mechanisms: [codemagic_submission_token], placement: handler, scopes: []}
       byok: not_applicable
-      rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}
+      rate_limit: {policy_name: app_review_config_submission, key_subject: ip, enforcement: fail_closed, placement: dependency}
       timeout_class: default_method
       surface: internal_task
       visibility: internal
