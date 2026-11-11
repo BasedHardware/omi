@@ -56,7 +56,15 @@ def main():
     require(disassembly.count('<disk_access_ioctl>') == 2, 'main must call disk ioctl INIT and DEINIT')
     require(disassembly.count('<pm_device_action_run>') == 2, 'main must resume and suspend SD')
     require('<boot_go>' in disassembly, 'Missing boot_go in main')
-    require(disassembly.rfind('<disk_access_ioctl>') < disassembly.index('<boot_go>'), 'SD initialization must precede boot_go')
+    calls = list(re.finditer(r'\bbl(?:\.w)?\s+[^\n]*<([^+>]+)>', disassembly))
+    selected = [call for call in calls if re.fullmatch(r'(?:z_impl_)?k_sleep|pm_device_action_run|disk_access_ioctl|boot_go', call[1])]
+    expected_calls = ['sleep', 'pm_device_action_run', 'disk_access_ioctl', 'sleep', 'disk_access_ioctl', 'pm_device_action_run', 'boot_go']
+    labels = ['sleep' if call[1].endswith('k_sleep') else call[1] for call in selected]
+    require(labels == expected_calls, 'SD sleep/resume/INIT/sleep/DEINIT/suspend order differs from factory')
+    for index, argument in [(1, 1), (2, 6), (4, 7), (5, 0)]:
+        instructions = disassembly[selected[index - 1].end():selected[index].start()]
+        require(re.search(rf'\bmovs?\s+r1,\s*#(?:0x)?{argument}\b', instructions),
+                f'Wrong SD action/ioctl argument before {selected[index][1]}')
     # Source identity catches an omitted overlay even if unused drivers exist.
     ninja = (args.build / 'mcuboot/build.ninja').read_text()
     require('mcuboot_boot_zephyr.c.obj:' in ninja, 'Custom MCUboot main was not compiled')

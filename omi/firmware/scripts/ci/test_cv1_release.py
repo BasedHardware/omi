@@ -114,6 +114,20 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unapproved CV1 boot region'):
             release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
 
+    def test_promotion_rejects_different_wire_app_even_with_updated_checksum(self):
+        name = release.asset_names('3.0.21')[1]
+        write_hex(self.assets / name, {0x10000: 0x3d, 0x10001: 0})
+        provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+        provenance['sha256'][name] = release.digest(self.assets / name)
+        (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
+        with self.assertRaisesRegex(ValueError, 'exactly the tested OTA signed bytes'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+
+    def test_stage_rejects_boot_bytes_in_network_hex(self):
+        write_hex(self.build / 'merged_CPUNET.hex', {0: 0x42, 0x1000000: 0x33})
+        with self.assertRaisesRegex(ValueError, 'unapproved CV1 boot region'):
+            release.stage(self.build, self.root / 'bad-net', '3.0.21', False, self.context, self.sim)
+
     def test_stage_requires_a_passing_full_simulator_report(self):
         bad_rows = [{'id': 'x', 'verdict': 'pass'}] * release.SIM_MIN_SCENARIOS
         failing = [dict(r, verdict='fail') for r in sim_report('a' * 40, '3.0.21')['scenarios']]
@@ -187,7 +201,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(manifest['files'], self.manifest['files'][:1])
             self.assertEqual(manifest['time'], 123)
         app_hex, net_hex = release.asset_names('3.0.21')[1:]
-        self.assertEqual(read_hex(self.assets / app_hex), {0x10000: 0x3d, 0x10200: 0x11})
+        self.assertEqual(read_hex(self.assets / app_hex), dict(enumerate(self.payload, 0x10000)))
         self.assertEqual((self.build / 'merged_CPUNET.hex').read_bytes(), (self.assets / net_hex).read_bytes())
 
     def test_network_requires_explicit_opt_in(self):

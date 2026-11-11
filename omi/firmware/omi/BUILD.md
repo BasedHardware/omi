@@ -49,7 +49,7 @@ west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always \
 | File | Purpose |
 | --- | --- |
 | `dfu_application.zip` | OTA package — what the Omi app / nRF Connect Mobile installs (MCUmgr DFU) |
-| `merged.hex` | Internal merged image; stage app-only HEX before SWD recovery |
+| `merged.hex` | Internal merged image; use staged OTA-derived app-only HEX for SWD recovery |
 | `merged_CPUNET.hex` | Full-flash image, network core (J-Link) |
 
 CI fails loudly if any of the three is missing. It also builds the Omi custom

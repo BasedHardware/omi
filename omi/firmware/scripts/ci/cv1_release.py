@@ -13,7 +13,7 @@ import struct
 import tempfile
 import zipfile
 
-from cv1_bootloader import app_only, inspect_hex
+from cv1_bootloader import app_hex, inspect_hex, read_hex
 
 WORKFLOW = '.github/workflows/firmware_release.yml'
 ARTIFACT = 'cv1-qa-release'
@@ -138,9 +138,10 @@ def stage(build, out, ver, include_network, context, sim_report):
     repackage(build / 'dfu_application.zip', out / names[0], include_network)
     with zipfile.ZipFile(out / names[0]) as archive:
         validate_signed_version(archive, ver)
-        signed_sha256 = hashlib.sha256(archive.read('omi.signed.bin')).hexdigest()
+        signed_image = archive.read('omi.signed.bin')
+        signed_sha256 = hashlib.sha256(signed_image).hexdigest()
     # Never distribute a bootloader while the new build awaits physical qualification.
-    app_only(build / 'merged.hex', out / names[1])
+    app_hex(signed_image, out / names[1])
     shutil.copyfile(build / 'merged_CPUNET.hex', out / names[2])
     require(all((out / name).stat().st_size for name in names), 'Empty release asset')
     boot_regions = {path.name: inspect_hex(path) for path in out.glob('*.hex')}
@@ -201,6 +202,8 @@ def validate_assets(out, run, ver, include_network, tested_signed_sha256):
             hashlib.sha256(archive.read('omi.signed.bin')).hexdigest() == tested_signed_sha256.lower(),
             'Bench-tested signed image SHA-256 mismatch',
         )
+        require(read_hex(out / names[1]) == dict(enumerate(archive.read('omi.signed.bin'), 0x10000)),
+                'QA app HEX must contain exactly the tested OTA signed bytes')
 
 
 def gh(*args):

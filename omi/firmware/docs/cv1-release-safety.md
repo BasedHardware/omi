@@ -24,7 +24,7 @@ never wire-flash stock MCUboot.
    evidence, not a test of the signed bytes; the bench (step 3) still is.
    The default OTA zip contains only app image 0. Set `include_network_core=true`
    only when intentionally testing a paired app/radio update. This changes zip
-   packaging only. Release staging also extracts app-only HEX from `merged.hex`;
+   packaging only. Release staging also generates app-only HEX from the staged OTA signed image;
    MCUboot, settings and UICR are excluded. `merged_CPUNET.hex` stays separate.
 3. Download `cv1-qa-release-<run ID>-<attempt>` and test its `Omi_CV1_OTA_v<version>.zip` on the bench
    through the stock app. Record the run ID, attempt, asset SHA-256 from

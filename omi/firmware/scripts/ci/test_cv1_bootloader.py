@@ -41,12 +41,14 @@ class BootRegionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'unapproved'):
                 boot.inspect_hex(self.hex, self.policy)
 
-    def test_strips_only_app_and_excludes_boot_uicr_and_settings(self):
-        memory = {0: 1, 0x10000: 2, 0x10200: 3, 0xf5fff: 4, 0xf6000: 5, 0xff8000: 6, 0x1000000: 7}
-        boot.write_hex(self.hex, memory)
+    def test_app_hex_preserves_signed_bytes_and_rejects_storage_overlap(self):
         out = self.root / 'app.hex'
-        boot.app_only(self.hex, out)
-        self.assertEqual(boot.read_hex(out), {a: memory[a] for a in (0x10000, 0x10200, 0xf5fff)})
+        image = b'\x3d\x00\xffsigned-app'
+        boot.app_hex(image, out)
+        self.assertEqual(boot.read_hex(out), dict(enumerate(image, boot.BOOT_END)))
+        for invalid in (b'', bytes(0xf6000 - boot.BOOT_END + 1)):
+            with self.assertRaisesRegex(ValueError, 'fit entirely'):
+                boot.app_hex(invalid, out)
 
     def test_parser_refuses_ambiguous_or_malformed_files(self):
         valid = boot.record(0, 0, b'\x42')
@@ -66,16 +68,18 @@ class BootRegionTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('cmake'), 'CMake required for source-overlay configure test')
     def test_overlay_replaces_exactly_one_main_and_fails_on_drift(self):
-        overlay = boot.POLICY.parents[1] / 'omi/sysbuild/mcuboot-main.cmake'
+        overlay = boot.POLICY.parents[1] / 'omi/sysbuild/mcuboot-main/CMakeLists.txt'
         for count in (0, 1, 2):
-            source = self.root / f'cmake-{count}'
-            source.mkdir()
+            source = self.root / f'cmake-{count}' / 'boot/zephyr'
+            source.mkdir(parents=True)
             (source / 'main.c').write_text('int main(void) { return 0; }')
             targets = ''.join(f'add_library(test{i} STATIC main.c)\n' for i in range(count))
             (source / 'CMakeLists.txt').write_text(
                 'cmake_minimum_required(VERSION 3.20)\n'
-                f'set(CMAKE_PROJECT_INCLUDE "{overlay}")\n'
-                'project(overlay_test C)\n' + targets)
+                'project(overlay_test C)\n'
+                f'set(APPLICATION_SOURCE_DIR "{source}")\n'
+                f'set(ZEPHYR_MCUBOOT_MODULE_DIR "{source.parents[1]}")\n' + targets +
+                f'include("{overlay}")\n')
             result = subprocess.run(['cmake', '-S', str(source), '-B', str(source / 'build')],
                                     text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             if count == 1:

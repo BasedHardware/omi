@@ -86,13 +86,11 @@ def write_hex(path, memory):
     Path(path).write_text('\n'.join(lines) + '\n')
 
 
-def app_only(source, target):
-    """Keep only the app slot, preserving factory MCUboot, settings and UICR."""
-    memory = read_hex(source)
-    app = {a: b for a, b in memory.items() if BOOT_END <= a < 0xf6000}
-    if BOOT_END not in app:
-        raise ValueError('Missing signed application at 0x10000')
-    write_hex(target, app)
+def app_hex(image, target):
+    """Wire recovery uses the exact OTA signed bytes and preserves factory state."""
+    if not image or len(image) > 0xf6000 - BOOT_END:
+        raise ValueError('Signed application must fit entirely below storage at 0xf6000')
+    write_hex(target, dict(enumerate(image, BOOT_END)))
     inspect_hex(target)
 
 

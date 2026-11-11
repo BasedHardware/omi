@@ -35,9 +35,9 @@ The embedded public-key SHA-256 is
 `fc5701dc6135e1323847bdc40f04d2e5bee5833b23c29f93593d00018cfa9994`.
 Compare public hashes; never print signing-key contents.
 
-**Release app HEX files are app-only.** `cv1_release.py stage` selects only
-[0x10000, 0xf6000) from `merged.hex`, preserving installed MCUboot, storage,
-settings and UICR. The name `Omi_CV1_v<version>.hex` does not mean full-flash.
+**Release app HEX files are app-only.** `cv1_release.py stage` writes the exact `omi.signed.bin` bytes from the staged OTA ZIP at
+0x10000 and rejects any overlap with storage at 0xf6000. This preserves
+installed MCUboot, storage, settings and UICR. The name `Omi_CV1_v<version>.hex` does not mean full-flash.
 The CPUNET HEX remains a separately named asset for explicitly authorized
 radio work; it is not part of normal app recovery. OTA ZIPs default to app only.
 

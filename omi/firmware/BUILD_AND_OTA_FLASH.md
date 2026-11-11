@@ -168,7 +168,7 @@ The build generates several important files in the `build/` directory:
 - `dfu_application.zip_manifest.json` - Package metadata
 
 ### Firmware Images
-- `merged.hex` - Internal sysbuild output, **not approved for direct programming**; release staging emits app-only HEX
+- `merged.hex` - Internal sysbuild output, **not approved for direct programming**; release staging emits app-only HEX from the OTA signed image
 - `signed_by_mcuboot_and_b0_ipc_radio.hex` - Signed application firmware
 - `merged_CPUNET.hex` (533 KB) - Network core firmware
 

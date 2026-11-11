@@ -70,8 +70,10 @@ ls -l build/dfu_application.zip build/merged.hex build/merged_CPUNET.hex
 
 # Evidence is a QA artifact, never a release asset. Extract exactly the boot
 # reservation with 0xff holes; never include UICR or a network image.
-OBJDUMP=$(find /opt/toolchains -name arm-zephyr-eabi-objdump -type f -print -quit)
-test -n "$OBJDUMP"
+COMPILER=$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' build/mcuboot/CMakeCache.txt)
+test -x "$COMPILER"
+OBJDUMP="${COMPILER%gcc}objdump"
+test -x "$OBJDUMP"
 python3 "$FW/scripts/ci/prove_cv1_bootloader.py" --build build \
   --objdump "$OBJDUMP" --out build/cv1-bootloader
 # Prove reproducibility of the unsigned bootloader, independently of the app's
@@ -85,4 +87,4 @@ cmp build/cv1-mcuboot-first.bin build/cv1-bootloader/cv1-mcuboot.bin
 printf '%s\n' 'Two clean MCUboot compilations produced identical 64KiB boot regions.' \
   > build/cv1-bootloader/reproducibility.txt
 west manifest --freeze > build/cv1-bootloader/west-frozen.yml
-"$OBJDUMP" --version > build/cv1-bootloader/toolchain.txt
+"$COMPILER" --version > build/cv1-bootloader/toolchain.txt
