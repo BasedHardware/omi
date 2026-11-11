@@ -30,16 +30,29 @@ not prove the initialization sequence runs before image validation.
 
 [`../bootloader/cv1-bootloader-policy.json`](../bootloader/cv1-bootloader-policy.json)
 is the release allowlist. Hash the entire [0, 0x10000) region, filling holes
-with 0xff. The approved factory hash is
-`c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086`,
-from `FLASH_3.0.8/MAC/merged.hex`. Factory initialized data ends at 0xcddc.
-The embedded public-key SHA-256 is
+with 0xff. The build and release bootloader hash is
+`6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1`.
+CI reproduces the historical 3.0.19 loader byte-for-byte. Its initialized bytes
+end at 0xcebc, inside the 64 KiB reservation. The lead qualified these exact
+bytes with the released 3.0.24 app on 2026-11-11; see the
+[committed jig receipt](cv1-bootloader-release-audit.md#jig-qualification-2026-11-11).
+The factory hash
+`c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086`
+from `FLASH_3.0.8/MAC/merged.hex` remains an approved installed/restoration
+state. Factory initialized data ends at 0xcddc. CI must build the pinned
+3.0.19 hash; accepting factory state does not permit a different build hash.
+Both embed public-key SHA-256
 `fc5701dc6135e1323847bdc40f04d2e5bee5833b23c29f93593d00018cfa9994`.
 Compare public hashes; never print signing-key contents.
 
-**Release app HEX files are app-only.** `cv1_release.py stage` writes the exact `omi.signed.bin` bytes from the staged OTA ZIP at
-0x10000 and rejects any overlap with storage at 0xf6000. This preserves
-installed MCUboot, storage, settings and UICR. The name `Omi_CV1_v<version>.hex` does not mean full-flash.
+**Release app-core HEX files contain the qualified bootloader and app.**
+`cv1_release.py stage` constructs them from the pinned MCUboot image and the
+exact `omi.signed.bin` bytes in the staged OTA ZIP at 0x10000. It excludes
+storage at 0xf6000 and above, UICR and network addresses. It never distributes
+the raw sysbuild `merged.hex`. This provides a qualified app-core image for
+manufacturing and wired repair of stock-loader units. App-only recovery is
+still an option when deliberately preserving an approved installed loader;
+it must be derived from the exact OTA signed image, not an old merged HEX.
 The CPUNET HEX remains a separately named asset for explicitly authorized
 radio work; it is not part of normal app recovery. OTA ZIPs default to app only.
 
@@ -49,7 +62,7 @@ overlapping, truncated or checksum-invalid HEX fails closed. Changing asset
 checksums in provenance does not bypass the boot-region gate. Inspect manually:
 
 ```sh
-python3 omi/firmware/scripts/ci/cv1_bootloader.py --app-only path/to/Omi_CV1_vX.hex
+python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader path/to/Omi_CV1_vX.hex
 ```
 
 The new custom build remains a separate **bench artifact**, not a release
@@ -73,8 +86,11 @@ static partitions remain the existing ones.
 `build-cv1.sh` uses stable locale/time/hash-seed settings and two build jobs.
 `prove_cv1_bootloader.py` checks the embedded public key, generated layout,
 production config, custom source selection and disassembled calls before
-`boot_go`. MCUboot initialized flash must end below 0xce00; the reserved
-region ends at 0x10000, signed slot header starts there, app vectors at 0x10200.
+`boot_go`. MCUboot initialized flash must fit inside [0, 0x10000), and its full padded
+hash must equal the pinned build hash. The signed primary slot starts at
+0x10000 with size 0xf0000; its header is 0x200 bytes and app allocation starts
+at 0x10200 with size 0xe5e00. The external secondary is also 0xf0000 bytes.
+The former 0xce00 heuristic is not a hardware boundary.
 A second clean MCUboot compilation must reproduce the same 64 KiB hash.
 App RSA signatures are randomized, so that claim does not apply to app bytes.
 
@@ -87,37 +103,43 @@ The run uploads `cv1-bootloader-<run>-<attempt>` with:
 - Rebuild comparison, frozen west manifest and toolchain version.
 
 Use the report to state the actual binary difference; compiler or layout
-changes cannot be dismissed merely as “different toolchain.” Until a CI run
-and bench receipt exist, source integration is not proof of factory equivalence.
+changes cannot be dismissed merely as “different toolchain.” The recorded CI rebuilds and lead jig receipt bind the approved bytes;
+source integration alone is not proof of factory equivalence.
 
-## Safe SWD app recovery
+## Safe SWD app-core recovery
 
-Prefer BLE OTA on a working pendant. For app-only wire recovery:
+Prefer BLE OTA on a working pendant. Wired flashing replaces the bootloader
+when using the merged release app-core HEX; use stable power and preserve a
+rollback backup. For an authorized wired repair:
 
-1. Back up and hash [0, 0x10000) with J-Link APP-core `savebin`. Compare with
-   the approved policy. A nonapproved installed loader needs a separately
-   reviewed recovery plan; app flashing cannot repair it.
-2. Check the exact downloaded HEX with the command above. Require
-   `bootloader-free` for normal recovery. Do not use historical merged release
-   HEX or copy a new HEX over the archived factory files.
-3. With the existing approved probe-selection conventions, use only the
-   `nRF5340_xxAA_APP` target and `loadfile` the app-only HEX. Never mass erase,
-   recover/unlock, flash CPUNET, change UICR or change protection settings.
-4. Read back the boot region again and verify it is unchanged. Reset, reconnect,
-   check firmware identity, boot record, SD and capture; verify a subsequent BLE
-   OTA install from a cold power cycle.
+1. Back up and hash [0, 0x10000) with J-Link APP-core `savebin`. Preserve the
+   backup even if it is stock; do not treat an unknown hash as approved.
+2. Validate the exact release HEX with `--require-bootloader` above. The
+   staged release must carry `6cfd4a70...35cad1` and the intended app version.
+   Never copy it over archived factory files or invoke legacy two-core scripts.
+3. With the approved probe-selection conventions, use only the
+   `nRF5340_xxAA_APP` target and program the validated app-core HEX. Never mass
+   erase, recover/unlock, flash CPUNET, change UICR or change protection settings.
+   Use the bench's verified reset-and-halt strategy before the loader reapplies
+   its SPU lock. Abort if it remains protected; do not bypass protection.
+4. Read back the boot region and require the release's pinned hash. Reset,
+   reconnect, check app identity, boot record, SD and capture, then verify a
+   subsequent BLE OTA install. Blinking LEDs alone are insufficient evidence.
 
-A blank pendant also needs a qualified bootloader; app-only HEX is insufficient.
-Bootloader replacement is a separate factory/bench operation: back up, use
-`loadbin` of the exact approved 64 KiB binary at 0, verify by readback and
-compare untouched app flash. Do not use `west flash` across all sysbuild domains.
-The archived `FLASH_3.0.8` images are evidence, not a generic current installer.
+To deliberately preserve an approved installed loader, extract only
+`omi.signed.bin` from the intended OTA ZIP and use APP-core `loadbin` at
+0x10000, followed by `verifybin`. Back up/read back the boot region and require
+it to be unchanged. This app-only route cannot repair a stock bootloader.
+The host helper's `--app-only` validates app-only HEX when that format is used.
+A blank pendant needs the separate qualified manufacturing process; an
+app-only image is insufficient. Do not use `west flash` across all sysbuild
+domains. Archived `FLASH_3.0.8` files are evidence, not a generic installer.
 
 ## Qualification and rollback limits
 
-Physical qualification must exercise candidate bootloader + 3.0.21 app,
+Qualification exercises the approved bootloader + 3.0.21 app,
 app-only BLE OTA to 3.0.24, cold SD startup, boot records and restoration of
-the factory bootloader. The lead owns the jig. Keep the exact run/attempt,
+the factory bootloader. The lead owns the jig and reported this pairing passed on 2026-11-11. Keep the exact run/attempt,
 bootloader and signed-app hashes with its receipt.
 
 Factory/production MCUboot uses **overwrite-only** with downgrade prevention.

@@ -9,7 +9,7 @@ import re
 import shutil
 import subprocess
 
-from cv1_bootloader import BOOT_END, POLICY, boot_bytes, read_hex
+from cv1_bootloader import BOOT_END, POLICY, boot_bytes, read_hex, validate_build_bootloader
 
 KEY_SHA256 = 'fc5701dc6135e1323847bdc40f04d2e5bee5833b23c29f93593d00018cfa9994'
 
@@ -62,18 +62,17 @@ def main():
     fw = POLICY.parents[1]
     factory = boot_bytes(read_hex(fw / 'FLASH_3.0.8/MAC/merged.hex'))
     memory = read_hex(args.build / 'mcuboot/zephyr/zephyr.hex')
-    require(min(memory) == 0 and max(memory) < 0xce00, 'MCUboot must fit below 0xCE00')
-    candidate = boot_bytes(memory)
+    candidate = validate_build_bootloader(memory)
     require(public_key(candidate) == public_key(factory), 'Public key differs from factory')
     partitions = (args.build / 'partitions.yml').read_text()
-    for name, address, size in [('mcuboot', 0, BOOT_END), ('mcuboot_pad', BOOT_END, 0x200), ('app', 0x10200, 0xe5e00)]:
+    for name, address, size in [('mcuboot', 0, BOOT_END), ('mcuboot_pad', BOOT_END, 0x200), ('mcuboot_primary', BOOT_END, 0xf0000), ('mcuboot_secondary', 0, 0xf0000), ('app', 0x10200, 0xe5e00)]:
         section = re.search(rf'^{name}:\n((?:[ \t].*\n)+)', partitions, re.M)
         require(section, f'Missing partition {name}')
         for key, expected in [('address', address), ('size', size)]:
             match = re.search(rf'^  {key}: (0x[0-9a-f]+|[0-9]+)$', section[1], re.M)
             require(match and int(match[1], 0) == expected, f'Unexpected {name}.{key}')
     config = (args.build / 'mcuboot/zephyr/.config').read_text()
-    for setting in ['CONFIG_BOOT_UPGRADE_ONLY=y', 'CONFIG_MCUBOOT_DOWNGRADE_PREVENTION=y', 'CONFIG_DISK_ACCESS=y', 'CONFIG_DISK_DRIVER_SDMMC=y']:
+    for setting in ['CONFIG_BOOT_UPGRADE_ONLY=y', 'CONFIG_MCUBOOT_DOWNGRADE_PREVENTION=y', 'CONFIG_DISK_ACCESS=y', 'CONFIG_DISK_DRIVER_SDMMC=y', 'CONFIG_FPROTECT=y']:
         require(setting in config.splitlines(), f'Missing production setting: {setting}')
     elf = args.build / 'mcuboot/zephyr/zephyr.elf'
     disassembly = subprocess.check_output([args.objdump, '-d', '--disassemble=main', str(elf)], text=True)
@@ -109,7 +108,7 @@ def main():
         'app_vector': 0x10200,
         'mode': 'overwrite-only; no trial rollback',
         'release_approved': digest in json.loads(POLICY.read_text())['approved_boot_sha256'],
-        'bench_qualified': False,
+        'bench_qualified': digest == json.loads(POLICY.read_text())['qualification']['boot_sha256'],
     }
     (args.out / 'bootloader-report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

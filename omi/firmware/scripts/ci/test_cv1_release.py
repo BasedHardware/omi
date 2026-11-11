@@ -17,6 +17,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
+import cv1_bootloader as boot
 import cv1_release as release
 from cv1_bootloader import write_hex, read_hex, inspect_hex, POLICY
 
@@ -55,6 +56,18 @@ class ReleaseTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.build = self.root / 'build'
         self.build.mkdir()
+        self.boot_memory = {0: 0x42, 8: 0x11}
+        self.boot_image = boot.boot_bytes(self.boot_memory)
+        policy = self.root / 'boot-policy.json'
+        fixture_hash = hashlib.sha256(self.boot_image).hexdigest()
+        policy.write_text(json.dumps({'build_boot_sha256': fixture_hash,
+                                     'approved_boot_sha256': [fixture_hash, 'c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086']}))
+        policy_patch = patch.object(boot, 'POLICY', policy)
+        policy_patch.start()
+        self.addCleanup(policy_patch.stop)
+        boot_path = self.build / 'mcuboot/zephyr/zephyr.hex'
+        boot_path.parent.mkdir(parents=True)
+        write_hex(boot_path, self.boot_memory)
         header = bytearray(32)
         struct.pack_into('<I', header, 0, 0x96F3B83D)
         struct.pack_into('<BBH', header, 20, 3, 0, 21)
@@ -107,7 +120,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_promotion_rejects_boot_bytes_even_with_updated_checksums(self):
         name = release.asset_names('3.0.21')[1]
-        write_hex(self.assets / name, {0: 0x42, 0x10000: 0x3d})
+        write_hex(self.assets / name, {0: 0x43, 0x10000: 0x3d})
         provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
         provenance['sha256'][name] = release.digest(self.assets / name)
         (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
@@ -116,11 +129,11 @@ class ReleaseTests(unittest.TestCase):
 
     def test_promotion_rejects_different_wire_app_even_with_updated_checksum(self):
         name = release.asset_names('3.0.21')[1]
-        write_hex(self.assets / name, {0x10000: 0x3d, 0x10001: 0})
+        write_hex(self.assets / name, {**dict(enumerate(self.boot_image)), 0x10000: 0x3d, 0x10001: 0})
         provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
         provenance['sha256'][name] = release.digest(self.assets / name)
         (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
-        with self.assertRaisesRegex(ValueError, 'exactly the tested OTA signed bytes'):
+        with self.assertRaisesRegex(ValueError, 'exactly the pinned bootloader and tested OTA signed bytes'):
             release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
 
     def test_stage_rejects_boot_bytes_in_network_hex(self):
@@ -128,19 +141,41 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unapproved CV1 boot region'):
             release.stage(self.build, self.root / 'bad-net', '3.0.21', False, self.context, self.sim)
 
-    def test_allowlisted_boot_or_outside_app_bytes_cannot_enter_app_hex(self):
+    def test_stage_rejects_even_approved_boot_bytes_in_network_hex(self):
+        write_hex(self.build / 'merged_CPUNET.hex', {**self.boot_memory, 0x1000000: 0x33})
+        with self.assertRaisesRegex(ValueError, 'CPUNET HEX must not contain'):
+            release.stage(self.build, self.root / 'approved-boot-in-net', '3.0.21', False, self.context, self.sim)
+
+    def test_other_allowlisted_boot_or_outside_app_bytes_cannot_enter_release_hex(self):
         name = release.asset_names('3.0.21')[1]
-        original = dict(enumerate(self.payload, 0x10000))
+        original = boot.wire_memory(self.payload, self.boot_image)
         factory = read_hex(POLICY.parents[1] / 'FLASH_3.0.8/MAC/merged.hex')
-        boot = {address: byte for address, byte in factory.items() if address < 0x10000}
-        for extra in (boot, {0xf6000: 1}, {0xff8000: 1}, {0x1000000: 1}):
+        factory_boot = {address: byte for address, byte in factory.items() if address < 0x10000}
+        for extra in (factory_boot, {0xf6000: 1}, {0xff8000: 1}, {0x1000000: 1}):
             write_hex(self.assets / name, {**original, **extra})
             provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
             provenance['sha256'][name] = release.digest(self.assets / name)
             provenance['boot_regions'][name] = inspect_hex(self.assets / name)
             (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
-            with self.subTest(extra=min(extra)), self.assertRaisesRegex(ValueError, 'exactly the tested OTA signed bytes'):
+            with self.subTest(extra=min(extra)), self.assertRaisesRegex(ValueError, 'pinned build bootloader|exactly the pinned bootloader'):
                 release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+
+    def test_stage_requires_the_exact_build_loader_and_reservation(self):
+        path = self.build / 'mcuboot/zephyr/zephyr.hex'
+        for index, memory in enumerate(({0: 0x43}, {**self.boot_memory, 0x10000: 1})):
+            write_hex(path, memory)
+            with self.subTest(memory=memory), self.assertRaisesRegex(ValueError, 'pinned build bootloader|reservation|inside'):
+                release.stage(self.build, self.root / f'bad-boot-{index}', '3.0.21', False, self.context, self.sim)
+
+    def test_promotion_rejects_app_only_replacement_even_with_receipts_updated(self):
+        name = release.asset_names('3.0.21')[1]
+        write_hex(self.assets / name, dict(enumerate(self.payload, 0x10000)))
+        provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+        provenance['sha256'][name] = release.digest(self.assets / name)
+        provenance['boot_regions'][name] = inspect_hex(self.assets / name)
+        (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
+        with self.assertRaisesRegex(ValueError, 'initialized bytes'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
 
     def test_stage_requires_a_passing_full_simulator_report(self):
         bad_rows = [{'id': 'x', 'verdict': 'pass'}] * release.SIM_MIN_SCENARIOS
@@ -215,7 +250,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(manifest['files'], self.manifest['files'][:1])
             self.assertEqual(manifest['time'], 123)
         app_hex, net_hex = release.asset_names('3.0.21')[1:]
-        self.assertEqual(read_hex(self.assets / app_hex), dict(enumerate(self.payload, 0x10000)))
+        self.assertEqual(read_hex(self.assets / app_hex), boot.wire_memory(self.payload, self.boot_image))
         self.assertEqual((self.build / 'merged_CPUNET.hex').read_bytes(), (self.assets / net_hex).read_bytes())
 
     def test_network_requires_explicit_opt_in(self):

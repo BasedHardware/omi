@@ -49,7 +49,7 @@ The OMI firmware is a dual-core nRF5340 application with the following features:
 - **Partition Manager**: Static memory layout for dual-core operation
 
 Read [CV1 MCUboot and safe wire flashing](docs/cv1-bootloader.md) before any SWD operation.
-Release app HEX is app-only; never flash stock MCUboot or an unvalidated merged HEX.
+Release app-core HEX combines the pinned qualified MCUboot with the exact OTA app; never flash stock MCUboot or unvalidated raw sysbuild output.
 
 ## Environment Setup
 
@@ -168,7 +168,7 @@ The build generates several important files in the `build/` directory:
 - `dfu_application.zip_manifest.json` - Package metadata
 
 ### Firmware Images
-- `merged.hex` - Internal sysbuild output, **not approved for direct programming**; release staging emits app-only HEX from the OTA signed image
+- `merged.hex` - Internal sysbuild output, **not approved for direct programming**; release staging constructs a qualified bootloader + exact OTA app HEX
 - `signed_by_mcuboot_and_b0_ipc_radio.hex` - Signed application firmware
 - `merged_CPUNET.hex` (533 KB) - Network core firmware
 

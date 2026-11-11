@@ -1229,7 +1229,16 @@ def check_firmware_ota_assets(workflow: Path) -> list[str]:
             with zipfile.ZipFile(build / "dfu_application.zip", "w") as archive:
                 archive.writestr("manifest.json", json.dumps(manifest))
                 archive.writestr("omi.signed.bin", image)
-            release.app_hex(image, build / "merged.hex")
+            # Synthetic boot policy is confined to this offline smoke module.
+            boot = release.bootloader
+            boot_memory = {0: 0x42}
+            boot_hash = hashlib.sha256(boot.boot_bytes(boot_memory)).hexdigest()
+            policy = root / "boot-policy.json"
+            policy.write_text(json.dumps({"build_boot_sha256": boot_hash, "approved_boot_sha256": [boot_hash]}))
+            boot.POLICY = policy
+            boot_path = build / "mcuboot/zephyr/zephyr.hex"
+            boot_path.parent.mkdir(parents=True)
+            boot.write_hex(boot_path, boot_memory)
             (build / "merged_CPUNET.hex").write_text(
                 ":020000040100F9\n:0100000033CC\n:00000001FF\n"
             )

@@ -111,10 +111,10 @@ There are two ways to update your Omi device firmware:
     manufacturing qualification.
 
     <Steps>
-      <Step title="Get a validated app-only image" icon="download">
+      <Step title="Get a validated app-core image" icon="download">
         Download `Omi_CV1_v<version>.hex` from the intended
         [CV1 release](https://github.com/BasedHardware/omi/releases?q=Omi_CV1_v).
-        Current recovery packaging makes this file **app-only**. If it is
+        Release packaging combines the qualified bootloader with the signed app. If it is
         absent, stop; do not substitute an older merged HEX or a stock build.
         The OTA ZIP is for Bluetooth updates. The separate CPUNET HEX is not
         part of normal app recovery.
@@ -122,23 +122,24 @@ There are two ways to update your Omi device firmware:
         From a repository checkout, validate the downloaded file:
 
         ```bash
-        python3 omi/firmware/scripts/ci/cv1_bootloader.py --app-only path/to/Omi_CV1_vX.hex
+        python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader path/to/Omi_CV1_vX.hex
         ```
 
-        The check rejects bootloader, storage, UICR and network-core bytes.
+        The check rejects unapproved bootloaders, storage, UICR and network-core bytes.
         Do not copy downloaded files over the archived factory images or run
         the legacy two-core batch/J-Link scripts.
       </Step>
-      <Step title="Preserve the installed bootloader" icon="shield">
-        Back up and hash the boot region before programming. Require a
-        qualified installed bootloader, then program only the app-only HEX
-        through the `nRF5340_xxAA_APP` target, following the recovery procedure.
+      <Step title="Back up and verify the bootloader" icon="shield">
+        Back up and hash the boot region before programming. The validated
+        release image replaces it with the pinned qualified loader. Program
+        only through the `nRF5340_xxAA_APP` target, following the recovery procedure.
         Do not mass erase, unlock/recover, change protection settings or flash
         the network core. A blank pendant needs a separately qualified
         manufacturing procedure; app-only HEX is insufficient.
       </Step>
       <Step title="Verify the result" icon="check">
-        Read back the boot region and confirm it is unchanged. Reconnect in
+        Read back the boot region and confirm its hash matches the qualified
+        release bootloader. Reconnect in
         the Omi app, verify the firmware version, and check SD storage and
         audio capture. Blinking LEDs alone do not verify an update.
       </Step>

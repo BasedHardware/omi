@@ -6,8 +6,10 @@ release HEX and run the historical two-core scripts: older release HEX files
 may contain stock MCUboot, which breaks OTA installation on CV1.
 
 Use BLE OTA for a working pendant. For SWD app recovery, follow
-[the CV1 bootloader runbook](../docs/cv1-bootloader.md): validate app-only HEX,
-back up/verify the existing factory boot region and program only the app core.
+[the CV1 bootloader runbook](../docs/cv1-bootloader.md): validate the staged qualified app-core HEX,
+back up the existing boot region, program only the app core and verify the
+new boot hash. App-only recovery is a separate option for preserving an
+approved loader; it uses the exact OTA signed app.
 A blank device needs a separately qualified bootloader and factory procedure.
 Do not mass erase, touch the network core, UICR or protection settings during
 app recovery. The legacy batch launchers are disabled; the raw J-Link files

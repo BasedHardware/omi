@@ -50,12 +50,12 @@ def boot_bytes(memory):
     return bytes(memory.get(address, 0xff) for address in range(BOOT_END))
 
 
-def inspect_hex(path, policy=POLICY):
+def inspect_hex(path, policy=None):
     memory = read_hex(path)
     if not any(address < BOOT_END for address in memory):
         return {'kind': 'bootloader-free', 'boot_sha256': None}
     digest = hashlib.sha256(boot_bytes(memory)).hexdigest()
-    approved = json.loads(Path(policy).read_text())['approved_boot_sha256']
+    approved = json.loads(Path(policy or POLICY).read_text())['approved_boot_sha256']
     if digest not in approved:
         raise ValueError(f'{path}: unapproved CV1 boot region sha256={digest}; never flash stock MCUboot')
     return {'kind': 'approved-bootloader', 'boot_sha256': digest}
@@ -86,11 +86,39 @@ def write_hex(path, memory):
     Path(path).write_text('\n'.join(lines) + '\n')
 
 
-def app_hex(image, target):
-    """Wire recovery uses the exact OTA signed bytes and preserves factory state."""
+def validate_build_bootloader(memory):
+    """A build must reproduce the jig-qualified loader, not merely any allowed state."""
+    if not memory or min(memory) != 0 or max(memory) >= BOOT_END:
+        raise ValueError('MCUboot initialized bytes must fit inside [0, 0x10000) and start at zero')
+    policy = json.loads(POLICY.read_text())
+    expected = policy['build_boot_sha256']
+    if expected not in policy['approved_boot_sha256']:
+        raise ValueError('Pinned build bootloader must also be approved')
+    image = boot_bytes(memory)
+    if hashlib.sha256(image).hexdigest() != expected:
+        raise ValueError('MCUboot must match the pinned build bootloader SHA-256')
+    return image
+
+
+def app_memory(image):
     if not image or len(image) > 0xf6000 - BOOT_END:
         raise ValueError('Signed application must fit entirely below storage at 0xf6000')
-    write_hex(target, dict(enumerate(image, BOOT_END)))
+    return dict(enumerate(image, BOOT_END))
+
+
+def wire_memory(image, boot_image):
+    """Canonical release image: approved boot reservation plus the exact OTA app."""
+    if len(boot_image) != BOOT_END:
+        raise ValueError('Wire bootloader must cover the full 64 KiB reservation')
+    memory = dict(enumerate(boot_image))
+    validate_build_bootloader(memory)
+    memory.update(app_memory(image))
+    return memory
+
+
+def app_hex(image, target):
+    """Optional app-only recovery preserves the installed approved bootloader."""
+    write_hex(target, app_memory(image))
     inspect_hex(target)
 
 

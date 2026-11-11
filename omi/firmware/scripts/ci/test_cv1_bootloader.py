@@ -7,6 +7,7 @@ import tempfile
 import subprocess
 import shutil
 import unittest
+from unittest.mock import patch
 
 import cv1_bootloader as boot
 from prove_cv1_bootloader import validate_main_disassembly
@@ -142,6 +143,26 @@ class BootRegionTests(unittest.TestCase):
         ):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 validate_main_disassembly(invalid)
+
+    def test_build_pin_checks_initialized_reservation_and_exact_hash(self):
+        self.policy.write_text(json.dumps({'approved_boot_sha256': [self.hash], 'build_boot_sha256': self.hash}))
+        memory = {address: byte for address, byte in self.memory.items() if address < boot.BOOT_END}
+        with patch.object(boot, 'POLICY', self.policy):
+            self.assertEqual(boot.validate_build_bootloader(memory), boot.boot_bytes(memory))
+            self.assertEqual(boot.validate_build_bootloader({**memory, 0xffff: 0xff}), boot.boot_bytes(memory))
+            for invalid in ({}, {8: 0x11}, {**memory, 0x10000: 1}, {**memory, 0: 0x43}):
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    boot.validate_build_bootloader(invalid)
+            self.policy.write_text(json.dumps({'approved_boot_sha256': [], 'build_boot_sha256': self.hash}))
+            with self.assertRaisesRegex(ValueError, 'also be approved'):
+                boot.validate_build_bootloader(memory)
+
+    def test_committed_build_hash_is_jig_qualified_and_approved(self):
+        policy = json.loads(boot.POLICY.read_text())
+        expected = '6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1'
+        self.assertEqual(policy['build_boot_sha256'], expected)
+        self.assertIn(expected, policy['approved_boot_sha256'])
+        self.assertEqual(policy['qualification']['boot_sha256'], expected)
 
     def test_committed_factory_hash_matches_reference(self):
         factory = boot.POLICY.parents[1] / 'FLASH_3.0.8/MAC/merged.hex'

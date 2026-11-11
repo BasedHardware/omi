@@ -94,7 +94,7 @@ Build the firmware using your normal Zephyr build process:
 ```
 west build -p auto -b <your_board>
 # Do not run multi-domain west flash on a CV1 pendant.
-# Use validated app-only SWD recovery: ../docs/cv1-bootloader.md
+# Follow qualified app-core SWD recovery: ../docs/cv1-bootloader.md
 ```
 
 ### 6. Monitoring Logs

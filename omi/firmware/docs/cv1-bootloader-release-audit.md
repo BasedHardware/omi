@@ -2,15 +2,14 @@
 
 Measured 2026-11-11 against downloaded GitHub release app-core HEX assets.
 Hash is SHA-256 of addresses [0, 0x10000), filling absent bytes with 0xff,
-not the HEX text or whole merged image. This is static evidence for the lead's
-asset-retention decision; no release assets were changed by this audit.
+not the HEX text or whole merged image. This records static classification and the lead's asset-retention and qualification decisions.
 
 | Version | Boot-region SHA-256 | Omi SD sequence | Evidence |
 | --- | --- | --- | --- |
-| 3.0.2 | `85ac576a9cd33da3e60c8732ac6cc7ca53c8c5b67d64317a4dac5c3fa9b835ab` | No | B: boot_go at 0x476, no SD prelude |
-| 3.0.3 | `9baad287d7a6579c01e6e11c8249f26fcb7ec307b3fda255bdbd8c4b2f1e3277` | No | B: boot_go at 0x476, no SD prelude |
-| 3.0.4 | `c38609f3caa3fe5215161c3d9176871839ecb4b7947e4015754532ef532cbf8d` | No | B: boot_go at 0x476, no SD prelude |
-| 3.0.5 | `e03e1fa02712acbf91a1d818a569eded34e3035626862a0bff3fe3103f0e4c47` | No | B: boot_go at 0x476, no SD prelude |
+| 3.0.2 | `85ac576a9cd33da3e60c8732ac6cc7ca53c8c5b67d64317a4dac5c3fa9b835ab` | No | B: boot_go at 0x476, no SD prelude; pulled |
+| 3.0.3 | `9baad287d7a6579c01e6e11c8249f26fcb7ec307b3fda255bdbd8c4b2f1e3277` | No | B: boot_go at 0x476, no SD prelude; pulled |
+| 3.0.4 | `c38609f3caa3fe5215161c3d9176871839ecb4b7947e4015754532ef532cbf8d` | No | B: boot_go at 0x476, no SD prelude; pulled |
+| 3.0.5 | `e03e1fa02712acbf91a1d818a569eded34e3035626862a0bff3fe3103f0e4c47` | No | B: boot_go at 0x476, no SD prelude; pulled |
 | 3.0.6 | `98261d50cccb6cb80b357ab2b66b4fd4d523aa39456942c6a09ffe93134af9f0` | Yes | A: INIT 0x4b4 / DEINIT 0x4c8 |
 | 3.0.7 | `c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086` | Yes | A: INIT 0x4b4 / DEINIT 0x4c8 |
 | 3.0.8 | `c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086` | Yes | A: INIT 0x4b4 / DEINIT 0x4c8 |
@@ -23,15 +22,17 @@ asset-retention decision; no release assets were changed by this audit.
 | 3.0.17 | `674d627fc37db6fd12a5c60383cdb3f874548d9e42b59886cd3b0ce40300618a` | Yes | A: INIT 0x4b4 / DEINIT 0x4c8 |
 | 3.0.18 | `df561c967fbef2da300b28a7308b815dd2324f48cfe94e8ac849739117a47f41` | Yes | A: INIT 0x4b4 / DEINIT 0x4c8 |
 | 3.0.19 | `6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1` | Yes | A: INIT 0x4b4 / DEINIT 0x4c8 |
-| 3.0.20 | `fb79eeff04fcb1a4b73b9d399180773c2abecfb1267cf6164c7925fce0587553` | No | B: boot_go at 0x476, no SD prelude |
-| 3.0.21 | `239239dedc25287e45411dcae3ddd71d8e028a325bcc6481ec3a175bb43ab753` | No | B: boot_go at 0x476, no SD prelude |
-| 3.0.23 | `239239dedc25287e45411dcae3ddd71d8e028a325bcc6481ec3a175bb43ab753` | No | B: boot_go at 0x476, no SD prelude |
-| 3.0.24 | `239239dedc25287e45411dcae3ddd71d8e028a325bcc6481ec3a175bb43ab753` | No | B: boot_go at 0x476, no SD prelude |
+| 3.0.20 | `fb79eeff04fcb1a4b73b9d399180773c2abecfb1267cf6164c7925fce0587553` | No | B: boot_go at 0x476, no SD prelude; pulled |
+| 3.0.21 | `239239dedc25287e45411dcae3ddd71d8e028a325bcc6481ec3a175bb43ab753` | No | B: boot_go at 0x476, no SD prelude; pulled |
+| 3.0.23 | `239239dedc25287e45411dcae3ddd71d8e028a325bcc6481ec3a175bb43ab753` | No | B: boot_go at 0x476, no SD prelude; pulled |
+| 3.0.24 | `239239dedc25287e45411dcae3ddd71d8e028a325bcc6481ec3a175bb43ab753` | No | B: boot_go at 0x476, no SD prelude; pulled |
 
 3.0.10 and 3.0.16: no local asset and `gh release view Omi_CV1_v<version>`
 returned "release not found" on the audit date. They are unclassified, not
-assumed safe. The lead reported the app HEX assets for .21/.23/.24 removed;
-the retained local copies were audited here. OTA ZIPs do not contain MCUboot.
+assumed safe. The lead reported the app HEX assets for .2/.3/.4/.5/.20/.21/.23/.24
+**pulled on 2026-11-11**. Their backups remain in the lab audit archive under
+`hex-audit/pulled/`; no serials or probe IDs are included here. OTA ZIPs and
+separate CPUNET assets remain. OTA ZIPs do not contain MCUboot.
 
 ## Method and limits
 
@@ -64,8 +65,42 @@ three bytes; its executable SD prelude is identical. .7/.8 match the pinned
 factory region exactly. Other Yes rows are **not** thereby approved: layout,
 configuration and physical behavior still need qualification. For example,
 .9–.15 end at 0xce2c, .17 at 0xce3c, .18 at 0xceac and .19 at 0xcebc;
-these differ from factory's 0xcddc end and the new-build 0xce00 size gate.
+these differ from factory's 0xcddc end. The former 0xce00 heuristic is retired;
+the actual reserved boot region ends at 0x10000.
 
-Recommendation for the lead: remove the app-core merged HEX assets marked
-No, retain OTA ZIPs, and prefer regenerated app-only HEX for wire recovery.
-Do not broaden the release hash allowlist based solely on this classification.
+The lead pulled all available app-core HEX assets marked No. New release
+app-core HEX is regenerated from the qualified pinned .19 loader and exact
+OTA signed app bytes; raw historical merged HEX must not be substituted.
+Classification alone does not approve the other Yes hashes.
+
+## Jig qualification 2026-11-11
+
+This is the lead's reported bench receipt, not hardware access by the
+implementation agent. The evidence set is named `bootloader-qual-20261111`.
+No device serials, probe IDs or personal paths are recorded here.
+
+1. The boot backup matched approved factory
+   `c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086`.
+2. APP-core `loadbin` at zero installed the .19 loader; verification and
+   readback matched
+   `6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1`,
+   byte-identical to production CI run `42986142335` at source
+   `eec9bff0be368557cde464f9e43b62b47c28a98e` (both independent attempts).
+3. Only the .21 app region was restored, at 0x10000 and above.
+4. BLE `image-upload --mode confirm` installed the released .24 signed app,
+   file SHA-256
+   `b92ef865d865ad47242a4f70d050225cc65f42705b9d9c2931d4402a0c852978`.
+   Before reset, slot1 image-hash prefix `7083cb10` was pending/permanent.
+   After reset, slot0 held that image active/confirmed and DIS reported 3.0.24.
+   The subsequent session showed boot record v2, flags 0x1d, `nor_fail=0` and
+   `sd_fail=0`. This proves the shared-SPI install on the .19 bootloader.
+5. The factory loader and .21 app were restored and verified. Boot readback
+   again matched `c80cf2fd...da086`.
+
+The lead approved .19 as the build/shipping bootloader and retained factory
+.8 as an approved hardware/restoration state. Initialized bytes must fit in
+[0, 0x10000), primary/secondary geometry must match the release layout, the
+public key must match `fc5701dc...fa9994`, and compiled main must execute the
+Omi SD sequence. CI also requires the full padded build hash to equal .19.
+Production remains overwrite-only: the trial-revert requirement was dropped,
+and no unconfirmed-image revert is claimed or required by this receipt.

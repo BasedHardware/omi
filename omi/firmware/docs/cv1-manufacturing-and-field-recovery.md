@@ -1,4 +1,4 @@
-# CV1 manufacturing candidate and stock-loader field recovery
+# CV1 qualified manufacturing bootloader and stock-loader field recovery
 
 Evidence date: 2026-11-11. Gettop's report that .19 and .21 were factory
 shipment versions, and that .21 units were programmed with the GitHub HEX
@@ -8,7 +8,7 @@ assume all fielded pendants have the same bootloader based on app version.
 
 ## Manufacturing: 3.0.19 MCUboot with the 3.0.24 app
 
-**Static compatibility passes; physical manufacturing qualification is pending.**
+**Static compatibility and the lead-run manufacturing pairing trial passed on 2026-11-11.**
 The 3.0.19 boot region is
 `6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1`.
 It contains the Omi power/sleep/resume/INIT(6)/sleep/DEINIT(7)/suspend sequence
@@ -54,8 +54,8 @@ this is shifted code/data, not 39,957 independent behavior changes. The SD
 prelude is the same, but the table grew from 10 to 13 areas: .8 has an app
 allocation of 0xefe00 and no separate storage/settings entries. The OTA app
 primary/secondary offsets and 0xf0000 sizes are unchanged. .19 fits inside
-its 0x10000 reservation; its end above 0xce00 must not be confused with the
-stricter size guard for the newly rebuilt custom loader.
+its 0x10000 reservation. The lead retired the 0xce00 heuristic: CI checks the
+actual reservation, exact build hash, production slots, public key and SD sequence.
 
 Method: strict Intel HEX parsing and 0xff-padded boot extraction; Thumb
 disassembly of main; embedded 270-byte PKCS#1 public DER digest; decode the
@@ -64,20 +64,24 @@ disassembly of main; embedded 270-byte PKCS#1 public DER digest; decode the
 against the pinned SDK [flash-area structure](https://github.com/nrfconnect/sdk-zephyr/blob/v3.7.99-ncs2/include/zephyr/storage/flash_map.h)
 and `tools/cv1/pinned-partitions.yml`.
 
-**Recommendation:** qualify .19 + .24 on the jig first, then use that exact
-boot hash for the manufacturing bundle if it passes. Do not substitute the
-old .19 app or its whole merged HEX. The lead must report boot readback,
-3.0.21 app install, .24 BLE OTA/cold SD health and factory restoration before
-adding .19 to `approved_boot_sha256`. Until then the policy pins it as an
-unapproved manufacturing candidate, and releases remain app-only. A successful
-app-only OTA on a .19-shipped unit would preserve the .19 loader, consistent
-with Gettop's claim; this does not establish their shipment count.
+**Manufacturing decision:** build and ship the exact .19 boot hash with the
+intended signed app. Two independent pristine production CI builds at source
+`eec9bff0be368557cde464f9e43b62b47c28a98e`, run `42986142335`, attempts 1 and 2,
+reproduced that historical boot region byte-for-byte. The lead then proved
+.21 app -> released .24 BLE installation with those same boot bytes and
+restored the factory loader and .21 app. See the
+[jig receipt](cv1-bootloader-release-audit.md#jig-qualification-2026-11-11).
+The old size heuristic alone rejected those CI attempts; it is replaced by
+reservation/layout/key/SD checks and the exact pinned hash.
 
-Manufacturing must validate the complete app-core wire image with
+The policy approves .19 for manufacturing and retains factory .8 as an
+approved installed/restoration state. New CI builds must equal .19. Release
+app-core HEX combines that loader with the exact staged OTA signed app bytes,
+excluding storage, UICR and network-core addresses. Validate it with:
 `python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader manufacturing-app.hex`.
-This requires an allowlisted boot region and signed app header, and excludes
-storage, UICR and network-core addresses. The candidate hash cannot pass merely
-because it is listed under `manufacturing_candidate`; approval is separate.
+Do not substitute the old .19 app or its whole historical merged HEX. Normal
+BLE OTA remains app-only and preserves the installed loader. This physical
+trial supports the pairing; it does not verify Gettop's shipment counts.
 
 ## Fielded stock 3.0.21 units
 

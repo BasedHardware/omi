@@ -49,7 +49,7 @@ west build -b omi/nrf5340/cpuapp ../omi --sysbuild -d build --pristine always \
 | File | Purpose |
 | --- | --- |
 | `dfu_application.zip` | OTA package — what the Omi app / nRF Connect Mobile installs (MCUmgr DFU) |
-| `merged.hex` | Internal merged image; use staged OTA-derived app-only HEX for SWD recovery |
+| `merged.hex` | Internal merged image; use the staged qualified bootloader + exact OTA app HEX for authorized SWD recovery |
 | `merged_CPUNET.hex` | Full-flash image, network core (J-Link) |
 
 CI fails loudly if any of the three is missing. It also builds the Omi custom
@@ -60,9 +60,11 @@ bench-only bootloader evidence. See [the bootloader runbook](../docs/cv1-bootloa
 
 - **OTA (normal path):** install `dfu_application.zip` via the Omi app
   (Settings → Device Settings → Product Update) or nRF Connect for Mobile.
-- **J-Link app recovery:** use only validated app-only HEX and preserve the installed
-  factory MCUboot. Never flash stock MCUboot or all sysbuild domains. First power-on
-  needs a separately qualified bootloader. Follow [the bootloader runbook](../docs/cv1-bootloader.md).
+- **J-Link app-core recovery:** use the validated staged release HEX, which includes
+  the pinned qualified bootloader. Back up first and verify boot readback afterward.
+  Never flash stock MCUboot or all sysbuild domains. App-only recovery from the OTA
+  signed image is a separate option when deliberately preserving an approved loader.
+  Follow [the bootloader runbook](../docs/cv1-bootloader.md).
 
 ## Release
 

@@ -4,10 +4,10 @@ CV1's installed MCUboot is overwrite-only and OTA cannot replace it. A signed
 image that boots badly has no automatic runtime rollback. Signing uses randomized
 RSA signatures: rebuilding tested source does not reproduce the tested bytes.
 
-Release app HEX is app-only and preserves factory MCUboot. Every staged HEX is
+Release app-core HEX carries the pinned jig-qualified MCUboot and exact OTA app. Every staged HEX is
 reparsed against the [bootloader policy](cv1-bootloader.md) at staging, promotion
-and publish. A new custom MCUboot is bench-only until physically qualified;
-never wire-flash stock MCUboot.
+and publish. The built/shipped loader must match the qualified .19 hash; factory .8 remains
+an approved installed/restoration state. Never wire-flash stock MCUboot.
 
 ## Build, test, promote
 
@@ -16,7 +16,7 @@ never wire-flash stock MCUboot.
    is also supported. The workflow sets both BLE DIS and the app's signed
    MCUboot header version to that value; packaging verifies the signed header.
 2. Dispatch `firmware_release.yml` **without** `publish` to build QA artifacts.
-   The run first executes the simulator gate (`omi/sim/README.md`, "Scenario
+   The run first compiles and proves the pinned MCUboot, then executes the simulator gate (`omi/sim/README.md`, "Scenario
    suite": every scenario plus 40 fuzz seeds at this SHA). Staging fails
    closed without a passing `sim-report.json` for the same SHA and version;
    the report ships in the QA artifact, its SHA-256 is in `qa-provenance.json`
@@ -24,8 +24,8 @@ never wire-flash stock MCUboot.
    evidence, not a test of the signed bytes; the bench (step 3) still is.
    The default OTA zip contains only app image 0. Set `include_network_core=true`
    only when intentionally testing a paired app/radio update. This changes zip
-   packaging only. Release staging also generates app-only HEX from the staged OTA signed image;
-   MCUboot, settings and UICR are excluded. `merged_CPUNET.hex` stays separate.
+   packaging only. Release staging constructs app-core HEX from the pinned qualified MCUboot and
+   staged OTA signed app bytes; settings, UICR and network addresses are excluded. `merged_CPUNET.hex` stays separate.
 3. Download `cv1-qa-release-<run ID>-<attempt>` and test its `Omi_CV1_OTA_v<version>.zip` on the bench
    through the stock app. Record the run ID, attempt, asset SHA-256 from
    `qa-provenance.json`, phone/app version, device identity and health results.
@@ -56,7 +56,7 @@ never wire-flash stock MCUboot.
    back to the old run-wide artifact name. Older artifacts need a new QA build
    and bench receipt. A mismatched bench signed-image hash fails closed.
    Advancing main requires a new QA build at that SHA. No rebuild, signing,
-   repackaging or renaming occurs on publish. Only the tested zip, app-only HEX and separate CPUNET
+   repackaging or renaming occurs on publish. Only the tested zip, qualified merged app-core HEX and separate CPUNET
    HEX are attached. The git refs API atomically creates the tag at the
    tested SHA and refuses existing tags. A release is created as a draft and its
    tag is verified again before publication. If verification fails, it stays a
