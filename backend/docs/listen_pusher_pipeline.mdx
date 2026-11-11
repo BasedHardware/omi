@@ -356,6 +356,9 @@ nested in the existing batch cohort, so selecting 50% while batch admits 25%
 can suppress at most the batch-admitted 25%. This knob does not expand batch
 admission itself. The rollout lead owns mobile cohort expansion and deployment.
 
+`SYNC_RECORD_COVERAGE_WAIT_MEMO` defaults `true`; set `false` to bypass memo reads
+and writes and restore full WAL coverage checks on each admission.
+
 Web uses `SERVER_BATCH_ONLY_WEB_PERCENT` (default 0), a separate salted owner
 cohort keyed on authenticated `client_platform=web`; persisted source may be
 `unknown`. It uses the existing server-side pusher custody path, with no client
