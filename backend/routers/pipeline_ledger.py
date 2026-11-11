@@ -67,11 +67,9 @@ def _owner(uid: str) -> str:
 
 @router.get('/census', include_in_schema=False)
 async def get_census(
-    uid: str = Query(..., min_length=1, max_length=128),
     start: str = Query(...),
     end: str = Query(...),
 ) -> Any:
-    owner = _owner(uid)
     start_epoch, end_epoch = _parse_time(start), _parse_time(end)
     if end_epoch <= start_epoch:
         raise HTTPException(status_code=422, detail='end must be after start')
@@ -79,7 +77,6 @@ async def get_census(
         result = await run_blocking(
             db_executor,
             pipeline_ledger_census.census,
-            owner,
             start_epoch,
             end_epoch,
         )

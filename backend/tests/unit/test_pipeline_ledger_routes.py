@@ -104,7 +104,7 @@ def _census_payload():
 def test_census_requires_a_service_token(monkeypatch):
     monkeypatch.delenv('PIPELINE_LEDGER_CENSUS_AUDIENCE', raising=False)
     monkeypatch.delenv('PIPELINE_LEDGER_CENSUS_INVOKER_SA', raising=False)
-    response = TestClient(_app()).get('/v2/pipeline-ledger/census', params={'uid': 'u', 'start': '0', 'end': '1'})
+    response = TestClient(_app()).get('/v2/pipeline-ledger/census', params={'start': '0', 'end': '1'})
     assert response.status_code == 403
 
 
@@ -113,9 +113,7 @@ def test_census_returns_aggregates_without_ids(monkeypatch):
     app.dependency_overrides[routes.verify_census] = lambda: None
     monkeypatch.setattr(pipeline_ledger_census, 'census', lambda *a, **k: _census_payload())
     monkeypatch.setattr(pipeline_ledger_metrics, 'refresh_gauges', lambda result: None)
-    response = TestClient(app).get(
-        '/v2/pipeline-ledger/census', params={'uid': 'owner-secret', 'start': '0', 'end': '3600'}
-    )
+    response = TestClient(app).get('/v2/pipeline-ledger/census', params={'start': '0', 'end': '3600'})
     assert response.status_code == 200
     body = response.json()
     assert body['rows'] == 2
@@ -130,7 +128,7 @@ def test_census_returns_aggregates_without_ids(monkeypatch):
 def test_census_rejects_an_inverted_window(monkeypatch):
     app = _app()
     app.dependency_overrides[routes.verify_census] = lambda: None
-    response = TestClient(app).get('/v2/pipeline-ledger/census', params={'uid': 'u', 'start': '10', 'end': '5'})
+    response = TestClient(app).get('/v2/pipeline-ledger/census', params={'start': '10', 'end': '5'})
     assert response.status_code == 422
 
 
@@ -142,7 +140,7 @@ def test_census_fails_closed_on_truncation(monkeypatch):
         raise pipeline_ledger_census.pipeline_ledger.LedgerWindowTruncated('too many')
 
     monkeypatch.setattr(pipeline_ledger_census, 'census', truncated)
-    response = TestClient(app).get('/v2/pipeline-ledger/census', params={'uid': 'u', 'start': '0', 'end': '3600'})
+    response = TestClient(app).get('/v2/pipeline-ledger/census', params={'start': '0', 'end': '3600'})
     assert response.status_code == 503
 
 

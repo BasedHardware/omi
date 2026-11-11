@@ -36,6 +36,7 @@ def _row(**overrides):
         'episode_done_at': None,
         'expires_at': None,
         'capture_id': 'conversation-1',
+        '_uid': 'owner',
     }
     row.update(overrides)
     return row
@@ -56,19 +57,19 @@ def _conversation(**overrides):
 def wire(monkeypatch):
     state = {'rows': [], 'conversations': {}}
 
-    def fake_window(start, end, *, uid, limit=None, firestore_client=None, include_key=False):
+    def fake_window(start, end, *, limit=None, firestore_client=None):
         return list(state['rows'])
 
     def fake_conversation(client, uid, conversation_id):
         return state['conversations'].get(conversation_id)
 
-    monkeypatch.setattr(pipeline_ledger, 'census_window', fake_window)
+    monkeypatch.setattr(census, '_global_window', fake_window)
     monkeypatch.setattr(census, '_conversation', fake_conversation)
     return state
 
 
 def _census(state, **kwargs):
-    return census.census('owner', 0, NOW + 1, now=NOW, firestore_client=object(), **kwargs)
+    return census.census(0, NOW + 1, now=NOW, firestore_client=object(), **kwargs)
 
 
 def test_classifier_parity_ready_transcribing_writing_notes_failed_noise_none(wire):

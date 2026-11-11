@@ -1,21 +1,22 @@
-"""Aggregate-only census over the C1 in-flight ledger for one owner.
+"""Aggregate-only census over the C1 in-flight ledger.
 
-Reads the C1 :func:`pipeline_ledger.census_window` helper, joins each row to its
-conversation row for the Home-visible predicate, and reduces every row to
-counts, shares, ages and quantiles. No uid, conversation id, title, transcript
-or audio path leaves this module. The Home classifier is the product
-:func:`home_step.classify`; this module does not fork it.
+Reads the ledger's ``admitted_at`` collection-group window (the index the C1 PR
+retained for the global aggregate), joins each row to its conversation row for
+the Home-visible predicate, and reduces every row to counts, shares, ages and
+quantiles. No uid, conversation id, title, transcript or audio path leaves this
+module. The Home classifier is the product :func:`home_step.classify`; this
+module does not fork it.
 
-The ledger is owner-scoped by contract, so the census is owner-scoped too. The
-operator route supplies the owner; the gate runner is run for the canary test
-account. A fleet-wide aggregate is a separate read the C1 PR deferred.
+The per-owner ``explain`` read uses the C1 ``ledger_ref`` and is owner-scoped.
 """
 
 from __future__ import annotations
 
 import time
 from collections import Counter
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
+
+from google.cloud import firestore
 
 from database import pipeline_ledger
 from utils.conversations import home_step
@@ -36,7 +37,38 @@ class CensusSchemaMismatch(RuntimeError):
     """A ledger row is not the schema this census understands; fail closed."""
 
 
-def _conversation(client: Any, uid: str, conversation_id: str) -> dict[str, Any] | None:
+def _global_window(start: Any, end: Any, *, limit: int, firestore_client: Any) -> Iterator[dict[str, Any]]:
+    """Yield ledger rows across owners with ``admitted_at`` in ``[start, end)``.
+
+    Bounded and fail-closed: the whole window is materialized before the first
+    yield, so a truncated window raises without handing the caller a prefix.
+    The owner id is read from the document path only to join the conversation
+    row; it is never returned.
+    """
+    start_epoch, end_epoch = pipeline_ledger._epoch(start), pipeline_ledger._epoch(end)
+    if start_epoch is None or end_epoch is None or end_epoch <= start_epoch or limit <= 0:
+        raise ValueError('invalid ledger window')
+    query = (
+        firestore_client.collection_group(pipeline_ledger.COLLECTION)
+        .where(filter=firestore.FieldFilter('admitted_at', '>=', start_epoch))
+        .where(filter=firestore.FieldFilter('admitted_at', '<', end_epoch))
+        .limit(limit + 1)
+    )
+    snapshots = list(query.stream())
+    if len(snapshots) > limit:
+        raise pipeline_ledger.LedgerWindowTruncated(f'ledger window exceeded {limit} rows')
+    for snapshot in snapshots:
+        doc = snapshot.to_dict() or {}
+        parts = str(getattr(snapshot.reference, 'path', '')).split('/')
+        row = {key: doc.get(key) for key in pipeline_ledger.CENSUS_FIELDS}
+        row['capture_id'] = snapshot.id
+        row['_uid'] = parts[1] if len(parts) >= 4 and parts[0] == 'users' else None
+        yield row
+
+
+def _conversation(client: Any, uid: str | None, conversation_id: str) -> dict[str, Any] | None:
+    if not uid:
+        return None
     snapshot = client.collection('users').document(uid).collection('conversations').document(conversation_id).get()
     return snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
 
@@ -97,7 +129,6 @@ def _km_quantiles(observations: list[tuple[float | None, float | None, bool]], q
 
 
 def census(
-    uid: str,
     start: Any,
     end: Any,
     *,
@@ -105,10 +136,10 @@ def census(
     firestore_client: Any = None,
     limit: int = pipeline_ledger.DEFAULT_WINDOW_LIMIT,
 ) -> dict[str, Any]:
-    """Exact owner-scoped aggregates for the ledger window ``[start, end)``."""
+    """Exact fleet aggregates for the ledger window ``[start, end)``."""
     current = time.time() if now is None else now
     client = firestore_client if firestore_client is not None else pipeline_ledger.get_firestore_client()
-    rows = pipeline_ledger.census_window(start, end, uid=uid, limit=limit, firestore_client=client, include_key=True)
+    rows = list(_global_window(start, end, limit=limit, firestore_client=client))
     by_stage: Counter[str] = Counter()
     stuck_by_stage: Counter[str] = Counter()
     stuck_users: dict[str, set[str]] = {stage: set() for stage in STUCK_STAGES}
@@ -120,6 +151,7 @@ def census(
     real_speech = speech_unknown = visible_real = home_unknown = clock_unknown = 0
     observations: list[tuple[float | None, float | None, bool]] = []
     latest_updated: float | None = None
+    earliest_admitted: float | None = None
     for row in rows:
         if row.get('schema_version') != SCHEMA_VERSION:
             raise CensusSchemaMismatch('ledger schema_version mismatch')
@@ -128,6 +160,9 @@ def census(
         updated = pipeline_ledger._epoch(row.get('updated_at'))
         if updated is not None and (latest_updated is None or updated > latest_updated):
             latest_updated = updated
+        admitted = pipeline_ledger._epoch(row.get('admitted_at'))
+        if admitted is not None and (earliest_admitted is None or admitted < earliest_admitted):
+            earliest_admitted = admitted
         deadline = pipeline_ledger._epoch(row.get('deadline_at'))
         if not row.get('terminal') and deadline is not None and current > deadline:
             label = pipeline_ledger.stage_label(stage if isinstance(stage, str) else 'other')
@@ -145,7 +180,7 @@ def census(
         ) is True
         real_speech += int(real)
         speech_unknown += int(row.get('speech_basis') == 'unknown')
-        conversation = _conversation(client, uid, row['capture_id']) if row.get('capture_id') else None
+        conversation = _conversation(client, row.get('_uid'), row['capture_id'])
         visible, step = _home_visible(conversation, current)
         home_unknown += int(conversation is None or step is None)
         visible_real += int(real and visible)
@@ -220,6 +255,7 @@ def census(
         },
         'end_types': end_types,
         'ledger_updated_at': latest_updated,
+        'earliest_admitted_at': earliest_admitted,
         'redaction': {
             'uids': False,
             'conversation_ids': False,
