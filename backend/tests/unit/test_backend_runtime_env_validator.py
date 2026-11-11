@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from datetime import date, timedelta
 import importlib.util
 import json
 import re
@@ -12,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from deploy import generate_read_lever_manifest as read_lever_manifest
 from scripts.verify_pusher_cohost_env_diff import parse_env_entries
 from scripts.runtime_env_validation import manifest as manifest_validation
 from scripts.runtime_env_validation.manifest import (
@@ -3675,3 +3677,173 @@ def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
             env = services[name]['env']
             assert env['SYNC_BACKFILL_GLOBAL_DAILY_HOURS']['value'] == '1665'
             assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'
+
+
+# M7: compose and validate declarations offline; no cloud clients or rollout writes.
+@pytest.fixture(scope='module')
+def read_lever_sources():
+    return read_lever_manifest.collect_sources()
+
+
+def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources():
+    generated = read_lever_manifest.build_manifest()
+    assert json.loads(read_lever_manifest.OUTPUT.read_text()) == generated
+    notes = '\n'.join(generated['notes'])
+    assert 'UNRESOLVED: chart-vs-CR batch_timeliness_leader' in notes
+    assert 'UNRESOLVED: README-vs-base triple' in notes
+    for lever in ('memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries'):
+        assert lever in notes
+    prod_worker = generated['surfaces']['chart/prod/batch-pipeline-worker']
+    assert prod_worker['explicit'] == {}
+    assert prod_worker['effective']['batch_timeliness_leader'] == 100
+    assert prod_worker['unresolved_differences']['batch_timeliness_leader'] == {'surface': 100, 'comparison_surface': 0}
+    assert prod_worker['inheritance']['status'] == 'UNRESOLVED'
+    assert generated['surfaces']['runtime/prod/cloud_run/services/backend']['effective']['batch_timeliness_leader'] == 0
+
+
+@pytest.mark.parametrize('days', [0, 7])
+def test_read_lever_expiry_accepts_only_matching_bounded_approvals(days):
+    expiry = {
+        'surface': {'listen_poll': {'value': 5, 'expires': (date(2026, 11, 11) + timedelta(days=days)).isoformat()}}
+    }
+    assert read_lever_manifest.expiry_errors({'surface': {'listen_poll': 5}}, expiry, today=date(2026, 11, 11)) == []
+
+
+@pytest.mark.parametrize(
+    'entry',
+    [
+        None,
+        {},
+        {'value': 10, 'expires': '2026-11-17'},
+        {'value': True, 'expires': '2026-11-17'},
+        {'value': 5},
+        {'value': 5, 'expires': 'tomorrow'},
+        {'value': 5, 'expires': '2026-11-31'},
+        {'value': 5, 'expires': '20261117'},
+        {'value': 5, 'expires': date(2026, 11, 17)},
+        {'value': 5, 'expires': '2026-11-10'},
+        {'value': 5, 'expires': '2026-11-19'},
+    ],
+)
+def test_read_lever_expiry_rejects_missing_malformed_stale_or_unbounded(entry):
+    assert read_lever_manifest.expiry_errors(
+        {'surface': {'listen_poll': 5}}, {'surface': {'listen_poll': entry}}, today=date(2026, 11, 11)
+    )
+
+
+@pytest.mark.parametrize('expiry', [None, [], {'surface': []}, {'surface': {'dead_lever': {}}}])
+def test_read_lever_expiry_rejects_malformed_map(expiry):
+    assert read_lever_manifest.expiry_errors({'surface': {'listen_poll': 5}}, expiry, today=date(2026, 11, 11))
+
+
+@pytest.mark.parametrize(
+    'values',
+    [{'dead_lever': 100}, {'listen_poll': True}, {'listen_poll': -1}, {'listen_poll': 101}, {'listen_poll': 5.5}],
+)
+def test_read_lever_rejects_unknown_keys_and_invalid_percentages(values):
+    with pytest.raises(ValueError):
+        read_lever_manifest.parse_levers(json.dumps(values), 'synthetic')
+
+
+def test_read_lever_partial_code_default_cannot_hide_behind_chart_inheritance(monkeypatch):
+    monkeypatch.setitem(read_lever_manifest.DEFAULT_PERCENTAGES, 'listen_poll', 5)
+    sources = {'code/defaults': dict(read_lever_manifest.DEFAULT_PERCENTAGES), 'chart/dev/batch-pipeline-worker': {}}
+    errors = read_lever_manifest.expiry_errors(sources, {}, today=date(2026, 11, 11))
+    assert any('code/defaults/listen_poll=5' in error for error in errors)
+    assert any('chart/dev/batch-pipeline-worker/listen_poll=5' in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    'prefix', ['base/', 'overlay/prod/', 'runtime/dev/', 'runtime/prod/', 'chart/dev/', 'chart/prod/']
+)
+def test_read_lever_expiry_covers_every_partial_source_surface(read_lever_sources, prefix):
+    policy, sources, _ = read_lever_sources
+    selected = {surface: values for surface, values in sources.items() if surface.startswith(prefix)}
+    assert selected
+    for surface, values in selected.items():
+        partials = {lever: value for lever, value in values.items() if 0 < value < 100}
+        for lever in partials:
+            expiry = copy.deepcopy(policy['lever_expiry'])
+            del expiry[surface][lever]
+            errors = read_lever_manifest.expiry_errors(sources, expiry, today=date(2026, 11, 11))
+            assert any(f'{surface}/{lever}=' in error for error in errors)
+    assert any(0 < value < 100 for values in selected.values() for value in values.values())
+
+
+@pytest.mark.parametrize(
+    'surface',
+    [
+        'runtime/prod/cloud_run/services/backend',
+        'runtime/dev/gke/backend-listen',
+        'chart/prod/backend-listen',
+        'chart/dev/pusher',
+    ],
+)
+def test_read_lever_parity_rejects_effective_drift(read_lever_sources, surface):
+    policy, sources, expected = read_lever_sources
+    changed = copy.deepcopy(sources)
+    changed[surface]['listen_poll'] = 100
+    assert read_lever_manifest.parity_errors(changed, expected, policy)
+
+
+@pytest.mark.parametrize(
+    'mutation',
+    ['missing_surface', 'extra_surface', 'missing_allowlist', 'resolved_annotation', 'missing_note', 'stale_allowlist'],
+)
+def test_read_lever_parity_requires_exact_surfaces_and_reviewed_unresolved_annotations(read_lever_sources, mutation):
+    policy, sources, expected = copy.deepcopy(read_lever_sources)
+    if mutation == 'missing_surface':
+        del sources['runtime/dev/gke/pusher']
+    elif mutation == 'extra_surface':
+        sources['runtime/prod/new-surface'] = {}
+    elif mutation == 'missing_allowlist':
+        policy['reviewed_inheritance'].clear()
+    elif mutation == 'resolved_annotation':
+        policy['reviewed_inheritance']['chart/prod/batch-pipeline-worker']['status'] = 'RESOLVED'
+    elif mutation == 'missing_note':
+        policy['reviewed_inheritance']['chart/prod/batch-pipeline-worker']['notes'] = ''
+    else:
+        policy['reviewed_inheritance']['chart/dev/unused'] = {}
+    assert read_lever_manifest.parity_errors(sources, expected, policy)
+
+
+@pytest.mark.parametrize('source', ['base', 'dev.overlay', 'prod.overlay', 'runtime', 'chart-dev', 'chart-prod'])
+def test_read_lever_unknown_declaration_is_rejected_from_actual_source_files(tmp_path, source):
+    """Exercise input discovery, not just the percentage helper, for every source family."""
+    base = ROOT / 'deploy/runtime_env/_base.yaml'
+    runtime = ROOT / 'deploy/runtime_env.yaml'
+    inputs = ROOT / 'deploy/runtime_env'
+    charts = ROOT / 'charts'
+    kwargs = {}
+    if source.startswith('chart-'):
+        local_charts = tmp_path / 'charts'
+        for chart in read_lever_manifest.CHARTS:
+            (local_charts / chart).mkdir(parents=True)
+            for path in (charts / chart).glob('*values.yaml'):
+                (local_charts / chart / path.name).write_text(path.read_text())
+        target = local_charts / 'pusher' / f'{source.removeprefix("chart-")}_omi_pusher_values.yaml'
+        kwargs['charts_dir'] = local_charts
+    elif source == 'base':
+        target = tmp_path / '_base.yaml'
+        target.write_text(base.read_text())
+        kwargs['base_path'] = target
+    elif source == 'runtime':
+        target = tmp_path / 'runtime_env.yaml'
+        target.write_text(runtime.read_text())
+        kwargs['runtime_path'] = target
+    else:
+        for path in inputs.glob('*.yaml'):
+            (tmp_path / path.name).write_text(path.read_text())
+        target = tmp_path / f'{source}.yaml'
+        # Dev currently has no lever literal: introduce one in a real service env block.
+        if source == 'dev.overlay':
+            doc = read_lever_manifest.composer._load_yaml(target)
+            doc['overlay'].setdefault('cloud_run', {}).setdefault('services', {}).setdefault('backend', {}).setdefault(
+                'env', {}
+            )['FIRESTORE_READ_LEVERS'] = {'value': '{"dead_lever":100}'}
+            target.write_text(yaml.safe_dump(doc))
+        kwargs['runtime_env_dir'] = tmp_path
+    if source != 'dev.overlay':
+        target.write_text(target.read_text().replace('"action_items_page":100', '"dead_lever":100', 1))
+    with pytest.raises(ValueError, match='unknown lever dead_lever'):
+        read_lever_manifest.collect_sources(**kwargs)
