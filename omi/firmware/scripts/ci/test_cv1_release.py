@@ -18,6 +18,7 @@ from unittest.mock import patch
 import zipfile
 
 import cv1_release as release
+from cv1_bootloader import write_hex, read_hex
 
 REAL_SIM_CATALOG = release.sim_catalog
 
@@ -79,8 +80,8 @@ class ReleaseTests(unittest.TestCase):
             archive.writestr('manifest.json', json.dumps(self.manifest))
             archive.writestr('omi.signed.bin', self.payload)
             archive.writestr('ipc_radio.bin', b'radio')
-        (self.build / 'merged.hex').write_bytes(b'factory app hex')
-        (self.build / 'merged_CPUNET.hex').write_bytes(b'factory net hex')
+        write_hex(self.build / 'merged.hex', {0: 0x42, 0x10000: 0x3d, 0x10200: 0x11})
+        write_hex(self.build / 'merged_CPUNET.hex', {0x1000000: 0x33})
         self.run = {
             'id': 123,
             'run_attempt': 1,
@@ -103,6 +104,15 @@ class ReleaseTests(unittest.TestCase):
         self.sim = self.root / 'sim-report.json'
         self.sim.write_text(json.dumps(sim_report('a' * 40, '3.0.21')))
         release.stage(self.build, self.assets, '3.0.21', False, self.context, self.sim)
+
+    def test_promotion_rejects_boot_bytes_even_with_updated_checksums(self):
+        name = release.asset_names('3.0.21')[1]
+        write_hex(self.assets / name, {0: 0x42, 0x10000: 0x3d})
+        provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+        provenance['sha256'][name] = release.digest(self.assets / name)
+        (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
+        with self.assertRaisesRegex(ValueError, 'unapproved CV1 boot region'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
 
     def test_stage_requires_a_passing_full_simulator_report(self):
         bad_rows = [{'id': 'x', 'verdict': 'pass'}] * release.SIM_MIN_SCENARIOS
@@ -176,8 +186,9 @@ class ReleaseTests(unittest.TestCase):
             manifest = release.ota_manifest(archive)
             self.assertEqual(manifest['files'], self.manifest['files'][:1])
             self.assertEqual(manifest['time'], 123)
-        for original, name in zip(('merged.hex', 'merged_CPUNET.hex'), release.asset_names('3.0.21')[1:]):
-            self.assertEqual((self.build / original).read_bytes(), (self.assets / name).read_bytes())
+        app_hex, net_hex = release.asset_names('3.0.21')[1:]
+        self.assertEqual(read_hex(self.assets / app_hex), {0x10000: 0x3d, 0x10200: 0x11})
+        self.assertEqual((self.build / 'merged_CPUNET.hex').read_bytes(), (self.assets / net_hex).read_bytes())
 
     def test_network_requires_explicit_opt_in(self):
         target = self.root / 'paired.zip'

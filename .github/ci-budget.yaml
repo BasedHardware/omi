@@ -980,7 +980,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Conservative cold QA allowance for the documented 20-30 minute SDK/build path replaces the unobserved 5-minute placeholder; publish skips compilation. Build-only runs now also run the CV1 simulator gate (full scenario suite plus 40 fuzz seeds in the same pinned image; not yet measured on a hosted runner), so the p50 allowance rises from 30 to 55 until the first QA run re-seeds it. Manual-only frequency forecast remains zero; no added jobs or automatic runs.",
+      "rationale": "Conservative cold QA allowance for the documented 20-30 minute SDK/build path replaces the unobserved 5-minute placeholder; publish skips compilation. Build-only runs now also run the CV1 simulator gate (full scenario suite plus 40 fuzz seeds in the same pinned image; not yet measured on a hosted runner), so the p50 allowance rises from 30 to 55 until the first QA run re-seeds it. Manual-only frequency forecast remains zero; no added jobs or automatic runs. CV1 custom MCUboot qualification adds one clean bootloader-only rebuild (parallelism capped at two) and a small public evidence upload inside the same manual job; retain the 55-minute allowance and zero automatic/PR run forecast. No new trigger, runner or job.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

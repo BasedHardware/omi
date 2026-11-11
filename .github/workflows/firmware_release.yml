@@ -181,6 +181,14 @@ jobs:
         if: ${{ inputs.publish != 'publish' }}
         run: sudo chown -R "$(id -u):$(id -g)" omi/firmware
 
+      - name: Upload custom MCUboot qualification evidence (never release assets)
+        if: ${{ inputs.publish != 'publish' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cv1-bootloader-${{ github.run_id }}-${{ github.run_attempt }}
+          path: omi/firmware/v2.9.0/build/cv1-bootloader/*
+          if-no-files-found: error
+
       - name: Package QA release assets
         if: ${{ inputs.publish != 'publish' }}
         env:

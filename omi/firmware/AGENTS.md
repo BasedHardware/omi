@@ -18,6 +18,8 @@ New releases start at 1%; David expands by editing the release body. Versions
 Capture mute (`19B10015`, NVS key `muted`, feature bit 10) and its pendant-owned
 semantics are specified in [docs/gatt-map.md](docs/gatt-map.md).
 
+MCUboot build, release hash gate and safe SWD recovery: [docs/cv1-bootloader.md](docs/cv1-bootloader.md).
+
 ## Formatting
 
 C/C++ files: `clang-format -i <files>` (the repo pre-commit hook covers this).

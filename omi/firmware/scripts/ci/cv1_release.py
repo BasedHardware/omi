@@ -13,6 +13,8 @@ import struct
 import tempfile
 import zipfile
 
+from cv1_bootloader import app_only, inspect_hex
+
 WORKFLOW = '.github/workflows/firmware_release.yml'
 ARTIFACT = 'cv1-qa-release'
 SIM_REPORT = 'sim-report.json'
@@ -137,13 +139,16 @@ def stage(build, out, ver, include_network, context, sim_report):
     with zipfile.ZipFile(out / names[0]) as archive:
         validate_signed_version(archive, ver)
         signed_sha256 = hashlib.sha256(archive.read('omi.signed.bin')).hexdigest()
-    shutil.copyfile(build / 'merged.hex', out / names[1])
+    # Never distribute a bootloader while the new build awaits physical qualification.
+    app_only(build / 'merged.hex', out / names[1])
     shutil.copyfile(build / 'merged_CPUNET.hex', out / names[2])
     require(all((out / name).stat().st_size for name in names), 'Empty release asset')
+    boot_regions = {path.name: inspect_hex(path) for path in out.glob('*.hex')}
     shutil.copyfile(sim_report, out / SIM_REPORT)
     provenance = dict(
         context,
         mode='build-only',
+        boot_regions=boot_regions,
         version=ver,
         include_network_core=include_network,
         signed_sha256=signed_sha256,
@@ -182,6 +187,9 @@ def validate_assets(out, run, ver, include_network, tested_signed_sha256):
     names = asset_names(ver)
     require(set(p.name for p in out.iterdir()) == {*names, 'qa-provenance.json', SIM_REPORT}, 'Unexpected QA assets')
     require(data.get('sha256') == {name: digest(out / name) for name in names}, 'QA asset checksum mismatch')
+    # Reparse the actual bytes even if an artifact's provenance was edited too.
+    boot_regions = {path.name: inspect_hex(path) for path in out.glob('*.hex')}
+    require(data.get('boot_regions') == boot_regions, 'QA boot-region receipt mismatch')
     # The simulator evidence binds to the same run/attempt and source SHA as the bench receipt.
     require(data.get('sim_report_sha256') == digest(out / SIM_REPORT), 'Simulator report checksum mismatch')
     validate_sim_report(json.loads((out / SIM_REPORT).read_text()), run['head_sha'], ver)

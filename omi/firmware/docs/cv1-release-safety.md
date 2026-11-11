@@ -4,6 +4,11 @@ CV1's installed MCUboot is overwrite-only and OTA cannot replace it. A signed
 image that boots badly has no automatic runtime rollback. Signing uses randomized
 RSA signatures: rebuilding tested source does not reproduce the tested bytes.
 
+Release app HEX is app-only and preserves factory MCUboot. Every staged HEX is
+reparsed against the [bootloader policy](cv1-bootloader.md) at staging, promotion
+and publish. A new custom MCUboot is bench-only until physically qualified;
+never wire-flash stock MCUboot.
+
 ## Build, test, promote
 
 1. Merge the intended source and firmware revision into main. Normally bump
@@ -19,8 +24,8 @@ RSA signatures: rebuilding tested source does not reproduce the tested bytes.
    evidence, not a test of the signed bytes; the bench (step 3) still is.
    The default OTA zip contains only app image 0. Set `include_network_core=true`
    only when intentionally testing a paired app/radio update. This changes zip
-   packaging only: MCUboot, partitions, sysbuild layout, `merged.hex` and
-   `merged_CPUNET.hex` are untouched.
+   packaging only. Release staging also extracts app-only HEX from `merged.hex`;
+   MCUboot, settings and UICR are excluded. `merged_CPUNET.hex` stays separate.
 3. Download `cv1-qa-release-<run ID>-<attempt>` and test its `Omi_CV1_OTA_v<version>.zip` on the bench
    through the stock app. Record the run ID, attempt, asset SHA-256 from
    `qa-provenance.json`, phone/app version, device identity and health results.
@@ -51,8 +56,8 @@ RSA signatures: rebuilding tested source does not reproduce the tested bytes.
    back to the old run-wide artifact name. Older artifacts need a new QA build
    and bench receipt. A mismatched bench signed-image hash fails closed.
    Advancing main requires a new QA build at that SHA. No rebuild, signing,
-   repackaging or renaming occurs on publish. Only the tested zip and two factory
-   hex files are attached. The git refs API atomically creates the tag at the
+   repackaging or renaming occurs on publish. Only the tested zip, app-only HEX and separate CPUNET
+   HEX are attached. The git refs API atomically creates the tag at the
    tested SHA and refuses existing tags. A release is created as a draft and its
    tag is verified again before publication. If verification fails, it stays a
    draft; inspect the tag/draft before an approved cleanup and retry.

@@ -44,6 +44,10 @@ and reserved emergency-revert versions.
 - `test_cv1_release.py` — offline packaging and promotion contract tests.
 - `make-release-body.sh` — renders the GitHub Release body + `KEY_VALUE` block.
 
+`cv1_bootloader.py` strictly parses and hashes every staged HEX at stage, promotion
+and publish. App HEX is app-only; custom MCUboot and equivalence/rebuild evidence
+are uploaded separately for bench qualification. See [the bootloader runbook](../../docs/cv1-bootloader.md).
+
 ## Notes
 
 - The Release is created by the **Omi Bot GitHub App** (`actions/create-github-app-token`,

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "region_start": 0,
+  "region_end": 65536,
+  "fill": 255,
+  "approved_boot_sha256": [
+    "c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086"
+  ],
+  "factory_source": "omi/firmware/FLASH_3.0.8/MAC/merged.hex",
+  "release_hex": "app-only; custom candidate requires bench qualification before approval"
+}
