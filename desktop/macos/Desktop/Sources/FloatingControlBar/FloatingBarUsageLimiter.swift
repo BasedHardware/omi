@@ -80,8 +80,8 @@ final class FloatingBarUsageLimiter: ObservableObject {
   }
   func applyQuota(_ quota: APIClient.ChatUsageQuota) {
     purchaseObservation.allowance(
-      quota.allowed == false, kind: quota.usesSharedBudget ? "usage_budget" : "chat",
-      surface: "chat", reason: quota.usesSharedBudget ? "budget_exhausted" : "chat_quota_exhausted")
+      quota.allowed == false, kind: quota.usesSharedBudget == true ? "usage_budget" : "chat",
+      surface: "chat", reason: quota.usesSharedBudget == true ? "budget_exhausted" : "chat_quota_exhausted")
     serverQuota = quota
     optimisticDelta = 0
   }
