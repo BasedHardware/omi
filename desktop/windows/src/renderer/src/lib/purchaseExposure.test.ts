@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi, type MockInstance } from 'vitest'
+import type { ChatUsageQuota } from './omiApi.generated'
 vi.mock('./firebase', () => ({ auth: { currentUser: null } }))
 import { openSubscriptionCheckout, trackUpgradePlanSelected, trackPurchaseEvent } from './analytics'
 import {
@@ -102,7 +103,14 @@ it('all generated events strip unknown keys and free values at runtime', () => {
 it('server quota observation ignores optimistic local exhaustion', async () => {
   const { createChatQuotaGate } = await import('./chatQuotaGate')
   const gate = createChatQuotaGate(vi.fn())
-  const snapshot = { allowed: true, plan: 'basic', unit: 'questions', used: 0, limit: 1 } as any
+  const snapshot: ChatUsageQuota = {
+    allowed: true,
+    plan: 'basic',
+    plan_type: 'free',
+    unit: 'questions',
+    used: 0,
+    limit: 1
+  }
   gate.applyQuota(snapshot)
   gate.recordQuery()
   expect(gate.isLimitReached()).toBe(true)

@@ -1,6 +1,11 @@
 // Exercises the real preload projection: only main's bounded observation can complete telemetry.
 // Optional callbacks/listener faults must preserve the legacy product outcome and listener cleanup.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { OmiBridgeApi } from '../shared/types'
+
+// The preload/node tsconfig intentionally has no renderer Window augmentation.
+// The real preload still writes this bridge onto the stubbed global below.
+const bridge = (): OmiBridgeApi => (window as unknown as { omi: OmiBridgeApi }).omi
 const h = vi.hoisted(() => ({
   listener: undefined as undefined | (() => void),
   invoke: vi.fn(),
@@ -39,7 +44,7 @@ it('projects legacy outcome and orders opened before verified completion, withou
     return { outcome: 'success', observedCompletion: true }
   })
   expect(
-    await window.omi.openCheckout(
+    await bridge().openCheckout(
       'fixture',
       () => order.push('opened'),
       () => order.push('completed')
@@ -60,7 +65,7 @@ it.each([
   async (outcome, observedCompletion) => {
     h.invoke.mockResolvedValue({ outcome, observedCompletion })
     const completed = vi.fn()
-    expect(await window.omi.openCheckout('fixture', undefined, completed)).toBe(outcome)
+    expect(await bridge().openCheckout('fixture', undefined, completed)).toBe(outcome)
     expect(completed).not.toHaveBeenCalled()
   }
 )
@@ -72,16 +77,16 @@ it('callback faults and visibility-listener transport faults never replace produ
   const fault = () => {
     throw new Error('optional observer')
   }
-  expect(await window.omi.openCheckout('fixture', fault, fault)).toBe('success')
+  expect(await bridge().openCheckout('fixture', fault, fault)).toBe('success')
   h.once.mockImplementationOnce(fault)
-  expect(await window.omi.openCheckout('fixture', fault, fault)).toBe('success')
+  expect(await bridge().openCheckout('fixture', fault, fault)).toBe('success')
   h.remove.mockImplementationOnce(fault)
-  expect(await window.omi.openCheckout('fixture', fault, fault)).toBe('success')
+  expect(await bridge().openCheckout('fixture', fault, fault)).toBe('success')
 })
 it('IPC failure cleans its listener, preserves rejection and cannot complete', async () => {
   h.invoke.mockRejectedValueOnce(new Error('unavailable'))
   const completed = vi.fn()
-  await expect(window.omi.openCheckout('fixture', undefined, completed)).rejects.toThrow(
+  await expect(bridge().openCheckout('fixture', undefined, completed)).rejects.toThrow(
     'unavailable'
   )
   expect(completed).not.toHaveBeenCalled()
@@ -94,7 +99,7 @@ it('a cleanup transport fault cannot deliver a late opened callback after resolu
     throw new Error('cleanup transport')
   })
   const opened = vi.fn()
-  expect(await window.omi.openCheckout('fixture', opened)).toBe('closed')
+  expect(await bridge().openCheckout('fixture', opened)).toBe('closed')
   h.listener?.()
   expect(opened).not.toHaveBeenCalled()
 })

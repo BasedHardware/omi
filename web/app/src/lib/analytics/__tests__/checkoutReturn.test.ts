@@ -16,7 +16,7 @@ const paymentSource = readFileSync(
 function returnScript(route: 'stripe_success' | 'stripe_cancel') {
   return paymentSource
     .slice(paymentSource.indexOf(`def ${route}(`))
-    .match(/<script>([\s\S]*?)<\/script>/)![1];
+    .match(/<script>([\s\S]*?)<\/script>/i)![1];
 }
 function signal(
   source: Window,

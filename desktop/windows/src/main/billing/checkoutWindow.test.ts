@@ -1,6 +1,16 @@
 import { EventEmitter } from 'node:events'
+import type { IpcMainInvokeEvent } from 'electron'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-const mocks = vi.hoisted(() => ({ windows: [] as any[] }))
+
+type MockCheckoutWindow = EventEmitter & {
+  webContents: EventEmitter
+  destroyed: boolean
+  show: ReturnType<typeof vi.fn>
+  isDestroyed(): boolean
+  destroy(): void
+  loadURL(): Promise<void>
+}
+const mocks = vi.hoisted(() => ({ windows: [] as MockCheckoutWindow[] }))
 vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
   shell: { openExternal: vi.fn() },
@@ -143,7 +153,7 @@ it('main IPC returns only a closed outcome/verification pair and observation fau
           throw new Error('transport')
         }
       }
-    } as any,
+    } as unknown as IpcMainInvokeEvent,
     'https://checkout.stripe.test/private'
   )
   const window = mocks.windows[0]

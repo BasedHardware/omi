@@ -164,7 +164,7 @@ export async function openSubscriptionCheckout(
   plan: string,
   interval: string,
   source: string
-) {
+): Promise<'success' | 'cancel' | 'closed'> {
   const properties = {
     plan: subscriptionPlanWire(plan),
     billing_interval: subscriptionIntervalWire(interval),
