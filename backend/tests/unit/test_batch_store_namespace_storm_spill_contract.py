@@ -715,11 +715,12 @@ def test_store_exhaustion_publishes_the_spill(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# the mid-ladder peek stays label-scoped
+# the mid-ladder peek adopts the fleet; a client-less peek stays label-scoped
 # ---------------------------------------------------------------------------
 
 
-def test_mid_ladder_peek_never_reads_the_spill():
+def test_mid_ladder_peek_without_a_client_stays_label_scoped_and_free():
+    """The superseded isolation keeps its client-less form: no reads, no cost."""
     client = StormDocsClient()
     window, _wall = fresh_window('batch_pipeline_dev')
     damper, clock = fresh_damper('batch_pipeline_dev', window=window)
@@ -728,3 +729,20 @@ def test_mid_ladder_peek_never_reads_the_spill():
     assert generation == 0
     assert window.spill_reads == 0
     assert client.get_calls == []
+
+
+def test_mid_ladder_peek_adopts_the_spill_share_capped_when_a_client_is_in_scope():
+    """A chain already in flight adopts the spill its entry consult missed.
+
+    The entry consult read the spill before a sibling raised it; the rung
+    past the mirror TTL re-reads once and spaces itself by the share-capped
+    residual instead of re-deriving the storm with the bare jitter.
+    """
+    client = StormDocsClient()
+    window, wall = fresh_window('batch_pipeline_dev')
+    seed_spill(client, 'batch_pipeline_dev', wall.time() + 3.0)
+    damper, clock = fresh_damper('batch_pipeline_dev', window=window)
+    residual, generation = damper.peek('batch_claim', client=client)
+    assert residual == pytest.approx(1.0)  # SPILL_SHARE_CAP_SECONDS
+    assert generation == 0
+    assert window.spill_reads == 1

@@ -353,7 +353,7 @@ class _ContentionStormDamper:
         self._sleeper(wait)
         return wait, generation
 
-    def peek(self, label: str) -> tuple[float, int]:
+    def peek(self, label: str, *, client: Any = None) -> tuple[float, int]:
         """Read ``(residual, generation)`` for ``label`` without sleeping.
 
         The mid-ladder gate reads this between a retry chain's attempts: the
@@ -361,11 +361,53 @@ class _ContentionStormDamper:
         double-sleep a wait the chain's budget has not accounted for. The
         residual never comes back negative — an expired window is ``0.0``,
         exactly like no window at all.
+
+        Without a client the read is process-local and free, exactly as it
+        has always been: no mirror read, no spill read, byte-identical to
+        the pre-fleet gate.
+
+        When this damper carries a fleet window and a client is in scope,
+        the rung also adopts what the fleet has already measured, with the
+        same precedence the entry consult applies: a sibling pod's armed
+        window for THIS label wins over the process's own residual (it only
+        ever raises the wait), and when no window exists anywhere for the
+        label, the namespace spill fills in, share-capped, so a chain that
+        entered before a sibling's broadcast stops re-deriving a storm the
+        fleet already measured. A chain's entry consulted the same documents
+        at most one mirror TTL ago, so the common chain pays zero extra
+        reads; a rung past the TTL re-reads once and picks up a window a
+        sibling armed mid-flight — evidence only a mid-chain read can
+        deliver. Both lanes are advisory and fail-open: a hostile answer, a
+        read fault, an absent or malformed document all collapse to
+        "no window" and leave the bare schedule unchanged.
+
+        Failure-Class: FC-mid-ladder-retry-collides-inside-the-concurrently-armed-storm-window
         """
         with self._lock:
             residual = self._armed_until.get(label, 0.0) - self._monotonic()
             generation = self._generations.get(label, 0)
-        return max(residual, 0.0), generation
+        wait = max(residual, 0.0)
+        if self._fleet is not None and client is not None:
+            fleet_residual = self._fleet.peek(label, client)
+            if fleet_residual > wait:
+                logger.info(
+                    'event=batch_store_backoff scope=gate_fleet operation=%s waited_ms=%d',
+                    label,
+                    round(fleet_residual * 1000),
+                )
+                wait = fleet_residual
+            if wait <= 0.0:
+                spill_residual = _finite_seconds(getattr(self._fleet, 'peek_spill', lambda _client: 0.0)(client))
+                spill_cap = _finite_seconds(getattr(self._fleet, 'SPILL_SHARE_CAP_SECONDS', 0.0))
+                if spill_cap > 0.0 and spill_residual > 0.0:
+                    spill_residual = min(spill_residual, spill_cap)
+                    logger.info(
+                        'event=batch_store_backoff scope=gate_spill operation=%s waited_ms=%d',
+                        label,
+                        round(spill_residual * 1000),
+                    )
+                    wait = spill_residual
+        return wait, generation
 
     def arm(self, label: str, *, client: Any = None) -> float:
         """Record one exhaustion for ``label``; return the applied retry-after seconds.
@@ -950,7 +992,10 @@ class FirestoreStore:
         label's window mid-flight, and re-striking the hot document inside
         that window burns every remaining rung against a collision the damper
         has already measured. Each retry rung therefore re-reads the label's
-        residual through a non-sleeping damper peek and adds it to the rung's
+        residual through a non-sleeping damper peek — fleet-aware now, so a
+        rung also adopts a window a sibling pod armed mid-flight and, on a
+        cold label, the namespace spill share-capped, exactly like the entry
+        consult — and adds it to the rung's
         equal-jitter wait (logged at INFO as
         ``event=batch_store_backoff scope=mid_ladder``). From the third rung
         — two measured collisions, sustained-wave evidence — the chain's
@@ -995,7 +1040,7 @@ class FirestoreStore:
             nonlocal latest_generation
             if damper is None:
                 return 0.0
-            residual, gate_generation = damper.peek(label)
+            residual, gate_generation = damper.peek(label, client=client)
             latest_generation = gate_generation
             # This chain's own aborts are storm evidence. The gate never used
             # to wait for anything unless a sibling had already exhausted:
@@ -1008,7 +1053,13 @@ class FirestoreStore:
             # on the shared state, so exhaustion stamping stays
             # exhaustion-driven. The early rungs keep their sub-second
             # transient-collision recovery; a sibling's armed window still
-            # wins whenever it is longer.
+            # wins whenever it is longer. The residual itself is fleet-aware
+            # now: a rung past the entry consult's mirror TTL re-reads the
+            # label's window document once and adopts a window a sibling pod
+            # armed mid-flight (logged as scope=gate_fleet), and a cold
+            # label adopts the namespace spill share-capped
+            # (scope=gate_spill) — a chain that entered before the broadcast
+            # no longer re-derives a storm the fleet already measured.
             #
             # Failure-Class: FC-storm-window-arms-only-after-exhaustion
             wait = residual

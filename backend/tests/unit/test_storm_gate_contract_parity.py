@@ -132,7 +132,7 @@ def test_source_store_defines_mid_ladder_gate_closure():
 
 
 def test_source_damper_defines_peek():
-    assert 'def peek(self, label: str) -> tuple[float, int]:' in STORE_SOURCE
+    assert 'def peek(self, label: str, *, client: Any = None) -> tuple[float, int]:' in STORE_SOURCE
 
 
 def test_source_peek_does_not_sleep():

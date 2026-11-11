@@ -23,7 +23,8 @@ whole fleet's next entries. This suite pins that contract end to end:
    window, and the publisher never re-reads its own broadcast.
 3. Boundaries: the mirror is keyed by namespace and label, bounded in
    labels, isolated from injected dampers, dormant with the damper kill
-   switches, invisible to the mid-ladder gate, and never shortens a wait
+   switches, free to a client-less mid-ladder gate (adopted with a client in
+   scope), and never shortens a wait
    the process's own window already decided.
 
 Failure-Class: FC-storm-window-never-leaves-the-process
@@ -612,14 +613,31 @@ def test_fleet_adoption_never_corrupts_the_generation_guard():
     assert 'batch_merge' in damper._generations  # the guard held: not cleared
 
 
-def test_mid_ladder_peek_stays_process_local():
+def test_mid_ladder_peek_without_a_client_stays_process_local():
     damper, window, clock, wall = adopt_clocks('batch_pipeline_dev')
     client = StormDocsClient()
     window.publish('batch_merge', 2.0, client=client)
     reads_after_publish = window.reads
     residual, generation = damper.peek('batch_merge')
-    assert (residual, generation) == (0.0, 0)  # the gate reads the process only
+    assert (residual, generation) == (0.0, 0)  # no client: the process only
     assert window.reads == reads_after_publish  # the gate adds no fleet read
+
+
+def test_mid_ladder_peek_adopts_a_sibling_window_with_a_client():
+    """A rung adopts a window a sibling pod armed mid-flight.
+
+    The publisher warmed this process's mirror, so the rung's adoption
+    costs no document read — and the rung that fired before the broadcast
+    still spaces itself out of the storm instead of re-deriving it.
+    """
+    damper, window, clock, wall = adopt_clocks('batch_pipeline_dev')
+    client = StormDocsClient()
+    window.publish('batch_merge', 2.0, client=client)
+    reads_after_publish = window.reads
+    residual, generation = damper.peek('batch_merge', client=client)
+    assert residual == pytest.approx(2.0)
+    assert generation == 0
+    assert window.reads == reads_after_publish  # served from the warm mirror
 
 
 # --------------------------------------------------------------------------
