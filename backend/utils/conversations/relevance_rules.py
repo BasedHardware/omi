@@ -19,7 +19,8 @@ Design constraints, in priority order:
    practice (pre-roll offsets, 10 s quantised sync segments, single segments
    spanning several minutes for one sentence, overlapping dual-channel
    segments), and short speech can matter ("call mom before five").
-3. Pure function of the text; stdlib only; no I/O; microseconds per call.
+3. Bounded text rules; no external I/O; microseconds per call. The calendar
+   request keep guard has one default-on runtime rollback switch.
    Several test harnesses load this module with a stubbed ``utils`` package.
 
 Measured 2026-09-23 against 286 hand-labelled conversations from one account
@@ -33,10 +34,12 @@ import re
 import unicodedata
 from typing import FrozenSet, List, Literal, Optional, Sequence, Tuple
 
+from config.refactor_modes import default_on
+
 Verdict = Literal['keep', 'discard']
 
 # Bumped whenever a rule changes, so stored decisions stay attributable.
-RULES_VERSION = 4
+RULES_VERSION = 5
 
 # ---------------------------------------------------------------------------
 # Lexicons. All entries are casefolded; apostrophes are normalised to "'".
@@ -112,6 +115,29 @@ EXPLICIT_REMINDER_RE = re.compile(
     r"add (?:it |this |that )?to (?:my|the) (?:list|calendar|to-?do))\b",
     re.IGNORECASE,
 )
+
+EXPLICIT_CALENDAR_REQUEST_KEEP_ENV = 'EXPLICIT_CALENDAR_REQUEST_KEEP'
+# A direct instruction (optionally polite), not a prediction, quotation or
+# future-tense commitment. Match one existing segment; never fuse speakers.
+_CALENDAR_REQUEST_RE = re.compile(
+    r"(?:please[ ,\t]+|(?:can|could|would)[ \t]+you[ \t]+(?:please[ \t]+)?)?"
+    r"(?:put[ \t]+\w[^\r\n.!?;]{0,159}?[ \t]+on|add[ \t]+\w[^\r\n.!?;]{0,159}?[ \t]+to)"
+    r"[ \t]+(?:my|the)[ \t]+calendar(?:[ \t]+[^\r\n.!?;]{1,80})?[.!?]?",
+    re.IGNORECASE,
+)
+
+
+def has_explicit_keep_instruction(text: str) -> bool:
+    """Retain input for normal adjudication; never authorize an action/event.
+
+    Existing reminder matching remains unchanged when the calendar guard is off.
+    Call per segment for new calendar forms, without coalescing speakers/turns.
+    """
+    return bool(EXPLICIT_REMINDER_RE.search(text)) or (
+        default_on(EXPLICIT_CALENDAR_REQUEST_KEEP_ENV)
+        and _CALENDAR_REQUEST_RE.fullmatch(normalize_relevance_text(text).strip()) is not None
+    )
+
 
 # Code points of CJK acknowledgement particles. A CJK transcript whose Han/kana
 # characters are all in this set is a backchannel ("嗯嗯", "好的", "对对对").
@@ -252,7 +278,7 @@ def deterministic_relevance(texts: Sequence[str], speech_seconds: Optional[float
     unreadable = bool(cjk_content) or any(not _is_filler(t) for t in foreign)
 
     # 1. Explicit reminder phrasing is always worth keeping, whatever else is said.
-    if EXPLICIT_REMINDER_RE.search(joined):
+    if EXPLICIT_REMINDER_RE.search(joined) or any(has_explicit_keep_instruction(t) for t in texts):
         return 'keep', 'explicit_reminder'
 
     # 2. Content-free at any length: checked before the length fast path so a long
