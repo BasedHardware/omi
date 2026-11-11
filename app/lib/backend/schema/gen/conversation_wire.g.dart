@@ -579,6 +579,7 @@ class GeneratedStructured {
   final String category;
   final String emoji;
   final List<GeneratedEvent>? events;
+  final String gist;
   final List<GeneratedInsight>? insights;
   final String? meetingType;
   final List<GeneratedNoteClaim>? noteClaims;
@@ -593,6 +594,7 @@ class GeneratedStructured {
     this.category = "other",
     this.emoji = "\ud83d\udcac",
     this.events,
+    this.gist = "",
     this.insights,
     this.meetingType,
     this.noteClaims,
@@ -609,6 +611,7 @@ class GeneratedStructured {
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "other"), "category"),
       emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: "\ud83d\udcac"), "emoji"),
       events: _readFieldValue<List<GeneratedEvent>>(_readField(json, const ["events"]), "events", (value) => _readObjectList(value, GeneratedEvent.fromJson), requiredField: false, nullable: true),
+      gist: _required(_readFieldValue<String>(_readField(json, const ["gist"]), "gist", _readString, requiredField: false, nullable: false, defaultValue: ""), "gist"),
       insights: _readFieldValue<List<GeneratedInsight>>(_readField(json, const ["insights"]), "insights", (value) => _readObjectList(value, GeneratedInsight.fromJson), requiredField: false, nullable: true),
       meetingType: _readFieldValue<String>(_readField(json, const ["meeting_type"]), "meeting_type", _readString, requiredField: false, nullable: true),
       noteClaims: _readFieldValue<List<GeneratedNoteClaim>>(_readField(json, const ["note_claims"]), "note_claims", (value) => _readObjectList(value, GeneratedNoteClaim.fromJson), requiredField: false, nullable: true),
@@ -626,6 +629,7 @@ class GeneratedStructured {
       'category': category,
       'emoji': emoji,
       'events': events?.map((value) => value.toJson()).toList(),
+      'gist': gist,
       'insights': insights?.map((value) => value.toJson()).toList(),
       'meeting_type': meetingType,
       'note_claims': noteClaims?.map((value) => value.toJson()).toList(),
