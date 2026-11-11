@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
-from database.jobstore.connection import Pool
+from database.jobstore.connection import Pool, sql
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from testing.pipeline_sim.store import CustomerData, SimStore
 
@@ -30,10 +30,18 @@ class PgRows(Mapping):
 
     def _all(self) -> dict[tuple[str, str], dict]:
         namespace = self._store.pg.namespace
-        sql = ' UNION ALL '.join(f"SELECT '{t}', key, doc FROM {t} WHERE namespace = %s" for t in _TYPED)
-        sql += ' UNION ALL SELECT tbl, key, doc FROM docs WHERE namespace = %s'
+        psycopg_sql = sql()
+        queries = [
+            psycopg_sql.SQL('SELECT {t_literal}, key, doc FROM {t_ident} WHERE namespace = %s').format(
+                t_literal=psycopg_sql.Literal(table), t_ident=psycopg_sql.Identifier(table)
+            )
+            for table in _TYPED
+        ]
+        query = psycopg_sql.SQL(' UNION ALL ').join(
+            [*queries, psycopg_sql.SQL('SELECT tbl, key, doc FROM docs WHERE namespace = %s')]
+        )
         with self._store.pg.pool.connection() as conn:
-            rows = conn.execute(sql, (namespace,) * (len(_TYPED) + 1)).fetchall()
+            rows = conn.execute(query, (namespace,) * (len(_TYPED) + 1)).fetchall()
         return {(table, key): doc for table, key, doc in rows}
 
     def __getitem__(self, address: tuple[str, str]) -> dict:
@@ -198,7 +206,11 @@ class PgSimStore(SimStore):
     def delete(self, table: str, key: str) -> None:
         with self.pg.pool.connection() as conn:
             if table in _TYPED:
-                conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.pg.namespace, key))
+                psycopg_sql = sql()
+                query = psycopg_sql.SQL('DELETE FROM {} WHERE namespace = %s AND key = %s').format(
+                    psycopg_sql.Identifier(table)
+                )
+                conn.execute(query, (self.pg.namespace, key))
             else:
                 conn.execute(
                     'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.pg.namespace, table, key)
