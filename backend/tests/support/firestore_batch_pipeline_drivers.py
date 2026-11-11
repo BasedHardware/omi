@@ -84,6 +84,7 @@ def entries():
                 'max_rows': (8, 'in-memory candidate cap only'),
                 'max_scan': (128, 'aggregate scan bound only'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
+                'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
             },
         ),

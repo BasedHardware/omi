@@ -1,6 +1,8 @@
 """Repair must prefer stored deadlines without losing bounded, encrypted progress."""
 
+from collections import Counter
 from datetime import datetime, timezone
+import math
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -36,6 +38,7 @@ def test_urgent_query_uses_stored_deadline_and_includes_final_day_boundary():
     query = client.queries[0]
     assert query.filters == [
         ('state', '==', 'record_pending'),
+        ('record_dead_letter_deadline_at', '>', 0),
         ('record_dead_letter_deadline_at', '<=', NOW + 86400),
     ]
     assert query.order == ['record_dead_letter_deadline_at', '__name__']
@@ -109,6 +112,8 @@ def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(
         assert max_rows == (1 if urgent else 2)
         if urgent and urgent_index_error:
             raise cluster.FailedPrecondition('private query requires an index: users/private')
+        if urgent:
+            kwargs['invalid_clock_counts']['invalid_clock_rows'] += 128
         path = 'urgent' if urgent else 'recent-job'
         selected_cursors[path] = {'path': path}
         return [(path, 5000 if urgent else 1000)], False, {'path': path}
@@ -139,7 +144,7 @@ def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(
         ]
         for path, _ in rows:
             attempted(path)
-        return {}
+        return {'invalid_clock_rows': 2}
 
     monkeypatch.setattr(config, 'require_runtime', lambda: None)
     monkeypatch.setattr(config, 'server_flags', lambda: {})
@@ -169,7 +174,8 @@ def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(
         assert 'private' not in str(events) + str(fallbacks)
         assert fallbacks[0]['outcome'] == 'degraded'
     else:
-        assert cluster.run()['outcome'] == 'ok'
+        report = cluster.run()
+        assert report['outcome'] == 'ok' and report['invalid_clock_rows'] == 130
     for key, path in [((True, True), 'urgent'), ((True, False), 'recent-job'), ((False, False), 'recent-conversation')]:
         assert cursors[key].writes == (
             []
@@ -187,8 +193,10 @@ def test_saturated_malformed_deadlines_never_persist_an_invalid_urgent_frontier(
     # out. Exercise the local guard independently of query type filtering.
     monkeypatch.setattr(query, 'stream', lambda **_: docs)
     monkeypatch.setattr(client, 'collection', lambda _: query)
-    rows, saturated, cursor = cluster.discover_jobs(client, budget=budget, urgent=True)
-    assert rows == [] and saturated and cursor is None
+    counts = Counter()
+    rows, saturated, cursor = cluster.discover_jobs(client, budget=budget, urgent=True, invalid_clock_counts=counts)
+    assert rows == [] and saturated and cursor['path'] == docs[-1].reference.path
+    assert counts == {'invalid_clock_rows': 128}
     state = CursorClient()
     frontier = RepairCursor(
         SimpleNamespace(collection=lambda _: SimpleNamespace(document=lambda _: state)),
@@ -197,10 +205,81 @@ def test_saturated_malformed_deadlines_never_persist_an_invalid_urgent_frontier(
         urgent=True,
     )
     frontier.write(cursor, budget)
-    assert frontier.read(budget) is None
+    restored = frontier.read(budget)
+    assert restored['path'] == cursor['path']
+    value = restored['enqueued_at']
+    assert type(value) is type(deadline)
+    assert math.isnan(value) if isinstance(deadline, float) and math.isnan(deadline) else value == deadline
+    if type(deadline) not in (int, float):
+        # This extension belongs only to urgent scalar query positions.
+        ordinary = RepairCursor(
+            SimpleNamespace(collection=lambda _: SimpleNamespace(document=lambda _: state)), b'k' * 32, jobs=True
+        )
+        with pytest.raises(ValueError, match='invalid maintenance frontier'):
+            ordinary.read(budget)
     # The next run can load the frontier and select a valid deadline.
     docs[:] = [pending_job(129, NOW - 5000, record_dead_letter_deadline_at=NOW + 1)]
     assert cluster.discover_jobs(client, budget=budget, urgent=True, after=frontier.read(budget))[0]
+
+
+@pytest.mark.parametrize('deadline', [0, -1])
+@pytest.mark.parametrize('force_malformed_page', [False, True])
+def test_persistent_malformed_prefix_cannot_pin_valid_urgent_jobs(monkeypatch, deadline, force_malformed_page):
+    bad = sorted(
+        [pending_job(i, NOW - 5000, record_dead_letter_deadline_at=deadline) for i in range(128)],
+        key=lambda doc: doc.reference.path,
+    )
+    good = pending_job(129, NOW - 5000, record_dead_letter_deadline_at=NOW + 1)
+    client, budget = OrderedJobsClient(bad + [good]), SweepBudget(60)
+    if force_malformed_page:
+        # Also exercise cursor progress independently of the query floor, as
+        # with the adversarial projected page in the saturated-page regression.
+        collection = client.collection
+
+        def unfiltered_collection(name):
+            query = collection(name)
+
+            def stream(**_):
+                docs = client.documents
+                if query.after:
+                    point = (query.after['record_dead_letter_deadline_at'], query.after['__name__'].path)
+                    docs = [
+                        doc
+                        for doc in docs
+                        if (doc.to_dict()['record_dead_letter_deadline_at'], doc.reference.path) > point
+                    ]
+                return docs[: query.cap]
+
+            query.stream = stream
+            return query
+
+        monkeypatch.setattr(client, 'collection', unfiltered_collection)
+    state = CursorClient()
+    frontier = RepairCursor(
+        SimpleNamespace(collection=lambda _: SimpleNamespace(document=lambda _: state)),
+        b'k' * 32,
+        jobs=True,
+        urgent=True,
+    )
+    counts, found = Counter(), []
+    for _ in range(2 if force_malformed_page else 1):
+        selected = {}
+        rows, saturated, cursor = cluster.discover_jobs(
+            client,
+            budget=budget,
+            urgent=True,
+            after=frontier.read(budget),
+            selected_cursors=selected,
+            invalid_clock_counts=counts,
+        )
+        if not rows:
+            assert saturated and selected == {} and cursor['path'] == bad[-1].reference.path
+        found.extend(path for path, _ in rows)
+        frontier.write(cursor, budget)
+    assert found == ['users/synthetic/conversations/capture-129']
+    assert len(client.documents) == 129  # The malformed prefix was never removed.
+    assert counts['invalid_clock_rows'] == (128 if force_malformed_page else 0)
+    assert all(('record_dead_letter_deadline_at', '>', 0) in query.filters for query in client.queries)
 
 
 def test_conversation_newest_first_encrypted_resume_frozen_horizon_and_wrap(monkeypatch):

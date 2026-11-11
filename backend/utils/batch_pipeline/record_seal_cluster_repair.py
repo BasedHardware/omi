@@ -75,7 +75,7 @@ DISPOSITIONS = frozenset(
 
 
 def valid_metric_clock(started):
-    """A metrics-only clock guard; never used to decide repair eligibility."""
+    """Finite positive clock for metrics and stored urgent-deadline validation."""
     return (
         isinstance(started, (int, float)) and not isinstance(started, bool) and math.isfinite(started) and started > 0
     )
@@ -349,6 +349,7 @@ def discover_jobs(
     selected_cursors=None,
     progress=lambda _: None,
     urgent=False,
+    invalid_clock_counts=None,
 ):
     """Newest pending jobs, or earliest near-dead-letter deadline, with bounded cursors.
 
@@ -382,6 +383,8 @@ def discover_jobs(
         query = client.collection('batch_pipeline_prod_jobs').where(filter=FieldFilter('state', '==', 'record_pending'))
         if age_order:
             cutoff = horizon.timestamp() + (NEAR_DEAD_LETTER_SECONDS if urgent else 0)
+            if urgent:
+                query = query.where(filter=FieldFilter(order_field, '>', 0))
             query = query.where(filter=FieldFilter(order_field, '<=', cutoff)).order_by(
                 order_field, direction='ASCENDING' if urgent else 'DESCENDING'
             )
@@ -436,17 +439,17 @@ def discover_jobs(
         budget.check()
         job = doc.to_dict() or {}
         uid, cid, enqueued = job.get('owner_id'), job.get('conversation_id'), job.get('enqueued_at')
-        # Never checkpoint a malformed deadline, including at a saturated page's
-        # tail. Retain the last valid frontier (or wrap if none was seen).
-        if urgent and not valid_metric_clock(job.get(order_field)):
-            continue
-        # The encrypted numeric slot carries this scan's ordered field. Urgent
-        # and ordinary scans have separate frontier documents.
+        # Checkpoint every examined query position before eligibility checks:
+        # a malformed page must not pin later urgent jobs. Frontiers are separate.
         cursor = (
             {'path': doc.reference.path, 'enqueued_at': job.get(order_field), 'horizon': horizon}
             if age_order
             else {'path': doc.reference.path, 'finished_at': horizon}
         )
+        if urgent and not valid_metric_clock(job.get(order_field)):
+            if invalid_clock_counts is not None:
+                invalid_clock_counts['invalid_clock_rows'] += 1
+            continue
         if not isinstance(uid, str) or not uid or '/' in uid or not isinstance(cid, str) or not cid or '/' in cid:
             continue
         if doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id'):
@@ -777,6 +780,7 @@ def run(*, progress=lambda _: None):
             job_rows, jobs_saturated, jobs_cursor = [], False, None
             jobs_frontier, urgent_frontier = None, None
             urgent_rows, urgent_cursors, urgent_cursor = [], {}, None
+            invalid_clock_counts = Counter()
             if config.jobs_enabled():
                 jobs_frontier = RepairCursor(client, config.cursor_secret(), jobs=True)
                 allocation = max(1, workers // 2)
@@ -800,6 +804,7 @@ def run(*, progress=lambda _: None):
                             max_rows=allocation - ordinary_reserve,
                             selected_cursors=urgent_cursors,
                             urgent=True,
+                            invalid_clock_counts=invalid_clock_counts,
                         )
                         jobs_saturated = jobs_saturated or urgent_saturated
                     except FailedPrecondition:
@@ -865,6 +870,7 @@ def run(*, progress=lambda _: None):
         progress=progress,
         attempted=attempted,
     )
+    report['invalid_clock_rows'] = report.get('invalid_clock_rows', 0) + invalid_clock_counts['invalid_clock_rows']
     if mode == 'apply' and (last_attempted or last_job_attempted or last_urgent_attempted):
         # Preserve exact Firestore nanoseconds, not an age reconstructed clock.
         # The second point write (lead ruling 4cbd2a) advances past ALL attempts,

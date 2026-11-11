@@ -160,9 +160,13 @@ skips urgency and restores the original document-order jobs query.
 The jobs frontiers are encrypted maintenance documents at
 `batch_pipeline_prod_maintenance/record_seal_repair_jobs_cursor_v2` (recency)
 and `batch_pipeline_prod_maintenance/record_seal_repair_urgent_cursor_v1`
-(deadline). The urgent cursor's numeric `enqueued_at` payload slot carries the
-stored deadline; malformed deadlines are never checkpointed. A page containing
-only malformed deadlines wraps without storing an invalid frontier. Recency
+(deadline). The urgent cursor's `enqueued_at` payload slot carries the raw ordered deadline
+value as an encrypted scalar scan position, including skipped malformed clocks.
+Eligibility still requires a finite positive stored deadline. The query's
+`> 0` floor excludes non-positive deadlines; local rejection advances past
+any malformed returned row and adds it to `invalid_clock_rows`. A saturated
+malformed page therefore cannot pin valid work behind it. The same existing
+state/deadline/name index serves both range bounds. Recency
 freezes an enqueue horizon; urgency recomputes its window on each run. Old v1
 recency/conversation documents remain for code rollback and are not advanced.
 

@@ -36,10 +36,18 @@ the ordinary checkpoint, including when discovery reaches the end of a page.
 The bound concerns discovery and reserved places in the first worker group;
 proof refusal, discovery failure, budgets and run scheduling still prevent a
 finite settlement or wall-clock guarantee. Conversation reservation remains.
-Malformed deadlines are skipped before advancing the urgent frontier, including
-at a saturated page's tail; an all-malformed page wraps instead of persisting
-an unreadable cursor. Such a page can delay urgent progress until the corrupt
-metadata is repaired, within the existing per-run scan/time bounds.
+Urgent discovery bounds the stored deadline to `> 0` and the final-day cutoff.
+This uses the existing state/deadline/name ascending index; no new index is
+required. Every examined row advances the encrypted scan position before
+eligibility checks, including malformed rows. The urgent codec preserves raw
+scalar query positions so a skipped clock cannot create an unreadable cursor;
+ordinary enqueue cursors retain their existing numeric validation. Invalid
+deadlines returned to the scanner increment the existing content-free
+`invalid_clock_rows` aggregate and are never selected for urgent repair.
+Values excluded by the query floor are not read or counted. A persistent full
+malformed page cannot pin valid urgent jobs behind it: the floor reaches them
+in one scan, and defensive cursor progress reaches them on the next scan even
+when an adversarial projected page bypasses that floor.
 
 Recency scans retain a frozen horizon and wrap so sustained new inflow cannot
 strand the tail. The deadline scan can expand its upper boundary on resume:
@@ -151,5 +159,29 @@ ran through `backend/test.sh` under `omi-heavy`, with credential variables
 unset, file isolation, four file workers, a 3,600-second per-file budget and
 the unchanged 0.1/1.0-second CPU warning/failure guards. Result: **436 passed,
 3 skipped** (Firestore emulator tests without an emulator). This includes all
-38 priority tests, 136 coordinator tests and five row import-graph contracts.
+35 priority tests, 136 coordinator tests and five row import-graph contracts.
 No production or emulator service was started.
+
+
+## Malformed urgent-prefix follow-up
+
+Luna's FIX-FIRST on earlier head `7c214814` identified that the previous
+all-malformed test replaced the bad rows before its next scan. That test is
+retained with readable advancing cursor assertions for all malformed scalar
+cases. A new persistent-prefix regression keeps 128 zero/negative deadlines
+in place with valid urgent work behind them. It checks the real query floor
+and, separately, an adversarial projected page to verify two-run encrypted
+cursor progress and invalid-clock counts. Coordinator tests also verify those
+counts are added to the existing summary metric without selecting bad rows.
+
+Verification recorded 2026-11-11T00:26:25+00:00 on m1:
+`backend/test.sh` under `omi-heavy` passed **1,310 tests** across all 15
+record-seal files, the canonical seven Firestore query guards and flag budget.
+Three emulator tests skipped without an emulator, and the standard runner
+deselected one slow-marked query guard. The priority file passed all 39 cases,
+including the four persistent-prefix cases and retained saturated-page cases.
+The earlier reserve batch's priority-file subtotal is corrected to 35;
+its recorded total of 436 is unchanged. The Firestore manifest generation
+check also passes without registry or manifest changes. Credential variables
+were unset; file isolation, four file workers, the 3,600-second per-file budget
+and unchanged 0.1/1.0-second CPU warning/failure guards were used.

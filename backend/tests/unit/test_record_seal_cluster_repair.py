@@ -1397,12 +1397,16 @@ class OrderedJobsClient:
                     if op == '==':
                         docs = [d for d in docs if d.to_dict().get(field) == value]
                     else:
-                        assert field in ('enqueued_at', 'record_dead_letter_deadline_at') and op == '<='
+                        assert field in ('enqueued_at', 'record_dead_letter_deadline_at') and op in ('<=', '>')
                         docs = [
                             d
                             for d in docs
                             if type(d.to_dict().get(field)) in (int, float)
-                            and (d.to_dict()[field] <= value or math.isnan(d.to_dict()[field]))
+                            and (
+                                (d.to_dict()[field] <= value or math.isnan(d.to_dict()[field]))
+                                if op == '<='
+                                else d.to_dict()[field] > value
+                            )
                         ]
 
                 def key(value, path):
