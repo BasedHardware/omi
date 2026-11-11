@@ -2371,6 +2371,7 @@
     "omi_people_scan_dedupe_total",
     "omi_pipeline_ledger_admit_total",
     "omi_pipeline_ledger_gate_receipt_generated_at_seconds",
+    "omi_pipeline_ledger_gate_verdict",
     "omi_pipeline_ledger_new_stuck_per_hour",
     "omi_pipeline_ledger_oldest_stuck_age_seconds",
     "omi_pipeline_ledger_refreshed_at_seconds",

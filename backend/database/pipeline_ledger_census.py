@@ -12,12 +12,14 @@ The per-owner ``explain`` read uses the C1 ``ledger_ref`` and is owner-scoped.
 
 from __future__ import annotations
 
+import datetime as dt
 import time
 from collections import Counter
 from typing import Any, Iterator, Mapping
 
 from google.cloud import firestore
 
+from database import conversations as conversations_db
 from database import pipeline_ledger
 from utils.conversations import home_step
 from utils.conversations.fragment_visibility import (
@@ -31,6 +33,43 @@ MIN_END_TYPE_SAMPLE = 20
 STUCK_STAGES = ('capturing', 'sealed', 'transcribed', 'noted')
 END_TYPES = ('user_initiated', 'jev_initiated', 'silence_backstop', 'unknown')
 NEW_STUCK_WINDOW_SECONDS = 3600
+# The conversation fields the Home predicate reads. Content (title/overview) is
+# needed by the product classifier; the transcript is reduced to a boolean
+# immediately and never leaves this module.
+CONVERSATION_FIELDS = (
+    'status',
+    'created_at',
+    'started_at',
+    'finished_at',
+    'structured.title',
+    'structured.overview',
+    'structured.title_provenance',
+    'user_title',
+    'sync_relevance_user_kept',
+    'has_photos',
+    'photos',
+    'starred',
+    'folder_user_set',
+    'summary_due_at',
+    'summary_completed_at',
+    'summary_output_present',
+    'summary_blocked_reason',
+    'summary_retryable',
+    'finalization_status',
+    'record_upload_failed',
+    'record_audio_partial',
+    'record_lane_owner',
+    'record_projection_revision',
+    'home_transcription_deadline_at',
+    'relevance_decision',
+    'discarded',
+    'deleted',
+    'sync_merged_into',
+    'dream_duplicate_of',
+    'sync_bridge_pending',
+    'no_speech_terminal',
+    'transcript_segments',
+)
 
 
 class CensusSchemaMismatch(RuntimeError):
@@ -40,37 +79,53 @@ class CensusSchemaMismatch(RuntimeError):
 def _global_window(start: Any, end: Any, *, limit: int, firestore_client: Any) -> Iterator[dict[str, Any]]:
     """Yield ledger rows across owners with ``admitted_at`` in ``[start, end)``.
 
-    Bounded and fail-closed: the whole window is materialized before the first
-    yield, so a truncated window raises without handing the caller a prefix.
-    The owner id is read from the document path only to join the conversation
-    row; it is never returned.
+    Reads through the C1 :func:`pipeline_ledger.iter_global_window` helper, the
+    documented fleet-global exception to the owner-scoped read. The owner id is
+    attached only to join the conversation row; it is never returned.
     """
-    start_epoch, end_epoch = pipeline_ledger.epoch(start), pipeline_ledger.epoch(end)
-    if start_epoch is None or end_epoch is None or end_epoch <= start_epoch or limit <= 0:
-        raise ValueError('invalid ledger window')
-    query = (
-        firestore_client.collection_group(pipeline_ledger.COLLECTION)
-        .where(filter=firestore.FieldFilter('admitted_at', '>=', start_epoch))
-        .where(filter=firestore.FieldFilter('admitted_at', '<', end_epoch))
-        .limit(limit + 1)
-    )
-    snapshots = list(query.stream())
-    if len(snapshots) > limit:
-        raise pipeline_ledger.LedgerWindowTruncated(f'ledger window exceeded {limit} rows')
-    for snapshot in snapshots:
-        doc = snapshot.to_dict() or {}
-        parts = str(getattr(snapshot.reference, 'path', '')).split('/')
-        row = {key: doc.get(key) for key in pipeline_ledger.CENSUS_FIELDS}
-        row['capture_id'] = snapshot.id
-        row['_uid'] = parts[1] if len(parts) >= 4 and parts[0] == 'users' else None
+    for uid, row in pipeline_ledger.iter_global_window(start, end, limit=limit, firestore_client=firestore_client):
+        row['_uid'] = uid
         yield row
 
 
 def _conversation(client: Any, uid: str | None, conversation_id: str) -> dict[str, Any] | None:
     if not uid:
         return None
-    snapshot = client.collection('users').document(uid).collection('conversations').document(conversation_id).get()
-    return snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+    row = conversations_db.get_conversation_raw_snapshot(
+        uid,
+        conversation_id,
+        firestore_client=client,
+        field_paths=list(CONVERSATION_FIELDS),
+    )
+    if row is None:
+        return None
+    # The classifier only needs transcript truthiness; reduce it now so the
+    # array never travels further than this statement.
+    row['transcript_segments'] = bool(row.get('transcript_segments'))
+    return row
+
+
+def _capture_creates(client: Any, start_epoch: float, end_epoch: float) -> int | None:
+    """Exact count of conversations created in the window (the coverage denominator)."""
+    start = pipeline_ledger.epoch(start_epoch)
+    end = pipeline_ledger.epoch(end_epoch)
+    if start is None or end is None:
+        return None
+    try:
+        start_at = dt.datetime.fromtimestamp(start, tz=dt.timezone.utc)
+        end_at = dt.datetime.fromtimestamp(end, tz=dt.timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
+    query = (
+        client.collection_group('conversations')
+        .where(filter=firestore.FieldFilter('created_at', '>=', start_at))
+        .where(filter=firestore.FieldFilter('created_at', '<', end_at))
+        # Ordering by the retained (created_at, id) collection-group index keeps
+        # the count on an existing index; a count does not care about order.
+        .order_by('created_at')
+        .order_by('id')
+    )
+    return int(query.count().get()[0][0].value)
 
 
 def _home_visible(row: Mapping[str, Any] | None, now: float) -> tuple[bool, str | None]:
@@ -148,7 +203,10 @@ def census(
     end_type_rows: Counter[str] = Counter()
     end_type_real: Counter[str] = Counter()
     end_type_visible: Counter[str] = Counter()
-    real_speech = speech_unknown = visible_real = home_unknown = clock_unknown = 0
+    end_type_observations: dict[str, list[tuple[float | None, float | None, bool]]] = {
+        end_type: [] for end_type in END_TYPES
+    }
+    real_speech = speech_unknown = visible_real = home_unknown = clock_unknown = terminal_rows = 0
     observations: list[tuple[float | None, float | None, bool]] = []
     latest_updated: float | None = None
     earliest_admitted: float | None = None
@@ -178,24 +236,38 @@ def census(
         real = (isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0) or row.get(
             'has_speech'
         ) is True
+        # Each row lands in exactly one bucket: known real speech, or unknown.
+        # ``plan_advance`` defaults ``speech_basis`` to ``unknown`` independently
+        # of ``has_speech``, so the two sets are not disjoint in the store.
+        unknown = (not real) and row.get('speech_basis') == 'unknown'
         real_speech += int(real)
-        speech_unknown += int(row.get('speech_basis') == 'unknown')
+        speech_unknown += int(unknown)
         conversation = _conversation(client, row.get('_uid'), row['capture_id'])
         visible, step = _home_visible(conversation, current)
         home_unknown += int(conversation is None or step is None)
         visible_real += int(real and visible)
-        end_type = str(row.get('end_type')) if row.get('end_type') in END_TYPES else 'unknown'
-        end_type_rows[end_type] += 1
-        end_type_real[end_type] += int(real)
-        end_type_visible[end_type] += int(real and visible)
         clock_start = pipeline_ledger.epoch(row.get('end_at')) or pipeline_ledger.epoch(row.get('admitted_at'))
         event_at = pipeline_ledger.epoch(row.get('home_ready_at'))
+        observation: tuple[float | None, float | None, bool]
         if clock_start is None:
             clock_unknown += 1
+            observation = (None, None, False)
         elif event_at is not None and event_at >= clock_start:
-            observations.append((event_at - clock_start, None, True))
+            observation = (event_at - clock_start, None, True)
         else:
-            observations.append((None, current - clock_start, False))
+            observation = (None, current - clock_start, False)
+        if clock_start is not None:
+            observations.append(observation)
+        # Only an ended row has an end type. An in-flight row's default
+        # ``end_type='unknown'`` is "not ended yet", not "ended unknown".
+        if row.get('terminal'):
+            terminal_rows += 1
+            end_type = str(row.get('end_type')) if row.get('end_type') in END_TYPES else 'unknown'
+            end_type_rows[end_type] += 1
+            end_type_real[end_type] += int(real)
+            end_type_visible[end_type] += int(real and visible)
+            if clock_start is not None:
+                end_type_observations[end_type].append(observation)
     denominator = real_speech + speech_unknown
     km = _km_quantiles(observations)
     total_rows = len(rows)
@@ -206,14 +278,22 @@ def census(
             end_type_real.get(end_type, 0),
             end_type_visible.get(end_type, 0),
         )
+        type_km = _km_quantiles(end_type_observations[end_type])
         end_types[end_type] = {
             'rows': count,
             'real_speech': real,
             'home_visible': visible,
             'share': visible / real if real else None,
+            'p50_seconds': type_km.get(0.5),
+            'p90_seconds': type_km.get(0.9),
+            'p50_status': 'measured' if type_km.get(0.5) is not None else 'not_reached',
+            'p90_status': 'measured' if type_km.get(0.9) is not None else 'not_reached',
             'sample_status': 'sufficient' if count >= MIN_END_TYPE_SAMPLE else 'insufficient_sample',
         }
-    end_types['unknown_share'] = end_type_rows.get('unknown', 0) / total_rows if total_rows else 0.0
+    end_types['terminal_rows'] = terminal_rows
+    end_types['unknown_share'] = end_type_rows.get('unknown', 0) / terminal_rows if terminal_rows else 0.0
+    capture_creates = _capture_creates(client, start, end)
+    coverage_ratio = total_rows / capture_creates if capture_creates else None
     return {
         'schema_version': SCHEMA_VERSION,
         'generated_at': current,
@@ -228,6 +308,15 @@ def census(
         'new_stuck_per_hour': {
             'by_stage': {stage: new_stuck.get(stage, 0) for stage in STUCK_STAGES},
             'total': sum(new_stuck.values()),
+        },
+        'coverage': {
+            'ledger_admits': total_rows,
+            'capture_creates': capture_creates,
+            'ratio': coverage_ratio,
+            'basis': 'all_conversations',
+            'ledger_write_failures': None,
+            'ledger_disabled': None,
+            'status': 'pass' if coverage_ratio is not None and coverage_ratio >= 0.995 else 'unknown',
         },
         'home_visible': {
             'denominator': denominator,
@@ -256,6 +345,10 @@ def census(
         'end_types': end_types,
         'ledger_updated_at': latest_updated,
         'earliest_admitted_at': earliest_admitted,
+        'retention': {
+            'earliest_admitted_at': pipeline_ledger.retention_start(firestore_client=client),
+            'basis': 'collection_group_min',
+        },
         'redaction': {
             'uids': False,
             'conversation_ids': False,

@@ -65,6 +65,10 @@ def _census_payload():
                 'real_speech': 2,
                 'home_visible': 2,
                 'share': 1.0,
+                'p50_seconds': 10.0,
+                'p90_seconds': 20.0,
+                'p50_status': 'measured',
+                'p90_status': 'measured',
                 'sample_status': 'insufficient_sample',
             },
             'jev_initiated': {
@@ -72,6 +76,10 @@ def _census_payload():
                 'real_speech': 0,
                 'home_visible': 0,
                 'share': None,
+                'p50_seconds': None,
+                'p90_seconds': None,
+                'p50_status': 'not_reached',
+                'p90_status': 'not_reached',
                 'sample_status': 'insufficient_sample',
             },
             'silence_backstop': {
@@ -79,6 +87,10 @@ def _census_payload():
                 'real_speech': 0,
                 'home_visible': 0,
                 'share': None,
+                'p50_seconds': None,
+                'p90_seconds': None,
+                'p50_status': 'not_reached',
+                'p90_status': 'not_reached',
                 'sample_status': 'insufficient_sample',
             },
             'unknown': {
@@ -86,11 +98,26 @@ def _census_payload():
                 'real_speech': 0,
                 'home_visible': 0,
                 'share': None,
+                'p50_seconds': None,
+                'p90_seconds': None,
+                'p50_status': 'not_reached',
+                'p90_status': 'not_reached',
                 'sample_status': 'insufficient_sample',
             },
+            'terminal_rows': 2,
             'unknown_share': 0.0,
         },
+        'coverage': {
+            'ledger_admits': 2,
+            'capture_creates': 2,
+            'ratio': 1.0,
+            'basis': 'all_conversations',
+            'ledger_write_failures': None,
+            'ledger_disabled': None,
+            'status': 'pass',
+        },
         'ledger_updated_at': 1_800_000_000.0,
+        'retention': {'earliest_admitted_at': 1_799_000_000.0, 'basis': 'collection_group_min'},
         'redaction': {
             'uids': False,
             'conversation_ids': False,
@@ -130,6 +157,23 @@ def test_census_rejects_an_inverted_window(monkeypatch):
     app.dependency_overrides[routes.verify_census] = lambda: None
     response = TestClient(app).get('/v2/pipeline-ledger/census', params={'start': '10', 'end': '5'})
     assert response.status_code == 422
+
+
+def test_census_rejects_a_non_finite_window(monkeypatch):
+    app = _app()
+    app.dependency_overrides[routes.verify_census] = lambda: None
+    for value in ('nan', 'inf', '-inf'):
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(pipeline_ledger_census, 'census', lambda *a, **k: _census_payload())
+            response = TestClient(app).get('/v2/pipeline-ledger/census', params={'start': value, 'end': '3600'})
+        assert response.status_code == 422, value
+
+
+def test_explain_rejects_a_slash_in_the_owner(monkeypatch):
+    app = _app()
+    app.dependency_overrides[routes.verify_census] = lambda: None
+    monkeypatch.setattr(pipeline_ledger_census, 'explain', lambda uid, cid, **k: None)
+    assert TestClient(app).get('/v2/pipeline-ledger/explain/c1', params={'uid': 'a/b'}).status_code == 422
 
 
 def test_census_fails_closed_on_truncation(monkeypatch):

@@ -55,7 +55,7 @@ def _conversation(**overrides):
 
 @pytest.fixture
 def wire(monkeypatch):
-    state = {'rows': [], 'conversations': {}}
+    state = {'rows': [], 'conversations': {}, 'capture_creates': 0, 'retention': NOW - 10_000}
 
     def fake_window(start, end, *, limit=None, firestore_client=None):
         return list(state['rows'])
@@ -63,8 +63,16 @@ def wire(monkeypatch):
     def fake_conversation(client, uid, conversation_id):
         return state['conversations'].get(conversation_id)
 
+    def fake_capture_creates(client, start, end):
+        return state['capture_creates']
+
+    def fake_retention(*, firestore_client=None):
+        return state['retention']
+
     monkeypatch.setattr(census, '_global_window', fake_window)
     monkeypatch.setattr(census, '_conversation', fake_conversation)
+    monkeypatch.setattr(census, '_capture_creates', fake_capture_creates)
+    monkeypatch.setattr(pipeline_ledger, 'retention_start', fake_retention)
     return state
 
 
@@ -158,17 +166,81 @@ def test_zero_real_speech_reports_null_not_zero(wire):
 
 def test_end_types_are_reported_and_unknown_is_never_dropped(wire):
     wire['rows'] = [
-        _row(capture_id='a', end_type='user_initiated'),
-        _row(capture_id='b', end_type='silence_backstop'),
-        _row(capture_id='c', end_type='unknown'),
+        _row(capture_id='a', end_type='user_initiated', terminal=True),
+        _row(capture_id='b', end_type='silence_backstop', terminal=True),
+        _row(capture_id='c', end_type='unknown', terminal=True),
     ]
     wire['conversations'] = {'a': _conversation(), 'b': _conversation(), 'c': _conversation()}
     result = _census(wire)
     assert result['end_types']['user_initiated']['rows'] == 1
     assert result['end_types']['silence_backstop']['rows'] == 1
     assert result['end_types']['unknown']['rows'] == 1
+    assert result['end_types']['terminal_rows'] == 3
     assert result['end_types']['unknown_share'] == pytest.approx(1 / 3)
     assert result['end_types']['jev_initiated']['sample_status'] == 'insufficient_sample'
+
+
+def test_in_flight_rows_are_not_an_unknown_end_type(wire):
+    wire['rows'] = [_row(capture_id='ended', end_type='unknown', terminal=True)] + [
+        _row(capture_id=f'live-{index}', end_type='unknown', terminal=False) for index in range(9)
+    ]
+    wire['conversations'] = {row['capture_id']: _conversation() for row in wire['rows']}
+    result = _census(wire)
+    assert result['end_types']['terminal_rows'] == 1
+    assert result['end_types']['unknown']['rows'] == 1
+    assert result['end_types']['unknown_share'] == 1.0
+
+
+def test_real_speech_and_unknown_are_disjoint(wire):
+    # plan_advance defaults speech_basis to 'unknown' independently of has_speech.
+    wire['rows'] = [_row(capture_id='a', speech_seconds=None, has_speech=True, speech_basis='unknown')]
+    wire['conversations'] = {'a': _conversation()}
+    result = _census(wire)
+    home = result['home_visible']
+    assert home['real_speech'] == 1
+    assert home['speech_unknown'] == 0
+    assert home['denominator'] == 1
+    assert home['speech_unknown_share'] == 0.0
+
+
+def test_per_end_type_latency_is_reported(wire):
+    wire['rows'] = [
+        _row(capture_id='a', end_type='user_initiated', terminal=True, end_at=NOW - 100, home_ready_at=NOW - 10),
+        _row(capture_id='b', end_type='user_initiated', terminal=True, end_at=NOW - 100, home_ready_at=NOW - 20),
+        _row(capture_id='c', end_type='silence_backstop', terminal=True, end_at=NOW - 100, home_ready_at=NOW - 5),
+    ]
+    wire['conversations'] = {row['capture_id']: _conversation() for row in wire['rows']}
+    result = _census(wire)
+    assert result['end_types']['user_initiated']['p50_seconds'] == 80.0
+    assert result['end_types']['user_initiated']['p50_status'] == 'measured'
+    assert result['end_types']['silence_backstop']['p50_seconds'] == 95.0
+    assert result['end_types']['jev_initiated']['p50_seconds'] is None
+
+
+def test_retention_and_coverage_are_reported(wire):
+    wire['rows'] = [_row(capture_id='a', terminal=True)]
+    wire['conversations'] = {'a': _conversation()}
+    wire['capture_creates'] = 1
+    result = _census(wire)
+    assert result['retention'] == {'earliest_admitted_at': NOW - 10_000, 'basis': 'collection_group_min'}
+    assert result['coverage']['ledger_admits'] == 1
+    assert result['coverage']['capture_creates'] == 1
+    assert result['coverage']['ratio'] == 1.0
+    assert result['coverage']['basis'] == 'all_conversations'
+
+
+def test_conversation_read_is_field_projected_and_transcript_is_a_boolean(monkeypatch):
+    calls = {}
+
+    def fake_snapshot(uid, conversation_id, *, firestore_client=None, field_paths=None):
+        calls['field_paths'] = field_paths
+        return {'status': 'completed', 'transcript_segments': [{'text': 'secret'}]}
+
+    monkeypatch.setattr(census.conversations_db, 'get_conversation_raw_snapshot', fake_snapshot)
+    row = census._conversation(object(), 'owner', 'conversation-1')
+    assert calls['field_paths'] == list(census.CONVERSATION_FIELDS)
+    assert row['transcript_segments'] is True
+    assert 'secret' not in json.dumps(row)
 
 
 def test_schema_mismatch_fails_closed(wire):
