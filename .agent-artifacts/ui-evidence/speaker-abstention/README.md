@@ -6,21 +6,26 @@ of Omi clients. `flutter-render-evidence` is unavailable on this host; the
 requested server API/excerpt fallback is used. `web` in the evidence manifest
 identifies the local HTML text renderer, not acceptance of the web client.
 
-Each case JSON contains exact before/after API `speaker_name` payloads (normal
+The test-owned case JSON under
+`backend/tests/unit/fixtures/speaker_abstention_snapshots/` contains exact before/after API `speaker_name` payloads (normal
 and developer modes), server review excerpt, MCP search and bounded transcript,
 plain and compact LLM input and bindings, episode input, analytics, and a raw
 inventory. Before means the new kill switch is false, restoring the previous
 behavior; after means true, the default. The snapshot tests compare these files
-byte-for-value against the real functions and assert unchanged inventory.
+value-for-value against the real functions and assert unchanged inventory.
 
 | Case | Snapshot | Before/after render |
 | --- | --- | --- |
-| One voice + two gaps | [one-voice.json](one-voice.json) | [001](001-web-one-voice-before-after.png) |
-| Two voices + two gaps | [two-voices.json](two-voices.json) | [002](002-web-two-voices-before-after.png) |
-| Manual wearer receipt | [wearer.json](wearer.json) | [003](003-web-wearer-before-after.png) |
-| Mixed capture epochs | [mixed-epochs.json](mixed-epochs.json) | [004](004-web-mixed-epochs-before-after.png) |
-| Zero-duration point keys | [point-keys.json](point-keys.json) | [005](005-web-point-keys-before-after.png) |
-| Historical fallback keys sharing old ID -1 | [historical-fallback.json](historical-fallback.json) | [006](006-web-historical-fallback-before-after.png) |
+| One voice + two gaps | [one-voice.json](../../../backend/tests/unit/fixtures/speaker_abstention_snapshots/one-voice.json) | [001](001-web-one-voice-before-after.png) |
+| Two voices + two gaps | [two-voices.json](../../../backend/tests/unit/fixtures/speaker_abstention_snapshots/two-voices.json) | [002](002-web-two-voices-before-after.png) |
+| Manual wearer receipt | [wearer.json](../../../backend/tests/unit/fixtures/speaker_abstention_snapshots/wearer.json) | [003](003-web-wearer-before-after.png) |
+| Mixed capture epochs | [mixed-epochs.json](../../../backend/tests/unit/fixtures/speaker_abstention_snapshots/mixed-epochs.json) | [004](004-web-mixed-epochs-before-after.png) |
+| Zero-duration point keys | [point-keys.json](../../../backend/tests/unit/fixtures/speaker_abstention_snapshots/point-keys.json) | [005](005-web-point-keys-before-after.png) |
+| Historical fallback keys sharing old ID -1 | [historical-fallback.json](../../../backend/tests/unit/fixtures/speaker_abstention_snapshots/historical-fallback.json) | [006](006-web-historical-fallback-before-after.png) |
+
+Positive manual assignments on gap keys remain authoritative; stale carried
+flags remain suppressed. MCP participant rosters exclude unassigned rows while
+transcript rows retain their text.
 
 UI/API/review/analytics labels use `Unknown speaker`; real voices keep dense
 letters and the manual wearer remains `You`. MCP and plain LLM text instead use
@@ -49,3 +54,10 @@ backend/.venv/bin/python .agent-artifacts/ui-evidence/speaker-abstention/render_
 # PLAYWRIGHT_BROWSERS_PATH at its installed Chromium headless shell cache.
 node .agent-artifacts/ui-evidence/speaker-abstention/render.mjs
 ```
+
+
+Pre-review fix batch: before payloads were independently verified against
+`origin/main` at `9980aaf18681eee6eb8989d30c9fce3710416bad`. The generator
+refuses to overwrite a before payload that differs from that verified oracle.
+The six PNGs and manifest are unchanged: the six existing cases render identical
+API, review, MCP and LLM output after the fix batch. Wording remains with David.

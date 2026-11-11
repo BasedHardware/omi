@@ -3,14 +3,15 @@
 PR #21981 preserves uncovered batch words under distinct `BATCH_UNASSIGNED_` keys.
 Those keys must remain distinct for provenance and correction, but must not look
 like extra people. The presentation boundary `utils/speakers/display.py` now labels
-prefix/source/status-marked batch abstentions `Unknown speaker`, with no letter,
-name, participant count, overflow slot or episode voice-order slot. Real voices
+prefix/source-marked batch abstentions (status aliases are defensive) `Unknown speaker`, with no letter,
+name, participant count, overflow slot or new episode voice-order slot. Real voices
 keep first-appearance letters; explicit wearer `You` rows are unchanged.
 
 The default-on kill switch `SPEAKER_ABSTENTION_UNKNOWN_LABEL_ENABLED` uses
 `config.refactor_modes.default_on`; false restores the previous labels in both
 `display_participants` and `developer_speaker_names`. No storage change, backfill,
-client change or new localization string. Contract: [speaker abstention display](../../listen_pusher_pipeline.mdx#batch-abstention-display).
+client change or new localization string. The enabled public developer API
+`speaker_name` for unassigned gaps changes from lettered values to `Unknown speaker`. Contract: [speaker abstention display](../../listen_pusher_pipeline.mdx#batch-abstention-display).
 
 Confirmed through the shared boundary and consumer tests:
 
@@ -46,3 +47,25 @@ The six snapshot cases include one voice/two gaps, two voices/separate unknown
 speech, a manual wearer receipt, mixed capture epochs, zero-duration point keys,
 and historical `BATCH_UNASSIGNED_` fallback keys sharing old numeric ID -1.
 Tests assert no text loss or label-based deduplication.
+
+
+Pre-review fix batch: positive manual gap bindings now outrank the prefix. The
+current scoped receipt writer's reapplied carried shape (explicit cleared match
+source and positive status) is honored in presentation; stale carried flags on
+an ambiguous gap remain suppressed. Tests call `apply_manual_assignments` for
+both contact and wearer assignments and cover every server boundary. Existing
+LLM owner-evidence policy remains conservative for carried owner flags; this
+batch does not promote those flags into manual owner evidence.
+
+The MCP display participant roster excludes unassigned rows; bounded transcript
+rows retain all text and distinct citation keys. The compatibility raw mapping
+mode retains its released behavior. `_speaker_map` cannot derive an owner from
+an unassigned row, including with role projection disabled. Keys also include
+the row ID to distinguish source-only gaps sharing a numeric ID and scope.
+
+The six JSON oracles now live under
+`backend/tests/unit/fixtures/speaker_abstention_snapshots/`. Pre-review verified
+their before payloads against `origin/main` at
+`9980aaf18681eee6eb8989d30c9fce3710416bad`. They match the current outputs after
+this fix batch; the six PNGs are unchanged because none of their rendered API,
+review, MCP or LLM output changed. Wording remains pending David.

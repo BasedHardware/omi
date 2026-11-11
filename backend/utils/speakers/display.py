@@ -43,11 +43,33 @@ def field(row: Any, key: str, default: Any = None) -> Any:
     return row.get(key, default) if isinstance(row, Mapping) else getattr(row, key, default)
 
 
+def _confirmed_identity(row: Any) -> bool:
+    """Manual bindings, or carried bindings reapplied by the scoped receipt writer."""
+    if not (field(row, 'person_id') or field(row, 'is_user', False)):
+        return False
+    source = field(row, 'speaker_label_source')
+    explicitly_set = field(row, 'model_fields_set')
+    reapplied = field(row, 'speaker_match_source', 'not_reapplied') is None
+    if isinstance(explicitly_set, (set, frozenset)):
+        reapplied = reapplied and {'speaker_match_source', 'speaker_identity_status'} <= explicitly_set
+    # apply_manual_assignments clears the batch source and writes this status
+    # after choosing the current scoped/generation-ordered carried receipt.
+    return source == 'manual' or (
+        source == 'carried'
+        and reapplied
+        and field(row, 'speaker_identity_status') == ('user' if field(row, 'is_user', False) else 'not_user')
+    )
+
+
 def _batch_abstention(row: Any) -> bool:
-    """Match persisted resolver markers without assigning identity to uncovered words."""
+    """Explicit user decisions outrank abstention; raw carried flags do not."""
+    if _confirmed_identity(row):
+        return False
     return (
         str(field(row, 'speaker') or '').startswith('BATCH_UNASSIGNED_')
         or field(row, 'speaker_match_source') == 'batch_abstention'
+        # Defensive legacy/status aliases; current batch writers use the prefix
+        # and match source above, with speaker_identity_status='ambiguous'.
         or field(row, 'speaker_identity_status') == 'batch_abstention'
         or field(row, 'identity_status') == 'batch_abstention'
     )
@@ -232,7 +254,7 @@ def display_participants(
         ).hexdigest()
         if abstentions[index]:
             # Keep each gap addressable, even if stale evidence binds it to a person.
-            key = ('abstention', key, field(row, 'speaker'))
+            key = ('abstention', key, field(row, 'speaker'), field(row, 'id') or index)
             abstention_keys.add(key)
         tokens[key] = token
         name = None
@@ -264,7 +286,7 @@ def display_participants(
                 name = _clean_name(field(row, 'person_name')) if field(row, 'person_id') else None
         if not evidence_available and not allow_automatic_names:
             name = None
-        if field(row, 'speaker_label_source') == 'manual':
+        if field(row, 'speaker_label_source') == 'manual' or _confirmed_identity(row):
             name = (
                 owner_name
                 if field(row, 'is_user', False)

@@ -67,7 +67,7 @@ def test_labels_participants_and_storage(case):
     ],
 )
 def test_each_marker_overrides_stale_person_and_wearer(marker):
-    row = dict(id='gap', speaker_id=99, is_user=True, person_id='p', speaker_label_source='manual', **marker)
+    row = dict(id='gap', speaker_id=99, is_user=True, person_id='p', speaker_label_source='carried', **marker)
     display = display_participants([row], names={'p': 'Ada'}, resolution={'status': 'resolved'})
     assert display.label(row) == 'Unknown speaker'
     assert display.for_segment(row).name is None
@@ -158,11 +158,13 @@ def test_conversation_api_including_developer_values(monkeypatch, preserve):
             'speaker_resolution': {'status': 'capture', 'participant_speaker_ids': ids},
         }
         render.populate_speaker_names('fictional', [conversation], preserve_api_values=preserve)
-        for row in rows:
-            if row['speaker_match_source'] == 'batch_abstention':
-                assert row['speaker_name'] == 'Unknown speaker'
-        expected = ('User' if preserve else 'You') if rows[0]['is_user'] else 'Speaker A'
-        assert rows[0]['speaker_name'] == expected
+        expected = (
+            developer_speaker_names(rows, names={}, owner_name='User')
+            if preserve
+            else [display_participants(rows).label(row) for row in rows]
+        )
+        assert [row['speaker_name'] for row in rows] == expected
+        assert expected.count('Unknown speaker') == 2
 
 
 @pytest.mark.parametrize('case', speaker_cases())
@@ -219,6 +221,19 @@ def test_all_server_consumers(monkeypatch, case):
         TranscriptSegment.segments_as_string(segments),
         incremental.render_moment(rows, voice_order=[]).text,
     ]
+    if case == 'wearer':
+        for output in (outputs[2], outputs[3], outputs[4]):
+            assert [line.split(': ', 1)[0] for line in output.splitlines() if ': ' in line] == [
+                'You',
+                '[unassigned speech]',
+                '[unassigned speech]',
+            ]
+        for output in outputs[:2]:
+            assert [line.split('] ', 1)[1] for line in output.splitlines() if line.startswith('[turn-')] == [
+                rows[0]['text'],
+                '[unassigned speech] ' + rows[1]['text'],
+                '[unassigned speech] ' + rows[2]['text'],
+            ]
     for output in outputs:
         assert '[unassigned speech]' in output
         assert 'Unknown speaker' not in output
@@ -236,8 +251,8 @@ def test_all_server_consumers(monkeypatch, case):
 def test_exact_api_mcp_llm_snapshots_and_raw_inventory(case):
     from tests.unit.fixtures.speaker_abstention_outputs import snapshot
 
-    root = Path(__file__).resolve().parents[3]
-    expected = json.loads((root / '.agent-artifacts/ui-evidence/speaker-abstention' / f'{case}.json').read_text())
+    root = Path(__file__).resolve().parent / 'fixtures/speaker_abstention_snapshots'
+    expected = json.loads((root / f'{case}.json').read_text())
     actual = snapshot(case)
     assert actual == expected
     assert actual['before']['inventory'] == actual['after']['inventory']
@@ -284,7 +299,7 @@ def test_stale_wearer_receipts_cannot_name_or_group_gap_projections(monkeypatch)
 
     rows, ids = speaker_cases()['wearer']
     for row in rows[1:]:
-        row.update(is_user=True, person_id='stale-person', speaker_label_source='manual')
+        row.update(is_user=True, person_id='stale-person', speaker_label_source='carried')
     before = deepcopy(rows)
     segments = [TranscriptSegment(**r) for r in rows]
     conversation = NS(
@@ -300,12 +315,284 @@ def test_stale_wearer_receipts_cannot_name_or_group_gap_projections(monkeypatch)
             assert not row.is_user and row.person_id is None
     projected = bounded_transcript_segments(rows, max_segments=10, max_chars=5000, extra_keys=('speaker_name',))[0]
     participants = conversation_participants({'transcript_segments': rows})['participants']
-    for output in (projected, participants):
-        assert len(output) == 3
-        for gap in output[1:]:
-            assert gap['speaker_label'] == '[unassigned speech]'
-            assert not gap['is_user'] and gap['person_id'] is None
+    assert len(participants) == 1 and participants[0]['is_user']
+    assert len(projected) == 3
+    for gap in projected[1:]:
+        assert gap['speaker_label'] == '[unassigned speech]'
+        assert not gap['is_user'] and gap['person_id'] is None
     monkeypatch.setattr(llm, 'get_user_name', lambda *_a, **_kw: 'You')
     labels = llm.conversation_action_item_speaker_labels('fictional', conversation)
     assert [r['speaker_role'] for r in labels[1:]] == ['unknown', 'unknown']
     assert rows == before
+
+
+def test_evidence_cluster_containing_only_abstentions_has_no_identity_or_slots(monkeypatch):
+    from utils.speakers import display as policy
+
+    rows = speaker_cases()['one-voice'][0][1:]
+    before = deepcopy(rows)
+    evidence = SpeakerEvidence(
+        status='resolved',
+        policy_version='test',
+        clusters=[
+            VoiceCluster(
+                id='gaps-only',
+                segment_ids=[r['id'] for r in rows],
+                speech_seconds=12,
+                candidates=[
+                    SpeakerCandidate(
+                        person_id='owner',
+                        name='You',
+                        probability=0.99,
+                        band='confident',
+                        source='voice',
+                        label_eligible=True,
+                    )
+                ],
+            )
+        ],
+    )
+    trips = []
+    monkeypatch.setattr(policy, 'record_count_guard', lambda: trips.append(True))
+    display = display_participants(rows, evidence=evidence, voice_order=[], defer_short_voices=True)
+    assert [display.label(r) for r in rows] == ['Unknown speaker', 'Unknown speaker']
+    assert [display.prompt_label(r) for r in rows] == ['[unassigned speech]', '[unassigned speech]']
+    assert len(display.participants) == 2
+    assert sum(p.countable for p in display.participants) == 0
+    assert sum(p.speech_seconds for p in display.participants) == 12
+    assert not display.voice_order and not trips
+    assert rows == before
+
+
+def test_marker_only_gaps_with_shared_raw_id_keep_per_segment_keys():
+    rows = [
+        dict(
+            id=f'gap-{i}',
+            speaker_id=-1,
+            speaker_id_scope='final:batch',
+            is_user=False,
+            speaker_match_source='batch_abstention',
+        )
+        for i in range(2)
+    ]
+    display = display_participants(rows)
+    assert [display.label(r) for r in rows] == ['Unknown speaker', 'Unknown speaker']
+    assert len({display.for_segment(r).key for r in rows}) == 2
+    assert [display.for_segment(dict(r)).key for r in rows] == [display.for_segment(r).key for r in rows]
+
+
+@pytest.mark.parametrize('roles_enabled', [True, False])
+def test_speaker_map_never_takes_owner_from_abstention(monkeypatch, roles_enabled):
+    from utils.conversations import transcript_for_llm as llm
+
+    monkeypatch.setenv('SPEAKER_ROLE_PROJECTION_ENABLED', str(roles_enabled).lower())
+    rows = speaker_cases()['one-voice'][0]
+    for row in rows[1:]:
+        row.update(is_user=True, speaker_label_source='carried')
+    segments = [TranscriptSegment(**r) for r in rows]
+    mapping = llm._speaker_map(segments, 'You', {})
+    assert len(mapping.clusters) == 3
+    assert all(not cluster.owner for cluster in mapping.clusters)
+    assert all(name is None for name in mapping.values())
+
+
+def test_mcp_roster_excludes_gaps_but_transcripts_keep_every_word(monkeypatch):
+    from utils.mcp_server.helpers import bounded_transcript_segments, conversation_participants
+
+    rows, ids = speaker_cases()['one-voice']
+    rows[1].update(speaker_id=None, person_id='stale', speaker_label_source='carried')
+    payload = {'transcript_segments': rows, 'speaker_resolution': {'status': 'capture', 'participant_speaker_ids': ids}}
+    roster = conversation_participants(payload)
+    assert len(roster['participants']) == 1
+    assert roster['person_ids'] == []
+    transcript = bounded_transcript_segments(rows, max_segments=10, max_chars=5000)[0]
+    assert [r['text'] for r in transcript] == [r['text'] for r in rows]
+    assert len({r['speaker_key'] for r in transcript}) == 3
+    monkeypatch.setenv(FLAG, 'false')
+    assert len(conversation_participants(payload)['participants']) == 3
+
+
+@pytest.mark.parametrize('is_user', [False, True])
+@pytest.mark.parametrize('source', ['manual', 'carried'])
+def test_applied_gap_receipts_win_every_presentation_surface(monkeypatch, is_user, source):
+    from utils import review
+    from utils.manual_speaker_assignments import apply_manual_assignments
+    from utils.conversations import render, transcript_for_llm as llm
+    from utils.conversations.analytics import build_conversation_analytics
+    from utils.conversations.mcp_transcript_search import build_transcript_match_snippets
+    from utils.episodes import incremental, moment_render
+    from utils.mcp_server.helpers import bounded_transcript_segments, conversation_participants
+
+    rows, _ = speaker_cases()['one-voice']
+    gap = rows[1]
+    receipt = {
+        'generation': 3,
+        'speakers': {
+            str(gap['speaker_id']): {
+                'generation': 3,
+                'person_id': None if is_user else 'ada',
+                'is_user': is_user,
+                'speaker_id_scope': gap['speaker_id_scope'],
+                **({'source': 'carried'} if source == 'carried' else {}),
+            }
+        },
+    }
+    rows = apply_manual_assignments(rows, receipt)
+    bound = rows[1]
+    assert bound['speaker'].startswith('BATCH_UNASSIGNED_')
+    assert bound['speaker_match_source'] is None
+    assert bound['speaker_label_source'] == source
+    assert bound['person_id'] == (None if is_user else 'ada') and bound['is_user'] == is_user
+    before = deepcopy(rows)
+    names = {'ada': 'Ada'}
+    expected_name = 'You' if is_user else 'Ada'
+    resolution = {'status': 'capture', 'participant_speaker_ids': [0, 1]}
+    display = display_participants(rows, names=names, resolution=resolution)
+    assert [display.label(r) for r in rows] == ['Speaker A', expected_name, 'Unknown speaker']
+    assert not display.for_segment(bound).is_abstention
+    assert sum(p.countable for p in display.participants) == 2
+    assert developer_speaker_names(rows, names=names, owner_name='You') == [
+        'Speaker A',
+        expected_name,
+        'Unknown speaker',
+    ]
+    monkeypatch.setattr(render, 'get_user_name', lambda *_a, **_kw: 'You')
+    monkeypatch.setattr(render.users_db, 'get_people_by_ids', lambda *_a: [{'id': 'ada', 'name': 'Ada'}])
+    for preserve in (False, True):
+        payload = {'transcript_segments': deepcopy(rows), 'speaker_resolution': resolution}
+        render.populate_speaker_names('fictional', [payload], preserve_api_values=preserve)
+        assert [r['speaker_name'] for r in payload['transcript_segments']] == [
+            'Speaker A',
+            expected_name,
+            'Unknown speaker',
+        ]
+    monkeypatch.setattr(
+        review.conversations,
+        'get_conversation',
+        lambda *_a: {
+            'transcript_segments': rows,
+            'speaker_resolution': resolution,
+            'started_at': datetime(2026, 11, 1, tzinfo=timezone.utc),
+        },
+    )
+    monkeypatch.setattr(review.conversations, 'is_visible_conversation', lambda *_a: True)
+    prompt = NS(
+        conversation_id='fictional',
+        segment_ids=[bound['id']],
+        id='p',
+        excerpt=bound['text'],
+        conversation_title='Fictional',
+        clip_start=6,
+        clip_end=12,
+        candidates=[],
+    )
+    # Review intentionally uses generic letters when it has no people lookup.
+    review_label = 'You' if is_user else 'Speaker B'
+    assert review._speaker_item('fictional', prompt).speaker.context[1].speaker_label == review_label
+    candidate = NS(
+        workstream_id=None,
+        candidate_id='task',
+        created_at=datetime(2026, 11, 1, tzinfo=timezone.utc),
+        task_change=NS(description='Bring tools', due_at=None),
+        evidence_refs=[NS(kind=NS(value='conversation'), id='fictional', transcript_segment_ids=[bound['id']])],
+    )
+    assert review._task_item('fictional', candidate).task.evidence.speaker_label == review_label
+    roster = conversation_participants({'transcript_segments': rows, 'speaker_resolution': resolution})['participants']
+    assert len(roster) == 2
+    assert roster[1]['is_user'] == is_user and roster[1]['person_id'] == (None if is_user else 'ada')
+    projected = bounded_transcript_segments(payload['transcript_segments'], max_segments=10, max_chars=5000)[0]
+    assert projected[1]['speaker_label'] == expected_name
+    assert projected[1]['is_user'] == is_user and projected[1]['person_id'] == (None if is_user else 'ada')
+    snippets = build_transcript_match_snippets(rows, 'seedlings')
+    assert snippets[0]['speaker_label'] == review_label
+    assert '[unassigned speech]: The seedlings' not in snippets[0]['text']
+    segments = [TranscriptSegment(**r) for r in rows]
+    conversation = NS(id='fictional', transcript_segments=segments, speaker_resolution=resolution)
+    analytics = build_conversation_analytics(conversation, names)
+    assert analytics.speaker_count == 2 and len(analytics.speakers) == 3
+    assert {r.speaker for r in analytics.speakers} == {'Speaker A', expected_name, 'Unknown speaker'}
+    monkeypatch.setattr(llm, 'get_user_name', lambda *_a, **_kw: 'You')
+    monkeypatch.setattr(llm, 'serving_for', lambda *_a: False)
+    monkeypatch.setattr(incremental, 'shadow_or_serve', lambda *_a: False)
+    # Episode people names are supplied by the existing trusted name projection.
+    episode_rows = moment_render.name_segments(rows, names)
+    assert f'{expected_name}: {bound["text"]}' in incremental.render_moment(episode_rows).text
+    people = [NS(id='ada', name='Ada')]
+    plain = TranscriptSegment.segments_as_string(segments, people=people, user_name='You')
+    assert f'{expected_name}: {bound["text"]}' in plain
+    # Current carried owner flags remain subject to the existing independent
+    # owner-evidence gate in LLM memory input; manual owner decisions are authoritative.
+    if source == 'manual' or not is_user:
+        for text, mapping in (
+            llm.render_cluster_transcript(rows, names=names),
+            llm.conversation_transcript_and_speaker_map('fictional', conversation, people=people),
+        ):
+            assert expected_name in mapping.values()
+            assert '[unassigned speech] ' + bound['text'] not in text
+        assert f'{expected_name}: {bound["text"]}' in llm.memory_transcript_from_segments(segments, people=people)
+        labels = llm.conversation_action_item_speaker_labels('fictional', conversation, people=people)
+        assert labels[1]['speaker_label'] == expected_name
+        assert labels[1]['speaker_role'] == ('primary_user' if is_user else 'other')
+    assert rows == before
+
+
+@pytest.mark.parametrize('is_user', [False, True])
+def test_stale_carried_gap_receipt_does_not_win(is_user):
+    from utils.manual_speaker_assignments import apply_manual_assignments
+
+    rows = speaker_cases()['one-voice'][0]
+    gap = rows[1]
+    gap.update(is_user=is_user, person_id=None if is_user else 'ada', speaker_label_source='carried')
+    receipt = {
+        'generation': 4,
+        'speakers': {
+            str(gap['speaker_id']): {
+                'generation': 4,
+                'speaker_id_scope': 'obsolete-epoch',
+                'source': 'carried',
+                'person_id': None if is_user else 'ada',
+                'is_user': is_user,
+            }
+        },
+    }
+    result = apply_manual_assignments(rows, receipt)
+    assert result is rows
+    display = display_participants(result, names={'ada': 'Ada'})
+    assert display.label(gap) == 'Unknown speaker'
+    assert not display.for_segment(gap).countable
+
+
+@pytest.mark.parametrize('model', [False, True])
+def test_legacy_carried_defaults_are_not_a_reapplied_receipt(model):
+    row = dict(
+        id='legacy',
+        speaker='BATCH_UNASSIGNED_old',
+        speaker_id=-1,
+        is_user=True,
+        speaker_label_source='carried',
+        start=0,
+        end=6,
+        text='Fictional gap words',
+    )
+    row = TranscriptSegment(**row) if model else row
+    display = display_participants([row])
+    assert display.label(row) == 'Unknown speaker'
+    assert not display.for_segment(row).countable
+
+
+def test_speaker_map_preserves_attributed_role_owner_without_raw_owner_flag():
+    from utils.conversations import transcript_for_llm as llm
+    from utils.conversations.owner_attribution import SpeakerRole, SpeakerRoleMap
+
+    rows = [
+        TranscriptSegment(
+            id='real', speaker='SPEAKER_00', speaker_id=0, is_user=False, text='Fictional words', start=0, end=6
+        )
+    ]
+    roles = SpeakerRoleMap(
+        rows=tuple(rows),
+        roles=(SpeakerRole(role='primary_user'),),
+        clusters={(None, 0): SpeakerRole(role='primary_user')},
+    )
+    mapping = llm._speaker_map(rows, 'You', {}, roles=roles)
+    assert mapping.clusters[0].owner

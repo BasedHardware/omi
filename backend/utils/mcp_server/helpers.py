@@ -51,12 +51,14 @@ def conversation_participants(conversation: Dict[str, Any], *, include_display: 
         person_id = person_id if isinstance(person_id, str) and person_id else None
         participant = display.for_segment(segment) if display else None
         abstention = participant is not None and participant.is_abstention
+        if abstention:
+            continue  # Unassigned speech remains in transcripts, not the participant roster.
         key = (
             participant.key if participant else speaker_id,
             None if abstention else person_id,
             False if abstention else segment.get("is_user") is True,
         )
-        if speaker_id is None and person_id is None and not key[2]:
+        if speaker_id is None and key[1] is None and not key[2]:
             continue
         if key in seen:
             continue

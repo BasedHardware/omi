@@ -87,6 +87,9 @@ def server_outputs(case):
     }
 
 
+# Pre-review verified all six before payloads equal origin/main output at
+# 9980aaf18681eee6eb8989d30c9fce3710416bad, by overlaying the ten backend sources.
+# Preserve these independently verified rollback oracles when regenerating after output.
 def snapshot(case):
     outputs = {'case': case, 'fixture': 'fictional; no account or provider data'}
     for label, enabled in [('before', 'false'), ('after', 'true')]:

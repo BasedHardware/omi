@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const root = dirname(fileURLToPath(import.meta.url));
+const snapshots = join(root, '../../../backend/tests/unit/fixtures/speaker_abstention_snapshots');
 const cases = ['one-voice', 'two-voices', 'wearer', 'mixed-epochs', 'point-keys', 'historical-fallback'];
 const titles = ['One voice + two uncovered gaps', 'Two voices + separate unknown speech', 'Manual wearer receipt + two gaps', 'Mixed capture epochs', 'Zero-duration point keys', 'Historical fallback IDs'];
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -13,7 +14,7 @@ const browser = await chromium.launch({ headless: true });
 const images = [];
 try {
   for (const [index, name] of cases.entries()) {
-    const snapshot = JSON.parse(await readFile(join(root, `${name}.json`), 'utf8'));
+    const snapshot = JSON.parse(await readFile(join(snapshots, `${name}.json`), 'utf8'));
     const column = (state, title) => {
       const output = snapshot[state];
       const rows = output.api.transcript_segments;

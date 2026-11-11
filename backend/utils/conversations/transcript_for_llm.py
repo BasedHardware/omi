@@ -117,7 +117,7 @@ def _speaker_map(
     roles = roles if roles is not None else speaker_role_projection(segments)
     speaker_map.role_evidence_authoritative = roles is not None
     cluster_bindings: dict[tuple[Optional[str], int], set[Optional[str]]] = {}
-    tallies: dict[tuple[Optional[str], int], tuple[bool, list[str], float, int]] = {}
+    tallies: dict[tuple[Optional[str], int], tuple[bool, list[str], float, int, bool]] = {}
     prompt_keys: dict[tuple[Optional[str], int], set[str]] = {}
     for segment in segments:
         speaker_id = getattr(segment, 'speaker_id', None)
@@ -129,15 +129,16 @@ def _speaker_map(
         prompt_key = display.for_segment(segment).key
         key = (getattr(segment, 'speaker_id_scope', None), speaker_id)
         prompt_keys.setdefault(key, set()).add(prompt_key)
-        owner, names, seconds, words = tallies.get(key, (False, [], 0.0, 0))
+        owner, names, seconds, words, attributed = tallies.get(key, (False, [], 0.0, 0, False))
         tagged = (person_name or '').strip()
         if not getattr(segment, 'is_user', False) and tagged and tagged not in names:
             names.append(tagged)
         tallies[key] = (
-            owner or getattr(segment, 'is_user', False),
+            owner or (getattr(segment, 'is_user', False) and not display.for_segment(segment).is_abstention),
             names,
             seconds + _speech_seconds(segment),
             words + len((getattr(segment, 'text', '') or '').split()),
+            attributed or not display.for_segment(segment).is_abstention,
         )
         name = display.for_segment(segment).name
         if roles is not None:
@@ -153,10 +154,10 @@ def _speaker_map(
         elif roles is not None and speaker_map[prompt_key] != name:
             speaker_map[prompt_key] = None
     clusters = []
-    for (scope, speaker_id), (owner, names, seconds, words) in tallies.items():
+    for (scope, speaker_id), (owner, names, seconds, words, attributed) in tallies.items():
         if roles is not None:
             role = roles.clusters.get((scope, speaker_id), UNKNOWN_ROLE)
-            owner = role.role == 'primary_user'
+            owner = attributed and role.role == 'primary_user'
             bindings = cluster_bindings.get((scope, speaker_id), set())
             name = role.name(user_name, people_map) if role.person_id else None
             name = name if name and bindings == {name} else None
