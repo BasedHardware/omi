@@ -99,13 +99,10 @@
     }
   ],
   "capture": {
-    "captured_at": "2026-11-11T03:03:30.312176+00:00",
-    "before_ref": "4e9c70405c53f8efcaced2fea369910ade355058",
-    "after_base_ref": "3ce4c9c1a6a56e836780c749f912fb66bd89b729",
-    "after_corrections": [
-      "Preserve PlansSheet centering during Framer Motion transforms",
-      "Keep storefront interval selection after a blocked launch"
-    ],
+    "captured_at": "2026-11-11T04:10:17.056690+00:00",
+    "before_ref": "c8a75e2800e17bf5d26a4989bab987bbe158aacc",
+    "after_ref": "d46cfeed31349a5995bcf51b66e7a7266a9a25b0",
+    "source_origin": "Read-only exports of git archive at before_ref/after_ref; no working source modifications between code commit, build, capture and evidence commit.",
     "renderer": "Local React component harness; Bun browser bundles; Playwright 1.65.0 Chromium; 1280x1000 and 390x1000 viewports; full-page PNGs; system sans-serif fallback (remote fonts disabled)",
     "surfaces": {
       "PlansSheet": "PlansSheet with controlled open state and cached fixture plans",
@@ -119,10 +116,17 @@
       "network": "Loopback-only HTTP server; Playwright aborts unexpected routes; CSP connect-src none; fetch throws; no external font import"
     },
     "source_sha256": {
-      "web/app/src/components/settings/PlansSheet.tsx": "c4b7fb17fb49c35fb67689ed1efd365bcb5ca3cd967c6793968a97adeacf7996",
-      "web/app/src/components/settings/SettingsPage.tsx": "fea5bec5ea84b181d652b7f78c5f9d2ff246c23969ca90731fb5d976bee08284",
-      "web/app/src/components/settings/storefront/StorefrontHost.tsx": "2a816861592818855c30c561e475f3a71e40ddc98a15c0b3a3bd5df20e63c0ce"
+      "web/app/src/components/settings/PlansSheet.tsx": "7aec8989e668e4bda510e58788e5aeeb604590e8a03525dcb5d847e5f473a83c",
+      "web/app/src/components/settings/SettingsPage.tsx": "ae100707d96841f4299266a26968d0484b738807722328765cb0116ae53b248b",
+      "web/app/src/components/settings/storefront/StorefrontHost.tsx": "8b72ea9639f10506b000e179a4c6c1a2a4e42d5cbe8396b4eb1dcd4ae429b2f6",
+      "web/app/src/lib/checkoutWindow.ts": "e2a0552fcf8bcabb821c371c712823d047755e0c8d8875479f606a2dbf8e52d3",
+      "web/app/src/lib/analytics/subscriptionFunnel.ts": "cca7e79dfe8dcab6b3297d8e0c9e711e80cfe121ebbc3c1d28d2a2262741b6bb"
     },
-    "behavior": "Each after state retains annual selection and allows a real pointer retry; both checkout attempts use fixture_pro_year. Before PlansSheet dismisses; SettingsPage/storefront show no popup warning. Keyboard activation used for initial launch in both versions so the uncorrected baseline dialog layout does not block the comparison."
+    "source_sha256_command": "shasum -a 256; verified against the exported snapshot, working files, and committed Git blobs before committing evidence",
+    "behavior": "Each after state retains annual selection and allows a real pointer retry; both checkout attempts use fixture_pro_year. Before PlansSheet dismisses; SettingsPage/storefront show no popup warning. Keyboard activation used for initial launch in both versions so the uncorrected baseline dialog layout does not block the comparison.",
+    "bundle_sha256": {
+      "before": "dad45900e3b4e07adf55b531327c89a422379341576c426dd82ead150a583d43",
+      "after": "7bb91daa09d15370f027d38ac1d4a5f7af087643cfeeb1ca6644194312c2e819"
+    }
   }
 }
