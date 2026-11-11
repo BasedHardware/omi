@@ -26,7 +26,7 @@ moving them is the A4 outbox + receipt-fence seam, not this PR.
 
 from __future__ import annotations
 
-from config.batch_pipeline import control_candidate_fanout
+from config.batch_pipeline import control_candidate_fanout, held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
 
 import re
 import hashlib
@@ -317,11 +317,15 @@ class PostgresStore:
 
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         # A hint read outside any transaction; the fresh-first transaction re-verifies it.
+        state = 'AND state <> ALL(%s) ' if held_poll_skip_enabled() else ''
+        params: tuple[Any, ...] = (self.namespace, owner_key)
+        if state:
+            params += (list(MERGE_POLL_TERMINAL_STATES),)
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
-                "AND doc->'fresh_capture' = 'true'::jsonb ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
-                (self.namespace, owner_key, max(1, min(limit, 32))),
+                f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
+                (*params, max(1, min(limit, 32))),
             ).fetchall()
         return [row[0] for row in rows]
 
@@ -336,7 +340,7 @@ class PostgresStore:
             ).fetchall()
             owners = []
             for (key,) in marks:
-                job = self.first_pending_in(conn, key)
+                job = self.first_pending_in(conn, key, skip_terminal=False)
                 owners.append((key, job[1].get('owner_id') if job else None))
         return owners
 
@@ -505,12 +509,18 @@ class PostgresStore:
         """Hold one document's advisory lock until the transaction ends (the key may not exist yet)."""
         conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (lock_key(self.namespace, table, key),))
 
-    def first_pending_in(self, conn: Any, owner_key: str, *, result_ready: bool = False) -> tuple[str, dict] | None:
+    def first_pending_in(
+        self, conn: Any, owner_key: str, *, result_ready: bool = False, skip_terminal: bool = True
+    ) -> tuple[str, dict] | None:
         state = "AND state = 'result_ready' " if result_ready else ''
+        params: tuple[Any, ...] = (self.namespace, owner_key)
+        if not result_ready and skip_terminal and held_poll_skip_enabled():
+            state = 'AND state <> ALL(%s) '
+            params += (list(MERGE_POLL_TERMINAL_STATES),)
         return conn.execute(
             f'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending {state}'
             'ORDER BY capture_at, key COLLATE "C" LIMIT 1',
-            (self.namespace, owner_key),
+            params,
         ).fetchone()
 
     def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
