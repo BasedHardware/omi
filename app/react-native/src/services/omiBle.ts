@@ -397,23 +397,39 @@ export class OmiBle {
     const prev = this.audioSub;
     this.audioSub = null;
     prev?.remove();
-    this.audioSub = d.monitorCharacteristicForService(
+    const sub = d.monitorCharacteristicForService(
       OMI.service,
       OMI.audioDataStream,
       (error, chunk) => {
         if (error) {
-          const anyErr = error as { errorCode?: unknown; reason?: unknown; message?: unknown };
-          this.lastAudioError =
+          // react-native-ble-plx can emit "Operation was cancelled" for a
+          // displaced/tearing-down monitor. If this is no longer the active
+          // subscription, swallow it to avoid killing a newer consumer.
+          if (this.audioSub !== sub) return;
+          const anyErr = error as { errorCode?: unknown; reason?: unknown; message?: unknown; name?: unknown };
+          const msg =
             typeof anyErr.reason === 'string' && anyErr.reason
               ? `${String(anyErr.message ?? 'BLE error')} (${anyErr.reason})`
-              : error.message || String(error);
-          onError?.(error);
+              : error instanceof Error
+                ? error.message || String(error)
+                : String(anyErr.message ?? error);
+          this.lastAudioError = msg;
+          // Drop the dead monitor so a reconnect/retry can re-subscribe cleanly.
+          this.audioSub = null;
+          try {
+            sub.remove();
+          } catch {
+            // ignore
+          }
+          onError?.(error instanceof Error ? error : new Error(msg));
           return;
         }
         if (!chunk || !chunk.value) return;
+        if (this.audioSub !== sub) return;
         onBytes(fromBase64(chunk.value));
       }
     );
+    this.audioSub = sub;
   }
 
   /**
@@ -438,8 +454,13 @@ export class OmiBle {
    */
   async startAudio(): Promise<boolean> {
     try {
-      this.requireDevice();
+      const d = this.requireDevice();
       this.lastAudioError = null;
+      const connected = await d.isConnected();
+      if (!connected) {
+        this.lastAudioError = 'device not connected';
+        return false;
+      }
       return true;
     } catch (e) {
       this.lastAudioError = e instanceof Error ? e.message : String(e);

@@ -140,6 +140,10 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
       return;
     }
 
+    // Ensure no stale BLE audio monitor from a previous/debug session can
+    // interfere before we open a new capture stream.
+    omiBle.stopAudio();
+
     const vp = get().voiceprint;
     const next = new DeepgramStream(
       {
@@ -149,46 +153,70 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
           get().pushSegment({ ...seg, speaker: label, isUser });
         },
         onOpen: () => {
+          if (get().stream !== next) return;
           set({ connecting: false, recording: true, error: null, source: 'omi' });
           // Device bytes are forwarded exactly as they arrive. No decode: the
           // backend is told the codec and sample rate in the query string, which
           // is what Flutter does, so decoding opus here would be work thrown away.
-          void omiBle.startAudio().then((ok) => {
+          void omiBle.startAudio().then(async (ok) => {
+            if (get().stream !== next) return;
             if (!ok) {
               get().stop();
               set({ error: `Could not enable device audio: ${omiBle.startAudioError() ?? 'unknown'}` });
               return;
             }
-            try {
+            const subscribe = () => {
               omiBle.onAudio(
-                (bytes) => get().stream?.sendAudio(bytes.buffer as ArrayBuffer),
+                (bytes) => {
+                  const s = get().stream;
+                  if (s !== next) return;
+                  s.sendAudio(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+                },
                 (e) => {
+                  if (get().stream !== next) return;
                   const msg = e instanceof Error ? e.message : String(e);
                   console.error('[capture] omi audio error:', msg);
                   get().stop();
                   set({ error: `Device audio stream failed: ${msg}. Reconnect the DevKit and try again.` });
                 },
               );
+            };
+            try {
+              subscribe();
             } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              // One quick retry helps with transient BLE "Operation was cancelled" races.
+              if (/cancel/i.test(msg)) {
+                try {
+                  await new Promise((r) => setTimeout(r, 250));
+                  if (get().stream !== next) return;
+                  subscribe();
+                  return;
+                } catch (e2) {
+                  console.error('[capture] omi audio retry failed:', e2);
+                }
+              }
               console.error('[capture] omi audio subscribe error:', e);
               get().stop();
-              set({ error: `Device audio unavailable: ${e instanceof Error ? e.message : String(e)}` });
+              set({ error: `Device audio unavailable: ${msg}` });
             }
           });
         },
         onError: (err) => {
           console.error('[capture] STT error:', err);
-          get().stop();
-          set({ error: 'Speech capture failed to start. Check your connection and session.' });
+          if (get().stream === next) {
+            get().stop();
+            set({ error: 'Speech capture failed to start. Check your connection and session.' });
+          }
         },
         onClose: () => {
-          if (get().recording) get().stop();
+          if (get().stream === next && get().recording) get().stop();
         },
       },
       url,
     );
 
-    set({ connecting: true, error: null, lastSegments: [], stream: next });
+    set({ connecting: true, error: null, lastSegments: [], stream: next, source: 'omi' });
     next.connect();
   },
   stop: () => {

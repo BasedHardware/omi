@@ -133,6 +133,10 @@ export default function DevOmiDeviceScreen() {
 
   const startAudio = useCallback(async () => {
     try {
+      if (capture.recording || capture.connecting) {
+        say('stop STT/capture before starting raw audio debug stream');
+        return;
+      }
       const enabled = await omiBle.startAudio();
       if (!enabled) {
         say(`CCCD write FAILED: ${omiBle.startAudioError() ?? 'unknown'}`);
@@ -144,14 +148,18 @@ export default function DevOmiDeviceScreen() {
           setAudioChunks((c) => c + 1);
           setAudioBytes((b) => b + bytes.length);
         },
-        (e) => say(`audio error: ${e instanceof Error ? e.message : String(e)}`)
+        (e) => {
+          say(`audio error: ${e instanceof Error ? e.message : String(e)}`);
+          setListening(false);
+        }
       );
       setListening(true);
       say(`subscribed, codec ${identity?.codec ?? '?'} @ ${SAMPLE_RATE} Hz`);
     } catch (e) {
+      setListening(false);
       say(`startAudio failed: ${String(e)}`);
     }
-  }, [say, identity]);
+  }, [say, identity, capture.recording, capture.connecting]);
 
   const stopAudio = useCallback(() => {
     omiBle.stopAudio();
@@ -310,7 +318,10 @@ export default function DevOmiDeviceScreen() {
               disabled={capture.recording || capture.connecting || !identity || listening}
               onPress={() => {
                 if (!identity) return;
-                if (listening) stopAudio();
+                if (listening) {
+                  stopAudio();
+                  setListening(false);
+                }
                 capture.startFromOmi(identity.codec);
                 say(`startFromOmi(${identity.codec})`);
               }}
