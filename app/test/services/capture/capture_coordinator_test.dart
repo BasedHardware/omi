@@ -1234,7 +1234,9 @@ void main() {
 
     expect(resumed.state.phase, CapturePhase.idle);
     expect(resumed.effects.whereType<PolicyWrite>().single.muted, isFalse);
-    expect(resumed.effects.whereType<RunStage>(), isEmpty);
+    // Only the pendant's own mute is cleared; no capture stage starts.
+    expect(resumed.effects.whereType<RunStage>().map((e) => e.stage).single,
+        isA<PersistDeviceMuteStage>().having((s) => s.muted, 'muted', isFalse));
   });
 
   test('device resume from muted idle is inert without a device or while a call holds', () {
@@ -2107,6 +2109,61 @@ void main() {
       expect(world.controller.liveCaptureSource, 'omi');
       expect(world.controller.isPaused, isFalse);
       expect(world.controller.recordingState, RecordingState.deviceRecord);
+    });
+  });
+
+  test('foreground restores a muted pendant left idle as paused with a working double-tap', () async {
+    await withReviewWorld((world) async {
+      await SharedPreferencesUtil().saveInt('doubleTapAction', 1);
+      world.deviceConnection = _ButtonTrackingConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.controller.pauseDeviceRecording();
+      expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
+      world.killProcess();
+      await world.reconstructProcess();
+
+      // Connected, but no capture session: a skipped or failed start.
+      final connection = _ButtonTrackingConnection();
+      world.deviceConnection = connection;
+      world.controller.updateRecordingDevice(pendant);
+      await world.settle();
+      expect(world.controller.liveCaptureSource, isNull);
+      expect(connection.openButtonSubscriptions, 0);
+
+      world.controller.onAppResumed();
+      await world.settle();
+      await world.elapse(const Duration(seconds: 1));
+      await world.settle();
+      expect(world.controller.liveCaptureSource, 'omi');
+      expect(world.controller.isPaused, isTrue);
+      expect(world.controller.recordingState, RecordingState.pause);
+      expect(connection.openButtonSubscriptions, 1);
+      expect(connection.openAudioSubscriptions, 0);
+
+      connection.doubleTap();
+      await world.settle();
+      expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+      expect(world.controller.recordingState, RecordingState.deviceRecord);
+      expect(connection.openAudioSubscriptions, 1);
+    });
+  });
+
+  test('foreground does not restart a muted pendant the user stopped', () async {
+    await withReviewWorld((world) async {
+      final connection = _ButtonTrackingConnection();
+      world.deviceConnection = connection;
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.controller.pauseDeviceRecording();
+      await world.controller.stopStreamDeviceRecording();
+      await world.settle();
+
+      world.controller.onAppResumed();
+      await world.settle();
+      await world.elapse(const Duration(seconds: 1));
+      await world.settle();
+      expect(world.controller.liveCaptureSource, isNull);
+      expect(connection.openButtonSubscriptions, 0);
+      expect(connection.openAudioSubscriptions, 0);
     });
   });
 
