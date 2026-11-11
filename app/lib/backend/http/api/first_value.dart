@@ -1,3 +1,4 @@
+// Paid-start prompt transport: the server owns eligibility, claims, and route targets.
 import 'dart:async';
 import 'dart:convert';
 

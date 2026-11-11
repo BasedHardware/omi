@@ -1,3 +1,4 @@
+// Home presentation for server-claimed first-value prompts; account epochs fence every surface.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
