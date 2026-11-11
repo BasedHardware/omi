@@ -518,7 +518,9 @@ class UsageProvider with ChangeNotifier {
       if (result is ApiSuccess<bool> && result.data) {
         // Finish any pre-application read before requesting post-application truth.
         final pending = _subscriptionFetch;
-        if (pending != null) await pending;
+        if (pending != null) {
+          await pending;
+        }
         if (generation != _sessionGeneration) {
           return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
         }
