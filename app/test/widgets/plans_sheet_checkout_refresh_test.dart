@@ -1,3 +1,5 @@
+// Verifies native Checkout refreshes backend-owned subscription and allowance state.
+// Redirect success never grants an entitlement locally; cancellation preserves state.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
