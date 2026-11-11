@@ -65,6 +65,7 @@ def entries():
             trials=2,
             patchers=(_repair_age_orders,),
             domains={
+                'urgent': [False, True],
                 'after': [
                     None,
                     {
@@ -76,13 +77,14 @@ def entries():
                         'enqueued_at': 1.0,
                         'horizon': datetime(2026, 10, 1, tzinfo=timezone.utc),
                     },
-                ]
+                ],
             },
             neutrals={
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (8, 'in-memory candidate cap only'),
                 'max_scan': (128, 'aggregate scan bound only'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
+                'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
             },
         ),

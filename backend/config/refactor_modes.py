@@ -139,7 +139,7 @@ def no_speech_terminal_enabled() -> bool:
 
 
 def record_seal_repair_age_order() -> bool:
-    """Prefer oldest pending records; off restores the name-ordered repair scan."""
+    """Prefer near-dead-letter records, then newest; off restores the name-ordered jobs scan."""
     return default_on('RECORD_SEAL_REPAIR_AGE_ORDER')
 
 
