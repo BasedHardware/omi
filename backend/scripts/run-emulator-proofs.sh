@@ -149,6 +149,12 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pending_deletion_conformance.py
 
+# PL-423: real recording-drain claims on both coordination stores. CI requires
+# sim + emulator; local/staging qualification must require all three backends.
+run_proof "recording-drain lease conformance (PL-423)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_drain_conformance.py
+
 if (( ${#failures[@]} )); then
   echo
   echo "Emulator proofs failed: ${#failures[@]}"
