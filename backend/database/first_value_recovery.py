@@ -112,7 +112,12 @@ def _direct_monthly_start_details(kwargs: Mapping[str, Any]) -> dict[str, Any] |
         return None
     created = obj.get('created')
     current_period_end = obj.get('current_period_end')
-    if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in (created, current_period_end)):
+    if (
+        isinstance(created, bool)
+        or not isinstance(created, (int, float))
+        or isinstance(current_period_end, bool)
+        or not isinstance(current_period_end, (int, float))
+    ):
         return None
     item = _single_subscription_item(obj)
     if item is None or not isinstance(item.get('id'), str) or not item.get('id'):
@@ -171,7 +176,9 @@ def verified_direct_monthly_start(kwargs: Mapping[str, Any]) -> dict[str, Any] |
     paid_at = transitions.get('paid_at') if isinstance(transitions, Mapping) else None
     amount_paid = invoice.get('amount_paid')
     lines = invoice.get('lines')
-    line_data = lines.get('data') if isinstance(lines, Mapping) else None
+    if not isinstance(lines, Mapping):
+        return None
+    line_data = lines.get('data')
     line = line_data[0] if isinstance(line_data, list) and len(line_data) == 1 else None
     if not isinstance(line, Mapping) or lines.get('has_more') is not False:
         return None
