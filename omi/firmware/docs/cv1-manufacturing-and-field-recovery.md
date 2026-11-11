@@ -142,9 +142,14 @@ ship a boot-writing app or treat possession of the signing key as a solution.
 
 Ask Gettop for **lot-level totals**: exact programmed boot hash/HEX asset,
 units shipped, unsold stock, replacements and units reworked to a qualified
-hash. The affected shipped inventory is the stock-hash lot total minus
-verified reworked/returned units. This is the best route to a manufacturing
-count, and the shipment claim remains unverified until those records arrive.
+hash. Start with **units actually shipped with the exact stock boot hash**,
+excluding unsold stock. Subtract mutually exclusive dispositions for those
+shipped units: returned and still held, or reworked to a qualified hash and
+returned to service. A unit must appear in only one disposition, so returns
+and reworks cannot be subtracted twice. Count replacements separately by
+their own programmed boot hash. This is the best route to an affected
+field-inventory count; the shipment claim remains unverified until those
+records arrive.
 
 For observed impact, request only aggregate analytics outputs over CV1:
 from-version, target/observed-version, upload-finished, install-requested,
