@@ -56,6 +56,7 @@ export function PlansSheet({
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingPlans, setIsLoadingPlans] = useState(true);
+  const [plansLoadSucceeded, setPlansLoadSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -72,7 +73,18 @@ export function PlansSheet({
   const isUnknownPlan = planIdentity?.kind === 'unknown';
   const isCanceling_ = subscription?.cancel_at_period_end;
 
-  usePurchaseExposure(open, 'web_plans', subscription?.plan ?? 'unknown', 'plans_sheet');
+  usePurchaseExposure(
+    open &&
+      !isLoadingPlans &&
+      plansLoadSucceeded &&
+      planIdentity?.kind === 'known' &&
+      pricingOptions.length > 0,
+    'web_plans',
+    subscription?.plan ?? 'unknown',
+    'plans_sheet',
+    'not_applicable',
+    open,
+  );
 
   useEffect(() => {
     if (open && !paywallWasOpen.current) {
@@ -105,6 +117,7 @@ export function PlansSheet({
       if (cachedPlans && cachedPlans.length > 0) {
         if (cancelled) return;
         setPricingOptions(cachedPlans);
+        setPlansLoadSucceeded(true);
         const activePlan = cachedPlans.find(
           (p) => p.is_active || p.id === subscription?.current_price_id,
         );
@@ -125,12 +138,14 @@ export function PlansSheet({
 
   const loadPlans = async (cancelled = false) => {
     setIsLoadingPlans(true);
+    setPlansLoadSucceeded(false);
     setError(null);
     try {
       const response = await getAvailablePlans();
       if (cancelled) return;
       if (response && response.plans) {
         setPricingOptions(response.plans);
+        setPlansLoadSucceeded(true);
         // Pre-select current active plan or first plan
         const activePlan = response.plans.find(
           (p) => p.is_active || p.id === subscription?.current_price_id,

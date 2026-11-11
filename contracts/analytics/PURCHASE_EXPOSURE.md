@@ -14,7 +14,7 @@ or account identifiers in these event properties. Existing SDK identity is outsi
 
 | Signal | Boundary and lifetime |
 | --- | --- |
-| Subscription Paywall Viewed | One committed presentation/mount of the actual sheet, grid or paywall; never an opener intent, repeated build or frame. Hidden surfaces do not count. Remote Flutter web content waits for its ready message. |
+| Subscription Paywall Viewed | One committed presentation/mount of the actual sheet, grid or paywall; never an opener intent, repeated build or frame. Storefront and yearly-switch views wait for successful loading and a rendered purchasable option; loading, failed, hidden, empty and unavailable offer branches do not consume them. Collapsed tiers and unselected unavailable prices do not count. The legacy web sheet additionally requires a recognized loaded current plan; the native settings grid requires its nonempty displayed catalog. The view latch stays consumed through refreshes within that presentation. Remote Flutter web content waits for its ready message. |
 | Subscription Allowance Reached | An existing authoritative allowance/quota answer, backend refusal or server-owned cap payload. Repeated snapshots deduplicate until observed recovery or observer reset. Optimistic chat deltas, unavailable/invalid allowance reads and free/on-device policy alone are excluded. |
 | Subscription Allowance Block Shown | The corresponding useful block UI is mounted, independently of authoritative reach or whether a paced automatic paywall opens. An optimistic local refusal still counts its rendered block; unavailable server cause uses unknown reason. Rebuilds deduplicate. A remounted block is a new presentation. |
 | Subscription Upgrade Tapped | Existing upgrade CTA intent/confirmation boundary, alongside legacy Upgrade Plan Selected; contextual navigation CTAs without a selected price use unknown plan/interval. |
@@ -27,6 +27,11 @@ The same cap can be observed on several surfaces. Locked-content previews expose
 boolean, so their block kind/reason use unknown rather than inferring a billing cause. Reopening a block can produce another exposure while
 repeated snapshots within its observer do not produce another reach. There is no persistent person,
 record or billing-period identifier in these properties. An unobserved recovery cannot be inferred.
+Shared-budget exhaustion is `usage_budget/budget_exhausted`,
+never an additional `chat/chat_quota_exhausted` for the same authoritative snapshot. Distinct transcription
+and chat caps can still both be observed. Kind changes and authoritative recovery rearm their own latches.
+A mounted native chat warning that becomes a hard block emits Block Shown at that rendered transition;
+optimistic refusal has an unknown cause and cannot manufacture an authoritative Reached event.
 
 Legacy resolution and verified completion observation are separate. Flutter retains its legacy prefix-based
 route pop, but the new callback additionally parses and matches the configured success scheme, host,
@@ -98,3 +103,19 @@ The checked-in consumer is an offline presence query, not a deployed dashboard, 
 measurement or causal conversion estimate. Missing client events mean unobserved, not failure.
 
 The Electron trial-expiry card is a reminder, not an allowance block: it reports server trial expiry under the distinct trial dimension and a bounded View Plans intent, but never Allowance Block Shown. The new settings plan view requires the actual nonempty, server-visible catalog render branch; the legacy settings impression remains unchanged. A committed render is not proof of eye attention or viewport dwell.
+
+## Focused test entry points
+
+`web/app`'s existing `bun run build` first runs `bun run test:purchase-exposure`: the
+hermetic plans/storefront, presentation/privacy and checkout-return regressions. This is
+code-owned wiring into the existing build entry; local success is not exact-head CI proof.
+`desktop/macos/scripts/run-swift-ci.sh --test` invokes `tests/purchase-exposure/run.sh`
+before the SwiftPM suites. The standalone harness removes its temporary binaries/modules.
+Windows unit tests retain inert API/Firebase values and a socket guard. Only the existing
+explicit `OMI_E2E=1` live opt-in removes those test overrides/setup; configuration regressions
+inspect both modes without loading credentials, running live E2E or making network calls.
+
+These source corrections have 0pp direct conversion effect and no lift forecast. A view is per
+mounted presentation, not a unique eligible pendant buyer. Eligible baseline N still requires
+served platform/version receipts and authoritative non-subscriber, paired-device and allowance
+eligibility. This source/test work establishes none of serving, baseline N, placement or lift.

@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const state = vi.hoisted(() => ({ track: vi.fn(), checkout: vi.fn() }));
+const state = vi.hoisted(() => ({ track: vi.fn(), checkout: vi.fn(), plans: vi.fn() }));
 vi.mock('@/lib/analytics/posthog', () => ({ PostHogManager: { track: state.track } }));
 vi.mock('@/lib/api', () => ({
-  getAvailablePlans: vi.fn(),
+  getAvailablePlans: state.plans,
   createCheckoutSession: state.checkout,
   upgradeSubscription: vi.fn(),
   cancelSubscription: vi.fn(),
@@ -29,6 +29,7 @@ const count = (name: string) =>
 beforeEach(() => {
   state.track.mockReset();
   state.checkout.mockReset();
+  state.plans.mockReset();
   vi.stubGlobal(
     'open',
     vi.fn(() => ({})),
@@ -91,5 +92,50 @@ it.each(['failed', 'blocked'])(
     expect(count('Upgrade Tapped')).toBe(1);
     expect(count('Checkout Opened')).toBe(0);
     expect(count('Checkout Completed')).toBe(0);
+  },
+);
+
+it('loading does not consume the view; loaded options count once', async () => {
+  let release!: (value: { plans: typeof props.cachedPlans }) => void;
+  state.plans.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const tree = render(<PlansSheet open {...props} cachedPlans={null} />);
+  expect(count('Paywall Viewed')).toBe(0);
+  release({ plans: props.cachedPlans });
+  await waitFor(() => expect(count('Paywall Viewed')).toBe(1));
+  tree.rerender(<PlansSheet open {...props} cachedPlans={null} />);
+  expect(count('Paywall Viewed')).toBe(1);
+});
+it.each(['failure', 'empty', 'unknown', 'missing'])(
+  'no view for %s plans',
+  async (kind) => {
+    if (kind === 'failure') state.plans.mockRejectedValue(new Error('private'));
+    else
+      state.plans.mockResolvedValue({ plans: kind === 'empty' ? [] : props.cachedPlans });
+    render(
+      <PlansSheet
+        open
+        {...props}
+        cachedPlans={null}
+        subscription={
+          kind === 'missing'
+            ? null
+            : kind === 'unknown'
+            ? { ...props.subscription, plan: 'future_plan' }
+            : props.subscription
+        }
+      />,
+    );
+    if (kind !== 'unknown') await waitFor(() => expect(state.plans).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByText('Failed to load plans') !== null).toBe(
+        kind === 'failure',
+      ),
+    );
+    expect(count('Paywall Viewed')).toBe(0);
   },
 );

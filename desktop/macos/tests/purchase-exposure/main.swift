@@ -90,3 +90,34 @@ precondition(
     URL(string: "http://fixture.invalid:80/v1/payments/success")!,
     completionURL: URL(string: "http://fixture.invalid/v1/payments/success")!))
 print("PASS: popup optimism is visible block only; strict origin/port/path/userinfo observation")
+
+// Actual production transition observer: warning -> optimistic block -> authoritative
+// block is one presentation. Recovery/remount rearm; updates cannot create a reach.
+var bannerEvents: [(PurchaseEvent, [String: String])] = []
+let bannerSink: PurchaseObservation.Sink = { bannerEvents.append(($0, $1)) }
+let banner = PurchaseObservation(sink: bannerSink)
+banner.chatBlock(shown: false, authoritative: false)
+precondition(bannerEvents.isEmpty)
+banner.chatBlock(shown: true, authoritative: false)
+banner.chatBlock(shown: true, authoritative: false)
+banner.chatBlock(shown: true, authoritative: true)
+precondition(bannerEvents.count == 1 && bannerEvents[0].1["reason"] == "unknown")
+banner.chatBlock(shown: false, authoritative: true)
+banner.chatBlock(shown: true, authoritative: true)
+precondition(bannerEvents.count == 2 && bannerEvents[1].1["reason"] == "chat_quota_exhausted")
+PurchaseObservation(sink: bannerSink).chatBlock(shown: true, authoritative: true)
+precondition(bannerEvents.count == 3 && bannerEvents.allSatisfy { $0.0 == .allowanceBlockShown })
+print("PASS: mounted warning/block transitions, rebuild dedupe, recovery and remount")
+
+// Empty/filtered asynchronous catalogs must leave the mounted view latch unused.
+var gridEvents: [PurchaseEvent] = []
+let grid = PurchaseObservation(sink: { event, _ in gridEvents.append(event) })
+grid.view(view, enabled: false)
+grid.view(view, enabled: false)
+precondition(gridEvents.isEmpty)
+grid.view(view, enabled: true)
+grid.view(view, enabled: true)
+grid.view(view, enabled: false)
+grid.view(view, enabled: true)
+precondition(gridEvents == [.paywallViewed])
+print("PASS: native empty-to-options view eligibility and per-mount latch")

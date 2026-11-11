@@ -145,8 +145,8 @@ export function StorefrontPanel({
   const [busyPriceId, setBusyPriceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const opened = useRef(false);
-  usePurchaseExposure(
-    !!data?.showSubscriptionUi,
+  const recordPurchaseView = usePurchaseExposure(
+    false,
     source,
     data?.current?.planId ?? 'unknown',
     'storefront',
@@ -213,6 +213,7 @@ export function StorefrontPanel({
     <>
       <StorefrontPlans
         data={data}
+        onPurchaseOptionsRendered={recordPurchaseView}
         loading={loading}
         failed={failed}
         busyPriceId={busyPriceId}

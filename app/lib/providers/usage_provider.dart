@@ -218,7 +218,9 @@ class UsageProvider with ChangeNotifier {
       );
     }
 
-    final chatReached = !chatQuotaAllowed;
+    // The subscription's capture answer identifies a shared-budget refusal.
+    // That same budget must not also be reported as an independent chat cap.
+    final chatReached = !chatQuotaAllowed && allowance?.reason != 'usage_budget_exhausted';
     if (!chatReached) {
       _reportedChatAllowance = null;
     } else if (_reportedChatAllowance != 'chat_quota_exhausted') {

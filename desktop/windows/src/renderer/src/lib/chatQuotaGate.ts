@@ -123,10 +123,15 @@ export function createChatQuotaGate(
   let lastSyncAt = 0
 
   const applyQuota = (next: ChatUsageQuota): void => {
-    telemetry.allowance(next.allowed === false, {
+    telemetry.allowance(next.allowed === false && next.uses_shared_budget !== true, {
       allowance_kind: 'chat',
       surface: 'chat',
       reason: 'chat_quota_exhausted'
+    })
+    telemetry.allowance(next.allowed === false && next.uses_shared_budget === true, {
+      allowance_kind: 'usage_budget',
+      surface: 'chat',
+      reason: 'budget_exhausted'
     })
     quota = next
     optimisticDelta = 0

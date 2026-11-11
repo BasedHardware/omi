@@ -2,9 +2,12 @@ import { defineConfig, type Plugin } from 'vitest/config'
 import { dirname, resolve } from 'path'
 
 // Unit tests never inherit service endpoints or Firebase identity from a developer .env.
+const liveE2E = process.env.OMI_E2E === '1'
 const testApiBase = 'http://127.0.0.1:9'
-process.env.VITE_OMI_API_BASE = testApiBase
-process.env.VITE_OMI_DESKTOP_API_BASE = testApiBase
+if (!liveE2E) {
+  process.env.VITE_OMI_API_BASE = testApiBase
+  process.env.VITE_OMI_DESKTOP_API_BASE = testApiBase
+}
 
 // electron-vite's `?asset` imports (a file path resolved at build time) don't
 // exist in plain vitest. Resolve them to the real on-disk source path so
@@ -36,14 +39,16 @@ export default defineConfig({
     }
   },
   test: {
-    setupFiles: [resolve(__dirname, 'test/hermeticSetup.ts')],
-    env: {
-      VITE_OMI_API_BASE: testApiBase,
-      VITE_OMI_DESKTOP_API_BASE: testApiBase,
-      VITE_FIREBASE_API_KEY: 'test-firebase-api-key',
-      VITE_FIREBASE_AUTH_DOMAIN: 'test.firebaseapp.com',
-      VITE_FIREBASE_PROJECT_ID: 'test-project'
-    },
+    setupFiles: liveE2E ? [] : [resolve(__dirname, 'test/hermeticSetup.ts')],
+    env: liveE2E
+      ? {}
+      : {
+          VITE_OMI_API_BASE: testApiBase,
+          VITE_OMI_DESKTOP_API_BASE: testApiBase,
+          VITE_FIREBASE_API_KEY: 'test-firebase-api-key',
+          VITE_FIREBASE_AUTH_DOMAIN: 'test.firebaseapp.com',
+          VITE_FIREBASE_PROJECT_ID: 'test-project'
+        },
     environment: 'node',
     // .tsx suites opt into jsdom per-file via `// @vitest-environment jsdom`.
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs']

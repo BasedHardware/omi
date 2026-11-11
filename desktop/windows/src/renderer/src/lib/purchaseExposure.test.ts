@@ -182,3 +182,38 @@ it.each(['cancel', 'closed', 'error', 'unopened'] as const)(
     expect(names()).not.toContain('Subscription Checkout Completed')
   }
 )
+
+it('shared-budget and chat refusals have separate labels and rearm on kind changes and recovery', async () => {
+  const { createChatQuotaGate } = await import('./chatQuotaGate')
+  const gate = createChatQuotaGate(vi.fn())
+  const snapshot: ChatUsageQuota = {
+    allowed: false,
+    plan: 'plus',
+    plan_type: 'paid',
+    unit: 'questions',
+    used: 1,
+    limit: 1
+  }
+  const apply = (shared: boolean, allowed = false) => {
+    gate.applyQuota({ ...snapshot, uses_shared_budget: shared, allowed })
+    expect(gate.authoritativeLimitReached()).toBe(!allowed)
+  }
+  apply(true)
+  apply(true)
+  apply(false)
+  apply(false)
+  apply(true)
+  apply(true, true)
+  apply(true)
+  const events = fetchMock.mock.calls
+    .map((call) => JSON.parse(String((call[1] as RequestInit).body)))
+    .filter((event) => event.event === 'Subscription Allowance Reached')
+  expect(events.map((event) => [event.properties.allowance_kind, event.properties.reason])).toEqual(
+    [
+      ['usage_budget', 'budget_exhausted'],
+      ['chat', 'chat_quota_exhausted'],
+      ['usage_budget', 'budget_exhausted'],
+      ['usage_budget', 'budget_exhausted']
+    ]
+  )
+})

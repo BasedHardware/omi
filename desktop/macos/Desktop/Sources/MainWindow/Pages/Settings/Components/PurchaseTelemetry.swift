@@ -8,8 +8,8 @@ final class PurchaseObservation {
   private var viewed = false
   private var active: Set<String> = []
   init(sink: @escaping Sink) { self.sink = sink }
-  func view(_ raw: [String: String]) {
-    guard !viewed else { return }
+  func view(_ raw: [String: String], enabled: Bool = true) {
+    guard enabled, !viewed else { return }
     viewed = true
     sink(.paywallViewed, PurchaseContract.properties(.paywallViewed, raw))
   }
@@ -23,6 +23,13 @@ final class PurchaseObservation {
     }
     guard active.insert(key).inserted else { return }
     sink(event, raw)
+  }
+  /// Rendered hard block, including a warning that becomes blocked while mounted.
+  /// Optimistic refusal is presentation evidence only, with an unknown server cause.
+  func chatBlock(shown: Bool, authoritative: Bool) {
+    allowance(
+      shown, kind: "chat", surface: "chat",
+      reason: authoritative ? "chat_quota_exhausted" : "unknown", block: true)
   }
   /// Called only by a mounted usage-limit popup. Presentation is independent of server reach.
   func usageLimitBlock(reason: String, chatAuthoritative: Bool) {

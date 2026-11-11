@@ -263,6 +263,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
         ),
       ),
     ).withPurchaseExposure(
+      enabled: !_loading && !_done && _usablePreview(_offer) && (_offer?.priceId?.trim().isNotEmpty ?? false),
       source: 'plans_yearly_switch',
       surface: PaywallViewedSurface.yearlySwitch,
     );

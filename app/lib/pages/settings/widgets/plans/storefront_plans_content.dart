@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/utils/analytics/purchase_exposure.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -17,6 +19,7 @@ class StorefrontPlansContent extends StatefulWidget {
     this.busy = false,
     this.livePlan,
     this.cancelScheduled = false,
+    this.purchaseExposureSource,
     required this.onRetry,
     required this.onSelect,
     required this.onManage,
@@ -28,6 +31,9 @@ class StorefrontPlansContent extends StatefulWidget {
   final bool busy;
   final PlanType? livePlan;
   final bool cancelScheduled;
+
+  /// The host opts in; the render branch below owns eligibility and the mount latch.
+  final String? purchaseExposureSource;
   final Future<void> Function() onRetry;
   final Future<void> Function(StorefrontTier tier, StorefrontPrice price) onSelect;
   final Future<void> Function() onManage;
@@ -61,6 +67,25 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
   Widget build(BuildContext context) {
     final data = widget.storefront;
     if (data != null) _applyInitialInterval(data);
+    final content = _content(context);
+    final source = widget.purchaseExposureSource;
+    return source == null
+        ? content
+        : content.withPurchaseExposure(
+            source: source,
+            surface: PaywallViewedSurface.storefront,
+            currentPlan: widget.livePlan?.wireName ?? 'unknown',
+            enabled: !widget.loading &&
+                !widget.failed &&
+                data?.showSubscriptionUi == true &&
+                data != null &&
+                data.current?.legacy != true &&
+                _hasRenderedPurchaseOptions(data),
+          );
+  }
+
+  Widget _content(BuildContext context) {
+    final data = widget.storefront;
     if (data != null && !data.showSubscriptionUi) return const SizedBox.shrink();
     final legacy = data?.current?.legacy == true;
     return SizedBox(
@@ -114,15 +139,43 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
     );
   }
 
-  List<Widget> _plans(PlanStorefront data) {
+  ({List<StorefrontTier> primary, List<StorefrontTier> rest, String interval}) _tierGroups(PlanStorefront data) {
     final cancelScheduled = _cancelScheduled(data);
     final tiers = _orderedTiers(data.tiers, cancelScheduled);
     final primary = cancelScheduled
         ? tiers.where((tier) => tier.isCurrent || tier.prices.isNotEmpty).toList()
         : tiers.where((tier) => tier.recommended || tier.isCurrent).toList();
     final primaryIds = primary.map((tier) => tier.tierId).toSet();
-    final rest = tiers.where((tier) => !primaryIds.contains(tier.tierId)).toList();
-    final interval = cancelScheduled ? (data.current?.interval ?? 'month') : _interval;
+    return (
+      primary: primary,
+      rest: tiers.where((tier) => !primaryIds.contains(tier.tierId)).toList(),
+      interval: cancelScheduled ? (data.current?.interval ?? 'month') : _interval
+    );
+  }
+
+  StorefrontCheckoutDecision _decision(StorefrontTier tier, StorefrontPrice price, PlanStorefront data) =>
+      storefrontCheckoutDecision(data.current, widget.livePlan, tier, price,
+          usageLegacy: data.usage?.kind == 'transcription',
+          cancelScheduled: _cancelScheduled(data),
+          showSubscriptionUi: data.showSubscriptionUi);
+
+  bool _hasRenderedPurchaseOptions(PlanStorefront data) {
+    final groups = _tierGroups(data);
+    final visible = [...groups.primary, if (_allPlansExpanded) ...groups.rest];
+    return visible.any((tier) {
+      final price = _offeredPrice(tier, groups.interval);
+      return tier.blockedLine == null &&
+          price != null &&
+          storefrontActionLabel(tier: tier, price: price, decision: _decision(tier, price, data)) != null;
+    });
+  }
+
+  List<Widget> _plans(PlanStorefront data) {
+    final cancelScheduled = _cancelScheduled(data);
+    final groups = _tierGroups(data);
+    final primary = groups.primary;
+    final rest = groups.rest;
+    final interval = groups.interval;
     // A null yearly label means the backend is not offering an interval choice.
     final showIntervalToggle = !cancelScheduled && data.yearlyToggleLabel != null;
     return [
@@ -175,17 +228,7 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
   Widget _tierCard(StorefrontTier tier, PlanStorefront storefront, String interval) {
     final cancelScheduled = _cancelScheduled(storefront);
     final price = _offeredPrice(tier, interval);
-    final decision = price == null
-        ? StorefrontCheckoutDecision.refuse
-        : storefrontCheckoutDecision(
-            storefront.current,
-            widget.livePlan,
-            tier,
-            price,
-            usageLegacy: storefront.usage?.kind == 'transcription',
-            cancelScheduled: cancelScheduled,
-            showSubscriptionUi: storefront.showSubscriptionUi,
-          );
+    final decision = price == null ? StorefrontCheckoutDecision.refuse : _decision(tier, price, storefront);
     final cta = price == null ? null : storefrontActionLabel(tier: tier, price: price, decision: decision);
     final blocked = tier.blockedLine;
     final highlight = tier.recommended && !cancelScheduled;

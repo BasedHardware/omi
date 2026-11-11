@@ -1,3 +1,12 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/plan_storefront_api.dart';
+import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/ui/components/omi_locked_preview.dart';
@@ -19,10 +28,12 @@ import 'package:omi/utils/analytics/purchase_exposure.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import '../support/recording_analytics.dart';
 
-UserSubscriptionResponse snapshot({bool paid = false, String reason = 'plan_within_allowance'}) =>
+UserSubscriptionResponse snapshot(
+        {bool paid = false, String reason = 'plan_within_allowance', bool chatAllowed = true}) =>
     UserSubscriptionResponse(
         subscription:
             Subscription(plan: paid ? PlanType.unlimitedV2 : PlanType.basic, status: SubscriptionStatus.active),
+        chatQuotaAllowed: chatAllowed,
         transcriptionSecondsUsed: 0,
         transcriptionSecondsLimit: 100,
         wordsTranscribedUsed: 0,
@@ -37,6 +48,46 @@ class _FailingCheckoutUsage extends UsageProvider {
   Future<Map<String, dynamic>?> createUserCheckoutSession(
           {required String priceId, String? promotionCode, int? trialDays}) async =>
       null;
+}
+
+class _StorefrontUsage extends UsageProvider {
+  @override
+  Future<void> loadAvailablePlans() async {}
+}
+
+class _StorefrontApi extends PlanStorefrontApi {
+  _StorefrontApi(this.response) : super(baseUrl: 'http://127.0.0.1:9/');
+  final Future<ApiResult<PlanStorefront>> Function() response;
+  @override
+  Future<ApiResult<PlanStorefront>> load({required String source, String trigger = '', required String locale}) =>
+      response();
+}
+
+class _StorefrontHost extends StatefulWidget {
+  const _StorefrontHost(this.api, {this.initial});
+  final PlanStorefrontApi api;
+  final PlanStorefront? initial;
+  @override
+  State<_StorefrontHost> createState() => _StorefrontHostState();
+}
+
+class _StorefrontHostState extends State<_StorefrontHost> with TickerProviderStateMixin {
+  late final animation = AnimationController(vsync: this);
+  @override
+  void dispose() {
+    animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => PlansSheet(
+      waveController: animation,
+      notesController: animation,
+      arrowController: animation,
+      arrowAnimation: animation,
+      storefrontApi: widget.api,
+      initialStorefront: widget.initial,
+      readStorefrontGate: () async => true);
 }
 
 void main() {
@@ -79,6 +130,153 @@ void main() {
     expect(recording.propertiesOf('Subscription Paywall Viewed'), hasLength(2));
   });
 
+  wire.GeneratedYearlySwitchResponse yearlyOffer({String? price = 'fixture', bool eligible = true}) =>
+      wire.GeneratedYearlySwitchResponse(
+          eligible: eligible,
+          reason: 'eligible',
+          planId: 'unlimited_v2',
+          priceId: price,
+          currency: 'usd',
+          amountDueToday: 100,
+          yearlyAmount: 30000,
+          renewsAt: 1900000000,
+          prorationDate: 1800000000);
+
+  Widget yearlyHost(YearlySwitchLoader load) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
+      home: Scaffold(body: YearlySwitchSheet(surface: YearlySwitchSurface.plans, load: load)));
+
+  testWidgets('yearly preview waits for a valid rendered offer and counts once', (tester) async {
+    final response = Completer<wire.GeneratedYearlySwitchResponse?>();
+    await tester.pumpWidget(yearlyHost(({bool preview = false}) => response.future));
+    await flush();
+    expect(find.byKey(const Key('yearly_switch_loading')), findsOneWidget);
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), isEmpty);
+    response.complete(yearlyOffer());
+    await tester.pump();
+    await tester.pump();
+    await flush();
+    expect(find.byKey(const Key('yearly_switch_preview')), findsOneWidget);
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), hasLength(1));
+    await tester.pump();
+    await flush();
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('yearly error, refused and missing price never expose a purchase offer', (tester) async {
+    for (final offer in [
+      null,
+      yearlyOffer(eligible: false),
+      yearlyOffer(price: null),
+      yearlyOffer(price: ''),
+      yearlyOffer(price: '  ')
+    ]) {
+      await tester.pumpWidget(yearlyHost(({bool preview = false}) async => offer));
+      await tester.pump();
+      await tester.pump();
+      await flush();
+      expect(recording.propertiesOf('Subscription Paywall Viewed'), isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
+  Map<String, dynamic> storefrontJson() =>
+      jsonDecode(File('test/fixtures/storefront_v2/single_plan_omi_pro.json').readAsStringSync())
+          as Map<String, dynamic>;
+
+  Future<void> storefrontHost(WidgetTester tester, PlanStorefrontApi api, {PlanStorefront? initial}) async {
+    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final usage = _StorefrontUsage();
+    addTearDown(usage.dispose);
+    usage.debugSetSubscription(snapshot());
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: const [Locale('en')],
+            home: Scaffold(body: _StorefrontHost(api, initial: initial)))));
+    await tester.pump();
+    await tester.pump();
+  }
+
+  testWidgets('storefront loading does not consume the eventual offer view', (tester) async {
+    final response = Completer<ApiResult<PlanStorefront>>();
+    await storefrontHost(tester, _StorefrontApi(() => response.future));
+    await flush();
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), isEmpty);
+    response.complete(ApiSuccess(PlanStorefront.fromJson(storefrontJson())));
+    await tester.pump();
+    await tester.pump();
+    await flush();
+    expect(find.byKey(const Key('storefront_buy_unlimited_v2')), findsOneWidget);
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), hasLength(1));
+    await tester.pump();
+    await flush();
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('storefront failure, hidden, empty, legacy and invalid offers never count', (tester) async {
+    for (final state in ['failure', 'hidden', 'empty', 'legacy', 'invalid']) {
+      final json = storefrontJson();
+      if (state == 'hidden') json['show_subscription_ui'] = false;
+      if (state == 'empty') json['tiers'] = [];
+      if (state == 'legacy') {
+        json['current']['legacy'] = true;
+        json['current']['legacy_note'] = 'Legacy plan';
+      }
+      if (state == 'invalid') {
+        for (final tier in json['tiers']) {
+          for (final price in tier['prices']) {
+            price['price_id'] = null;
+          }
+        }
+      }
+      await storefrontHost(
+          tester,
+          _StorefrontApi(() async => state == 'failure'
+              ? const ApiFailure(ApiProblem(ApiProblemKind.transport))
+              : ApiSuccess(PlanStorefront.fromJson(json))));
+      await tester.pump();
+      await tester.pump();
+      await flush();
+      expect(recording.propertiesOf('Subscription Paywall Viewed'), isEmpty, reason: state);
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
+  testWidgets('collapsed and unselected storefront offers wait until actually rendered', (tester) async {
+    final json = storefrontJson();
+    json['tiers'][0]['recommended'] = false;
+    for (final price in json['tiers'][0]['prices']) {
+      if (price['interval'] == 'month') price['price_id'] = null;
+    }
+    final data = PlanStorefront.fromJson(json);
+    await storefrontHost(tester, _StorefrontApi(() async => ApiSuccess(data)), initial: data);
+    await flush();
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), isEmpty);
+    await tester.tap(find.byKey(const Key('storefront_other_plans')));
+    await tester.pumpAndSettle();
+    await flush();
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), isEmpty);
+    await tester.tap(find.byKey(const Key('storefront_year')));
+    await tester.pumpAndSettle();
+    await flush();
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), hasLength(1));
+    await tester.tap(find.byKey(const Key('storefront_month')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('storefront_year')));
+    await tester.pumpAndSettle();
+    await flush();
+    expect(recording.propertiesOf('Subscription Paywall Viewed'), hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('block shows once across rebuilds and rearms only after hidden state', (tester) async {
     Widget block(bool shown) => AllowanceBlockShownOnce(
         kind: 'chat', surface: 'chat', reason: 'chat_quota_exhausted', shown: shown, child: const SizedBox());
@@ -116,6 +314,33 @@ void main() {
     expect(
         recording.propertiesOf('Subscription Allowance Reached').last, containsPair('allowance_kind', 'usage_budget'));
     expect(recording.propertiesOf('Subscription Allowance Reached').last, containsPair('reason', 'budget_exhausted'));
+  });
+
+  test('shared budget emits once without a false chat cap and rearms after kind changes and recovery', () async {
+    final usage = UsageProvider();
+    addTearDown(usage.dispose);
+    void apply(String reason, {bool chatAllowed = false}) =>
+        usage.debugSetSubscription(snapshot(reason: reason, chatAllowed: chatAllowed));
+    apply('usage_budget_exhausted');
+    apply('usage_budget_exhausted');
+    await flush();
+    expect(recording.propertiesOf('Subscription Allowance Reached').map((e) => e['allowance_kind']), ['usage_budget']);
+    apply('plan_allowance_exhausted'); // Distinct capture and chat allowances are real.
+    apply('plan_allowance_exhausted');
+    apply('usage_budget_exhausted');
+    apply('plan_within_allowance', chatAllowed: true);
+    apply('usage_budget_exhausted');
+    await flush();
+    expect(recording.propertiesOf('Subscription Allowance Reached').map((e) => e['allowance_kind']),
+        ['usage_budget', 'transcription', 'chat', 'usage_budget', 'usage_budget']);
+    expect(recording.propertiesOf('Subscription Allowance Reached').map((e) => e['reason']), [
+      'budget_exhausted',
+      'plan_allowance_exhausted',
+      'chat_quota_exhausted',
+      'budget_exhausted',
+      'budget_exhausted'
+    ]);
+    expect(recording.propertiesOf('Subscription Allowance Block Shown'), isEmpty);
   });
 
   test('restore results use fresh server outcome, never stale paid state', () async {

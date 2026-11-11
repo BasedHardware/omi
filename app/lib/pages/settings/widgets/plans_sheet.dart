@@ -805,6 +805,7 @@ class _PlansSheetState extends State<PlansSheet> {
         if (_storefrontEnabled) {
           return StorefrontPlansContent(
             storefront: _storefront,
+            purchaseExposureSource: widget.analyticsSource,
             loading: _storefrontLoading,
             failed: _storefrontFailed,
             busy: _isUpgrading,
@@ -814,12 +815,6 @@ class _PlansSheetState extends State<PlansSheet> {
             onSelect: _selectStorefrontPrice,
             onManage: _openPaymentPortal,
           )
-              .withPurchaseExposure(
-                enabled: _storefrontGateResolved,
-                source: widget.analyticsSource,
-                surface: PaywallViewedSurface.storefront,
-                currentPlan: provider.subscription?.subscription.plan.wireName ?? 'unknown',
-              )
               .withAllowanceBlock(
                   kind: 'usage_budget',
                   surface: 'storefront',

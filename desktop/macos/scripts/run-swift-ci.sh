@@ -77,6 +77,7 @@ case "${1:-}" in
     [ "$#" -eq 1 ] || usage
     select_toolchain
     cd "$MACOS_DIR"
+    bash "$MACOS_DIR/tests/purchase-exposure/run.sh"
     OMI_SWIFT_TEST_SUITE_WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-4}" \
       "$SCRIPT_DIR/swift-test-suites.sh"
     ;;

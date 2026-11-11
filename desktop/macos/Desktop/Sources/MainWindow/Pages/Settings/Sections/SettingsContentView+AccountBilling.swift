@@ -401,7 +401,7 @@ extension SettingsContentView {
     }
     .purchaseExposure(
       source: "macos_settings_view", currentPlan: userSubscription?.subscription.plan.rawValue ?? "unknown",
-      surface: "settings_plans", enabled: !PlanStorefrontGate.sheetEnabled
+      surface: "settings_plans", enabled: !PlanStorefrontGate.sheetEnabled && shouldShowPlanPurchaseOptions
     )
     .onAppear {
       // The plan grid is part of this settings section, so this is a settings

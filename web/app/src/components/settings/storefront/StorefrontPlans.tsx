@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertCircle, CreditCard, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -25,6 +25,8 @@ import {
  */
 export interface StorefrontPlansProps {
   data: PlanStorefront | null;
+  /** Telemetry only, after a selectable option commits; host owns the mount latch. */
+  onPurchaseOptionsRendered?: () => void;
   loading?: boolean;
   failed?: boolean;
   /** Price id whose purchase is in flight; every button is disabled meanwhile. */
@@ -38,6 +40,7 @@ export interface StorefrontPlansProps {
 
 export function StorefrontPlans({
   data,
+  onPurchaseOptionsRendered,
   loading = false,
   failed = false,
   busyPriceId = null,
@@ -102,6 +105,7 @@ export function StorefrontPlans({
       ) : legacy ? null : (
         <TierList
           data={data}
+          onPurchaseOptionsRendered={onPurchaseOptionsRendered}
           busyPriceId={busyPriceId}
           livePlanId={livePlanId}
           onSelect={onSelect}
@@ -131,11 +135,13 @@ export function StorefrontPlans({
 
 function TierList({
   data,
+  onPurchaseOptionsRendered,
   busyPriceId,
   livePlanId,
   onSelect,
 }: {
   data: PlanStorefront;
+  onPurchaseOptionsRendered?: () => void;
   busyPriceId: string | null;
   livePlanId?: string | null;
   onSelect: StorefrontPlansProps['onSelect'];
@@ -147,6 +153,17 @@ function TierList({
   const selected = cancelScheduled ? data.current?.interval ?? 'month' : chosen;
   const { primary, rest } = partitionTiers(data);
   const showToggle = !cancelScheduled && data.yearlyToggleLabel !== null;
+  const visibleTiers = [...primary, ...(expanded ? rest : [])];
+  const hasPurchaseOptions = visibleTiers.some((tier) => {
+    const price = offeredPrice(tier, selected);
+    const decision = price
+      ? storefrontCheckoutDecision(data, tier, price, livePlanId)
+      : 'refuse';
+    return !tier.blockedLine && !!price && !!storefrontActionLabel(tier, price, decision);
+  });
+  useEffect(() => {
+    if (hasPurchaseOptions) onPurchaseOptionsRendered?.();
+  }, [hasPurchaseOptions, onPurchaseOptionsRendered]);
 
   const card = (tier: PlanStorefrontTier) => (
     <TierCard
