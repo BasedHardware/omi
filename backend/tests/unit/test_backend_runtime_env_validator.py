@@ -3701,6 +3701,73 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
     assert generated['surfaces']['runtime/prod/cloud_run/services/backend']['effective']['batch_timeliness_leader'] == 0
 
 
+@pytest.mark.parametrize('lever', ['memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries', 'all'])
+@pytest.mark.parametrize('source', ['readme', 'base'])
+def test_read_lever_manifest_rejects_silently_resolved_readme_discrepancy(tmp_path, lever, source):
+    levers = read_lever_manifest.README_TRAIN_LEVERS if lever == 'all' else (lever,)
+    kwargs = {}
+    if source == 'readme':
+        target = tmp_path / 'README.md'
+        text = (ROOT / 'deploy/runtime_env/README.md').read_text()
+        for key in levers:
+            text = text.replace(f'`{key}:0`', f'`{key}:100`')
+        kwargs['readme_path'] = target
+    else:
+        target = tmp_path / '_base.yaml'
+        text = read_lever_manifest.composer.DEFAULT_BASE.read_text()
+        for key in levers:
+            text = text.replace(f'"{key}":100', f'"{key}":0')
+        kwargs['base_path'] = target
+    target.write_text(text)
+    # Real file extraction must detect resolution from either source, including
+    # partial resolution of the triple, even though the unchanged note remains.
+    with pytest.raises(ValueError, match='README and base now agree.*stale UNRESOLVED'):
+        read_lever_manifest.build_manifest(today=date(2026, 11, 11), **kwargs)
+
+
+def test_read_lever_manifest_rejects_missing_note_while_readme_disagrees(monkeypatch):
+    notes = [
+        note
+        for note in read_lever_manifest.UNRESOLVED_NOTES
+        if not note.startswith(read_lever_manifest.README_TRIPLE_NOTE_PREFIX)
+    ]
+    monkeypatch.setattr(read_lever_manifest, 'UNRESOLVED_NOTES', notes)
+    with pytest.raises(ValueError, match='source disagreement requires its UNRESOLVED note'):
+        read_lever_manifest.build_manifest(today=date(2026, 11, 11))
+
+
+@pytest.mark.parametrize('lever', ['memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries'])
+@pytest.mark.parametrize('mutation', ['missing', 'duplicate'])
+def test_read_lever_readme_comparison_rejects_missing_or_ambiguous_claims(tmp_path, lever, mutation):
+    target = tmp_path / 'README.md'
+    text = (ROOT / 'deploy/runtime_env/README.md').read_text()
+    claim = f'`{lever}:0`'
+    text = text.replace(claim, lever if mutation == 'missing' else f'{claim} {claim}')
+    target.write_text(text)
+    with pytest.raises(ValueError, match=f'exactly one historical train claim for {lever}'):
+        read_lever_manifest.build_manifest(today=date(2026, 11, 11), readme_path=target)
+
+
+def test_read_lever_evidence_metadata_lives_only_in_generator(read_lever_sources):
+    base = read_lever_manifest.composer._load_yaml(read_lever_manifest.composer.DEFAULT_BASE)
+    assert set(base[read_lever_manifest.POLICY_KEY]) == {'lever_expiry'}
+    policy, _, _ = read_lever_sources
+    assert policy['reviewed_inheritance'] == read_lever_manifest.REVIEWED_INHERITANCE
+    assert policy['unresolved_notes'] == read_lever_manifest.UNRESOLVED_NOTES
+    generated = read_lever_manifest.build_manifest(today=date(2026, 11, 11))
+    assert generated['notes'] == read_lever_manifest.UNRESOLVED_NOTES
+    for surface, annotation in read_lever_manifest.REVIEWED_INHERITANCE.items():
+        assert generated['surfaces'][surface]['inheritance'] == annotation
+
+
+@pytest.mark.parametrize('key', ['reviewed_inheritance', 'unresolved_notes'])
+def test_read_lever_policy_rejects_evidence_metadata_in_base(tmp_path, key):
+    target = tmp_path / '_base.yaml'
+    target.write_text(read_lever_manifest.composer.DEFAULT_BASE.read_text() + f'  {key}: {{}}\n')
+    with pytest.raises(ValueError, match='firestore_read_lever_policy must contain only lever_expiry'):
+        read_lever_manifest.collect_sources(base_path=target)
+
+
 @pytest.mark.parametrize('days', [0, 7])
 def test_read_lever_expiry_accepts_only_matching_bounded_approvals(days):
     expiry = {

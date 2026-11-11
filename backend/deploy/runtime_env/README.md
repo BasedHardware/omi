@@ -146,10 +146,15 @@ No broad exception grants expiry coverage to another surface or percentage.
 
 UNRESOLVED: chart-vs-CR `batch_timeliness_leader`: worker chart `{}` inherits
 100 from `DEFAULT_PERCENTAGES`; prod Cloud Run literals explicitly carry 0.
-The reviewed inheritance allowlist preserves `{}` on default/dev/prod worker
-surfaces and annotates the generated differences. It does not resolve them.
+The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev/prod
+worker surfaces and annotates the generated differences. It does not resolve them.
 
 UNRESOLVED: README-vs-base triple: `memory_list_index_window`,
 `people_scan_dedupe`, and `finjob_candidate_queries` are documented as 0 in the
 historical train text above, while `_base.yaml` carries 100. Both source claims
-are preserved pending a human ruling; the generated notes record the disagreement.
+are preserved pending a human ruling. The generator's `UNRESOLVED_NOTES` constant
+supplies the manifest notes; neither evidence structure lives in `_base.yaml`,
+whose `firestore_read_lever_policy` contains only `lever_expiry`. The offline guard
+extracts each historical train claim and compares it with every base declaration.
+It rejects missing or ambiguous claims, agreement with a stale UNRESOLVED note,
+and a missing note while the sources disagree.

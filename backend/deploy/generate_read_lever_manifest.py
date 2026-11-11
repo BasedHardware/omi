@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any, Iterator
 
@@ -21,6 +23,49 @@ from scripts.runtime_env_validation.common import _literal_env_value  # noqa: E4
 OUTPUT = BACKEND / 'deploy/firestore_read_levers_manifest.json'
 POLICY_KEY = 'firestore_read_lever_policy'
 CHARTS = ('batch-pipeline-worker', 'backend-listen', 'pusher')
+
+# Reviewed source-preservation evidence belongs to this offline generator, not runtime config.
+REVIEWED_INHERITANCE = {
+    'chart/default/batch-pipeline-worker': {
+        'reason': 'intentionally inherits code defaults',
+        'status': 'UNRESOLVED',
+        'reviewed_by': 'lead2 e34fb4; David 9f4a0b4c (source preservation, not resolution)',
+        'comparison_surface': 'runtime/prod/cloud_run/services/backend',
+        'notes': 'UNRESOLVED: chart-vs-CR batch_timeliness_leader: worker chart '
+        '{} inherits 100; prod Cloud Run literals explicitly carry 0. '
+        'Preserve the difference pending human ruling; other inherited '
+        'differences are enumerated, not normalized.',
+    },
+    'chart/dev/batch-pipeline-worker': {
+        'reason': 'intentionally inherits code defaults',
+        'status': 'UNRESOLVED',
+        'reviewed_by': 'lead2 e34fb4; David 9f4a0b4c (source preservation, not resolution)',
+        'comparison_surface': 'runtime/dev/cloud_run/services/backend',
+        'notes': 'UNRESOLVED: chart-vs-CR batch_timeliness_leader: worker chart {} '
+        'inherits 100; prod Cloud Run literals explicitly carry 0. Preserve '
+        'the difference pending human ruling; other inherited differences '
+        'are enumerated, not normalized.',
+    },
+    'chart/prod/batch-pipeline-worker': {
+        'reason': 'intentionally inherits code defaults',
+        'status': 'UNRESOLVED',
+        'reviewed_by': 'lead2 e34fb4; David 9f4a0b4c (source preservation, not resolution)',
+        'comparison_surface': 'runtime/prod/cloud_run/services/backend',
+        'notes': 'UNRESOLVED: chart-vs-CR batch_timeliness_leader: worker chart {} '
+        'inherits 100; prod Cloud Run literals explicitly carry 0. '
+        'Preserve the difference pending human ruling; other inherited '
+        'differences are enumerated, not normalized.',
+    },
+}
+UNRESOLVED_NOTES = [
+    'UNRESOLVED: chart-vs-CR batch_timeliness_leader: worker chart {} inherits 100 from DEFAULT_PERCENTAGES; prod '
+    'Cloud Run literals explicitly carry 0. No common value chosen.',
+    'UNRESOLVED: README-vs-base triple: memory_list_index_window/people_scan_dedupe/finjob_candidate_queries are '
+    'documented as 0 in runtime_env/README.md but _base.yaml carries 100. Neither source is selected as authority; '
+    'human ruling required.',
+]
+README_TRAIN_LEVERS = ('memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries')
+README_TRIPLE_NOTE_PREFIX = 'UNRESOLVED: README-vs-base triple:'
 
 
 def parse_levers(raw: str, surface: str) -> dict[str, int]:
@@ -116,7 +161,18 @@ def collect_sources(
             # Validate overlay literals independently too (including any future knob).
             if chart != 'batch-pipeline-worker' or 'firestoreReadLevers' in overlay.get('worker', {}):
                 parse_levers(chart_literal(overlay), f'{surface} overlay')
-    return base[POLICY_KEY], sources, expected
+    policy = base[POLICY_KEY]
+    if set(policy) != {'lever_expiry'}:
+        raise ValueError(f'{POLICY_KEY} must contain only lever_expiry')
+    return (
+        {
+            **policy,
+            'reviewed_inheritance': deepcopy(REVIEWED_INHERITANCE),
+            'unresolved_notes': list(UNRESOLVED_NOTES),
+        },
+        sources,
+        expected,
+    )
 
 
 def expiry_errors(sources: dict[str, dict[str, int]], expiry: dict, *, today: date) -> list[str]:
@@ -198,10 +254,42 @@ def parity_errors(sources: dict[str, dict[str, int]], expected: dict[str, dict[s
     return errors
 
 
-def build_manifest(*, today: date | None = None, **paths: Any) -> dict:
+def readme_discrepancy_errors(sources: dict[str, dict[str, int]], notes: list[str], readme_path: Path) -> list[str]:
+    """Require actual source disagreement and its unresolved annotation together."""
+    sections = re.findall(
+        r'^## Firestore read train[^\n]*\n(.*?)(?=^## |\Z)', readme_path.read_text(), flags=re.MULTILINE | re.DOTALL
+    )
+    if len(sections) != 1:
+        return ['README-vs-base triple: expected exactly one historical Firestore read train section']
+    claims = {}
+    for lever in README_TRAIN_LEVERS:
+        values = re.findall(rf'`{lever}:(0|[1-9]\d?|100)`', sections[0])
+        if len(values) != 1:
+            return [f'README-vs-base triple: expected exactly one historical train claim for {lever}']
+        claims[lever] = int(values[0])
+    base_sources = {surface: values for surface, values in sources.items() if surface.startswith('base/')}
+    if not base_sources:
+        return ['README-vs-base triple: missing base declarations']
+    errors = []
+    for surface, values in base_sources.items():
+        for lever, claim in claims.items():
+            if lever not in values:
+                errors.append(f'{surface}/{lever}: missing explicit base declaration for README comparison')
+            elif values[lever] == claim:
+                errors.append(f'{surface}/{lever}: README and base now agree at {claim}; stale UNRESOLVED discrepancy')
+    matching_notes = [note for note in notes if note.startswith(README_TRIPLE_NOTE_PREFIX)]
+    if len(matching_notes) != 1 or any(lever not in matching_notes[0] for lever in README_TRAIN_LEVERS):
+        errors.append('README-vs-base triple: source disagreement requires its UNRESOLVED note naming all three levers')
+    return errors
+
+
+def build_manifest(
+    *, today: date | None = None, readme_path: Path = composer.RUNTIME_ENV_DIR / 'README.md', **paths: Any
+) -> dict:
     policy, sources, expected = collect_sources(**paths)
     errors = expiry_errors(sources, policy.get('lever_expiry'), today=today or datetime.now(timezone.utc).date())
     errors += parity_errors(sources, expected, policy)
+    errors += readme_discrepancy_errors(sources, policy['unresolved_notes'], readme_path)
     if errors:
         raise ValueError('\n'.join(errors))
     surfaces = {}
