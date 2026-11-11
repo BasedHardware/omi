@@ -19,7 +19,7 @@ PIN_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["
 PIN_BUILD="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build"])' "$PIN_FILE")"
 PIN_APP_NAME="Xcode_${PIN_VERSION}.app"
 
-TMPDIR="$(mktemp -d)"
+TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-swift-ci-test.XXXXXX")"
 cleanup() {
   rm -rf "$TMPDIR"
 }
@@ -27,7 +27,7 @@ trap cleanup EXIT
 
 # The runner resolves the pin file relative to its own location
 # (../ci/xcode-pin.json), so the sandbox mirrors that layout.
-mkdir -p "$TMPDIR/macos/scripts" "$TMPDIR/macos/ci" "$TMPDIR/$PIN_APP_NAME/Contents/Developer/usr/bin" "$TMPDIR/bin"
+mkdir -p "$TMPDIR/macos/scripts" "$TMPDIR/macos/ci" "$TMPDIR/macos/tests/purchase-exposure" "$TMPDIR/$PIN_APP_NAME/Contents/Developer/usr/bin" "$TMPDIR/bin"
 cp "$RUNNER" "$TMPDIR/macos/scripts/run-swift-ci.sh"
 chmod +x "$TMPDIR/macos/scripts/run-swift-ci.sh"
 cp "$PIN_FILE" "$TMPDIR/macos/ci/xcode-pin.json"
@@ -66,22 +66,54 @@ printf '%s|%s\n' "$DEVELOPER_DIR" "$OMI_SWIFT_TEST_SUITE_WORKERS" >> "$FAKE_SUIT
 SH
 chmod +x "$TMPDIR/macos/scripts/swift-test-suites.sh"
 
+# This fixture tests runner orchestration with fake toolchain/test boundaries.
+# Ordinary CI still executes the real purchase-exposure harness through --test.
+cat >"$TMPDIR/macos/tests/purchase-exposure/run.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s|%s|%s\n' "$PWD" "$DEVELOPER_DIR" "$*" >> "$FAKE_PURCHASE_LOG"
+exit "${FAKE_PURCHASE_FAILURE:-0}"
+SH
+
 export PATH="$TMPDIR/bin:$PATH"
 export OMI_SWIFT_CI_XCODE_APP="$TMPDIR/$PIN_APP_NAME"
 export FAKE_XCRUN_LOG="$TMPDIR/xcrun.log"
 export FAKE_RELEASE_BUILD="$TMPDIR/release-build"
 export FAKE_SUITE_LOG="$TMPDIR/suite.log"
+export FAKE_PURCHASE_LOG="$TMPDIR/purchase-exposure.log"
 export GITHUB_ENV="$TMPDIR/github-env"
 
 "$TMPDIR/macos/scripts/run-swift-ci.sh" --select-toolchain
 if ! grep -qx "DEVELOPER_DIR=$TMPDIR/$PIN_APP_NAME/Contents/Developer" "$GITHUB_ENV"; then
   fail "toolchain selection did not export DEVELOPER_DIR for subsequent CI steps"
 fi
+if [ -s "$FAKE_PURCHASE_LOG" ]; then
+  fail "toolchain-only mode must not execute purchase-exposure tests"
+fi
 
 "$TMPDIR/macos/scripts/run-swift-ci.sh" --test
 if ! grep -qx "$TMPDIR/$PIN_APP_NAME/Contents/Developer|4" "$FAKE_SUITE_LOG"; then
   fail "Swift suite did not inherit the selected toolchain and four worker default"
 fi
+if [ "$(wc -l < "$FAKE_PURCHASE_LOG" | tr -d ' ')" -ne 1 ] ||
+  ! grep -Fqx "$TMPDIR/macos|$TMPDIR/$PIN_APP_NAME/Contents/Developer|" "$FAKE_PURCHASE_LOG"; then
+  fail "test mode must run purchase-exposure once, without arguments, in the selected macOS toolchain"
+fi
+
+# A failing required subharness must fail --test before the broader Swift suites.
+: > "$FAKE_PURCHASE_LOG"
+: > "$FAKE_SUITE_LOG"
+: > "$FAKE_XCRUN_LOG"
+purchase_status=0
+FAKE_PURCHASE_FAILURE=37 "$TMPDIR/macos/scripts/run-swift-ci.sh" --test >"$TMPDIR/purchase-failure.out" 2>&1 || purchase_status=$?
+if [ "$purchase_status" -ne 37 ] || [ "$(wc -l < "$FAKE_PURCHASE_LOG" | tr -d ' ')" -ne 1 ]; then
+  fail "runner did not propagate the invoked purchase-exposure harness failure (expected 37, got $purchase_status)"
+fi
+if [ -s "$FAKE_SUITE_LOG" ] || grep -Eq 'swift (build|test) ' "$FAKE_XCRUN_LOG"; then
+  fail "runner continued Swift build/test execution after purchase-exposure failed"
+fi
+echo "purchase-exposure invocation and failure propagation passed (exit $purchase_status; no later Swift suites)"
+: > "$FAKE_PURCHASE_LOG"
 
 # Generated-only PRs compile both targets in one debug build and execute no suites.
 : > "$FAKE_XCRUN_LOG"
@@ -90,7 +122,7 @@ fi
 if ! grep -qx 'swift build -c debug --package-path Desktop --build-tests' "$FAKE_RELEASE_BUILD"; then
   fail "debug app and test targets must compile together"
 fi
-if [ "$(grep -c 'swift build ' "$FAKE_XCRUN_LOG")" -ne 1 ] || grep -q 'swift test ' "$FAKE_XCRUN_LOG" || [ -s "$FAKE_SUITE_LOG" ]; then
+if [ "$(grep -c 'swift build ' "$FAKE_XCRUN_LOG")" -ne 1 ] || grep -q 'swift test ' "$FAKE_XCRUN_LOG" || [ -s "$FAKE_SUITE_LOG" ] || [ -s "$FAKE_PURCHASE_LOG" ]; then
   fail "compile-only mode must invoke one build and no test execution"
 fi
 if FAKE_BUILD_FAILURE=1 "$TMPDIR/macos/scripts/run-swift-ci.sh" --test-compile; then
@@ -154,5 +186,9 @@ if ! grep -q 'missing Xcode pin file' "$TMPDIR/missing-pin.out"; then
   fail "a missing pin file did not produce an actionable error"
 fi
 mv "$PIN_BACKUP" "$TMPDIR/macos/ci/xcode-pin.json"
+
+if [ -s "$FAKE_PURCHASE_LOG" ]; then
+  fail "compile, release-regression and toolchain-only modes must not execute purchase-exposure tests"
+fi
 
 echo "run-swift-ci tests passed (pin $PIN_VERSION/$PIN_BUILD)"
