@@ -178,6 +178,10 @@ def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
     ):
         implementations.update(LEGACY_IMPLEMENTATIONS[feature])
         implementations.update(f'{version}:{routing_digest()}' for version in LEGACY_PROMPT_VERSIONS[feature])
+        dependencies = '|'.join(f'{name}:{version}' for name, version in INSTALLED_DEPENDENCY_VERSIONS)
+        implementations.update(
+            f'{version}:{routing_digest()}:{dependencies}' for version in LEGACY_PROMPT_VERSIONS[feature]
+        )
     return bool(saved) and any(saved == _fingerprint(feature, inputs, item) for item in implementations)
 
 
