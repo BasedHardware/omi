@@ -28,7 +28,7 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from routers.listen.policy import persist_conversation_policy
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
-from utils.executors import start_background_task
+from utils.executors import db_executor, run_blocking, start_background_task
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
@@ -57,6 +57,7 @@ from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.lifecycle_clocks import speech_clock
 from utils.episodes import boundaries, boundary_runtime
+from utils.episodes.batch_close import attach_admitted_batch_capture
 from routers.listen.occasion import occasion_attach_target
 from routers.listen.boundary_poll import poll_calendar, ingest_calendar, conversation_action
 
@@ -761,6 +762,23 @@ class LiveConversationController:
             note_carry = getattr(self.host.speakers, 'note_rollover_carry', None)
             if note_carry is not None:
                 note_carry(carried_ids)
+        if server_batch_owned(self.host.batch_record_capture or {}):
+            # Give the capture its episode now, not at audio close: Home paints a
+            # member from its first appearance instead of a standalone row that
+            # folds in minutes later. Metadata only, fail-open, off this path.
+            # Scheduled after rollover so a deleted loser is never attached.
+            start_background_task(
+                run_blocking(
+                    db_executor,
+                    attach_admitted_batch_capture,
+                    request.uid,
+                    conversation_id,
+                    # The snapshot is eligibility only; the payload carries the
+                    # clocks the admission attach needs to place the member.
+                    {**payload, **(self.host.batch_record_capture or {})},
+                ),
+                name='listen_batch_admission_attach',
+            )
         await self._refresh_speakers(
             conversation_id,
             owner_carry_scope=carry_from[1] if automatic_donor and carry_from else None,
