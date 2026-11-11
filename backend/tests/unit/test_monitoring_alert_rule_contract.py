@@ -1303,6 +1303,10 @@ EXTERNAL_ALERT_METRICS = {
         "prometheus-stackdriver-exporter"
     ),
     "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # Workspace gate runner (infra/metrics/pipeline-census/gate.py) writes a
+    # node_exporter textfile; it is not a backend process.
+    "omi_pipeline_ledger_gate_receipt_generated_at_seconds": "workspace census gate textfile",
+    "omi_pipeline_ledger_gate_verdict": "workspace census gate textfile",
     # Cloud Logging declarations, queried directly through GMP (never the local exporter).
     "logging_googleapis_com:user_omi_pipeline_upload_admission_503": "batch-projection/log-metrics.json",
     "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted": "batch-projection/log-metrics.json",
@@ -1396,8 +1400,11 @@ def _declared_backend_metric_names() -> set[str]:
             registry = CollectorRegistry()
             PhaseMetrics(prefix, ['state'], registry=registry)
             names.update(metric.name for metric in registry.collect())
-        if path == REPO / 'backend/utils/executors.py':
-            # This helper constructs/reuses registered Gauge objects with fixed names.
+        if path in (
+            REPO / 'backend/utils/executors.py',
+            REPO / 'backend/utils/conversations/pipeline_ledger_metrics.py',
+        ):
+            # These helpers construct/reuse registered Gauge objects with fixed names.
             names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
     return names
 
