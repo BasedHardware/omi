@@ -538,7 +538,9 @@ def test_v2_recap_regenerates_in_place_on_revision_and_reuses_unchanged_inputs(n
     monkeypatch.setattr(module, 'release_daily_summary_lock', MagicMock())
     monkeypatch.setattr(module, '_conversation_has_summary_content', lambda *_args: True)
     monkeypatch.setattr(module, 'bound_daily_summary_conversations', lambda _uid, _date, rows: rows)
-    conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='synthetic speech')], discarded=False)
+    conversation = SimpleNamespace(
+        id='synthetic-a', transcript_segments=[SimpleNamespace(text='synthetic speech')], discarded=False
+    )
     monkeypatch.setattr(module, 'deserialize_conversations', lambda *_args: [conversation])
     data = [{'id': 'synthetic-a', 'sync_content_revision': 1}]
     harness.conversations_db.get_conversations.return_value = data

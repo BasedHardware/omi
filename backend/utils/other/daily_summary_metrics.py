@@ -41,6 +41,7 @@ RECIPIENT_OUTCOMES = (
     'selected',
     'generated',
     'generated_retry',
+    'refreshed',
     'failed',
     'timed_out',
     'skipped_budget',
@@ -59,6 +60,7 @@ REFRESH_OUTCOMES = (
     'refresh_skipped_cap',
     'refresh_skipped_unchanged',
     'refresh_conflict',
+    'window_truncated',
 )
 REFRESH = cast(
     Counter, _collector(Counter, 'omi_daily_summary_late_refresh_total', 'Legacy recap refresh outcomes.', ('outcome',))
@@ -66,7 +68,7 @@ REFRESH = cast(
 
 
 def bounded_refresh_outcome(outcome: str) -> str:
-    """Return one of the six refresh labels; reject identities/free text."""
+    """Return one of the closed refresh labels; reject identities/free text."""
     if outcome not in REFRESH_OUTCOMES:
         raise ValueError('unknown daily recap refresh outcome')
     return outcome

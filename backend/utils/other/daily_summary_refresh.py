@@ -2,11 +2,16 @@
 
 import hashlib
 import json
+import math
 from datetime import datetime, timezone
 
-from utils.llm.daily_recap_fingerprint import FINGERPRINT_FIELD, input_fingerprint
-
 FIELD = 'late_input_fingerprint_v1'
+
+
+class RefreshedSummary(dict):
+    """Per-call delivery/metric signal; never persisted as a document flag."""
+
+
 # Generic `revision` is deliberately absent: starring also advances it.
 REVISION_FIELDS = (
     'sync_content_revision',
@@ -53,7 +58,7 @@ def _timestamp(value):
     if isinstance(value, datetime):
         return value.replace(tzinfo=value.tzinfo or timezone.utc).timestamp()
     if isinstance(value, (int, float)):
-        return value
+        return value if math.isfinite(value) else None
     if isinstance(value, str):
         try:
             parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
@@ -65,18 +70,13 @@ def _timestamp(value):
 
 def adoption_needs_repair(existing, rows):
     """Unknown content age is repair debt, not proof that a legacy recap is fresh."""
-    # Surviving input timestamps cannot prove that an older input was not
-    # deleted, discarded or moved away. Only a prior source fingerprint can
-    # establish membership. Unknown legacy membership is bounded repair debt.
-    if existing.get(FINGERPRINT_FIELD) != input_fingerprint(rows):
-        return True
-    generated = _timestamp(existing.get('generated_at') or existing.get('created_at'))
+    generated = _timestamp(existing.get('generated_at'))
     if generated is None:
         return True
     for row in rows:
         completed = _timestamp(row.get('summary_completed_at'))
-        stamps = [_timestamp(row.get(key)) for key in ('created_at', 'finished_at', 'summary_completed_at')]
-        if completed is None or any(stamp is not None and stamp > generated for stamp in stamps):
+        created = _timestamp(row.get('created_at'))
+        if completed is None or created is None or completed > generated or created > generated:
             return True
         # An ordinal cannot be compared to generation wall time. Conservatively
         # repair legacy multi-revision input once, even if its first completion is old.

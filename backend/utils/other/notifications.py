@@ -27,6 +27,8 @@ from utils.executors import db_executor, open_loops_executor, postprocess_execut
 from utils.conversations.relevance_content import exclude_from_derived
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from config.refactor_modes import serving_for, daily_recap_late_input_refresh_enabled
+from utils.llm.daily_recap_fingerprint import FINGERPRINT_FIELD, input_fingerprint
+from utils.llm.notes_refactor_metrics import shadow as record_notes_shadow
 from utils.other import daily_summary_refresh as recap_refresh
 from database import daily_summary_refresh as recap_refresh_db
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
@@ -182,9 +184,23 @@ def _generate_and_store_daily_summary(
     )
 
 
+def _recap_model_inputs(uid, date_str, rows):
+    conversations = deserialize_conversations([row for row in rows if not row.get('is_locked')])
+    conversations = [
+        c for c in conversations if not c.discarded and not exclude_from_derived(uid, c, consumer='daily_summary')
+    ]
+    return bound_daily_summary_conversations(uid, date_str, conversations) if conversations else []
+
+
 # refactor: superseded by utils.other.daily_recap when CALLS_RECAP_MODE=serve
 def _legacy_generate_and_store_daily_summary(
-    uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery: Optional[Callable[[], None]] = None
+    uid,
+    date_str,
+    start_date_utc,
+    end_date_utc,
+    *,
+    prepare_delivery: Optional[Callable[[], None]] = None,
+    user_initiated=False,
 ) -> Tuple[Optional[dict], bool, Optional[str]]:
     """Like ``generate_and_store_daily_summary``, plus whether this call persisted a new record
     and, when it declined, which guard declined it.
@@ -226,7 +242,22 @@ def _legacy_generate_and_store_daily_summary(
         conversations_data = conversations_db.get_conversations(
             uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
         )
-        fingerprint = recap_refresh.fingerprint(conversations_data or []) if refresh_enabled else None
+        if serving_for('NOTES_PACKET_V2_MODE', uid):
+            record_notes_shadow(
+                'daily_recap_inputs',
+                (
+                    'agree'
+                    if existing_summary
+                    and existing_summary.get(FINGERPRINT_FIELD) == input_fingerprint(conversations_data or [])
+                    else 'disagree'
+                ),
+            )
+        if refresh_enabled and len(conversations_data or []) >= 100:
+            daily_summary_metrics.refresh('window_truncated')
+        conversations = _recap_model_inputs(uid, date_str, conversations_data or [])
+        selected_ids = {c.id for c in conversations} if refresh_enabled else set()
+        input_rows = [row for row in conversations_data or [] if row.get('id') in selected_ids]
+        fingerprint = recap_refresh.fingerprint(input_rows) if refresh_enabled else None
         if refreshing and existing_summary:
             if recap_refresh.FIELD not in existing_summary:
                 stale = recap_refresh.adoption_needs_repair(existing_summary, conversations_data or [])
@@ -245,10 +276,6 @@ def _legacy_generate_and_store_daily_summary(
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NO_CONVERSATIONS
 
-        conversations = deserialize_conversations(
-            [convo_data for convo_data in conversations_data if not convo_data.get('is_locked')]
-        )
-        conversations = [c for c in conversations if not exclude_from_derived(uid, c, consumer='daily_summary')]
         if not conversations:
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
@@ -258,11 +285,6 @@ def _legacy_generate_and_store_daily_summary(
             logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
-
-        # Bound the generator's input (#12530). Keep the most recent conversations
-        # that fit, drop the rest loudly, and always keep at least one so a recap is
-        # still attempted.
-        conversations = bound_daily_summary_conversations(uid, date_str, conversations)
 
         # The prompt is built by ``conversations_to_string(use_transcript=False)``,
         # which renders the title plus the first app result or the structured
@@ -278,7 +300,9 @@ def _legacy_generate_and_store_daily_summary(
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
 
-        if refreshing and not recap_refresh_db.reserve(uid, date_str):
+        if refreshing and not recap_refresh_db.reserve(
+            uid, date_str, **({'charge_budget': False} if user_initiated else {})
+        ):
             daily_summary_metrics.refresh('refresh_skipped_cap')
             release_daily_summary_lock(uid, date_str)
             return existing_summary, False, None
@@ -307,11 +331,14 @@ def _legacy_generate_and_store_daily_summary(
                 )
                 or []
             )
+            if len(latest) >= 100:
+                daily_summary_metrics.refresh('window_truncated')
             if account_deletion_blocks_user_work(uid):
                 release_daily_summary_lock(uid, date_str)
                 return None, False, 'account_pending_deletion'
             refreshed = None
-            if recap_refresh.fingerprint(latest) == fingerprint:
+            latest_ids = {c.id for c in _recap_model_inputs(uid, date_str, latest)}
+            if recap_refresh.fingerprint([row for row in latest if row.get('id') in latest_ids]) == fingerprint:
                 refreshed = recap_refresh_db.commit(uid, date_str, existing_summary, summary_data, fingerprint)
             daily_summary_metrics.refresh('refreshed' if refreshed else 'refresh_conflict')
             release_daily_summary_lock(uid, date_str)
@@ -1184,11 +1211,14 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
     )
     # Count current-day generation only, never the backfill walk. A generated
     # recap can also fail delivery; these are distinct recipient outcomes.
-    if created:
+    refreshed = isinstance(summary_data, recap_refresh.RefreshedSummary)
+    if refreshed:
+        daily_summary_metrics.RECIPIENTS.labels(outcome='refreshed').inc()
+    elif created:
         daily_summary_metrics.RECIPIENTS.labels(outcome='generated_retry' if retry_attempt else 'generated').inc()
         # Durable outcome token for the daily_summary_recap_generated log metric. The
         # job's in-process counters depend on a scrape sidecar; this line does not.
-        if summary_data and not summary_data.get('late_refresh_silent'):
+        if summary_data:
             logger.info('daily_summary_generated uid=%s retry=%s', uid, retry_attempt)
     elif summary_data:
         daily_summary_metrics.RECIPIENTS.labels(outcome='suppressed_existing').inc()
@@ -1206,14 +1236,12 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
         declined = None
     if summary_data and not delivery_allowed(uid, summary_data):
         raise RuntimeError('daily summary not generated')
-    if summary_data and (
-        summary_data.get('notification_delivery_completed') or summary_data.get('late_refresh_silent')
-    ):
+    if summary_data and (summary_data.get('notification_delivery_completed') or (refreshed and not retry_delivery)):
         # An abandoned worker may have delivered after wait_for timed out and
         # after its coordinator saved an uncertain outcome. The receipt wins.
         if delivery_completed is not None:
             delivery_completed.set()
-    elif (created or retry_delivery) and summary_data:
+    elif ((created and not refreshed) or retry_delivery) and summary_data:
         try:
             prepare_delivery()
             _deliver_current_day_summary(uid, date_str, summary_data, tokens)
@@ -1234,7 +1262,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
     # this worker's push, backfill and webhook have all finished. Never for a
     # day another worker owns or a budget already declined.
     pass_request: Optional[Tuple[str, str, Any, Any, Optional[str]]] = None
-    if declined not in (_DECLINE_LOCKED, _DECLINE_USAGE_BUDGET):
+    if declined not in (_DECLINE_LOCKED, _DECLINE_USAGE_BUDGET, 'account_pending_deletion'):
         pass_request = (uid, date_str, start_date_utc, end_date_utc, user_tz_name)
 
     try:
@@ -1251,7 +1279,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
         # carried no transcript, still proves the owner was recording — those are the accounts whose
         # earlier days most need walking back — so `_DECLINE_NOTHING_TO_SUMMARIZE` is deliberately
         # absent from this set.
-        if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
+        if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS, 'account_pending_deletion'):
             return pass_request
 
         _backfill_recent_daily_summaries(uid, display_date, user_tz_name)

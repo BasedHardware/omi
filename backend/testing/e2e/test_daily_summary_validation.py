@@ -350,6 +350,10 @@ def test_regenerate_invalid_output_preserves_stored_recap_then_retry_replaces_in
     assert success.status_code == 200, success.text
     assert success.json()['id'] == 'original'
     assert success.json()['headline'] == 'Regenerated'
+    assert (
+        list(fake_firestore.collection('users').document('123').collection('daily_summary_refresh_budget').stream())
+        == []
+    )
     assert ref.get().to_dict()['visibility'] == 'shared'
     assert ref.get().to_dict()['created_at'] == original['created_at']
     assert (
@@ -410,15 +414,15 @@ def test_default_on_late_refresh_drops_deleted_input_and_preserves_concurrent_pr
     assert stored['created_at'] == original['created_at']
     assert stored['visibility'] == 'private'
     assert stored['notification_delivery_completed'] is True
-    assert stored['late_refresh_silent'] is True
+    assert 'late_refresh_silent' not in stored
     marker = (
         fake_firestore.collection('users').document('123').collection('daily_summary_generation').document('2026-10-01')
     )
-    # The real status writer must not erase repair debt/verification metadata.
+    # The real status writer must not erase the repair marker.
     from database.daily_summaries import set_daily_summary_generation_status
 
     set_daily_summary_generation_status('123', '2026-10-01', 'generated')
-    assert marker.get().to_dict()['late_refresh_verify_pending'] is True
+    assert marker.get().to_dict()['late_refresh_required'] is False
 
 
 def test_legacy_stale_adoption_persists_debt_then_repairs_with_real_storage(
@@ -456,7 +460,7 @@ def test_legacy_stale_adoption_persists_debt_then_repairs_with_real_storage(
     assert recap.get().to_dict()['headline'] == 'Repaired'
 
 
-def test_source_deleted_before_legacy_adoption_is_not_blessed_as_fresh(
+def test_unknown_generation_after_source_deletion_is_repair_debt(
     client, auth_headers, fake_firestore, generation_seams, monkeypatch, conversation_fixture, live_user
 ):
     import utils.other.notifications as n
@@ -496,3 +500,21 @@ def test_source_deleted_before_legacy_adoption_is_not_blessed_as_fresh(
     assert seen == [retained['id']]
     assert repaired['id'] == 'legacy'
     assert recap.get().to_dict()['headline'] == 'Retained source only'
+
+
+def test_authenticated_list_and_detail_exclude_internal_refresh_state(client, auth_headers, fake_firestore):
+    internal = {
+        'late_input_fingerprint_v1': 'content-hash',
+        'late_refresh_silent': True,
+        'late_refresh_required': True,
+        'late_refresh_verify_pending': True,
+        'notes_input_fingerprint': 'wave2-hash',
+        'notification_delivery_completed': True,
+    }
+    _seed(fake_firestore, {**_summary('internal-state'), **internal})
+    detail = client.get('/v1/users/daily-summaries/internal-state', headers=auth_headers)
+    listing = client.get('/v1/users/daily-summaries', headers=auth_headers)
+    assert detail.status_code == listing.status_code == 200
+    assert not set(internal).intersection(detail.json())
+    assert not set(internal).intersection(listing.json()['summaries'][0])
+    assert detail.json()['headline']

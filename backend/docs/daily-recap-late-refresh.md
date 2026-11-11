@@ -32,16 +32,17 @@ precedence. The supplied source documents were under `/tmp/omi-homestep-push/`.
   event-created state, locations and geocoding. No transcripts enter the digest.
 - Use a separate `late_input_fingerprint_v1` field so the wave-2 fingerprint
   cannot be mistaken for this narrower identity.
-- Adoption compares input creation/finish/summary completion stamps with the
-  recap's generation time. Newer content, unknown completion/generation times,
-  ordinal revisions greater than one, and unverified original membership schedule
-  conservative durable repair. Surviving timestamps cannot prove that an input
-  was not previously deleted, discarded or moved outside the day. Only a matching
-  prior source fingerprint establishes membership for fresh adoption.
-  Fresh adoption stores the fingerprint without a model call. Stale adoption
-  also spends no model call until the next admitted scan.
+- The first scheduled pass over a complete legacy recap without the narrow
+  fingerprint never calls the model. It stores the current eligible-input fingerprint.
+  Fresh adoption requires a parseable `generated_at` and, on every returned window
+  row, parseable `created_at` and `summary_completed_at` at or before that time.
+  No wave-2 fingerprint is required. Missing/unparseable stamps, a late row or
+  completion, or ordinal content revisions greater than one schedule durable debt;
+  a later admitted scan attempts repair. Unknown age is debt; `created_at` on the
+  recap is not a substitute for missing `generated_at`.
+  This evidence cannot reconstruct sources removed before the first adoption.
 - Persist repair debt on `daily_summary_generation/{date}`. Preserve it when
-  status changes. Reserve before every refresh model attempt in the transactional
+  status changes. Reserve before every scheduled refresh model attempt in the transactional
   `daily_summary_refresh_budget/{UTC-date}` counter: at most two per owner per
   UTC day across all recap dates/workers; failures/conflicts consume attempts.
   The existing three-backfill-generation tick cap and job/user budgets still apply.
@@ -50,13 +51,19 @@ precedence. The supplied source documents were under `/tmp/omi-homestep-push/`.
   recap document or patch visibility, creation time or delivery receipt. Patch
   `read_contract_version`, `action_items_coverage` and `memories_learned_coverage`
   with generated content so readers interpret the replacement consistently.
-  Keep `late_refresh_verify_pending` through adoption and every refresh commit:
-  inputs arriving between the last read and commit remain an explicit verification
-  obligation, and the stored fingerprint always identifies the original model inputs.
-  Each subsequent bounded scan compares current inputs, including membership;
-  unchanged verification costs no model call. The marker does not create a new job.
-- Same recap ID/deep link. Persist `late_refresh_silent` to suppress delivery and
-  webhooks even for an on-demand-created recap without a delivery receipt.
+  Fingerprints use the eligible, non-discarded, bounded rows actually passed to
+  the model, including on the verification read. A change between that read and
+  commit leaves the original fingerprint for the next scheduled comparison.
+  `late_refresh_verify_pending` is no longer written: the comparison itself is the
+  verification mechanism. Repair debt, unlike that removed field, is read.
+  A full 100-row window emits `window_truncated`; coverage beyond it is unknown.
+- Same recap ID/deep link. Silence is a per-call result, never a persisted flag.
+  A refresh alone never pushes, including an on-demand-created day without a
+  receipt. An explicitly owed retry (`retry_delivery`) can still send the first
+  successful push and persist its receipt; subsequent retries honor that receipt.
+  Authenticated response models remove internal fingerprints, worker flags and
+  delivery state. Explicit on-demand regeneration does not consume the scheduled
+  refresh budget; it still marks repair debt until a verified commit.
   Backfill never pushes. Deleting an input removes it from subsequent generated
   content. If all inputs disappear, retain the legacy recap without a model call;
   this change does not introduce a purge policy.
@@ -65,12 +72,16 @@ precedence. The supplied source documents were under `/tmp/omi-homestep-push/`.
 
 Automatic scans cover the current recap day and the existing seven-day backfill.
 Historical recaps older than that window remain unrepaired automatically, including
-obligations that age out. There is no fleet incidence or extra-spend estimate.
+obligations that age out. Fleet-wide first-pass incidence is unmeasured. Adoption itself has zero model
+calls; later scheduled repairs are bounded by two attempts per owner per UTC day.
+The initial backlog may age out under that cap. There is no extra-spend estimate.
 Fresh adoption adds an input-window read and a transaction; unchanged scans add
 input-window and marker reads. A refresh adds a second input read and bounded writes.
 
 `omi_daily_summary_late_refresh_total{outcome}` has only these labels:
 `adopted_fresh`, `adopted_stale_scheduled`, `refreshed`, `refresh_skipped_cap`,
-`refresh_skipped_unchanged`, `refresh_conflict`. No identity/content labels or logs
+`refresh_skipped_unchanged`, `refresh_conflict`, `window_truncated`.
+Refresh calls use recipient outcome `refreshed`, never `generated`. The wave-2
+`daily_recap_inputs` shadow agree/disagree series continues for its existing cohort. No identity/content labels or logs
 are added. Rollback: set the kill switch to `false` to restore blind reuse of
 complete legacy recaps; stored recaps, privacy and delivery state remain intact.

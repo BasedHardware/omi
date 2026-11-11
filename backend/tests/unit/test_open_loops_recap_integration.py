@@ -85,6 +85,7 @@ def recap_env(monkeypatch):
     monkeypatch.setattr(notif.daily_summaries_db, 'mark_daily_summary_delivery_completed', Mock())
 
     conversation = SimpleNamespace(
+        id='c1',
         discarded=False,
         transcript_segments=[object()],
         structured=SimpleNamespace(overview='Maya will send the vendor write-up.'),

@@ -91,7 +91,14 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
         return None, False, 'account_pending_deletion'
 
     if not serving_for(FLAG, uid):
-        return legacy(uid, date_str, start_date_utc, end_date_utc, prepare_delivery=prepare_delivery)
+        return legacy(
+            uid,
+            date_str,
+            start_date_utc,
+            end_date_utc,
+            prepare_delivery=prepare_delivery,
+            **({'user_initiated': True} if user_initiated else {}),
+        )
     compute_allowed = n.generated_compute_allowed(uid, 'daily_summary')
     if not n.try_acquire_daily_summary_lock(uid, date_str):
         return None, False, n.DAILY_SUMMARY_DECLINE_LOCKED

@@ -34,7 +34,11 @@ def producer(monkeypatch):
     monkeypatch.setattr(notif.daily_summaries_db, 'update_daily_summary', save)
     monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *_a, **_k: list(rows))
     conversation = SimpleNamespace(
-        discarded=False, transcript_segments=[object()], structured=SimpleNamespace(overview='Ready'), apps_results=[]
+        id='conversation-1',
+        discarded=False,
+        transcript_segments=[object()],
+        structured=SimpleNamespace(overview='Ready'),
+        apps_results=[],
     )
     monkeypatch.setattr(notif, 'deserialize_conversations', lambda values: [conversation for _ in values])
     monkeypatch.setattr(notif, 'bound_daily_summary_conversations', lambda *_: [conversation])
