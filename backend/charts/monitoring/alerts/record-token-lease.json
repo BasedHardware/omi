@@ -1,0 +1,214 @@
+[
+  {
+    "uid": "omi-record-token-lease-late-append",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Record token lease",
+    "title": "Record token lease closed during uploader activity",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_record_token_late_append_total[5m])) > 0 or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "B",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-11-09T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Record token lease closed during uploader activity",
+      "user_impact": "Audio remains retained; record closure must not race an active uploader.",
+      "scope": "Server-observed custody appends/frame batches only. Backlog warning requires recent lease-based release activity.",
+      "verification": "Inspect late-append rate, signal-gap histogram and oldest unsealed age. No user-data reads required.",
+      "safe_next_action": "P4 auto-revert RECORD_TOKEN_LEASE_MODE to shadow/off; retain all raw audio; lead2 go before the next step.",
+      "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md",
+      "threshold": "Any late append pages immediately; non-falling backlog age warns during lease release activity.",
+      "evaluated_bad": "Synthetic late-append counter increases, or positive age slope with lease releases.",
+      "evaluated_good": "Synthetic zero late-appends and falling oldest-unsealed age."
+    },
+    "labels": {
+      "alert_identity": "omi-record-token-lease-late-append",
+      "component": "record-token-lease",
+      "impact": "product",
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "record-token-lease"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-record-token-lease-backlog",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Record token lease",
+    "title": "Record token lease backlog age is not falling",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(deriv((last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]))[30m:]) >= bool 0) and on() (last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]) > 0) and on() (sum(increase(omi_record_token_lease_expired_sealed_total[1h])) > 0) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "B",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-11-09T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Record token lease backlog age is not falling",
+      "user_impact": "Audio remains retained; record closure must not race an active uploader.",
+      "scope": "Server-observed custody appends/frame batches only. Backlog warning requires recent lease-based release activity.",
+      "verification": "Inspect late-append rate, signal-gap histogram and oldest unsealed age. No user-data reads required.",
+      "safe_next_action": "P4 auto-revert RECORD_TOKEN_LEASE_MODE to shadow/off; retain all raw audio; lead2 go before the next step.",
+      "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md",
+      "threshold": "Any late append pages immediately; non-falling backlog age warns during lease release activity.",
+      "evaluated_bad": "Synthetic late-append counter increases, or positive age slope with lease releases.",
+      "evaluated_good": "Synthetic zero late-appends and falling oldest-unsealed age."
+    },
+    "labels": {
+      "alert_identity": "omi-record-token-lease-backlog",
+      "component": "record-token-lease",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "record-token-lease"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  }
+]

@@ -115,6 +115,18 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
   # Default off. 512 MiB is a proposed canary size, not enabled here.

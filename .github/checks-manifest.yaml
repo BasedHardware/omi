@@ -69,6 +69,12 @@ checks:
     triggers: ["backend/**/*.py", "config/feature-flags.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-10-18 policy-window incident: obligations admitted at first-summary percent zero were graded under another revision's policy; fail reads of snapshot-owned batch keys outside the immutable resolver; keep live switches behind their helper and warn on unowned E1b worker/process keys"
+  - id: record-token-lease-promql
+    command: ["bash", "scripts/dev-harness/run-python.sh", "backend/scripts/check_record_token_lease_promql.py"]
+    triggers: ["backend/charts/monitoring/**", "backend/tests/promql/record_token_lease.py", "backend/scripts/check_record_token_lease_promql.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#25018 pre-review: prove the actual lease backlog warning across CronJob replacement, invalid clocks and release gaps with real PromQL instead of uncaught manual-only backtests"
   - id: monitoring-alert-backtest-lint
     command: ["python3", "backend/scripts/alert_backtest.py", "--lint"]
     triggers: ["backend/charts/monitoring/alerts/**", "backend/charts/monitoring/metric-inventory.prod.json", "backend/scripts/alert_backtest.py", "backend/tests/unit/test_monitoring_alert_backtest.py", ".github/checks-manifest.yaml"]
