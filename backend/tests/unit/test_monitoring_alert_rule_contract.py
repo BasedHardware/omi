@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 
 import yaml
+
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST, NEWEST
 from prometheus_client import CollectorRegistry
 from utils.lifecycle_metrics import PhaseMetrics
 
@@ -101,13 +103,14 @@ def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_p
         assert 'omi-batch-queue-uncommitted-2h' not in rules
         late = rules['omi-batch-unit-unpublished-2h']
         nodes = {node['refId']: node for node in late['data']}
-        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)', export_name
+        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120)', export_name
         selector = '{namespace="prod-omi-backend"}'
         assert nodes['A']['model']['expr'] == (
-            'max(omi_batch_timeliness_new_oldest_age_seconds'
-            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) or vector(0)'
+            'max((omi_batch_timeliness_new_oldest_age_seconds'
+            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) '
+            f'and ignoring(leg) {FRESH_NEWEST}) or vector(0)'
         )
-        assert nodes['B']['model']['expr'] == '(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)'
+        assert nodes['B']['model']['expr'] == f'(time() - max({NEWEST})) or vector(1e9)'
         assert nodes['C']['model']['expr'] == f'max(omi_batch_pipeline_oldest_age_seconds{selector} >= 0) or vector(0)'
         assert (
             nodes['F']['model']['expr']
@@ -1343,6 +1346,7 @@ _PROMQL_KEYWORDS = frozenset(
         "clamp_min",
         "clamp_max",
         "vector",
+        "scalar",
         "or",
         "and",
         "unless",
