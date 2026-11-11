@@ -13,6 +13,7 @@ from typing import Iterator
 
 from database import conversation_batch_purge_jobs as purge_jobs
 from database import conversation_tombstones
+from utils.observability.fallback import record_fallback
 from utils.cloud_tasks import (
     conversation_batch_purge_consumer_ready,
     enqueue_conversation_batch_purge,
@@ -22,8 +23,9 @@ from utils.cloud_tasks import (
 logger = logging.getLogger(__name__)
 
 ENQUEUE_RETRY_SECONDS = 60
-# Repeated generations without completion page someone; the obligation is never dropped.
-ALERT_AFTER_GENERATIONS = 8
+# Dispatches without progress (checkpoint hand-offs reset the count) log an error;
+# the obligation is never dropped.
+ALERT_AFTER_ATTEMPTS = 8
 
 
 @contextmanager
@@ -51,15 +53,30 @@ def reconcile_conversation_batch_purges(limit: int = 50) -> dict[str, int]:
         # Rollout or rollback: the serving consumer lacks the route. Obligations wait.
         logger.warning('conversation batch purge consumer not serving the route; holding %d due', len(due))
         return {'due': len(due), 'held_for_consumer': len(due)}
+    if ready is None:
+        # Fail-open: the probe could not answer, so dispatch is unverified. A task
+        # that reaches an old consumer is lost only until the redrive.
+        record_fallback(
+            component='other',
+            from_mode='verified_consumer_dispatch',
+            to_mode='unverified_dispatch',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
     counts = {'due': len(due), 'dispatched': 0, 'skipped': 0, 'enqueue_failed': 0}
     for snapshot in due:
-        generation = purge_jobs.claim_dispatch(snapshot.id)
-        if generation is None:
+        claim = purge_jobs.claim_dispatch(snapshot.id)
+        if claim is None:
             counts['skipped'] += 1
             continue
-        if generation > ALERT_AFTER_GENERATIONS:
+        generation, attempts = claim
+        if attempts > ALERT_AFTER_ATTEMPTS:
             logger.error(
-                'conversation batch purge obligation still pending job=%s generation=%d', snapshot.id, generation
+                'conversation batch purge obligation still pending job=%s generation=%d attempts=%d',
+                snapshot.id,
+                generation,
+                attempts,
             )
         try:
             enqueue_conversation_batch_purge(snapshot.id, generation)

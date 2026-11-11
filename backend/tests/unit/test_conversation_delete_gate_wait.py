@@ -33,9 +33,11 @@ UID = 'uid1'
 
 
 class _Snapshot:
-    def __init__(self, payload):
+    def __init__(self, payload, reference=None):
         self._payload = payload
         self.exists = payload is not None
+        self.reference = reference
+        self.id = reference.id if reference is not None else None
 
     def to_dict(self):
         return dict(self._payload or {})
@@ -47,7 +49,7 @@ class _Ref:
 
     def get(self, transaction=None):
         with self.client.lock:
-            return _Snapshot(self.client.docs.get(self.path))
+            return _Snapshot(self.client.docs.get(self.path), self)
 
     def create(self, payload):
         from google.api_core.exceptions import AlreadyExists
@@ -112,6 +114,9 @@ class _Batch:
     def set(self, reference, payload, merge=False):
         self.ops.append(('set', reference, (payload, merge)))
 
+    def delete(self, reference):
+        self.ops.append(('delete', reference, None))
+
     def commit(self):
         from google.api_core.exceptions import AlreadyExists
 
@@ -119,7 +124,12 @@ class _Batch:
             if any(op == 'create' and ref.path in self.client.docs for op, ref, _ in self.ops):
                 raise AlreadyExists('exists')
             for op, ref, payload in self.ops:
-                ref.create(payload) if op == 'create' else ref.set(*payload)
+                if op == 'create':
+                    ref.create(payload)
+                elif op == 'set':
+                    ref.set(*payload)
+                else:
+                    ref.delete()
 
 
 class _Client:
@@ -252,6 +262,37 @@ def test_legal_hold_fails_fast_without_waiting(gate_client, fast_clock):
     assert GATE_PATH not in gate_client.docs
 
 
+def test_transaction_contention_on_the_gate_shares_the_wait(monkeypatch, gate_client, fast_clock):
+    real_acquire = legal_holds.acquire_destructive_operation
+    attempts = []
+
+    def contended(*args, **kwargs):
+        attempts.append(True)
+        if len(attempts) <= 2:
+            raise ValueError('Failed to commit transaction in 5 attempts.')
+        return real_acquire(*args, **kwargs)
+
+    monkeypatch.setattr(legal_holds, 'acquire_destructive_operation', contended)
+    with legal_holds.destructive_operation_gate(UID, wait_seconds=20):
+        pass
+    assert len(attempts) == 3 and len(fast_clock.sleeps) == 2
+
+    attempts.clear()
+    with pytest.raises(ValueError, match='Failed to commit'):
+        with legal_holds.destructive_operation_gate(UID):  # no wait budget: unchanged behaviour
+            pass
+
+    def invalid(*args, **kwargs):
+        raise ValueError('destructive operation identity is invalid')
+
+    monkeypatch.setattr(legal_holds, 'acquire_destructive_operation', invalid)
+    fast_clock.sleeps.clear()
+    with pytest.raises(ValueError, match='identity'):
+        with legal_holds.destructive_operation_gate(UID, wait_seconds=20):
+            pass
+    assert fast_clock.sleeps == []
+
+
 def test_default_gate_keeps_fail_fast_contract(gate_client, fast_clock):
     gate_client.docs[GATE_PATH] = _gate_doc()
     with pytest.raises(legal_holds.DestructiveOperationInProgress):
@@ -365,10 +406,20 @@ def tombstone_db(monkeypatch):
     monkeypatch.setattr(conversation_tombstones, 'db', client)
     monkeypatch.setattr(purge_jobs, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(purge_jobs, '_in_transaction', lambda _client, body: body(_Transaction(client)))
+    monkeypatch.setattr(
+        purge_jobs, 'segment_records', lambda job, ns, limit=None, **k: _segments(client, job, ns, limit)
+    )
     from database import from_segments_chunks
 
     monkeypatch.setattr(from_segments_chunks, 'purge_chunks', lambda *args, **kwargs: None)
     return client
+
+
+def _segments(client, job, namespace, limit=None):
+    prefix = f'{purge_jobs.COLLECTION}/{job}/{purge_jobs.SEGMENTS}/'
+    rows = [row for path, row in sorted(client.docs.items()) if path.startswith(prefix)]
+    rows = [row for row in rows if row.get('namespace') == namespace]
+    return rows[:limit] if limit else rows
 
 
 def _tombstone(client, conversation_id):
@@ -520,10 +571,10 @@ def _advance(client, job, seconds):
 
 
 def _purge(monkeypatch, effect=None):
-    from database import batch_pipeline_purge
+    from database import batch_pipeline_conversation_purge
 
     purge = MagicMock(side_effect=effect)
-    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', purge)
+    monkeypatch.setattr(batch_pipeline_conversation_purge, 'purge_conversation', purge)
     monkeypatch.setattr(purge_jobs, 'assert_account_deletion_permitted', lambda *a, **k: None)
     return purge
 
@@ -535,7 +586,8 @@ def test_reconciler_dispatches_new_generations_and_only_completion_clears(monkey
     assert deletion_batch_purge.reconcile_conversation_batch_purges() == {}  # redrive not due yet
     assert purge_jobs.run_job(armed, 1) == 'purged'
     purge.assert_called_once()
-    assert purge.call_args.kwargs['conversation_id'] == 'c1' and purge.call_args.kwargs['unit_guard']
+    assert purge.call_args.args[:2] == (UID, 'c1')
+    assert isinstance(purge.call_args.args[2], purge_jobs.RunProgress)
     assert _obligation(tombstone_db, 'c1') is None
     assert purge_jobs.run_job(armed, 1) == 'missing'  # duplicate delivery after completion
 
@@ -624,79 +676,17 @@ def test_transaction_bodies_read_before_they_write():
 
     job = purge_jobs.job_id(UID, 'c1')
     store = StrictFirestore({(purge_jobs.COLLECTION, job): purge_jobs.arm_fields(UID, 'c1')})
-    assert purge_jobs.claim_dispatch(job, firestore_client=store) == 1
+    assert purge_jobs.claim_dispatch(job, firestore_client=store) == (1, 1)
     later = purge_jobs._now() + purge_jobs.timedelta(seconds=1)
-    assert purge_jobs.begin_run(job, 1, now=later, firestore_client=store)[0] == 'run'
+    claim, _row, token = purge_jobs.begin_run(job, 1, now=later, firestore_client=store)
+    assert claim == 'run' and token
     assert purge_jobs.begin_run(job, 1, now=later, firestore_client=store)[0] == 'in_progress'
-    assert purge_jobs.finish_run(job, 1, 'completed', firestore_client=store) is True
+    assert purge_jobs.finish_run(job, 1, 'not-the-owner', 'completed', firestore_client=store) is False
+    assert purge_jobs.finish_run(job, 1, token, 'completed', firestore_client=store) is True
     assert not store.collection(purge_jobs.COLLECTION).document(job).get().exists
 
 
 # --- legal hold / account wipe fence each erasure unit (finding 1) ---
-
-
-def _place_hold(gate_client):
-    legal_holds._place_legal_hold_transaction.to_wrap(
-        gate_client.transaction(), gate_client, UID, 'admin', True, legal_holds.datetime.now(legal_holds.timezone.utc)
-    )
-
-
-def _two_page_owner(monkeypatch, on_second_page=None):
-    """A data plane whose owner has one matching result row on each of two scan pages."""
-    from database import batch_pipeline_purge
-
-    plane = MagicMock()
-    plane.collection.return_value.document.return_value.get.return_value = SimpleNamespace(exists=True, to_dict=dict)
-    owned = {'conversation_id': 'c1'}
-    page_one = [SimpleNamespace(id='r1', to_dict=lambda: owned)]
-    page_two = [SimpleNamespace(id='r2', to_dict=lambda: owned)]
-
-    def owner_documents(_client, namespace, table, key, *, after=None):
-        if namespace != 'batch_pipeline_prod' or table != 'results':
-            return []
-        if after is None:
-            return page_one
-        if after is page_one[-1]:
-            if on_second_page:
-                on_second_page()  # the scan (reads, no gate) is where a hold can land
-            return page_two
-        return []
-
-    erased = []
-    monkeypatch.setattr(batch_pipeline_purge, 'get_data_plane_firestore_client', lambda: plane)
-    monkeypatch.setattr(batch_pipeline_purge.queries, 'owner_documents', owner_documents)
-    monkeypatch.setattr(batch_pipeline_purge.queries, 'artifacts_by_owner_id', lambda *a, **k: [])
-    monkeypatch.setattr(batch_pipeline_purge, '_erase_result', lambda _c, _n, snapshot: erased.append(snapshot.id))
-    monkeypatch.setattr(batch_pipeline_purge, 'mirror_refresh', lambda *a: None)
-    monkeypatch.setattr(batch_pipeline_purge, 'purge_jobstore_owner', lambda *a: None)
-    return erased
-
-
-def test_hold_placed_mid_purge_stops_the_next_erasure_unit_and_keeps_the_debt(
-    monkeypatch, gate_client, tombstone_db, armed, dispatch, fast_clock
-):
-    """Reviewer probe 1, end to end: real runner, real gate units, real hold-writer transaction."""
-    from database import batch_pipeline_purge
-
-    attempts = []
-    erased = _two_page_owner(monkeypatch, on_second_page=lambda: _place_hold(gate_client))
-    real_erase = batch_pipeline_purge._erase_result
-
-    def erase_under_gate(client, namespace, snapshot):
-        # While a unit holds the gate the hold writer cannot commit.
-        try:
-            _place_hold(gate_client)
-        except legal_holds.DestructiveOperationInProgress:
-            attempts.append('hold_rejected_inside_unit')
-        real_erase(client, namespace, snapshot)
-
-    monkeypatch.setattr(batch_pipeline_purge, '_erase_result', erase_under_gate)
-    deletion_batch_purge.reconcile_conversation_batch_purges()
-    assert purge_jobs.run_job(armed, 1) == 'held'
-    assert erased == ['r1'], 'erased a row after the legal hold committed'
-    assert attempts == ['hold_rejected_inside_unit']
-    assert gate_client.docs[HOLD_PATH]['active'] is True
-    assert _obligation(tombstone_db, 'c1')['last_outcome'] == 'held'  # debt kept for after release
 
 
 def test_account_wipe_gate_stops_purge_units(gate_client):
@@ -704,43 +694,6 @@ def test_account_wipe_gate_stops_purge_units(gate_client):
     with pytest.raises(legal_holds.DestructiveOperationInProgress):
         with legal_holds.destructive_operation_gate(UID, kind='explicit_memory_deletion', wait_seconds=0):
             pytest.fail('erased while the account wipe owns the gate')
-
-
-def test_purge_wraps_each_page_of_matches_in_one_guarded_unit(monkeypatch):
-    from database import batch_pipeline_purge
-
-    client = MagicMock()
-    client.collection.return_value.document.return_value.get.return_value = SimpleNamespace(exists=True, to_dict=dict)
-    owned = {'conversation_id': 'c1'}
-    pages = {
-        'results': [[SimpleNamespace(id='r1', to_dict=lambda: owned), SimpleNamespace(id='x', to_dict=lambda: {})]],
-    }
-
-    def owner_documents(_client, namespace, table, key, *, after=None):
-        if namespace != 'batch_pipeline_prod' or after is not None:
-            return []
-        rows = pages.get(table, [[]])[0]
-        return rows
-
-    monkeypatch.setattr(batch_pipeline_purge.queries, 'owner_documents', owner_documents)
-    monkeypatch.setattr(batch_pipeline_purge.queries, 'artifacts_by_owner_id', lambda *a, **k: [])
-    events = []
-    monkeypatch.setattr(batch_pipeline_purge, '_erase_result', lambda *a: events.append('erase'))
-    monkeypatch.setattr(batch_pipeline_purge, 'mirror_refresh', lambda *a: None)
-    monkeypatch.setattr(batch_pipeline_purge, 'purge_jobstore_owner', lambda *a: events.append('shadow'))
-
-    class Guard:
-        def __enter__(self):
-            events.append('enter')
-
-        def __exit__(self, *exc):
-            events.append('exit')
-
-    batch_pipeline_purge.purge_batch_owner(
-        UID, firestore_client=client, conversation_id='c1', delete_uri=lambda *a: None, unit_guard=Guard
-    )
-    # Unmatched rows never take the gate; every erasure sits inside a unit.
-    assert events == ['enter', 'erase', 'exit', 'enter', 'shadow', 'exit', 'enter', 'shadow', 'exit']
 
 
 # --- the task handler ---

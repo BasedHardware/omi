@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterator
 from uuid import uuid4
 
+from google.api_core.exceptions import Aborted
 from google.cloud.firestore_v1 import transactional
 
 from database.account_deletion_marker import account_deletion_firestore_client
@@ -453,6 +454,12 @@ def _blocking_gate_kind(client: Any, uid: str) -> str | None:
     return gate["kind"] if gate["uid"] == uid else ""
 
 
+def _is_transaction_contention(error: BaseException) -> bool:
+    if isinstance(error, Aborted):
+        return True
+    return isinstance(error, ValueError) and str(error).startswith('Failed to commit transaction')
+
+
 def _acquire_with_same_kind_wait(uid: str, *, kind: str, token: str, client: Any, wait_seconds: float) -> None:
     """Acquire, waiting out a running gate of the same kind for at most ``wait_seconds``.
 
@@ -467,6 +474,17 @@ def _acquire_with_same_kind_wait(uid: str, *, kind: str, token: str, client: Any
     while True:
         try:
             acquire_destructive_operation(uid, kind=kind, token=token, firestore_client=client)
+        except (Aborted, ValueError) as error:
+            # A same-account burst can exhaust the transaction's own retries on the
+            # gate document; that is contention, not a verdict, so it shares the wait.
+            remaining = deadline - _gate_wait_clock()
+            if not _is_transaction_contention(error) or remaining <= 0:
+                raise
+            _gate_wait_sleep(
+                min(_GATE_WAIT_BACKOFF_SECONDS[min(waits, len(_GATE_WAIT_BACKOFF_SECONDS) - 1)], remaining)
+            )
+            waits += 1
+            continue
         except DestructiveOperationInProgress:
             remaining = deadline - _gate_wait_clock()
             blocking_kind = _blocking_gate_kind(client, uid) if remaining > 0 else ""

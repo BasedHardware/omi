@@ -35,8 +35,11 @@ HOLD_RECHECK = timedelta(hours=1)
 logger = logging.getLogger(__name__)
 
 
-def delete_batch_object(uid: str, uri: str) -> None:
-    """Delete only a configured, owner-scoped object; foreign refs fail closed."""
+def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None) -> None:
+    """Delete only a configured, owner-scoped object; foreign refs fail closed.
+
+    ``timeout`` bounds the storage RPC for callers that hold an account gate.
+    """
     parsed = urlsplit(uri)
     bucket_name, path = parsed.netloc, parsed.path.lstrip('/')
     allowed_buckets = {
@@ -64,7 +67,10 @@ def delete_batch_object(uid: str, uri: str) -> None:
     storage_client: Any = create_storage_client()
     blob = storage_client.bucket(bucket_name).blob(path, generation=generation)
     try:
-        blob.delete(if_generation_match=generation)
+        if timeout is None:
+            blob.delete(if_generation_match=generation)
+        else:
+            blob.delete(if_generation_match=generation, timeout=timeout)
     except NotFound:
         pass
 

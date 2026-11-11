@@ -112,18 +112,21 @@ def test_six_parallel_same_account_cascade_deletes_all_succeed(monkeypatch, plan
     ids = [f'conv-{index}-{uuid4().hex[:6]}' for index in range(6)]
     for cid in ids:
         _conversation(plane, cid)
-    statuses = []
+    statuses, errors = [], []
 
     def delete(cid):
-        with TestClient(route.app) as client:
-            statuses.append(client.delete(f'/v1/conversations/{cid}?cascade=true').status_code)
+        try:
+            with TestClient(route.app) as client:
+                statuses.append(client.delete(f'/v1/conversations/{cid}?cascade=true').status_code)
+        except Exception as error:  # surface, don't drop, a thread's failure
+            errors.append(f'{type(error).__name__}: {error}')
 
     threads = [threading.Thread(target=delete, args=(cid,)) for cid in ids]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join(timeout=120)
-    assert statuses == [204] * 6
+    assert statuses == [204] * 6, errors
     assert not any(_exists(plane, 'users', plane.uid, 'conversations', cid) for cid in ids)
 
 
@@ -163,6 +166,26 @@ def _delete(plane, route, cid):
         assert client.delete(f'/v1/conversations/{cid}?cascade=true').status_code == 204
 
 
+def _quick(job, generation, **kwargs):
+    from database import conversation_batch_purge_jobs as purge_jobs
+
+    kwargs.setdefault('sleep', lambda seconds: None)
+    return purge_jobs.run_job(job, generation, **kwargs)
+
+
+def _owed(plane, job):
+    from database import conversation_batch_purge_jobs as purge_jobs
+
+    return list(plane.client.collection(purge_jobs.COLLECTION).document(job).collection('segments').stream())
+
+
+def _redrive(monkeypatch, plane, job):
+    from database import conversation_batch_purge_jobs as purge_jobs
+
+    plane.client.collection(purge_jobs.COLLECTION).document(job).update({'due_at': purge_jobs._now()})
+    return _reconcile(monkeypatch)
+
+
 def test_reconciled_purge_erases_only_its_conversation_then_clears(monkeypatch, plane, route):
     from database import conversation_batch_purge_jobs as purge_jobs
 
@@ -170,46 +193,118 @@ def test_reconciled_purge_erases_only_its_conversation_then_clears(monkeypatch, 
     _delete(plane, route, cid)
     _seed_batch(plane, cid, mine=3, others=150)
     [(job, generation)] = _reconcile(monkeypatch)
-    assert purge_jobs.run_job(job, generation) == 'purged'
+    assert _quick(job, generation) == 'purged'
     assert _results_left(plane, cid) == 0
     others = list(plane.client.collection('batch_pipeline_prod_results').where('owner_key', '==', plane.key).stream())
     assert sum(1 for row in others if (row.to_dict() or {}).get('conversation_id', '').startswith('other-')) == 150
     assert not plane.client.collection(purge_jobs.COLLECTION).document(job).get().exists
-    assert purge_jobs.run_job(job, generation) == 'missing'
+    assert _owed(plane, job) == []
+    assert _quick(job, generation) == 'missing'
 
 
 def test_hold_between_purge_units_stops_erasure_until_release(monkeypatch, plane, route):
-    from database import batch_pipeline_purge, legal_holds
-    from database import conversation_batch_purge_jobs as purge_jobs
+    from database import legal_holds
 
     cid = f'conv-{uuid4().hex[:8]}'
     _delete(plane, route, cid)
-    _seed_batch(plane, cid, mine=150, others=0)  # matches on two scan pages
+    _seed_batch(plane, cid, mine=150, others=0)
+    units = []
+
+    def hold_after_two_units(_seconds):
+        units.append(True)
+        if len(units) == 2:  # between units: no gate held
+            legal_holds.place_legal_hold(plane.uid, issuer='admin', active=True)
+
+    [(job, generation)] = _reconcile(monkeypatch)
+    assert _quick(job, generation, sleep=hold_after_two_units) == 'held'
+    assert _results_left(plane, cid) == 130, 'erased after the hold committed'
+    assert len(_owed(plane, job)) == 130  # remaining segment work is durable
+
+    legal_holds.place_legal_hold(plane.uid, issuer='admin', active=False)
+    [(job, generation)] = _redrive(monkeypatch, plane, job)
+    assert generation == 2
+    assert _quick(job, generation) == 'purged'
+    assert _results_left(plane, cid) == 0 and _owed(plane, job) == []
+
+
+def test_hold_before_artifact_unit_resume_erases_segment_only_artifact(monkeypatch, plane, route):
+    """Reviewer round-2 resume probe: the artifact carries only its segment id."""
+    from database import batch_pipeline_purge, legal_holds
+    from database import conversation_batch_purge_jobs as purge_jobs
+    from utils.batch_pipeline import retention
+
+    cid = f'conv-{uuid4().hex[:8]}'
+    _delete(plane, route, cid)
+    _seed_batch(plane, cid, mine=1, others=0)
+    segment = f'{plane.uid}-r0000'
+    artifact = plane.client.collection('batch_pipeline_prod_artifacts').document(f'{segment}-audio')
+    uri = f'gs://synthetic/batch-pipeline/batch_pipeline_prod/owners/{plane.key}/audio/object'
+    artifact.set(
+        {
+            'owner_key': plane.key,
+            'owner_id': plane.uid,
+            'segment_id': segment,
+            'conversation_ids': [],
+            'uri': uri,
+            'kind': 'audio',
+        }
+    )
+    objects_deleted = []
+    monkeypatch.setattr(retention, 'delete_batch_object', lambda uid, uri, timeout=None: objects_deleted.append(uri))
     real_page = batch_pipeline_purge.queries.owner_documents
-    pages = []
+    held = []
 
     def page_then_hold(client, namespace, table, key, *, after=None):
         rows = real_page(client, namespace, table, key, after=after)
-        if namespace == 'batch_pipeline_prod' and table == 'results':
-            pages.append(len(rows))
-            if len(pages) == 2:  # the scan reads results page two: no gate is held
-                legal_holds.place_legal_hold(plane.uid, issuer='admin', active=True)
+        if namespace == 'batch_pipeline_prod' and table == 'artifacts' and rows and not held:
+            legal_holds.place_legal_hold(plane.uid, issuer='admin', active=True)
+            held.append(True)
         return rows
 
     monkeypatch.setattr(batch_pipeline_purge.queries, 'owner_documents', page_then_hold)
     [(job, generation)] = _reconcile(monkeypatch)
-    assert purge_jobs.run_job(job, generation) == 'held'
-    assert _results_left(plane, cid) == 50, 'rows erased after the hold committed'
-    row = plane.client.collection(purge_jobs.COLLECTION).document(job).get().to_dict()
-    assert row['last_outcome'] == 'held'
+    assert _quick(job, generation) == 'held'
+    assert artifact.get().exists and objects_deleted == []
+    assert [row.to_dict()['segment_id'] for row in _owed(plane, job)] == [segment]
 
     monkeypatch.setattr(batch_pipeline_purge.queries, 'owner_documents', real_page)
     legal_holds.place_legal_hold(plane.uid, issuer='admin', active=False)
-    plane.client.collection(purge_jobs.COLLECTION).document(job).update({'due_at': purge_jobs._now()})
-    [(job, generation)] = _reconcile(monkeypatch)
-    assert generation == 2
-    assert purge_jobs.run_job(job, generation) == 'purged'
+    [(job, generation)] = _redrive(monkeypatch, plane, job)
+    assert _quick(job, generation) == 'purged'
+    assert not artifact.get().exists and objects_deleted == [uri]
     assert _results_left(plane, cid) == 0
+    assert not plane.client.collection(purge_jobs.COLLECTION).document(job).get().exists
+
+
+def test_checkpointed_runs_resume_from_real_cursors_until_done(monkeypatch, plane, route):
+    from database import batch_pipeline_purge
+    from database import conversation_batch_purge_jobs as purge_jobs
+
+    cid = f'conv-{uuid4().hex[:8]}'
+    _delete(plane, route, cid)
+    _seed_batch(plane, cid, mine=0, others=250)  # a long unmatched prefix ...
+    mine = plane.client.collection('batch_pipeline_prod_results').document(f'{plane.uid}-zzzz')
+    mine.set({'owner_key': plane.key, 'conversation_id': cid, 'segment_id': f'{plane.uid}-zzzz'})  # ... then ours
+    real_page = batch_pipeline_purge.queries.owner_documents
+    cursors = []
+
+    def recording_page(client, namespace, table, key, *, after=None):
+        if namespace == 'batch_pipeline_prod' and table == 'results':
+            cursors.append(after.id if after is not None else None)
+        return real_page(client, namespace, table, key, after=after)
+
+    monkeypatch.setattr(batch_pipeline_purge.queries, 'owner_documents', recording_page)
+    [(job, generation)] = _reconcile(monkeypatch)
+    outcomes = []
+    for _ in range(80):  # one checkpoint per run: every page, table and phase boundary
+        outcomes.append(_quick(job, generation, budget_seconds=0))  # hand off at every checkpoint
+        if outcomes[-1] == 'purged':
+            break
+        [(job, generation)] = _reconcile(monkeypatch)
+    assert outcomes[-1] == 'purged' and 'checkpointed' in outcomes
+    assert cursors[:3] == [None, f'{plane.uid}-r0099', f'{plane.uid}-r0199']  # each run resumed after the last
+    assert not mine.get().to_dict().get('conversation_id')
+    assert not plane.client.collection(purge_jobs.COLLECTION).document(job).get().exists
 
 
 def test_account_wipe_gate_fails_the_run_retryably_and_keeps_the_obligation(monkeypatch, plane, route):
@@ -222,6 +317,8 @@ def test_account_wipe_gate_fails_the_run_retryably_and_keeps_the_obligation(monk
     legal_holds.acquire_destructive_operation(plane.uid, kind='account_deletion', token='synthetic-wipe')
     [(job, generation)] = _reconcile(monkeypatch)
     with pytest.raises(legal_holds.DestructiveOperationInProgress):
-        purge_jobs.run_job(job, generation)
+        _quick(job, generation)
     assert _results_left(plane, cid) == 2
-    assert plane.client.collection(purge_jobs.COLLECTION).document(job).get().to_dict()['last_outcome'] == 'failed'
+    row = plane.client.collection(purge_jobs.COLLECTION).document(job).get().to_dict()
+    assert row['last_outcome'] == 'failed' and row['progress']['phase'] == 'segments'
+    assert len(_owed(plane, job)) == 2
