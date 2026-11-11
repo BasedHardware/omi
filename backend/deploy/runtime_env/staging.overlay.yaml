@@ -46,6 +46,10 @@ cloud_run:
     MCP_OAUTH_CLAUDE_CLIENT_NAME: ''
     MCP_OAUTH_CLAUDE_REDIRECT_URIS: ''
     SYNC_LEDGER_FENCE_MODE: legacy
+    RECORD_TOKEN_LEASE_MODE: 'off'
+    RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: '0'
+    RECORD_TOKEN_LEASE_SECONDS: '3600'
+    RECORD_TOKEN_LEASE_DEPLOYED_AT: '1794268800'
   # Per-service env_inputs (override env_inputs for that service). Prod's deploy action gives
   # backend-sync-backfill its own sync-jobs URL; without it the backfill service mints and accepts
   # backend-sync's audience and rejects its own Cloud Tasks with 403 (wrong audience).

@@ -1505,6 +1505,33 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_record_token_late_append_total[5m])) > 0 or vector(0)",
+      "file": "alerts/record-token-lease.json",
+      "issues": [],
+      "metrics": [
+        "omi_record_token_late_append_total"
+      ],
+      "owner_title": "Record token lease closed during uploader activity",
+      "owner_uid": "omi-record-token-lease-late-append",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(deriv((last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]))[30m:]) >= bool 0) and on() (last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]) > 0) and on() (sum(increase(omi_record_token_lease_expired_sealed_total[1h])) > 0) or vector(0)",
+      "file": "alerts/record-token-lease.json",
+      "issues": [],
+      "metrics": [
+        "omi_record_seal_oldest_age_seconds",
+        "omi_record_token_lease_expired_sealed_total"
+      ],
+      "owner_title": "Record token lease backlog age is not falling",
+      "owner_uid": "omi-record-token-lease-backlog",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
       "file": "alerts/resilience.json",
       "issues": [],
@@ -4045,7 +4072,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 271
+    "query_consumers": 273
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

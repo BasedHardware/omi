@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-10 -->
+<!-- feature-flag-registry as-of: 2026-11-11 -->
 
 # Feature-flag authority registry
 
@@ -120,7 +120,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-11-10.
+None as of 2026-11-11.
 
 ## Flags
 
@@ -285,6 +285,9 @@ and an explicit empty literal renders as `''`.
 | `QUIET_EMPTY_EXIT_ENABLED` | Default off; fenced empty quiet-check exits and deferred server custody repair | backend | env | closed | — | — | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | on | 2026-11-16 | batch-pipeline (dazheng) |
 | `RECORD_GAP_FILL_PERCENT` | Default 0; with RECORD_GAP_FILL=on, a stable uid cohort whose WAL upload may fill a closed record's missing retained tail with create-only tagged PCM objects | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-21 | auditfix |
 | `RECORD_RETAINED_ACK_PERCENT` | Default 0; with RECORD_RETAINED_ACK=on and the uid inside the RECORD_GAP_FILL cohort, a stable uid cohort whose proven-covered closed-record WAL uploads are answered 200 so the phone releases them and sends the next batch | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-22 | omi-pipeline |
+| `RECORD_TOKEN_LEASE_MODE` | Default off; server-observed producer custody leases, shadow observes only and serve honors the lease cohort | backend | env | closed | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); valueFrom (backend-listen (chart), pusher (chart)) | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); valueFrom (backend-listen (chart), pusher (chart)) | — | pending | undecided | 2026-11-23 | record-token-lease |
+| `RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT` | Default zero; serve-only uid cohort with fresh record-token-lease salt | backend | env | closed | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); valueFrom (backend-listen (chart), pusher (chart)) | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); valueFrom (backend-listen (chart), pusher (chart)) | — | pending | undecided | 2026-11-23 | record-token-lease |
+| `RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S` | Default empty; digested uid serve cohort, inert in off and shadow modes | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-23 | record-token-lease |
 | `REVIEW_SURFACE_MODE` | Review queue, reversible agent changes and entity pages; off by default, on enables authenticated routes | backend | env | closed | on | on (backend-listen (chart), cloud_run/backend, gke/backend-listen) | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen) | — | pending | undecided | 2026-11-07 | auditfix |
 | `SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT` | Default 0; learned supported-only auto/multi/undeclared mobile/web capture, nested in each platform cohort (and batch for mobile); whole-unit dual audio LID before Parakeet | backend | env | closed | — | — | 100 (backend-listen (chart)) | — | pending | on | 2026-11-10 | auditfix |
 | `SERVER_BATCH_ONLY_MOBILE_PERCENT` | Default 0; iOS/Android unsalted owner-hash cohort nested in existing batch admission, with the same custody and language gates | backend | env | closed | — | — | 100 (backend-listen (chart)) | — | pending | on | 2026-11-07 | auditfix |
@@ -445,6 +448,7 @@ and an explicit empty literal renders as `''`.
 | `BATCH_VENDOR_OVERFLOW_ENABLED` | Default on; inside the vendor-routing cohort, a fresh unit that would start on GPU starts on the table's next healthy primary vendor while the GPU ring reads saturated (oldest admissible fresh unit past BATCH_VENDOR_OVERFLOW_ENTER_SECONDS with at least BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS waiting). false keeps every capable unit on GPU | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `BATCH_VENDOR_ROUTING_ENABLED` | Default on; all-vendor batch route selection at intake. false serves today's routing (GPU where Parakeet serves, else Modulate) to every owner | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `BATCH_VENDOR_SPEAKER_TURNS_ENABLED` | Default on: vendor-route batch units keep the vendor's own speaker turns and join the GPU unit scope, sync-off centroids and conversation linking | backend | env | open | — | — | — | — | keep | keep | — | backlog-refactor |
+| `BILLING_RENEWAL_OBSERVATIONS_ENABLED` | Default on; best-effort immutable renewal attempt observations; off performs no observation IO | backend | env | open | — | — | — | — | keep | keep | — | churn-lead |
 | `CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED` | Default on; regenerate a capture-group primary's notes once per group revision when confirmed same-event members carry meeting context the primary lacks | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `CAP_HOLD_DURABLE_REDRIVE_ENABLED` | Default on; awaited periodic recovery of persisted processing choices, staged live sources and fragment cleanup | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `CAP_HOLD_FLEET_SNAPSHOT_ENABLED` | Default on; refresh the held-content fleet gauge asynchronously with its own bounded RPC budget | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
@@ -499,6 +503,7 @@ and an explicit empty literal renders as `''`.
 | `EPISODE_MOMENT_OUTPUT_VALIDATOR` | Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_OUTPUT_LANGUAGE_PIN` | Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_RECORDED_TIME_ENABLED` | Default on; resolve episode ownership by recorded timestamps for every device and late capture | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
+| `EXPLICIT_CALENDAR_REQUEST_KEEP` | Default on; preserve direct put-on-calendar and add-content-to-calendar requests through short-clip and relevance thinning | backend | env | open | — | — | — | — | keep | keep | — | quality-lead |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | auditfix |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_THROTTLE_DECAY_ENABLED` | Decay expired throttle and quiet warnings on read; set off to restore restrict-only decay | backend | env | open | — | — | — | — | keep | keep | — | backend |
@@ -929,6 +934,9 @@ and an explicit empty literal renders as `''`.
 | `QUIET_EMPTY_EXIT_ENABLED` | dark local validation and staging → separately approved orphan-repair drain → lead-approved full serving cohort after staging and backlog acceptance | Zero protected-row deletions or endless quiet rearming in staging; orphan stock must not grow after enablement; inspect listen_quiet_check_empty_exit_total by disposition and mode. | lead2 (dazheng) | 2026-11-16 |
 | `RECORD_GAP_FILL_PERCENT` | 0 (ships dark) → 1% for at least 30 min → 10% for at least 30 min → 50% for at least 30 min → 100% | omi_record_gap_fill_total{outcome=written} followed by admissions for the same record= key within 15 min; no conflicting retained audio overlap retries for filled records; admission errors do not rise; no _covered failure after a fill for the same record key | lead2's go at each step | 2026-11-21 |
 | `RECORD_RETAINED_ACK_PERCENT` | 0 (ships dark) → 1% for at least 30 min → 10% for at least 30 min → 50% for at least 30 min → 100% | omi_record_retained_ack_total{outcome=acked} with no conflicting retained audio overlap on the next admission of an acked record; no skipped_bytes_differ spike; acked rate within the gap-fill written rate plus already-complete PCM records; playback gap rate for acked records does not rise | lead2's go at each step; rollback is RECORD_RETAINED_ACK=off or percent 0 | 2026-11-22 |
+| `RECORD_TOKEN_LEASE_MODE` | off (dark deployment) → shadow for at least 48h → serve 1% → serve 10% (retune from gap histogram) → serve 50% → serve 100% only after RECORD_GAP_FILL_PERCENT >= 10 | omi_record_token_late_append_total stays zero; oldest unsealed age falls; no immediate reactivation churn; P4 auto-revert at every step | lead2 go at every flag step | 2026-11-23 |
+| `RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT` | off (dark deployment) → shadow for at least 48h → serve 1% → serve 10% (retune from gap histogram) → serve 50% → serve 100% only after RECORD_GAP_FILL_PERCENT >= 10 | omi_record_token_late_append_total stays zero; oldest unsealed age falls; no immediate reactivation churn; P4 auto-revert at every step | lead2 go at every flag step | 2026-11-23 |
+| `RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S` | off (dark deployment) → shadow for at least 48h → serve 1% → serve 10% (retune from gap histogram) → serve 50% → serve 100% only after RECORD_GAP_FILL_PERCENT >= 10 | omi_record_token_late_append_total stays zero; oldest unsealed age falls; no immediate reactivation churn; P4 auto-revert at every step | lead2 go at every flag step | 2026-11-23 |
 | `SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT` | 0% until David approves measured multilingual replay, custody and capacity qualification → 1% of eligible mobile batch owners for one full new-state lookback → 5%, then 25%, then 100% only after each full clean lookback | Existing hard-3 and T4 unchanged; zero unsafe routes, zero missing custody; serving replay wrong-script and empty rates no worse than baseline; queue age and GPU occupancy within release guards; suppression reasons and multilingual recovery backlog understood | two-lane rollout lead after David approves admission percent | 2026-11-10 |
 | `SERVER_BATCH_ONLY_MOBILE_PERCENT` | 0% until platform hermetic and release custody qualification pass → 5% of batch-admitted owners after one clean new-state lookback → 25% after no missing audio or transcript backlog regression → 100% of batch-admitted owners after capacity and language readbacks stay clean | zero custody failures or byte loss; retained zero-preview rows reach batch transcript; batch queue age and GPU backlog remain within existing release guards; supported-language outputs qualify | two-lane rollout lead | 2026-10-31 |
 | `SERVER_BATCH_ONLY_WEB_PERCENT` | 5% after the web deploy is live → 25% after one clean new-state lookback → 100% after another clean new-state lookback | Server batch suppression counter by web platform and reason stays clean; batch timeliness and queue age remain within existing release guards | Infra Rollout Coordinator | 2026-11-30 |
@@ -1090,6 +1098,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_VENDOR_ROUTING_SHADOW_PERCENT` — Default zero; owners outside the routing cohort whose table decision is computed and logged (event=batch_vendor_route_shadow, no ids) while their routing stays unchanged (fail: closed)
 - `BATCH_VENDOR_ROUTING_UID_ALLOWLIST` — Comma-separated owners routed from the vendor route table regardless of percent; default empty; env only, no cohort-document membership (fail: closed)
 - `BATCH_VENDOR_SPEAKER_TURNS_ENABLED` — Default on: vendor-route batch units keep the vendor's own speaker turns and join the GPU unit scope, sync-off centroids and conversation linking (fail: open)
+- `BILLING_RENEWAL_OBSERVATIONS_ENABLED` — Default on; best-effort immutable renewal attempt observations; off performs no observation IO (fail: open)
 - `BILLING_WEBHOOK_LEDGER_ENABLED` — Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint (fail: closed)
 - `CALLS_RECAP_MODE` — Boundary call metadata and completed-local-day revision-aware recap states; default shadow (fail: closed)
 - `CALLS_RECAP_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
@@ -1187,6 +1196,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_MOMENT_OUTPUT_VALIDATOR` — Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels (fail: open)
 - `EPISODE_OUTPUT_LANGUAGE_PIN` — Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language (fail: open)
 - `EPISODE_RECORDED_TIME_ENABLED` — Default on; resolve episode ownership by recorded timestamps for every device and late capture (fail: open)
+- `EXPLICIT_CALENDAR_REQUEST_KEEP` — Default on; preserve direct put-on-calendar and add-content-to-calendar requests through short-clip and relevance thinning (fail: open)
 - `FAIR_USE_THROTTLE_DECAY_ENABLED` — Decay expired throttle and quiet warnings on read; set off to restore restrict-only decay (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
@@ -1322,6 +1332,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RECORD_SEAL_SWEEPER_ENABLED` — Default on; bounded in-cluster proof and repair of dead record producers (fail: open)
 - `RECORD_SEAL_SWEEPER_MODE` — plan or apply; default apply, plan performs proofs without writes (fail: closed)
 - `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` — Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing (fail: open)
+- `RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S` — Default empty; digested uid serve cohort, inert in off and shadow modes (fail: closed)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
 - `SCREEN_TASK_JEV_AUDIT_RATE` — Screen gate reject audit fraction, default 0.01 (fail: open)
 - `SCREEN_TASK_JEV_THRESHOLD` — Screen gate threshold, default 0.5 (fail: open)
@@ -1410,6 +1421,8 @@ reason:
 
 | Key | Reason | owner | decision | review_by | notes |
 | --- | --- | --- | --- | --- | --- |
+| `RECORD_TOKEN_LEASE_SECONDS` | Lease timing parameter, default 3600 seconds; bounded to 1800-7200; mode owns rollback | — | — | — | — |
+| `RECORD_TOKEN_LEASE_DEPLOYED_AT` | Shared serve-enable epoch for bounded stock-token seed; missing epoch preserves the legacy producer fence | — | — | — | — |
 | `K_REVISION` | Cloud Run revision identity for process-local discovery phase, not a behavior flag | — | — | — | — |
 | `DD_TRACE_ENABLED` | Datadog telemetry instrumentation switch, not a product behavior flag | — | — | — | — |
 | `DD_LOGS_ENABLED` | Datadog telemetry log routing switch, not a product behavior flag | — | — | — | — |
