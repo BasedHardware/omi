@@ -87,5 +87,10 @@ python3 "$FW/scripts/ci/prove_cv1_bootloader.py" --build build \
 cmp build/cv1-mcuboot-first.bin build/cv1-bootloader/cv1-mcuboot.bin
 printf '%s\n' 'Two clean MCUboot compilations produced identical 64KiB boot regions.' \
   > build/cv1-bootloader/reproducibility.txt
-west manifest --freeze > build/cv1-bootloader/west-frozen.yml
+# west 1.2.0 freezes inactive projects too, even when west update correctly
+# leaves them uncloned. Record the resolved pinned manifest and actual active
+# module SHAs without cloning modules that are not part of this build.
+west manifest --resolve > build/cv1-bootloader/west-resolved.yml
+west list -f '{name} {path} {sha}' > build/cv1-bootloader/west-active-shas.txt
+git -C nrf rev-parse HEAD > build/cv1-bootloader/ncs-revision.txt
 "$COMPILER" --version > build/cv1-bootloader/toolchain.txt

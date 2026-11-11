@@ -101,7 +101,7 @@ The run uploads `cv1-bootloader-<run>-<attempt>` with:
 - MCUboot ELF/map, main disassembly, effective config and generated partitions.
 - `bootloader-report.json`: factory/candidate hashes, differing-byte count,
   loaded ends, public key hash, layout and approval/bench status.
-- Rebuild comparison, frozen west manifest and toolchain version.
+- Rebuild comparison, resolved west manifest, active module SHAs and NCS revision and toolchain version.
 
 Use the report to state the actual binary difference; compiler or layout
 changes cannot be dismissed merely as “different toolchain.” The recorded CI rebuilds and lead jig receipt bind the approved bytes;
