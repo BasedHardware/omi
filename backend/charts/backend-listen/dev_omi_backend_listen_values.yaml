@@ -107,6 +107,8 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
+    value: "true"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE

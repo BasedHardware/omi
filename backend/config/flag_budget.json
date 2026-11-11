@@ -24,8 +24,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 268,
+  "count": 269,
   "names": {
+    "SYNC_RECORD_COVERAGE_WAIT_MEMO": {"owner": "cl2-fixnow", "review_by": "2026-12-11"},
     "SUMMARY_PROJECTION_DEBT_ENABLED": {"owner": "refactor-lead", "review_by": "2026-12-10", "registry": "config/feature-flags.yaml"},
     "EPISODE_COMPOSER_REUSE": {"owner": "refactor-lead", "review_by": "2026-12-10", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-08", "registry": "config/feature-flags.yaml"},

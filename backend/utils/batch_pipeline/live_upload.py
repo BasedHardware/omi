@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 import io
+import hashlib
+import json
 import logging
 import wave
 
@@ -20,12 +22,19 @@ from config.batch_pipeline import (
     record_capture_eligible,
 )
 from config.policy import resolve_batch_policy
+from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
-from database.sync_record_wait_cache import RECORD_WAIT_CACHE_SECONDS, cached_record_wait, remember_record_wait
+from database.sync_record_wait_cache import (
+    RECORD_WAIT_CACHE_SECONDS,
+    cached_record_wait,
+    remember_record_wait,
+    cached_coverage_wait,
+    remember_coverage_wait,
+)
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.intake import durable_status, start_response
 from utils.batch_pipeline.artifact_policy import artifacts_for
@@ -89,7 +98,7 @@ def _pending(reason: RecordUploadWait, record: str | None = None):
 
 # Conversation-level waits: any WAL for the conversation gets the same answer
 # until record state changes. Content-level waits (coverage, receipts) are not
-# memoized, since another WAL of the same conversation may already be provable.
+# memoized here, since another WAL of the same conversation may already be provable.
 _MEMOIZED_WAITS = frozenset({RecordUploadWait.RECORD_JOBS_MISSING, RecordUploadWait.RESERVATION_PENDING})
 
 
@@ -120,6 +129,16 @@ async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
 def _pcm(wav):
     with wave.open(io.BytesIO(wav), 'rb') as stream:
         return stream.readframes(stream.getnframes())
+
+
+def _coverage_wait_key(uid, conversation_id, content_id, jobs):
+    # content_id already hashes each uploaded basename (capture timestamp and
+    # codec) plus its bytes, without decoding. record_identity is stable for the
+    # conversation, NOT a revision: hash the current jobs too, so added units or
+    # changed artifact references/timing invalidate immediately. Existing reads
+    # supply all inputs; no extra Firestore lookup or local file read is needed.
+    payload = json.dumps([uid, conversation_id, content_id, jobs], sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _covered(paths, jobs, artifacts):
@@ -375,11 +394,18 @@ async def registered_record_response(
             if acked:
                 return covered_response()
         return await conversation_pending(RecordUploadWait.RECORD_JOBS_MISSING, uid, conversation_id)
+    coverage_key = None
+    if coverage_wait_memo_enabled():
+        coverage_key = _coverage_wait_key(uid, conversation_id, content_id, jobs)
+        if await run_blocking(db_executor, cached_coverage_wait, coverage_key):
+            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
     failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         failure_reason = RecordUploadWait.COVERAGE_CHECK_FAILED
         if not await run_blocking(sync_executor, _covered, paths, jobs, artifacts):
+            if coverage_key is not None:
+                await run_blocking(db_executor, remember_coverage_wait, coverage_key)
             return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
 
         def alias(tx):
