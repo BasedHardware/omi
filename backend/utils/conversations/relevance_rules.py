@@ -125,6 +125,12 @@ _CALENDAR_REQUEST_RE = re.compile(
     r"[ \t]+(?:my|the)[ \t]+calendar(?:[ \t]+[^\r\n.!?;]{1,80})?[.!?]?",
     re.IGNORECASE,
 )
+# Only scan after the bounded candidate matches. Ambiguous negation/cancellation
+# keeps the prior policy; word boundaries preserve Notion/notebook/notifications.
+_CALENDAR_REQUEST_NEGATION_RE = re.compile(
+    r"\b(?:not|never|no|cannot|[a-z]{1,12}n't|cancel(?:s|ed|led|ing|ling|lation|lations)?)\b",
+    re.IGNORECASE,
+)
 
 
 def has_explicit_keep_instruction(text: str) -> bool:
@@ -133,9 +139,14 @@ def has_explicit_keep_instruction(text: str) -> bool:
     Existing reminder matching remains unchanged when the calendar guard is off.
     Call per segment for new calendar forms, without coalescing speakers/turns.
     """
-    return bool(EXPLICIT_REMINDER_RE.search(text)) or (
-        default_on(EXPLICIT_CALENDAR_REQUEST_KEEP_ENV)
-        and _CALENDAR_REQUEST_RE.fullmatch(normalize_relevance_text(text).strip()) is not None
+    if EXPLICIT_REMINDER_RE.search(text):
+        return True
+    if not default_on(EXPLICIT_CALENDAR_REQUEST_KEEP_ENV):
+        return False
+    candidate = normalize_relevance_text(text).strip()
+    return (
+        _CALENDAR_REQUEST_RE.fullmatch(candidate) is not None
+        and _CALENDAR_REQUEST_NEGATION_RE.search(candidate) is None
     )
 
 

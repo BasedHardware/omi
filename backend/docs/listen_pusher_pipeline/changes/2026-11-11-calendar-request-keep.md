@@ -13,6 +13,16 @@ the same contract. New calendar matches never join speakers or segments. Future
 tense, past statements, negated commands and calendar mentions are not new keep
 exemptions. Existing reminders and user/manual/privacy/media authority remain.
 
+For the new calendar branch only, an otherwise matching bounded candidate with a
+standalone `not`, `never`, `no`, `cannot`, an `n't` contraction, or a cancellation
+marker (`cancel`/`cancels`, `canceled`/`cancelled`, `canceling`/`cancelling`,
+`cancellation`/`cancellations`) keeps the prior policy instead of gaining an
+exemption. This conservatively declines ambiguous objects such as a cancelled
+appointment. Candidate matching and marker detection share NFKC/apostrophe
+normalization; word boundaries preserve names such as Notion, notebook and
+notifications. The unchanged legacy reminder regex is evaluated first, including
+its existing negated phrases, with either value of the new switch.
+
 This guard retains input for normal downstream adjudication. It neither creates
 an event/action nor guarantees accepted extraction. The general floor and its
 derived-work suppression remain for unprotected clips.

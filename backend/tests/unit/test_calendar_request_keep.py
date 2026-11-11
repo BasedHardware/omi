@@ -18,6 +18,10 @@ REQUESTS = (
     'Please put the tire change on my calendar.',
     'Could you add the safety check to the calendar?',
     'Can you please put the bike service on the calendar tomorrow?',
+    'Please add the Notion workshop to my calendar.',
+    'Could you please put notebook shopping on the calendar?',
+    'Can you add the notifications review to my calendar?',
+    'Ｐｕｔ my bike service on the calendar.',
 )
 
 
@@ -81,7 +85,17 @@ def test_explicit_false_restores_previous_floor_and_relevance(monkeypatch, switc
 
 
 @pytest.mark.parametrize('switch', ['false', 'true'])
-@pytest.mark.parametrize('text', ['Remind me to call tomorrow.', 'Add this to my calendar.'])
+@pytest.mark.parametrize(
+    'text',
+    [
+        'Remind me to call tomorrow.',
+        'Add this to my calendar.',
+        'Remind me not to call tomorrow.',
+        'Do not forget to call tomorrow.',
+        'Do not add this to my calendar.',
+        'Never add this to my calendar.',
+    ],
+)
 def test_existing_reminders_keep_their_authority(monkeypatch, switch, text):
     monkeypatch.setenv('EXPLICIT_CALENDAR_REQUEST_KEEP', switch)
     assert quiet_minimum('synthetic-account', capture(text), tz='UTC') is None
@@ -98,8 +112,7 @@ def test_new_calendar_guard_does_not_fuse_speakers_or_turns():
     assert deterministic_relevance([s.text for s in rows], 2.0)[0] is None
 
 
-@pytest.mark.parametrize('text', REQUESTS)
-def test_same_instruction_contract_precedes_content_and_minimum_salience(monkeypatch, text):
+def unowned_media_minimum(text):
     start = datetime(2026, 11, 11, tzinfo=timezone.utc)
     rows = [SimpleNamespace(id='synthetic-segment', text=text, start=0.0, end=2.0, is_user=False)]
     evidence = SpeakerEvidence(
@@ -116,6 +129,12 @@ def test_same_instruction_contract_precedes_content_and_minimum_salience(monkeyp
     )
     conversation = SimpleNamespace(transcript_segments=rows, content_kind='media')
     minimum = Structured(title='Synthetic minimum', title_provenance='server_minimum')
+    return start, rows, evidence, conversation, minimum
+
+
+@pytest.mark.parametrize('text', REQUESTS)
+def test_same_instruction_contract_precedes_content_and_minimum_salience(monkeypatch, text):
+    start, rows, evidence, conversation, minimum = unowned_media_minimum(text)
     decision = classify_content(rows, started_at=start, finished_at=start + timedelta(seconds=2), evidence=evidence)
     assert decision.content_kind == 'conversation' and decision.reason == 'protected'
     assert not minimum_is_background(conversation, minimum, evidence)
@@ -125,3 +144,39 @@ def test_same_instruction_contract_precedes_content_and_minimum_salience(monkeyp
         classify_content(rows, started_at=start, finished_at=start + timedelta(seconds=2), evidence=evidence).reason
         != 'protected'
     )
+
+
+@pytest.mark.parametrize('switch', ['true', 'false'])
+@pytest.mark.parametrize(
+    'text',
+    [
+        'Put my bike service not on the calendar.',
+        'Add the annual inspection not to my calendar.',
+        'Please put my bike service not on the calendar.',
+        'Can you please add the inspection not to my calendar?',
+        'Could you please put my bike service never on the calendar?',
+        'Can you please not put my bike service on the calendar?',
+        'Could you please never add the inspection to my calendar?',
+        'Put no bike service on the calendar.',
+        'Add the cancelled inspection to my calendar.',
+        'Add the canceled inspection to my calendar.',
+        'Please add the cancellation to my calendar.',
+        'Put my bike service on the calendar never mind.',
+        'Could you add the inspection I can’t attend to my calendar?',
+        'Put my bike service ｎｏｔ on the calendar.',
+        'Put the inspection I cannot attend on the calendar.',
+    ],
+)
+def test_negated_calendar_forms_preserve_floor_and_later_unprotected_policy(monkeypatch, switch, text):
+    monkeypatch.setenv('EXPLICIT_CALENDAR_REQUEST_KEEP', switch)
+    floor = quiet_minimum('synthetic-account', capture(text), tz='UTC')
+    assert floor is not None
+    assert not has_explicit_keep_instruction(text)
+    assert floor.overview == '' and floor.action_items == [] and floor.events == []
+    assert deterministic_relevance([text], speech_seconds=2.0)[0] is None
+    start, rows, evidence, conversation, minimum = unowned_media_minimum(text)
+    assert (
+        classify_content(rows, started_at=start, finished_at=start + timedelta(seconds=2), evidence=evidence).reason
+        != 'protected'
+    )
+    assert minimum_is_background(conversation, minimum, evidence)
