@@ -128,7 +128,8 @@ _CALENDAR_REQUEST_RE = re.compile(
 # Only scan after the bounded candidate matches. Ambiguous negation/cancellation
 # keeps the prior policy; word boundaries preserve Notion/notebook/notifications.
 _CALENDAR_REQUEST_NEGATION_RE = re.compile(
-    r"\b(?:not|never|no|cannot|[a-z]{1,12}n't|cancel(?:s|ed|led|ing|ling|lation|lations)?)\b",
+    r"\b(?:not|never|no|cannot|without|except|excluding|avoid(?:ing)?|omit(?:ting)?|"
+    r"instead[ \t-]+of|rather[ \t-]+than|[a-z]{1,12}n't|cancel(?:s|ed|led|ing|ling|lation|lations)?)\b",
     re.IGNORECASE,
 )
 
