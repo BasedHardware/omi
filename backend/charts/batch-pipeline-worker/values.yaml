@@ -224,6 +224,25 @@ recordSealRepair:
   mode: apply
   workers: 8
   rowSeconds: 270
+  # CPU-only repair pod placement. The old affinity excluded the batch-pipeline
+  # pool, so repair landed on the monitoring pool at 101% CPU and received ~2 of
+  # its 4-core limit; the batch-pipeline pool sits at 8-19% CPU. Empty nodePool
+  # restores the old exclusion (and empty tolerations the old no-toleration pod).
+  # g2-standard-8 allocatable is ~7.8 vCPU and the GPU worker requests 4, so a
+  # 4-CPU request does not co-schedule with a worker: the pool autoscaler adds a
+  # node. Lower cpuRequest to "3" to share a worker's node instead.
+  nodePool: batch-pipeline-pool
+  tolerations:
+    - key: omi.ai/batch-pipeline
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+    - key: nvidia.com/gpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+  # 2 -> 4 (== the unchanged limit) so 16 row workers are not starved to ~2 cores.
+  cpuRequest: "4"
   # Lead supplies current serving-role policy flags; absent/invalid refuses IO.
   # Refresh this map per ramp rung with --reuse-values; no worker restart.
   serverFlags: {}
