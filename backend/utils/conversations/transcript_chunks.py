@@ -50,7 +50,7 @@ def build_transcript_chunks(
         text = (seg.get('text') or '').strip()
         if not text:
             continue
-        lines.append(f"{display.label(seg)}: {text}")
+        lines.append(f"{display.prompt_label(seg)}: {text}")
     if not lines:
         return []
 

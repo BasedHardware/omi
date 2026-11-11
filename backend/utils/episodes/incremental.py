@@ -216,7 +216,7 @@ def _legacy_moment(segments: Sequence[Mapping[str, Any]], display: Any) -> tuple
             continue
         words += len(text.split())
         participant = display.for_segment(segment)
-        label = participant.label
+        label = display.prompt_label(segment)
         voice = (
             ('user',)
             if participant.name and segment.get('is_user')

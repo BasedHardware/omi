@@ -9583,3 +9583,17 @@ in completed bounded age samples and existing held sweep pages, including
 missing clocks excluded by age ordering. Neither clock usable in an age sample also sets
 `omi_batch_timeliness_scan_truncated{leg="staged_input"}` to 1 for the existing
 scan-blind warning. These observations are not a distinct-row fleet census.
+
+## Batch abstention display
+
+`SPEAKER_ABSTENTION_UNKNOWN_LABEL_ENABLED` defaults on (`default_on` parser).
+At the server presentation boundary, `BATCH_UNASSIGNED_` speaker keys or
+`speaker_match_source`, `speaker_identity_status` or legacy `identity_status`
+set to `batch_abstention` render as the shared `Unknown speaker` label. They
+consume no letter or episode voice-order slot and remain uncountable. Stored
+speaker keys and IDs remain distinct; a gap never inherits a person or wearer
+name. MCP and LLM-facing text instead use `[unassigned speech]` per segment;
+compact transcripts retain distinct citation keys and null identity bindings,
+never one shared speaker name. Setting the switch to false restores the previous display behavior,
+including developer API `speaker_name` values. This adds no wire field or client
+naming rule. See [stage 1 change note](listen_pusher_pipeline/changes/2026-11-11-speaker-abstention-label.md).

@@ -257,7 +257,7 @@ def build_transcript_match_snippets(
             text = (seg.get("text") or "").strip()
             if not text:
                 continue
-            prefix = f"{display.label(seg)}: "
+            prefix = f"{display.prompt_label(seg)}: "
             line = f"{prefix}{text}"
             if index == center:
                 center_line_start, center_offset, center_text = line_offset, line_offset + len(prefix), text
@@ -323,7 +323,7 @@ def build_transcript_match_snippets(
                 "end_ms": _seconds_to_ms(end_f),
                 "speaker_id": None,
                 "speaker_key": display.for_segment(hit).key,
-                "speaker_label": display.label(hit),
+                "speaker_label": display.prompt_label(hit),
             }
         )
     return snippets

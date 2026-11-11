@@ -195,15 +195,12 @@ def conversation_action_item_speaker_labels(
     for segment, prompt_row in zip(segments, rendered):
         if not getattr(segment, 'id', None):
             continue
+        role = roles.for_segment(segment).role if roles is not None else 'primary_user' if segment.is_user else 'other'
         labels.append(
             {
                 'segment_id': str(segment.id),
-                'speaker_label': display.label(prompt_row),
-                'speaker_role': (
-                    roles.for_segment(segment).role
-                    if roles is not None
-                    else 'primary_user' if segment.is_user else 'other'
-                ),
+                'speaker_label': display.prompt_label(prompt_row),
+                'speaker_role': 'unknown' if display.for_segment(prompt_row).is_abstention else role,
             }
         )
     return labels
@@ -396,8 +393,9 @@ def conversation_transcript_and_speaker_map(
             segment_id = escape_spoken_wake_word_marker(segment_id)
             segment_text = escape_spoken_wake_word_marker(segment_text)
         speaker_key = display.for_segment(segment).key
-        header = f'[{segment_id}]' if speaker_key == previous_speaker else f'[{segment_id} {speaker_key}]'
-        lines.append(f'{header} {marker}{segment_text}')
+        lines.append(
+            display.prompt_turn(segment, segment_text, segment_id, marker=marker, previous_key=previous_speaker)
+        )
         previous_speaker = speaker_key
     return '\n\n'.join(lines), speaker_map
 
@@ -501,6 +499,6 @@ def render_cluster_transcript(
         if mark_wake_words:
             text = escape_spoken_wake_word_marker(text)
             segment_id = escape_spoken_wake_word_marker(segment_id)
-        turns.append(f'[{segment_id} {key}] {marker}{text}')
+        turns.append(display.prompt_turn(row, text, segment_id, marker=marker))
     metadata = '\n'.join(f'spk {key} {name or "?"}' for key, name in labels.items())
     return '\n'.join(part for part in (owner_note, metadata, '\n\n'.join(turns)) if part), labels

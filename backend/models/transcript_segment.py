@@ -371,7 +371,7 @@ class TranscriptSegment(BaseModel):
             timestamp_str = (
                 f'[{segment.get_timestamp_string(elapsed=elapsed_timestamps)}] ' if include_timestamps else ''
             )
-            speaker_name = display.label(segment)
+            speaker_name = display.prompt_label(segment)
             transcript += f'{timestamp_str}{speaker_name}: {segment_text}\n\n'
 
         return transcript.strip()

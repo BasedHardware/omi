@@ -1,0 +1,540 @@
+{
+  "case": "point-keys",
+  "fixture": "fictional; no account or provider data",
+  "before": {
+    "api": {
+      "transcript_segments": [
+        {
+          "id": "turn-0",
+          "speaker": "SPEAKER_0",
+          "speaker_id": 0,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": null,
+          "speaker_identity_status": "unknown",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "Let us plan the garden.",
+          "start": 0.0,
+          "end": 6.0,
+          "speaker_name": "Speaker A"
+        },
+        {
+          "id": "turn-1",
+          "speaker": "BATCH_UNASSIGNED_part_point_1",
+          "speaker_id": 1,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": "batch_abstention",
+          "speaker_identity_status": "ambiguous",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "The seedlings arrive Friday.",
+          "start": 6.0,
+          "end": 6.0,
+          "speaker_name": "Speaker B"
+        },
+        {
+          "id": "turn-2",
+          "speaker": "BATCH_UNASSIGNED_part_point_2",
+          "speaker_id": 2,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": "batch_abstention",
+          "speaker_identity_status": "ambiguous",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "We can plant on Saturday.",
+          "start": 12.0,
+          "end": 12.0,
+          "speaker_name": "Speaker C"
+        }
+      ],
+      "speaker_resolution": {
+        "status": "capture",
+        "participant_speaker_ids": [
+          0
+        ]
+      }
+    },
+    "developer_api": {
+      "transcript_segments": [
+        {
+          "id": "turn-0",
+          "speaker": "SPEAKER_0",
+          "speaker_id": 0,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": null,
+          "speaker_identity_status": "unknown",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "Let us plan the garden.",
+          "start": 0.0,
+          "end": 6.0,
+          "speaker_name": "Speaker A"
+        },
+        {
+          "id": "turn-1",
+          "speaker": "BATCH_UNASSIGNED_part_point_1",
+          "speaker_id": 1,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": "batch_abstention",
+          "speaker_identity_status": "ambiguous",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "The seedlings arrive Friday.",
+          "start": 6.0,
+          "end": 6.0,
+          "speaker_name": "Speaker B"
+        },
+        {
+          "id": "turn-2",
+          "speaker": "BATCH_UNASSIGNED_part_point_2",
+          "speaker_id": 2,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": "batch_abstention",
+          "speaker_identity_status": "ambiguous",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "We can plant on Saturday.",
+          "start": 12.0,
+          "end": 12.0,
+          "speaker_name": "Speaker C"
+        }
+      ],
+      "speaker_resolution": {
+        "status": "capture",
+        "participant_speaker_ids": [
+          0
+        ]
+      }
+    },
+    "review": {
+      "item_id": "speaker:fictional-prompt",
+      "kind": "speaker",
+      "title": "Who said this?",
+      "created_at": "2026-11-01T12:00:00Z",
+      "speaker": {
+        "prompt_id": "fictional-prompt",
+        "conversation_id": "fictional-garden",
+        "conversation_title": "Fictional garden plan",
+        "start": 6.0,
+        "end": 12.0,
+        "candidates": [],
+        "affected_conversation_count": 1,
+        "context": [
+          {
+            "speaker_label": "Speaker A",
+            "text": "Let us plan the garden.",
+            "at": "2026-11-01T12:00:00Z",
+            "is_target": false
+          },
+          {
+            "speaker_label": "Speaker B",
+            "text": "The seedlings arrive Friday.",
+            "at": "2026-11-01T12:00:06Z",
+            "is_target": true
+          },
+          {
+            "speaker_label": "Speaker C",
+            "text": "We can plant on Saturday.",
+            "at": "2026-11-01T12:00:12Z",
+            "is_target": false
+          }
+        ]
+      },
+      "task": null,
+      "same_person": null,
+      "spelling": null,
+      "quote": "The seedlings arrive Friday.",
+      "source_ref": null
+    },
+    "mcp_search": [
+      {
+        "text": "Speaker A: Let us plan the garden.\nSpeaker B: The seedlings arrive Friday.\nSpeaker C: We can plant on Saturday.",
+        "segment_id": "turn-1",
+        "start": 6.0,
+        "end": 6.0,
+        "start_ms": 6000,
+        "end_ms": 6000,
+        "speaker_id": null,
+        "speaker_key": "c1",
+        "speaker_label": "Speaker B"
+      }
+    ],
+    "mcp_segments": [
+      {
+        "id": "turn-0",
+        "text": "Let us plan the garden.",
+        "speaker_id": null,
+        "is_user": false,
+        "start": 0.0,
+        "end": 6.0,
+        "speaker_key": "c0",
+        "speaker_label": "Speaker A"
+      },
+      {
+        "id": "turn-1",
+        "text": "The seedlings arrive Friday.",
+        "speaker_id": null,
+        "is_user": false,
+        "start": 6.0,
+        "end": 6.0,
+        "speaker_key": "c1",
+        "speaker_label": "Speaker B"
+      },
+      {
+        "id": "turn-2",
+        "text": "We can plant on Saturday.",
+        "speaker_id": null,
+        "is_user": false,
+        "start": 12.0,
+        "end": 12.0,
+        "speaker_key": "c2",
+        "speaker_label": "Speaker C"
+      }
+    ],
+    "llm_plain": "Speaker A: Let us plan the garden.\n\nSpeaker B: The seedlings arrive Friday.\n\nSpeaker C: We can plant on Saturday.",
+    "llm_compact": "[Diarization marked 0 of 3 speaker clusters as the account owner; owner identity is UNTRUSTED in this transcript — treat first-person statements as unattributed]\nspk c0 ?\nspk c1 ?\nspk c2 ?\n[turn-0 c0] Let us plan the garden.\n\n[turn-1 c1] The seedlings arrive Friday.\n\n[turn-2 c2] We can plant on Saturday.",
+    "llm_bindings": {
+      "c0": null,
+      "c1": null,
+      "c2": null
+    },
+    "llm_legacy_compact": "[turn-0 c0] Let us plan the garden.\n\n[turn-1 c1] The seedlings arrive Friday.\n\n[turn-2 c2] We can plant on Saturday.",
+    "llm_legacy_bindings": {
+      "c0": null,
+      "c1": null,
+      "c2": null
+    },
+    "episode": "Speaker A: Let us plan the garden.\nUnknown speaker: The seedlings arrive Friday.\nUnknown speaker: We can plant on Saturday.",
+    "analytics": {
+      "conversation_id": "fictional-garden",
+      "total_seconds": 6.0,
+      "total_words": 14,
+      "words_per_minute": 140.0,
+      "speaker_count": 1,
+      "speakers": [
+        {
+          "speaker": "Speaker A",
+          "person_id": null,
+          "is_user": false,
+          "talk_seconds": 6.0,
+          "word_count": 5,
+          "words_per_minute": 50.0,
+          "talk_share": 1.0
+        },
+        {
+          "speaker": "Speaker C",
+          "person_id": null,
+          "is_user": false,
+          "talk_seconds": 0.0,
+          "word_count": 5,
+          "words_per_minute": 0.0,
+          "talk_share": 0.0
+        },
+        {
+          "speaker": "Speaker B",
+          "person_id": null,
+          "is_user": false,
+          "talk_seconds": 0.0,
+          "word_count": 4,
+          "words_per_minute": 0.0,
+          "talk_share": 0.0
+        }
+      ]
+    },
+    "label_participant_delta": 2,
+    "inventory": {
+      "raw_scoped_ids": [
+        [
+          "final:batch:fictional",
+          0
+        ],
+        [
+          "final:batch:fictional",
+          1
+        ],
+        [
+          "final:batch:fictional",
+          2
+        ]
+      ],
+      "participant_speaker_ids": [
+        0
+      ],
+      "abstention_keys": [
+        "BATCH_UNASSIGNED_part_point_1",
+        "BATCH_UNASSIGNED_part_point_2"
+      ],
+      "segments": 3,
+      "words": 14,
+      "speech_seconds": 6.0
+    }
+  },
+  "after": {
+    "api": {
+      "transcript_segments": [
+        {
+          "id": "turn-0",
+          "speaker": "SPEAKER_0",
+          "speaker_id": 0,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": null,
+          "speaker_identity_status": "unknown",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "Let us plan the garden.",
+          "start": 0.0,
+          "end": 6.0,
+          "speaker_name": "Speaker A"
+        },
+        {
+          "id": "turn-1",
+          "speaker": "BATCH_UNASSIGNED_part_point_1",
+          "speaker_id": 1,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": "batch_abstention",
+          "speaker_identity_status": "ambiguous",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "The seedlings arrive Friday.",
+          "start": 6.0,
+          "end": 6.0,
+          "speaker_name": "Unknown speaker"
+        },
+        {
+          "id": "turn-2",
+          "speaker": "BATCH_UNASSIGNED_part_point_2",
+          "speaker_id": 2,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": "batch_abstention",
+          "speaker_identity_status": "ambiguous",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "We can plant on Saturday.",
+          "start": 12.0,
+          "end": 12.0,
+          "speaker_name": "Unknown speaker"
+        }
+      ],
+      "speaker_resolution": {
+        "status": "capture",
+        "participant_speaker_ids": [
+          0
+        ]
+      }
+    },
+    "developer_api": {
+      "transcript_segments": [
+        {
+          "id": "turn-0",
+          "speaker": "SPEAKER_0",
+          "speaker_id": 0,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": null,
+          "speaker_identity_status": "unknown",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "Let us plan the garden.",
+          "start": 0.0,
+          "end": 6.0,
+          "speaker_name": "Speaker A"
+        },
+        {
+          "id": "turn-1",
+          "speaker": "BATCH_UNASSIGNED_part_point_1",
+          "speaker_id": 1,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": "batch_abstention",
+          "speaker_identity_status": "ambiguous",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "The seedlings arrive Friday.",
+          "start": 6.0,
+          "end": 6.0,
+          "speaker_name": "Unknown speaker"
+        },
+        {
+          "id": "turn-2",
+          "speaker": "BATCH_UNASSIGNED_part_point_2",
+          "speaker_id": 2,
+          "speaker_id_scope": "final:batch:fictional",
+          "speaker_match_source": "batch_abstention",
+          "speaker_identity_status": "ambiguous",
+          "is_user": false,
+          "speaker_label_source": null,
+          "text": "We can plant on Saturday.",
+          "start": 12.0,
+          "end": 12.0,
+          "speaker_name": "Unknown speaker"
+        }
+      ],
+      "speaker_resolution": {
+        "status": "capture",
+        "participant_speaker_ids": [
+          0
+        ]
+      }
+    },
+    "review": {
+      "item_id": "speaker:fictional-prompt",
+      "kind": "speaker",
+      "title": "Who said this?",
+      "created_at": "2026-11-01T12:00:00Z",
+      "speaker": {
+        "prompt_id": "fictional-prompt",
+        "conversation_id": "fictional-garden",
+        "conversation_title": "Fictional garden plan",
+        "start": 6.0,
+        "end": 12.0,
+        "candidates": [],
+        "affected_conversation_count": 1,
+        "context": [
+          {
+            "speaker_label": "Speaker A",
+            "text": "Let us plan the garden.",
+            "at": "2026-11-01T12:00:00Z",
+            "is_target": false
+          },
+          {
+            "speaker_label": "Unknown speaker",
+            "text": "The seedlings arrive Friday.",
+            "at": "2026-11-01T12:00:06Z",
+            "is_target": true
+          },
+          {
+            "speaker_label": "Unknown speaker",
+            "text": "We can plant on Saturday.",
+            "at": "2026-11-01T12:00:12Z",
+            "is_target": false
+          }
+        ]
+      },
+      "task": null,
+      "same_person": null,
+      "spelling": null,
+      "quote": "The seedlings arrive Friday.",
+      "source_ref": null
+    },
+    "mcp_search": [
+      {
+        "text": "Speaker A: Let us plan the garden.\n[unassigned speech]: The seedlings arrive Friday.\n[unassigned speech]: We can plant on Saturday.",
+        "segment_id": "turn-1",
+        "start": 6.0,
+        "end": 6.0,
+        "start_ms": 6000,
+        "end_ms": 6000,
+        "speaker_id": null,
+        "speaker_key": "c1",
+        "speaker_label": "[unassigned speech]"
+      }
+    ],
+    "mcp_segments": [
+      {
+        "id": "turn-0",
+        "text": "Let us plan the garden.",
+        "speaker_id": null,
+        "is_user": false,
+        "start": 0.0,
+        "end": 6.0,
+        "speaker_key": "c0",
+        "speaker_label": "Speaker A"
+      },
+      {
+        "id": "turn-1",
+        "text": "The seedlings arrive Friday.",
+        "speaker_id": null,
+        "is_user": false,
+        "start": 6.0,
+        "end": 6.0,
+        "speaker_key": "c1",
+        "speaker_label": "[unassigned speech]"
+      },
+      {
+        "id": "turn-2",
+        "text": "We can plant on Saturday.",
+        "speaker_id": null,
+        "is_user": false,
+        "start": 12.0,
+        "end": 12.0,
+        "speaker_key": "c2",
+        "speaker_label": "[unassigned speech]"
+      }
+    ],
+    "llm_plain": "Speaker A: Let us plan the garden.\n\n[unassigned speech]: The seedlings arrive Friday.\n\n[unassigned speech]: We can plant on Saturday.",
+    "llm_compact": "[Diarization marked 0 of 3 speaker clusters as the account owner; owner identity is UNTRUSTED in this transcript — treat first-person statements as unattributed]\nspk c0 ?\nspk c1 ?\nspk c2 ?\n[turn-0 c0] Let us plan the garden.\n\n[turn-1 c1] [unassigned speech] The seedlings arrive Friday.\n\n[turn-2 c2] [unassigned speech] We can plant on Saturday.",
+    "llm_bindings": {
+      "c0": null,
+      "c1": null,
+      "c2": null
+    },
+    "llm_legacy_compact": "[turn-0 c0] Let us plan the garden.\n\n[turn-1 c1] [unassigned speech] The seedlings arrive Friday.\n\n[turn-2 c2] [unassigned speech] We can plant on Saturday.",
+    "llm_legacy_bindings": {
+      "c0": null,
+      "c1": null,
+      "c2": null
+    },
+    "episode": "Speaker A: Let us plan the garden.\n[unassigned speech]: The seedlings arrive Friday.\n[unassigned speech]: We can plant on Saturday.",
+    "analytics": {
+      "conversation_id": "fictional-garden",
+      "total_seconds": 6.0,
+      "total_words": 14,
+      "words_per_minute": 140.0,
+      "speaker_count": 1,
+      "speakers": [
+        {
+          "speaker": "Speaker A",
+          "person_id": null,
+          "is_user": false,
+          "talk_seconds": 6.0,
+          "word_count": 5,
+          "words_per_minute": 50.0,
+          "talk_share": 1.0
+        },
+        {
+          "speaker": "Unknown speaker",
+          "person_id": null,
+          "is_user": false,
+          "talk_seconds": 0.0,
+          "word_count": 5,
+          "words_per_minute": 0.0,
+          "talk_share": 0.0
+        },
+        {
+          "speaker": "Unknown speaker",
+          "person_id": null,
+          "is_user": false,
+          "talk_seconds": 0.0,
+          "word_count": 4,
+          "words_per_minute": 0.0,
+          "talk_share": 0.0
+        }
+      ]
+    },
+    "label_participant_delta": 0,
+    "inventory": {
+      "raw_scoped_ids": [
+        [
+          "final:batch:fictional",
+          0
+        ],
+        [
+          "final:batch:fictional",
+          1
+        ],
+        [
+          "final:batch:fictional",
+          2
+        ]
+      ],
+      "participant_speaker_ids": [
+        0
+      ],
+      "abstention_keys": [
+        "BATCH_UNASSIGNED_part_point_1",
+        "BATCH_UNASSIGNED_part_point_2"
+      ],
+      "segments": 3,
+      "words": 14,
+      "speech_seconds": 6.0
+    }
+  }
+}

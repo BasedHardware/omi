@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-batch-abstention-counted-as-speaker",
+  "violated_contract": "Batch diarizer abstention keys preserve unattributed words and provenance; they must not allocate person labels or inherit wearer/person identity at the server presentation boundary.",
+  "canonical_prevention": "Recognize persisted abstention markers in the shared speaker display boundary, use one Unknown speaker label without spending a letter or overflow slot, and retain distinct storage and prompt keys. Exercise all server consumers with shared fictional fixtures, participant-count parity and rollback checks.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_speaker_abstention_display.py",
+    "backend/tests/unit/fixtures/speaker_abstention.py"
+  ],
+  "evidence_prs": [21981],
+  "scope_hints": ["backend/utils/speakers/display.py"],
+  "status": "open"
+}
