@@ -28,6 +28,7 @@ from database import (
     memories as memories_db,
     action_items as action_items_db,
 )
+from database.first_value_recovery import enroll_verified_paid_start
 from database.locked_content import has_recoverable_locked_content
 from database.redis_db import claim_payment_recovery_notification, set_credits_invalidation_signal
 from config.plan_catalog import _paid_period_still_open, plan_uses_overage
@@ -1669,6 +1670,23 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 metadata = subscription.get('metadata') or {}
                 app_id = metadata.get('app_id')
                 uid = metadata.get('uid')
+                if uid:
+                    # The subscription-start projection alone cannot distinguish
+                    # a $0/code activation from a direct-paid monthly start. Admit
+                    # only this owner-linked positive initial-invoice event.
+                    await run_blocking(
+                        db_executor,
+                        enroll_verified_paid_start,
+                        uid=uid,
+                        stripe_event_id=str(event.get('id') or ''),
+                        stripe_event_created=event.get('created'),
+                        stripe_event_type=event['type'],
+                        subscription_obj=subscription.to_dict(),
+                        previous_paid_subscription_id=None,
+                        resulting_paid_subscription_id=subscription_id,
+                        previous_attributes={},
+                        payment_proof=invoice,
+                    )
                 if app_id and uid:
                     if await _deletion_webhook_blocks_entitlement(uid, subscription_id):
                         return {"status": "success", "message": "Account deletion is in progress."}

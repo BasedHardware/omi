@@ -31,6 +31,11 @@ from utils import apps as apps_utils
 _DAY = 60 * 60 * 24
 
 
+class _Subscription(dict):
+    def to_dict(self):
+        return dict(self)
+
+
 class _Request:
     @staticmethod
     async def body():
@@ -51,7 +56,7 @@ def webhook(monkeypatch):
         monkeypatch.setattr(
             payment.stripe.Subscription,
             'retrieve',
-            staticmethod(lambda sub_id: {'id': sub_id, 'metadata': subscription_metadata}),
+            staticmethod(lambda sub_id: _Subscription({'id': sub_id, 'metadata': subscription_metadata})),
         )
         monkeypatch.setattr(
             payment, 'paid_app', lambda app_id, uid, current_period_end=None: rearmed.append((app_id, uid))
@@ -120,11 +125,13 @@ def test_a_renewal_keeps_the_entitlement_through_a_31_day_period(monkeypatch):
         payment.stripe.Subscription,
         'retrieve',
         staticmethod(
-            lambda sub_id: {
-                'id': sub_id,
-                'metadata': {'uid': 'user-1', 'app_id': 'app-1'},
-                'current_period_end': period_end,
-            }
+            lambda sub_id: _Subscription(
+                {
+                    'id': sub_id,
+                    'metadata': {'uid': 'user-1', 'app_id': 'app-1'},
+                    'current_period_end': period_end,
+                }
+            )
         ),
     )
     ttls = _record_entitlement_ttls(monkeypatch)

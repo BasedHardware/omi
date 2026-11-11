@@ -9,8 +9,8 @@ Target: monthly paying-subscriber churn of 10%. The supporting proposal's 0.65â€
 
 ## Cohort and assignment
 
-- Only newly observed, owner-linked, direct-paid, non-trial monthly Stripe starts with a recognized paid plan enter. Trial, annual, unknown-price, unknown-owner and paid-app starts do not.
-- `backend/utils/observability/billing_webhook.py` is already the owner-confirmed post-reconciliation projection. It records `users/{uid}/first_value_starts/{paid_start_hash}` only while both runtime controls are open. No historical scan/backfill exists.
+- Only newly observed, owner-linked, non-trial monthly Stripe starts with a recognized paid plan **and a paid initial invoice (`billing_reason=subscription_create`, `paid=true`, positive numeric `amount_paid`)** enter. Trial, annual, zero/unpaid, unknown-price, unknown-owner and paid-app starts do not.
+- `backend/routers/payment.py` handles the existing positive initial-invoice event and retrieves the authoritative owner-linked subscription without adding an external request. It records `users/{uid}/first_value_starts/{paid_start_hash}` only while both runtime controls are open. No historical scan/backfill exists.
 - Assignment is persisted at paid start, before product eligibility or delivery. `sha256("EXP-005-first-value-recovery:<uid>:<subscription_id>:<created>")` selects exactly 50% treatment / 50% control. The experiment id and paid-start key must not change while running. Replayed webhooks cannot redraw or duplicate an enrollment.
 - The independent approved-intake draw uses `:approved-intake`. `FIRST_VALUE_RECOVERY_COHORT_PERCENT` changes only intake coverage; it never changes the 50/50 holdout. Analysis is intention-to-treat within each dated intake population.
 - The defaults `FIRST_VALUE_RECOVERY_ENABLED=false` and `FIRST_VALUE_RECOVERY_COHORT_PERCENT=0` are both closed. `recovery_enabled()` requires the switch open **and** a positive valid percentage. Off returns before paid-start/user selection, experiment-state writes or dispatch.

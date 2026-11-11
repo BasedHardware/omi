@@ -78,8 +78,19 @@ def _first_price(subscription: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 def verified_direct_monthly_start(kwargs: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Validate the same owner-bound initial activation as Billing Subscription Started."""
+    """Validate owner linkage plus a positive paid initial-invoice event."""
 
+    payment_proof = kwargs.get('payment_proof')
+    amount_paid = payment_proof.get('amount_paid') if isinstance(payment_proof, Mapping) else None
+    if (
+        not isinstance(payment_proof, Mapping)
+        or payment_proof.get('paid') is not True
+        or payment_proof.get('billing_reason') != 'subscription_create'
+        or isinstance(amount_paid, bool)
+        or not isinstance(amount_paid, (int, float))
+        or amount_paid <= 0
+    ):
+        return None
     uid = kwargs.get('uid')
     event_id = kwargs.get('stripe_event_id')
     event_type = kwargs.get('stripe_event_type')

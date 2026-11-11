@@ -69,6 +69,11 @@ def _projection(**changes):
         'previous_paid_subscription_id': None,
         'resulting_paid_subscription_id': 'fixture-subscription',
         'previous_attributes': {},
+        'payment_proof': {
+            'paid': True,
+            'billing_reason': 'subscription_create',
+            'amount_paid': 3000,
+        },
         **changes,
     }
 
@@ -109,6 +114,21 @@ def test_enrollment_verifies_non_trial_and_stores_paid_start_assignment(monkeypa
         assert emitted[0]['properties']['experiment_id'] == recovery.EXPERIMENT_ID
         assert 'fixture-user' not in str(emitted[0]['properties'])
         assert 'fixture-subscription' not in str(emitted[0]['properties'])
+
+
+@pytest.mark.parametrize(
+    'payment_proof',
+    [
+        None,
+        {'paid': False, 'billing_reason': 'subscription_create', 'amount_paid': 3000},
+        {'paid': True, 'billing_reason': 'subscription_create', 'amount_paid': 0},
+        {'paid': True, 'billing_reason': 'subscription_cycle', 'amount_paid': 3000},
+        {'paid': True, 'billing_reason': 'subscription_create', 'amount_paid': True},
+        {'paid': True, 'billing_reason': 'subscription_create', 'amount_paid': '3000'},
+    ],
+)
+def test_incomplete_or_nonpositive_payment_proof_never_enrolls(payment_proof):
+    assert recovery.verified_direct_monthly_start(_projection(payment_proof=payment_proof)) is None
 
 
 def test_duplicate_webhook_adopts_committed_assignment_and_recovers_enrollment_event(monkeypatch):
