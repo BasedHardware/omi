@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Omi",
-    "slug": "frontforumfocus",
+    "slug": "omi-rn-palontologist",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "omi",
@@ -47,10 +47,10 @@
         "origin": "https://omi.me"
       },
       "eas": {
-        "projectId": "74c774a0-31e3-4486-bef9-0b93935549d5"
+        "projectId": "38bee385-0679-4de1-8c82-1382b73fb0a5"
       }
     },
-    "owner": "georgesg",
+    "owner": "palontologist",
     "assetBundlePatterns": [
       "assets/images/*"
     ],
