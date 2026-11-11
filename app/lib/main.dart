@@ -102,7 +102,6 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
-import 'package:omi/providers/ai_interjection_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/omi_theme.dart';
 import 'package:omi/ui/omi_tokens.dart';

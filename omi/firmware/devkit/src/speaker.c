@@ -157,10 +157,9 @@ int speaker_init()
         .options =
             I2S_OPT_FRAME_CLK_MASTER | I2S_OPT_BIT_CLK_MASTER | I2S_OPT_BIT_CLK_GATED, // how to configure the mclock
         .frame_clk_freq = SAMPLE_FREQUENCY,                                            /* Sampling rate */
-        .mem_slab = &mem_slab,         /* Memory slab to store rx/tx data */
+        .mem_slab = &mem_slab,           /* Memory slab to store rx/tx data */
         .block_size = I2S_TX_BLOCK_SIZE, /* one packet, duplicated to stereo */
-        .timeout = 1000,               /* ms a full Tx queue may stall a write; a blocked
-                                          write delays the BLE response, which paces the host */
+        .timeout = 1000,                 /* ms a full Tx queue may stall a write; a blocked write delays BLE pacing */
     };
     int err = i2s_configure(audio_speaker, I2S_DIR_TX, &config);
     if (err) {
