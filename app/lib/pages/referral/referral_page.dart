@@ -192,6 +192,15 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
         earned &&
         campaign.claimedMonths < cumulative &&
         (start == 0 || campaign.claimedMonths >= 2);
+    // At large text a pill beside the copy leaves too narrow a column and breaks words, so it moves under the detail.
+    final bodySize = OmiType.body.fontSize!;
+    final stackClaim = MediaQuery.textScalerOf(context).scale(bodySize) > bodySize * 1.3;
+    final claim = OmiButton(
+        key: const Key('referral-claim'),
+        label: context.l10n.referralClaimShort,
+        size: OmiButtonSize.compact,
+        isLoading: _busy,
+        onPressed: _busy ? null : _claim);
     return IntrinsicHeight(
       child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         SizedBox(
@@ -218,19 +227,11 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
               Text(title, style: OmiType.body),
               const SizedBox(height: 2),
               Text(detail, style: OmiType.body.copyWith(color: OmiColors.textTertiary)),
+              if (claimable && stackClaim) ...[const SizedBox(height: OmiSpacing.sm), claim],
             ]),
           ),
         ),
-        if (claimable)
-          Align(
-            alignment: Alignment.topCenter,
-            child: OmiButton(
-                key: const Key('referral-claim'),
-                label: context.l10n.referralClaimShort,
-                size: OmiButtonSize.compact,
-                isLoading: _busy,
-                onPressed: _busy ? null : _claim),
-          ),
+        if (claimable && !stackClaim) Align(alignment: Alignment.topCenter, child: claim),
       ]),
     );
   }

@@ -15,7 +15,8 @@ import 'package:omi/utils/platform/platform_manager.dart';
 const legacyLink = 'https://omi.me/r/ref1.dXNlcg.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const link = 'https://omi.me/r/ref2.dXNlcg.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const otherLink = 'https://omi.me/r/ref2.b3RoZXI.BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
-ReferralCampaign campaign({int purchases = 0, int claimed = 0, int claimable = 0, String url = link}) =>
+ReferralCampaign campaign(
+        {int purchases = 0, int claimed = 0, int claimable = 0, String url = link, String status = 'ready'}) =>
     ReferralCampaign.fromJson({
       'campaign_id': 'omi_pocket_match_v1',
       'enabled': true,
@@ -23,7 +24,7 @@ ReferralCampaign campaign({int purchases = 0, int claimed = 0, int claimable = 0
       'qualified_purchases': purchases,
       'claimed_months': claimed,
       'claimable_months': claimable,
-      'reward_status': 'ready'
+      'reward_status': status
     });
 Widget host(Widget child) => MaterialApp(
       theme: buildOmiTheme(),
@@ -208,6 +209,59 @@ void main() {
       expect(find.byKey(const Key('referral-reward-2-earned')), findsOneWidget);
       expect(find.byKey(const Key('referral-claim')), findsNothing);
       expect(claims, 1);
+    }
+  });
+
+  testWidgets('Claim sits beside its milestone at default text and under it at large text', (tester) async {
+    tester.view.physicalSize = const Size(402, 874);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var claims = 0;
+    for (final scale in [1.0, 3.2]) {
+      await tester.pumpWidget(host(MediaQuery(
+        data: MediaQueryData(size: const Size(402, 874), textScaler: TextScaler.linear(scale)),
+        child: ReferralPage(
+            key: ValueKey(scale),
+            accountChanges: const Stream.empty(),
+            createSession: () => ReferralLinkSession(
+                isCurrent: () => true,
+                load: () async => campaign(purchases: 2, claimable: 2),
+                claim: () async {
+                  claims++;
+                  return campaign(purchases: 2, claimable: 2);
+                })),
+      )));
+      await tester.pumpAndSettle();
+      await Scrollable.ensureVisible(tester.element(find.byKey(const Key('referral-claim'))), alignment: 0.5);
+      await tester.pumpAndSettle();
+      final pill = tester.getRect(find.byKey(const Key('referral-claim')));
+      final detail = tester.getRect(find.text('When 2 friends buy Omi'));
+      if (scale == 1.0) {
+        expect(pill.left, greaterThanOrEqualTo(detail.right));
+      } else {
+        expect(pill.top, greaterThanOrEqualTo(detail.bottom), reason: 'Claim no longer narrows the milestone copy');
+        expect(pill.left, closeTo(detail.left, 0.5));
+      }
+      await tester.tap(find.byKey(const Key('referral-claim')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+    expect(claims, 2);
+  });
+
+  testWidgets('pending paid subscription shows the saved-reward note without a Claim', (tester) async {
+    const note = 'Your reward is saved until your paid subscription ends.';
+    for (final status in ['pending_paid_subscription', 'active']) {
+      await tester.pumpWidget(host(ReferralPage(
+          key: ValueKey(status),
+          accountChanges: const Stream.empty(),
+          createSession: () => ReferralLinkSession(
+              isCurrent: () => true, load: () async => campaign(purchases: 2, claimed: 2, status: status)))));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('referral-reward-2-earned')), findsOneWidget);
+      expect(find.byKey(const Key('referral-claim')), findsNothing);
+      expect(find.text(note), status == 'active' ? findsNothing : findsOneWidget);
     }
   });
 
