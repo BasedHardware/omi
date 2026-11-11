@@ -32,15 +32,9 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
-# Explicit terminal union: queue dispositions, retired records and superseded providers.
-# Exclusion keeps future nonterminal state strings visible to authoritative merge.
-MERGE_POLL_TERMINAL_STATES = (
-    'committed',
-    'dead',
-    'quarantined',
-    'privacy_blocked',
-    'partial_retired',
-    'provider_superseded',
+# Terminal exclusion keeps future nonterminal strings visible; the census gates missing/null state.
+MERGE_POLL_TERMINAL_STATES = tuple(
+    'committed dead quarantined privacy_blocked partial_retired provider_superseded'.split()
 )
 
 

@@ -359,7 +359,7 @@ class FirestoreStore:
                     ref.update(value, option=firestore.LastUpdateOption(snapshot.update_time), retry=None)
                 else:
                     ref.create(value, retry=None)
-            except (AlreadyExists, FailedPrecondition, Aborted, InvalidArgument):
+            except (AlreadyExists, FailedPrecondition, Aborted):
                 logger.info('event=batch_shard_contention operation=batch_claim shard=%s outcome=busy', shard)
                 return False
             return True

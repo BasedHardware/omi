@@ -62,7 +62,11 @@ class Query:
         self.calls.append(('stream', kwargs))
         rows = self.rows
         for field, op, value in self.filters:
-            rows = [r for r in rows if field in r and (r[field] == value if op == '==' else r[field] not in value)]
+            rows = [
+                r
+                for r in rows
+                if field in r and (r[field] == value if op == '==' else r[field] is not None and r[field] not in value)
+            ]
         rows = sorted(rows, key=lambda row: tuple(row[field] for field in self.orders))
         for row in rows[: self.count]:
             self.reads.append(row['segment_id'])
@@ -166,7 +170,10 @@ def test_excluded_set_is_the_terminal_union_and_nonterminal_complement():
     lifecycle = {r.state for r in STATES if r.machine == 'batch' and r.terminal}
     dispositions = {state for state in batch if is_queue_dispositioned(row(state))}
     assert set(TERMINAL) == lifecycle | dispositions | {SUPERSEDED}
+    from scripts.batch_pipeline_poll_state_census import KNOWN_STATES
+
     known = batch | {PENDING, RUNNING, SUPERSEDED}
+    assert set(KNOWN_STATES) == known
     assert known - set(TERMINAL) == set(NONTERMINAL) - {'held', 'future_state'}
 
 
@@ -243,3 +250,46 @@ def test_postgres_off_sql_and_parameter_sequence_are_unchanged(monkeypatch):
     assert store.first_pending_in(conn, 'owner') is None
     assert 'state <> ALL(%s)' in conn.execute.call_args.args[0]
     assert conn.execute.call_args.args[1] == ('ns', 'owner', list(TERMINAL))
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('state', ['missing', None])
+def test_missing_and_null_state_follow_firestore_negative_filter(monkeypatch, enabled, state):
+    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+    legacy = row(state)
+    legacy['segment_id'] = 'legacy'
+    if state == 'missing':
+        del legacy['state']
+    expected = [] if enabled else [legacy]
+    assert fresh_pending(Query([legacy]), 'ns', 'owner', 32) == expected
+    assert first_pending(Query([legacy]), 'ns', 'owner') == (None if enabled else legacy)
+
+
+@pytest.mark.parametrize('counts, output, status', [([7, 7, 5, 5], 'PASS (0)\n', 0), ([7, 7, 5, 3], 'FAIL (2)\n', 1)])
+def test_census_cli_combines_both_collections_and_only_aggregates(monkeypatch, capsys, counts, output, status):
+    import runpy
+    from pathlib import Path
+    from unittest.mock import MagicMock, call
+    from google.cloud import firestore
+    from scripts import batch_pipeline_poll_state_census as tool
+
+    client = MagicMock()
+    query = client.collection.return_value
+    query.where.return_value = query
+    query.count.return_value.get.side_effect = [[[SimpleNamespace(value=n)]] for n in counts]
+    monkeypatch.setattr(firestore, 'Client', lambda **kwargs: client)
+    monkeypatch.setattr(firestore, 'transactional', lambda function: function)
+    monkeypatch.setattr('sys.argv', ['census', '--project', 'demo-omi-isolated-tests'])
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_path(str(Path(tool.__file__)), run_name='__main__')
+    assert exit_info.value.code == status
+    assert capsys.readouterr().out == output
+    assert client.collection.call_args_list == [call('batch_pipeline_prod_jobs'), call('batch_pipeline_dev_jobs')]
+    assert client.transaction.call_args_list == [call(read_only=True), call(read_only=True)]
+    assert query.count.return_value.get.call_args_list == [call(transaction=client.transaction.return_value)] * 4
+    assert not query.stream.called and not query.get.called
+    for index, invocation in enumerate(query.where.call_args_list):
+        actual = invocation.kwargs['filter']
+        assert (actual.field_path, actual.op_string, actual.value) == (
+            ('merge_pending', '==', True) if index % 2 == 0 else ('state', 'in', tool.KNOWN_STATES)
+        )

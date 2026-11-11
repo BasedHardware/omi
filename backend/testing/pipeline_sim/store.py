@@ -343,7 +343,7 @@ class SimStore:
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
-            if skip and row.get('state') in MERGE_POLL_TERMINAL_STATES:
+            if skip and row.get('state') in (None, *MERGE_POLL_TERMINAL_STATES):
                 continue
             if ready_only and row.get('state') != 'result_ready':
                 continue
@@ -417,7 +417,7 @@ class SimStore:
             (row['capture_at'], segment_id)
             for segment_id in self._pending_by_owner.get(owner_key, ())
             if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
-            and (not skip or row.get('state') not in MERGE_POLL_TERMINAL_STATES)
+            and (not skip or row.get('state') not in (None, *MERGE_POLL_TERMINAL_STATES))
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 

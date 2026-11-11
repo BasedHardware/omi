@@ -626,20 +626,16 @@ companion series disappears on collection. No data migration or cleanup.
 
 ## Terminal-only merge polling (dark)
 
-`BATCH_HELD_POLL_SKIP_ENABLED` defaults off. On, `fresh_pending` and transactional
-`first_pending` exclude committed, dead, quarantined, privacy_blocked,
-partial_retired and provider_superseded using the existing `state` field.
-Future nonterminal state strings stay visible. Dead GPU held/input expiry and
-GPU privacy fences can retain merge_pending=true. Their recovery routes and
-writers are unchanged; the authoritative merge head and scheduler head-priority
-lookup can advance past these terminals. Held ready/retry/vendor_held heads
-retain capture order and fresh-head waiting. `held_merge_owners` deliberately
-uses the OFF query, even when the flag is on, preserving marker ownership.
-
-Unavailable ON indexes/query shapes fall back to the exact OFF query; OFF errors
-still propagate. Build all four prod/dev poll indexes and verify a real
-Firestore query plan before enabling. Off restores the previous query/read
-sequence. No existing flag is replaced. Oldest, held SLA sampling and the
-stale-vendor watchdog remain independent. Simulator/Postgres mirror behavior;
-Postgres has no read-saving claim. The read-saving bound is Firestore-only,
-excludes index-entry costs, and is booked at zero until settled SKU validation.
+`BATCH_HELD_POLL_SKIP_ENABLED` defaults OFF. ON, `fresh_pending` and transactional
+`first_pending` exclude committed/dead/quarantined/privacy_blocked/partial_retired/provider_superseded.
+Unknown strings stay visible; missing/null state is excluded in Firestore, Postgres and simulator.
+**Before enabling: all four prod/dev poll indexes MUST be READY, real query plans MUST succeed,
+and `scripts.batch_pipeline_poll_state_census --project PROJECT` MUST PASS (0).** Run from backend
+with `.venv/bin/python -m`; on this host source `~/.local/bin/gcp-agent-env.sh ro-prod` first.
+The read-only tool COUNTs pending minus pending-in-full-lifecycle-inventory per prod/dev jobs collection,
+prints one combined PASS (0)/FAIL (n) line and exits 0/1; API errors propagate nonzero. No job reads/writes.
+Dead GPU expiry/privacy fencing can retain merge_pending; recovery remains unchanged while merge/scheduler
+head lookup can advance. Held ready/retry/vendor_held heads keep capture order/fresh waiting;
+`held_merge_owners` always uses OFF. Oldest, held SLA gauges and stale-vendor watchdog are untouched.
+Unavailable ON queries fall back to exact OFF; OFF errors propagate. Rollback: flag OFF restores old queries/reads.
+No flag is replaced. Savings are Firestore-only, exclude index-entry costs, and stay booked at zero pending settled SKU.

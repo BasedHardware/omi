@@ -1065,3 +1065,59 @@ def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, 
     assert h.store.run(pick)['segment_id'] == 'selected'
     assert h.store.run(lambda tx: tx.get('jobs', 'head'))['state'] == head_state
     assert observations == ([('ready_age', 9), ('head_not_found', None)] if enabled and head_state == 'dead' else [])
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('state', ['missing', None])
+def test_missing_and_null_pending_state_match_firestore_negative_filter(h, monkeypatch, enabled, state):
+    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+    legacy = job(h, 'legacy', state=state, merge_pending=True, fresh_capture=True, privacy_generation=0)
+    if state == 'missing':
+        del legacy['state']
+    put_all(h, [('jobs', 'legacy', legacy)])
+    key = owner_key(h.uid('o'))
+    assert h.store.fresh_pending(key, 32) == ([] if enabled else [legacy])
+    assert h.store.run(lambda tx: tx.first_pending(key)) == (None if enabled else legacy)
+    assert h.store.run(lambda tx: tx.get('jobs', 'legacy')) == legacy
+
+
+def test_state_census_counts_only_pending_missing_null_or_unknown_rows(h, monkeypatch):
+    if h.name != 'emulator':
+        pytest.skip('Firestore aggregate API only')
+    from scripts.batch_pipeline_poll_state_census import KNOWN_STATES, census
+
+    rows = [('jobs', state, job(h, state, state=state, merge_pending=True)) for state in KNOWN_STATES]
+    put_all(h, rows)
+    client = h.store.client
+    collection = f'{h.store.namespace}_jobs'
+
+    def forbid_document_reads(*args, **kwargs):
+        pytest.fail('census must use aggregation COUNT, never document reads')
+
+    commit = client._firestore_api.commit
+
+    def aggregate_only_commit(request, **kwargs):
+        assert not request['writes']
+        return commit(request, **kwargs)
+
+    with monkeypatch.context() as census_only:
+        census_only.setattr(client._firestore_api, 'commit', aggregate_only_commit)
+        census_only.setattr(client._firestore_api, 'run_query', forbid_document_reads)
+        census_only.setattr(client._firestore_api, 'batch_get_documents', forbid_document_reads)
+        assert census(client.transaction(read_only=True), client, collection) == 0
+    missing = job(h, 'missing', merge_pending=True)
+    del missing['state']
+    put_all(
+        h,
+        [
+            ('jobs', 'missing', missing),
+            ('jobs', 'null', job(h, 'null', state=None, merge_pending=True)),
+            ('jobs', 'unknown', job(h, 'unknown', state='future_state', merge_pending=True)),
+            ('jobs', 'not_pending', job(h, 'not_pending', state=None, merge_pending=False)),
+        ],
+    )
+    with monkeypatch.context() as census_only:
+        census_only.setattr(client._firestore_api, 'commit', aggregate_only_commit)
+        census_only.setattr(client._firestore_api, 'run_query', forbid_document_reads)
+        census_only.setattr(client._firestore_api, 'batch_get_documents', forbid_document_reads)
+        assert census(client.transaction(read_only=True), client, collection) == 3
