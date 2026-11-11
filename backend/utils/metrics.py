@@ -846,6 +846,38 @@ OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP = Gauge(
     ['fingerprint', 'service'],
 )
 
+OMI_APP_REVIEW_CONFIG_ALERT_TOTAL = Counter(
+    'omi_app_review_config_alert_total',
+    'App-review hide lifecycle alerts by platform and bounded reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_alert_timestamp_seconds',
+    'Unix time of the latest app-review hide lifecycle alert by platform and reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL = Counter(
+    'omi_app_review_config_sweep_total',
+    'App-review lifecycle sweep ticks by overall outcome',
+    ['outcome'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_SWEEP_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_sweep_timestamp_seconds',
+    'Unix time of the most recent completed app-review lifecycle sweep',
+)
+for _app_review_platform in ('ios', 'android'):
+    for _app_review_reason in (
+        'credentials_unavailable',
+        'store_api_error',
+        'reconciliation_repair',
+        'live_hide_cleared',
+        'submission_token_unavailable',
+    ):
+        OMI_APP_REVIEW_CONFIG_ALERT_TOTAL.labels(platform=_app_review_platform, reason=_app_review_reason)
+        OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP.labels(platform=_app_review_platform, reason=_app_review_reason)
+for _app_review_outcome in ('ok', 'partial', 'error'):
+    OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL.labels(outcome=_app_review_outcome)
+
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',

@@ -36,6 +36,29 @@ BUILD_TAG_RE = re.compile(
 CHANGES_NOT_SENT_FOR_REVIEW = True
 
 
+def record_review_submission(platform: str, version: str, version_code: str | None = None) -> None:
+    """Append the exact successful store-submission identity for Codemagic's hook."""
+    receipt_path = os.environ.get("APP_REVIEW_CONFIG_SUBMISSION_RECEIPT")
+    if not receipt_path:
+        return
+    path = Path(receipt_path)
+    records: list[dict[str, str]] = []
+    if path.exists() and path.stat().st_size:
+        try:
+            previous = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(previous, list):
+                records = [row for row in previous if isinstance(row, dict)]
+        except (OSError, ValueError):
+            raise PromotionError("submission receipt file is invalid")
+    record = {"platform": platform, "version": version}
+    if version_code is not None:
+        record["version_code"] = version_code
+    records.append(record)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+    temporary.replace(path)
+
+
 # A version in any of these states is in Apple's hands or approved and waiting.
 # Withdrawing it to submit a newer build sends the app to the back of the review
 # queue (2026-10-23: three overnight withdrawals kept 1.0.572-1.0.574 out of the
@@ -662,8 +685,10 @@ def main() -> int:
         android_target = prepare_android(args.version, args.android_build) if android else None
         if ios_build:
             submit_ios(ios_build, ios_notes, locales=ios_live_locales())
+            record_review_submission("ios", args.version)
         if android_target:
             submit_android(*android_target, args.version, args.android_build, android_notes)
+            record_review_submission("android", args.version, args.android_build)
     except PromotionError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
