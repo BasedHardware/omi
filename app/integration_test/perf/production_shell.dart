@@ -1,5 +1,5 @@
 // Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
-// Extracted shell SHA256 (imports, telemetry field, builder chain): 2439a00fb970e6596809afefb4c7821c9997b192c904fdc80c0b1e92c9f30056
+// Extracted shell SHA256 (imports, telemetry field, builder chain): 054ada2b8a3d2f3a12b1b3ae7e7a4d594cf0dbb2c917f3763dd585f17b939062
 // ignore_for_file: unused_import, unnecessary_import
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -61,6 +61,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/ai_interjection_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -130,7 +131,6 @@ class PerfProductionShell extends StatefulWidget {
   @override
   State<PerfProductionShell> createState() => _PerfProductionShellState();
 }
-
 class _PerfProductionShellState extends State<PerfProductionShell> {
   late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
     emit: (name, properties) {
@@ -146,62 +146,62 @@ class _PerfProductionShellState extends State<PerfProductionShell> {
     super.initState();
     _performanceTelemetry.attach();
   }
-
   @override
   void dispose() {
     _performanceTelemetry.dispose();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) => MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => AppearanceProvider()),
-          ChangeNotifierProvider(create: (_) => LocaleProvider()),
-        ],
-        builder: (context, child) {
-          final mode = context.watch<AppearanceProvider>().mode;
-          final platformBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-          final brightness = resolveAppearanceBrightness(mode, platformBrightness);
-          OmiColors.active = OmiColors.forBrightness(brightness);
-          return WithForegroundTask(
-            child: MaterialApp(
-              debugShowCheckedModeBanner: F.env == Environment.dev,
-              title: F.title,
-              navigatorKey: MyApp.navigatorKey,
-              navigatorObservers: [if (!PhysicalQualification.enabled) _performanceTelemetry],
-              locale: context.watch<LocaleProvider>().locale,
-              localizationsDelegates: const [
-                AppLocalizations.delegate,
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              supportedLocales: AppLocalizations.supportedLocales,
-              theme: buildOmiTheme(brightness: Brightness.light),
-              darkTheme: buildOmiTheme(brightness: Brightness.dark),
-              themeMode: mode,
-              builder: (context, child) {
-                syncIntlDefaultLocale(Localizations.localeOf(context));
-                ErrorWidget.builder = (errorDetails) {
-                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
-                };
-                final content = AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
-                  child: KeyedSubtree(key: ValueKey(brightness), child: child!),
-                );
-                final guidedContent = BluetoothGuidanceListener(child: content);
-                return SessionReplayScope(
-                  child: widget.iosAnalytics ? RageClickContextTracker(child: guidedContent) : guidedContent,
-                );
-              },
-              home: TalkerWrapper(
-                talker: Logger.instance.talker,
-                options: const TalkerWrapperOptions(enableErrorAlerts: false, enableExceptionAlerts: false),
-                child: widget.page,
-              ),
+    providers: [
+      ChangeNotifierProvider(create: (_) => AppearanceProvider()),
+      ChangeNotifierProvider(create: (_) => LocaleProvider()),
+    ],
+    builder: (context, child) {
+        final mode = context.watch<AppearanceProvider>().mode;
+        final platformBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+        final brightness = resolveAppearanceBrightness(mode, platformBrightness);
+        OmiColors.active = OmiColors.forBrightness(brightness);
+        return WithForegroundTask(
+          child: MaterialApp(
+            debugShowCheckedModeBanner: F.env == Environment.dev,
+            title: F.title,
+            navigatorKey: MyApp.navigatorKey,
+            navigatorObservers: [if (!PhysicalQualification.enabled) _performanceTelemetry],
+            locale: context.watch<LocaleProvider>().locale,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: buildOmiTheme(brightness: Brightness.light),
+            darkTheme: buildOmiTheme(brightness: Brightness.dark),
+            themeMode: mode,
+            builder: (context, child) {
+              syncIntlDefaultLocale(Localizations.localeOf(context));
+              ErrorWidget.builder = (errorDetails) {
+                return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
+              };
+              final content = AnnotatedRegion<SystemUiOverlayStyle>(
+                value: brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+                child: KeyedSubtree(key: ValueKey(brightness), child: child!),
+              );
+              final guidedContent = BluetoothGuidanceListener(child: content);
+              return SessionReplayScope(
+                child: widget.iosAnalytics
+                    ? RageClickContextTracker(child: guidedContent)
+                    : guidedContent,
+              );
+            },
+            home: TalkerWrapper(
+              talker: Logger.instance.talker,
+              options: const TalkerWrapperOptions(enableErrorAlerts: false, enableExceptionAlerts: false),
+              child: widget.page,
             ),
-          );
-        },
-      );
+          ),
+        );
+      },
+  );
 }

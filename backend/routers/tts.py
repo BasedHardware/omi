@@ -222,7 +222,8 @@ async def _stream_direct_tts(
         url = _DEEPGRAM_SPEAK_URL + "?" + "&".join(f"{k}={v}" for k, v in params.items())
         body = {"text": text}
         media_type = _el_output_media_type(req.output_format)
-        headers = {"Content-Type": "application/json", "Authorization": f"Token {dg_key}"}
+        assert dg_key is not None
+        headers: Dict[str, str] = {"Content-Type": "application/json", "Authorization": f"Token {dg_key}"}
 
     client = get_tts_client()
     semaphore = get_tts_semaphore()
