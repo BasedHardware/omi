@@ -29,6 +29,7 @@ from typing import Any, Callable, ContextManager, Iterable, Protocol
 
 from google.cloud import firestore
 
+from database import rpc_deadline
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import privacy_owner_key
@@ -93,14 +94,25 @@ def _cursor(client: Any, namespace: str, table: str, after: str | None) -> Any:
     )
 
 
+def _ensure_budget(progress: Progress) -> None:
+    """No unit or read batch starts past the run budget; resume replays from the last checkpoint."""
+    if progress.expired():
+        raise PurgeCheckpointed()
+
+
 def _in_units(progress: Progress, rows: list[Any], erase: Callable[[Any], None], clock: Callable[[], float]) -> int:
     pending = list(rows)
     erased = 0
     while pending:
+        _ensure_budget(progress)
         with progress.unit():
             started = clock()
             done = 0
-            while pending and done < UNIT_MAX_ROWS and (done == 0 or clock() - started < UNIT_BUDGET_SECONDS):
+            while (
+                pending
+                and done < UNIT_MAX_ROWS
+                and (done == 0 or (clock() - started < UNIT_BUDGET_SECONDS and not progress.expired()))
+            ):
                 erase(pending.pop(0))
                 done += 1
             erased += done
@@ -118,14 +130,25 @@ def purge_conversation(
 ) -> int:
     """Erase ``conversation_id``'s batch rows from ``progress.position`` onward; returns rows erased."""
     client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    rpc_deadline.bind_firestore_client(client)  # erasures inside units honour the unit deadline
     tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
     if not tombstone.get().exists:
         raise RuntimeError('conversation deletion intent required before batch purge')
     if delete_uri is None:
         from utils.batch_pipeline.retention import delete_batch_object
+        from utils.other.local_storage import create_storage_client
+
+        # One client per run, built outside any unit when possible; its session honours the unit deadline.
+        storage: list[Any] = []
+        try:
+            storage.append(rpc_deadline.bind_storage_client(create_storage_client()))
+        except Exception:  # noqa: BLE001 - e.g. no storage configured here; build on first use
+            pass
 
         def bounded_delete(owner: str, uri: str) -> None:
-            delete_batch_object(owner, uri, timeout=OBJECT_DELETE_TIMEOUT_SECONDS)
+            if not storage:
+                storage.append(rpc_deadline.bind_storage_client(create_storage_client()))
+            delete_batch_object(owner, uri, timeout=OBJECT_DELETE_TIMEOUT_SECONDS, storage_client=storage[0])
 
         delete_uri = bounded_delete
     key = privacy_owner_key(uid)
@@ -167,6 +190,7 @@ def purge_conversation(
                     table = tables[table_index]
                     cursor = after if table_index == first_table else None
                     while True:
+                        _ensure_budget(progress)
                         rows = queries.owner_documents(
                             client, namespace, table, key, after=_cursor(client, namespace, table, cursor)
                         )
@@ -180,6 +204,8 @@ def purge_conversation(
                                 data = snapshot.to_dict() or {}
                                 result = {}
                                 if table == 'jobs':
+                                    # Unsaved page: an expiry here replays it from the previous cursor.
+                                    _ensure_budget(progress)
                                     result_ref = client.collection(f'{namespace}_results').document(snapshot.id)
                                     result = result_ref.get().to_dict() or {}
                                 projection = result.get('projection') or data.get('projection')
@@ -203,6 +229,7 @@ def purge_conversation(
                 segments = progress.segments(namespace)
                 cursor = after
                 while True:
+                    _ensure_budget(progress)
                     rows = queries.artifacts_by_owner_id(
                         client, namespace, uid, after=_cursor(client, namespace, 'artifacts', cursor)
                     )
@@ -220,12 +247,14 @@ def purge_conversation(
                     mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': cursor})
             elif phase == 'segments':
                 while True:
+                    _ensure_budget(progress)
                     pending = progress.pending_segments(namespace, SEGMENT_PAGE)
                     if not pending:
                         break
                     for chunk_start in range(0, len(pending), UNIT_MAX_ROWS):
                         chunk = pending[chunk_start : chunk_start + UNIT_MAX_ROWS]
                         bindings = []
+                        _ensure_budget(progress)
                         for segment_id in chunk:
                             job = client.collection(f'{namespace}_jobs').document(segment_id).get()
                             result = client.collection(f'{namespace}_results').document(segment_id).get()
@@ -246,10 +275,11 @@ def purge_conversation(
                                 mirror_refresh(namespace, [('results', segment_id)])
                             done.append(segment_id)
 
+                        _ensure_budget(progress)
                         with progress.unit():
                             started = clock()
                             for item in bindings:
-                                if done and clock() - started >= UNIT_BUDGET_SECONDS:
+                                if done and (clock() - started >= UNIT_BUDGET_SECONDS or progress.expired()):
                                     break
                                 erase_binding(item)
                             # Records go only after their binding is gone, under the same ownership.
@@ -259,6 +289,7 @@ def purge_conversation(
                             break  # Budget hit; re-read pending (the rest stays recorded).
                     mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': None})
             elif phase == 'shadow' and _shadow_mode():
+                _ensure_budget(progress)
                 with progress.unit():
                     purge_jobstore_owner(namespace, uid)
             if phase_index + 1 < len(PHASES):

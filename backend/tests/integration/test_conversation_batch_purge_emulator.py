@@ -250,7 +250,11 @@ def test_hold_before_artifact_unit_resume_erases_segment_only_artifact(monkeypat
         }
     )
     objects_deleted = []
-    monkeypatch.setattr(retention, 'delete_batch_object', lambda uid, uri, timeout=None: objects_deleted.append(uri))
+    monkeypatch.setattr(
+        retention,
+        'delete_batch_object',
+        lambda uid, uri, timeout=None, storage_client=None: objects_deleted.append(uri),
+    )
     real_page = batch_pipeline_purge.queries.owner_documents
     held = []
 
@@ -322,3 +326,109 @@ def test_account_wipe_gate_fails_the_run_retryably_and_keeps_the_obligation(monk
     row = plane.client.collection(purge_jobs.COLLECTION).document(job).get().to_dict()
     assert row['last_outcome'] == 'failed' and row['progress']['phase'] == 'segments'
     assert len(_owed(plane, job)) == 2
+
+
+def _scripted_storage(monkeypatch, plane, statuses, *, seconds=4.5):
+    """The real google-cloud-storage SDK; only its HTTP responses are scripted."""
+    import requests
+    from google.cloud import storage
+    from utils.other import local_storage
+
+    client = storage.Client(project='demo-storage-sdk', credentials=AnonymousCredentials())
+    calls = []
+
+    def http(method, url, headers, data, target_object, timeout):
+        calls.append(timeout)
+        time.sleep(seconds)
+        response = requests.Response()
+        response.status_code = statuses[min(len(calls), len(statuses)) - 1]
+        response._content = b'{"error": {"message": "scripted transient storage outage"}}'
+        if response.status_code == 204:
+            response._content = b''
+        response.headers['content-type'] = 'application/json'
+        response.request = requests.Request(method, url).prepare()
+        return response
+
+    monkeypatch.setattr(client._connection, '_do_request', http)
+    monkeypatch.setattr(local_storage, 'create_storage_client', lambda: client)
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-bucket')
+    return calls
+
+
+def test_storage_sdk_retries_cannot_hold_the_gate_past_a_foreground_delete(monkeypatch, plane, route):
+    """Reviewer round-3 probe: four 503s then 204, 4.5 s each, used to hold the gate 33 s (foreground 409)."""
+    from database import conversation_batch_purge_jobs as purge_jobs
+
+    cid = f'conv-{uuid4().hex[:8]}'
+    _delete(plane, route, cid)
+    _conversation(plane, 'foreground-conversation')
+    calls = _scripted_storage(monkeypatch, plane, [503, 503, 503, 503, 204])
+    uri = f'gs://synthetic-bucket/batch-pipeline/batch_pipeline_prod/owners/{plane.key}/audio/test.enc#123'
+    artifact = plane.client.collection('batch_pipeline_prod_artifacts').document('artifact-1')
+    artifact.set({'owner_key': plane.key, 'owner_id': plane.uid, 'conversation_ids': [cid], 'uri': uri})
+    [(job, generation)] = _reconcile(monkeypatch)
+    outcomes, errors = [], []
+
+    def background():
+        try:
+            outcomes.append(_quick(job, generation))
+        except Exception as error:
+            errors.append(type(error).__name__)
+
+    worker = threading.Thread(target=background)
+    worker.start()
+    for _ in range(100):  # wait until the purge is inside its storage call, holding the gate
+        if calls:
+            break
+        time.sleep(0.05)
+    with TestClient(route.app) as foreground:
+        started = time.monotonic()
+        response = foreground.delete('/v1/conversations/foreground-conversation?cascade=true')
+        waited = time.monotonic() - started
+    worker.join(timeout=60)
+    assert response.status_code == 204, waited
+    assert waited < 10.0
+    # One bounded attempt, no SDK retry; the unit failed retryably and released the gate.
+    assert len(calls) == 1 and calls[0] <= 5.0
+    assert errors == ['ServiceUnavailable'] and outcomes == []
+    assert artifact.get().exists
+    row = plane.client.collection(purge_jobs.COLLECTION).document(job).get().to_dict()
+    assert row['last_outcome'] == 'failed'  # the debt is kept
+
+    # Storage recovers: the queue's retry of the same generation completes the purge.
+    calls_after = _scripted_storage(monkeypatch, plane, [204], seconds=0.0)
+    assert _quick(job, generation) == 'purged'
+    assert calls_after and not artifact.get().exists
+
+
+def test_real_unit_gate_expiry_frees_foreground_deletes_when_release_is_lost(monkeypatch, plane, route):
+    from database import legal_holds
+
+    _conversation(plane, 'foreground-conversation')
+    monkeypatch.setattr(legal_holds, 'UNIT_EXPIRY_SECONDS', 1.0)
+    monkeypatch.setattr(legal_holds, 'UNIT_HOLD_SECONDS', 0.8)
+    monkeypatch.setattr(legal_holds, 'UNIT_BODY_SECONDS', 0.5)
+    monkeypatch.setattr(legal_holds, '_release_bounded_unit', lambda *args, **kwargs: None)  # release never lands
+    with legal_holds.bounded_destructive_unit(plane.uid):
+        pass
+    gate = plane.client.document(f'legal_hold_deletion_gates/{plane.uid}').get().to_dict()
+    assert gate['state'] == 'running' and gate['expires_at']
+    with TestClient(route.app) as foreground:
+        started = time.monotonic()
+        response = foreground.delete('/v1/conversations/foreground-conversation?cascade=true')
+        waited = time.monotonic() - started
+    assert response.status_code == 204
+    assert waited < 5.0
+
+
+def test_real_firestore_rpc_past_the_unit_deadline_is_not_sent(plane):
+    from database import rpc_deadline
+
+    rpc_deadline.bind_firestore_client(plane.client)
+    ref = plane.client.collection('synthetic_deadline').document('d1')
+    with rpc_deadline.rpc_deadline(rpc_deadline.now() - 0.001):
+        with pytest.raises(rpc_deadline.RpcDeadlineExceeded):
+            ref.set({'erased': True})
+    with rpc_deadline.rpc_deadline(rpc_deadline.now() + 5):
+        ref.set({'erased': True})  # one bounded attempt on the real client
+    assert ref.get().to_dict() == {'erased': True}

@@ -74,7 +74,14 @@ class BatchPlane:
         monkeypatch.setattr(purge, '_delete_job', self.delete_job)
         monkeypatch.setattr(purge, 'mirror_refresh', lambda *a: None)
         monkeypatch.setattr(purge, '_shadow_mode', lambda: False)
-        monkeypatch.setattr(retention, 'delete_batch_object', lambda uid, uri, timeout=None: self.objects.append(uri))
+        monkeypatch.setattr(
+            retention,
+            'delete_batch_object',
+            lambda uid, uri, timeout=None, storage_client=None: self.objects.append(uri),
+        )
+        from utils.other import local_storage
+
+        monkeypatch.setattr(local_storage, 'create_storage_client', MagicMock)
 
     def add(self, table, doc_id, **data):
         self.client.docs[f'{NS}_{table}/{doc_id}'] = {'owner_key': KEY, 'owner_id': UID, **data}
@@ -340,6 +347,9 @@ def test_run_hands_off_before_the_deadline_and_resumes_past_an_unmatched_prefix(
 class _Units:
     def __init__(self, clock):
         self.clock, self.sizes, self._current = clock, [], None
+
+    def expired(self):
+        return False
 
     def unit(self):
         units = self

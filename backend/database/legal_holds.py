@@ -10,16 +10,18 @@ outcome is known. User-facing routes never write either authority document.
 from __future__ import annotations
 
 import logging
+import random
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterator
 from uuid import uuid4
 
 from google.api_core.exceptions import Aborted
 from google.cloud.firestore_v1 import transactional
 
+from database import rpc_deadline
 from database.account_deletion_marker import account_deletion_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.fsr_read_cache import cache_writer
@@ -50,8 +52,22 @@ _OBSOLETE_WRITER_GATE_KIND = "external_data_write"
 _ACTIVE_GATE: ContextVar[tuple[str, str, str] | None] = ContextVar("active_legal_hold_deletion_gate", default=None)
 # Backoff between acquisition attempts while a same-kind peer holds the gate.
 _GATE_WAIT_BACKOFF_SECONDS = (0.1, 0.2, 0.4, 0.5)
+# Bounded destructive units (background purges): body RPC deadline, total hold incl.
+# release, and the gate document's own expiry, all from the winning attempt's start.
+# The expiry leaves 2 s for clock skew and stays far inside the 20 s foreground wait.
+UNIT_BODY_SECONDS = 5.0
+UNIT_HOLD_SECONDS = 8.0
+UNIT_EXPIRY_SECONDS = 10.0
+UNIT_RELEASE_RETRY_SECONDS = 0.2
 _gate_wait_sleep = time.sleep
 _gate_wait_clock = time.monotonic
+_RELEASE_CONTENTION_ATTEMPTS = 5
+
+
+def _gate_wait_jitter() -> float:
+    return random.uniform(0.0, 0.1)
+
+
 _EXTERNAL_TRANSACTION: ContextVar[tuple[str, Any, Any] | None] = ContextVar("external_write_transaction", default=None)
 
 
@@ -125,6 +141,11 @@ def _validated_gate(snapshot: Any) -> dict[str, Any] | None:
     started_at = payload.get("started_at")
     if not isinstance(started_at, datetime) or started_at.tzinfo is None or started_at.utcoffset() is None:
         raise LegalHoldAuthorityUnavailable("legal-hold deletion gate timestamp is malformed")
+    expires_at = payload.get("expires_at")
+    if expires_at is not None and (
+        not isinstance(expires_at, datetime) or expires_at.tzinfo is None or expires_at.utcoffset() is None
+    ):
+        raise LegalHoldAuthorityUnavailable("legal-hold deletion gate expiry is malformed")
     return payload
 
 
@@ -134,6 +155,10 @@ def _gate_blocks(gate: dict[str, Any] | None, now: datetime, *, kind: str | None
     if gate is None or gate["state"] != "running":
         return False
     if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND:
+        return False
+    expires_at = gate.get("expires_at")
+    if expires_at is not None and now >= expires_at:
+        # A bounded unit's holder sends no RPC after its deadline, which precedes this.
         return False
     return (now - gate["started_at"]).total_seconds() < GATE_STALE_AFTER_SECONDS
 
@@ -222,6 +247,7 @@ def _acquire_destructive_operation_transaction(
     kind: str,
     token: str,
     now: datetime,
+    expires_at: datetime | None = None,
 ) -> None:
     hold_ref = _document(client, f"{LEGAL_HOLDS_COLLECTION}/{uid}")
     gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
@@ -258,6 +284,7 @@ def _acquire_destructive_operation_transaction(
             "state": "running",
             "started_at": now,
             "finished_at": None,
+            **({"expires_at": expires_at} if expires_at is not None else {}),
         },
     )
 
@@ -270,12 +297,13 @@ def acquire_destructive_operation(
     token: str,
     firestore_client: Any | None = None,
     now: datetime | None = None,
+    expires_at: datetime | None = None,
 ) -> None:
     if not uid or not kind.strip() or not token.strip():
         raise LegalHoldAuthorityUnavailable("destructive operation identity is invalid")
     current = now or datetime.now(timezone.utc)
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    _acquire_destructive_operation_transaction(client.transaction(), client, uid, kind, token, current)
+    _acquire_destructive_operation_transaction(client.transaction(), client, uid, kind, token, current, expires_at)
 
 
 @transactional
@@ -460,7 +488,9 @@ def _is_transaction_contention(error: BaseException) -> bool:
     return isinstance(error, ValueError) and str(error).startswith('Failed to commit transaction')
 
 
-def _acquire_with_same_kind_wait(uid: str, *, kind: str, token: str, client: Any, wait_seconds: float) -> None:
+def _acquire_with_same_kind_wait(
+    uid: str, *, kind: str, token: str, client: Any, wait_seconds: float, expires_in: float | None = None
+) -> float:
     """Acquire, waiting out a running gate of the same kind for at most ``wait_seconds``.
 
     Same-account deletes arrive in bursts (multi-select, client retries) and each
@@ -472,8 +502,21 @@ def _acquire_with_same_kind_wait(uid: str, *, kind: str, token: str, client: Any
     deadline = _gate_wait_clock() + max(0.0, wait_seconds)
     waits = 0
     while True:
+        # A bounded unit measures its deadlines from the start of the attempt that wins.
+        attempt_started = rpc_deadline.now()
         try:
-            acquire_destructive_operation(uid, kind=kind, token=token, firestore_client=client)
+            if expires_in is None:
+                acquire_destructive_operation(uid, kind=kind, token=token, firestore_client=client)
+            else:
+                attempt_wall = datetime.now(timezone.utc)
+                acquire_destructive_operation(
+                    uid,
+                    kind=kind,
+                    token=token,
+                    firestore_client=client,
+                    now=attempt_wall,
+                    expires_at=attempt_wall + timedelta(seconds=expires_in),
+                )
         except (Aborted, ValueError) as error:
             # A same-account burst can exhaust the transaction's own retries on the
             # gate document; that is contention, not a verdict, so it shares the wait.
@@ -486,20 +529,28 @@ def _acquire_with_same_kind_wait(uid: str, *, kind: str, token: str, client: Any
             waits += 1
             continue
         except DestructiveOperationInProgress:
-            remaining = deadline - _gate_wait_clock()
-            blocking_kind = _blocking_gate_kind(client, uid) if remaining > 0 else ""
-            if blocking_kind not in {None, kind}:
-                if waits:
-                    logger.warning("destructive operation gate wait exhausted kind=%s waits=%d", kind, waits)
-                raise
-            # A gate that reads free was released after our attempt: retry almost at once.
-            backoff = _GATE_WAIT_BACKOFF_SECONDS[min(waits, len(_GATE_WAIT_BACKOFF_SECONDS) - 1)]
-            _gate_wait_sleep(min(backoff if blocking_kind is not None else 0.05, remaining))
-            waits += 1
+            # Wait on plain (lock-free) reads: a transactional retry per poll would lock the
+            # gate document and delay the holder's own release write.
+            while True:
+                remaining = deadline - _gate_wait_clock()
+                blocking_kind = _blocking_gate_kind(client, uid) if remaining > 0 else ""
+                if blocking_kind not in {None, kind}:
+                    if waits:
+                        logger.warning("destructive operation gate wait exhausted kind=%s waits=%d", kind, waits)
+                    raise
+                if blocking_kind is None:
+                    # Released: retry the transactional acquire, de-synchronised from other waiters.
+                    jitter = _gate_wait_jitter()
+                    if jitter > 0:
+                        _gate_wait_sleep(min(jitter, max(remaining, 0.0)))
+                    break
+                backoff = _GATE_WAIT_BACKOFF_SECONDS[min(waits, len(_GATE_WAIT_BACKOFF_SECONDS) - 1)]
+                _gate_wait_sleep(min(backoff, remaining))
+                waits += 1
             continue
         if waits:
             logger.info("destructive operation gate acquired after waiting kind=%s waits=%d", kind, waits)
-        return
+        return attempt_started
 
 
 @contextmanager
@@ -534,14 +585,80 @@ def destructive_operation_gate(
         # secondary authority error. An unreleased gate self-expires via the
         # staleness bound instead of blocking the account forever.
         try:
-            finish_destructive_operation(uid, kind=kind, token=token, outcome="failed", firestore_client=client)
+            _finish_through_contention(uid, kind, token, "failed", client)
         except Exception:
             pass
         raise
     else:
-        finish_destructive_operation(uid, kind=kind, token=token, outcome="completed", firestore_client=client)
+        _finish_through_contention(uid, kind, token, "completed", client)
     finally:
         _ACTIVE_GATE.reset(reset)
+
+
+def _finish_through_contention(uid: str, kind: str, token: str, outcome: str, client: Any) -> None:
+    """Release the gate; a release lost to waiter contention would otherwise pin it until stale."""
+    for attempt in range(_RELEASE_CONTENTION_ATTEMPTS):
+        try:
+            finish_destructive_operation(uid, kind=kind, token=token, outcome=outcome, firestore_client=client)
+            return
+        except (Aborted, ValueError) as error:
+            if not _is_transaction_contention(error) or attempt + 1 == _RELEASE_CONTENTION_ATTEMPTS:
+                raise
+            _gate_wait_sleep(0.05 * (attempt + 1) + _gate_wait_jitter())
+
+
+@contextmanager
+def bounded_destructive_unit(
+    uid: str,
+    *,
+    kind: str = "explicit_memory_deletion",
+    wait_seconds: float = 0.0,
+    firestore_client: Any | None = None,
+) -> Iterator[str]:
+    """Hold the account gate for one short destructive unit, never longer than ``UNIT_HOLD_SECONDS``.
+
+    Every RPC the body makes on deadline-bound clients (``database.rpc_deadline``)
+    must finish by ``UNIT_BODY_SECONDS`` after the winning acquisition attempt
+    started, or it raises without being sent; the release then gets the rest of
+    ``UNIT_HOLD_SECONDS``. The gate document also expires at
+    ``UNIT_EXPIRY_SECONDS``, so even a release that never lands cannot keep a
+    foreground delete waiting past its budget.
+    """
+
+    if _ACTIVE_GATE.get() is not None:
+        raise DestructiveOperationInProgress("bounded unit cannot nest inside another destructive gate")
+    token = uuid4().hex
+    client = rpc_deadline.bind_firestore_client(account_deletion_firestore_client(firestore_client=firestore_client))
+    started = _acquire_with_same_kind_wait(
+        uid, kind=kind, token=token, client=client, wait_seconds=wait_seconds, expires_in=UNIT_EXPIRY_SECONDS
+    )
+    reset = _ACTIVE_GATE.set((uid, kind, token))
+    outcome = "completed"
+    try:
+        with rpc_deadline.rpc_deadline(started + UNIT_BODY_SECONDS):
+            yield token
+    except BaseException:
+        outcome = "failed"
+        raise
+    finally:
+        _ACTIVE_GATE.reset(reset)
+        _release_bounded_unit(uid, kind, token, outcome, client, started + UNIT_HOLD_SECONDS)
+
+
+def _release_bounded_unit(uid: str, kind: str, token: str, outcome: str, client: Any, deadline: float) -> None:
+    with rpc_deadline.rpc_deadline(deadline):
+        while True:
+            try:
+                finish_destructive_operation(uid, kind=kind, token=token, outcome=outcome, firestore_client=client)
+                return
+            except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
+                return  # Expired and taken over, or already terminal: nothing left to release.
+            except Exception as error:  # noqa: BLE001 - the gate's expiry is the backstop
+                left = rpc_deadline.remaining()
+                if left is None or left <= UNIT_RELEASE_RETRY_SECONDS:
+                    logger.warning("bounded unit release failed; gate expires on its own: %s", type(error).__name__)
+                    return
+                _gate_wait_sleep(UNIT_RELEASE_RETRY_SECONDS)
 
 
 @contextmanager
@@ -656,6 +773,7 @@ __all__ = [
     "LegalHoldAuthorityUnavailable",
     "acquire_destructive_operation",
     "assert_account_deletion_permitted",
+    "bounded_destructive_unit",
     "assert_destructive_operation_transaction",
     "assert_destructive_gate_still_ours",
     "assert_no_destructive_operation_transaction",

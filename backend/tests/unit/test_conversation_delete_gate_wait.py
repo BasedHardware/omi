@@ -169,7 +169,7 @@ def gate_client(monkeypatch):
     client = _Client()
     lock = threading.Lock()
 
-    def acquire(uid, *, kind, token, firestore_client=None, now=None):
+    def acquire(uid, *, kind, token, firestore_client=None, now=None, expires_at=None):
         with lock:
             legal_holds._acquire_destructive_operation_transaction.to_wrap(
                 client.transaction(),
@@ -178,6 +178,7 @@ def gate_client(monkeypatch):
                 kind,
                 token,
                 now or legal_holds.datetime.now(legal_holds.timezone.utc),
+                expires_at,
             )
 
     def finish(uid, *, kind, token, outcome, firestore_client=None, now=None):
@@ -211,6 +212,7 @@ def fast_clock(monkeypatch):
 
     monkeypatch.setattr(legal_holds, '_gate_wait_sleep', sleep)
     monkeypatch.setattr(legal_holds, '_gate_wait_clock', lambda: state.now)
+    monkeypatch.setattr(legal_holds, '_gate_wait_jitter', lambda: 0.0)
     return state
 
 
@@ -291,6 +293,23 @@ def test_transaction_contention_on_the_gate_shares_the_wait(monkeypatch, gate_cl
         with legal_holds.destructive_operation_gate(UID, wait_seconds=20):
             pass
     assert fast_clock.sleeps == []
+
+
+def test_route_gate_release_survives_waiter_contention(monkeypatch, gate_client, fast_clock):
+    real_finish = legal_holds.finish_destructive_operation
+    attempts = []
+
+    def contended(*args, **kwargs):
+        attempts.append(True)
+        if len(attempts) <= 2:
+            raise ValueError('Failed to commit transaction in 5 attempts.')
+        return real_finish(*args, **kwargs)
+
+    monkeypatch.setattr(legal_holds, 'finish_destructive_operation', contended)
+    with legal_holds.destructive_operation_gate(UID, wait_seconds=20):
+        pass
+    assert len(attempts) == 3
+    assert gate_client.docs[GATE_PATH]['state'] == 'completed'  # not pinned until stale
 
 
 def test_default_gate_keeps_fail_fast_contract(gate_client, fast_clock):

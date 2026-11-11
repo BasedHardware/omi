@@ -25,14 +25,16 @@ from uuid import uuid4
 from google.cloud import firestore
 
 from database._client import get_firestore_client
-from database.legal_holds import LegalHoldActive, assert_account_deletion_permitted, destructive_operation_gate
+from database import rpc_deadline
+from database.legal_holds import LegalHoldActive, assert_account_deletion_permitted, bounded_destructive_unit
 
 COLLECTION = 'conversation_batch_purge_jobs'
 SEGMENTS = 'segments'
 TOMBSTONES = 'deleted_conversations'
 # Renewed by every checkpoint/unit; a dead or wedged worker loses ownership after this.
 LEASE_SECONDS = 300
-# Hand off well inside the 1500 s Cloud Tasks dispatch deadline / handler timeout.
+# No unit or read batch starts past this; with bounded units and checkpointing that
+# leaves minutes inside the 1500 s Cloud Tasks dispatch deadline / handler timeout.
 RUN_BUDGET_SECONDS = 1200
 # A dispatched generation that never ran (lost task, old consumer, exhausted
 # retries) is redriven after this, doubling per attempt up to the cap.
@@ -247,6 +249,7 @@ class RunProgress:
         self._clock, self._sleep = clock, sleep
         self._started = clock()
         self._budget = budget_seconds
+        self._checkpointed = False  # every run saves at least one step before honouring its budget
 
     def _ref(self) -> Any:
         return self.client.collection(COLLECTION).document(self.job)
@@ -276,6 +279,7 @@ class RunProgress:
 
         _in_transaction(self.client, body)
         self.position = dict(position)
+        self._checkpointed = True
 
     def segments(self, namespace: str) -> set[str]:
         records = segment_records(self.job, namespace, firestore_client=self.client)
@@ -298,7 +302,8 @@ class RunProgress:
 
     @contextmanager
     def unit(self) -> Iterator[None]:
-        with destructive_operation_gate(self.uid, kind=GATE_KIND, wait_seconds=UNIT_GATE_WAIT_SECONDS):
+        # Every RPC while the gate is held (ownership check included) is deadline-bound; see bounded_destructive_unit.
+        with bounded_destructive_unit(self.uid, kind=GATE_KIND, wait_seconds=UNIT_GATE_WAIT_SECONDS):
 
             def renew(transaction):
                 self._owned(transaction)
@@ -309,7 +314,7 @@ class RunProgress:
         self._sleep(UNIT_YIELD_SECONDS)
 
     def expired(self) -> bool:
-        return self._clock() - self._started >= self._budget
+        return self._checkpointed and self._clock() - self._started >= self._budget
 
 
 def _owes_segments(client: Any, job: str) -> bool:
@@ -345,6 +350,8 @@ def run_job(
     from database.batch_pipeline_conversation_purge import PurgeCheckpointed, purge_conversation
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
+    # Units hold the gate; their ownership checks on this client honour the unit's RPC deadline.
+    rpc_deadline.bind_firestore_client(client)
     claim, row, token = begin_run(job, generation, firestore_client=client)
     if claim != 'run' or row is None or token is None:
         return claim
