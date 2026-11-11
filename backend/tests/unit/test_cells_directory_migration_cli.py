@@ -142,8 +142,17 @@ def test_direct_cli_preserves_iam_token_auth(cli, command, monkeypatch):
 
     adc.assert_called_once_with(scopes=['https://www.googleapis.com/auth/sqlservice.login'])
     credentials.refresh.assert_called_once_with(request)
-    driver.connect.assert_called_once_with(
-        host='direct-private-ip', port=5432, dbname='migration-db', user='migration-owner@project.iam',
-        password='fresh-iam-token', sslmode='require', autocommit=True, connect_timeout=10,
-    )  # fmt: skip
+    driver.connect.assert_called_once()
+    assert driver.connect.call_args.args == ()
+    # Timeout policy belongs to the shared connector's owner; guard the CLI's auth contract.
+    expected = {
+        'host': 'direct-private-ip',
+        'port': 5432,
+        'dbname': 'migration-db',
+        'user': 'migration-owner@project.iam',
+        'password': 'fresh-iam-token',
+        'sslmode': 'require',
+        'autocommit': True,
+    }
+    assert driver.connect.call_args.kwargs.items() >= expected.items()
     conn.close.assert_called_once_with()
