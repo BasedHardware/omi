@@ -3129,11 +3129,16 @@ def get_action_items(
             action_items.append(action_item_data)
 
     # Sort by newest first
-    action_items.sort(
-        key=lambda x: -(
-            x['conversation_created_at'].timestamp() if isinstance(x.get('conversation_created_at'), datetime) else 0.0
-        )
-    )
+    def _action_item_sort_key(item: dict) -> float:
+        dt = item.get('conversation_created_at')
+        if isinstance(dt, datetime) and dt.year > 1:
+            try:
+                return -dt.timestamp()
+            except (OverflowError, OSError, ValueError):
+                pass
+        return float('inf')
+
+    action_items.sort(key=_action_item_sort_key)
 
     # Apply pagination
     start_idx = offset
