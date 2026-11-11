@@ -1074,7 +1074,9 @@ class _PlansSheetState extends State<PlansSheet> {
         _isUpgrading ||
         _codeRetryTimer != null ||
         code.isEmpty ||
-        !provider.canRedeemSubscriptionCode) return;
+        !provider.canRedeemSubscriptionCode) {
+      return;
+    }
     setState(() {
       _isRedeemingCode = true;
       _promoCodeError = null;
