@@ -12,17 +12,18 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('off response and both server-owned prompt routes decode closed', () {
-    expect(FirstValuePrompt.fromResponse('{"prompt":null}'), isNull);
-    expect(FirstValuePrompt.fromResponse('{"prompt":{"kind":"capture","route":"/settings/device"}}')?.route,
+    expect(FirstValueResponse.fromResponse('{"prompt":null}').prompt, isNull);
+    expect(FirstValueResponse.fromResponse('{"prompt":{"kind":"capture","route":"/settings/device"}}').prompt?.route,
         '/settings/device');
-    expect(FirstValuePrompt.fromResponse('{"prompt":{"kind":"result","route":"/conversation/result-1"}}')?.route,
+    expect(
+        FirstValueResponse.fromResponse('{"prompt":{"kind":"result","route":"/conversation/result-1"}}').prompt?.route,
         '/conversation/result-1');
-    expect(() => FirstValuePrompt.fromResponse('{"prompt":{"kind":"result","route":"https://elsewhere.invalid"}}'),
+    expect(() => FirstValueResponse.fromResponse('{"prompt":{"kind":"result","route":"https://elsewhere.invalid"}}'),
         throwsFormatException);
-    expect(() => FirstValuePrompt.fromResponse('{"prompt":{"kind":"other","route":"/settings/device"}}'),
+    expect(() => FirstValueResponse.fromResponse('{"prompt":{"kind":"other","route":"/settings/device"}}'),
         throwsFormatException);
-    expect(() => FirstValuePrompt.fromResponse('[]'), throwsFormatException);
-    expect(() => FirstValuePrompt.fromResponse('{broken'), throwsFormatException);
+    expect(() => FirstValueResponse.fromResponse('[]'), throwsFormatException);
+    expect(() => FirstValueResponse.fromResponse('{broken'), throwsFormatException);
   });
 
   test('ready navigation authenticates the prompt instead of reading an FCM object id', () async {

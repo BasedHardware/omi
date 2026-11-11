@@ -29,8 +29,8 @@ class FirstValueRecoveryService {
     final identityEpoch = AnalyticsManager.identityEpoch;
     try {
       final result = await _api.prompt();
-      if (identityEpoch != AnalyticsManager.identityEpoch || result is! ApiSuccess<FirstValuePrompt?>) return;
-      final prompt = result.data;
+      if (identityEpoch != AnalyticsManager.identityEpoch || result is! ApiSuccess<FirstValueResponse>) return;
+      final prompt = result.data.prompt;
       if (prompt == null || !AnalyticsManager.identityKnown) return;
       PromptQueue.instance.enqueue(
         'first-value-${prompt.kind}',
@@ -58,8 +58,8 @@ class FirstValueRecoveryService {
   Future<bool> openReadyResultFromPush() async {
     final identityEpoch = AnalyticsManager.identityEpoch;
     final result = await _api.prompt(navigation: true);
-    if (identityEpoch != AnalyticsManager.identityEpoch || result is! ApiSuccess<FirstValuePrompt?>) return false;
-    final prompt = result.data;
+    if (identityEpoch != AnalyticsManager.identityEpoch || result is! ApiSuccess<FirstValueResponse>) return false;
+    final prompt = result.data.prompt;
     if (prompt == null || prompt.kind != 'result') return false;
     return HomeNavigation.openRoute(prompt.route);
   }
