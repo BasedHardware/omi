@@ -39,9 +39,13 @@ Report control/treatment numerators, denominators, absolute percentage-point dif
 
 **Guardrails:** notification opt-out and quiet-hour/cap suppression; FCM acceptance/errors; cancellation requests and effective paid ends through day 14; capture/upload failures; privacy/content incidents; uninstalls where measurable. Kill new intake and delivery immediately for content/privacy leakage, duplicate prompts or credible cancellation/primary harm. Push acceptance is not proof of device delivery or product value.
 
-## Weekly eligible volume and power — activation blocker
+## Weekly volume and power — activation blocker
 
-`eligible-volume.md` was absent at implementation time on 2026-11-11. **Weekly eligible volume, baseline day-7 capture/open rates, minimum detectable effect and duration/power are PENDING.** The churn lead must publish these before final PR acceptance/activation; no value is inferred from the selected cancel-flow cohort. If four weeks cannot power a useful primary readout, label this measurement/repair rather than promising a churn answer. Sample-day maturity is added to intake duration; day-60 retention needs another 60 days and is not a ramp gate.
+The lead published `omi-workspace:data/run-2026-11-11-goals/churn-round5/eligible-volume.md` at 2026-11-11T01:47:21Z from aggregate-only read-only analytics. It reports **23.7 behavioral screening candidates/week** across three complete seven-day cohort bins, and **18.5/week** for the latest two. Those proxies combine saved-capture/ready-result events imperfectly: cancellation is excluded at trigger, but actual direct-paid invoice evidence, effective entitlement, consent, pendant recency, supported client/route and exact capture/result join are not jointly measured. They are not send-eligible volume or a runtime bound.
+
+At `alpha=.05`, 80% power and 50/50 arms under conservative binary p=.5 sensitivity, four weeks at those proxy rates gives about 29–33 percentage points detectable on the candidate-level day-seven binary outcome. ITT over observed starts yields about 421–250 starts across four weeks and about 14–18 percentage points detectable. A 10-point difference needs about 784 total under the same approximation, roughly 33–42 full-exposure proxy weeks before maturity/exclusions. Four weeks at 10% cannot decide a modest effect. These are planning sensitivities, not fitted lifts, bounds or a retention claim.
+
+**Exact runtime-eligible volume, matched baselines and final powered intake/readout duration remain an activation blocker.** Before activation, perform the lead's documented aggregate dry-run over the implemented predicate (positive direct-paid start, current effective state, consent/timezone, capture/result state and supported route), publish matched/unmatched coverage excluding unknowns, and recompute power on the actual ITT denominator. Early work is measurement/repair. Sample maturity adds to intake, and day-60 effective-end retention needs its own baseline and at least 60 further days.
 
 ## Dated ramp and stop gates
 

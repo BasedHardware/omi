@@ -1,4 +1,5 @@
 // Home presentation for server-claimed first-value prompts; account epochs fence every surface.
+// Existing dialogs/deep links own UX, and a push tap resolves through authenticated API state.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';

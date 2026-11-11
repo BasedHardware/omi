@@ -1,4 +1,5 @@
 // Paid-start prompt transport: the server owns eligibility, claims, and route targets.
+// Clients never infer a paid start, randomize an arm, or accept an object id from FCM.
 import 'dart:async';
 import 'dart:convert';
 
