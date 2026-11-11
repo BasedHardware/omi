@@ -711,7 +711,7 @@ WITNESSES: dict[str, CallerWitness] = {
             'database.conversations.get_conversations',
             'database.conversations.get_conversations',
             ('daily-summary-generation',),
-            1,
+            2,  # Initial inputs plus the same bounded window before refresh commit.
             _run_daily_summary_generation,
         ),
         CallerWitness(
