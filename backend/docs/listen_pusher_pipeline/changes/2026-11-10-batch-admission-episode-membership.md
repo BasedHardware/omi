@@ -26,6 +26,13 @@ it. Only a member that is still pending transcription, with no projected
 transcript, and whose episode keeps at least one other member may be detached;
 a transcribed member never moves and an episode is never left empty.
 
+The admission call is scheduled in the background, so it may run after the
+audio close committed. Its transaction therefore re-reads the member and
+returns `closed` without writing once the archive is closed or a real
+`server_batch_audio_end` exists; a replayed admission also treats that closed
+membership as already placed. The close-time end and `state_version` are never
+rewritten by the late task.
+
 Kill switch: `EPISODE_BATCH_ADMISSION_ATTACH_ENABLED`, default on. Off restores
 the pre-admission behaviour exactly: the capture stays standalone and joins at
 audio close. `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` still governs the close path.

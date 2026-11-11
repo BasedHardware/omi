@@ -1259,6 +1259,7 @@ _add(
             'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
             'deadline_floor': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
             'detach_from': (None, 'document gets for the old provisional membership; no query shape effect'),
+            'admission': (False, 'member document refusal guard; no query filter or ordering effect'),
         },
         base={
             'uid': UID,

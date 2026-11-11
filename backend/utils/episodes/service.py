@@ -1678,7 +1678,8 @@ def attach_recorded(
     new_occasion=False,
     deadline_floor=None,
     detach_from=None,
-) -> dict[str, Any]:
+    admission=False,
+) -> dict[str, Any] | str:
     template = new_episode(
         conversation_id=conversation_id,
         started_at=started,
@@ -1701,7 +1702,10 @@ def attach_recorded(
         deadline_floor=deadline_floor,
         detach_from=detach_from,
         attach_row=row,
+        admission=admission,
     )
+    if placed == 'closed':
+        return 'closed'
     placed.pop('_recorded_windows', None)
     return placed
 

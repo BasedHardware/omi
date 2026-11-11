@@ -19,6 +19,9 @@ from database import episodes, episode_batch_pending
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
+# The admission attach's distinct refusal: the audio close already owns the member.
+ADMISSION_CLOSED = 'closed'
+
 
 def _automatic(row):
     return (
@@ -160,6 +163,7 @@ def attach(
     pending_at=None,
     deadline_floor=None,
     detach_from=None,
+    admission=False,
 ):
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
@@ -168,6 +172,14 @@ def attach(
     fence = root.collection('episode_links').document('recorded_timeline')
 
     def commit(transaction):
+        if admission:
+            # Read the member inside the same transaction as the attach. The
+            # scheduled admission task may run after the audio close committed;
+            # in that case the close-time window is final, and the admission's
+            # stale provisional bounds must never re-enter placement.
+            member = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
+            if episode_batch_pending.audio_finalized(member):
+                return ADMISSION_CLOSED
         revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
         pending_patch = episode_batch_pending.read_patch(
@@ -208,12 +220,19 @@ def attach(
                 # audio clock. Legacy started_at/finished_at can be arrival time.
                 # An admission attach has no committed bounds yet: its stored
                 # provisional fact already matched above, so a replay of the same
-                # window is the same span and must not bump the episode.
+                # window is the same span and must not bump the episode. Once the
+                # audio close has finalized the member, that closed membership is
+                # already placed and must never re-enter placement with the stale
+                # provisional window.
                 same_span = (
-                    episode_batch_pending.matches_closed_audio(member, start, end)
-                    or member.get('server_batch_audio_closed') is not True
-                    if pending_at is not None
-                    else span is not None and span.recorded_start == start and span.recorded_end == end
+                    True
+                    if admission
+                    else (
+                        episode_batch_pending.matches_closed_audio(member, start, end)
+                        or member.get('server_batch_audio_closed') is not True
+                        if pending_at is not None
+                        else span is not None and span.recorded_start == start and span.recorded_end == end
+                    )
                 )
                 if (
                     same_span

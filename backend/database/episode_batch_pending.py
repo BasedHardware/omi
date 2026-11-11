@@ -1,8 +1,21 @@
 """Stamp a batch member's deadline in the membership transaction, once only."""
 
+import math
 from datetime import datetime, timedelta, timezone
 
 from config.batch_timeliness import SLA_SECONDS
+
+
+def audio_finalized(row):
+    """The audio close owns the member once it is closed or its end is committed.
+
+    A late admission attach must never place a capture after this point: the
+    close-time window is final, and its provisional one-second bounds are stale.
+    """
+    end = row.get('server_batch_audio_end')
+    return row.get('server_batch_audio_closed') is True or (
+        isinstance(end, (int, float)) and not isinstance(end, bool) and math.isfinite(end)
+    )
 
 
 def matches_closed_audio(row, start, end):

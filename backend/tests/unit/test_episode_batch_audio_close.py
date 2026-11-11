@@ -444,6 +444,35 @@ def test_audio_close_finalizes_the_admitted_end_without_renewing_the_deadline(ti
     assert episode['conversation_ids'] == ['capture']
 
 
+def test_late_admission_after_audio_close_cannot_undo_the_close_end(timeline_store):
+    """The close attach commits first; the delayed admission task must refuse."""
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    stale_admission_row = admitted()
+    store.rows[path] = admitted()
+    c = service.Collaborators(firestore_client=store)
+    store.rows[path].update(server_batch_audio_closed=True, server_batch_audio_end=1120, has_content=True)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    member = store.rows[path]
+    episode_id = member['episode_id']
+    episode_path = ('users', 'owner', 'episodes', episode_id)
+    closed_end = datetime.fromtimestamp(1120, timezone.utc)
+    version = store.rows[episode_path]['state_version']
+    assert store.rows[episode_path]['last_activity_at'] == closed_end
+    before = deepcopy(store.rows)
+    # The background admission task still holds its pre-close snapshot.
+    assert (
+        attachment.attach_admitted_batch_capture('owner', 'capture', stale_admission_row, collaborators=c) == 'closed'
+    )
+    assert store.rows == before, 'a late admission must not write after the close'
+    member = store.rows[path]
+    assert member['episode_id'] == episode_id, 'the member keeps its close-time episode'
+    assert member['server_batch_audio_end'] == 1120
+    assert store.rows[episode_path]['last_activity_at'] == closed_end, 'the finalized end survives'
+    assert store.rows[episode_path]['state_version'] == version
+    assert store.rows[episode_path]['conversation_ids'] == ['capture']
+
+
 def test_boundary_move_moves_the_provisional_member_atomically_at_the_close_attach(timeline_store):
     store = timeline_store
     path = ('users', 'owner', 'conversations', 'capture')
