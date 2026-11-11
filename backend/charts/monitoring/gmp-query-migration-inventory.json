@@ -2,6 +2,32 @@
   "combined_equals_split": true,
   "consumers": [
     {
+      "expression": "sum(increase(omi_app_review_config_alert_total[15m])) > bool 0",
+      "file": "alerts/app-review-config.json",
+      "issues": [],
+      "metrics": [
+        "omi_app_review_config_alert_total"
+      ],
+      "owner_title": "App review config - lifecycle reconciliation needs attention",
+      "owner_uid": "omi-app-review-config-alert",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "time() - max(omi_app_review_config_last_sweep_timestamp_seconds) > bool 7200",
+      "file": "alerts/app-review-config.json",
+      "issues": [],
+      "metrics": [
+        "omi_app_review_config_last_sweep_timestamp_seconds"
+      ],
+      "owner_title": "App review config - sweep is silent or failing",
+      "owner_uid": "omi-app-review-config-sweep-silent",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(rate(omi_sync_dispatch_attempts_total{mode=\"enqueue_uncertain\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
       "file": "alerts/backend-sync.json",
       "issues": [],
@@ -4111,7 +4137,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 276
+    "query_consumers": 278
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

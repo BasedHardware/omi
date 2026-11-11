@@ -29,6 +29,7 @@ from utils.metrics import (
     OMI_APP_REVIEW_CONFIG_LAST_SWEEP_TIMESTAMP,
     OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL,
 )
+from utils.observability.reasons import AppReviewConfigReason, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
 
@@ -248,8 +249,12 @@ def reconcile_android_config(config: dict[str, Any], *, production_codes: set[st
 
 
 def report_lifecycle_alert(platform: str, reason: str, message: str) -> None:
-    OMI_APP_REVIEW_CONFIG_ALERT_TOTAL.labels(platform=platform, reason=reason).inc()
-    OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP.labels(platform=platform, reason=reason).set(time.time())
+    OMI_APP_REVIEW_CONFIG_ALERT_TOTAL.labels(
+        platform=platform, reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, reason, AppReviewConfigReason)
+    ).inc()
+    OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP.labels(
+        platform=platform, reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, reason, AppReviewConfigReason)
+    ).set(time.time())
     logger.error('app_review_config alert platform=%s reason=%s %s', platform, reason, message)
 
 
