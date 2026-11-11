@@ -13,7 +13,9 @@ The per-owner ``explain`` read uses the C1 ``ledger_ref`` and is owner-scoped.
 from __future__ import annotations
 
 import time
+import math
 from collections import Counter
+from datetime import datetime, timezone
 from typing import Any, Iterator, Mapping
 
 from google.cloud import firestore
@@ -37,6 +39,18 @@ class CensusSchemaMismatch(RuntimeError):
     """A ledger row is not the schema this census understands; fail closed."""
 
 
+def _epoch(value: Any) -> float | None:
+    """Epoch seconds for a datetime or numeric ledger clock; ``None`` when unknown."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        moment = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return moment.timestamp()
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+        return float(value)
+    return None
+
+
 def _global_window(start: Any, end: Any, *, limit: int, firestore_client: Any) -> Iterator[dict[str, Any]]:
     """Yield ledger rows across owners with ``admitted_at`` in ``[start, end)``.
 
@@ -45,7 +59,7 @@ def _global_window(start: Any, end: Any, *, limit: int, firestore_client: Any) -
     The owner id is read from the document path only to join the conversation
     row; it is never returned.
     """
-    start_epoch, end_epoch = pipeline_ledger._epoch(start), pipeline_ledger._epoch(end)
+    start_epoch, end_epoch = _epoch(start), _epoch(end)
     if start_epoch is None or end_epoch is None or end_epoch <= start_epoch or limit <= 0:
         raise ValueError('invalid ledger window')
     query = (
@@ -157,13 +171,13 @@ def census(
             raise CensusSchemaMismatch('ledger schema_version mismatch')
         stage = row.get('stage')
         by_stage[pipeline_ledger.stage_label(stage if isinstance(stage, str) else 'other')] += 1
-        updated = pipeline_ledger._epoch(row.get('updated_at'))
+        updated = _epoch(row.get('updated_at'))
         if updated is not None and (latest_updated is None or updated > latest_updated):
             latest_updated = updated
-        admitted = pipeline_ledger._epoch(row.get('admitted_at'))
+        admitted = _epoch(row.get('admitted_at'))
         if admitted is not None and (earliest_admitted is None or admitted < earliest_admitted):
             earliest_admitted = admitted
-        deadline = pipeline_ledger._epoch(row.get('deadline_at'))
+        deadline = _epoch(row.get('deadline_at'))
         if not row.get('terminal') and deadline is not None and current > deadline:
             label = pipeline_ledger.stage_label(stage if isinstance(stage, str) else 'other')
             if label in STUCK_STAGES:
@@ -184,12 +198,12 @@ def census(
         visible, step = _home_visible(conversation, current)
         home_unknown += int(conversation is None or step is None)
         visible_real += int(real and visible)
-        end_type = row.get('end_type') if row.get('end_type') in END_TYPES else 'unknown'
+        end_type = str(row.get('end_type')) if row.get('end_type') in END_TYPES else 'unknown'
         end_type_rows[end_type] += 1
         end_type_real[end_type] += int(real)
         end_type_visible[end_type] += int(real and visible)
-        clock_start = pipeline_ledger._epoch(row.get('end_at')) or pipeline_ledger._epoch(row.get('admitted_at'))
-        event_at = pipeline_ledger._epoch(row.get('home_ready_at'))
+        clock_start = _epoch(row.get('end_at')) or _epoch(row.get('admitted_at'))
+        event_at = _epoch(row.get('home_ready_at'))
         if clock_start is None:
             clock_unknown += 1
         elif event_at is not None and event_at >= clock_start:
@@ -274,7 +288,7 @@ def explain(uid: str, conversation_id: str, *, firestore_client: Any = None) -> 
         return None
     doc = snapshot.to_dict() or {}
     transitions = [
-        {'stage': entry.get('stage'), 'at': pipeline_ledger._epoch(entry.get('at')), 'reason': entry.get('reason')}
+        {'stage': entry.get('stage'), 'at': _epoch(entry.get('at')), 'reason': entry.get('reason')}
         for entry in (doc.get('transitions') or [])[: pipeline_ledger.MAX_TRANSITIONS]
         if isinstance(entry, Mapping)
     ]
@@ -282,12 +296,12 @@ def explain(uid: str, conversation_id: str, *, firestore_client: Any = None) -> 
         'schema_version': pipeline_ledger.SCHEMA_VERSION,
         'conversation_id': conversation_id,
         'stage': doc.get('stage'),
-        'entered_at': pipeline_ledger._epoch(doc.get('entered_at')),
-        'deadline_at': pipeline_ledger._epoch(doc.get('deadline_at')),
+        'entered_at': _epoch(doc.get('entered_at')),
+        'deadline_at': _epoch(doc.get('deadline_at')),
         'attempt': doc.get('attempt'),
         'reason': doc.get('reason'),
         'end_type': doc.get('end_type'),
-        'end_at': pipeline_ledger._epoch(doc.get('end_at')),
+        'end_at': _epoch(doc.get('end_at')),
         'transitions': transitions,
         'redaction': {'uids': False, 'content': False, 'titles': False, 'transcripts': False},
     }
