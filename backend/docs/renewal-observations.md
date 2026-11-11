@@ -3,17 +3,16 @@
 Observation-only backend instrumentation for the churn program; no notification,
 entitlement, Stripe-setting or historical-data changes. Source does not prove serving.
 
-After signature validation and successful completion of the owning handler, the Stripe webhook records a minimal immutable fact for
+After signature validation and return of the owning handler (including retryable skips), the Stripe webhook records a minimal immutable fact for
 subscription-cycle invoice finalization, failed payment, paid/payment_succeeded,
-void and uncollectible events. It also records provider subscription creation,
-status and cancel transitions with a hashed latest-invoice link. It never reads
-Stripe or user docs.
+void and uncollectible events. It also records provider subscription status/cancel
+transitions with a hashed latest-invoice link. It never reads Stripe or user docs.
 `BILLING_RENEWAL_OBSERVATIONS_ENABLED=false` disables projection and observation IO;
 code defaults on (ops kill switch), with no runtime/config deployment in this PR.
 A default-off experiment ramp is not appropriate for observation-only instrumentation.
 
 `billing_renewal_observations` documents contain hashes of invoice/subscription keys,
-allowlisted enums, provider attempt_count/attempted, positive-amount flag, provider
+allowlisted enums, provider livemode, attempt_count/attempted, positive-amount flag, provider
 invoice periods, timestamps and expiry. No UID, customer, contact, card, price ID,
 line content, full payload or raw provider identifier is persisted. Hashes are
 join keys inside trusted analytics, never Prometheus labels or public output.
@@ -25,22 +24,15 @@ Paid aliases and webhook redelivery dedupe; a later failed retry is separate, an
 an out-of-order failure cannot overwrite a paid observation. Read outcomes as a
 set of provider facts ordered by provider event time, not by arrival or doc ID.
 Finalized/void/uncollectible and out-of-band paid invoices are not payment attempts.
-Count attempted positive-due invoices separately from attempt outcomes. Group invoice
-cohorts by invoice period only; those fields are not claimed to be service periods
-or anniversary dates. A raw subscription snapshot is not effective payer churn;
+Count attempted positive-due invoices separately from attempt outcomes. Cohort invoices by the first observed finalized/attempt provider timestamp and disclose source-start left truncation; invoice period fields are raw provider periods, not service periods or anniversary dates. A raw subscription snapshot is not effective payer churn;
 replacement and paid-through rules remain the churn producer's authority.
-First versus later renewal ordinal is explicitly unknown on the invoice fact
-alone. A subscription snapshot carries the provider `subscription_created`
-timestamp, so a reader can join `subscription_key` and compare
-`invoice_period_start` to classify the first renewal versus later renewals
-where a snapshot exists. A missing snapshot leaves the ordinal unknown; it is
-never inferred from the invoice alone.
+First versus later renewal ordinal is explicitly unknown without more history.
 
 Persistence uses a create RPC with retry disabled and one-second SDK deadline,
-offloaded to the DB executor with a 1.25-second await bound. Duplicate creation is
+offloaded to the DB executor with a 1.25-second await bound. Production uses the response BackgroundTasks after the owning handler returns, so observation does not delay its response; direct Python callers without a response container await the bounded observer. Observation is first in the response task list so a later notification/policy exception cannot suppress it; it can delay other background work by up to the observer bound. Process exit, response-serialization failure or disconnect before response can lose observations. Duplicate creation is
 expected. Failures record the shared fallback signal and type-only logs; the owning
-webhook response body/effects are unchanged. Observation runs after entitlement decisions, so observation IO/logging cannot change their decision clock. A failed owning handler records nothing on that attempt; Stripe replay must succeed before observation. This is best-effort instrumentation, not a
-lossless billing ledger: publish observation-error/timeout gaps beside denominators.
+webhook response body/effects are unchanged. Observation runs after entitlement decisions, so observation IO/logging cannot change their decision clock. A raising owning handler records nothing on that attempt; retryable-skip returns still record provider facts (not effective entitlement changes); Stripe replay must succeed before observation. This is best-effort instrumentation, not a
+lossless billing ledger: publish observation-error/timeout gaps beside denominators. omi_billing_renewal_observations_total exposes eligible/created/duplicate/projection_error/write_error/timeout deliveries; labels are closed and zero-initialized. These are delivery counts, not distinct invoice/attempt denominators. A timed-out worker may complete later; disclose that uncertainty. Provider livemode is true/false/unknown and production readouts require true.
 
 `expires_at` is 90 days after first observation; readers must exclude expired facts.
 No TTL policy or deletion job is installed by this change, so physical cleanup is
@@ -49,7 +41,7 @@ bounded stored history. For December, read the cohort before the earliest facts
 expire; churn-lead reads first coverage within 24 hours of verified serving, then
 weekly through December and on 2027-01-08 for December recovery. Lead2/cl2-deploy
 own ordinary source delivery; churn-lead never deploys or activates runtime.
-No consumer reads, counters or historical backfill are performed by this PR.
+No consumer reads or historical backfill are performed; counters describe delivery health only.
 
 Readout: distinct invoice_key and invoice_key/attempt_count among attempted,
 positive-due recognized-consumer observations, split month/year/unknown; failed to

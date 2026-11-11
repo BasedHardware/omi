@@ -89,6 +89,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.apps import find_app_subscription, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
+from starlette.background import BackgroundTask
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
 from utils import subscription as subscription_utils
@@ -1216,7 +1217,10 @@ async def stripe_webhook(
         return await run_blocking(db_executor, function, *args, **kwargs)
 
     result = await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
-    await observe_verified_event(event)
+    if background_tasks is not None:
+        background_tasks.tasks.insert(0, BackgroundTask(observe_verified_event, event))
+    else:
+        await observe_verified_event(event)
     return result
 
 
