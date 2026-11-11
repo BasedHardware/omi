@@ -208,6 +208,28 @@ cost readout. The scope's dollar estimate does not measure that new write cost.
 
 ## Verification
 
+Daily architecture parity also runs
+`backend/scripts/privacy_revocation_emulator_test.py` through the existing
+`backend/scripts/run-emulator-proofs.sh` runner. Set
+`OMI_REQUIRE_STORE_BACKENDS=all` under a private loopback Firestore emulator to
+require old Firestore, replacement Postgres and simulator jobs. The suite uses
+the real external-write and deletion-marker authorities, isolated Redis and
+synthetic owners; sim/Postgres customer fixtures have explicit synthetic server
+revisions rather than real-server contention semantics.
+
+PL-505 warms ALLOW, commits a deletion marker plus changed durable
+certification, and checks again one second later, with Redis invalidations
+deliberately lost. The live and token-certified controls must block before
+external work. The exact uncertified TTL stale-ALLOW defect has a strict
+expected failure linked to [#25011](https://github.com/BasedHardware/omi/pull/25011);
+a repaired implementation must become strict XPASS until that marker is
+removed. Setup and unrelated authority failures remain failures. The TTL is
+an upper bound and cannot excuse a stale ALLOW after completed revocation.
+PL-461 keeps a reader request open while a separate Context writes deletion
+and fences Redis, then requires the later dispatch check to block. Both
+refusals preserve the retained job and create no result. This qualification
+does not enable any cache or clear any runtime kill switch.
+
 Run unit files through `backend/test.sh` with `BACKEND_UNIT_TEST_FILE_LIST` and
 the workspace `bin/omi-heavy run -- nice -n 19` wrapper. The batch writer
 matrix in `tests/integration/test_bpp_generation_fence_emulator.py` requires an
