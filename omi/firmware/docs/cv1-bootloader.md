@@ -57,18 +57,19 @@ The CPUNET HEX remains a separately named asset for explicitly authorized
 radio work; it is not part of normal app recovery. OTA ZIPs default to app only.
 
 Staging, promotion and immediately-before-publication validation parse every
-staged HEX. Any boot bytes must match the checked-in allowlist. Malformed,
+staged HEX. Release app-core bytes must match the pinned .19 bootloader and
+the exact signed app extracted from the staged OTA ZIP. Malformed,
 overlapping, truncated or checksum-invalid HEX fails closed. Changing asset
-checksums in provenance does not bypass the boot-region gate. Inspect manually:
+checksums in provenance does not bypass the boot-region gate. Extract
+`omi.signed.bin` from the intended OTA ZIP, then inspect manually:
 
 ```sh
-python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader path/to/Omi_CV1_vX.hex
+python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader --signed-app path/to/omi.signed.bin path/to/Omi_CV1_vX.hex
 ```
 
-The new custom build remains a separate **bench artifact**, not a release
-bootloader, until the lead reports physical qualification and a reviewed
-policy update pins its exact hash. Do not add a hash merely to make a build
-pass. The [historical audit](cv1-bootloader-release-audit.md) classifies older
+The custom build is jig-qualified and pinned to the reproduced .19 bytes.
+Future bootloader changes need a new reviewed qualification and policy update;
+do not add a hash merely to make a build pass. The [historical audit](cv1-bootloader-release-audit.md) classifies older
 assets; the presence of Omi's sequence alone is not an approval.
 
 ## CI and developer build

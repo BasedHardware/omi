@@ -77,8 +77,9 @@ reservation/layout/key/SD checks and the exact pinned hash.
 The policy approves .19 for manufacturing and retains factory .8 as an
 approved installed/restoration state. New CI builds must equal .19. Release
 app-core HEX combines that loader with the exact staged OTA signed app bytes,
-excluding storage, UICR and network-core addresses. Validate it with:
-`python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader manufacturing-app.hex`.
+excluding storage, UICR and network-core addresses. Extract `omi.signed.bin`
+from the matching OTA ZIP and validate it with:
+`python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader --signed-app omi.signed.bin manufacturing-app.hex`.
 Do not substitute the old .19 app or its whole historical merged HEX. Normal
 BLE OTA remains app-only and preserves the installed loader. This physical
 trial supports the pairing; it does not verify Gettop's shipment counts.

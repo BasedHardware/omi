@@ -116,6 +116,15 @@ def wire_memory(image, boot_image):
     return memory
 
 
+def validate_release_hex(path, signed_image):
+    """Reparse a release HEX and bind its entire memory map to the shipping pin/app."""
+    memory = read_hex(path)
+    boot_image = validate_build_bootloader({address: byte for address, byte in memory.items() if address < BOOT_END})
+    if memory != wire_memory(signed_image, boot_image):
+        raise ValueError('Release app HEX must contain exactly the pinned bootloader and tested OTA signed bytes')
+    return {'kind': 'approved-bootloader', 'boot_sha256': hashlib.sha256(boot_image).hexdigest()}
+
+
 def app_hex(image, target):
     """Optional app-only recovery preserves the installed approved bootloader."""
     write_hex(target, app_memory(image))
@@ -143,9 +152,14 @@ def main():
     role = parser.add_mutually_exclusive_group()
     role.add_argument('--app-only', action='store_const', dest='role', const='app')
     role.add_argument('--require-bootloader', action='store_const', dest='role', const='manufacturing')
+    parser.add_argument('--signed-app', type=Path, help='Exact omi.signed.bin extracted from the intended OTA ZIP')
     args = parser.parse_args()
+    if (args.role == 'manufacturing') != (args.signed_app is not None):
+        parser.error('--require-bootloader and --signed-app must be used together')
     for path in args.hex:
-        print(json.dumps({'file': path.name, **inspect_role(path, args.role)}, sort_keys=True))
+        result = (validate_release_hex(path, args.signed_app.read_bytes())
+                  if args.role == 'manufacturing' else inspect_role(path, args.role))
+        print(json.dumps({'file': path.name, **result}, sort_keys=True))
 
 
 if __name__ == '__main__':

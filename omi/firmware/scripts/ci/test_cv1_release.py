@@ -136,6 +136,13 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'exactly the pinned bootloader and tested OTA signed bytes'):
             release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
 
+    def test_stage_reparses_and_rejects_corrupted_writer_output(self):
+        def corrupt_writer(path, memory):
+            write_hex(path, {**memory, 0xf6000: 1})
+        with patch.object(release, 'write_hex', side_effect=corrupt_writer):
+            with self.assertRaisesRegex(ValueError, 'exactly the pinned bootloader'):
+                release.stage(self.build, self.root / 'bad-write', '3.0.21', False, self.context, self.sim)
+
     def test_stage_rejects_boot_bytes_in_network_hex(self):
         write_hex(self.build / 'merged_CPUNET.hex', {0: 0x42, 0x1000000: 0x33})
         with self.assertRaisesRegex(ValueError, 'unapproved CV1 boot region'):

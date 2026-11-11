@@ -157,6 +157,31 @@ class BootRegionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'also be approved'):
                 boot.validate_build_bootloader(memory)
 
+    def test_release_validation_requires_pin_and_exact_app_map(self):
+        image = bytes.fromhex('3db8f396') + b'app'
+        self.policy.write_text(json.dumps({'approved_boot_sha256': [self.hash], 'build_boot_sha256': self.hash}))
+        with patch.object(boot, 'POLICY', self.policy):
+            memory = boot.wire_memory(image, boot.boot_bytes(self.memory))
+            boot.write_hex(self.hex, memory)
+            self.assertEqual(boot.validate_release_hex(self.hex, image)['boot_sha256'], self.hash)
+            for invalid in ({**memory, 0x10004: 42}, {**memory, 0xf6000: 1},
+                            boot.app_memory(image)):
+                boot.write_hex(self.hex, invalid)
+                with self.subTest(invalid_size=len(invalid)), self.assertRaises(ValueError):
+                    boot.validate_release_hex(self.hex, image)
+            alternative = {**memory, 0: 43}
+            other_hash = hashlib.sha256(boot.boot_bytes(alternative)).hexdigest()
+            self.policy.write_text(json.dumps({'approved_boot_sha256': [self.hash, other_hash], 'build_boot_sha256': self.hash}))
+            boot.write_hex(self.hex, alternative)
+            with self.assertRaisesRegex(ValueError, 'pinned build'):
+                boot.validate_release_hex(self.hex, image)
+
+    def test_release_cli_requires_exact_signed_app_argument(self):
+        result = subprocess.run(['python3', str(Path(boot.__file__)), '--require-bootloader', str(self.hex)],
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('must be used together', result.stderr)
+
     def test_committed_build_hash_is_jig_qualified_and_approved(self):
         policy = json.loads(boot.POLICY.read_text())
         expected = '6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1'

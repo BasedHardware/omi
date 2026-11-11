@@ -119,13 +119,15 @@ There are two ways to update your Omi device firmware:
         The OTA ZIP is for Bluetooth updates. The separate CPUNET HEX is not
         part of normal app recovery.
 
-        From a repository checkout, validate the downloaded file:
+        Extract `omi.signed.bin` from the matching OTA ZIP. From a repository checkout,
+        validate the downloaded HEX against that signed app:
 
         ```bash
-        python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader path/to/Omi_CV1_vX.hex
+        python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader --signed-app path/to/omi.signed.bin path/to/Omi_CV1_vX.hex
         ```
 
-        The check rejects unapproved bootloaders, storage, UICR and network-core bytes.
+        The check requires the pinned bootloader and exact signed app bytes; it rejects
+        storage, UICR and network-core bytes.
         Do not copy downloaded files over the archived factory images or run
         the legacy two-core batch/J-Link scripts.
       </Step>
