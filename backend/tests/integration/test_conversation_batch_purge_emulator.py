@@ -11,6 +11,7 @@ import hashlib
 import os
 import threading
 import time
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -513,3 +514,84 @@ def _run_capturing(job, generation, errors):
         _quick(job, generation)
     except BaseException as error:  # the late response overran the unit: retryable failure, debt kept
         errors.append(type(error).__name__)
+
+
+def test_unanswered_delete_is_not_settled_by_a_retry_503_real_transport(monkeypatch, plane, route):
+    """Round-5 item 1 on the real transport: the first DELETE is never answered (client times out) but
+    lands later; the retries get 503. The gate must stay held, so no hold commits before that erasure,
+    and only a later definitive 404 for the same pinned generation settles it."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from google.cloud import storage
+    from database import conversation_batch_purge_jobs as purge_jobs
+    from database import legal_holds
+    from utils.other import local_storage
+
+    cid = f'conv-{uuid4().hex[:8]}'
+    _delete(plane, route, cid)
+    _conversation(plane, 'foreground-conversation')
+    first_landed, lock, calls = threading.Event(), threading.Lock(), []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_DELETE(self):
+            with lock:
+                calls.append(time.monotonic())
+                number = len(calls)
+            if number == 1:
+                time.sleep(8)  # the client gives up; the server operation continues
+                first_landed.set()
+                status, body = 204, b''
+            elif first_landed.is_set():
+                status, body = 404, b'{"error": {"code": 404, "message": "gone"}}'
+            else:
+                status, body = 503, b'{"error": {"code": 503, "message": "unavailable"}}'
+            try:
+                self.send_response(status)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    client = storage.Client(
+        project='demo-unanswered',
+        credentials=AnonymousCredentials(),
+        client_options={'api_endpoint': f'http://127.0.0.1:{server.server_port}'},
+    )
+    monkeypatch.setattr(local_storage, 'create_storage_client', lambda: client)
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-bucket')
+    uri = f'gs://synthetic-bucket/batch-pipeline/batch_pipeline_prod/owners/{plane.key}/audio/a.enc#123'
+    artifact = plane.client.collection('batch_pipeline_prod_artifacts').document('artifact-1')
+    artifact.set({'owner_key': plane.key, 'owner_id': plane.uid, 'conversation_ids': [cid], 'uri': uri})
+    gate_ref = plane.client.document(f'legal_hold_deletion_gates/{plane.uid}')
+    try:
+        [(job, generation)] = _reconcile(monkeypatch)
+        with pytest.raises(Exception) as unanswered:
+            _quick(job, generation)
+        assert type(unanswered.value).__name__ in {'ReadTimeout', 'ConnectionError', 'Timeout'}
+        assert len(calls) == 1 + legal_holds.UNIT_REMOTE_RESOLVE_ATTEMPTS  # retries answered 503
+        gate = gate_ref.get().to_dict()
+        assert gate['state'] == 'running' and gate['remote_inflight'] is True  # not settled by a 503
+        with pytest.raises(legal_holds.DestructiveOperationInProgress):
+            legal_holds.place_legal_hold(plane.uid, issuer='admin')  # no hold before the late erasure
+        assert first_landed.wait(10)
+
+        # The next run settles it: the same pinned delete now answers 404, the generation is gone.
+        gate_ref.update({'remote_inflight_at': gate['remote_inflight_at'] - timedelta(minutes=5)})
+        plane.client.collection(purge_jobs.COLLECTION).document(job).update({'due_at': purge_jobs._now()})
+        [(job, generation)] = _reconcile(monkeypatch)
+        assert _quick(job, generation) == 'purged'
+        assert not artifact.get().exists
+        with TestClient(route.app) as foreground:
+            assert foreground.delete('/v1/conversations/foreground-conversation?cascade=true').status_code == 204
+        legal_holds.place_legal_hold(plane.uid, issuer='admin')  # after the erasure, not before it
+    finally:
+        server.shutdown()
+        server.server_close()
+        client.close()

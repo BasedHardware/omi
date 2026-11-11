@@ -246,11 +246,12 @@ class RunProgress:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         budget_seconds: float = RUN_BUDGET_SECONDS,
+        started: float | None = None,
     ):
         self.client, self.job, self.generation, self.token, self.uid = client, job, generation, token, uid
         self.position = dict(position or {})
         self._clock, self._sleep = clock, sleep
-        self._started = clock()
+        self._started = clock() if started is None else started  # the run's entry, admission included
         self._budget = budget_seconds
         self._checkpointed = False  # every run saves at least one step before honouring its budget
 
@@ -365,30 +366,32 @@ def run_job(
     """Execute (or resume) one dispatched generation. Raises on a retryable failure."""
     from database.batch_pipeline_conversation_purge import PurgeCheckpointed, purge_conversation
 
+    # The run's budget and its absolute RPC deadline start at entry: admission is debited too.
+    started = clock()
     client = firestore_client if firestore_client is not None else get_firestore_client()
     # Units hold the gate; their ownership checks on this client honour the unit's RPC deadline.
     rpc_deadline.bind_firestore_client(client)
-    claim, row, token = begin_run(job, generation, firestore_client=client)
-    if claim != 'run' or row is None or token is None:
-        return claim
-    uid, conversation_id = str(row['uid']), str(row['conversation_id'])
-    progress = RunProgress(
-        client,
-        job,
-        generation,
-        token,
-        uid,
-        row.get('progress'),
-        clock=clock,
-        sleep=sleep,
-        budget_seconds=budget_seconds,
-    )
-
-    def finish(outcome: str) -> bool:
-        return finish_run(job, generation, token, outcome, firestore_client=client)
-
-    # Out-of-unit reads, queries, checkpoints and finalization cannot outlive the handler either.
     with rpc_deadline.rpc_deadline(rpc_deadline.now() + budget_seconds + RUN_FINALIZE_SECONDS):
+        claim, row, token = begin_run(job, generation, firestore_client=client)
+        if claim != 'run' or row is None or token is None:
+            return claim
+        uid, conversation_id = str(row['uid']), str(row['conversation_id'])
+        progress = RunProgress(
+            client,
+            job,
+            generation,
+            token,
+            uid,
+            row.get('progress'),
+            clock=clock,
+            sleep=sleep,
+            budget_seconds=budget_seconds,
+            started=started,
+        )
+
+        def finish(outcome: str) -> bool:
+            return finish_run(job, generation, token, outcome, firestore_client=client)
+
         try:
             tombstone = client.collection('users').document(uid).collection(TOMBSTONES).document(conversation_id)
             if not tombstone.get().exists:

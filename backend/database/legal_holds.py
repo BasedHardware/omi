@@ -162,12 +162,23 @@ def _gate_blocks(gate: dict[str, Any] | None, now: datetime, *, kind: str | None
         return False
     if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND:
         return False
+    age_seconds = (now - gate["started_at"]).total_seconds()
+    if gate.get("remote_inflight"):
+        # An erasure whose outcome is unknown may still land: no expiry and no
+        # stale bound ever transfers authority; only settlement clears it.
+        if age_seconds >= GATE_STALE_AFTER_SECONDS:
+            logger.error(
+                "event=destructive_gate_remote_unresolved uid=%s kind=%s age_seconds=%d",
+                gate["uid"],
+                gate["kind"],
+                int(age_seconds),
+            )
+        return True
     expires_at = gate.get("expires_at")
-    if expires_at is not None and now >= expires_at and not gate.get("remote_inflight"):
-        # Past a bounded unit's expiry its Firestore erasures are fenced by token, so
-        # a successor is safe; a remote erasure still in flight keeps the gate held.
+    if expires_at is not None and now >= expires_at:
+        # Past a bounded unit's expiry its Firestore erasures are fenced by token, so a successor is safe.
         return False
-    return (now - gate["started_at"]).total_seconds() < GATE_STALE_AFTER_SECONDS
+    return age_seconds < GATE_STALE_AFTER_SECONDS
 
 
 def _gate_owned_by_this_context(gate: dict[str, Any] | None, uid: str) -> bool:
@@ -708,6 +719,22 @@ def remote_outcome_known(error: BaseException) -> bool:
     return not isinstance(error, (TimeoutError, ConnectionError, OSError)) and not _is_transport_error(error)
 
 
+def settles_unknown_erasure(call: Callable[[], Any]) -> bool:
+    """Re-issue the same generation-pinned delete; True only if it proves the earlier one can no longer act.
+
+    A return means the target is gone now (deleted, or already absent); a 412
+    means the pinned generation is no longer the live object. Either way the
+    earlier request, pinned to that generation, can only be a no-op. Any other
+    outcome (503, 403, timeout, refusal to send) says nothing about the earlier
+    request, so the erasure stays unresolved and the gate stays held.
+    """
+    try:
+        call()
+        return True
+    except BaseException as error:  # noqa: BLE001 - only a precondition miss proves absence
+        return getattr(error, "code", None) == 412
+
+
 def _is_transport_error(error: BaseException) -> bool:
     names = {klass.__name__ for klass in type(error).__mro__}
     return bool(names & {"RequestException", "TransportError", "Timeout", "ConnectionError", "ReadTimeout"})
@@ -754,15 +781,10 @@ class UnitAuthority:
         return result
 
     def _resolve(self, call: Callable[[], Any]) -> bool:
-        # A definitive answer to the same generation-pinned delete settles the earlier request too.
         for _ in range(UNIT_REMOTE_RESOLVE_ATTEMPTS):
             with self._after_call(UNIT_REMOTE_RESOLVE_SECONDS):
-                try:
-                    call()
+                if settles_unknown_erasure(call):
                     return True
-                except BaseException as error:  # noqa: BLE001 - classified below
-                    if remote_outcome_known(error):
-                        return True
         return False
 
     def _clear(self) -> None:
@@ -959,6 +981,7 @@ __all__ = [
     "bounded_destructive_unit",
     "mark_remote_erasure",
     "remote_outcome_known",
+    "settles_unknown_erasure",
     "settle_stuck_remote_erasure",
     "stuck_remote_erasure",
     "assert_destructive_operation_transaction",

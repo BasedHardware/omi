@@ -235,3 +235,103 @@ def test_every_rpc_of_a_run_is_bounded_by_the_run_deadline(
     budget = purge_jobs.RUN_BUDGET_SECONDS + purge_jobs.RUN_FINALIZE_SECONDS
     assert seen and all(left is not None and 0 < left <= budget for left in seen)
     assert budget < 1500  # inside the Cloud Tasks dispatch deadline / handler timeout
+
+
+# --- round 5 ---
+
+
+class _Http503(Exception):
+    code = 503
+    response = object()
+
+
+class _Http412(Exception):
+    code = 412
+    response = object()
+
+
+def test_a_retry_503_does_not_settle_an_unanswered_delete(gate_client, fast_clock):
+    """Round-5 item 1: the earlier request had no response; a later 503 proves nothing about it."""
+    calls = []
+
+    def first_unanswered_then_503():
+        calls.append(True)
+        if len(calls) == 1:
+            raise requests.exceptions.ReadTimeout('no response')
+        raise _Http503('unavailable')
+
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        with legal_holds.bounded_destructive_unit(UID) as authority:
+            authority.remote(first_unanswered_then_503, target='gs://bucket/owners/a#7')
+    gate = gate_client.docs[GATE_PATH]
+    assert gate['state'] == 'running' and gate['remote_inflight'] is True  # not released on a 503
+    assert _foreground_acquires(gate_client) is False
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        _hold(gate_client)
+    # Only proof that the pinned generation is gone settles it: deleted/absent now, or 412.
+    assert legal_holds.settles_unknown_erasure(lambda: (_ for _ in ()).throw(_Http503('unavailable'))) is False
+    assert legal_holds.settles_unknown_erasure(lambda: None) is True
+    assert legal_holds.settles_unknown_erasure(lambda: (_ for _ in ()).throw(_Http412('not that generation'))) is True
+
+
+def test_unresolved_remote_gate_blocks_past_the_stale_bound_and_reports_it(gate_client, fast_clock, caplog):
+    """Round-5 item 2: the 6 h stale takeover must not apply while an erasure is unresolved."""
+    old = legal_holds.datetime.now(legal_holds.timezone.utc) - legal_holds.timedelta(hours=7)
+    gate_client.docs[GATE_PATH] = {
+        'schema_version': legal_holds.LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+        'uid': UID,
+        'kind': 'explicit_memory_deletion',
+        'token': 'unresolved-request',
+        'state': 'running',
+        'started_at': old,
+        'finished_at': None,
+        'expires_at': old + legal_holds.timedelta(seconds=10),
+        'remote_inflight': True,
+        'remote_inflight_at': old,
+        'remote_target': 'gs://bucket/owners/a#7',
+    }
+    with caplog.at_level('ERROR', logger='database.legal_holds'):
+        with pytest.raises(legal_holds.DestructiveOperationInProgress):
+            _hold(gate_client)
+        assert _foreground_acquires(gate_client) is False
+        with pytest.raises(legal_holds.DestructiveOperationInProgress):
+            with legal_holds.destructive_operation_gate(UID, kind='account_deletion'):
+                pass
+    assert 'event=destructive_gate_remote_unresolved' in caplog.text
+    # An ordinary abandoned gate still goes stale as before.
+    gate_client.docs[GATE_PATH]['remote_inflight'] = False
+    assert _foreground_acquires(gate_client) is True
+
+
+def test_admission_is_inside_the_run_deadline_and_debited_from_the_budget(
+    monkeypatch, owner, tombstone_db, gate_client, armed, dispatch, fast_clock
+):
+    """Round-5 item 3: begin_run ran with no deadline, and its time was not charged to the budget."""
+    from database import batch_pipeline_conversation_purge as purge
+
+    elapsed, seen = {'seconds': 0.0}, {}
+    owner.plane()
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    monkeypatch.setattr(rpc_deadline, 'now', lambda: elapsed['seconds'])
+    real_begin = purge_jobs.begin_run
+
+    def slow_admission(*args, **kwargs):
+        seen['admission_deadline'] = rpc_deadline.current()
+        result = real_begin(*args, **kwargs)
+        elapsed['seconds'] += 301.0  # SDK/transaction retries before the claim lands
+        return result
+
+    def body(uid, conversation_id, progress, **kwargs):
+        seen['run_deadline'] = rpc_deadline.current()
+        progress.checkpoint({'ns': 0, 'phase': 'discover', 'table': 0, 'after': None})
+        elapsed['seconds'] += purge_jobs.RUN_BUDGET_SECONDS - 301.0
+        seen['expired_at_budget_from_entry'] = progress.expired()
+        raise purge.PurgeCheckpointed()
+
+    monkeypatch.setattr(purge_jobs, 'begin_run', slow_admission)
+    monkeypatch.setattr(purge, 'purge_conversation', body)
+    assert _run(armed, 1, clock=lambda: elapsed['seconds']) == 'checkpointed'
+    limit = purge_jobs.RUN_BUDGET_SECONDS + purge_jobs.RUN_FINALIZE_SECONDS
+    assert seen['admission_deadline'] == limit  # admission is bounded from entry
+    assert seen['run_deadline'] == limit  # not reset after admission
+    assert seen['expired_at_budget_from_entry'] is True  # admission time was debited

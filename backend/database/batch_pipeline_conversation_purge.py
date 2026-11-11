@@ -41,7 +41,7 @@ from database.batch_pipeline_purge import row_belongs as _belongs
 from database.batch_pipeline_purge import row_references as _references
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 from database.batch_pipeline_shadow_hook import shadow_mode_enabled as _shadow_mode
-from database.legal_holds import remote_outcome_known
+from database.legal_holds import settles_unknown_erasure
 
 PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow')
 DISCOVER_TABLES = ('jobs', 'results')
@@ -197,11 +197,8 @@ def purge_conversation(
         return delete
 
     def resolve(target: str) -> bool:
-        try:
-            delete_uri(uid, target)
-            return True
-        except BaseException as error:  # noqa: BLE001 - classified as known/unknown
-            return remote_outcome_known(error)
+        # Settles a stuck gate only on proof the targeted generation is gone (never on a 503).
+        return settles_unknown_erasure(lambda: delete_uri(uid, target))
 
     def settle() -> None:
         progress.settle_stuck(resolve)
