@@ -27,6 +27,7 @@ import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/native_link_reconciler.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/first_value_recovery_service.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
@@ -387,6 +388,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_isCurrent(generation)) return;
     if (isNewConnection) {
       PlatformManager.instance.analytics.deviceConnected(pairedDevice ?? device);
+      if (device.type == DeviceType.omi || device.type == DeviceType.friendPendant) {
+        unawaited(FirstValueRecoveryService.instance.recordPendantConnection());
+      }
     }
     if (device != null) {
       final firstPairedAt = await _markDevicePaired(device.id, generation);

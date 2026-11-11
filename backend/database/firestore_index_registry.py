@@ -2035,6 +2035,30 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('__name__'),),
 )
 
+FIRST_VALUE_RECENT_STARTS_QUERY = FirestoreQuerySpec(
+    identifier='first_value_recent_paid_starts',
+    collection_group='first_value_starts',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('paid_start_at', '>=', 'start'),),
+    index_fields=(_asc('paid_start_at'), _asc('__name__')),
+)
+
+FIRST_VALUE_DUE_PUSH_QUERY = FirestoreQuerySpec(
+    identifier='first_value_due_push_probes',
+    collection_group='first_value_starts',
+    query_scope='COLLECTION_GROUP',
+    filters=(FirestoreQueryFilter('next_push_probe_at', '<=', 'due'),),
+    index_fields=(_asc('next_push_probe_at'), _asc('__name__')),
+)
+
+FIRST_VALUE_PRODUCT_SIGNALS_QUERY = FirestoreQuerySpec(
+    identifier='first_value_product_signals',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('created_at', '>=', 'start'),),
+    index_fields=(_asc('created_at'), _asc('__name__')),
+)
+
 QUERY_SPECS = (
     MCP_DAILY_RECORDINGS_QUERY,
     *MCP_MEMORY_FILTER_QUERIES.values(),
@@ -2122,6 +2146,9 @@ QUERY_SPECS = (
     DAILY_SUMMARY_RECIPIENTS_QUERY,
     CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
     CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
+    FIRST_VALUE_RECENT_STARTS_QUERY,
+    FIRST_VALUE_DUE_PUSH_QUERY,
+    FIRST_VALUE_PRODUCT_SIGNALS_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
@@ -2254,6 +2281,9 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
         'fcm_tokens_app_version_group_both', 'fcm_tokens', 'app_version', ('ASCENDING', 'DESCENDING')
     ),
     FieldIndexRequirement('fcm_tokens_token_group_ascending', 'fcm_tokens', 'token', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'first_value_starts_due_group_ascending', 'first_value_starts', 'next_push_probe_at', ('ASCENDING',)
+    ),
     FieldIndexRequirement('llm_usage_date_group_ascending', 'llm_usage', 'date', ('ASCENDING',)),
     FieldIndexRequirement('memories_tags_group_contains', 'memories', 'tags', ('CONTAINS',)),
     FieldIndexRequirement(

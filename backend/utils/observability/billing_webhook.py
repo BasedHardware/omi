@@ -2,6 +2,7 @@
 
 import logging
 
+from database.first_value_recovery import enroll_verified_paid_start
 from utils.observability import subscription_events as lifecycle
 
 logger = logging.getLogger(__name__)
@@ -36,5 +37,8 @@ def emit_billing_webhook_events(**kwargs) -> None:
             lifecycle_args['previous_attributes'] = previous
         lifecycle.emit_billing_product_event(**lifecycle_args)
         lifecycle.emit_billing_plan_changed(**kwargs)
+        # This persists only verified, admitted direct-paid monthly starts. Its
+        # own default-dark gate runs before Firestore selection or any write.
+        enroll_verified_paid_start(**kwargs)
     except Exception as error:
         logger.warning('billing webhook telemetry failed error_type=%s', type(error).__name__)
