@@ -162,6 +162,11 @@ def test_regression_surfaces_select_this_guard(tmp_path, source):
         timeout=30,
     )
     assert 'tests/unit/test_timeliness_metrics_are_scraped.py' in result.stdout.splitlines()
+    if source == 'backend/deploy/cloud_run_gmp_sync.yaml':
+        # This unmapped deploy path retains its existing full-suite fallback.
+        assert 'tests/unit/test_attach_cloud_run_gmp_sidecar.py' in result.stdout.splitlines()
+    if source.startswith('backend/utils/batch_pipeline/'):
+        assert 'tests/unit/test_lifecycle_invariants.py' in result.stdout.splitlines()
 
 
 def test_prometheus_replayed_handoffs_and_sustained_leadership(tmp_path):

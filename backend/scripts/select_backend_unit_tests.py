@@ -261,11 +261,6 @@ LIFECYCLE_SOURCE_REGRESSION_TESTS = {
 
 AREA_TESTS = (
     (
-        ('backend/utils/batch_pipeline/', 'backend/database/batch_pipeline_', 'backend/deploy/cloud_run_gmp_sync.yaml'),
-        (),
-        ('tests/unit/test_timeliness_metrics_are_scraped.py',),
-    ),
-    (
         (
             'backend/utils/conversations/',
             'backend/utils/batch_pipeline/',
@@ -692,6 +687,14 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(
             test for test in ('tests/unit/test_generated_compute_inventory_guardrails.py',) if test in all_tests
         )
+    # Add the timeliness contract without classifying an otherwise-unmapped
+    # producer/deploy edit as narrow: retain its existing full-suite fallback.
+    if any(
+        path.startswith(('backend/utils/batch_pipeline/', 'backend/database/batch_pipeline_'))
+        or path == 'backend/deploy/cloud_run_gmp_sync.yaml'
+        for path in changed_paths
+    ):
+        selected.update(test for test in ('tests/unit/test_timeliness_metrics_are_scraped.py',) if test in all_tests)
     if any(is_firestore_index_guard_path(path) for path in changed_paths):
         selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
     if any(is_background_task_ratchet_path(path) for path in changed_paths):
