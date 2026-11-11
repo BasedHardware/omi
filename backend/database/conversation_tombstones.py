@@ -17,7 +17,7 @@ def is_deleted(uid: str, conversation_id: str) -> bool:
 
     def live():
         return not metrics.read_snapshot(
-            'tombstone', db.collection('users').document(uid).collection(COLLECTION).document(conversation_id)
+            'tombstone', db.collection('users').document(uid).collection(COLLECTION).document(conversation_id), uid=uid
         ).exists
 
     return not decide('tombstone', uid, db, conversation_id, live, 'tombstone_negative_cache')

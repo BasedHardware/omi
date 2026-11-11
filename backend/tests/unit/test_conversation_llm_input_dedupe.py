@@ -410,3 +410,97 @@ def test_additive_gist_does_not_rebuy_a_stable_l8a_checkpoint(enabled, monkeypat
     monkeypatch.setattr(dedupe, 'implementation_digest', original)
     assert dedupe.notes('u', enabled, 'unchanged', generate, {}).overview == 'Useful stored notes'
     assert generate.call_count == 1
+
+
+@pytest.fixture
+def dependency_identity():
+    # Simulate a fresh process after upgrading an installed distribution.
+    dedupe._legacy_implementation_digest.cache_clear()
+    yield
+    dedupe._legacy_implementation_digest.cache_clear()
+
+
+@pytest.mark.parametrize('feature', ['notes', 'l1'])
+@pytest.mark.parametrize('dependency', ['pydantic', 'langchain-core'])
+@pytest.mark.parametrize('flag', ['true', 'off'])
+def test_dependency_upgrade_invalidates_checkpoint_in_both_modes(
+    enabled, monkeypatch, dependency_identity, feature, dependency, flag
+):
+    monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+    inputs = {'text': 'unchanged'}
+    saved = dedupe.fingerprint(feature, inputs)
+    stable = dedupe.stable_implementation(feature)
+    monkeypatch.setattr(
+        dedupe,
+        'INSTALLED_DEPENDENCY_VERSIONS',
+        tuple(
+            (name, version + '.changed' if name == dependency else version)
+            for name, version in dedupe.INSTALLED_DEPENDENCY_VERSIONS
+        ),
+    )
+    dedupe._legacy_implementation_digest.cache_clear()
+    digest = dedupe.fingerprint(feature, inputs)
+    assert digest != saved
+    assert dedupe.stable_implementation(feature) != stable
+    assert not dedupe._matches(saved, feature, inputs, digest)
+
+
+@pytest.mark.parametrize('feature', ['notes', 'l1'])
+@pytest.mark.parametrize('dependency', [None, 'pydantic', 'langchain-core'])
+@pytest.mark.parametrize('flag', ['true', 'off'])
+def test_historical_aliases_require_the_recorded_dependency_versions(
+    enabled, monkeypatch, dependency_identity, feature, dependency, flag
+):
+    monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+    monkeypatch.setattr(
+        dedupe,
+        'INSTALLED_DEPENDENCY_VERSIONS',
+        tuple(
+            (name, version + '.changed' if name == dependency else version)
+            for name, version in dedupe.LEGACY_DEPENDENCY_VERSIONS
+        ),
+    )
+    inputs = {'text': 'unchanged'}
+    digest = dedupe.fingerprint(feature, inputs)
+    for implementation in dedupe.LEGACY_IMPLEMENTATIONS[feature]:
+        saved = dedupe._fingerprint(feature, inputs, implementation)
+        assert dedupe._matches(saved, feature, inputs, digest) == (dependency is None)
+
+
+@pytest.mark.parametrize('dependency', ['pydantic', 'langchain-core'])
+def test_dependency_upgrade_recomputes_notes_once_then_reuses_across_flag_flips(
+    enabled, monkeypatch, dependency_identity, dependency
+):
+    from models.structured import Structured
+
+    generate = Mock(return_value=Structured(title='Paid notes', overview='Useful stored work'))
+    row = {}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+
+    def process():
+        hashes = {}
+        dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, hashes)
+        row.update(hashes, structured=generate.return_value.model_dump())
+
+    process()
+    monkeypatch.setattr(
+        dedupe,
+        'INSTALLED_DEPENDENCY_VERSIONS',
+        tuple(
+            (name, version + '.changed' if name == dependency else version)
+            for name, version in dedupe.INSTALLED_DEPENDENCY_VERSIONS
+        ),
+    )
+    dedupe._legacy_implementation_digest.cache_clear()
+    for flag in ('true', 'off', 'true', 'off'):
+        monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+        process()
+        assert generate.call_count == 2
+
+
+def test_key_modes_do_not_read_dependency_metadata_per_call(enabled, monkeypatch, dependency_identity):
+    monkeypatch.setattr(dedupe, 'distribution_version', Mock(side_effect=AssertionError('per-call metadata read')))
+    for flag in ('true', 'off'):
+        monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+        for feature in ('notes', 'l1'):
+            assert dedupe.fingerprint(feature, {'text': 'unchanged'})

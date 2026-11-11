@@ -9,7 +9,12 @@ from __future__ import annotations
 from config.refactor_modes import serving_for
 from config.llm_input_versions import prompt_version
 from config.memory_l1_admission import noise_skip_enabled
-from config.llm_input_legacy import LEGACY_IMPLEMENTATIONS, LEGACY_ROUTING, LEGACY_PROMPT_VERSIONS
+from config.llm_input_legacy import (
+    LEGACY_DEPENDENCY_VERSIONS,
+    LEGACY_IMPLEMENTATIONS,
+    LEGACY_ROUTING,
+    LEGACY_PROMPT_VERSIONS,
+)
 
 import dataclasses
 import hashlib
@@ -48,6 +53,9 @@ CHECKPOINT_ERRORS = Counter(
 NOTES_HASH = 'notes_llm_input_hash'
 NOTES_OUTPUT_HASH = 'notes_llm_output_hash'
 L1_HASH = 'l1_llm_input_hash'
+# Serialization and model wrappers can change effective inputs without a source
+# edit. Installed distributions are immutable for this process; read them once.
+INSTALLED_DEPENDENCY_VERSIONS = tuple((name, distribution_version(name)) for name in ('pydantic', 'langchain-core'))
 
 
 def canonical(value: Any) -> Any:
@@ -77,7 +85,8 @@ def canonical(value: Any) -> Any:
 @lru_cache(maxsize=2)
 def _legacy_implementation_digest(feature: str) -> str:
     # Invalidate persisted results on prompt/schema/orchestration edits as well
-    # as input changes. Read lazily: imports perform no filesystem/client IO.
+    # as input changes. Source files are read lazily; dependencies are snapshotted
+    # at import so both key modes use the same installed-version identity.
     root = Path(__file__).resolve().parents[1]
     paths = [
         'conversations/process_conversation.py',
@@ -115,7 +124,7 @@ def _legacy_implementation_digest(feature: str) -> str:
         '../models/conversation.py',
         '../models/memories.py',
     ]
-    dependencies = '|'.join(f'{name}:{distribution_version(name)}' for name in ('pydantic', 'langchain-core')).encode()
+    dependencies = '|'.join(f'{name}:{version}' for name, version in INSTALLED_DEPENDENCY_VERSIONS).encode()
     return hashlib.sha256(b''.join((root / path).read_bytes() for path in paths) + dependencies).hexdigest()
 
 
@@ -137,7 +146,8 @@ def routing_digest() -> str:
 
 
 def stable_implementation(feature: str) -> str:
-    return f'{prompt_version(feature)}:{routing_digest()}'
+    dependencies = '|'.join(f'{name}:{version}' for name, version in INSTALLED_DEPENDENCY_VERSIONS)
+    return f'{prompt_version(feature)}:{routing_digest()}:{dependencies}'
 
 
 def implementation_digest(feature: str) -> str:
@@ -158,9 +168,14 @@ def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
         return True
     # Accept both modes across a rollback. Never make a flag flip buy the same
     # eligible work again. Historical keys are allowed only for the same routing
-    # and compatible prompt sources; exact inputs + output validation still apply.
+    # and compatible prompt sources/dependencies; exact inputs + output validation
+    # still apply. A dependency bump deliberately recomputes once per input.
     implementations = {stable_implementation(feature), _legacy_implementation_digest(feature)}
-    if routing_digest() == LEGACY_ROUTING and prompt_version(feature) in LEGACY_PROMPT_VERSIONS[feature]:
+    if (
+        INSTALLED_DEPENDENCY_VERSIONS == LEGACY_DEPENDENCY_VERSIONS
+        and routing_digest() == LEGACY_ROUTING
+        and prompt_version(feature) in LEGACY_PROMPT_VERSIONS[feature]
+    ):
         implementations.update(LEGACY_IMPLEMENTATIONS[feature])
         implementations.update(f'{version}:{routing_digest()}' for version in LEGACY_PROMPT_VERSIONS[feature])
     return bool(saved) and any(saved == _fingerprint(feature, inputs, item) for item in implementations)
