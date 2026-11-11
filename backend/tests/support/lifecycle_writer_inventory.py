@@ -2128,6 +2128,27 @@ FIELD_SITES = {
     'database/stale_conversation_recovery.py': [
         ('get_stale_recovery_page', 'status', "'in_progress'", ('cutoff', 'status'))
     ],
+    'database/pipeline_ledger_census.py': [
+        # Read-only aggregate: the coverage status is a response field, not a write.
+        (
+            'census',
+            'status',
+            "'pass' if coverage_ratio is not None and coverage_ratio >= 0.995 else 'unknown'",
+            (
+                'basis',
+                'capture_creates',
+                'cohort_admits',
+                'excluded_admits',
+                'ledger_admits',
+                'ledger_disabled',
+                'ledger_write_failures',
+                'ratio',
+                'settle_seconds',
+                'status',
+                'unmatched_creates',
+            ),
+        )
+    ],
     'database/stuck_backfill.py': [
         ('_close_txn', 'status', "'completed'", ('discarded', 'status', 'stuck_noise_close'))
     ],

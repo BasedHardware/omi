@@ -1071,7 +1071,9 @@ def test_firmware_release_metadata_reports_status_when_shell_has_no_output(tmp_p
 def test_firmware_ota_guard_follows_workflow_and_exercises_assets(tmp_path, monkeypatch, mutation):
     workflow = tmp_path / ".github/workflows/firmware_release.yml"
     helper = tmp_path / "omi/firmware/scripts/ci/cv1_release.py"
-    for target in (workflow, helper):
+    boot_helper = helper.with_name("cv1_bootloader.py")
+    policy = tmp_path / "omi/firmware/bootloader/cv1-bootloader-policy.json"
+    for target in (workflow, helper, boot_helper, policy):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO_ROOT / target.relative_to(tmp_path), target)
     if mutation.startswith("no-") and mutation != "no-helper":
