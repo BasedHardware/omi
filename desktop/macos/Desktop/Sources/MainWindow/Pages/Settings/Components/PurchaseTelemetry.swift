@@ -1,6 +1,7 @@
 import Foundation
 
-/// One rendering lifetime or authoritative snapshot observer. No user keys or clocks.
+/// Owns purchase observations for one rendering lifetime or authoritative snapshot.
+/// Deduplicates telemetry only; no user keys, payment authority, or clocks.
 final class PurchaseObservation {
   typealias Sink = (PurchaseEvent, [String: String]) -> Void
   private let sink: Sink
