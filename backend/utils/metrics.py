@@ -1559,6 +1559,18 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     ['provider', 'terminal_state'],
 )
 
+OMI_BILLING_RENEWAL_OBSERVATIONS = Counter(
+    'omi_billing_renewal_observations_total',
+    'Verified billing observation deliveries, not distinct invoices or attempts',
+    ['outcome'],
+)
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='eligible')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='created')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='duplicate')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='projection_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='write_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='timeout')
+
 OMI_SUBSCRIPTION_EVENTS = Counter(
     'omi_subscription_events_total',
     'Stripe subscription lifecycle events observed via webhook. Counts webhook '
