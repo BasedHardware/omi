@@ -107,6 +107,8 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
   - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
     value: "true"
   - name: RECORD_TOKEN_LEASE_MODE
