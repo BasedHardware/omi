@@ -26,3 +26,11 @@ covers floor-off deterministic errors, provider timeout recovery, and completed
 job replay. Session tests cover the send cap under sustained timeouts and
 reconnects. The existing short-clip rollout lane exercises external integration
 input through the processing coordinator.
+
+The Cloud Tasks dispatch route applies the same typed processing classification
+and four-attempt deterministic limit as the live worker. Its configured
+transient budget remains unchanged. Strict transaction tests exercise the
+route's deterministic terminal transition (including reset retry headers) and
+provider timeout/5xx exhaustion through exactly one delayed second budget.
+Failed pusher recovery writes emit shared fallback telemetry while retaining
+the leased obligation for durable replay.

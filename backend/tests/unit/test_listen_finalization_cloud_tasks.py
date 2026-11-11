@@ -998,7 +998,12 @@ async def test_recovery_minimum_ends_on_first_failure_only_when_enabled(
     else:
         assert response.status_code == 500
         terminal.assert_not_called()
-        retryable.assert_called_once_with('job-1', 1, 3, 'processing_failed')
+        failure_code = (
+            'transient_processing_failed'
+            if isinstance(source_error, TimeoutError)
+            else 'deterministic_processing_failed'
+        )
+        retryable.assert_called_once_with('job-1', 1, 3, failure_code)
 
 
 @pytest.mark.anyio

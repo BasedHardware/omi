@@ -4,7 +4,8 @@ import asyncio
 import json
 import logging
 import struct
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import anthropic
@@ -15,11 +16,12 @@ from fastapi import HTTPException
 from database import conversation_finalization_jobs as jobs
 from models.conversation import Conversation
 from models.structured import Structured
+from routers import conversation_finalization as task_route
 from services import conversation_finalization as service
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.utils.test_listen_pusher_session import make_session
 from utils import pusher_finalization as worker
-from utils.conversations import finalizer, process_conversation as processing, typesense_index
+from utils.conversations import demand_processing, finalizer, process_conversation as processing, typesense_index
 from utils.conversations.processing_retry import (
     DETERMINISTIC_PROCESSING_FAILURE,
     TRANSIENT_PROCESSING_FAILURE,
@@ -147,6 +149,120 @@ def durable_loop(monkeypatch):
     monkeypatch.setattr(processing, 'notes_agent_inputs', lambda *a: {})
     assert quiet_minimum(ROW[1], conversation) is None
     return store, conversation
+
+
+@pytest.fixture
+def cloud_tasks_route(monkeypatch, durable_loop):
+    async def inline(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(task_route, 'run_blocking', inline)
+    monkeypatch.setattr(task_route, 'try_acquire_job_run_lock', lambda *_: 'lock')
+    monkeypatch.setattr(task_route, 'release_job_run_lock', lambda *_: None)
+    monkeypatch.setattr(task_route, 'account_deletion_blocks_user_work', lambda *_: False)
+    monkeypatch.setattr(task_route, 'should_skip_background_account_mutation', lambda *_: False)
+    monkeypatch.setattr(demand_processing, 'admit', lambda *a, **kw: True)
+    monkeypatch.setattr(task_route, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
+    monkeypatch.setenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true')
+    terminal = Mock(wraps=jobs.mark_finalization_dead_letter)
+    grant = Mock(wraps=jobs.grant_finalization_budget_requeue)
+    monkeypatch.setattr(jobs, 'mark_finalization_dead_letter', terminal)
+    monkeypatch.setattr(jobs, 'grant_finalization_budget_requeue', grant)
+
+    async def deliver(retry_count, generation=1):
+        request = SimpleNamespace(json=AsyncMock(return_value={'job_id': JOB[-1], 'dispatch_generation': generation}))
+        return await task_route.run_listen_finalization_job(request, task_retry_count=retry_count)
+
+    return durable_loop[0], deliver, terminal, grant
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('reset_retry_header', [False, True])
+@pytest.mark.parametrize('cause', [AttributeError('synthetic'), HTTPException(500, 'processing failed')])
+async def test_cloud_tasks_deterministic_failure_dead_letters_at_four(
+    monkeypatch, cloud_tasks_route, reset_retry_header, cause
+):
+    store, deliver, terminal, grant = cloud_tasks_route
+    error = finalizer.ConversationFinalizationError('processing_failed')
+    error.__cause__ = cause
+    process = AsyncMock(side_effect=error)
+    monkeypatch.setattr(task_route, 'finalize_persisted_conversation', process)
+    for attempt in range(4):
+        response = await deliver(0 if reset_retry_header else attempt)
+        assert response.status_code == (500 if attempt < 3 else 200)
+        assert json.loads(response.body)['status'] == ('retry' if attempt < 3 else 'dead_letter')
+        if attempt < 3:
+            assert store.rows[JOB]['last_failure_code'] == DETERMINISTIC_PROCESSING_FAILURE
+    terminal.assert_called_once()
+    assert grant.call_args.kwargs == {}
+    assert grant.call_args.args[-1] == DETERMINISTIC_PROCESSING_FAILURE
+    assert store.rows[JOB]['status'] == 'dead_letter'
+    assert store.rows[JOB]['attempt_count'] == 4
+    assert store.rows[JOB].get('budget_requeue_count', 0) == 0
+    assert store.rows[ROW]['status'] == 'completed'
+    assert store.rows[ROW]['transcript_segments']
+    await deliver(4)
+    assert process.await_count == 4
+    terminal.assert_called_once()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('provider_status', [None, 503])
+async def test_cloud_tasks_transient_failure_retains_one_bounded_delayed_budget(
+    monkeypatch, cloud_tasks_route, provider_status
+):
+    store, deliver, terminal, grant = cloud_tasks_route
+    cause = provider_timeout()
+    if provider_status is not None:
+        response = httpx.Response(provider_status, request=httpx.Request('POST', 'https://provider.invalid'))
+        cause = anthropic.APIStatusError('synthetic', response=response, body=None)
+    error = finalizer.ConversationFinalizationError('processing_failed')
+    error.__cause__ = cause
+    process = AsyncMock(side_effect=error)
+    monkeypatch.setattr(task_route, 'finalize_persisted_conversation', process)
+    for attempt in range(5):
+        response = await deliver(attempt)
+        assert json.loads(response.body)['status'] == ('retry' if attempt < 4 else 'delayed_requeue')
+    terminal.assert_not_called()
+    assert store.rows[JOB]['budget_requeue_count'] == 1
+    assert store.rows[JOB]['last_failure_code'] == TRANSIENT_PROCESSING_FAILURE
+    due = store.rows[JOB]['reconcile_after_at']
+    assert due > NOW
+    monkeypatch.setattr(jobs, '_now', lambda: due + timedelta(seconds=1))
+    intent = jobs.claim_finalization_replay(JOB[-1], stale_after=timedelta(seconds=60), max_attempts=5)
+    assert intent['created'] and intent['dispatch_generation'] == 2
+    for attempt in range(5):
+        response = await deliver(attempt, generation=2)
+        assert json.loads(response.body)['status'] == ('retry' if attempt < 4 else 'dead_letter')
+    terminal.assert_called_once()
+    assert grant.call_count == 2
+    assert store.rows[JOB]['status'] == 'dead_letter'
+    assert store.rows[JOB]['budget_requeue_count'] == 1
+    assert store.rows[ROW]['transcript_segments']
+    await deliver(5, generation=2)
+    assert process.await_count == 10
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('terminal', [False, True])
+async def test_pusher_recovery_write_failure_records_shared_fallback(monkeypatch, durable_loop, terminal):
+    store, _ = durable_loop
+    store.rows[JOB]['attempt_count'] = 3 if terminal else 0
+    error = finalizer.ConversationFinalizationError('processing_failed')
+    error.__cause__ = AttributeError('synthetic')
+    monkeypatch.setattr(worker, 'finalize_persisted_conversation', AsyncMock(side_effect=error))
+    target, name = (worker, 'final_attempt_failed') if terminal else (jobs, 'mark_finalization_retryable')
+    monkeypatch.setattr(target, name, Mock(side_effect=RuntimeError('recovery write unavailable')))
+    fallback = Mock()
+    monkeypatch.setattr(worker, 'record_fallback', fallback)
+    socket = SimpleNamespace(send_bytes=AsyncMock())
+    await worker.process_conversation_task(
+        ROW[1], ROW[-1], 'en', socket, finalization_job_id=JOB[-1], dispatch_generation=1
+    )
+    fallback.assert_called_once_with(
+        component='pusher', from_mode='none', to_mode='none', reason='unavailable', outcome='degraded'
+    )
+    assert store.rows[JOB]['status'] == 'leased'  # Durable replay retains the obligation.
 
 
 class LoopSocket:

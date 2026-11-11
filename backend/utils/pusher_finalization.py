@@ -160,6 +160,9 @@ async def process_conversation_task(
                 failure_code,
                 terminal,
             )
+            record_fallback(
+                component='pusher', from_mode='none', to_mode='none', reason='unavailable', outcome='degraded'
+            )
             return 'conflict'
         return 'retry'
 
