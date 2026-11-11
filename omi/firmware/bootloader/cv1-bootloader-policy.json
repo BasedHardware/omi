@@ -7,5 +7,11 @@
     "c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086"
   ],
   "factory_source": "omi/firmware/FLASH_3.0.8/MAC/merged.hex",
-  "release_hex": "app-only; custom candidate requires bench qualification before approval"
+  "release_hex": "app-only; custom candidate requires bench qualification before approval",
+  "manufacturing_candidate": {
+    "version": "3.0.19",
+    "boot_sha256": "6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1",
+    "source_asset": "Omi_CV1_v3.0.19.hex",
+    "qualification": "pending lead-run jig; not approved for release or manufacturing"
+  }
 }

@@ -9,6 +9,7 @@ import shutil
 import unittest
 
 import cv1_bootloader as boot
+from prove_cv1_bootloader import validate_main_disassembly
 
 
 class BootRegionTests(unittest.TestCase):
@@ -88,6 +89,47 @@ class BootRegionTests(unittest.TestCase):
             else:
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertIn('requires exactly one MCUboot main.c replacement', result.stdout)
+
+    def test_pending_manufacturing_candidate_is_not_approved(self):
+        boot.write_hex(self.hex, self.memory)
+        self.policy.write_text(json.dumps({'approved_boot_sha256': [],
+                                         'manufacturing_candidate': {'boot_sha256': self.hash}}))
+        with self.assertRaisesRegex(ValueError, 'unapproved'):
+            boot.inspect_hex(self.hex, self.policy)
+
+    def test_compiled_sd_order_arguments_and_gpio_precede_boot_go(self):
+        assembly = """
+  470: blx r3
+  49a: blx r3
+  49c: movs r1, #0
+  49e: mov.w r0, #32768
+  4a2: bl 7758 <z_impl_k_sleep>
+  4a6: movs r1, #1
+  4aa: bl 1c34 <pm_device_action_run>
+  4b0: movs r1, #6
+  4b4: bl 860a <disk_access_ioctl>
+  4b8: movs r1, #0
+  4ba: mov.w r0, #32768
+  4be: bl 7758 <z_impl_k_sleep>
+  4c4: movs r1, #7
+  4c8: bl 860a <disk_access_ioctl>
+  4cc: movs r1, #0
+  4d0: bl 1c34 <pm_device_action_run>
+  4da: bl 13f8 <boot_go>
+"""
+        validate_main_disassembly(assembly)
+        for invalid in (
+            assembly.replace('#32768', '#1'),
+            assembly.replace('r1, #6', 'r1, #7'),
+            assembly.replace('r1, #7', 'r1, #6'),
+            assembly.replace('r1, #1', 'r1, #0'),
+            assembly.replace('<z_impl_k_sleep>', '<unrelated>'),
+            assembly.replace('blx r3', 'nop'),
+            assembly.replace('<pm_device_action_run>', '<disk_access_ioctl>', 1),
+            assembly.replace('<boot_go>', '<z_impl_k_sleep>', 1),
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                validate_main_disassembly(invalid)
 
     def test_committed_factory_hash_matches_reference(self):
         factory = boot.POLICY.parents[1] / 'FLASH_3.0.8/MAC/merged.hex'

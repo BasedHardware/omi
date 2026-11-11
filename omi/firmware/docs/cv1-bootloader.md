@@ -4,6 +4,8 @@ CV1 pendants need the Omi MCUboot main. **Never flash stock MCUboot to CV1.**
 OTA replaces the app, not MCUboot. A bootloader-only fix cannot reach fielded
 pendants over BLE and does not require a new app firmware version.
 
+Manufacturing pairing and stock-loader field recovery: [3.0.19 + 3.0.24 assessment](cv1-manufacturing-and-field-recovery.md).
+
 ## Why the custom main exists
 
 SD and external NOR share SPI3. An uninitialized SD can drive MISO and corrupt

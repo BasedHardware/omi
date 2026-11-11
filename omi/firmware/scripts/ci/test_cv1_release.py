@@ -18,7 +18,7 @@ from unittest.mock import patch
 import zipfile
 
 import cv1_release as release
-from cv1_bootloader import write_hex, read_hex
+from cv1_bootloader import write_hex, read_hex, inspect_hex, POLICY
 
 REAL_SIM_CATALOG = release.sim_catalog
 
@@ -127,6 +127,20 @@ class ReleaseTests(unittest.TestCase):
         write_hex(self.build / 'merged_CPUNET.hex', {0: 0x42, 0x1000000: 0x33})
         with self.assertRaisesRegex(ValueError, 'unapproved CV1 boot region'):
             release.stage(self.build, self.root / 'bad-net', '3.0.21', False, self.context, self.sim)
+
+    def test_allowlisted_boot_or_outside_app_bytes_cannot_enter_app_hex(self):
+        name = release.asset_names('3.0.21')[1]
+        original = dict(enumerate(self.payload, 0x10000))
+        factory = read_hex(POLICY.parents[1] / 'FLASH_3.0.8/MAC/merged.hex')
+        boot = {address: byte for address, byte in factory.items() if address < 0x10000}
+        for extra in (boot, {0xf6000: 1}, {0xff8000: 1}, {0x1000000: 1}):
+            write_hex(self.assets / name, {**original, **extra})
+            provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+            provenance['sha256'][name] = release.digest(self.assets / name)
+            provenance['boot_regions'][name] = inspect_hex(self.assets / name)
+            (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
+            with self.subTest(extra=min(extra)), self.assertRaisesRegex(ValueError, 'exactly the tested OTA signed bytes'):
+                release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
 
     def test_stage_requires_a_passing_full_simulator_report(self):
         bad_rows = [{'id': 'x', 'verdict': 'pass'}] * release.SIM_MIN_SCENARIOS
