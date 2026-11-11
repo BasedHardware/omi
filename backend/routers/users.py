@@ -144,8 +144,7 @@ from utils.cloud_tasks import (
     verify_account_deletion_cloud_tasks_oidc,
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from database import conversation_tombstones
-from database.legal_holds import LegalHoldActive
+from database import conversation_batch_purge_jobs
 from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
@@ -399,7 +398,7 @@ async def run_account_deletion_wipe(
             await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
 
 
-# Rides the account-deletion queue and invoker identity; enqueued by conversation deletes.
+# Rides the account-deletion queue and invoker identity; dispatched by the purge reconciler.
 # Path must equal utils.cloud_tasks.CONVERSATION_BATCH_PURGE_PATH (pinned by its test).
 @router.post('/v1/conversations/deletion-batch-purges/run', include_in_schema=False)
 async def run_conversation_batch_purge(
@@ -408,29 +407,26 @@ async def run_conversation_batch_purge(
 ):
     try:
         payload = await request.json()
-        uid = payload.get('uid') if isinstance(payload, dict) else None
-        conversation_id = payload.get('conversation_id') if isinstance(payload, dict) else None
-        if not isinstance(uid, str) or not uid or not isinstance(conversation_id, str) or not conversation_id:
-            raise ValueError('uid and conversation_id must be non-empty strings')
+        job_id = payload.get('job_id') if isinstance(payload, dict) else None
+        generation = payload.get('generation') if isinstance(payload, dict) else None
+        if not isinstance(job_id, str) or not job_id or not isinstance(generation, int) or generation < 1:
+            raise ValueError('job_id and a positive generation are required')
     except Exception as e:
         logger.error(f'conversation_batch_purge handler: invalid payload, dropping task: {sanitize(str(e))}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
 
     try:
-        outcome = await run_blocking(cleanup_executor, conversation_tombstones.run_batch_purge, uid, conversation_id)
-    except LegalHoldActive:
-        # The pending marker stays on the tombstone; a re-drive resumes after release.
-        logger.warning('conversation_batch_purge handler: legal hold active uid=%s, holding purge', uid)
-        return JSONResponse(status_code=200, content={'status': 'held', 'reason': 'legal_hold'})
+        outcome = await run_blocking(cleanup_executor, conversation_batch_purge_jobs.run_job, job_id, generation)
     except Exception as e:
+        # The obligation stays durable; the queue retries and the reconciler redrives.
         logger.warning(
-            'conversation_batch_purge handler: attempt %d failed uid=%s, will retry: %s',
+            'conversation_batch_purge handler: attempt %d failed job=%s: %s',
             retry_count + 1,
-            uid,
+            job_id,
             type(e).__name__,
         )
         return JSONResponse(status_code=500, content={'status': 'retry'})
-    logger.info('conversation_batch_purge handler: uid=%s outcome=%s', uid, outcome)
+    logger.info('conversation_batch_purge handler: job=%s generation=%d outcome=%s', job_id, generation, outcome)
     return JSONResponse(status_code=200, content={'status': 'done', 'outcome': outcome})
 
 

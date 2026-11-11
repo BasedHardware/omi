@@ -267,28 +267,48 @@ def is_conversation_batch_purge_dispatch_configured() -> bool:
     )
 
 
-def conversation_batch_purge_task_id(uid: str, conversation_id: str) -> str:
-    digest = hashlib.sha256(f'{uid}\x00{conversation_id}'.encode()).hexdigest()[:40]
-    return f'conversation-batch-purge-{digest}'
+def conversation_batch_purge_task_id(job_id: str, generation: int) -> str:
+    # One name per dispatch generation: a completed, deleted or still-reserved
+    # name (Cloud Tasks keeps them for up to 24 h) never swallows a redrive.
+    return f'conversation-batch-purge-{job_id}-g{int(generation)}'
 
 
-def enqueue_conversation_batch_purge(uid: str, conversation_id: str, *, redrive: int = 0) -> None:
-    """Durably hand one tombstoned conversation's batch purge to backend-sync.
-
-    Named per (uid, conversation): a repeated delete deduplicates. ``redrive``
-    gives an operator re-drive a fresh name once the original task is spent.
-    """
-    task_id = conversation_batch_purge_task_id(uid, conversation_id)
-    if redrive:
-        task_id = f'{task_id}-r{int(redrive)}'
+def enqueue_conversation_batch_purge(job_id: str, generation: int) -> None:
+    """Dispatch one generation of a durable purge obligation to backend-sync (opaque payload)."""
     enqueue_named_task(
         os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip(),
         _conversation_batch_purge_handler_url(),
-        task_id,
-        {'uid': uid, 'conversation_id': conversation_id},
+        conversation_batch_purge_task_id(job_id, generation),
+        {'job_id': job_id, 'generation': int(generation)},
         audience=_conversation_batch_purge_handler_url(),
         invoker_sa=_invoker_sa(),
     )
+
+
+def conversation_batch_purge_consumer_ready() -> Optional[bool]:
+    """Probe the live handler URL without credentials: does the serving consumer have the route?
+
+    The new handler rejects the unauthenticated probe with its own 403
+    ("Missing bearer token"); a revision without the route answers 404/405.
+    None means the probe itself failed (network), which proves nothing.
+    """
+    url = _conversation_batch_purge_handler_url()
+    if not url:
+        return False
+    try:
+        response = _get_auth_request()(
+            url, method='POST', body=b'{}', headers={'Content-Type': 'application/json'}, timeout=5
+        )
+    except Exception as exc:  # noqa: BLE001 - an unreachable probe is an unanswered question
+        logger.warning('conversation batch purge consumer probe failed: %s', type(exc).__name__)
+        return None
+    if response.status in (404, 405):
+        return False
+    try:
+        detail = json.loads(response.data or b'{}').get('detail')
+    except Exception:  # noqa: BLE001
+        detail = None
+    return response.status == 403 and detail == 'Missing bearer token'
 
 
 def is_listen_finalization_dispatch_enabled() -> bool:

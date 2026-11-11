@@ -78,7 +78,7 @@ def function(path, name, namespace):
         namespace['nullcontext'] = nullcontext
         namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
         namespace.setdefault('CONVERSATION_DELETE_GATE_WAIT_SECONDS', 0.0)
-        namespace.setdefault('batch_purges_dispatched_after', lambda uid: nullcontext())
+        namespace.setdefault('deferred_batch_purges', lambda uid: nullcontext())
         function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n

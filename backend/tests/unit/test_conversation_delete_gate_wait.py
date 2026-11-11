@@ -19,6 +19,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from database import conversation_batch_purge_jobs as purge_jobs
 from database import conversation_tombstones, legal_holds
 from routers import conversations
 from utils.conversations import deletion_batch_purge
@@ -65,6 +66,14 @@ class _Ref:
         with self.client.lock:
             self.client.docs[self.path] = {**self.client.docs[self.path], **payload}
 
+    def delete(self):
+        with self.client.lock:
+            self.client.docs.pop(self.path, None)
+
+    @property
+    def id(self):
+        return self.path.rsplit('/', 1)[-1]
+
     def collection(self, name):
         return _Collection(self.client, f'{self.path}/{name}')
 
@@ -84,6 +93,34 @@ class _Transaction:
     def set(self, reference, payload, merge=False):
         reference.set(payload, merge=merge)
 
+    def update(self, reference, payload):
+        reference.update(payload)
+
+    def delete(self, reference):
+        reference.delete()
+
+
+class _Batch:
+    """Atomic like Firestore: a failed create precondition writes nothing."""
+
+    def __init__(self, client):
+        self.client, self.ops = client, []
+
+    def create(self, reference, payload):
+        self.ops.append(('create', reference, payload))
+
+    def set(self, reference, payload, merge=False):
+        self.ops.append(('set', reference, (payload, merge)))
+
+    def commit(self):
+        from google.api_core.exceptions import AlreadyExists
+
+        with self.client.lock:
+            if any(op == 'create' and ref.path in self.client.docs for op, ref, _ in self.ops):
+                raise AlreadyExists('exists')
+            for op, ref, payload in self.ops:
+                ref.create(payload) if op == 'create' else ref.set(*payload)
+
 
 class _Client:
     def __init__(self, docs=None):
@@ -95,6 +132,9 @@ class _Client:
 
     def transaction(self):
         return _Transaction(self)
+
+    def batch(self):
+        return _Batch(self)
 
 
 def _gate_doc(*, kind='explicit_memory_deletion', token='peer'):
@@ -315,13 +355,16 @@ def test_legal_hold_still_blocks_cascade_delete(monkeypatch, gate_client, fast_c
     body.assert_not_called()
 
 
-# --- the batch purge leaves the request path ---
+# --- the request only arms a durable obligation ---
 
 
 @pytest.fixture
 def tombstone_db(monkeypatch):
+    """One fake plane for tombstones, obligations and the gate; transactions run inline."""
     client = _Client()
     monkeypatch.setattr(conversation_tombstones, 'db', client)
+    monkeypatch.setattr(purge_jobs, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(purge_jobs, '_in_transaction', lambda _client, body: body(_Transaction(client)))
     from database import from_segments_chunks
 
     monkeypatch.setattr(from_segments_chunks, 'purge_chunks', lambda *args, **kwargs: None)
@@ -332,7 +375,11 @@ def _tombstone(client, conversation_id):
     return client.docs.get(f'users/{UID}/{conversation_tombstones.COLLECTION}/{conversation_id}')
 
 
-def test_deferred_scope_marks_intent_and_skips_the_inline_batch_scan(monkeypatch, tombstone_db):
+def _obligation(client, conversation_id):
+    return client.docs.get(f'{purge_jobs.COLLECTION}/{purge_jobs.job_id(UID, conversation_id)}')
+
+
+def test_deferred_scope_arms_the_obligation_with_the_tombstone_and_skips_the_scan(monkeypatch, tombstone_db):
     from database import batch_pipeline_purge
 
     purge = MagicMock()
@@ -340,14 +387,27 @@ def test_deferred_scope_marks_intent_and_skips_the_inline_batch_scan(monkeypatch
     with conversation_tombstones.defer_batch_purges(UID) as deferred:
         conversation_tombstones.record_deletion(UID, 'survivor')
         conversation_tombstones.record_deletion(UID, 'donor')
-        conversation_tombstones.record_deletion(UID, 'survivor')
+        conversation_tombstones.record_deletion(UID, 'survivor')  # retried delete re-arms, keeps tombstone
     assert deferred == ['survivor', 'donor']
     purge.assert_not_called()
-    assert _tombstone(tombstone_db, 'survivor')['batch_purge_pending'] is True
-    assert _tombstone(tombstone_db, 'donor')['batch_purge_pending'] is True
-    # Outside the scope, and for another owner inside it, the purge stays inline.
+    for conversation_id in ('survivor', 'donor'):
+        assert _tombstone(tombstone_db, conversation_id)['conversation_id'] == conversation_id
+        armed = _obligation(tombstone_db, conversation_id)
+        assert armed['uid'] == UID and armed['conversation_id'] == conversation_id and armed['due_at']
+    # Outside the scope the purge stays inline (dev/local, and every non-route caller).
     conversation_tombstones.record_deletion(UID, 'other')
     purge.assert_called_once_with(UID, conversation_id='other')
+    assert _obligation(tombstone_db, 'other') is None
+
+
+def test_obligation_is_written_before_fallible_cleanup(monkeypatch, tombstone_db):
+    from database import from_segments_chunks
+
+    monkeypatch.setattr(from_segments_chunks, 'purge_chunks', MagicMock(side_effect=RuntimeError('firestore down')))
+    with conversation_tombstones.defer_batch_purges(UID):
+        with pytest.raises(RuntimeError):
+            conversation_tombstones.record_deletion(UID, 'c1')
+    assert _tombstone(tombstone_db, 'c1') and _obligation(tombstone_db, 'c1')
 
 
 def _real_route_app(monkeypatch):
@@ -376,7 +436,7 @@ def _real_route_app(monkeypatch):
     return app
 
 
-def test_heavy_owner_delete_returns_without_running_the_batch_scan(monkeypatch, tombstone_db):
+def test_heavy_owner_delete_returns_without_scanning_or_enqueueing(monkeypatch, tombstone_db):
     from database import batch_pipeline_purge
 
     def heavy_owner_scan(*args, **kwargs):
@@ -385,7 +445,7 @@ def test_heavy_owner_delete_returns_without_running_the_batch_scan(monkeypatch, 
     purge = MagicMock(side_effect=heavy_owner_scan)
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', purge)
     enqueue = MagicMock()
-    monkeypatch.setattr(deletion_batch_purge, 'enqueue_conversation_batch_purge', enqueue)
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
     app = _real_route_app(monkeypatch)
     with TestClient(app) as client:
         started = time.monotonic()
@@ -394,75 +454,296 @@ def test_heavy_owner_delete_returns_without_running_the_batch_scan(monkeypatch, 
     assert response.status_code == 204
     assert elapsed < 1.5
     purge.assert_not_called()
-    enqueue.assert_called_once_with(UID, 'c1')
-    assert _tombstone(tombstone_db, 'c1')['batch_purge_pending'] is True
+    enqueue.assert_not_called()  # producers never dispatch; the consumer-side reconciler does
+    assert _obligation(tombstone_db, 'c1')['due_at']
 
 
-def test_enqueue_failure_falls_back_to_the_inline_purge(monkeypatch, tombstone_db):
-    from database import batch_pipeline_purge
-
-    purge = MagicMock()
-    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', purge)
-    monkeypatch.setattr(legal_holds, 'assert_account_deletion_permitted', lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        deletion_batch_purge, 'enqueue_conversation_batch_purge', MagicMock(side_effect=RuntimeError('tasks down'))
-    )
-    app = _real_route_app(monkeypatch)
-    with TestClient(app) as client:
-        response = client.delete('/v1/conversations/c1?cascade=true')
-    assert response.status_code == 204
-    purge.assert_called_once_with(UID, conversation_id='c1')
-    assert _tombstone(tombstone_db, 'c1')['batch_purge_pending'] is False
-
-
-def test_failed_cascade_still_dispatches_the_recorded_purge(monkeypatch, tombstone_db):
-    from database import batch_pipeline_purge
-
-    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', MagicMock())
-    enqueue = MagicMock()
-    monkeypatch.setattr(deletion_batch_purge, 'enqueue_conversation_batch_purge', enqueue)
+def test_failed_cascade_keeps_its_armed_obligation(monkeypatch, tombstone_db):
     app = _real_route_app(monkeypatch)
     conversations.delete_conversation_and_frame_evidence.side_effect = RuntimeError('lake down')
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.delete('/v1/conversations/c1?cascade=true')
     assert response.status_code == 500
-    enqueue.assert_called_once_with(UID, 'c1')
+    assert _obligation(tombstone_db, 'c1')
 
 
-# --- the durable purge runner and its task handler ---
+# --- the reconciler and runner own completion (finding 2) ---
 
 
-def test_run_batch_purge_clears_the_marker_only_after_purging(monkeypatch, tombstone_db):
-    from database import batch_pipeline_purge
-
-    purge = MagicMock()
-    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', purge)
-    monkeypatch.setattr(legal_holds, 'assert_account_deletion_permitted', lambda *args, **kwargs: None)
-    assert conversation_tombstones.run_batch_purge(UID, 'missing') == 'no_tombstone'
+@pytest.fixture
+def armed(tombstone_db):
     with conversation_tombstones.defer_batch_purges(UID):
         conversation_tombstones.record_deletion(UID, 'c1')
-    assert conversation_tombstones.run_batch_purge(UID, 'c1') == 'purged'
-    assert conversation_tombstones.run_batch_purge(UID, 'c1') == 'already_completed'
-    purge.assert_called_once_with(UID, conversation_id='c1')
-    assert _tombstone(tombstone_db, 'c1')['batch_purge_pending'] is False
+    return purge_jobs.job_id(UID, 'c1')
 
 
-def test_run_batch_purge_refuses_under_legal_hold_and_keeps_the_marker(monkeypatch, tombstone_db):
+@pytest.fixture
+def dispatch(monkeypatch):
+    sent = []
+    monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: True)
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
+    monkeypatch.setattr(
+        deletion_batch_purge, 'enqueue_conversation_batch_purge', lambda job, gen: sent.append((job, gen))
+    )
+    monkeypatch.setattr(purge_jobs, 'due_jobs', lambda **kwargs: _due(kwargs.get('now')))
+    return sent
+
+
+_PLANE: list = []
+
+
+def _due(now=None):
+    client = _PLANE[0]
+    now = now or purge_jobs._now()
+    prefix = f'{purge_jobs.COLLECTION}/'
+    rows = [
+        _Ref(client, path)
+        for path, row in sorted(client.docs.items())
+        if path.startswith(prefix) and row.get('due_at') is not None and row['due_at'] <= now
+    ]
+    return rows
+
+
+@pytest.fixture(autouse=True)
+def _plane(request):
+    _PLANE[:] = [request.getfixturevalue('tombstone_db')] if 'tombstone_db' in request.fixturenames else []
+    yield
+    _PLANE.clear()
+
+
+def _advance(client, job, seconds):
+    """Pretend the obligation's timers elapsed."""
+    row = client.docs[f'{purge_jobs.COLLECTION}/{job}']
+    for field in ('due_at', 'lease_until'):
+        if row.get(field) is not None:
+            row[field] = row[field] - purge_jobs.timedelta(seconds=seconds)
+
+
+def _purge(monkeypatch, effect=None):
     from database import batch_pipeline_purge
 
-    purge = MagicMock()
+    purge = MagicMock(side_effect=effect)
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', purge)
+    monkeypatch.setattr(purge_jobs, 'assert_account_deletion_permitted', lambda *a, **k: None)
+    return purge
+
+
+def test_reconciler_dispatches_new_generations_and_only_completion_clears(monkeypatch, tombstone_db, armed, dispatch):
+    purge = _purge(monkeypatch)
+    assert deletion_batch_purge.reconcile_conversation_batch_purges()['dispatched'] == 1
+    assert dispatch == [(armed, 1)]
+    assert deletion_batch_purge.reconcile_conversation_batch_purges() == {}  # redrive not due yet
+    assert purge_jobs.run_job(armed, 1) == 'purged'
+    purge.assert_called_once()
+    assert purge.call_args.kwargs['conversation_id'] == 'c1' and purge.call_args.kwargs['unit_guard']
+    assert _obligation(tombstone_db, 'c1') is None
+    assert purge_jobs.run_job(armed, 1) == 'missing'  # duplicate delivery after completion
+
+
+def test_lost_or_exhausted_task_is_redriven_under_a_fresh_name(monkeypatch, tombstone_db, armed, dispatch):
+    _purge(monkeypatch)
+    deletion_batch_purge.reconcile_conversation_batch_purges()  # generation 1 never runs (old consumer / lost)
+    _advance(tombstone_db, armed, purge_jobs.REDRIVE_SECONDS + 1)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert dispatch == [(armed, 1), (armed, 2)]
+    names = {cloud_tasks.conversation_batch_purge_task_id(job, gen) for job, gen in dispatch}
+    assert len(names) == 2  # a spent or reserved name never swallows the redrive
+    assert purge_jobs.run_job(armed, 1) == 'superseded'  # a late generation-1 delivery cannot clear generation 2
+    assert _obligation(tombstone_db, 'c1')
+    assert purge_jobs.run_job(armed, 2) == 'purged'
+    assert _obligation(tombstone_db, 'c1') is None
+
+
+def test_held_obligation_is_redriven_automatically_after_release(monkeypatch, tombstone_db, armed, dispatch):
+    purge = _purge(monkeypatch)
 
     def held(*args, **kwargs):
         raise legal_holds.LegalHoldActive('held')
 
-    monkeypatch.setattr(legal_holds, 'assert_account_deletion_permitted', held)
-    with conversation_tombstones.defer_batch_purges(UID):
-        conversation_tombstones.record_deletion(UID, 'c1')
-    with pytest.raises(legal_holds.LegalHoldActive):
-        conversation_tombstones.run_batch_purge(UID, 'c1')
+    monkeypatch.setattr(purge_jobs, 'assert_account_deletion_permitted', held)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert purge_jobs.run_job(armed, 1) == 'held'
     purge.assert_not_called()
-    assert _tombstone(tombstone_db, 'c1')['batch_purge_pending'] is True
+    assert _obligation(tombstone_db, 'c1')['last_outcome'] == 'held'
+    assert deletion_batch_purge.reconcile_conversation_batch_purges() == {}  # rechecked hourly, not hot
+    monkeypatch.setattr(purge_jobs, 'assert_account_deletion_permitted', lambda *a, **k: None)  # hold released
+    _advance(tombstone_db, armed, purge_jobs.HOLD_RECHECK_SECONDS + 1)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert dispatch[-1] == (armed, 2)
+    assert purge_jobs.run_job(armed, 2) == 'purged'
+    assert _obligation(tombstone_db, 'c1') is None
+
+
+def test_failed_run_keeps_the_obligation_and_duplicate_delivery_does_not_overlap(
+    monkeypatch, tombstone_db, armed, dispatch
+):
+    entered = []
+
+    def failing_scan(*args, **kwargs):
+        entered.append(purge_jobs.run_job(armed, 1))  # a concurrent duplicate of the same generation
+        raise RuntimeError('firestore deadline')
+
+    _purge(monkeypatch, failing_scan)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    with pytest.raises(RuntimeError):
+        purge_jobs.run_job(armed, 1)
+    assert entered == ['in_progress']
+    row = _obligation(tombstone_db, 'c1')
+    assert row['last_outcome'] == 'failed' and row['lease_until'] is None
+
+
+def test_consumer_without_the_route_holds_dispatch(monkeypatch, tombstone_db, armed, dispatch):
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: False)
+    result = deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert result == {'due': 1, 'held_for_consumer': 1}
+    assert dispatch == []
+    assert _obligation(tombstone_db, 'c1')['due_at'] <= purge_jobs._now()  # still due for the new consumer
+
+
+def test_enqueue_failure_makes_the_obligation_due_again_soon(monkeypatch, tombstone_db, armed, dispatch):
+    monkeypatch.setattr(
+        deletion_batch_purge, 'enqueue_conversation_batch_purge', MagicMock(side_effect=RuntimeError('tasks down'))
+    )
+    assert deletion_batch_purge.reconcile_conversation_batch_purges()['enqueue_failed'] == 1
+    due = _obligation(tombstone_db, 'c1')['due_at']
+    assert due <= purge_jobs._now() + purge_jobs.timedelta(seconds=deletion_batch_purge.ENQUEUE_RETRY_SECONDS + 1)
+
+
+def test_wiped_account_completes_without_a_tombstone(monkeypatch, tombstone_db, armed, dispatch):
+    purge = _purge(monkeypatch)
+    tombstone_db.docs.pop(f'users/{UID}/{conversation_tombstones.COLLECTION}/c1')
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert purge_jobs.run_job(armed, 1) == 'no_tombstone'
+    purge.assert_not_called()
+    assert _obligation(tombstone_db, 'c1') is None
+
+
+def test_transaction_bodies_read_before_they_write():
+    """Real ``@transactional`` bodies over the strict fixture (reads after a write fail)."""
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    job = purge_jobs.job_id(UID, 'c1')
+    store = StrictFirestore({(purge_jobs.COLLECTION, job): purge_jobs.arm_fields(UID, 'c1')})
+    assert purge_jobs.claim_dispatch(job, firestore_client=store) == 1
+    later = purge_jobs._now() + purge_jobs.timedelta(seconds=1)
+    assert purge_jobs.begin_run(job, 1, now=later, firestore_client=store)[0] == 'run'
+    assert purge_jobs.begin_run(job, 1, now=later, firestore_client=store)[0] == 'in_progress'
+    assert purge_jobs.finish_run(job, 1, 'completed', firestore_client=store) is True
+    assert not store.collection(purge_jobs.COLLECTION).document(job).get().exists
+
+
+# --- legal hold / account wipe fence each erasure unit (finding 1) ---
+
+
+def _place_hold(gate_client):
+    legal_holds._place_legal_hold_transaction.to_wrap(
+        gate_client.transaction(), gate_client, UID, 'admin', True, legal_holds.datetime.now(legal_holds.timezone.utc)
+    )
+
+
+def _two_page_owner(monkeypatch, on_second_page=None):
+    """A data plane whose owner has one matching result row on each of two scan pages."""
+    from database import batch_pipeline_purge
+
+    plane = MagicMock()
+    plane.collection.return_value.document.return_value.get.return_value = SimpleNamespace(exists=True, to_dict=dict)
+    owned = {'conversation_id': 'c1'}
+    page_one = [SimpleNamespace(id='r1', to_dict=lambda: owned)]
+    page_two = [SimpleNamespace(id='r2', to_dict=lambda: owned)]
+
+    def owner_documents(_client, namespace, table, key, *, after=None):
+        if namespace != 'batch_pipeline_prod' or table != 'results':
+            return []
+        if after is None:
+            return page_one
+        if after is page_one[-1]:
+            if on_second_page:
+                on_second_page()  # the scan (reads, no gate) is where a hold can land
+            return page_two
+        return []
+
+    erased = []
+    monkeypatch.setattr(batch_pipeline_purge, 'get_data_plane_firestore_client', lambda: plane)
+    monkeypatch.setattr(batch_pipeline_purge.queries, 'owner_documents', owner_documents)
+    monkeypatch.setattr(batch_pipeline_purge.queries, 'artifacts_by_owner_id', lambda *a, **k: [])
+    monkeypatch.setattr(batch_pipeline_purge, '_erase_result', lambda _c, _n, snapshot: erased.append(snapshot.id))
+    monkeypatch.setattr(batch_pipeline_purge, 'mirror_refresh', lambda *a: None)
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_jobstore_owner', lambda *a: None)
+    return erased
+
+
+def test_hold_placed_mid_purge_stops_the_next_erasure_unit_and_keeps_the_debt(
+    monkeypatch, gate_client, tombstone_db, armed, dispatch, fast_clock
+):
+    """Reviewer probe 1, end to end: real runner, real gate units, real hold-writer transaction."""
+    from database import batch_pipeline_purge
+
+    attempts = []
+    erased = _two_page_owner(monkeypatch, on_second_page=lambda: _place_hold(gate_client))
+    real_erase = batch_pipeline_purge._erase_result
+
+    def erase_under_gate(client, namespace, snapshot):
+        # While a unit holds the gate the hold writer cannot commit.
+        try:
+            _place_hold(gate_client)
+        except legal_holds.DestructiveOperationInProgress:
+            attempts.append('hold_rejected_inside_unit')
+        real_erase(client, namespace, snapshot)
+
+    monkeypatch.setattr(batch_pipeline_purge, '_erase_result', erase_under_gate)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert purge_jobs.run_job(armed, 1) == 'held'
+    assert erased == ['r1'], 'erased a row after the legal hold committed'
+    assert attempts == ['hold_rejected_inside_unit']
+    assert gate_client.docs[HOLD_PATH]['active'] is True
+    assert _obligation(tombstone_db, 'c1')['last_outcome'] == 'held'  # debt kept for after release
+
+
+def test_account_wipe_gate_stops_purge_units(gate_client):
+    gate_client.docs[GATE_PATH] = _gate_doc(kind='account_deletion')
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        with legal_holds.destructive_operation_gate(UID, kind='explicit_memory_deletion', wait_seconds=0):
+            pytest.fail('erased while the account wipe owns the gate')
+
+
+def test_purge_wraps_each_page_of_matches_in_one_guarded_unit(monkeypatch):
+    from database import batch_pipeline_purge
+
+    client = MagicMock()
+    client.collection.return_value.document.return_value.get.return_value = SimpleNamespace(exists=True, to_dict=dict)
+    owned = {'conversation_id': 'c1'}
+    pages = {
+        'results': [[SimpleNamespace(id='r1', to_dict=lambda: owned), SimpleNamespace(id='x', to_dict=lambda: {})]],
+    }
+
+    def owner_documents(_client, namespace, table, key, *, after=None):
+        if namespace != 'batch_pipeline_prod' or after is not None:
+            return []
+        rows = pages.get(table, [[]])[0]
+        return rows
+
+    monkeypatch.setattr(batch_pipeline_purge.queries, 'owner_documents', owner_documents)
+    monkeypatch.setattr(batch_pipeline_purge.queries, 'artifacts_by_owner_id', lambda *a, **k: [])
+    events = []
+    monkeypatch.setattr(batch_pipeline_purge, '_erase_result', lambda *a: events.append('erase'))
+    monkeypatch.setattr(batch_pipeline_purge, 'mirror_refresh', lambda *a: None)
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_jobstore_owner', lambda *a: events.append('shadow'))
+
+    class Guard:
+        def __enter__(self):
+            events.append('enter')
+
+        def __exit__(self, *exc):
+            events.append('exit')
+
+    batch_pipeline_purge.purge_batch_owner(
+        UID, firestore_client=client, conversation_id='c1', delete_uri=lambda *a: None, unit_guard=Guard
+    )
+    # Unmatched rows never take the gate; every erasure sits inside a unit.
+    assert events == ['enter', 'erase', 'exit', 'enter', 'shadow', 'exit', 'enter', 'shadow', 'exit']
+
+
+# --- the task handler ---
 
 
 class _Request:
@@ -477,23 +758,22 @@ class _Request:
     'effect,status,body_status',
     [
         (lambda *a: 'purged', 200, 'done'),
-        (MagicMock(side_effect=legal_holds.LegalHoldActive('held')), 200, 'held'),
+        (lambda *a: 'held', 200, 'done'),
         (MagicMock(side_effect=RuntimeError('firestore down')), 500, 'retry'),
     ],
 )
-def test_task_handler_maps_purge_outcomes_to_queue_retry(monkeypatch, effect, status, body_status):
-    monkeypatch.setattr(conversation_tombstones, 'run_batch_purge', effect)
-    response = asyncio.run(
-        users_router.run_conversation_batch_purge(_Request({'uid': UID, 'conversation_id': 'c1'}), 0)
-    )
+def test_task_handler_maps_run_outcomes_to_queue_retry(monkeypatch, effect, status, body_status):
+    monkeypatch.setattr(purge_jobs, 'run_job', effect)
+    response = asyncio.run(users_router.run_conversation_batch_purge(_Request({'job_id': 'j1', 'generation': 1}), 0))
     assert response.status_code == status
     assert body_status.encode() in response.body
 
 
-def test_task_handler_drops_invalid_payloads(monkeypatch):
+@pytest.mark.parametrize('payload', [{'job_id': 'j1'}, {'generation': 1}, {'job_id': 'j1', 'generation': 0}, ['x']])
+def test_task_handler_drops_invalid_payloads(monkeypatch, payload):
     runner = MagicMock()
-    monkeypatch.setattr(conversation_tombstones, 'run_batch_purge', runner)
-    response = asyncio.run(users_router.run_conversation_batch_purge(_Request({'uid': UID}), 0))
+    monkeypatch.setattr(purge_jobs, 'run_job', runner)
+    response = asyncio.run(users_router.run_conversation_batch_purge(_Request(payload), 0))
     assert response.status_code == 200
     runner.assert_not_called()
 
@@ -505,31 +785,63 @@ def test_handler_route_verifies_its_own_task_audience():
     assert cloud_tasks.verify_conversation_batch_purge_cloud_tasks_oidc in dependencies
 
 
-def test_enqueue_targets_backend_sync_on_the_account_deletion_queue(monkeypatch):
+@pytest.fixture
+def purge_env(monkeypatch):
     monkeypatch.setenv('ACCOUNT_DELETION_DISPATCH_MODE', 'cloud_tasks')
     monkeypatch.setenv('ACCOUNT_DELETION_TASKS_QUEUE', 'account-deletion')
     monkeypatch.setenv(
         'ACCOUNT_DELETION_HANDLER_URL', 'https://backend-sync.example.invalid/v1/users/account-deletion-wipes/run'
     )
-    monkeypatch.delenv('ACCOUNT_DELETION_TASKS_OIDC_AUDIENCE', raising=False)
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    return 'https://backend-sync.example.invalid/v1/conversations/deletion-batch-purges/run'
+
+
+def test_enqueue_sends_an_opaque_generation_task_with_its_own_audience(monkeypatch, purge_env):
     enqueue = MagicMock()
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
     assert cloud_tasks.is_conversation_batch_purge_dispatch_configured()
-    cloud_tasks.enqueue_conversation_batch_purge(UID, 'c1')
+    cloud_tasks.enqueue_conversation_batch_purge('j1', 3)
     queue, url, task_id, payload = enqueue.call_args.args
-    assert queue == 'account-deletion'
-    assert url == 'https://backend-sync.example.invalid/v1/conversations/deletion-batch-purges/run'
-    assert task_id == cloud_tasks.conversation_batch_purge_task_id(UID, 'c1')
-    assert payload == {'uid': UID, 'conversation_id': 'c1'}
+    assert (queue, url) == ('account-deletion', purge_env)
+    assert task_id == 'conversation-batch-purge-j1-g3'
+    assert payload == {'job_id': 'j1', 'generation': 3}  # no uid or conversation id in the queue
     # FC-oidc-audience-borrowed-from-sibling-handler: mint and verify for this handler's own URL.
-    assert enqueue.call_args.kwargs['audience'] == url
+    assert enqueue.call_args.kwargs['audience'] == purge_env
     verified = MagicMock(return_value=3)
     monkeypatch.setattr(cloud_tasks, 'verify_configured_cloud_tasks_oidc', verified)
     assert cloud_tasks.verify_conversation_batch_purge_cloud_tasks_oidc(MagicMock()) == 3
-    assert verified.call_args.kwargs == {'audience': url, 'invoker_sa': 'invoker@example.invalid'}
+    assert verified.call_args.kwargs == {'audience': purge_env, 'invoker_sa': 'invoker@example.invalid'}
     monkeypatch.setenv('ACCOUNT_DELETION_DISPATCH_MODE', 'inline')
     assert not cloud_tasks.is_conversation_batch_purge_dispatch_configured()
+
+
+@pytest.mark.parametrize(
+    'status,body,ready',
+    [
+        (403, b'{"detail": "Missing bearer token"}', True),  # new consumer: route + verifier
+        (404, b'{"detail": "Not Found"}', False),  # old consumer: no route
+        (405, b'{}', False),
+        (403, b'{"detail": "Forbidden"}', False),  # something else answered
+    ],
+)
+def test_consumer_probe_tells_the_new_route_from_an_old_revision(monkeypatch, purge_env, status, body, ready):
+    calls = []
+
+    def request(url, **kwargs):
+        calls.append((url, kwargs.get('headers')))
+        return SimpleNamespace(status=status, data=body)
+
+    monkeypatch.setattr(cloud_tasks, '_get_auth_request', lambda: request)
+    assert cloud_tasks.conversation_batch_purge_consumer_ready() is ready
+    assert calls[0][0] == purge_env and 'Authorization' not in (calls[0][1] or {})
+
+
+def test_consumer_probe_network_failure_is_unknown_not_ready(monkeypatch, purge_env):
+    def unreachable(url, **kwargs):
+        raise OSError('no route')
+
+    monkeypatch.setattr(cloud_tasks, '_get_auth_request', lambda: unreachable)
+    assert cloud_tasks.conversation_batch_purge_consumer_ready() is None
 
 
 def test_staged_chunk_purge_is_one_commit_not_128_round_trips():
@@ -543,3 +855,28 @@ def test_staged_chunk_purge_is_one_commit_not_128_round_trips():
     assert [call.args[0] for call in slots.document.call_args_list] == [f'c1-{index:03d}' for index in range(128)]
     batch.commit.assert_called_once()
     slots.document.return_value.delete.assert_not_called()
+
+
+def test_rollout_and_rollback_order_cannot_strand_an_obligation(monkeypatch, tombstone_db, armed, dispatch):
+    """Producers never dispatch; the dispatcher waits for the live route and redrives lost generations."""
+    serving = {'route': False}
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: serving['route'])
+    _purge(monkeypatch)
+    # New producers, old backend-sync still serving: nothing is sent.
+    assert deletion_batch_purge.reconcile_conversation_batch_purges()['held_for_consumer'] == 1
+    assert dispatch == []
+    # New consumer serving: generation 1 goes out ...
+    serving['route'] = True
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert dispatch == [(armed, 1)]
+    # ... then backend-sync rolls back before it runs: the task 404s to exhaustion and never runs.
+    serving['route'] = False
+    _advance(tombstone_db, armed, purge_jobs.REDRIVE_SECONDS + 1)
+    assert deletion_batch_purge.reconcile_conversation_batch_purges()['held_for_consumer'] == 1
+    assert _obligation(tombstone_db, 'c1')  # still owed
+    # Roll forward again: a fresh generation and name, which completes.
+    serving['route'] = True
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert dispatch[-1] == (armed, 2)
+    assert purge_jobs.run_job(armed, 2) == 'purged'
+    assert _obligation(tombstone_db, 'c1') is None

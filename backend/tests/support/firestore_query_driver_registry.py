@@ -374,6 +374,13 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+# Conversation batch-purge reconciler: one single-field ``due_at`` range, oldest first.
+_add(
+    DriverEntry(
+        'database.conversation_batch_purge_jobs.due_jobs',
+        neutrals={'now': _NOW, 'limit': _LIMIT},
+    )
+)
 _add(
     DriverEntry(
         'database.hidden_noise_counts.count_hidden_noise_by_day',

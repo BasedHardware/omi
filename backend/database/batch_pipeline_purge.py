@@ -3,7 +3,8 @@
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta, timezone
 from config.batch_pipeline import scheduler_control_key
-from typing import Any
+from contextlib import nullcontext
+from typing import Any, ContextManager
 
 from google.cloud import firestore
 
@@ -133,6 +134,7 @@ def purge_batch_owner(
     reason: str = 'deleted',
     namespaces: Iterable[str] = NAMESPACES,
     delete_uri: Callable[[str, str], None] | None = None,
+    unit_guard: Callable[[], ContextManager[Any]] | None = None,
 ) -> int:
     """Fence first; erase objects before metadata so partial failures can retry.
 
@@ -141,7 +143,13 @@ def purge_batch_owner(
     lease loss does not prove inference idle. Purge both stage namespaces on
     the customer data plane even when admission is off. Synthetic namespaces
     require a loopback emulator client.
+
+    ``unit_guard`` wraps each bounded erasure unit (one scanned page's matches):
+    a caller that does not hold the account gate for the whole scan passes the
+    gate here, so a legal hold or account wipe that commits mid-scan stops the
+    next unit. Reads stay outside it.
     """
+    guard = unit_guard or nullcontext
     client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
     namespaces = tuple(namespaces)
     for namespace in namespaces:
@@ -176,6 +184,7 @@ def purge_batch_owner(
                 if not rows:
                     break
                 after = rows[-1]
+                matches = []
                 for snapshot in rows:
                     data = snapshot.to_dict() or {}
                     result = {}
@@ -192,23 +201,15 @@ def purge_batch_owner(
                         continue
                     if table in {'jobs', 'results'}:
                         segments.add(snapshot.id)
-                    if table == 'artifacts':
-                        _erase_artifact(uid, namespace, snapshot, data, delete_uri)
+                    matches.append((snapshot, data, result))
+                if not matches:
+                    continue
+                with guard():
+                    for snapshot, data, result in matches:
+                        _erase_owner_row(
+                            uid, client, namespace, table, snapshot, data, result, delete_uri, conversation_id
+                        )
                         deleted += 1
-                        continue
-                    for uri in _references(data):
-                        delete_uri(uid, uri)
-                    if table == 'jobs':
-                        for uri in _references(result):
-                            delete_uri(uid, uri)
-                        _delete_job(client, namespace, snapshot, retain_ordering=conversation_id is not None)
-                    elif table == 'results' and conversation_id is not None:
-                        _erase_result(client, namespace, snapshot)
-                    else:
-                        snapshot.reference.delete()
-                    if table != 'jobs':
-                        mirror_refresh(namespace, [(table, snapshot.id)])
-                    deleted += 1
         # A routine owner-mismatch flag must never hide accepted audio from
         # privacy erasure. This bounded, single-field fallback reaches parked
         # rows without scanning other owners or trusting a foreign URI.
@@ -218,14 +219,19 @@ def purge_batch_owner(
             if not rows:
                 break
             after = rows[-1]
+            parked = []
             for snapshot in rows:
                 data = snapshot.to_dict() or {}
                 if data.get('owner_key') == key:
                     continue  # Already handled above, including pending writes.
                 if not _belongs(data, conversation_id) and data.get('segment_id') not in segments:
                     continue
-                _erase_artifact(uid, namespace, snapshot, data, delete_uri)
-                deleted += 1
+                parked.append((snapshot, data))
+            if parked:
+                with guard():
+                    for snapshot, data in parked:
+                        _erase_artifact(uid, namespace, snapshot, data, delete_uri)
+                        deleted += 1
         if conversation_id is None:
             _purge_owner_fairness(client, namespace, key)
             if default_storage_cleanup:
@@ -234,10 +240,39 @@ def purge_batch_owner(
                 purge_batch_storage_owner(uid, namespace)
         # A5: the Postgres copy (A2 shadow) is erased in the same retryable flow, before the purge is
         # recorded as finished; a failure raises and the caller retries. No-op outside shadow mode.
-        purge_jobstore_owner(namespace, uid)
+        with guard():
+            purge_jobstore_owner(namespace, uid)
     if conversation_id is None:
         finish_privacy_purge(client, uid, generation)
     return deleted
+
+
+def _erase_owner_row(
+    uid: str,
+    client: Any,
+    namespace: str,
+    table: str,
+    snapshot: Any,
+    data: dict,
+    result: dict,
+    delete_uri: Callable[[str, str], None],
+    conversation_id: str | None,
+) -> None:
+    if table == 'artifacts':
+        _erase_artifact(uid, namespace, snapshot, data, delete_uri)
+        return
+    for uri in _references(data):
+        delete_uri(uid, uri)
+    if table == 'jobs':
+        for uri in _references(result):
+            delete_uri(uid, uri)
+        _delete_job(client, namespace, snapshot, retain_ordering=conversation_id is not None)
+    elif table == 'results' and conversation_id is not None:
+        _erase_result(client, namespace, snapshot)
+    else:
+        snapshot.reference.delete()
+    if table != 'jobs':
+        mirror_refresh(namespace, [(table, snapshot.id)])
 
 
 def _purge_owner_fairness(client: Any, namespace: str, key: str) -> None:

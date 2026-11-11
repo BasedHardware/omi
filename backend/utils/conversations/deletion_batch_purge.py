@@ -1,72 +1,73 @@
-"""Hand a conversation delete's per-conversation batch purge to its durable task.
+"""Conversation deletes arm batch-purge obligations; the reconciler dispatches them.
 
 That purge scans every batch-pipeline row the owner has (prod 2026-11-11: a
-6k-row owner held the account gate 53 s, a 34k-row owner 366 s). The tombstone
-keeps fencing new batch writes; the purge itself runs on backend-sync.
+6k-row owner held the account gate 53 s, a 34k-row owner 366 s), so the delete
+request only arms a durable obligation next to its tombstone. Producers never
+enqueue: dispatch belongs to this reconciler, which first proves the serving
+consumer has the route, then sends each due obligation as a new generation.
 """
 
 import logging
 from contextlib import contextmanager
-from typing import Iterable, Iterator
+from typing import Iterator
 
-from fastapi import HTTPException
-
+from database import conversation_batch_purge_jobs as purge_jobs
 from database import conversation_tombstones
-from utils.cloud_tasks import enqueue_conversation_batch_purge, is_conversation_batch_purge_dispatch_configured
-from utils.observability.fallback import record_fallback
+from utils.cloud_tasks import (
+    conversation_batch_purge_consumer_ready,
+    enqueue_conversation_batch_purge,
+    is_conversation_batch_purge_dispatch_configured,
+)
 
 logger = logging.getLogger(__name__)
 
+ENQUEUE_RETRY_SECONDS = 60
+# Repeated generations without completion page someone; the obligation is never dropped.
+ALERT_AFTER_GENERATIONS = 8
+
 
 @contextmanager
-def batch_purges_dispatched_after(uid: str) -> Iterator[None]:
-    """Defer ``record_deletion``'s batch purges in this scope, then dispatch them.
+def deferred_batch_purges(uid: str) -> Iterator[None]:
+    """Inside this scope ``record_deletion`` arms an obligation instead of purging inline.
 
-    Dispatch runs on success and on failure: every collected id already carries
-    a durable pending marker. Without task dispatch configured the purge stays
-    inline in ``record_deletion``, unchanged.
+    Without task dispatch configured (dev, local, tests) the purge stays inline.
     """
     if not is_conversation_batch_purge_dispatch_configured():
         yield
         return
-    with conversation_tombstones.defer_batch_purges(uid) as deferred:
-        try:
-            yield
-        except BaseException:
-            dispatch_deferred_batch_purges(uid, deferred, raise_on_failure=False)
-            raise
-        dispatch_deferred_batch_purges(uid, deferred, raise_on_failure=True)
+    with conversation_tombstones.defer_batch_purges(uid):
+        yield
 
 
-def dispatch_deferred_batch_purges(uid: str, conversation_ids: Iterable[str], *, raise_on_failure: bool) -> None:
-    """Enqueue each collected purge; an enqueue failure falls back to the inline purge."""
-    stranded = 0
-    for conversation_id in conversation_ids:
-        try:
-            enqueue_conversation_batch_purge(uid, conversation_id)
+def reconcile_conversation_batch_purges(limit: int = 50) -> dict[str, int]:
+    """Dispatch due obligations: new deletes, lost tasks, exhausted retries, released holds."""
+    if not is_conversation_batch_purge_dispatch_configured():
+        return {}
+    due = purge_jobs.due_jobs(limit=limit)
+    if not due:
+        return {}
+    ready = conversation_batch_purge_consumer_ready()
+    if ready is False:
+        # Rollout or rollback: the serving consumer lacks the route. Obligations wait.
+        logger.warning('conversation batch purge consumer not serving the route; holding %d due', len(due))
+        return {'due': len(due), 'held_for_consumer': len(due)}
+    counts = {'due': len(due), 'dispatched': 0, 'skipped': 0, 'enqueue_failed': 0}
+    for snapshot in due:
+        generation = purge_jobs.claim_dispatch(snapshot.id)
+        if generation is None:
+            counts['skipped'] += 1
             continue
-        except Exception as error:
-            record_fallback(
-                component='other',
-                from_mode='cloud_tasks',
-                to_mode='inline_batch_purge',
-                reason='other',
-                outcome='degraded',
-                log=logger,
-            )
-            logger.warning(
-                'event=conversation_delete action=batch_purge_enqueue outcome=error exception_type=%s',
-                type(error).__name__,
+        if generation > ALERT_AFTER_GENERATIONS:
+            logger.error(
+                'conversation batch purge obligation still pending job=%s generation=%d', snapshot.id, generation
             )
         try:
-            conversation_tombstones.run_batch_purge(uid, conversation_id)
+            enqueue_conversation_batch_purge(snapshot.id, generation)
+            counts['dispatched'] += 1
         except Exception as error:
-            # The pending marker on the tombstone survives for a re-drive.
-            stranded += 1
-            logger.error(
-                'event=conversation_delete action=batch_purge_inline outcome=error exception_type=%s',
-                type(error).__name__,
+            counts['enqueue_failed'] += 1
+            logger.warning(
+                'conversation batch purge enqueue failed job=%s exception_type=%s', snapshot.id, type(error).__name__
             )
-    if stranded and raise_on_failure:
-        # A retried delete re-records the marker and enqueues again.
-        raise HTTPException(503, 'Conversation storage deletion is busy, please retry')
+            purge_jobs.defer(snapshot.id, ENQUEUE_RETRY_SECONDS)
+    return counts

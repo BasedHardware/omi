@@ -117,7 +117,7 @@ from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
-from utils.conversations.deletion_batch_purge import batch_purges_dispatched_after
+from utils.conversations.deletion_batch_purge import deferred_batch_purges
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
@@ -1461,7 +1461,7 @@ def delete_conversation(
         else nullcontext()
     )
     try:
-        with gate, batch_purges_dispatched_after(uid):
+        with gate, deferred_batch_purges(uid):
             return _delete_conversation_under_gate(
                 conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
             )
