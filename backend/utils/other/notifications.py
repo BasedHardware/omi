@@ -26,9 +26,9 @@ from utils.daily_summary_validation import require_daily_summary
 from utils.executors import db_executor, open_loops_executor, postprocess_executor, run_blocking
 from utils.conversations.relevance_content import exclude_from_derived
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
-from config.refactor_modes import serving_for
-from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
-from utils.llm.notes_refactor_metrics import shadow as record_notes_shadow
+from config.refactor_modes import serving_for, daily_recap_late_input_refresh_enabled
+from utils.other import daily_summary_refresh as recap_refresh
+from database import daily_summary_refresh as recap_refresh_db
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification_result
 from utils.other import daily_summary_metrics
@@ -214,7 +214,9 @@ def _legacy_generate_and_store_daily_summary(
         # any LLM tokens. The regenerate flow stays in-place via update_daily_summary.
         existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
         existing_complete = bool(existing_summary and delivery_allowed(uid, existing_summary))
-        if existing_summary and existing_complete and not serving_for('NOTES_PACKET_V2_MODE', uid):
+        refresh_enabled = daily_recap_late_input_refresh_enabled()
+        refreshing = bool(refresh_enabled and existing_complete)
+        if existing_summary and existing_complete and not refresh_enabled:
             logger.info(
                 f"Daily summary already exists for uid={uid} date={date_str} "
                 f"id={existing_summary.get('id')}; skipping duplicate generation"
@@ -224,14 +226,21 @@ def _legacy_generate_and_store_daily_summary(
         conversations_data = conversations_db.get_conversations(
             uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
         )
-        fingerprint = None
-        if serving_for('NOTES_PACKET_V2_MODE', uid):
-            fingerprint = input_fingerprint(conversations_data or [])
-            if existing_summary and existing_complete and existing_summary.get(FINGERPRINT_FIELD) == fingerprint:
+        fingerprint = recap_refresh.fingerprint(conversations_data or []) if refresh_enabled else None
+        if refreshing:
+            if recap_refresh.FIELD not in existing_summary:
+                stale = recap_refresh.adoption_needs_repair(existing_summary, conversations_data or [])
+                adopted = recap_refresh_db.adopt(uid, date_str, existing_summary, fingerprint, stale)
+                daily_summary_metrics.refresh(
+                    ('adopted_stale_scheduled' if stale else 'adopted_fresh') if adopted else 'refresh_conflict'
+                )
                 release_daily_summary_lock(uid, date_str)
-                record_notes_shadow('daily_recap_inputs', 'agree')
+                return adopted or existing_summary, False, None
+            debt = daily_summaries_db.get_daily_summary_generation_status(uid, date_str) or {}
+            if existing_summary.get(recap_refresh.FIELD) == fingerprint and not debt.get('late_refresh_required'):
+                daily_summary_metrics.refresh('refresh_skipped_unchanged')
+                release_daily_summary_lock(uid, date_str)
                 return existing_summary, False, None
-            record_notes_shadow('daily_recap_inputs', 'disagree')
         if not conversations_data or len(conversations_data) == 0:
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NO_CONVERSATIONS
@@ -269,7 +278,11 @@ def _legacy_generate_and_store_daily_summary(
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
 
-        if prepare_delivery is not None:
+        if refreshing and not recap_refresh_db.reserve(uid, date_str):
+            daily_summary_metrics.refresh('refresh_skipped_cap')
+            release_daily_summary_lock(uid, date_str)
+            return existing_summary, False, None
+        if prepare_delivery is not None and not refreshing:
             prepare_delivery()
 
         _record_summary_generation_status(uid, date_str, 'pending')
@@ -286,7 +299,23 @@ def _legacy_generate_and_store_daily_summary(
         require_daily_summary(summary_data, uid=uid, operation='legacy_generation_candidate')
         summary_data = finish_legacy_stub(existing_summary, summary_data)
         if fingerprint is not None:
-            summary_data[FINGERPRINT_FIELD] = fingerprint
+            summary_data[recap_refresh.FIELD] = fingerprint
+        if refreshing:
+            latest = (
+                conversations_db.get_conversations(
+                    uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
+                )
+                or []
+            )
+            if account_deletion_blocks_user_work(uid):
+                release_daily_summary_lock(uid, date_str)
+                return None, False, 'account_pending_deletion'
+            refreshed = None
+            if recap_refresh.fingerprint(latest) == fingerprint:
+                refreshed = recap_refresh_db.commit(uid, date_str, existing_summary, summary_data, fingerprint)
+            daily_summary_metrics.refresh('refreshed' if refreshed else 'refresh_conflict')
+            release_daily_summary_lock(uid, date_str)
+            return refreshed or existing_summary, bool(refreshed), None
         if existing_summary:
             summary_id = existing_summary['id']
             # Preserve the existing deep link and completed-delivery marker on refresh.
@@ -294,7 +323,7 @@ def _legacy_generate_and_store_daily_summary(
             summary_data.update(
                 {
                     key: existing_summary[key]
-                    for key in ('visibility', 'notification_delivery_completed')
+                    for key in ('visibility', 'notification_delivery_completed', 'created_at')
                     if key in existing_summary
                 }
             )
@@ -1159,7 +1188,8 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
         daily_summary_metrics.RECIPIENTS.labels(outcome='generated_retry' if retry_attempt else 'generated').inc()
         # Durable outcome token for the daily_summary_recap_generated log metric. The
         # job's in-process counters depend on a scrape sidecar; this line does not.
-        logger.info('daily_summary_generated uid=%s retry=%s', uid, retry_attempt)
+        if not summary_data.get('late_refresh_silent'):
+            logger.info('daily_summary_generated uid=%s retry=%s', uid, retry_attempt)
     elif summary_data:
         daily_summary_metrics.RECIPIENTS.labels(outcome='suppressed_existing').inc()
     pending_webhook: Optional[dict] = None
@@ -1176,7 +1206,9 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
         declined = None
     if summary_data and not delivery_allowed(uid, summary_data):
         raise RuntimeError('daily summary not generated')
-    if summary_data and summary_data.get('notification_delivery_completed'):
+    if summary_data and (
+        summary_data.get('notification_delivery_completed') or summary_data.get('late_refresh_silent')
+    ):
         # An abandoned worker may have delivered after wait_for timed out and
         # after its coordinator saved an uncertain outcome. The receipt wins.
         if delivery_completed is not None:

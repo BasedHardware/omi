@@ -50,3 +50,24 @@ for _outcome in RECIPIENT_OUTCOMES:
     RECIPIENTS.labels(outcome=_outcome)
 for _outcome in ('complete', 'incomplete'):
     COHORT_COMPLETE.labels(outcome=_outcome)
+
+
+REFRESH_OUTCOMES = (
+    'adopted_fresh',
+    'adopted_stale_scheduled',
+    'refreshed',
+    'refresh_skipped_cap',
+    'refresh_skipped_unchanged',
+    'refresh_conflict',
+)
+REFRESH = cast(
+    Counter, _collector(Counter, 'omi_daily_summary_late_refresh_total', 'Legacy recap refresh outcomes.', ('outcome',))
+)
+for _outcome in REFRESH_OUTCOMES:
+    REFRESH.labels(outcome=_outcome)
+
+
+def refresh(outcome: str) -> None:
+    if outcome not in REFRESH_OUTCOMES:
+        raise ValueError('unknown daily recap refresh outcome')
+    REFRESH.labels(outcome=outcome).inc()

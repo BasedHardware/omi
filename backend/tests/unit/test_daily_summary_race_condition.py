@@ -133,7 +133,9 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
 
 
 @pytest.fixture
-def notification_harness() -> Iterator[SimpleNamespace]:
+def notification_harness(monkeypatch) -> Iterator[SimpleNamespace]:
+    # These older tests pin the kill-switch rollback contract.
+    monkeypatch.setenv('DAILY_RECAP_LATE_INPUT_REFRESH_ENABLED', 'false')
     conversations_db = _module('database.conversations', get_conversations=MagicMock())
     notification_db = _module('database.notifications')
     daily_summaries_db = _module(
@@ -520,10 +522,17 @@ class TestDailyRecapNotDesktopPaywalled:
 
 
 def test_v2_recap_regenerates_in_place_on_revision_and_reuses_unchanged_inputs(notification_harness, monkeypatch):
-    from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
+    from utils.other.daily_summary_refresh import fingerprint as input_fingerprint, FIELD as FINGERPRINT_FIELD
 
     harness, module = notification_harness, notification_harness.module
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'serve')
+    monkeypatch.delenv('DAILY_RECAP_LATE_INPUT_REFRESH_ENABLED')
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    monkeypatch.setattr(module.recap_refresh_db, 'reserve', lambda *_a: True)
+    monkeypatch.setattr(
+        module.recap_refresh_db, 'commit', lambda _u, _d, old, data, _fp: {**old, **data, 'id': old['id']}
+    )
+    harness.daily_summaries_db.get_daily_summary_generation_status = MagicMock(return_value={})
+    monkeypatch.setattr(module, 'account_deletion_blocks_user_work', lambda *_a: False)
     monkeypatch.setattr(module, 'generated_compute_allowed', lambda *_args: True)
     monkeypatch.setattr(module, 'try_acquire_daily_summary_lock', lambda *_args: True)
     monkeypatch.setattr(module, 'release_daily_summary_lock', MagicMock())
@@ -550,6 +559,5 @@ def test_v2_recap_regenerates_in_place_on_revision_and_reuses_unchanged_inputs(n
     assert created and declined is None
     assert result['id'] == 'same-recap' and result['notification_delivery_completed'] is True
     harness.daily_summaries_db.create_daily_summary.assert_not_called()
-    args = harness.daily_summaries_db.update_daily_summary.call_args.args
-    assert args[1] == 'same-recap' and args[2][FINGERPRINT_FIELD] == input_fingerprint(data)
+    assert result[FINGERPRINT_FIELD] == input_fingerprint(data)
     harness.generate_summary.assert_called_once()

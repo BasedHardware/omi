@@ -365,3 +365,92 @@ def test_regenerate_invalid_output_preserves_stored_recap_then_retry_replaces_in
 def test_owner_routes_still_require_authentication(client):
     for path in ('/v1/users/daily-summaries', '/v1/dev/user/daily-summaries'):
         assert client.get(path).status_code == 401
+
+
+def test_default_on_late_refresh_drops_deleted_input_and_preserves_concurrent_privacy(
+    client, auth_headers, fake_firestore, generation_seams, monkeypatch, conversation_fixture, live_user
+):
+    import utils.other.notifications as n
+    from fakes.firestore import seed_conversation
+
+    monkeypatch.delenv('DAILY_RECAP_LATE_INPUT_REFRESH_ENABLED', raising=False)
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    monkeypatch.setattr(n, 'require_generated_compute', lambda *a, **k: None)
+    monkeypatch.setattr(n, 'generated_compute_allowed', lambda *a, **k: True)
+    monkeypatch.setattr(n, 'memories_learned_payload', lambda *a, **k: [])
+    first = _seed_source_day(fake_firestore, conversation_fixture)
+    second = deepcopy(first.get().to_dict())
+    second['id'] = 'late-refresh-retained-source'
+    seed_conversation('123', second)
+    monkeypatch.setattr(n, 'generate_comprehensive_daily_summary', lambda *a, **k: _summary('original'))
+    response = client.post('/v1/users/daily-summaries', json={'date': '2026-10-01'}, headers=auth_headers)
+    assert response.status_code == 200, response.text
+    recap = (
+        fake_firestore.collection('users').document('123').collection('daily_summaries').document(response.json()['id'])
+    )
+    recap.update({'visibility': 'shared', 'created_at': datetime(2026, 10, 1, 22, tzinfo=timezone.utc)})
+    original = recap.get().to_dict()
+    first.delete()
+    seen = []
+
+    def generate(_uid, conversations, *a, **k):
+        seen.extend(c.id for c in conversations)
+        recap.update({'visibility': 'private', 'notification_delivery_completed': True})
+        return _summary('different-model-id', headline='Updated retained content', visibility='shared')
+
+    monkeypatch.setattr(n, 'generate_comprehensive_daily_summary', generate)
+    n.release_daily_summary_lock('123', '2026-10-01')
+    start, end = n.local_day_bounds_utc(datetime(2026, 10, 1).date(), 'UTC')
+    result, created, declined = n._generate_and_store_daily_summary('123', '2026-10-01', start, end)
+    assert created and declined is None
+    assert seen == [second['id']]
+    stored = recap.get().to_dict()
+    assert stored['id'] == result['id'] == original['id']
+    assert stored['created_at'] == original['created_at']
+    assert stored['visibility'] == 'private'
+    assert stored['notification_delivery_completed'] is True
+    assert stored['late_refresh_silent'] is True
+    marker = (
+        fake_firestore.collection('users').document('123').collection('daily_summary_generation').document('2026-10-01')
+    )
+    # The real status writer must not erase repair debt/verification metadata.
+    from database.daily_summaries import set_daily_summary_generation_status
+
+    set_daily_summary_generation_status('123', '2026-10-01', 'generated')
+    assert marker.get().to_dict()['late_refresh_verify_pending'] is True
+
+
+def test_legacy_stale_adoption_persists_debt_then_repairs_with_real_storage(
+    client, auth_headers, fake_firestore, generation_seams, monkeypatch, conversation_fixture, live_user
+):
+    import utils.other.notifications as n
+    from utils.other.daily_summary_refresh import FIELD
+
+    monkeypatch.delenv('DAILY_RECAP_LATE_INPUT_REFRESH_ENABLED', raising=False)
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    monkeypatch.setattr(n, 'generated_compute_allowed', lambda *a, **k: True)
+    monkeypatch.setattr(n, 'memories_learned_payload', lambda *a, **k: [])
+    source = _seed_source_day(fake_firestore, conversation_fixture)
+    source.update({'summary_completed_at': datetime(2026, 10, 2, tzinfo=timezone.utc).timestamp()})
+    recap = _seed(fake_firestore, _summary('stable-legacy', created_at=datetime(2026, 10, 1, 22, tzinfo=timezone.utc)))
+    calls = []
+
+    def generate(*a, **k):
+        calls.append(1)
+        return _summary('model-id', headline='Repaired')
+
+    monkeypatch.setattr(n, 'generate_comprehensive_daily_summary', generate)
+    start, end = n.local_day_bounds_utc(datetime(2026, 10, 1).date(), 'UTC')
+    adopted, created, declined = n._generate_and_store_daily_summary('123', '2026-10-01', start, end)
+    assert not created and declined is None and calls == []
+    assert FIELD in adopted
+    marker = (
+        fake_firestore.collection('users').document('123').collection('daily_summary_generation').document('2026-10-01')
+    )
+    assert marker.get().to_dict()['late_refresh_required'] is True
+    repaired, created, declined = n._generate_and_store_daily_summary('123', '2026-10-01', start, end)
+    assert created and declined is None and calls == [1]
+    assert repaired['id'] == 'stable-legacy'
+    assert recap.get().to_dict()['headline'] == 'Repaired'

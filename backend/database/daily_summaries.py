@@ -354,5 +354,5 @@ def get_daily_summary_generation_status(uid: str, date: str, *, firestore_client
 def set_daily_summary_generation_status(uid: str, date: str, status: str, *, firestore_client: Any = None) -> None:
     client = firestore_client if firestore_client is not None else get_firestore_client()
     client.collection('users').document(uid).collection('daily_summary_generation').document(date).set(
-        {'status': status, 'updated_at': datetime.now(timezone.utc), 'generated_at': None}
+        {'status': status, 'updated_at': datetime.now(timezone.utc), 'generated_at': None}, merge=True
     )

@@ -16,3 +16,43 @@ def test_legacy_reprocessing_changes_summary_fingerprint_without_version_field()
     after = [{'id': 'synthetic-a', 'structured': {'title': 'Workshop', 'overview': 'Revised synthetic overview'}}]
     assert input_fingerprint(before) != input_fingerprint(after)
     assert input_fingerprint(before) == input_fingerprint([dict(before[0], transcript_segments='opaque bytes')])
+
+
+def test_late_refresh_identity_pins_meaningful_fields_and_ignores_metadata():
+    from copy import deepcopy
+    from utils.other.daily_summary_refresh import fingerprint, REVISION_FIELDS
+
+    assert REVISION_FIELDS == (
+        'sync_content_revision',
+        'content_revision',
+        'notes_llm_output_hash',
+        'summary_completed_at',
+        'discarded',
+        'deleted',
+        'is_locked',
+        'content_kind',
+        'relevance_decision',
+        'sync_relevance_user_kept',
+    )
+    row = {
+        'id': 'synthetic',
+        'structured': {
+            'overview': 'Summary',
+            'action_items': [{'description': 'Plan', 'completed': False}],
+            'events': [{'title': 'Meet', 'created': False}],
+        },
+    }
+    changed = deepcopy(row)
+    changed.update(
+        updated_at='later-server-time',
+        revision=42,
+        starred=True,
+        folder_id='other',
+        geolocation={'address': 'Resolved'},
+        transcript_segments='opaque bytes',
+    )
+    changed['structured']['action_items'][0]['completed'] = True
+    changed['structured']['events'][0]['created'] = True
+    assert fingerprint([row]) == fingerprint([changed])
+    changed['notes_llm_output_hash'] = 'new-content'
+    assert fingerprint([row]) != fingerprint([changed])
