@@ -63,11 +63,18 @@ REFRESH_OUTCOMES = (
 REFRESH = cast(
     Counter, _collector(Counter, 'omi_daily_summary_late_refresh_total', 'Legacy recap refresh outcomes.', ('outcome',))
 )
+
+
+def bounded_refresh_outcome(outcome: str) -> str:
+    """Return one of the six refresh labels; reject identities/free text."""
+    if outcome not in REFRESH_OUTCOMES:
+        raise ValueError('unknown daily recap refresh outcome')
+    return outcome
+
+
 for _outcome in REFRESH_OUTCOMES:
-    REFRESH.labels(outcome=_outcome)
+    REFRESH.labels(outcome=bounded_refresh_outcome(_outcome))
 
 
 def refresh(outcome: str) -> None:
-    if outcome not in REFRESH_OUTCOMES:
-        raise ValueError('unknown daily recap refresh outcome')
-    REFRESH.labels(outcome=outcome).inc()
+    REFRESH.labels(outcome=bounded_refresh_outcome(outcome)).inc()

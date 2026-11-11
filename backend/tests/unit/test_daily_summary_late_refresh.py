@@ -351,3 +351,12 @@ def test_refreshed_content_carries_its_read_contract_metadata(refresh_harness):
     assert projected['memories_learned_coverage'] == h.generate_summary.return_value['memories_learned_coverage']
     assert projected['stats']['watching_minutes_basis'] == 'interval_union'
     assert projected['stats']['watching_coverage'] == 'complete'
+
+
+def test_refresh_metric_rejects_identity_and_free_text_labels(refresh_harness):
+    metrics = refresh_harness.module.daily_summary_metrics
+    before = set(metrics.REFRESH._metrics)
+    with pytest.raises(ValueError, match='unknown daily recap refresh outcome'):
+        metrics.refresh(UID)
+    assert set(metrics.REFRESH._metrics) == before
+    assert before == {(outcome,) for outcome in metrics.REFRESH_OUTCOMES}
