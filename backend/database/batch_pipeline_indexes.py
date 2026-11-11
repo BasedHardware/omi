@@ -12,6 +12,31 @@ def _desc(field):
 
 
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
+    # Repair keeps the existing ascending index for result-ready consumers and rollback.
+    *(
+        FirestoreIndexRequirement(
+            f'{namespace}_record_repair_newest',
+            f'{namespace}_jobs',
+            'COLLECTION',
+            (_asc('state'), _desc('enqueued_at'), _desc('__name__')),
+        )
+        for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{namespace}_record_repair_deadline',
+            f'{namespace}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('record_dead_letter_deadline_at'), _asc('__name__')),
+        )
+        for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
+    ),
+    FirestoreIndexRequirement(
+        'record_seal_repair_newest_completed',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('record_lane_owner'), _asc('status'), _desc('finished_at'), _desc('__name__')),
+    ),
     # Shared by result-ready draining and oldest-first record-pending repair.
     # Moved from sync_pipeline_indexes; retain its existing registry identity.
     *(

@@ -25,12 +25,13 @@ def test_optional_load_failure_returns_plain_window(monkeypatch, failure):
     store.assert_access = MagicMock()
     store.load.side_effect = failure
 
-    async def fake_database(executor, function, *args):
+    async def in_memory_read(executor, function, *args):
         return function(*args)
 
-    # Preparation now starts digest IO concurrently; keep this regression hermetic
-    # without executor startup/deadlines masking the continuity-load failure.
-    monkeypatch.setattr(context, 'run_blocking', fake_database)
+    # Both reads are in-memory fakes. A real worker can miss the 150ms budget
+    # under shard contention and add an unrelated digest-timeout fallback.
+    # Deadline and real executor isolation have their own regression tests.
+    monkeypatch.setattr(context, 'run_blocking', in_memory_read)
     monkeypatch.setattr(context, 'recent_activity', lambda *args: [])
     notices = []
     monkeypatch.setattr(context, 'record_fallback', lambda **kw: notices.append(kw))

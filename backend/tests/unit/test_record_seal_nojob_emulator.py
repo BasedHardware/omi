@@ -153,7 +153,7 @@ def test_real_jobs_age_order_numeric_coverage_frozen_horizon_and_cursor(monkeypa
         frontier = RepairCursor(client, b'synthetic-local-key' * 2, jobs=True)
         expected = [
             f'users/synthetic-age-owner/conversations/synthetic-{i}'
-            for i in sorted(range(3), key=lambda i: (clocks[i], refs[i].id))
+            for i in sorted(range(3), key=lambda i: (clocks[i], refs[i].id), reverse=True)
         ]
         observed, cursor, ages = [], None, []
         # Scan only one document at a time, including ineligible NaN/-inf.

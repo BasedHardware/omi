@@ -485,17 +485,19 @@ def test_child_output_never_becomes_a_log_label(private):
     assert private not in json.dumps([report, progress])
 
 
-def test_discovery_pages_past_closed_rows_and_preserves_oldest_order():
+def test_discovery_pages_past_closed_rows_and_requests_newest_order():
     class Query:
         def __init__(self):
             self.page = 0
             self.orders = []
+            self.directions = []
 
         def where(self, **kw):
             return self
 
-        def order_by(self, field):
+        def order_by(self, field, direction=None):
             self.orders.append(field)
+            self.directions.append(direction)
             return self
 
         def select(self, fields):
@@ -539,6 +541,7 @@ def test_discovery_pages_past_closed_rows_and_preserves_oldest_order():
     )
     assert [path for path, _ in rows] == ['oldest'] and not saturated
     assert query.orders == ['finished_at', '__name__'] * 2
+    assert query.directions == ['DESCENDING'] * 4
     assert cursor is None
 
 
@@ -575,7 +578,7 @@ class CursorClient:
                     self.horizon = field.value
                 return self
 
-            def order_by(self, field):
+            def order_by(self, field, direction=None):
                 return self
 
             def select(self, fields):
@@ -1107,7 +1110,7 @@ def test_discovery_skips_rows_repair_can_only_refuse(extra, selected):
         def where(self, **kw):
             return self
 
-        def order_by(self, field):
+        def order_by(self, field, direction=None):
             return self
 
         def select(self, fields):
@@ -1402,17 +1405,28 @@ class OrderedJobsClient:
         class Query:
             def __init__(self):
                 self.filters, self.order, self.after, self.cap = [], [], None, None
+                self.directions = []
 
             def where(self, *, filter):
                 self.filters.append((filter.field_path, filter.op_string, filter.value))
                 return self
 
-            def order_by(self, field):
+            def order_by(self, field, direction=None):
                 self.order.append(field)
+                self.directions.append(direction or 'ASCENDING')
                 return self
 
             def select(self, fields):
-                assert fields == ('owner_id', 'conversation_id', 'enqueued_at', 'record_content_id')
+                assert fields in (
+                    ('owner_id', 'conversation_id', 'enqueued_at', 'record_content_id'),
+                    (
+                        'owner_id',
+                        'conversation_id',
+                        'enqueued_at',
+                        'record_content_id',
+                        'record_dead_letter_deadline_at',
+                    ),
+                )
                 return self
 
             def limit(self, cap):
@@ -1427,7 +1441,7 @@ class OrderedJobsClient:
 
             def stream(self, *, timeout, retry):
                 assert 0 < timeout <= 10 and retry is None
-                age_order = self.order == ['enqueued_at', '__name__']
+                age_order = self.order in (['enqueued_at', '__name__'], ['record_dead_letter_deadline_at', '__name__'])
                 assert age_order or self.order == ['__name__']
                 if age_order and client.error:
                     raise client.error
@@ -1436,12 +1450,16 @@ class OrderedJobsClient:
                     if op == '==':
                         docs = [d for d in docs if d.to_dict().get(field) == value]
                     else:
-                        assert (field, op) == ('enqueued_at', '<=')
+                        assert field in ('enqueued_at', 'record_dead_letter_deadline_at') and op in ('<=', '>')
                         docs = [
                             d
                             for d in docs
                             if type(d.to_dict().get(field)) in (int, float)
-                            and (d.to_dict()[field] <= value or math.isnan(d.to_dict()[field]))
+                            and (
+                                (d.to_dict()[field] <= value or math.isnan(d.to_dict()[field]))
+                                if op == '<='
+                                else d.to_dict()[field] > value
+                            )
                         ]
 
                 def key(value, path):
@@ -1451,10 +1469,20 @@ class OrderedJobsClient:
                     numeric = (0, 0) if math.isnan(value) else (1, value)
                     return numeric, path
 
-                docs.sort(key=lambda d: key(d.to_dict().get('enqueued_at'), d.reference.path))
+                field = self.order[0]
+                descending = self.directions[0] == 'DESCENDING'
+                docs.sort(key=lambda d: key(d.to_dict().get(field), d.reference.path), reverse=descending)
                 if self.after:
-                    point = key(self.after.get('enqueued_at'), self.after['__name__'].path)
-                    docs = [d for d in docs if key(d.to_dict().get('enqueued_at'), d.reference.path) > point]
+                    point = key(self.after.get(field), self.after['__name__'].path)
+                    docs = [
+                        d
+                        for d in docs
+                        if (
+                            key(d.to_dict().get(field), d.reference.path) < point
+                            if descending
+                            else key(d.to_dict().get(field), d.reference.path) > point
+                        )
+                    ]
                 return docs[: self.cap]
 
         query = Query()
@@ -1569,14 +1597,14 @@ def test_run_gauge_excludes_absent_conversation_ages(source, proof, monkeypatch,
 
 
 @pytest.mark.parametrize('setting', [None, 'on', 'typo'])
-def test_jobs_oldest_first_ties_resume_encrypted_and_wrap(monkeypatch, setting):
+def test_jobs_newest_first_ties_resume_encrypted_and_wrap(monkeypatch, setting):
     from utils.batch_pipeline.record_seal_repair_cursor import RepairCursor
 
     monkeypatch.delenv('RECORD_SEAL_REPAIR_AGE_ORDER', raising=False)
     if setting:
         monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', setting)
     docs = [pending_job(0, 200), pending_job(1, 100), pending_job(2, 100)]
-    expected = sorted(docs, key=lambda d: (d.to_dict()['enqueued_at'], d.id))
+    expected = sorted(docs, key=lambda d: (d.to_dict()['enqueued_at'], d.id), reverse=True)
     client, budget, selected = OrderedJobsClient(docs), SweepBudget(60), {}
     state = CursorClient()
     frontier = RepairCursor(
@@ -1630,11 +1658,14 @@ def test_jobs_age_filter_and_page_bounds_remain_local(monkeypatch):
     horizon = datetime.now(timezone.utc)
     stamp = horizon.timestamp() - config.JOBS_MIN_AGE_SECONDS
     client = OrderedJobsClient([pending_job(0, stamp), pending_job(1, stamp + 1), pending_job(2, stamp - 1)])
-    cursor = {'path': 'batch_pipeline_prod_jobs/', 'enqueued_at': -1, 'horizon': horizon}
+    cursor = {'path': 'batch_pipeline_prod_jobs/', 'enqueued_at': horizon.timestamp(), 'horizon': horizon}
     rows, saturated, cursor = cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor, max_scan=1)
-    assert [path for path, _ in rows] == ['users/synthetic/conversations/capture-2'] and saturated
+    assert rows == [] and saturated
     rows, _, cursor = cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor)
-    assert rows == [('users/synthetic/conversations/capture-0', config.JOBS_MIN_AGE_SECONDS)]
+    assert rows == [
+        ('users/synthetic/conversations/capture-0', config.JOBS_MIN_AGE_SECONDS),
+        ('users/synthetic/conversations/capture-2', config.JOBS_MIN_AGE_SECONDS + 1),
+    ]
     assert cursor is None
     assert all(q.cap <= 128 for q in client.queries)
 
@@ -1660,13 +1691,13 @@ def test_jobs_kill_switch_restores_exact_old_hash_scan(monkeypatch, setting):
     assert client.queries[0].order == ['__name__']
 
 
-def test_jobs_switching_orders_restarts_without_skipping_oldest(monkeypatch):
+def test_jobs_switching_orders_restarts_at_newest_head(monkeypatch):
     client = OrderedJobsClient([pending_job(0), pending_job(1, 1)])
     monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', 'off')
     _, _, old = cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)
     monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', 'on')
     rows, _, age = cluster.discover_jobs(client, budget=SweepBudget(60), after=old, max_rows=1)
-    assert rows[0][0].endswith('capture-0') and client.queries[-1].after is None
+    assert rows[0][0].endswith('capture-1') and client.queries[-1].after is None
     monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', 'off')
     cluster.discover_jobs(client, budget=SweepBudget(60), after=age, max_rows=1)
     assert client.queries[-1].after is None
