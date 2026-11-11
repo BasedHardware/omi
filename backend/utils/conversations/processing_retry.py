@@ -20,7 +20,11 @@ def processing_failure_code(error: BaseException) -> str:
     A processing HTTP 500 with no provider cause is a failed processing seam,
     not evidence of a transient provider outage. SDK timeouts/connections and
     provider 429/5xx retain bounded recovery. The explicit cause is authoritative
-    even when an SDK rollback error masks it via __context__.
+    even when an SDK rollback error masks it via __context__. Every generic
+    processing_failed wrapper must enter this classifier, including one with
+    only __context__ (even suppressed context). Missing or cyclic chains are
+    not proven transient: they use the deterministic bounded-then-terminal
+    policy and cannot receive a delayed second budget.
     """
     seen = set()
     current = error

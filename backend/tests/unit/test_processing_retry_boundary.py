@@ -177,6 +177,94 @@ def cloud_tasks_route(monkeypatch, durable_loop):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize('path', ['cloud_tasks', 'pusher'])
+@pytest.mark.parametrize(
+    ('chain', 'failure_code'),
+    [
+        ('absent', DETERMINISTIC_PROCESSING_FAILURE),
+        ('context_attribute', DETERMINISTIC_PROCESSING_FAILURE),
+        ('context_timeout', TRANSIENT_PROCESSING_FAILURE),
+        ('context_provider_503', TRANSIENT_PROCESSING_FAILURE),
+        ('nested_context_timeout', TRANSIENT_PROCESSING_FAILURE),
+        ('suppressed_context_timeout', TRANSIENT_PROCESSING_FAILURE),
+        ('explicit_cause_wins', DETERMINISTIC_PROCESSING_FAILURE),
+        ('context_cycle', DETERMINISTIC_PROCESSING_FAILURE),
+    ],
+)
+async def test_processing_wrapper_is_classified_on_every_finalization_path(
+    monkeypatch, cloud_tasks_route, path, chain, failure_code
+):
+    store, task_delivery, terminal, grant = cloud_tasks_route
+    error = finalizer.ConversationFinalizationError('processing_failed')
+    if chain == 'context_attribute':
+        error.__context__ = AttributeError('synthetic')
+    elif chain in {'context_timeout', 'suppressed_context_timeout', 'explicit_cause_wins'}:
+        error.__context__ = provider_timeout()
+        error.__suppress_context__ = chain == 'suppressed_context_timeout'
+        if chain == 'explicit_cause_wins':
+            error.__cause__ = AttributeError('authoritative cause')
+    elif chain == 'context_provider_503':
+        response = httpx.Response(503, request=httpx.Request('POST', 'https://provider.invalid'))
+        error.__context__ = anthropic.APIStatusError('synthetic', response=response, body=None)
+    elif chain == 'nested_context_timeout':
+        error.__context__ = HTTPException(500, 'safe processing wrapper')
+        error.__context__.__context__ = provider_timeout()
+    elif chain == 'context_cycle':
+        error.__context__ = error
+    process = AsyncMock(side_effect=error)
+    target = task_route if path == 'cloud_tasks' else worker
+    monkeypatch.setattr(target, 'finalize_persisted_conversation', process)
+    socket = SimpleNamespace(send_bytes=AsyncMock())
+
+    async def deliver(attempt):
+        if path == 'cloud_tasks':
+            response = await task_delivery(attempt)
+            return response.status_code, json.loads(response.body)
+        await worker.process_conversation_task(
+            ROW[1], ROW[-1], 'en', socket, finalization_job_id=JOB[-1], dispatch_generation=1
+        )
+        return None, json.loads(socket.send_bytes.call_args.args[0][4:])
+
+    deterministic = failure_code == DETERMINISTIC_PROCESSING_FAILURE
+    for attempt in range(4 if deterministic else 1):
+        status, result = await deliver(attempt)
+        terminal_expected = deterministic and attempt == 3
+        if path == 'cloud_tasks':
+            assert status == (200 if terminal_expected else 500)
+            assert result['status'] == ('dead_letter' if terminal_expected else 'retry')
+        else:
+            assert result['error'] == failure_code
+            assert result['terminal'] == terminal_expected
+        if not terminal_expected:
+            assert store.rows[JOB]['last_failure_code'] == failure_code
+    assert store.rows[JOB].get('budget_requeue_count', 0) == 0
+    if deterministic:
+        assert store.rows[JOB]['status'] == 'dead_letter'
+        assert store.rows[JOB]['attempt_count'] == 4
+        assert store.rows[ROW]['status'] == 'completed'
+        assert store.rows[ROW]['transcript_segments']
+        terminal.assert_called_once()
+        assert grant.call_args.args[-1] == DETERMINISTIC_PROCESSING_FAILURE
+        await deliver(4)
+        assert process.await_count == 4
+        terminal.assert_called_once()
+    else:
+        terminal.assert_not_called()
+        grant.assert_not_called()
+
+        async def complete(*args, **kwargs):
+            assert jobs.mark_finalization_fanout_completed(
+                JOB[-1], kwargs['dispatch_generation'], kwargs['lease_epoch']
+            )
+            return finalizer.ConversationFinalizationDisposition.completed
+
+        process.side_effect = complete
+        await deliver(1)
+        assert store.rows[JOB]['status'] == 'completed'
+        assert process.await_count == 2
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize('reset_retry_header', [False, True])
 @pytest.mark.parametrize('cause', [AttributeError('synthetic'), HTTPException(500, 'processing failed')])
 async def test_cloud_tasks_deterministic_failure_dead_letters_at_four(

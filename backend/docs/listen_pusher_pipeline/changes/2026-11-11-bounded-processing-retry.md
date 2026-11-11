@@ -34,3 +34,11 @@ route's deterministic terminal transition (including reset retry headers) and
 provider timeout/5xx exhaustion through exactly one delayed second budget.
 Failed pusher recovery writes emit shared fallback telemetry while retaining
 the leased obligation for durable replay.
+
+Every generic `processing_failed` wrapper enters the shared classifier on both
+finalization paths, whether its original error is in `__cause__`, `__context__`
+(including suppressed context), or absent. An explicit cause takes precedence.
+Unknown or cyclic chains are not proven transient: they use the deterministic
+four-attempt cap (or an earlier configured task cap), with no delayed second
+budget. Typed provider timeouts/connections and provider 429/5xx still retain
+their bounded recovery; special finalization codes keep their existing policy.

@@ -232,7 +232,7 @@ async def test_byok_pusher_exhaustion_dead_letters_without_a_requeue(monkeypatch
             dispatch_generation=1,
         )
 
-    grant.assert_called_once_with('job-1', 1, 7, 'processing_failed')
+    grant.assert_called_once_with('job-1', 1, 7, 'deterministic_processing_failed')
     records = [r for r in caplog.records if 'pusher finalization failed' in r.getMessage()]
     assert records and all('terminal=True' in r.getMessage() for r in records)
     assert any(b'"terminal":true' in payload.replace(b' ', b'') for payload in websocket.sent)

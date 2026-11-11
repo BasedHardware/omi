@@ -266,11 +266,7 @@ async def process_conversation_task(
         record_completed('success', claim)
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError as error:
-        failure_code = (
-            processing_failure_code(error)
-            if error.code == 'processing_failed' and error.__cause__ is not None
-            else error.code
-        )
+        failure_code = processing_failure_code(error) if error.code == 'processing_failed' else error.code
         failure_disposition = await record_failure(failure_code)
         terminal = failure_disposition == 'dead_letter'
         byok_class = byok_failure_class_of(error)

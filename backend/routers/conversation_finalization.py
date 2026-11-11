@@ -325,11 +325,7 @@ async def run_listen_finalization_job(
                 if disposition == 'requeued':
                     return JSONResponse(status_code=200, content={'status': 'delayed_requeue'})
                 return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
-            failure_code = (
-                processing_failure_code(error)
-                if error.code == 'processing_failed' and error.__cause__ is not None
-                else error.code
-            )
+            failure_code = processing_failure_code(error) if error.code == 'processing_failed' else error.code
             disposition = await _retry_or_dead_letter(
                 job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, failure_code
             )
