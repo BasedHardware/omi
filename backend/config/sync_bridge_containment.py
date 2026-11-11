@@ -24,8 +24,11 @@ def contained_donor_merge_enabled() -> bool:
 
     Off restores the pre-change refusal exactly: a processed donor is never
     absorbed, no span is compared, and the assignment keeps its blanket
-    ``already_processed`` protection. A typo therefore disables the merge,
-    never the fence.
+    ``already_processed`` protection. On the legacy path a typo therefore
+    disables the merge, never the fence. In ``CAPTURE_COVERAGE_MODE=serve`` the
+    resolution delegates to the shared parser, whose policy keeps unknown values
+    on, so a typo there can leave the merge enabled; containment and every other
+    fence still apply.
     """
     raw = os.getenv(ENV, '').strip().lower()
     return rollout_default_on(ENV, not raw or raw in _ON)

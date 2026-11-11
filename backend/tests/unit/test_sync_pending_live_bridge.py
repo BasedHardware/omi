@@ -15,11 +15,15 @@ from tests.unit.test_sync_live_overlap import assign, live_row, seeded
 from tests.unit.test_sync_cross_job_assignment import chunk
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing, _rows_from_store
 from utils.sync import bridge, bridge_pending
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.sync.intake_completion import complete_sync_intake
 
 
 @pytest.fixture
 def pending(monkeypatch):
+    # The switch is default on; keep the tests independent of a developer or
+    # deploy shell that exports the kill switch off.
+    monkeypatch.delenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', raising=False)
     # The live owner exists but has not yet persisted speech proof. Its wall
     # envelope may hold intake, but cannot authorize transcript transfer.
     live = live_row('in_progress')
@@ -218,10 +222,45 @@ def test_partial_overlap_processed_donor_is_refused(pending):
 def test_open_target_processed_donor_is_refused(pending):
     store, _, _, _ = pending
     source = _mark_processed(store)
-    # The live capture is still open, so no merge is due yet.
+    # The target's recorded span covers the whole donor, but its capture is still
+    # open, so no merge is due yet. Without the open-target fence this would merge.
+    target = _finish_target(store, end_seconds=20.0)
+    target['status'] = 'in_progress'
     assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
     assert not source.get('deleted')
     assert not source.get('sync_merged_into')
+
+
+def test_contained_donor_growing_past_target_refuses_whole_assignment(monkeypatch, pending):
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    _finish_target(store, end_seconds=20.0)
+    refused = []
+    assign_after_bridge_read = db.assign_sync_conversation
+
+    def grow_then_assign(uid, row, **kw):
+        # The bridge already proved containment on its own read. Grow the donor
+        # past the target before the assignment transaction reads it again.
+        grown = store.rows[('users', 'u', 'conversations', 'wal')]
+        grown['transcript_segments'] = [
+            {'start': 0.0, 'end': 30.0, 'text': 'Donor speech.', 'speaker_id': 0, 'is_user': False}
+        ]
+        grown['recorded_end'] = grown['started_at'] + timedelta(seconds=30)
+        try:
+            return assign_after_bridge_read(uid, row, **kw)
+        except SyncAssignmentConflict as error:
+            refused.append(error.subtype)
+            raise
+
+    monkeypatch.setattr(db, 'assign_sync_conversation', grow_then_assign)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    # The transaction re-proof refuses the assignment whole, not just the donor.
+    assert refused == [SyncAssignmentConflictReason.CONTAINED_DONOR_NOT_CONTAINED]
+    donor = store.rows[('users', 'u', 'conversations', 'wal')]
+    assert not donor.get('deleted') and not donor.get('sync_merged_into')
+    assert 'wal' not in store.rows[('users', 'u', 'conversations', 'live')].get('sync_merged_from', [])
+    # Nothing dead-letters the row: it is still pending and visible after expiry.
+    assert bridge_pending.hidden(donor, now=donor[bridge_pending.FIELD]['expires_at'] + 1) is False
 
 
 def test_contained_donor_switch_off_restores_refusal(monkeypatch, pending):
