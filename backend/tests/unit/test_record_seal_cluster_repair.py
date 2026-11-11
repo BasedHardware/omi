@@ -6,6 +6,7 @@ import math
 import json
 import os
 from pathlib import Path
+import select
 import subprocess
 import sys
 import time
@@ -16,12 +17,14 @@ import pytest
 import re
 
 from config import record_seal_repair as config
+from database import _client, record_token_lease_metrics
 from utils.batch_pipeline import record_seal_nojob as nojob, record_seal_cluster_repair as cluster
 from utils.batch_pipeline import record_producer_proof as producer
+from utils.batch_pipeline import record_seal_sweeper
 from utils.batch_pipeline.record_seal_budget import SweepBudget
 from utils.batch_pipeline.record_seal_reasons import TAIL_GAP_BUCKETS
 from tests.unit.test_record_seal_nojob import source, SCOPE, SERVER, PATH, JOB_PATH
-from tests.unit.test_record_producer_proof import inventory
+from tests.unit.test_record_producer_proof import inventory, pod
 
 
 @pytest.mark.parametrize('fail', [False, True])
@@ -677,7 +680,7 @@ def test_closed_row_scan_cap_also_advances_without_skipping_the_tail():
 @pytest.mark.parametrize('mode,writes', [('apply', 1), ('plan', 0)])
 def test_frontier_advances_before_work_and_plan_never_writes(source, proof, monkeypatch, mode, writes):
     monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
-    from database import _client
+    from database import _client, record_token_lease_metrics
     from utils.batch_pipeline import record_seal_sweeper
 
     client = CursorClient()
@@ -695,9 +698,11 @@ def test_frontier_advances_before_work_and_plan_never_writes(source, proof, monk
     assert cluster.run()['outcome'] == 'ok' and client.writes == writes
 
 
-def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, monkeypatch):
+@pytest.mark.parametrize('expiry_outcome', ['completed', 'error', 'budget_exhausted'])
+def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, monkeypatch, expiry_outcome):
     monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
-    from database import _client
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+    from database import _client, record_token_lease_metrics
     from utils.batch_pipeline import record_seal_sweeper
 
     finished = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -713,9 +718,29 @@ def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, mo
     monkeypatch.setattr(config, 'require_runtime', lambda: None)
     monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
     monkeypatch.setattr(config, 'settings', lambda: (2, 240, 1500, 'apply'))
-    attempted = []
+    attempted, events, promotions = [], [], []
+
+    def promote(client, namespace, now, *, budget):
+        assert namespace == 'batch_pipeline_prod'
+        budget.check()
+        promotions.append(now)
+        return 1
+
+    monkeypatch.setattr(cluster, 'promote_record_recoveries', promote)
+
+    def expire(*args, **kwargs):
+        if expiry_outcome == 'budget_exhausted':
+            from utils.batch_pipeline.record_seal_budget import BudgetExhausted
+
+            raise BudgetExhausted()
+        if expiry_outcome == 'error':
+            raise RuntimeError('synthetic unavailable cleanup')
+        return 3
+
+    monkeypatch.setattr(cluster.record_custody_receipts, 'prune', expire)
 
     def time_limited(rows, **kwargs):
+        assert cluster.REPAIR_OLDEST._value.get() == max(age for _, age in rows)
         attempted.extend(path for path, _ in rows[:2])
         for path, _ in rows[:2]:
             kwargs['attempted'](path)
@@ -723,8 +748,13 @@ def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, mo
 
     monkeypatch.setattr(cluster, 'coordinate', time_limited)
     for _ in range(5):
-        cluster.run()
+        cluster.run(progress=events.append)
     assert attempted == paths
+    assert len(promotions) == 5
+    assert sum(event.get('promoted', 0) for event in events) == 5
+    assert [event['outcome'] for event in events if event['event'] == 'record_custody_receipts_expiry'] == [
+        expiry_outcome
+    ] * 5
 
 
 def test_admitted_registration_succeeds_at_zero_and_full_ramp_but_policy_changes(source):
@@ -751,7 +781,7 @@ def test_admitted_registration_succeeds_at_zero_and_full_ramp_but_policy_changes
 
 def test_last_attempt_checkpoint_skips_refused_prefix_and_wrap_revisits_oldest(source, proof, monkeypatch):
     monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
-    from database import _client
+    from database import _client, record_token_lease_metrics
     from utils.batch_pipeline import record_seal_sweeper
 
     finished = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -1185,39 +1215,62 @@ def test_profile_measures_deltas_and_bounds_worst_case_ipc():
     assert len(json.dumps(result).encode()) < 1024
 
 
+@pytest.mark.parametrize('startup_delay', [0, 0.5])
 @pytest.mark.parametrize('checkpoint,expected', [(True, 'walk'), (False, 'unknown')])
-def test_killed_child_reports_last_received_stage(checkpoint, expected):
+def test_killed_child_reports_last_received_stage(checkpoint, expected, startup_delay):
     children, events = [], []
+    ready_read, ready_write = os.pipe()
     code = (
         'import os,time\n'
+        + f'time.sleep({startup_delay})\n'
         + (
             'os.write(1, b\'{"stage":"walk","stage_ms":{"proof":12},"chunks":2,"bytes":99}\\n\')\n'
             if checkpoint
             else ''
         )
+        + f'os.write({ready_write}, b"1"); os.close({ready_write})\n'
         + 'time.sleep(30)\n'
     )
-
-    def launch(*_):
-        child = subprocess.Popen([sys.executable, '-c', code], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        child = subprocess.Popen(
+            [sys.executable, '-c', code], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, pass_fds=(ready_write,)
+        )
         children.append(child)
-        return child
+        os.close(ready_write)
+        ready_write = None
+        # This is an IPC timeout test. Ensure the fixture emitted its profile
+        # before advancing the coordinator's injected clock. Scheduler delays
+        # cannot consume either the startup phase or the row budget.
+        assert select.select([ready_read], [], [], 30)[0], 'fixture child did not become ready'
+        assert os.read(ready_read, 1) == b'1'
+        now = [0.0]
 
-    report = cluster.coordinate(
-        [('private', 100)],
-        workers=1,
-        row_seconds=0.3,
-        run_seconds=5,
-        mode='apply',
-        launch=launch,
-        progress=events.append,
-    )
-    assert report['dispositions'] == {'budget_exhausted': 1}
-    assert events[0]['stage'] == expected
-    assert report['disposition_elapsed_ms']['budget_exhausted'] == events[0]['elapsed_ms']
-    assert children[0].returncode is not None and children[0].stdout.closed
-    if checkpoint:
-        assert events[0]['chunks'] == 2 and events[0]['bytes'] == 99
+        def advance(seconds):
+            now[0] += seconds
+
+        report = cluster.coordinate(
+            [('private', 100)],
+            workers=1,
+            row_seconds=0.3,
+            run_seconds=5,
+            mode='apply',
+            launch=lambda *_: child,
+            progress=events.append,
+            clock=lambda: now[0],
+            pause=advance,
+        )
+        assert report['dispositions'] == {'budget_exhausted': 1}
+        assert events[0]['stage'] == expected
+        assert report['disposition_elapsed_ms']['budget_exhausted'] == events[0]['elapsed_ms']
+        assert child.returncode is not None and child.stdout.closed
+        if checkpoint:
+            assert events[0]['chunks'] == 2 and events[0]['bytes'] == 99
+    finally:
+        if ready_write is not None:
+            os.close(ready_write)
+        os.close(ready_read)
+        for child in children:
+            cluster.stop(child)
 
 
 def test_ipc_tolerates_old_partial_oversized_and_untrusted_profiles():
@@ -1450,6 +1503,97 @@ def pending_job(index, enqueued=0, **extra):
     return SimpleNamespace(
         id=segment, reference=SimpleNamespace(path=f'batch_pipeline_prod_jobs/{segment}'), to_dict=lambda: dict(data)
     )
+
+
+@pytest.mark.parametrize('order', ['on', 'off'])
+@pytest.mark.parametrize('page', ['mixed', 'all_zero', 'nonpositive', 'positive_sentinel'])
+def test_run_gauge_excludes_invalid_enqueue_clocks_without_changing_discovery(source, proof, monkeypatch, order, page):
+    horizon = datetime(2026, 11, 9, tzinfo=timezone.utc)
+    stamp = horizon.timestamp()
+    enqueued, expected = {
+        'mixed': ([0, stamp - 7200, stamp - 3600], 7200),
+        'all_zero': ([0, 0], 0),
+        'nonpositive': ([-1, 0], 0),
+        # Main's shared guard accepts every positive finite clock. Repair and
+        # worker must agree, including a positive sentinel; no private floor.
+        'positive_sentinel': ([1, stamp - 3600], stamp - 1),
+    }[page]
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return horizon
+
+    monkeypatch.setattr(cluster, 'datetime', FrozenDatetime)
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', order)
+    jobs = OrderedJobsClient([pending_job(i, clock) for i, clock in enumerate(enqueued)])
+    # The metric-free call remains the discovery/repair selection oracle.
+    expected_rows, expected_saturated, expected_cursor = cluster.discover_jobs(jobs, budget=SweepBudget(60))
+    samples = []
+    assert cluster.discover_jobs(jobs, budget=SweepBudget(60), metric_ages=samples) == (
+        expected_rows,
+        expected_saturated,
+        expected_cursor,
+    )
+    assert len(expected_rows) == len(enqueued)
+    assert max(samples, default=0) == expected
+    assert dict(expected_rows) == {
+        f'users/synthetic/conversations/capture-{i}': None if clock <= 0 else max(0, int(stamp - clock))
+        for i, clock in enumerate(enqueued)
+    }  # Invalid rows are still repaired with upstream's metrics-only age representation.
+
+    cursor_state = CursorClient()
+    client = SimpleNamespace(
+        collection=lambda name: (
+            SimpleNamespace(document=lambda _: cursor_state)
+            if name == 'batch_pipeline_prod_maintenance'
+            else jobs.collection(name)
+        ),
+        document=jobs.document,
+    )
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', proof)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: True)
+    monkeypatch.setattr(config, 'settings', lambda: (16, 240, 1500, 'plan'))
+    monkeypatch.setattr(cluster, 'discover', lambda *args, **kwargs: ([], False, None))
+
+    def work(rows, **kwargs):
+        assert rows == expected_rows
+        assert cluster.REPAIR_OLDEST._value.get() == expected
+        return {'rows': len(rows), 'dispositions': {}}
+
+    monkeypatch.setattr(cluster, 'coordinate', work)
+    previous = cluster.REPAIR_OLDEST._value.get()
+    try:
+        assert cluster.run()['outcome'] == 'ok'
+    finally:
+        cluster.REPAIR_OLDEST.set(previous)
+
+
+@pytest.mark.parametrize('ages,expected', [([None, 1000], 1000), ([None], 0)])
+def test_run_gauge_excludes_absent_conversation_ages(source, proof, monkeypatch, ages, expected):
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: CursorClient())
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', proof)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
+    monkeypatch.setattr(config, 'settings', lambda: (16, 240, 1500, 'plan'))
+    rows = [(f'users/synthetic/conversations/capture-{i}', age) for i, age in enumerate(ages)]
+    monkeypatch.setattr(cluster, 'discover', lambda *args, **kwargs: (rows, False, None))
+
+    def work(selected, **kwargs):
+        assert selected == rows
+        assert cluster.REPAIR_OLDEST._value.get() == expected
+        return {'rows': len(selected), 'dispositions': {}}
+
+    monkeypatch.setattr(cluster, 'coordinate', work)
+    previous = cluster.REPAIR_OLDEST._value.get()
+    try:
+        assert cluster.run()['outcome'] == 'ok'
+    finally:
+        cluster.REPAIR_OLDEST.set(previous)
 
 
 @pytest.mark.parametrize('setting', [None, 'on', 'typo'])
@@ -1697,3 +1841,51 @@ def test_invalid_conversation_finish_clock_preserves_selection(monkeypatch, bad_
     )
     assert rows == [('invalid', None), ('normal', 1000)]
     assert saturated is False and cursor is None
+
+
+@pytest.mark.parametrize('diagnostics', [False, True])
+@pytest.mark.parametrize('pending', [False, True])
+def test_active_full_repair_counts_shadow_lease_would_expire(source, monkeypatch, diagnostics, pending):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', '1')
+    monkeypatch.setattr(producer.time, 'time', lambda: 10000)
+    store, client, artifacts = source
+    client.rows[PATH]['record_upload_sessions'] = {
+        'old': {
+            'pod': 'live',
+            'process_started_at': 1,
+            'last_signal_at': 1,
+            'lease_expires_at': 3601,
+            'signal_source': 'frames',
+        }
+    }
+    if pending:
+        client.rows[JOB_PATH] = {
+            'segment_id': JOB_PATH[1],
+            'owner_id': 'synthetic',
+            'conversation_id': 'capture',
+            'record_content_id': 'record',
+            'privacy_generation': 0,
+            'state': 'record_pending',
+        }
+    proof = producer.parse_pusher_pod_proof(
+        json.dumps(inventory([pod('live', 1)])).encode(), datetime.fromtimestamp(9999, timezone.utc).isoformat()
+    )
+    before = record_token_lease_metrics.EXPIRED_WOULD._value.get()
+    observed = {} if diagnostics else None
+    assert (
+        cluster.repair_one(
+            store,
+            object(),
+            artifacts,
+            SCOPE[0],
+            flags=SERVER,
+            inventory=lambda: proof,
+            budget=SweepBudget(30),
+            reason_out=observed,
+        )
+        == 'upload_pending'
+    )
+    assert record_token_lease_metrics.EXPIRED_WOULD._value.get() == before + 1
+    if observed is not None:
+        assert observed['lease_reason'] == 'lease_would_expire'

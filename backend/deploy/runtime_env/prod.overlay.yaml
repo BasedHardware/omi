@@ -875,6 +875,8 @@ overlay:
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-sync:
+        flags:
+          --timeout: 3600s
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL

@@ -20,6 +20,9 @@ NOW = 1_800_000_000
 @pytest.fixture(autouse=True)
 def priority_clock(monkeypatch):
     monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', 'on')
+    # Maintenance phases have their own custody tests; keep priority's query inventory isolated.
+    monkeypatch.setattr(cluster, 'promote_record_recoveries', lambda *args, **kwargs: 0)
+    monkeypatch.setattr(cluster.record_custody_receipts, 'prune', lambda *args, **kwargs: 0)
     monkeypatch.setattr(cluster, 'datetime', SimpleNamespace(now=lambda _: datetime.fromtimestamp(NOW, timezone.utc)))
 
 
@@ -164,6 +167,9 @@ def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(
 
         events, fallbacks = [], []
         monkeypatch.setattr(cluster, 'record_fallback', lambda **kw: fallbacks.append(kw))
+        from contextlib import nullcontext
+
+        monkeypatch.setattr(entrypoint, 'repair_probe_server', nullcontext)
         monkeypatch.setattr(entrypoint, 'emit', events.append)
         monkeypatch.setattr(entrypoint.signal, 'signal', lambda *_: None)
         monkeypatch.setattr(entrypoint.sys, 'argv', ['record_seal_repair_job.py'])

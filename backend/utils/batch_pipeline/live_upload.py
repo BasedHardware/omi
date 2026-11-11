@@ -28,6 +28,7 @@ from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
+from database.record_custody_append import resolve_target
 from database.sync_record_wait_cache import (
     RECORD_WAIT_CACHE_SECONDS,
     cached_record_wait,
@@ -264,12 +265,7 @@ async def registered_record_response(
 
     def target_snapshot() -> tuple[str | None, Any]:
         user = store.client.collection('users').document(uid)
-        target = conversation_id
-        if not target and recording_session_id:
-            session = user.collection('recording_sessions').document(recording_session_id).get().to_dict() or {}
-            target = session.get('conversation_id')
-        if target is not None and not isinstance(target, str):
-            raise ValueError('invalid registered conversation identity')
+        target = resolve_target(uid, conversation_id, recording_session_id, firestore_client=store.client)
         return (target, user.collection('conversations').document(target).get()) if target else (None, None)
 
     snapshot = None
@@ -371,6 +367,9 @@ async def registered_record_response(
                 'detail': 'Capture is unavailable for server processing',
             },
         )
+    from utils.batch_pipeline.record_lease_append import retain_upload
+
+    await retain_upload(uid, conversation_id, row, paths, store)
     if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
         status = await run_blocking(db_executor, durable_status, store, uid, prior['job_id'])
         return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING, content)
