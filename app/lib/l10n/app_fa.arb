@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "ضبط‌ها متوقف شده‌اند",
     "activityAttentionUploadStalledTitle": "بارگذاری متوقف شده",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 ضبط در انتظار} other{{count} ضبط در انتظار}}",
+    "attentionRerunNotes": "ایجاد دوباره یادداشت‌ها",
     "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد",
     "activityAttentionSemantics": "فعالیت، نیاز به توجه",
     "connectAgentHeadline": "از حافظهٔ Omi خود در ChatGPT و عامل‌های هوش مصنوعی‌تان استفاده کنید",

@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -35,7 +36,11 @@ def test_local_http_batch_archive_acceptance(client, auth_headers, monkeypatch, 
     monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'standard')
     monkeypatch.setattr(router, 'start_background_task', hold_pipeline)
     monkeypatch.setattr(router, 'get_hard_restriction_status', lambda uid: (False, None))
-    monkeypatch.setattr(router, 'has_transcription_credits', lambda uid: True)
+    monkeypatch.setattr(
+        router,
+        'resolve_transcription_allowance',
+        lambda uid: SimpleNamespace(managed=True, reason='plan_within_allowance'),
+    )
     monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
     monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
     if archive_fails:

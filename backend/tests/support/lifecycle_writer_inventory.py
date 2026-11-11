@@ -3152,6 +3152,7 @@ FIELD_SITES = {
             'composed_fingerprint',
             'fingerprint(members)',
             (
+                'compose_deferred_at',
                 'composed_fingerprint',
                 'composed_member_ids',
                 'composed_notes',
@@ -3164,6 +3165,7 @@ FIELD_SITES = {
             'composed_fingerprint',
             'print_',
             (
+                'compose_deferred_at',
                 'compose_failures',
                 'composed_at',
                 'composed_fingerprint',
@@ -3174,10 +3176,30 @@ FIELD_SITES = {
                 'usage',
             ),
         ),
+        (
+            '_write_single_member.finish',
+            'composed_fingerprint',
+            'print_',
+            (
+                'compose_deferred_at',
+                'compose_failures',
+                'composed_at',
+                'composed_fingerprint',
+                'composed_member_ids',
+                'composed_notes',
+                'composer_version',
+                'summary_needs_regeneration',
+            ),
+        ),
     ],
     'utils/episodes/home_read.py': [
         ('project_episode', 'status', "'completed'", ('status',)),
-        ('project_episode', 'status', 'status', ('emoji', 'finished_at', 'id', 'started_at', 'status', 'title')),
+        (
+            'project_episode',
+            'status',
+            'status',
+            ('emoji', 'finished_at', 'gist', 'id', 'started_at', 'status', 'title'),
+        ),
     ],
     'utils/episodes/service.py': [
         ('_close', 'status', "'dropped'", ('status',)),
@@ -3253,6 +3275,7 @@ FIELD_SITES = {
                 'bullets',
                 'close_reason',
                 'closed_at',
+                'compose_deferred',
                 'conversation_ids',
                 'follow_ups',
                 'id',
@@ -3884,6 +3907,13 @@ FIELD_SITES = {
             "loop.get('status')",
             ('age_days', 'due', 'history', 'kind', 'loop_id', 'opened_on', 'status', 'times_surfaced', 'what', 'who'),
         ),
+    ],
+    # Account-wipe results, not conversation lifecycle writes. The conservative
+    # inventory also tracks response maps containing a status key.
+    'utils/other/lake_wipe.py': [
+        ('destroy_owner_lake_keys', 'status', "'destroyed'", ('status', 'versions_destroyed')),
+        ('purge_owner_lake_content', 'status', "'noop'", ('status',)),
+        ('purge_owner_lake_content', 'status', "'purged'", ('candidates_deleted', 'objects_deleted', 'status')),
     ],
     'utils/other/daily_recap.py': [
         ('_state', 'status', 'status', ('created_at', 'date', 'generated_at', 'status')),

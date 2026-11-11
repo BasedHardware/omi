@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "Posnetki so pavzirani",
     "activityAttentionUploadStalledTitle": "Nalaganje se je ustavilo",
     "activityAttentionUploadRecordings": "{count, plural, =1{Čaka 1 posnetek} other{Čaka {count} posnetkov}}",
+    "attentionRerunNotes": "Znova ustvari zapiske",
     "attentionSummaryFailed": "Tega pogovora ni bilo mogoče povzeti",
     "activityAttentionSemantics": "Dejavnost, zahteva pozornost",
     "connectAgentHeadline": "Uporabljajte svoj spomin Omi v ChatGPT in svojih agentih UI",

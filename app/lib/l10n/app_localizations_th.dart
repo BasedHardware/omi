@@ -13586,6 +13586,9 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'สร้างบันทึกอีกครั้ง';
+
+  @override
   String get attentionSummaryFailed => 'ไม่สามารถสรุปบทสนทนานี้ได้';
 
   @override

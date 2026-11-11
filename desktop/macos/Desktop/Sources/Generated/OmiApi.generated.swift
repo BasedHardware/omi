@@ -5793,6 +5793,7 @@ public enum OmiAPI {
     public let category: CategoryEnum?
     public let emoji: String?
     public let events: [Event]?
+    public let gist: String?
     public let insights: [Insight]?
     public let meetingType: String?
     public let noteClaims: [NoteClaim]?
@@ -5807,6 +5808,7 @@ public enum OmiAPI {
       case category
       case emoji
       case events
+      case gist
       case insights
       case meetingType = "meeting_type"
       case noteClaims = "note_claims"
@@ -5823,6 +5825,7 @@ public enum OmiAPI {
       category = try c.decodeIfPresent(CategoryEnum.self, forKey: .category)
       emoji = try c.decodeIfPresent(String.self, forKey: .emoji)
       events = try c.decodeIfPresent([Event].self, forKey: .events)
+      gist = try c.decodeIfPresent(String.self, forKey: .gist)
       insights = try c.decodeIfPresent([Insight].self, forKey: .insights)
       meetingType = try c.decodeIfPresent(String.self, forKey: .meetingType)
       noteClaims = try c.decodeIfPresent([NoteClaim].self, forKey: .noteClaims)
@@ -5833,11 +5836,12 @@ public enum OmiAPI {
       title = try c.decodeIfPresent(String.self, forKey: .title)
     }
 
-    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, insights: [Insight]? = nil, meetingType: String? = nil, noteClaims: [NoteClaim]? = nil, overview: String? = nil, participants: [Participant]? = nil, salience: String? = nil, sections: [Section]? = nil, title: String? = nil) {
+    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, gist: String? = nil, insights: [Insight]? = nil, meetingType: String? = nil, noteClaims: [NoteClaim]? = nil, overview: String? = nil, participants: [Participant]? = nil, salience: String? = nil, sections: [Section]? = nil, title: String? = nil) {
       self.actionItems = actionItems
       self.category = category
       self.emoji = emoji
       self.events = events
+      self.gist = gist
       self.insights = insights
       self.meetingType = meetingType
       self.noteClaims = noteClaims

@@ -62,6 +62,7 @@ KNOWN_LEVERS = frozenset(
         'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
         'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=serving replica
         'admission_frontier_hint',  # ship-on: owner activation reads the service frontier outside the txn; 0 restores the txn query
+        'sync_allowance_single_resolve',  # ship-on: one admission answer; 0 restores the legacy two-call race
     }
 )
 
@@ -71,6 +72,7 @@ DEFAULT_PERCENTAGES = {
     'batch_metrics_oldest_leader': 100,
     'batch_timeliness_leader': 100,
     'admission_frontier_hint': 100,
+    'sync_allowance_single_resolve': 100,
 }
 
 

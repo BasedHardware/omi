@@ -13649,6 +13649,9 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Znova vytvoriť poznámky';
+
+  @override
   String get attentionSummaryFailed => 'Tento rozhovor sa nepodarilo zhrnúť';
 
   @override

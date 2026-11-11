@@ -16486,6 +16486,10 @@
             }
         }
     },
+    "attentionRerunNotes": "Re-run notes",
+    "@attentionRerunNotes": {
+        "description": "Activity Needs attention button: retry notes only, preserving saved tasks and events"
+    },
     "attentionSummaryFailed": "Couldn't summarize this conversation",
     "@attentionSummaryFailed": {
         "description": "Needs attention row: the server gave up summarizing a conversation"

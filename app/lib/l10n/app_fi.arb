@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Tallenteet keskeytetty",
     "activityAttentionUploadStalledTitle": "Lataus on pysähtynyt",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 tallenne odottaa} other{{count} tallennetta odottaa}}",
+    "attentionRerunNotes": "Luo muistiinpanot uudelleen",
     "attentionSummaryFailed": "Tätä keskustelua ei voitu tiivistää",
     "activityAttentionSemantics": "Aktiviteetti, vaatii huomiota",
     "connectAgentHeadline": "Käytä Omi-muistiasi ChatGPT:ssä ja tekoälyagenteissasi",

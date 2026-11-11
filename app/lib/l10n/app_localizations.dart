@@ -24285,6 +24285,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
   String activityAttentionUploadRecordings(int count);
 
+  /// Activity Needs attention button: retry notes only, preserving saved tasks and events
+  ///
+  /// In en, this message translates to:
+  /// **'Re-run notes'**
+  String get attentionRerunNotes;
+
   /// Needs attention row: the server gave up summarizing a conversation
   ///
   /// In en, this message translates to:

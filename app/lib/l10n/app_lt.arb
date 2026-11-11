@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Įrašai pristabdyti",
     "activityAttentionUploadStalledTitle": "Įkėlimas sustojo",
     "activityAttentionUploadRecordings": "{count, plural, =1{Laukia 1 įrašas} other{Laukia {count} įrašų}}",
+    "attentionRerunNotes": "Kurti pastabas iš naujo",
     "attentionSummaryFailed": "Nepavyko apibendrinti šio pokalbio",
     "activityAttentionSemantics": "Veikla, reikalauja dėmesio",
     "connectAgentHeadline": "Naudokite savo Omi atmintį ChatGPT ir savo DI agentuose",

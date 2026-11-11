@@ -13647,6 +13647,9 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Loo märkmed uuesti';
+
+  @override
   String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
 
   @override

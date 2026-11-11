@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి",
     "activityAttentionUploadStalledTitle": "అప్‌లోడ్ ఆగిపోయింది",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 రికార్డింగ్ వేచి ఉంది} other{{count} రికార్డింగ్‌లు వేచి ఉన్నాయి}}",
+    "attentionRerunNotes": "గమనికలను మళ్లీ సృష్టించండి",
     "attentionSummaryFailed": "ఈ సంభాషణను సంగ్రహించలేకపోయాం",
     "activityAttentionSemantics": "యాక్టివిటీ, శ్రద్ధ అవసరం",
     "connectAgentHeadline": "ChatGPT మరియు మీ AI ఏజెంట్లలో మీ Omi మెమరీని ఉపయోగించండి",

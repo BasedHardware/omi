@@ -274,15 +274,37 @@ def test_unknown_provenance_retains_legacy_debt_for_provenance_repair(provenance
     assert client.rows == {'target': row}
 
 
-@pytest.mark.parametrize(
-    'still_refused', [{}, {'user_title': 'Manual'}, {'summary_output_present': True}, {'is_locked': True}]
-)
-@pytest.mark.parametrize('existing_due', [None, 211])
-def test_backfill_cleared_discard_restore_recovers_only_owed_unarmed_debt(monkeypatch, still_refused, existing_due):
+@pytest.fixture(scope='module')
+def restore_deps():
+    # Import these in fixture setup, outside the call-phase CPU budget: the first
+    # import of database.conversations and the lifecycle state table (which scans
+    # source to build FIELD_BUILDERS) costs about a second on CI runners.
     from config.policy import FirstSummaryPolicy
     from database import conversations
     from tests.support.lifecycle_state_table import FIELD_BUILDERS, SUMMARY_DISCARD_RESTORE_WRITERS
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    return SimpleNamespace(
+        FirstSummaryPolicy=FirstSummaryPolicy,
+        conversations=conversations,
+        FIELD_BUILDERS=FIELD_BUILDERS,
+        SUMMARY_DISCARD_RESTORE_WRITERS=SUMMARY_DISCARD_RESTORE_WRITERS,
+        StrictFirestore=StrictFirestore,
+    )
+
+
+@pytest.mark.parametrize(
+    'still_refused', [{}, {'user_title': 'Manual'}, {'summary_output_present': True}, {'is_locked': True}]
+)
+@pytest.mark.parametrize('existing_due', [None, 211])
+def test_backfill_cleared_discard_restore_recovers_only_owed_unarmed_debt(
+    monkeypatch, restore_deps, still_refused, existing_due
+):
+    FirstSummaryPolicy = restore_deps.FirstSummaryPolicy
+    conversations = restore_deps.conversations
+    FIELD_BUILDERS = restore_deps.FIELD_BUILDERS
+    SUMMARY_DISCARD_RESTORE_WRITERS = restore_deps.SUMMARY_DISCARD_RESTORE_WRITERS
+    StrictFirestore = restore_deps.StrictFirestore
 
     path = ('users', 'synthetic', 'conversations', 'target')
     row = {

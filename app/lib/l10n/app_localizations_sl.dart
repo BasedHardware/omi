@@ -13683,6 +13683,9 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Znova ustvari zapiske';
+
+  @override
   String get attentionSummaryFailed => 'Tega pogovora ni bilo mogoče povzeti';
 
   @override

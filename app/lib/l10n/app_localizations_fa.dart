@@ -13649,6 +13649,9 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'ایجاد دوباره یادداشت‌ها';
+
+  @override
   String get attentionSummaryFailed => 'خلاصه‌سازی این گفتگو ممکن نشد';
 
   @override

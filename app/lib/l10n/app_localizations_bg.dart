@@ -13701,6 +13701,9 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Повторно генериране на бележки';
+
+  @override
   String get attentionSummaryFailed => 'Този разговор не можа да бъде обобщен';
 
   @override

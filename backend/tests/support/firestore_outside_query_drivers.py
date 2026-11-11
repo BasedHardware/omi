@@ -564,3 +564,25 @@ _driver(
     profile='operational-stalled-enrichment-redrive',
     serving=False,
 )
+
+# Required account erasure includes abandoned lake upload intents; a single
+# collection field range uses Firestore's automatic ascending key index.
+_driver(
+    'utils.other.object_lake.delete_space_upload_candidates',
+    base={'space_id': UID},
+    profile='maintenance-lake-account-erasure',
+    serving=False,
+)
+_driver(
+    'utils.other.object_lake.assert_space_uploads_quiescent',
+    base={'space_id': UID},
+    profile='maintenance-lake-erasure-quiescence',
+    serving=False,
+)
+
+_driver(
+    'utils.other.object_lake.delete_entity_upload_candidates',
+    base={'space_id': UID, 'entity_id': 'conversation-1'},
+    profile='maintenance-lake-conversation-erasure',
+    serving=False,
+)
