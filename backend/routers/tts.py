@@ -371,9 +371,7 @@ async def tts_synthesize(
             # Allow local/dev fallback when Gemini is unavailable but a direct
             # provider is configured and the request is a standard MP3 format.
             if os.getenv('ELEVENLABS_API_KEY') or os.getenv('DEEPGRAM_API_KEY'):
-                return await _stream_direct_tts(
-                    uid=uid, req=req, text=text, voice_id=voice_id, char_count=char_count
-                )
+                return await _stream_direct_tts(uid=uid, req=req, text=text, voice_id=voice_id, char_count=char_count)
             raise HTTPException(status_code=503, detail="TTS service not configured") from exc
         except TtsUpstreamError as exc:
             raise HTTPException(status_code=exc.status_code, detail="TTS upstream error") from exc

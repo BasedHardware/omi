@@ -74,6 +74,16 @@ describe('routeWithProvider composition', () => {
     const out = await routeWithProvider('', fixed('chat'))
     expect(out.decision).toEqual({ kind: 'chat', text: '' })
   })
+
+  it('preserves hard negation and never falls back to creating the denied action', async () => {
+    const provider: RouteProvider = {
+      route: async () => ({ route: 'create_reminder', margin: 0.8, declined: true, negated: true }),
+    }
+    const out = await routeWithProvider('do not remind me to call mom in 5 minutes', provider)
+    expect(out.source).toBe('router')
+    expect(out.decision).toEqual({ kind: 'chat', text: 'do not remind me to call mom in 5 minutes' })
+    expect(out.negated).toBe(true)
+  })
 })
 
 describe('prototype bank', () => {

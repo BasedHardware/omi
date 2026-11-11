@@ -49,6 +49,15 @@ export async function answerLocally(text: string): Promise<AssistantAnswer> {
   // a real identity yet.
   const speakers = await knownSpeakers();
   const speaker = detectSpeaker(q, speakers);
+  const explicitSpeakerMention = detectExplicitSpeakerMention(q, speakers);
+  if (explicitSpeakerMention && !speaker) {
+    return {
+      text: `I can't tell which recorded speaker is "${explicitSpeakerMention}" on this device yet, so I won't guess and attribute someone else's words to them.`,
+      kind: 'empty',
+      hits: [],
+      speakerHint: explicitSpeakerMention,
+    };
+  }
   const topic = stripQuestion(q, speaker);
 
   const wantsRecall =
@@ -111,11 +120,9 @@ export async function answerLocally(text: string): Promise<AssistantAnswer> {
     };
   }
 
+  // Non-recall informational query with strong local evidence: summarize closest match.
   return {
-    text: `Closest thing you said about "${topic}":\n\n${hits
-      .slice(0, 3)
-      .map((h) => `${h.speaker}: "${h.text}"`)
-      .join('\n')}`,
+    text: `Closest thing on this device: ${best.speaker}: "${best.text}"`,
     kind: 'summary',
     hits,
     speakerHint: speaker,
@@ -141,6 +148,26 @@ export function detectSpeaker(query: string, known: string[]): string | undefine
   return undefined;
 }
 
+/** Detects an explicit person reference in recall-style questions when unresolved. */
+export function detectExplicitSpeakerMention(query: string, known: string[]): string | undefined {
+  const q = query.trim();
+  const patterns = [
+    /\bwhat\s+did\s+([A-Za-z][A-Za-z0-9_']*)\s+(?:say|says|said)\b/i,
+    /\bdid\s+([A-Za-z][A-Za-z0-9_']*)\s+(?:say|says|said)\b/i,
+    /\bwhat\s+does\s+([A-Za-z][A-Za-z0-9_']*)\s+(?:say|think)\b/i,
+  ];
+  for (const p of patterns) {
+    const m = q.match(p);
+    const name = m?.[1]?.trim();
+    if (!name) continue;
+    const lower = name.toLowerCase();
+    if (['i', 'you', 'we', 'they', 'he', 'she'].includes(lower)) continue;
+    if (known.some((k) => k.toLowerCase() === lower || q.toLowerCase().includes(k.toLowerCase()))) continue;
+    return name;
+  }
+  return undefined;
+}
+
 /** Removes the question scaffolding, leaving the topic to search for. */
 export function stripQuestion(query: string, speaker?: string): string {
   let q = query.trim();
@@ -160,15 +187,13 @@ export function stripQuestion(query: string, speaker?: string): string {
     q = q.replace(p, '');
   }
 
-  // The important one: "<name> say|says|said|told me <rest>". Stripping this is
-  // what turns "what did marco say about bread" into "bread". Without it the
-  // topic kept the name and the verb, neither of which appears in what was
-  // actually said, so term coverage collapsed and every question looked like a
-  // miss. A test caught exactly that.
-  q = q.replace(/\b[A-Za-z0-9_']+\s+(?:say|says|said|tell me|told me)\b/gi, ' ');
-
+  // "what did marco say about bread" -> "bread". If speaker was resolved we can
+  // remove its label safely; if unresolved, still strip the recall subject verb so
+  // topic extraction works while unresolved-speaker detection happens separately.
+  q = q.replace(/^\s*([A-Za-z][A-Za-z0-9_']*(?:\s+\d+)?)\s+(?:say|says|said|tell me|told me)\b/i, ' ');
   if (speaker) {
     const escaped = speaker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    q = q.replace(new RegExp(`\\b${escaped}\\s+(?:say|says|said|tell me|told me)\\b`, 'ig'), ' ');
     q = q.replace(new RegExp(`\\b${escaped}\\b`, 'ig'), ' ');
   }
 

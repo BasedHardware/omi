@@ -262,6 +262,14 @@ abstract class Env {
   static bool get useWebAuth => _instance.useWebAuth ?? false;
 
   static bool get useAuthCustomToken => _instance.useAuthCustomToken ?? false;
+
+  static String get agentProxyWsUrl {
+    final base = apiBaseUrl ?? productionApiBaseUrl;
+    final uri = Uri.tryParse(base);
+    if (uri == null || uri.host.isEmpty) return 'wss://api.omi.me/v1/agent/chat';
+    final wsScheme = uri.scheme == 'http' ? 'ws' : 'wss';
+    return uri.replace(scheme: wsScheme, path: '/v1/agent/chat', query: '', fragment: '').toString();
+  }
 }
 
 abstract class EnvFields {

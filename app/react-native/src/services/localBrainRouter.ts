@@ -55,12 +55,14 @@ export type Route = 'create_task' | 'create_reminder' | 'chat'
  */
 export interface RouteProvider {
   /** Resolves the utterance to one of `Route`, or null if it declined. */
-  route(text: string): Promise<{ route: RouterRoute; margin: number; declined: boolean } | null>
+  route(
+    text: string
+  ): Promise<{ route: RouterRoute; margin: number; declined: boolean; negated?: boolean } | null>
 }
 
 export type RouteOutcome =
-  | { source: 'router'; decision: AgentAction; margin: number }
-  | { source: 'heuristic'; decision: AgentAction; reason: string }
+  | { source: 'router'; decision: AgentAction; margin: number; negated?: boolean }
+  | { source: 'heuristic'; decision: AgentAction; reason: string; negated?: boolean }
 
 /**
  * Routes with `provider`, then fills slots with the existing heuristics.
@@ -84,13 +86,17 @@ export async function routeWithProvider(
 
   if (!provider) return fallback('no provider')
 
-  let routed: { route: RouterRoute; margin: number; declined: boolean } | null = null
+  let routed: { route: RouterRoute; margin: number; declined: boolean; negated?: boolean } | null = null
   try {
     routed = await provider.route(text)
   } catch {
     return fallback('provider threw')
   }
   if (!routed) return fallback('provider returned null')
+  if (routed.negated) {
+    // Hard veto: "do not remind me..." must never become the denied action.
+    return { source: 'router', decision: { kind: 'chat', text }, margin: routed.margin, negated: true }
+  }
   if (routed.declined) return fallback(`declined (margin ${routed.margin.toFixed(3)})`)
 
   // no_action is the router's own "this is not one of my routes" answer, and it

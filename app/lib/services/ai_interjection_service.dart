@@ -64,11 +64,7 @@ class AiInterjectionService {
   }
 
   String _sanitizeTranscript(String transcript) {
-    return transcript
-        .replaceAll('\n', ' ')
-        .replaceAll('\r', ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    return transcript.replaceAll('\n', ' ').replaceAll('\r', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   void _onPauseDetected() {

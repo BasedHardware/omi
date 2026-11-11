@@ -63,8 +63,7 @@ export async function warmUp(
     // right to. Configuring here rather than lazily inside route() is what lets the
     // load happen without pretending to route anything.
     await native.configure(prototypes, outOfDomain)
-    await native.warmUp()
-    return true
+    return await native.warmUp()
   } catch {
     return false
   }
@@ -81,7 +80,7 @@ export function createNativeRouter(
       configured ??= native.configure(prototypes, outOfDomain)
       await configured
       const r = await native.route(text)
-      return { route: r.route, margin: r.margin, declined: r.declined }
+      return { route: r.route, margin: r.margin, declined: r.declined, negated: r.negated }
     },
   }
 }

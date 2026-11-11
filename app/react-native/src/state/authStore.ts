@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { observeAuth, signOut, signInWithGoogle, signInWithApple } from '@/auth/firebaseAuth';
 import { setAuthToken } from '@/api/omiApi';
 import { DEV_AUTH_TOKEN, DEV_BYPASS_AUTH, DEV_UID } from '@/devFlags';
+import { resetLocalConversationsCache, setActiveLocalConversationOwnerScope } from '@/services/localConversations';
 
 /**
  * Marks the session created by loginWithoutAccount(). Anything that must not talk
@@ -38,11 +39,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (DEV_BYPASS_AUTH && DEV_AUTH_TOKEN) {
       setAuthToken(DEV_AUTH_TOKEN);
       set({ uid: DEV_UID, token: DEV_AUTH_TOKEN, loading: false, isDemo: false, error: null });
+      setActiveLocalConversationOwnerScope(`account:${DEV_UID}`);
       console.warn('[auth] DEV_BYPASS_AUTH active — using local dev token, Firebase auth skipped');
       return () => {};
     }
     const unsub = observeAuth((uid, token) => {
       set({ uid, token, loading: false, isDemo: false });
+      setActiveLocalConversationOwnerScope();
     });
     return () => {
       unsub();
@@ -79,10 +82,14 @@ export const useAuthStore = create<AuthState>((set) => ({
    * the honest behaviour for a session that does not exist.
    */
   loginWithoutAccount: () => {
+    resetLocalConversationsCache();
     set({ uid: DEMO_UID, token: null, isDemo: true, loading: false, error: null });
+    setActiveLocalConversationOwnerScope('guest:demo');
   },
   logout: async () => {
+    resetLocalConversationsCache();
     await signOut();
     set({ uid: null, token: null, isDemo: false });
+    setActiveLocalConversationOwnerScope('guest:anon');
   },
 }));

@@ -9,6 +9,7 @@ import {
   searchLocal,
   knownSpeakers,
   listConversations,
+  resetLocalConversationsCache,
 } from './localConversations';
 import { answerLocally, stripQuestion, detectSpeaker } from './localAssistant';
 
@@ -16,12 +17,20 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+const authState = { uid: null as string | null, isDemo: false, token: null as string | null };
+jest.mock('@/state/authStore', () => ({
+  DEMO_UID: 'local-demo-user',
+  useAuthStore: {
+    getState: () => authState,
+  },
+}));
+
 beforeEach(async () => {
-  (AsyncStorage as unknown as { clear: () => Promise<void> }).clear();
-  const { _resetCacheForTests } = require('./localConversations') as {
-    _resetCacheForTests?: () => void;
-  };
-  _resetCacheForTests?.();
+  await (AsyncStorage as unknown as { clear: () => Promise<void> }).clear();
+  authState.uid = null;
+  authState.isDemo = false;
+  authState.token = null;
+  resetLocalConversationsCache();
 });
 
 async function seed() {
@@ -61,6 +70,31 @@ describe('local conversation store', () => {
     const hits = await searchLocal('bread');
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0]?.text).toMatch(/brown bread/);
+  });
+
+  it('isolates transcripts by account and guest session across logout', async () => {
+    authState.uid = 'user-a';
+    authState.isDemo = false;
+    await appendSegments([{ text: 'account A private quote', speaker: 'You', isUser: true, start: 0 }], 'mic');
+    expect((await searchLocal('private quote')).length).toBeGreaterThan(0);
+
+    // logout -> guest/anon scope must not see A
+    authState.uid = null;
+    authState.isDemo = false;
+    resetLocalConversationsCache();
+    expect(await searchLocal('private quote')).toEqual([]);
+
+    // login as B must not see A
+    authState.uid = 'user-b';
+    authState.isDemo = false;
+    resetLocalConversationsCache();
+    expect(await searchLocal('private quote')).toEqual([]);
+
+    // guest demo session is separate
+    authState.uid = 'local-demo-user';
+    authState.isDemo = true;
+    resetLocalConversationsCache();
+    expect(await searchLocal('private quote')).toEqual([]);
   });
 
   it('filters by speaker', async () => {
@@ -108,6 +142,14 @@ describe('answerLocally', () => {
     expect(a.text).not.toMatch(/\d+\s*(degrees|°|celsius|fahrenheit)/i);
   });
 
+  it('does not guess an unresolved explicit speaker mention', async () => {
+    await seed();
+    const a = await answerLocally('what did marco say about bread');
+    expect(a.kind).toBe('empty');
+    expect(a.text).toMatch(/can't tell which recorded speaker is "marco"/i);
+    expect(a.text).not.toMatch(/Other 1: "can you pick up brown bread/);
+  });
+
   it('flags a weak match as uncertain rather than presenting it as the answer', async () => {
     await appendSegments(
       [{ text: 'the weather is quite nice today', speaker: 'You', isUser: true, start: 0 }],
@@ -115,23 +157,23 @@ describe('answerLocally', () => {
     );
     // One of three content words appears: coverage 0.33, below the bar. It must
     // surface as "closest was", not as the answer.
-    const a = await answerLocally('what did they say about bread and weather and taxes');
+    const a = await answerLocally('what was said about bread and weather and taxes');
     expect(a.kind).toBe('empty');
     expect(a.text).toMatch(/Closest was/);
   });
 
-  it('reports which speaker label it used, so a name miss is visible', async () => {
+  it('explains when an explicit speaker name cannot be resolved', async () => {
     await seed();
     const a = await answerLocally('what did marco say about bread');
-    // "marco" is not a label anyone has, so the filter cannot apply -- and saying
-    // so beats silently searching every speaker.
-    expect(a.speakerHint).toBeUndefined();
-    expect(a.text.length).toBeGreaterThan(0);
+    expect(a.kind).toBe('empty');
+    expect(a.speakerHint).toBe('marco');
+    expect(a.text).toMatch(/can't tell which recorded speaker is "marco"/i);
   });
 
   it('uses a matching speaker label when one exists', async () => {
     await seed();
     const a = await answerLocally('what did Other 1 say about bread');
+    expect(a.kind).toBe('quote');
     expect(a.speakerHint).toBe('Other 1');
   });
 });

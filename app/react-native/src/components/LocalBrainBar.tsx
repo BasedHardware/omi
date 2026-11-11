@@ -17,6 +17,7 @@ import {
   getCallPermissions,
   requestCallPermissions,
   startCallDetection,
+  stopCallDetection,
   answerCall,
   hangUp,
   type CallState,
@@ -112,21 +113,28 @@ export function LocalBrainBar({
   useEffect(() => {
     if (!isCallDetectionAvailable || !isSupportedPlatform) return
     let cancelled = false
+    let started = false
     // Ask, then listen. Both prompts are runtime grants and either can be
     // revoked, so this re-checks rather than assuming.
     requestCallPermissions()
-      .then((p) => {
+      .then(async (p) => {
         if (cancelled) return
         setCanAnswer(p.canAnswer)
         if (!p.canDetect) return
-        return startCallDetection((s) => {
+        started = await startCallDetection((s) => {
+          if (cancelled) return
           setRinging(s === 'ringing')
           onCallState?.(s)
         })
+        if (cancelled && started) {
+          await stopCallDetection()
+        }
       })
       .catch(() => undefined)
     return () => {
       cancelled = true
+      void stopCallDetection().catch(() => undefined)
+      setRinging(false)
     }
   }, [onCallState])
 
@@ -141,17 +149,17 @@ export function LocalBrainBar({
     ready: styles.dotOn,
   }
 
-  const onToggleCalls = useCallback(async () => {
-    if (ringing) {
-      const ok = await hangUp()
-      setRinging(!ok)
-    }
-  }, [ringing])
+  const onDecline = useCallback(async () => {
+    if (!canAnswer) return
+    const ok = await hangUp()
+    if (ok) setRinging(false)
+  }, [canAnswer])
 
   const onAnswer = useCallback(async () => {
+    if (!canAnswer) return
     const ok = await answerCall()
     if (ok) setRinging(false)
-  }, [])
+  }, [canAnswer])
 
   return (
     <View>
@@ -159,25 +167,26 @@ export function LocalBrainBar({
         <View style={styles.ringBar}>
           <Text style={styles.ringText}>Incoming call</Text>
           <View style={styles.ringActions}>
-            <TouchableOpacity
-              style={[styles.ringBtn, styles.ringDecline]}
-              onPress={onToggleCalls}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.ringBtnText}>Decline</Text>
-            </TouchableOpacity>
             {canAnswer ? (
-              <TouchableOpacity
-                style={[styles.ringBtn, styles.ringAccept]}
-                onPress={onAnswer}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.ringBtnText}>Answer</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={[styles.ringBtn, styles.ringDecline]}
+                  onPress={onDecline}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.ringBtnText}>Decline</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.ringBtn, styles.ringAccept]}
+                  onPress={onAnswer}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.ringBtnText}>Answer</Text>
+                </TouchableOpacity>
+              </>
             ) : (
-              // Answering needs a grant. Saying so beats a button that silently
-              // does nothing.
-              <Text style={styles.ringNeedsPerm}>answering needs permission</Text>
+              // Answering/ending needs a grant. Saying so beats buttons that silently fail.
+              <Text style={styles.ringNeedsPerm}>call control needs permission</Text>
             )}
           </View>
         </View>
@@ -192,11 +201,11 @@ export function LocalBrainBar({
         <Text style={styles.label}>{label[state]}</Text>
         {trace ? (
           <View style={styles.traceWrap}>
-        <Text style={styles.trace}>
-            {trace.source === 'router' ? 'routed' : 'heuristic'} ·{' '}
-            {trace.route.replace('create_', '')} · m{trace.margin.toFixed(2)}
-          </Text>
-        </View>
+            <Text style={styles.trace}>
+              {trace.source === 'router' ? 'routed' : 'heuristic'} ·{' '}
+              {trace.route.replace('create_', '')} · m{trace.margin.toFixed(2)}
+            </Text>
+          </View>
         ) : null}
         <Text style={styles.chevron}>{showDetail ? '▾' : '▸'}</Text>
       </TouchableOpacity>

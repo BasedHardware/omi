@@ -13,7 +13,7 @@ describe('omiStreamParams', () => {
     expect(omiStreamParams('opusFS320')).toEqual({
       codec: 'opus_fs320',
       sample_rate: '16000',
-      channels: '2',
+      channels: '1',
       language: 'multi',
     });
   });

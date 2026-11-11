@@ -17,9 +17,7 @@ class AiInterjectionIndicator extends StatelessWidget {
           key: const Key('ai_interjection_indicator'),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: provider.isInterjecting
-                ? Colors.green.withValues(alpha: 0.15)
-                : Colors.grey.withValues(alpha: 0.1),
+            color: provider.isInterjecting ? Colors.green.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(

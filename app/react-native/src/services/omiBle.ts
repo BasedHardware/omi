@@ -125,13 +125,14 @@ export function sttCodecName(codec: OmiCodec): string | null {
 }
 
 /**
- * Channel count the backend expects. Flutter sends 2 for opus and 1 for pcm
- * (capture_controller.dart), which is a quirk rather than a derivation -- there
- * is nothing wrong with single-channel opus -- but the backend is written against
- * it, so matching it is what works.
+ * Channel count the backend expects.
+ *
+ * Phone-mic/backend quirks historically used 2 for opus in some paths, but the
+ * DevKit wearable BLE audio notifications are mono packets and the review/compat
+ * contract for this RN path requires mono protocol (no channel-ID activation).
  */
 export function sttChannels(codec: OmiCodec): 1 | 2 {
-  return codec === 'opus' || codec === 'opusFS320' ? 2 : 1;
+  return codec === 'opus' || codec === 'opusFS320' ? 1 : 1;
 }
 
 /**
@@ -379,21 +380,15 @@ export class OmiBle {
   /**
    * Subscribes to the device's audio notifications.
    *
-   * This hands raw firmware bytes to `onBytes` and does not decode them. The
-   * backend expects the codec declared and 16 kHz for all of them, so the next
-   * step is to forward these chunks to the same websocket the phone mic uses --
-   * not to unpack PCM here.
+   * This hands codec payload bytes to `onBytes` (firmware transport header stripped)
+   * and does not decode them. The backend expects the codec declared and 16 kHz.
    *
    * Always replaces any existing audio subscription first: react-native-ble-plx
    * cancels the displaced native monitor, which would otherwise surface as a
-   * spurious "Operation was cancelled" error to the previous consumer (e.g. the
-   * dev "Start audio" counter vs capture/STT).
+   * spurious "Operation was cancelled" error to the previous consumer.
    */
   onAudio(onBytes: (bytes: Uint8Array) => void, onError?: (e: unknown) => void): void {
     const d = this.requireDevice();
-    // Tear down any existing monitor first to avoid duplicate native
-    // subscriptions (which previously caused "Operation was cancelled" on the
-    // displaced handler). Clearing the ref before remove() prevents races.
     const prev = this.audioSub;
     this.audioSub = null;
     prev?.remove();
@@ -414,7 +409,6 @@ export class OmiBle {
                 ? error.message || String(error)
                 : String(anyErr.message ?? error);
           this.lastAudioError = msg;
-          // Drop the dead monitor so a reconnect/retry can re-subscribe cleanly.
           this.audioSub = null;
           try {
             sub.remove();
@@ -426,7 +420,9 @@ export class OmiBle {
         }
         if (!chunk || !chunk.value) return;
         if (this.audioSub !== sub) return;
-        onBytes(fromBase64(chunk.value));
+        const payload = stripWearableAudioEnvelope(fromBase64(chunk.value));
+        if (!payload) return;
+        onBytes(payload);
       }
     );
     this.audioSub = sub;
@@ -582,7 +578,18 @@ export function omiStreamParams(codec: OmiCodec): Record<string, string> | null 
   return {
     codec: wire,
     sample_rate: String(SAMPLE_RATE),
-    channels: String(sttChannels(codec)),
+    // Wearable BLE stream is mono; using 2 activates channel-ID protocol mismatches.
+    channels: '1',
     language: 'multi',
   };
+}
+
+/**
+ * DevKit wearable audio notifications include a 3-byte transport envelope/header
+ * before codec payload bytes. The first byte is a packet counter (not a channel ID).
+ * Returns null for malformed/too-short packets so callers can drop them safely.
+ */
+export function stripWearableAudioEnvelope(packet: Uint8Array): Uint8Array | null {
+  if (packet.byteLength <= 3) return null;
+  return packet.subarray(3);
 }

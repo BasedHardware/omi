@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DEMO_UID, useAuthStore } from '@/state/authStore';
 
 /**
  * Conversations on the device.
@@ -49,13 +50,22 @@ export interface SearchHit {
   score: number;
 }
 
-const KEY = 'local.conversations.v1';
+const STORAGE_KEY_PREFIX = 'local.conversations.v2.';
+const LEGACY_STORAGE_KEY = 'local.conversations.v1';
 /** A run of segments with a gap this large starts a new conversation. */
 const CONVERSATION_GAP_MS = 5 * 60 * 1000;
 /** Conversations kept on device. Old audio is cheap to drop and not free to keep. */
 const MAX_CONVERSATIONS = 200;
 
-let cache: StoredConversation[] | null = null;
+type ScopeState = {
+  cache: StoredConversation[] | null;
+  loadPromise: Promise<StoredConversation[]> | null;
+};
+
+const scopeStates = new Map<string, ScopeState>();
+let activeScope: string | null = null;
+let scopeGeneration = 0;
+let legacyMigrationPromise: Promise<void> | null = null;
 
 function nowMs(): number {
   return Date.now();
@@ -65,24 +75,109 @@ function newId(): string {
   return `lc_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function load(): Promise<StoredConversation[]> {
-  if (cache) return cache;
-  try {
-    const raw = await AsyncStorage.getItem(KEY);
-    const parsed = raw ? (JSON.parse(raw) as StoredConversation[]) : [];
-    cache = Array.isArray(parsed) ? parsed : [];
-  } catch {
-    // Corrupt or unreadable storage must not take the app down; start empty rather
-    // than throwing out of a capture path.
-    cache = [];
-  }
-  return cache;
+function resolveOwnerScope(): string {
+  const { uid, isDemo } = useAuthStore.getState();
+  if (uid && !isDemo) return `account:${uid}`;
+  if (isDemo || uid === DEMO_UID) return 'guest:demo';
+  if (uid) return `guest:${uid}`;
+  return 'guest:anon';
 }
 
-async function persist(list: StoredConversation[]): Promise<void> {
-  cache = list;
+function keyForScope(scope: string): string {
+  return `${STORAGE_KEY_PREFIX}${encodeURIComponent(scope)}`;
+}
+
+function getScopeState(scope: string): ScopeState {
+  let st = scopeStates.get(scope);
+  if (!st) {
+    st = { cache: null, loadPromise: null };
+    scopeStates.set(scope, st);
+  }
+  return st;
+}
+
+async function migrateLegacyIfNeeded(): Promise<void> {
+  if (legacyMigrationPromise) return legacyMigrationPromise;
+  legacyMigrationPromise = (async () => {
+    try {
+      const legacy = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy == null) return;
+      const targetScope = resolveOwnerScope();
+      const targetKey = keyForScope(targetScope);
+      const existing = await AsyncStorage.getItem(targetKey);
+      if (existing == null) {
+        await AsyncStorage.setItem(targetKey, legacy);
+      }
+      await AsyncStorage.removeItem(LEGACY_STORAGE_KEY);
+      const st = getScopeState(targetScope);
+      st.cache = null;
+      st.loadPromise = null;
+    } catch (e) {
+      console.warn('[localConversations] legacy migration failed:', e);
+    } finally {
+      legacyMigrationPromise = null;
+    }
+  })();
+  return legacyMigrationPromise;
+}
+
+export function setActiveLocalConversationOwnerScope(scope?: string): void {
+  const next = scope ?? resolveOwnerScope();
+  if (next === activeScope) return;
+  activeScope = next;
+  scopeGeneration++;
+  // Keep only active scope in process memory to prevent cross-owner leakage.
+  for (const k of Array.from(scopeStates.keys())) {
+    if (k !== next) scopeStates.delete(k);
+  }
+}
+
+export function resetLocalConversationsCache(): void {
+  scopeStates.clear();
+  activeScope = null;
+  scopeGeneration++;
+}
+
+function currentScopeAndGen(): { scope: string; gen: number } {
+  const scope = resolveOwnerScope();
+  setActiveLocalConversationOwnerScope(scope);
+  return { scope, gen: scopeGeneration };
+}
+
+function isStale(scope: string, gen: number): boolean {
+  return gen !== scopeGeneration || resolveOwnerScope() !== scope;
+}
+
+async function load(scope = resolveOwnerScope()): Promise<StoredConversation[]> {
+  await migrateLegacyIfNeeded();
+  setActiveLocalConversationOwnerScope(scope);
+  const st = getScopeState(scope);
+  if (st.cache) return st.cache;
+  if (st.loadPromise) return st.loadPromise;
+  const gen = scopeGeneration;
+  st.loadPromise = (async () => {
+    try {
+      const raw = await AsyncStorage.getItem(keyForScope(scope));
+      const parsed = raw ? (JSON.parse(raw) as StoredConversation[]) : [];
+      const list = Array.isArray(parsed) ? parsed : [];
+      if (!isStale(scope, gen)) st.cache = list;
+      return list;
+    } catch {
+      if (!isStale(scope, gen)) st.cache = [];
+      return st.cache ?? [];
+    } finally {
+      st.loadPromise = null;
+    }
+  })();
+  return st.loadPromise;
+}
+
+async function persist(scope: string, gen: number, list: StoredConversation[]): Promise<void> {
+  const st = getScopeState(scope);
+  st.cache = list;
+  if (isStale(scope, gen)) return;
   try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(list));
+    await AsyncStorage.setItem(keyForScope(scope), JSON.stringify(list));
   } catch (e) {
     console.warn('[localConversations] persist failed:', e);
   }
@@ -102,10 +197,12 @@ export async function appendSegments(
   const final = segments.filter((s) => s.text.trim().length > 0);
   if (final.length === 0) return null;
 
-  const list = await load();
+  const { scope, gen } = currentScopeAndGen();
+  const list = await load(scope);
+  if (isStale(scope, gen)) return null;
+
   const startedAt = nowMs();
   const last = list[list.length - 1];
-
   const continues =
     !!last &&
     last.source === source &&
@@ -125,8 +222,8 @@ export async function appendSegments(
     }));
     last.segments.push(...added);
     last.endedAt = startedAt;
-    await persist(list);
-    return last;
+    await persist(scope, gen, list);
+    return isStale(scope, gen) ? null : last;
   }
 
   const convo: StoredConversation = {
@@ -147,8 +244,8 @@ export async function appendSegments(
   convo.title = deriveTitle(convo);
 
   const next = [...list, convo].slice(-MAX_CONVERSATIONS);
-  await persist(next);
-  return convo;
+  await persist(scope, gen, next);
+  return isStale(scope, gen) ? null : convo;
 }
 
 /** First meaningful words, so a list is scannable before anything is read. */
@@ -160,17 +257,22 @@ export function deriveTitle(convo: StoredConversation): string {
 }
 
 export async function listConversations(): Promise<StoredConversation[]> {
-  const list = await load();
+  const { scope, gen } = currentScopeAndGen();
+  const list = await load(scope);
+  if (isStale(scope, gen)) return [];
   return [...list].reverse();
 }
 
 export async function getConversation(id: string): Promise<StoredConversation | null> {
-  const list = await load();
+  const { scope, gen } = currentScopeAndGen();
+  const list = await load(scope);
+  if (isStale(scope, gen)) return null;
   return list.find((c) => c.id === id) ?? null;
 }
 
 export async function clearAll(): Promise<void> {
-  await persist([]);
+  const { scope, gen } = currentScopeAndGen();
+  await persist(scope, gen, []);
 }
 
 const STOP = new Set([
@@ -206,7 +308,9 @@ export async function searchLocal(
   const wanted = terms(query);
   if (wanted.length === 0) return [];
 
-  const list = await load();
+  const { scope, gen } = currentScopeAndGen();
+  const list = await load(scope);
+  if (isStale(scope, gen)) return [];
   const cutoff = sinceDays ? nowMs() - sinceDays * 86400_000 : 0;
   const speakerNeedle = speaker?.trim().toLowerCase();
   const hits: SearchHit[] = [];
@@ -249,17 +353,22 @@ export async function searchLocal(
 
 /** Distinct speaker labels across stored conversations. */
 export async function knownSpeakers(): Promise<string[]> {
-  const list = await load();
+  const { scope, gen } = currentScopeAndGen();
+  const list = await load(scope);
+  if (isStale(scope, gen)) return [];
   const set = new Set<string>();
   for (const c of list) for (const s of c.segments) set.add(s.speaker);
   return [...set].sort();
 }
 
 export async function totalSegments(): Promise<number> {
-  const list = await load();
+  const { scope, gen } = currentScopeAndGen();
+  const list = await load(scope);
+  if (isStale(scope, gen)) return 0;
   return list.reduce((n, c) => n + c.segments.length, 0);
 }
-/** Test-only: drops the in-memory cache so a suite can start from empty storage. */
+/** Test-only: drops in-memory caches so a suite can start from empty storage. */
 export function _resetCacheForTests(): void {
-  cache = null;
+  resetLocalConversationsCache();
+  legacyMigrationPromise = null;
 }

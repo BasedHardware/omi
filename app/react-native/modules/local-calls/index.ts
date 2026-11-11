@@ -16,9 +16,9 @@ interface LocalCallsNative {
   stop(): Promise<boolean>
   answer(): Promise<boolean>
   endCall(): Promise<boolean>
-  addListener(
-    cb: (event: string, state: CallState, caller: string | null) => void
-  ): { remove(): void }
+  addListener(eventName: 'callState', listener: (event: { state: CallState; caller: string | null }) => void): {
+    remove(): void
+  }
 }
 
 // requireNativeModule THROWS when the module is absent, so it cannot be called
@@ -46,6 +46,8 @@ const NO_PERMISSIONS: CallPermissionState = {
   canDetect: false,
   canAnswer: false,
 }
+
+let callSub: { remove(): void } | null = null
 
 /** What the OS currently permits. Not a prompt. */
 export function getCallPermissions(): Promise<CallPermissionState> {
@@ -79,18 +81,33 @@ export async function startCallDetection(
   onState: (state: CallState, caller: string | null) => void
 ): Promise<boolean> {
   if (!isSupportedPlatform || !native) return false
-  const sub = native.addListener((_e, state, caller) => onState(state, caller))
+  if (callSub) return true
+  const sub = native.addListener('callState', ({ state, caller }) => onState(state, caller ?? null))
+  callSub = sub
   try {
-    await native.start()
+    const started = await native.start()
+    if (!started) {
+      sub.remove()
+      if (callSub === sub) callSub = null
+      return false
+    }
     return true
   } catch {
     sub.remove()
+    if (callSub === sub) callSub = null
     return false
   }
 }
 
 export const stopCallDetection = async (): Promise<void> => {
-  if (isSupportedPlatform && native) await native.stop()
+  if (!isSupportedPlatform || !native) return
+  try {
+    await native.stop()
+  } catch {
+    // ignore
+  }
+  callSub?.remove()
+  callSub = null
 }
 
 /**
@@ -102,8 +119,7 @@ export const stopCallDetection = async (): Promise<void> => {
 export async function answerCall(): Promise<boolean> {
   if (!isSupportedPlatform || !native) return false
   try {
-    await native.answer()
-    return true
+    return (await native.answer()) === true
   } catch {
     return false
   }
@@ -112,8 +128,7 @@ export async function answerCall(): Promise<boolean> {
 export async function hangUp(): Promise<boolean> {
   if (!isSupportedPlatform || !native) return false
   try {
-    await native.endCall()
-    return true
+    return (await native.endCall()) === true
   } catch {
     return false
   }

@@ -28,6 +28,7 @@ class LocalCallsModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("LocalCalls")
+    Events("callState")
 
     AsyncFunction("permissionState") {
       mapOf(
@@ -39,9 +40,8 @@ class LocalCallsModule : Module() {
     }
 
     /**
-     * Starts listening. `onEvent` is invoked as `onEvent("callState", state, caller)`
-     * so JS can subscribe with addListener. Null caller is expected: identifying
-     * the caller needs READ_CALL_LOG, which this does not request.
+     * Starts listening. Emits `callState` events with `{ state, caller }`.
+     * Null caller is expected: identifying the caller needs READ_CALL_LOG.
      */
     AsyncFunction("start") { promise: Promise ->
       val ok =
@@ -73,8 +73,8 @@ class LocalCallsModule : Module() {
     }
 
     AsyncFunction("endCall") { promise: Promise ->
-      val error = detector.endCall()
-      if (error == null) promise.resolve(true) else promise.reject("E_END_CALL", error, null)
+      val result = detector.endCallResult()
+      if (result.ok) promise.resolve(true) else promise.reject("E_END_CALL", result.error ?: "endCall failed", null)
     }
   }
 }

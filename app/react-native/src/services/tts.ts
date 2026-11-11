@@ -218,9 +218,9 @@ async function synthesize(
  */
 async function cacheAudio(bytes: Uint8Array): Promise<string | null> {
   try {
-    const { File, Paths } = require('expo-file-system') as typeof import('expo-file-system');
-    const dir = new File(Paths.cache, 'tts');
-    if (!dir.exists) dir.create({ intermediates: true });
+    const { Directory, File, Paths } = require('expo-file-system') as typeof import('expo-file-system');
+    const dir = new Directory(Paths.cache, 'tts');
+    if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
     const name = `reply-${Date.now()}.mp3`;
     const file = new File(dir, name);
     file.write(bytes);
@@ -233,3 +233,6 @@ async function cacheAudio(bytes: Uint8Array): Promise<string | null> {
 
 export const tts = new Tts();
 export { synthesize as synthesizeSpeech };
+export const __ttsTest = {
+  cacheAudio,
+};

@@ -72,6 +72,9 @@ class CallStateDetector(private val context: Context) {
     private val telecom =
         appContext.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
 
+    data class EndCallResult(val ok: Boolean, val error: String? = null)
+
+    private var handlerThread: android.os.HandlerThread? = null
     private var executor: java.util.concurrent.Executor? = null
     private var callback: Any? = null
     private var listener: Listener? = null
@@ -95,12 +98,14 @@ class CallStateDetector(private val context: Context) {
             return false
         }
         val tm = telephony ?: return false
+        stop()
         listener = l
-        // A dedicated thread: TelephonyCallback callbacks arrive on this executor,
-        // and binding them to the main looper would put telephony work on the UI
-        // thread for the life of the app.
+        // A dedicated thread: callbacks arrive on this executor so telephony work
+        // does not run on the UI thread for the life of the app.
         val thread = android.os.HandlerThread("call-detect").apply { start() }
-        val exec = java.util.concurrent.Executor { command -> command.run() }
+        val handler = android.os.Handler(thread.looper)
+        handlerThread = thread
+        val exec = java.util.concurrent.Executor { command -> handler.post(command) }
         executor = exec
 
         // API 31+ prefers TelephonyCallback; PhoneStateListener is deprecated and
@@ -160,6 +165,9 @@ class CallStateDetector(private val context: Context) {
         }
         callback = null
         listener = null
+        executor = null
+        handlerThread?.quitSafely()
+        handlerThread = null
     }
 
     /**
@@ -177,9 +185,16 @@ class CallStateDetector(private val context: Context) {
 
     /** Hangs up an active call. Same permission story as [answer]. */
     fun endCall(): String? {
-        val tm = telecom ?: return "TelecomManager unavailable"
-        if (!hasAnswerPermission()) return "ANSWER_PHONE_CALLS not granted"
-        return runCatching { tm.endCall() }
-            .fold({ null }, { "endCall failed: ${it.message}" })
+        val result = endCallResult()
+        return if (result.ok) null else result.error ?: "endCall failed"
+    }
+
+    fun endCallResult(): EndCallResult {
+        val tm = telecom ?: return EndCallResult(false, "TelecomManager unavailable")
+        if (!hasAnswerPermission()) return EndCallResult(false, "ANSWER_PHONE_CALLS not granted")
+        return runCatching {
+            val ok = tm.endCall()
+            if (ok) EndCallResult(true) else EndCallResult(false, "endCall returned false")
+        }.getOrElse { EndCallResult(false, "endCall failed: ${it.message}") }
     }
 }
