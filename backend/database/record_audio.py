@@ -6,6 +6,7 @@ import time
 from google.cloud import firestore
 
 from config import record_seal_rules
+from database import pipeline_ledger
 from database._client import get_firestore_client, run_transactional
 from database import record_token_lease_metrics as lease_metrics
 
@@ -26,10 +27,19 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    owner_ref = client.collection('users').document(uid)
+    observed_at = time.time()
+    admitted = False
+    source_revision = 0
+    failed_at = None
 
     @firestore.transactional
     def commit(tx):
-        row = ref.get(transaction=tx).to_dict() or {}
+        nonlocal admitted, source_revision, failed_at
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
+        source_revision = pipeline_ledger.source_revision(snapshot)
+        failed_at = row.get('record_upload_failed_at')
         if row.get('deleted') or not row:
             return 'deleted'
         if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
@@ -49,9 +59,45 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             if row.get('record_seal_refused_at') is not None:
                 patch['record_seal_refused_at'] = None
             tx.update(ref, patch)
+            admitted = True
         return None
 
-    return run_transactional(client, commit, transient=True)
+    result = run_transactional(client, commit, transient=True)
+    # The ledger is written after the real seal commits, in its own CAS
+    # transaction. A ledger failure can never fail the seal. Admission is
+    # counted once per capture, not once per partial-seal repair.
+    if admitted:
+        pipeline_ledger.observe_admission()
+    revision = max(1, source_revision)
+    if result is None and admitted:
+        pipeline_ledger.advance(
+            uid,
+            conversation_id,
+            pipeline_ledger.SEALED,
+            revision=revision,
+            reopen=True,
+            source_ref=ref,
+            owner_ref=owner_ref,
+            firestore_client=client,
+        )
+    elif result == 'upload_failed':
+        # A deleted capture gets no ledger row: erasure must not be followed by
+        # a new durable record. The firing clock is the observed failure, never
+        # last speech or the ledger-write time.
+        pipeline_ledger.advance(
+            uid,
+            conversation_id,
+            pipeline_ledger.failed_stage(result),
+            reason=result,
+            end_type='unknown',
+            end_at=failed_at if failed_at is not None else observed_at,
+            revision=revision,
+            reopen=True,
+            source_ref=ref,
+            owner_ref=owner_ref,
+            firestore_client=client,
+        )
+    return result
 
 
 def set_record_upload_pending(
@@ -183,6 +229,7 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
             ref,
             {
                 'record_upload_failed': True,
+                'record_upload_failed_at': time.time(),
                 'record_audio_closed': False,
                 'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
             },

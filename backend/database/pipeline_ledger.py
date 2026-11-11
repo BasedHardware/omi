@@ -153,6 +153,22 @@ def terminal_ttl_seconds() -> int:
     return max(DEFAULT_TERMINAL_TTL_SECONDS, min(MAX_TERMINAL_TTL_SECONDS, value))
 
 
+def end_type_for_trigger(trigger: Any, *, quiet_cause: bool = False) -> str:
+    """Map an existing ``ProcessingTrigger`` to a bounded end type.
+
+    Only an observed trigger maps to a known type. A bare disconnect
+    (``capture_end``) or a generic recovery without a proven quiet cause stays
+    ``unknown``. There is no Jev finalizer on main, so ``jev_initiated`` is
+    never inferred.
+    """
+    value = getattr(trigger, 'value', trigger)
+    if value == 'client_finalize':
+        return 'user_initiated'
+    if value == 'server_recovery' and quiet_cause:
+        return 'silence_backstop'
+    return 'unknown'
+
+
 def _epoch(value: Any) -> float | None:
     if value is None:
         return None
@@ -333,11 +349,40 @@ def ledger_ref(client: Any, uid: str, capture_id: str) -> Any:
     return client.collection('users').document(uid).collection(COLLECTION).document(capture_id)
 
 
-def _commit(client: Any, ref: Any, uid: str, stage: str, **kwargs: Any) -> str:
+def source_revision(snapshot: Any) -> int:
+    """Ordered, persisted source revision from a Firestore snapshot's update_time."""
+    update_time = getattr(snapshot, 'update_time', None)
+    if isinstance(update_time, datetime):
+        return int(update_time.timestamp() * 1_000_000)
+    return 0
+
+
+def _commit(
+    client: Any,
+    ref: Any,
+    uid: str,
+    stage: str,
+    *,
+    source_ref: Any = None,
+    owner_ref: Any = None,
+    **kwargs: Any,
+) -> str:
     observed: dict[str, Any] = {}
 
     @firestore.transactional
     def commit(transaction: Any) -> str:
+        # Fence a delayed post-commit write against source deletion and account
+        # erasure inside the same transaction that would create the row.
+        if owner_ref is not None:
+            owner = owner_ref.get(transaction=transaction)
+            if not getattr(owner, 'exists', False):
+                observed['outcome'] = 'deleted'
+                return 'deleted'
+        if source_ref is not None:
+            source = source_ref.get(transaction=transaction)
+            if not getattr(source, 'exists', False) or (source.to_dict() or {}).get('deleted'):
+                observed['outcome'] = 'deleted'
+                return 'deleted'
         snapshot = ref.get(transaction=transaction)
         existing = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
         plan = plan_advance(existing, stage, **kwargs)
@@ -379,16 +424,28 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
     ``fields`` are the :func:`plan_advance` keyword arguments (``now``,
     ``reason``, ``end_type``, ``end_at``, ``last_speech_at``, ``quiet_due_at``,
     ``revision``, ``reopen``, ``speech_seconds``, ``has_speech``,
-    ``speech_basis``, ``home_ready_at``, ``episode_done_at``). Returns ``True``
-    only when a new document was committed. Every error is swallowed: the real
-    transition already committed and stays authoritative.
+    ``speech_basis``, ``home_ready_at``, ``episode_done_at``). ``source_ref``
+    and ``owner_ref`` fence the write against a deleted source or erased
+    account. Returns ``True`` only when a new document was committed. Every
+    error is swallowed: the real transition already committed and stays
+    authoritative.
     """
     if not pipeline_ledger_enabled():
         _observe_write('disabled')
         return False
     try:
         client = firestore_client if firestore_client is not None else get_firestore_client()
-        outcome = _commit(client, ledger_ref(client, uid, capture_id), uid, stage, **fields)
+        source_ref = fields.pop('source_ref', None)
+        owner_ref = fields.pop('owner_ref', None)
+        outcome = _commit(
+            client,
+            ledger_ref(client, uid, capture_id),
+            uid,
+            stage,
+            source_ref=source_ref,
+            owner_ref=owner_ref,
+            **fields,
+        )
         _observe_write('ok' if outcome == 'written' else outcome)
         return outcome == 'written'
     except Exception as error:  # Fail open: the real transition is authoritative.

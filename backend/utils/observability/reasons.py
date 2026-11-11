@@ -833,6 +833,7 @@ class PipelineLedgerOutcome(StrEnum):
     STALE = 'stale'
     ILLEGAL = 'illegal'
     TERMINAL = 'terminal'
+    DELETED = 'deleted'
 
 
 class PipelineLedgerFailureReason(StrEnum):

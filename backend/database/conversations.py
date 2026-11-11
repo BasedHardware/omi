@@ -12,6 +12,7 @@ from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
+from database import pipeline_ledger
 from utils.conversations import summary_delivery, lifecycle_clocks
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
@@ -1207,19 +1208,23 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     summary_receipt = None
     delivery_outcome = None
     summary_changed = False
+    noted = False
+    source_revision = 0
 
     @firestore.transactional
     def _write_processing_result(transaction):
-        nonlocal summary_receipt, summary_changed, delivery_outcome
+        nonlocal summary_receipt, summary_changed, delivery_outcome, noted, source_revision
         summary_receipt = None
         delivery_outcome = None
         summary_changed = False
+        noted = False
         write_data = copy.deepcopy(conversation_data)
         write_data.pop('record_audio_partial', None)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         conversation_recorded_time.adopt_membership(transaction, user_ref, write_data)
         existing_snapshot = conversation_ref.get(transaction=transaction)
+        source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
             if existing.get('deleted'):
@@ -1282,6 +1287,12 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             _offload_processing_transcript(uid, write_data, existing)
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+            if (
+                summary_receipt is not None
+                and summary_receipt.get('present')
+                and summary_receipt.get('reason') in {'summary', 'accept_unknown'}
+            ):
+                noted = True
             delivery_outcome = summary_terminal_outcome(existing, write_data)
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1295,6 +1306,12 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         _offload_processing_transcript(uid, write_data)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
+        if (
+            summary_receipt is not None
+            and summary_receipt.get('present')
+            and summary_receipt.get('reason') in {'summary', 'accept_unknown'}
+        ):
+            noted = True
         delivery_outcome = summary_terminal_outcome({}, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
@@ -1302,6 +1319,17 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         transaction.set(conversation_ref, with_creation_scope_index(write_data))
 
     run_preloaded_transactional(db, _write_processing_result)
+    if noted:
+        pipeline_ledger.advance(
+            uid,
+            conversation_data['id'],
+            pipeline_ledger.NOTED,
+            revision=max(1, source_revision),
+            reopen=True,
+            source_ref=conversation_ref,
+            owner_ref=user_ref,
+            firestore_client=db,
+        )
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
@@ -1353,11 +1381,13 @@ def persist_processing_result_with_lifecycle(
     summary_changed = False
     notes_refresh_state_write = None
     terminal_refusal = None
+    noted = False
+    source_revision = 0
     family_enabled = _terminal_family_serving(uid)
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, noted, source_revision
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
@@ -1365,11 +1395,13 @@ def persist_processing_result_with_lifecycle(
         stale_sync_revision = False
         first_completed = False
         notes_refresh_state_write = None
+        noted = False
         write_data = copy.deepcopy(conversation_data)
         evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         existing_snapshot = conversation_ref.get(transaction=transaction)
+        source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
             # Deleting one is a decision its owner made, and a merge write to a
@@ -1573,6 +1605,12 @@ def persist_processing_result_with_lifecycle(
 
         _offload_processing_transcript(uid, write_data, existing)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+        if (
+            summary_receipt is not None
+            and summary_receipt.get('present')
+            and summary_receipt.get('reason') in {'summary', 'accept_unknown'}
+        ):
+            noted = True
         delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1596,6 +1634,17 @@ def persist_processing_result_with_lifecycle(
         persisted = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
         return False
+    if persisted and noted:
+        pipeline_ledger.advance(
+            uid,
+            conversation_data['id'],
+            pipeline_ledger.NOTED,
+            revision=max(1, source_revision),
+            reopen=True,
+            source_ref=conversation_ref,
+            owner_ref=user_ref,
+            firestore_client=db,
+        )
     if persisted and terminal_refusal is not None:
         _record_terminal_claim_refusal(*terminal_refusal)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
