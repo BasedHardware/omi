@@ -5064,10 +5064,23 @@ committed speech into a fresh conversation.
 | Speaker verification policy | 0.65 / 0.10 | `utils/stt/speaker_match.py` | Maximum cosine distance / minimum runner-up margin; live uses >=5s, <=3 clips |
 | Speaker clustering threshold | 0.60 | `utils/stt/speaker_clustering.py`, `parakeet/speaker_math.py` | Short-clip in-session centroid cutoff |
 | Speaker clustering cap | 8 | `utils/stt/speaker_clustering.py`, `parakeet/speaker_math.py` | Merge misses to nearest centroid after capacity |
-| `PENDING_REQUEST_TIMEOUT` | 120s | `routers/listen/conversations.py` | Timeout before retrying a pending request |
-| `MAX_RETRIES_PER_REQUEST` | 3 | `routers/listen/conversations.py` | Max retries before keeping buffered |
+| `PENDING_REQUEST_TIMEOUT` | 120s | `utils/listen_pusher_session.py` | Timeout before retrying a pending request |
+| `MAX_RETRIES_PER_REQUEST` | 3 | `utils/listen_pusher_session.py` | Retries per burst; deterministic processing faults dead-letter after the initial dispatch plus three failures |
+| `PENDING_REQUEST_RECOVERY_COOLDOWN` | 300s | `utils/listen_pusher_session.py` | Recovery cooldown for transport/provider faults and `job_queued`; shared fallback telemetry records recovery bursts |
+| `MAX_PROCESSING_REQUEST_ATTEMPTS` | 7 | `utils/listen_pusher_session.py` | Total sends per conversation generation, including reconnect replay; exhaustion stops live retries and leaves durable custody with the job owner |
 | `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | `utils/listen_pusher_session.py` | Reconnect attempts before DEGRADED |
 | `MAX_PENDING_REQUESTS` | 100 | `routers/listen/contracts.py` | Max buffered conversations per session |
+
+Opcode-201 processing errors distinguish `deterministic_processing_failed` from
+`transient_processing_failed`. Composition wrappers retain their provider cause;
+SDK timeout/connection errors and provider 429/5xx can use recovery, while a processing
+500 without a transient provider cause is deterministic. Deterministic failures do
+not receive a delayed second durable budget. The terminal conversation retains the
+existing `processing_failed` retry vocabulary and dead-letter/fault signals. A terminal
+live generation cannot be buffered again by reconnect; an explicit newer durable
+generation has a fresh budget. A committed job's optional result send or journey
+publication cannot release its lease or re-enter processing; these fail-open paths
+use shared `record_fallback` telemetry.
 
 ## 8. WebSocket Task Supervision
 

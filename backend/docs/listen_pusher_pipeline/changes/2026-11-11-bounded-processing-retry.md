@@ -1,0 +1,28 @@
+# Bound floor-off processing retries at the durable and live boundaries
+
+With `NOTES_SHORT_CLIP_FLOOR=false`, below-floor speech reaches full notes
+processing. Provider timeouts and deterministic processing failures must not
+reset the live retry budget indefinitely. The triggering investigation is
+`refactor-lead/floor-retry-storm-cause-2026-11-11.md` (lead2 `5ce019`, supplied
+with the task; this host did not read production logs).
+
+The [retry contract](../../listen_pusher_pipeline.mdx#7-timing-constants)
+now caps every conversation generation's sends, including reconnect replays.
+The durable worker dead-letters deterministic processing failures after one
+burst through the existing fenced terminal transition; it does not grant them
+a delayed second budget. Typed provider timeouts/connections and provider
+429/5xx retain bounded recovery. Result delivery and journey publication after
+a commit cannot turn that commit into another processing attempt. Shared
+fallback telemetry covers those fail-open branches and recovery cooldowns.
+
+Text-only integration input bypasses speaker retry admission without assuming
+`transcript_segments`. No feature flag or rollout gate is introduced; the
+short-clip floor's existing setting remains authoritative.
+
+Hermetic coverage in `test_processing_retry_boundary.py` drives opcode 104
+through the worker, real persisted finalizer and notes admission, and opcode
+201 back through the live session, using strict Firestore transactions. It
+covers floor-off deterministic errors, provider timeout recovery, and completed
+job replay. Session tests cover the send cap under sustained timeouts and
+reconnects. The existing short-clip rollout lane exercises external integration
+input through the processing coordinator.

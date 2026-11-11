@@ -1530,11 +1530,11 @@ async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    retryable.assert_called_once_with('job-1', 3, 4, 'worker_failed')
+    retryable.assert_called_once_with('job-1', 3, 4, 'deterministic_processing_failed')
     retries.assert_called_once_with()
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
-        'error': 'processing_failed',
+        'error': 'deterministic_processing_failed',
         'terminal': False,
     }
 

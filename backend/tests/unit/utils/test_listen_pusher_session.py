@@ -1642,3 +1642,49 @@ async def test_replaced_socket_close_does_not_disconnect_new_socket():
     assert session.pusher_connected
     assert session.pusher_ws is fresh
     assert session.reconnect_task is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('failure_code', [None, 'transient_processing_failed'])
+async def test_recovery_bursts_have_a_total_send_cap(monkeypatch, caplog, failure_code):
+    clock = [1000.0]
+    active_ref = {'active': True}
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, active_ref=active_ref, deps_overrides={'now': lambda: clock[0]})
+
+    async def receive():
+        clock[0] += pusher_session.PENDING_REQUEST_RECOVERY_COOLDOWN + pusher_session.PENDING_REQUEST_TIMEOUT + 1
+        if not session.pending_conversation_requests:
+            active_ref['active'] = False
+        if failure_code is None:
+            raise asyncio.TimeoutError
+        return (
+            struct.pack('<I', 201)
+            + json.dumps({'conversation_id': 'conv-1', 'error': failure_code, 'terminal': False}).encode()
+        )
+
+    ws.recv = receive
+    session.pusher_connected, session.pusher_ws = True, ws
+    await session.request_conversation_processing('conv-1', 'job-1', 1)
+    session.deps.is_active = lambda: bool(session.pending_conversation_requests)
+    with caplog.at_level(logging.WARNING):
+        await asyncio.wait_for(session.pusher_receive(), 2)
+    frames = [f for f in ws.sent if frame_type(f) == 104]
+    assert len(frames) == pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS
+    assert not session.pending_conversation_requests
+    assert any('failed terminally' in r.message for r in caplog.records)
+    assert not await session.request_conversation_processing('conv-1', 'job-1', 1)
+    # A durable replay generation is allowed a fresh, finite budget.
+    assert await session.request_conversation_processing('conv-1', 'job-1', 2)
+    assert session.pending_conversation_requests['conv-1']['attempts'] == 1
+
+
+@pytest.mark.anyio
+async def test_reconnect_replay_cannot_reset_processing_send_budget():
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    for _ in range(pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS + 3):
+        await session.request_conversation_processing('conv-1', 'job-1', 1)
+        await session.connect()
+    assert len([f for f in ws.sent if frame_type(f) == 104]) == pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS
+    assert not session.pending_conversation_requests

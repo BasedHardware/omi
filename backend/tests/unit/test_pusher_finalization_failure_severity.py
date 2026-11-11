@@ -79,6 +79,7 @@ async def test_owner_contention_stays_queued_without_completion_or_failure_budge
     retry.assert_not_called()
     complete.assert_not_called()
     dead_letter.assert_not_called()
+    assert len(websocket.sent) == 1  # The queued acknowledgement cannot be overwritten by an immediate retry error.
     assert any(
         b'job_queued' in payload and b'"terminal":false' in payload.replace(b' ', b'') for payload in websocket.sent
     )
@@ -179,6 +180,7 @@ async def test_first_exhaustion_requeue_queues_the_job_and_stays_warning(monkeyp
             dispatch_generation=1,
         )
 
+    assert len(websocket.sent) == 1  # The queued acknowledgement cannot be overwritten by an immediate retry error.
     assert any(
         b'job_queued' in payload and b'"terminal":false' in payload.replace(b' ', b'') for payload in websocket.sent
     )
