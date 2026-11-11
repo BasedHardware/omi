@@ -2,6 +2,15 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.573",
+      "date": "2026-11-11",
+      "changes": [
+        "Fixed expired conversations remaining stuck in processing",
+        "Moved failures to Activity with notes-only retries that safely resume after connection errors",
+        "Restored the previous Home conversation display"
+      ]
+    },
+    {
       "version": "0.12.572",
       "date": "2026-11-09",
       "changes": [
