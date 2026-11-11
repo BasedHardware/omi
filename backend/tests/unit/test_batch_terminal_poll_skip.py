@@ -1,16 +1,28 @@
 """Terminal discovery must not remove unready fresh heads or their bounded wait."""
 
-from copy import deepcopy
+from copy import copy, deepcopy
 from types import SimpleNamespace
 
 import pytest
 
-from config.batch_pipeline import MERGE_POLL_STATES, held_poll_skip_enabled
+from config.batch_pipeline import MERGE_POLL_TERMINAL_STATES, held_poll_skip_enabled
 from database.batch_pipeline_store import first_pending, fresh_pending, is_queue_dispositioned
 from database.firestore_index_registry import firebase_index_manifest
 from utils.batch_pipeline.merge import _fresh_pick
 
-TERMINAL = ('committed', 'dead', 'quarantined', 'privacy_blocked')
+TERMINAL = MERGE_POLL_TERMINAL_STATES
+NONTERMINAL = (
+    'ready',
+    'leased',
+    'retry',
+    'result_ready',
+    'record_pending',
+    'held',
+    'provider_pending',
+    'provider_running',
+    'vendor_held',
+    'future_state',
+)
 
 
 class Query:
@@ -20,6 +32,9 @@ class Query:
         self.rows = rows
         self.calls = []
         self.reads = []
+        self.filters = []
+        self.orders = []
+        self.count = None
 
     def collection(self, name):
         self.calls.append(('collection', name))
@@ -27,27 +42,29 @@ class Query:
 
     def where(self, field, op, value):
         self.calls.append(('where', field, op, value))
-        return self
+        query = copy(self)
+        query.filters = [*self.filters, (field, op, value)]
+        return query
 
     def order_by(self, field):
         self.calls.append(('order_by', field))
-        return self
+        query = copy(self)
+        query.orders = [*self.orders, field]
+        return query
 
     def limit(self, count):
         self.calls.append(('limit', count))
-        return self
+        query = copy(self)
+        query.count = count
+        return query
 
     def stream(self, **kwargs):
         self.calls.append(('stream', kwargs))
         rows = self.rows
-        for call in self.calls:
-            if call[0] == 'where':
-                _, field, op, value = call
-                rows = [r for r in rows if field in r and (r[field] == value if op == '==' else r[field] in value)]
-        orders = [call[1] for call in self.calls if call[0] == 'order_by']
-        rows = sorted(rows, key=lambda row: tuple(row[field] for field in orders))
-        count = next(call[1] for call in self.calls if call[0] == 'limit')
-        for row in rows[:count]:
+        for field, op, value in self.filters:
+            rows = [r for r in rows if field in r and (r[field] == value if op == '==' else r[field] not in value)]
+        rows = sorted(rows, key=lambda row: tuple(row[field] for field in self.orders))
+        for row in rows[: self.count]:
             self.reads.append(row['segment_id'])
             yield SimpleNamespace(to_dict=lambda row=row: deepcopy(row))
 
@@ -93,20 +110,18 @@ def test_off_exact_old_rpc_and_read_sequence(monkeypatch, path, setting):
     assert query.reads == (['dead', 'retry', 'result_ready'] if path == 'fresh' else ['dead'])
 
 
-@pytest.mark.parametrize('state', MERGE_POLL_STATES)
+@pytest.mark.parametrize('state', NONTERMINAL)
 def test_on_skips_terminal_reads_but_retains_each_nonterminal_head(monkeypatch, state):
     monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', 'true')
     assert not is_queue_dispositioned(row(state))
     rows = [*(row(terminal, 0) for terminal in TERMINAL), row(state)]
-    for terminal in TERMINAL:
-        assert is_queue_dispositioned(row(terminal))
     query = Query(rows)
     assert [r['state'] for r in fresh_pending(query, 'ns', 'owner', 32)] == [state]
     assert query.reads == [state]
     query = Query(rows)
     assert first_pending(query, 'ns', 'owner', transaction='tx')['state'] == state
     assert query.reads == [state]
-    assert ('where', 'state', 'in', list(MERGE_POLL_STATES)) in query.calls
+    assert ('where', 'state', 'not-in', list(TERMINAL)) in query.calls
 
 
 @pytest.mark.parametrize('state', ['held', 'ready', 'retry', 'vendor_held'])
@@ -130,9 +145,9 @@ def test_both_index_shapes_are_in_the_generated_registry():
                 'owner_key',
                 'merge_pending',
                 *(['fresh_capture'] if fresh else []),
-                'state',
                 'capture_at',
                 'segment_id',
+                'state',
                 '__name__',
             ]
             assert any(
@@ -141,3 +156,90 @@ def test_both_index_shapes_are_in_the_generated_registry():
                 and index['fields'] == [{'fieldPath': field, 'order': 'ASCENDING'} for field in fields]
                 for index in manifest
             )
+
+
+def test_excluded_set_is_the_terminal_union_and_nonterminal_complement():
+    from tests.support.lifecycle_state_table import STATES
+    from utils.batch_pipeline.provider_stt import PENDING, RUNNING, SUPERSEDED
+
+    batch = {r.state for r in STATES if r.machine == 'batch'}
+    lifecycle = {r.state for r in STATES if r.machine == 'batch' and r.terminal}
+    dispositions = {state for state in batch if is_queue_dispositioned(row(state))}
+    assert set(TERMINAL) == lifecycle | dispositions | {SUPERSEDED}
+    known = batch | {PENDING, RUNNING, SUPERSEDED}
+    assert known - set(TERMINAL) == set(NONTERMINAL) - {'held', 'future_state'}
+
+
+@pytest.mark.parametrize('path', ['first', 'fresh'])
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('error_type', ['FailedPrecondition', 'InvalidArgument'])
+def test_unavailable_on_query_falls_back_to_the_exact_off_query(monkeypatch, path, enabled, error_type):
+    from google.api_core import exceptions
+
+    class Unavailable(Query):
+        def stream(self, **kwargs):
+            if not enabled or any(field == 'state' for field, _, _ in self.filters):
+                self.calls.append(('stream', kwargs))
+                raise getattr(exceptions, error_type)('synthetic unavailable index or query')
+            yield from super().stream(**kwargs)
+
+    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+    query = Unavailable([row('dead', 0), row('retry')])
+
+    def read():
+        if path == 'first':
+            return [first_pending(query, 'ns', 'owner', transaction='tx')]
+        return fresh_pending(query, 'ns', 'owner', 32)
+
+    if not enabled:
+        with pytest.raises(getattr(exceptions, error_type)):
+            read()
+    else:
+        assert [r['state'] for r in read()] == (['dead'] if path == 'first' else ['dead', 'retry'])
+        assert query.calls[-4:] == [
+            ('order_by', 'capture_at'),
+            ('order_by', 'segment_id'),
+            ('limit', 1 if path == 'first' else 32),
+            ('stream', {'transaction': 'tx'} if path == 'first' else {}),
+        ]
+
+
+def test_postgres_off_sql_and_parameter_sequence_are_unchanged(monkeypatch):
+    from contextlib import contextmanager
+    from unittest.mock import MagicMock
+    from database.jobstore.postgres_store import PostgresStore
+
+    monkeypatch.delenv('BATCH_HELD_POLL_SKIP_ENABLED', raising=False)
+    store = object.__new__(PostgresStore)
+    store.namespace = 'ns'
+    conn = MagicMock()
+    conn.execute.return_value.fetchone.return_value = None
+    conn.execute.return_value.fetchall.return_value = []
+
+    @contextmanager
+    def connection():
+        yield conn
+
+    monkeypatch.setattr(store, '_read_conn', connection)
+    assert store.first_pending_in(conn, 'owner') is None
+    conn.execute.assert_called_once_with(
+        'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending '
+        'ORDER BY capture_at, key COLLATE "C" LIMIT 1',
+        ('ns', 'owner'),
+    )
+    conn.reset_mock()
+    assert store.fresh_pending('owner', 32) == []
+    conn.execute.assert_called_once_with(
+        "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+        "AND doc->'fresh_capture' = 'true'::jsonb ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
+        ('ns', 'owner', 32),
+    )
+    conn.reset_mock()
+    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', 'true')
+    assert store.fresh_pending('owner', 32) == []
+    assert 'state <> ALL(%s)' in conn.execute.call_args.args[0]
+    assert conn.execute.call_args.args[1] == ('ns', 'owner', list(TERMINAL), 32)
+    conn.reset_mock()
+    assert store.first_pending_in(conn, 'owner') is None
+    assert 'state <> ALL(%s)' in conn.execute.call_args.args[0]
+    assert conn.execute.call_args.args[1] == ('ns', 'owner', list(TERMINAL))

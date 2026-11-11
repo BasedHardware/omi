@@ -12,26 +12,25 @@ def _desc(field):
 
 
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
-    # Dark terminal-only fresh probe. first_pending reuses the merge_ready index.
+    # Capture-first negative state filter; Firestore supplies implicit inequality ordering.
     *(
         FirestoreIndexRequirement(
-            f'{stage}_batch_fresh_pending_nonterminal',
+            f'{stage}_batch_{"fresh_" if fresh else ""}pending_nonterminal',
             f'batch_pipeline_{stage}_jobs',
             'COLLECTION',
             (
                 _asc('owner_key'),
                 _asc('merge_pending'),
-                _asc('fresh_capture'),
-                _asc('state'),
+                *([_asc('fresh_capture')] if fresh else []),
                 _asc('capture_at'),
                 _asc('segment_id'),
+                _asc('state'),
                 _asc('__name__'),
             ),
         )
         for stage in ('prod', 'dev')
+        for fresh in (False, True)
     ),
-    # Shared by result-ready draining and oldest-first record-pending repair.
-    # Moved from sync_pipeline_indexes; retain its existing registry identity.
     *(
         FirestoreIndexRequirement(
             f'{namespace}_result_ready',

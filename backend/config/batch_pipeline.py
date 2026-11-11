@@ -32,19 +32,14 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
-# All supported nonterminal job states, including the reserved held marker and
-# provider_superseded (not queue-dispositioned). Keep in sync with job writers;
-# Firestore needs a positive state filter to retain capture/segment ordering.
-MERGE_POLL_STATES = (
-    'ready',
-    'leased',
-    'retry',
-    'result_ready',
-    'record_pending',
-    'held',
-    'provider_pending',
-    'provider_running',
-    'vendor_held',
+# Explicit terminal union: queue dispositions, retired records and superseded providers.
+# Exclusion keeps future nonterminal state strings visible to authoritative merge.
+MERGE_POLL_TERMINAL_STATES = (
+    'committed',
+    'dead',
+    'quarantined',
+    'privacy_blocked',
+    'partial_retired',
     'provider_superseded',
 )
 

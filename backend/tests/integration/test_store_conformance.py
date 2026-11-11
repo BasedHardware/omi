@@ -584,21 +584,33 @@ def test_fresh_pending_returns_the_earliest_fresh_rows_in_any_state(h):
 
 @pytest.mark.parametrize('enabled', [False, True])
 def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monkeypatch, enabled):
-    from config.batch_pipeline import MERGE_POLL_STATES
+    from config.batch_pipeline import MERGE_POLL_TERMINAL_STATES
     from utils.batch_pipeline.merge import _fresh_pick
 
     monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
-    terminals = ('committed', 'dead', 'quarantined', 'privacy_blocked')
-    for state in (*terminals, *MERGE_POLL_STATES):
+    terminals = MERGE_POLL_TERMINAL_STATES
+    nonterminal = (
+        'ready',
+        'leased',
+        'retry',
+        'result_ready',
+        'record_pending',
+        'held',
+        'provider_pending',
+        'provider_running',
+        'vendor_held',
+        'future_state',
+    )
+    for state in (*terminals, *nonterminal):
         put_all(h, [_pending(h, state, capture_at=0.0 if state in terminals else 1.0, fresh_capture=True, state=state)])
     key = owner_key(h.uid('o'))
     rows = h.store.fresh_pending(key, 32)
-    expected = set(MERGE_POLL_STATES) | (set() if enabled else set(terminals))
+    expected = set(nonterminal) | (set() if enabled else set(terminals))
     assert {r['state'] for r in rows} == expected
     assert h.store.run(lambda tx: tx.first_pending(key))['state'] == rows[0]['state']
 
     # Isolate a decisionless allowance retry ahead of a completed fresh result.
-    for state in (*terminals, *MERGE_POLL_STATES):
+    for state in (*terminals, *nonterminal):
 
         def remove(tx):
             current = tx.get('jobs', state)
@@ -680,12 +692,14 @@ def test_poll_filter_never_skips_recovery_or_durable_terminal_transitions(h, mon
     assert (pending is None) if enabled else pending['segment_id'] == 'fenced'
 
 
-def test_held_merge_owners_rotates_markers_and_resolves_the_owner_from_pending_work(h):
+@pytest.mark.parametrize('enabled', [False, True])
+def test_held_merge_owners_rotates_markers_and_resolves_the_owner_from_pending_work(h, monkeypatch, enabled):
+    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
     held = owner_key(h.uid('o'))
     put_all(
         h,
         [
-            _pending(h, 'a'),
+            _pending(h, 'a', state='dead'),
             ('merge_holds', held, {'held': True}),
             ('merge_holds', 'ok-stale', {'held': True}),
             ('merge_holds', owner_key(h.uid('p')), {'held': False}),
@@ -981,3 +995,73 @@ def test_concurrent_schedulers_lease_every_job_exactly_once(h):
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(drain, range(4)))
     assert sorted(leased) == sorted(expected)
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_ordered_merge_retained_terminal_head_and_later_result(h, monkeypatch, enabled):
+    from utils.batch_pipeline.contracts import WorkResult
+    from utils.batch_pipeline.merge import OrderedMerge
+
+    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+    uid = h.uid('o')
+    queue = Scheduler(h.store)
+    for segment, capture in [('terminal', 1), ('later', 2)]:
+        assert queue.enqueue(WorkItem(segment, uid, capture, 'gs://synthetic/input', 30, Priority.FRESH), 100)
+    leases = {lease.item.segment_id: lease for lease in queue.pull(101, 2)}
+    assert queue.complete(WorkResult('later', 'gs://synthetic/result'), leases['later'].token, 102)
+
+    def retain(tx):
+        old = tx.get('jobs', 'terminal')
+        old.update(state='dead', merge_pending=True, token='', lease_until=0, dead_letter_reason='synthetic_failure')
+        tx.put('jobs', 'terminal', old)
+        return old
+
+    terminal = h.store.run(retain)
+    merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0)
+    entry = merge.commit_next(uid, 103)
+    assert h.store.run(lambda tx: tx.get('jobs', 'terminal')) == terminal
+    if not enabled:
+        assert entry is None
+        assert h.store.run(lambda tx: tx.get('results', 'later')) == {}
+        return
+    assert entry['segment_id'] == 'later' and entry['previous_segment_id'] is None and entry['log_sequence'] == 1
+    assert h.store.run(lambda tx: queue.redrive_in_transaction(tx, tx.get('jobs', 'terminal'), 104, operator=True))
+    lease = queue.pull(105)[0]
+    assert lease.item.segment_id == 'terminal'
+    assert queue.complete(WorkResult('terminal', 'gs://synthetic/recovered'), lease.token, 106)
+    recovered = merge.commit_next(uid, 107)
+    assert recovered['segment_id'] == 'terminal' and recovered['late_capture'] is True
+    assert recovered['previous_segment_id'] == 'later' and recovered['log_sequence'] == 2
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('head_state', ['dead', 'future_state'])
+def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, monkeypatch, enabled, head_state):
+    from utils.batch_pipeline.scheduler import _prefer_merge_head
+
+    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+    put_all(
+        h,
+        [
+            _pending(h, 'head', capture_at=1, state=head_state, next='middle', duration_seconds=30),
+            _pending(h, 'middle', capture_at=2, next='selected', duration_seconds=30, available_at=1),
+            _pending(h, 'selected', capture_at=3, next=None, duration_seconds=30, available_at=1),
+        ],
+    )
+    observations = []
+
+    def pick(tx):
+        return _prefer_merge_head(
+            tx,
+            {'tail': 'selected'},
+            tx.get('jobs', 'selected'),
+            [1],
+            observations,
+            now=10,
+            max_seconds=60,
+            shared_gpu=False,
+        )
+
+    assert h.store.run(pick)['segment_id'] == 'selected'
+    assert h.store.run(lambda tx: tx.get('jobs', 'head'))['state'] == head_state
+    assert observations == ([('ready_age', 9), ('head_not_found', None)] if enabled and head_state == 'dead' else [])

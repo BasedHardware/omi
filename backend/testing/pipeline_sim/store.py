@@ -29,7 +29,7 @@ from copy import deepcopy
 import hashlib
 from typing import Any, Callable, TypeVar
 
-from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_STATES
+from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
 
 from database.batch_pipeline_privacy import (
     PRIVACY_COLLECTION,
@@ -338,12 +338,12 @@ class SimStore:
         return True
 
     # -- Query helpers --------------------------------------------------
-    def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
-        skip = not ready_only and held_poll_skip_enabled()
+    def first_pending(self, owner_key: str, *, ready_only: bool = False, skip_terminal: bool = True) -> dict | None:
+        skip = not ready_only and skip_terminal and held_poll_skip_enabled()
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
-            if skip and row.get('state') not in MERGE_POLL_STATES:
+            if skip and row.get('state') in MERGE_POLL_TERMINAL_STATES:
                 continue
             if ready_only and row.get('state') != 'result_ready':
                 continue
@@ -417,7 +417,7 @@ class SimStore:
             (row['capture_at'], segment_id)
             for segment_id in self._pending_by_owner.get(owner_key, ())
             if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
-            and (not skip or row.get('state') in MERGE_POLL_STATES)
+            and (not skip or row.get('state') not in MERGE_POLL_TERMINAL_STATES)
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 
@@ -429,7 +429,7 @@ class SimStore:
         )
         owners = []
         for key in keys[:limit]:
-            job = self.first_pending(key)
+            job = self.first_pending(key, skip_terminal=False)
             owners.append((key, job['owner_id'] if job else None))
         return owners
 

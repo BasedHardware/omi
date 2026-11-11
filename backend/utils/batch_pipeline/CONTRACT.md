@@ -626,18 +626,20 @@ companion series disappears on collection. No data migration or cleanup.
 
 ## Terminal-only merge polling (dark)
 
-`BATCH_HELD_POLL_SKIP_ENABLED` defaults off. On, `fresh_pending` and
-`first_pending` use the existing `state` field to skip the queue-dispositioned
-states in `batch_pipeline_store.is_queue_dispositioned`: committed, dead,
-quarantined and privacy_blocked. Dead held-expiry/input-expiry and GPU privacy
-fences can retain merge_pending=true; this filter changes discovery, never
-their durable transition or recovery route. Held ready/retry/vendor_held heads
-remain in capture order, including decisionless rows. Fresh-head waiting is
-unchanged. The simulator and Postgres adapter implement the same gated contract.
+`BATCH_HELD_POLL_SKIP_ENABLED` defaults off. On, `fresh_pending` and transactional
+`first_pending` exclude committed, dead, quarantined, privacy_blocked,
+partial_retired and provider_superseded using the existing `state` field.
+Future nonterminal state strings stay visible. Dead GPU held/input expiry and
+GPU privacy fences can retain merge_pending=true. Their recovery routes and
+writers are unchanged; the authoritative merge head and scheduler head-priority
+lookup can advance past these terminals. Held ready/retry/vendor_held heads
+retain capture order and fresh-head waiting. `held_merge_owners` deliberately
+uses the OFF query, even when the flag is on, preserving marker ownership.
 
-Add any new nonterminal job state to `config.batch_pipeline.MERGE_POLL_STATES`
-alongside its writer. This positive indexed filter covers current supported
-states; unknown future states require that coordinated change before enablement.
-Build both declared poll indexes (prod and dev) before enabling. Off restores
-the previous query and read sequence. This switch does not replace another flag.
-Oldest, held SLA sampling and stale-vendor watchdog queries remain independent.
+Unavailable ON indexes/query shapes fall back to the exact OFF query; OFF errors
+still propagate. Build all four prod/dev poll indexes and verify a real
+Firestore query plan before enabling. Off restores the previous query/read
+sequence. No existing flag is replaced. Oldest, held SLA sampling and the
+stale-vendor watchdog remain independent. Simulator/Postgres mirror behavior;
+Postgres has no read-saving claim. The read-saving bound is Firestore-only,
+excludes index-entry costs, and is booked at zero until settled SKU validation.
