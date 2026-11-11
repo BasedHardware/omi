@@ -132,7 +132,6 @@ def containment_lines(caplog):
     return [r.message for r in caplog.records if 'event=capture_group_containment' in r.message]
 
 
-
 REPO = Path(__file__).resolve().parents[3]
 MODE_KEY = 'CAPTURE_GROUP_CONTAINMENT_MODE'
 GKE_HOSTS = ('backend-listen', 'pusher')
@@ -383,6 +382,8 @@ def test_detector_fault_never_leaks_or_inhibits(seam, monkeypatch, caplog):
     assert ('capture_group_joined', 'none') in seam['events']
     assert all('capture_group' not in r for r in seam['store'].rows.values())
     assert all('PRIVATE-SENTINEL' not in r.message for r in caplog.records)
+
+
 @pytest.mark.parametrize('mode', ['shadow', 'on'])
 def test_pair_budget_exhaustion_blocks_join_through_the_seam(seam, monkeypatch, caplog, mode):
     monkeypatch.setenv(containment_module.MODE_ENV, mode)
@@ -582,6 +583,7 @@ def test_shadow_sampled_budget_abstention_logs_sampled_basis(seam, monkeypatch, 
     assert 'would_join=false' in lines[0] and 'reason=bounds_matcher_calls' in lines[0]
     assert 'basis=sampled' in lines[0]
 
+
 def test_composed_manifest_declares_shadow_on_all_six_hosts_per_environment():
     manifest = yaml.load((REPO / 'backend/deploy/runtime_env.yaml').read_text(), Loader=SAFE_YAML_LOADER)
     for env_name in ('dev', 'prod'):
@@ -614,6 +616,7 @@ def test_registry_and_classification_declare_the_mode():
     assert rows[0]['surfaces'] == ['backend'] and rows[0]['decision'] == 'pending'
     classification = json.loads((REPO / 'config/deployment-setting-classification.json').read_text())
     assert MODE_KEY in classification['kinds']['config']
+
 
 def _baseline_policy():
     source = subprocess.run(
