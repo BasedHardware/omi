@@ -274,15 +274,27 @@ def test_unknown_provenance_retains_legacy_debt_for_provenance_repair(provenance
     assert client.rows == {'target': row}
 
 
-@pytest.mark.parametrize(
-    'still_refused', [{}, {'user_title': 'Manual'}, {'summary_output_present': True}, {'is_locked': True}]
-)
-@pytest.mark.parametrize('existing_due', [None, 211])
-def test_backfill_cleared_discard_restore_recovers_only_owed_unarmed_debt(monkeypatch, still_refused, existing_due):
+@pytest.fixture
+def discard_restore_dependencies():
+    # Dependency bootstrap is setup, not part of the restore call's CPU budget.
     from config.policy import FirstSummaryPolicy
     from database import conversations
     from tests.support.lifecycle_state_table import FIELD_BUILDERS, SUMMARY_DISCARD_RESTORE_WRITERS
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    return FirstSummaryPolicy, conversations, FIELD_BUILDERS, SUMMARY_DISCARD_RESTORE_WRITERS, StrictFirestore
+
+
+@pytest.mark.parametrize(
+    'still_refused', [{}, {'user_title': 'Manual'}, {'summary_output_present': True}, {'is_locked': True}]
+)
+@pytest.mark.parametrize('existing_due', [None, 211])
+def test_backfill_cleared_discard_restore_recovers_only_owed_unarmed_debt(
+    monkeypatch, still_refused, existing_due, discard_restore_dependencies
+):
+    FirstSummaryPolicy, conversations, FIELD_BUILDERS, SUMMARY_DISCARD_RESTORE_WRITERS, StrictFirestore = (
+        discard_restore_dependencies
+    )
 
     path = ('users', 'synthetic', 'conversations', 'target')
     row = {
