@@ -100,6 +100,7 @@ void main() {
 
   Future<void> flush() => AnalyticsManager.flushPending(force: true);
   Iterable<Map<String, Object>> views() => recording.propertiesOf('Subscription Paywall Viewed');
+  Finder upgrade() => find.byKey(const ValueKey('plans_sheet_upgrade_button'));
 
   Future<_Usage> mount(WidgetTester tester, _CatalogApi api, {PlanType? plan, bool cancelled = false}) async {
     tester.view.physicalSize = const Size(1000, 2600);
@@ -154,14 +155,17 @@ void main() {
     final usage = await mount(tester, api);
     await flush();
     expect(find.byType(PlanOptionShimmer), findsNWidgets(2));
+    expect(upgrade(), findsNothing);
     expect(views(), isEmpty);
     await respond(tester, api, [_price('unlimited_v2', 'year'), _price('unlimited_v2', 'month')]);
     expect(find.byType(PlanOptionCard), findsNWidgets(2));
+    expect(upgrade(), findsOneWidget);
     expect(views(), hasLength(1));
     final refresh = usage.loadAvailablePlans();
     await tester.pump();
     await flush();
     expect(find.byType(PlanOptionShimmer), findsNWidgets(2));
+    expect(upgrade(), findsNothing);
     expect(views(), hasLength(1));
     await respond(tester, api, [_price('unlimited_v2', 'year')]);
     await refresh;
@@ -175,15 +179,18 @@ void main() {
     final usage = await mount(tester, api);
     await respond(tester, api, null);
     expect(find.byType(PlanOptionCard), findsNothing);
+    expect(upgrade(), findsNothing);
     expect(views(), isEmpty);
     final empty = usage.loadAvailablePlans();
     await respond(tester, api, []);
     await empty;
     expect(find.byType(PlanOptionCard), findsNothing);
+    expect(upgrade(), findsNothing);
     expect(views(), isEmpty);
     final valid = usage.loadAvailablePlans();
     await respond(tester, api, [_price('unlimited_v2', 'year')]);
     await valid;
+    expect(upgrade(), findsOneWidget);
     expect(views(), hasLength(1));
     await tester.pumpWidget(const SizedBox());
   });
@@ -193,12 +200,43 @@ void main() {
     final usage = await mount(tester, api);
     await respond(tester, api, [_price('plus', 'month'), _price('unlimited_v2', 'month')]);
     expect(find.byType(PlanOptionCard), findsNothing);
+    expect(upgrade(), findsNothing);
     expect(views(), isEmpty);
     final valid = usage.loadAvailablePlans();
     await respond(tester, api, [_price('plus', 'year'), _price('unlimited_v2', 'year')]);
     await valid;
     expect(find.byType(PlanOptionCard), findsNWidgets(2));
+    expect(upgrade(), findsOneWidget);
     expect(views(), hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('legacy cards without a selected checkout price hide Upgrade until a valid interval is selected',
+      (tester) async {
+    final api = _CatalogApi();
+    await mount(tester, api);
+    await respond(tester, api, [_price('unlimited_v2', 'month')]);
+    expect(find.byType(PlanOptionCard), findsNWidgets(2), reason: 'Existing single-tier card fallback remains');
+    expect(upgrade(), findsNothing, reason: 'The default yearly interval has no checkout price');
+    await tester.ensureVisible(find.byType(PlanOptionCard).last);
+    await tester.tap(find.byType(PlanOptionCard).last);
+    await tester.pump();
+    expect(upgrade(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('paid multi-tier cards normalize selection before rendering Continue in the same build', (tester) async {
+    final api = _CatalogApi();
+    await mount(tester, api, plan: PlanType.plus);
+    await respond(tester, api, [
+      _price('plus', 'month', active: true),
+      _price('plus', 'year'),
+      _price('unlimited_v2', 'year'),
+    ]);
+    expect(find.byType(PlanOptionCard), findsNWidgets(2));
+    expect(upgrade(), findsOneWidget);
+    expect(tester.widget<PlanOptionCard>(find.byType(PlanOptionCard).last).isSelected, isTrue);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -209,6 +247,7 @@ void main() {
     expect(views(), isEmpty);
     await respond(tester, api, [_price('unlimited_v2', 'year')]);
     expect(find.byType(PlanOptionCard), findsNWidgets(2));
+    expect(upgrade(), findsOneWidget);
     expect(views(), hasLength(1));
     expect(views().single, containsPair('current_plan', 'unknown'));
     await tester.pumpWidget(const SizedBox());
@@ -224,6 +263,7 @@ void main() {
       ]);
       expect(find.byType(PlanOptionCard), state == 'cancelled' ? findsNWidgets(2) : findsNothing);
       expect(views(), state == 'cancelled' ? hasLength(1) : isEmpty);
+      expect(upgrade(), findsNothing, reason: 'Annual, scheduled and cancellation constraints are retained');
       await tester.pumpWidget(const SizedBox());
     });
   }

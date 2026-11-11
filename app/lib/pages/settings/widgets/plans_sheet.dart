@@ -989,21 +989,37 @@ class _PlansSheetState extends State<PlansSheet> {
 
                       // Continue/Upgrade — hidden for same-tier annual (nothing to change) and for
                       // desktop-plan → mobile-tier switches.
-                      if (shouldShowPlanContinueButton(
-                        isOnAnnualPlan: isOnAnnualPlan,
-                        hasScheduledUpgrade: hasScheduledUpgrade,
-                        isCancelled: isCancelled,
-                        plansLoaded: plansLoaded,
-                        selectedTierId: selectedTierId,
-                        currentTierId: sub?.plan.wireName,
-                        currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
-                        selectedPriceIsCurrent: _selectedPriceIsCurrent(provider.availablePlans),
-                      ))
-                        // For basic users, show "Upgrade". For paid users upgrading, show "Continue".
-                        _primaryAction(
-                          key: const ValueKey('plans_sheet_upgrade_button'),
-                          label: isUnlimited ? l10n.continueText : l10n.upgrade,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          // Read after the plan-card Builder normalizes the selected tier.
+                          // Use the checkout handler's resolver, without changing selection or billing policy.
+                          final rawPlans = provider.availablePlans?['plans'];
+                          final selectedPrice = !plansLoaded || rawPlans is! List
+                              ? null
+                              : planForCheckout(
+                                  rawPlans.cast<Map<String, dynamic>>(),
+                                  interval: selectedPlan == 'yearly' ? 'year' : 'month',
+                                  selectedTierId: selectedTierId,
+                                );
+                          if (selectedPrice == null ||
+                              !shouldShowPlanContinueButton(
+                                isOnAnnualPlan: isOnAnnualPlan,
+                                hasScheduledUpgrade: hasScheduledUpgrade,
+                                isCancelled: isCancelled,
+                                plansLoaded: plansLoaded,
+                                selectedTierId: selectedTierId,
+                                currentTierId: sub?.plan.wireName,
+                                currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
+                                selectedPriceIsCurrent: _selectedPriceIsCurrent(provider.availablePlans),
+                              )) {
+                            return const SizedBox.shrink();
+                          }
+                          return _primaryAction(
+                            key: const ValueKey('plans_sheet_upgrade_button'),
+                            label: isUnlimited ? l10n.continueText : l10n.upgrade,
+                          );
+                        },
+                      ),
 
                       // Freemium limitations and the downgrade option - basic users only
                       if (!isUnlimited) ...[
