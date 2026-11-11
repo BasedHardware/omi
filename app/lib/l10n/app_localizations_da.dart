@@ -13640,6 +13640,9 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Generér noter igen';
+
+  @override
   String get attentionSummaryFailed => 'Samtalen kunne ikke opsummeres';
 
   @override

@@ -13693,6 +13693,9 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'ಟಿಪ್ಪಣಿಗಳನ್ನು ಮತ್ತೆ ರಚಿಸಿ';
+
+  @override
   String get attentionSummaryFailed => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
 
   @override

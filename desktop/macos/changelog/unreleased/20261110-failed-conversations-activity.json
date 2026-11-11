@@ -1,0 +1,3 @@
+{
+  "change": "Moved failures to Activity with notes-only retries that safely resume after connection errors"
+}

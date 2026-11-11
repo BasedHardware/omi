@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Înregistrările sunt pauzate",
     "activityAttentionUploadStalledTitle": "Încărcarea s-a oprit",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 înregistrare așteaptă} other{{count} înregistrări așteaptă}}",
+    "attentionRerunNotes": "Generează din nou notițele",
     "attentionSummaryFailed": "Conversația nu a putut fi rezumată",
     "activityAttentionSemantics": "Activitate, necesită atenție",
     "connectAgentHeadline": "Folosește memoria Omi în ChatGPT și în agenții tăi AI",

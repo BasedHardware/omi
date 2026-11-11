@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "ההקלטות מושהות",
     "activityAttentionUploadStalledTitle": "ההעלאה נתקעה",
     "activityAttentionUploadRecordings": "{count, plural, =1{הקלטה אחת ממתינה} other{{count} הקלטות ממתינות}}",
+    "attentionRerunNotes": "יצירת הערות מחדש",
     "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו",
     "activityAttentionSemantics": "פעילות, דורש תשומת לב",
     "connectAgentHeadline": "השתמשו בזיכרון של Omi ב-ChatGPT ובסוכני ה-AI שלכם",

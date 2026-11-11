@@ -13754,6 +13754,9 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Notizen erneut erstellen';
+
+  @override
   String get attentionSummaryFailed => 'Diese Unterhaltung konnte nicht zusammengefasst werden';
 
   @override

@@ -13658,6 +13658,9 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'नोट्स पुन्हा तयार करा';
+
+  @override
   String get attentionSummaryFailed => 'या संभाषणाचा सारांश तयार करता आला नाही';
 
   @override

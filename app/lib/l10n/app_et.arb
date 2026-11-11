@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Salvestised peatatud",
     "activityAttentionUploadStalledTitle": "Üleslaadimine on seiskunud",
     "activityAttentionUploadRecordings": "{count, plural, =1{Ootab 1 salvestis} other{Ootab {count} salvestist}}",
+    "attentionRerunNotes": "Loo märkmed uuesti",
     "attentionSummaryFailed": "Seda vestlust ei õnnestunud kokku võtta",
     "activityAttentionSemantics": "Tegevus, vajab tähelepanu",
     "connectAgentHeadline": "Kasuta oma Omi mälu ChatGPT-s ja oma tehisintellekti agentides",

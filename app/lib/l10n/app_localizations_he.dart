@@ -13556,6 +13556,9 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'יצירת הערות מחדש';
+
+  @override
   String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
 
   @override

@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Aufnahmen pausiert",
     "activityAttentionUploadStalledTitle": "Upload stockt",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 Aufnahme wartet} other{{count} Aufnahmen warten}}",
+    "attentionRerunNotes": "Notizen erneut erstellen",
     "attentionSummaryFailed": "Diese Unterhaltung konnte nicht zusammengefasst werden",
     "activityAttentionSemantics": "Aktivität, Aufmerksamkeit erforderlich",
     "connectAgentHeadline": "Nutze dein Omi-Gedächtnis in ChatGPT und deinen KI-Agenten",

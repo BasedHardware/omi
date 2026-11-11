@@ -4218,6 +4218,7 @@
     "activityAttentionStorageSubtitle": "Kayıtlar duraklatıldı",
     "activityAttentionUploadStalledTitle": "Yükleme durdu",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 kayıt bekliyor} other{{count} kayıt bekliyor}}",
+    "attentionRerunNotes": "Notları yeniden oluştur",
     "attentionSummaryFailed": "Bu konuşma özetlenemedi",
     "activityAttentionSemantics": "Etkinlik, ilgilenilmesi gerekiyor",
     "connectAgentHeadline": "Omi hafızanı ChatGPT'de ve yapay zeka ajanlarında kullan",

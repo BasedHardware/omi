@@ -13468,6 +13468,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => '노트 다시 생성';
+
+  @override
   String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
 
   @override

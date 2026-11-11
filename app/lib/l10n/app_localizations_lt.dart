@@ -13676,6 +13676,9 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Kurti pastabas iš naujo';
+
+  @override
   String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
 
   @override
