@@ -1118,6 +1118,17 @@ OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
     ['outcome', 'reason'],
 )
 
+OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL = Counter(
+    'omi_sync_bridge_contained_donor_shadow_total',
+    (
+        'Shadow-mode outcomes for a processed sync donor the contained-donor bridge merge would consider. '
+        'Labels are a closed set: '
+        'outcome=would_absorb|partial_overlap|no_segment_span|open_target|no_overlap. '
+        'Never labeled by uid, conversation id, or content.'
+    ),
+    ['outcome'],
+)
+
 # Counted alongside omi_sync_transcription_*_total{outcome="internal_error"}:
 # the bounded internal cause (config.sync_telemetry.SyncFailureReason).
 OMI_SYNC_INTERNAL_FAILURES_TOTAL = Counter(
