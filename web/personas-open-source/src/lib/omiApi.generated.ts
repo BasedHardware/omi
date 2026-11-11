@@ -4636,6 +4636,10 @@ export interface RecordingVoice {
   stream_speaker: string;
 }
 
+export interface RecoveryPreparation {
+  ready: boolean;
+}
+
 export interface RedeemCodeRequest {
   code: string;
 }
@@ -7257,6 +7261,7 @@ export interface OmiApiSchemas {
   "RecordingTranscriptResponse": RecordingTranscriptResponse;
   "RecordingTranscriptSegment": RecordingTranscriptSegment;
   "RecordingVoice": RecordingVoice;
+  "RecoveryPreparation": RecoveryPreparation;
   "RedeemCodeRequest": RedeemCodeRequest;
   "RedeemCodeResponse": RedeemCodeResponse;
   "ReferralClaimRequest": ReferralClaimRequest;
@@ -9618,6 +9623,16 @@ export interface OmiApiPaths {
       operationId: "get_my_fair_use_status_v1_fair_use_status_get";
       responses: {
         "200": FairUseStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/first-value/recovery/prepare": {
+    get: {
+      operationId: "prepare_recovery_prompt_v1_first_value_recovery_prepare_get";
+      responses: {
+        "200": RecoveryPreparation;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -17084,6 +17099,28 @@ export async function get_my_fair_use_status_v1_fair_use_status_get(header: { au
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function prepare_recovery_prompt_v1_first_value_recovery_prepare_get(header: { X_Omi_First_Value_Protocol?: string | null, X_Omi_Notification_Permission?: string | null, X_Omi_Time_Zone?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RecoveryPreparation> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/first-value/recovery/prepare`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_Omi_First_Value_Protocol !== undefined ? { "X-Omi-First-Value-Protocol": String(header.X_Omi_First_Value_Protocol) } : {}),
+      ...(header.X_Omi_Notification_Permission !== undefined ? { "X-Omi-Notification-Permission": String(header.X_Omi_Notification_Permission) } : {}),
+      ...(header.X_Omi_Time_Zone !== undefined ? { "X-Omi-Time-Zone": String(header.X_Omi_Time_Zone) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function client_flags_v1_flags_get(query: { surface: "macos" | "mobile" | "web-app" | "windows" }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ClientFlagsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/flags`;
@@ -23876,4 +23913,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 545 client methods generated.
+// Total: 546 client methods generated.
