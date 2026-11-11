@@ -31,6 +31,17 @@ def test_review_config_behavior_matrix_covers_every_supported_platform():
         pytest.param({"reviewer_uids": ["reviewer"]}, "reviewer", "9.9.9+1", True, id="reviewer-uid"),
         pytest.param({}, "user", "1.0.531+607", False, id="missing-document"),
         pytest.param(
+            {
+                "review_submission_entries": [
+                    {"platform": "ios", "version": "1.0.531", "state": "active", "expires_at": "2099-01-01T00:00:00Z"}
+                ]
+            },
+            "user",
+            "1.0.531+607",
+            False,
+            id="lifecycle-metadata-is-not-serving-contract",
+        ),
+        pytest.param(
             {"hidden_versions": ["1.0.532"], "reviewer_uids": ["another-user"]},
             "user",
             "1.0.531+607",

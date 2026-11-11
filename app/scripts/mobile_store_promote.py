@@ -12,6 +12,7 @@ import sys
 import tempfile
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -34,6 +35,30 @@ BUILD_TAG_RE = re.compile(
 # 2026-10-27 error said this parameter must not be set; keep this switch aligned
 # with the current Play response and both Codemagic publishing blocks.
 CHANGES_NOT_SENT_FOR_REVIEW = True
+
+
+def record_review_submission(platform: str, version: str, version_code: str | None = None) -> None:
+    """Best-effort receipt for a successful store submission; never fail the release."""
+    receipt_path = os.environ.get("APP_REVIEW_CONFIG_SUBMISSION_RECEIPT")
+    if not receipt_path:
+        return
+    try:
+        path = Path(receipt_path)
+        records: list[dict[str, str]] = []
+        if path.exists() and path.stat().st_size:
+            previous = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(previous, list):
+                records = [row for row in previous if isinstance(row, dict)]
+        record = {"platform": platform, "version": version}
+        record["submitted_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        if version_code is not None:
+            record["version_code"] = version_code
+        records.append(record)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+        temporary.replace(path)
+    except (OSError, TypeError, ValueError):
+        print("WARN: app-review receipt could not be recorded; store submission already succeeded", file=sys.stderr)
 
 
 # A version in any of these states is in Apple's hands or approved and waiting.
@@ -81,11 +106,7 @@ def require_build_id(value: str | None, label: str = "CM_BUILD_ID") -> str:
 
 def require_build_tag(value: str | None, version: str, label: str = "CM_TAG") -> str:
     match = BUILD_TAG_RE.fullmatch(value or "")
-    if (
-        match is None
-        or match.group("version") != version
-        or int(match.group("build")) > 2_100_000_000
-    ):
+    if match is None or match.group("version") != version or int(match.group("build")) > 2_100_000_000:
         raise PromotionError(f"{label} must be a valid Android release tag for {version}")
     return value
 
@@ -141,7 +162,9 @@ def cli_json(*args: str) -> object:
         result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=60)
         return json.loads(result.stdout)
     except subprocess.CalledProcessError as exc:
-        raise PromotionError(f"App Store Connect lookup failed: {' '.join(args[:3])}\n{(exc.stderr or '')[-2000:]}") from exc
+        raise PromotionError(
+            f"App Store Connect lookup failed: {' '.join(args[:3])}\n{(exc.stderr or '')[-2000:]}"
+        ) from exc
     except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
         raise PromotionError("App Store Connect build lookup failed") from exc
 
@@ -443,11 +466,7 @@ def promote_internal_android_to_alpha(
             if build_number not in codes:
                 continue
             name = release.get("name")
-            if (
-                codes != [build_number]
-                or name != expected_name
-                or release.get("status") != "completed"
-            ):
+            if codes != [build_number] or name != expected_name or release.get("status") != "completed":
                 raise PromotionError("Play internal release does not match this exact completed build")
             matches.append(release)
         if len(matches) != 1:
@@ -465,11 +484,7 @@ def promote_internal_android_to_alpha(
             if build_number not in codes:
                 expected_releases.append(dict(release))
                 continue
-            if (
-                codes != [build_number]
-                or release.get("name") != expected_name
-                or release.get("status") != "completed"
-            ):
+            if codes != [build_number] or release.get("name") != expected_name or release.get("status") != "completed":
                 raise PromotionError("Play alpha already contains a conflicting release for this build")
             matching_alpha_releases += 1
             if matching_alpha_releases > 1:
@@ -479,12 +494,17 @@ def promote_internal_android_to_alpha(
         promoted_release["status"] = "completed"
         promoted_release.pop("userFraction", None)
         expected_releases.append(promoted_release)
-        updated = client.edits().tracks().update(
-            packageName=PACKAGE_NAME,
-            editId=edit_id,
-            track="alpha",
-            body={"track": "alpha", "releases": expected_releases},
-        ).execute()
+        updated = (
+            client.edits()
+            .tracks()
+            .update(
+                packageName=PACKAGE_NAME,
+                editId=edit_id,
+                track="alpha",
+                body={"track": "alpha", "releases": expected_releases},
+            )
+            .execute()
+        )
         if (
             not isinstance(updated, dict)
             or updated.get("track") != "alpha"
@@ -581,9 +601,7 @@ def submit_android(
     release["name"] = release_name if release_name is not None else version
     release["versionCodes"] = codes
     release["status"] = status
-    release["releaseNotes"] = preserved_notes if preserved_notes is not None else [
-        {"language": "en-US", "text": notes}
-    ]
+    release["releaseNotes"] = preserved_notes if preserved_notes is not None else [{"language": "en-US", "text": notes}]
     release.pop("userFraction", None)
     if status != "inProgress" and "countryTargeting" in release:
         # Google permits countryTargeting only on an inProgress release;
@@ -616,9 +634,7 @@ def submit_android(
         # the train log; a bare "rejected" line cost a 2026-10-19 1%->10% ladder
         # hop its root cause — the train only printed this static string.
         detail = f": {exc}" if str(exc).strip() else ""
-        raise PromotionError(
-            f"Google Play rejected exact-code promotion to production{detail}"
-        ) from exc
+        raise PromotionError(f"Google Play rejected exact-code promotion to production{detail}") from exc
 
 
 def main() -> int:
@@ -640,7 +656,9 @@ def main() -> int:
             build_id = require_build_id(args.build_id)
             client, edit_id = play_edit()
             promote_internal_android_to_alpha(client, edit_id, args.version, build_number, build_tag, build_id)
-            print(f"Promoted Android {args.version} ({build_number}) from internal to alpha; held for review submission")
+            print(
+                f"Promoted Android {args.version} ({build_number}) from internal to alpha; held for review submission"
+            )
             return 0
         if args.confirm != "submit-for-review":
             raise PromotionError("CONFIRM must be exactly submit-for-review")
@@ -662,8 +680,10 @@ def main() -> int:
         android_target = prepare_android(args.version, args.android_build) if android else None
         if ios_build:
             submit_ios(ios_build, ios_notes, locales=ios_live_locales())
+            record_review_submission("ios", args.version)
         if android_target:
             submit_android(*android_target, args.version, args.android_build, android_notes)
+            record_review_submission("android", args.version, args.android_build)
     except PromotionError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1

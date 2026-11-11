@@ -84,6 +84,7 @@ class ReasonFamily(StrEnum):
     RECORD_GAP_FILL = 'record_gap_fill'
     RECORD_RETAINED_ACK = 'record_retained_ack'
     PIPELINE_LEDGER = 'pipeline_ledger'
+    APP_REVIEW_CONFIG = 'app_review_config'
 
 
 class PusherPcmStage(StrEnum):
@@ -97,6 +98,22 @@ class PusherPcmErrorReason(StrEnum):
     ACQUIRE = 'acquire'
     RELEASE = 'release'
     LATE_STORAGE = 'late_storage'
+
+
+class AppReviewConfigReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CREDENTIALS_UNAVAILABLE = 'credentials_unavailable'
+    STORE_API_ERROR = 'store_api_error'
+    RECONCILIATION_REPAIR = 'reconciliation_repair'
+    LIVE_HIDE_CLEARED = 'live_hide_cleared'
+    SUBMISSION_TOKEN_UNAVAILABLE = 'submission_token_unavailable'
+
+
+class AppReviewConfigOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OK = 'ok'
+    PARTIAL = 'partial'
+    ERROR = 'error'
 
 
 REASON_UNKNOWN_TOTAL = Counter(

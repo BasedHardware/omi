@@ -121,6 +121,34 @@ routes:
       owner: backend
   - route_type: http
     method: POST
+    path: /v2/app-review-config/sweep
+    policy:
+      review_status: reviewed
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
+      byok: not_applicable
+      rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}
+      timeout_class: sync_job
+      surface: internal_task
+      visibility: internal
+      data_domain: billing
+      deprecation: {state: active}
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v2/internal/app-review-config/submissions
+    policy:
+      review_status: reviewed
+      auth: {mechanisms: [codemagic_submission_token], placement: handler, scopes: []}
+      byok: not_applicable
+      rate_limit: {policy_name: app_review_config_submission, key_subject: ip, enforcement: fail_closed, placement: dependency}
+      timeout_class: default_method
+      surface: internal_task
+      visibility: internal
+      data_domain: billing
+      deprecation: {state: active}
+      owner: backend
+  - route_type: http
+    method: POST
     path: /v2/dream-agent/sweep
     policy:
       review_status: reviewed

@@ -2985,6 +2985,7 @@ workflows:
     environment:
       groups:
         - google_play
+        - app_review_config
       # Per-run inputs, overridden by the API trigger's environment.variables (Codemagic only injects
       # overrides for declared variables). The placeholders are rejected by mobile_store_promote.py,
       # so a run without explicit inputs fails closed; empty-string defaults fail yaml validation.
@@ -3014,12 +3015,20 @@ workflows:
           [ "${PROMOTE_IOS_BUILD:-}" = "0" ] && PROMOTE_IOS_BUILD=""
           [ "${PROMOTE_ANDROID_BUILD:-}" = "0" ] && PROMOTE_ANDROID_BUILD=""
           echo "promotion inputs: platform=${PROMOTE_PLATFORM:-} version=${PROMOTE_VERSION:-} ios=${PROMOTE_IOS_BUILD:-} android=${PROMOTE_ANDROID_BUILD:-} confirm_set=$([ "${CONFIRM:-}" = "submit-for-review" ] && echo yes || echo no)"
+          receipt="$(mktemp)"
+          export APP_REVIEW_CONFIG_SUBMISSION_RECEIPT="$receipt"
+          submit_status=0
           python3 scripts/mobile_store_promote.py \
             --confirm "${CONFIRM:-}" \
             --platform "${PROMOTE_PLATFORM:-}" \
             --version "${PROMOTE_VERSION:-}" \
             --ios-build "${PROMOTE_IOS_BUILD:-}" \
-            --android-build "${PROMOTE_ANDROID_BUILD:-}"
+            --android-build "${PROMOTE_ANDROID_BUILD:-}" || submit_status=$?
+          hook_status=0
+          python3 scripts/app_review_config_hook.py --receipt "$receipt" || hook_status=$?
+          rm -f "$receipt"
+          if [ "$submit_status" -ne 0 ]; then exit "$submit_status"; fi
+          exit "$hook_status"
 
   mobile-daily-train:
     name: Daily Mobile Store Train (self-driving store release)
@@ -3030,6 +3039,7 @@ workflows:
     environment:
       groups:
         - google_play
+        - app_review_config
       vars:
         # "true" reads store state and prints the plan without submitting or drafting anything.
         TRAIN_DRY_RUN: "false"
@@ -3055,7 +3065,15 @@ workflows:
           if [ "${TRAIN_DRY_RUN:-false}" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
           fi
-          python3 scripts/mobile_daily_train.py --platform both $DRY_RUN_FLAG
+          receipt="$(mktemp)"
+          export APP_REVIEW_CONFIG_SUBMISSION_RECEIPT="$receipt"
+          submit_status=0
+          python3 scripts/mobile_daily_train.py --platform both $DRY_RUN_FLAG || submit_status=$?
+          hook_status=0
+          python3 scripts/app_review_config_hook.py --receipt "$receipt" || hook_status=$?
+          rm -f "$receipt"
+          if [ "$submit_status" -ne 0 ]; then exit "$submit_status"; fi
+          exit "$hook_status"
 
   mobile-rollout-advance:
     name: Mobile Rollout Advance (intraday exposure ladder)
