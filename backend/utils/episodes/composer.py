@@ -1277,17 +1277,21 @@ def _compose(
     fresh_revisions: dict[str, Optional[datetime]] = {}
     fresh_state, fresh = _members(uid, fresh_episode, c, revisions=fresh_revisions)
     superseded = fresh_state != 'ok' or fingerprint(fresh) != print_
-    removed_member = bool(set(member_ids) - set(_retained_ids(fresh_episode)))
+    member_changed = bool(set(member_ids) - set(_retained_ids(fresh_episode)))
     # Waiting members collapse _members to []; check visibility of the original
     # paid set separately so an actual removal/hidden member still cannot leak.
     for cid in member_ids:
         row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
-        # Fence the exact visibility read, including members omitted by a waiting
-        # result. A later hide/delete must refuse the paid notes atomically.
-        fresh_revisions[cid] = row.get('updated_at') if row else None
-        if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
-            removed_member = True
-    if removed_member or (superseded and not keep_paid):
+        # Preserve the fingerprint snapshot's revisions; never adopt later reads.
+        if (
+            not row
+            or cid not in fresh_revisions
+            or row.get('updated_at') != fresh_revisions[cid]
+            or hidden_member(row)
+            or not conversations_db.is_visible_conversation(row)
+        ):
+            member_changed = True
+    if member_changed or (superseded and not keep_paid):
         _write(uid, episode_id, c, lambda current: _release(current, print_, lease_token))
         return 'superseded'
 

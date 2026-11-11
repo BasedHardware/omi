@@ -120,7 +120,10 @@ def test_paid_member_change_between_visibility_read_and_write_is_never_published
     assert all('composed_fingerprint' not in row for tx in s.db.transactions for _, row in tx.sets)
 
 
-def test_hide_during_the_final_visibility_read_refuses_even_when_fingerprint_was_unchanged(paid_store, monkeypatch):
+@pytest.mark.parametrize('change', ['hidden', 'notes'])
+def test_change_during_final_visibility_read_refuses_even_when_fingerprint_was_unchanged(
+    paid_store, monkeypatch, change
+):
     s = paid_store
     original_read = composer.conversations_db.get_conversation
     reads_after_call = []
@@ -129,7 +132,10 @@ def test_hide_during_the_final_visibility_read_refuses_even_when_fingerprint_was
         if s.calls:
             reads_after_call.append(args[1])
             if len(reads_after_call) == 3:  # _members read both; now the original-member visibility check
-                s.db.rows[s.paths['c1']]['discarded'] = True
+                if change == 'hidden':
+                    s.db.rows[s.paths['c1']]['discarded'] = True
+                else:
+                    s.db.rows[s.paths['c1']]['structured']['overview'] = 'Newer visible notes'
                 s.revisions[s.paths['c1']] += timedelta(seconds=1)
         return original_read(*args, **kwargs)
 
@@ -137,10 +143,13 @@ def test_hide_during_the_final_visibility_read_refuses_even_when_fingerprint_was
     assert composer.compose(UID, 'ep1', collaborators=s.c) == 'superseded'
     assert not _episode_now(s).get('composed_fingerprint')
     assert _episode_now(s)['title'] == 'old'
+    assert not _episode_now(s).get('compose_lease')
+    assert all('composed_fingerprint' not in row for tx in s.db.transactions for _, row in tx.sets)
 
 
+@pytest.mark.parametrize('boundary', ['write', 'visibility'])
 @pytest.mark.parametrize('settle', [True, False])
-def test_member_fence_refusal_reuses_bounded_recompose_scheduling(paid_store, monkeypatch, settle):
+def test_member_fence_refusal_reuses_bounded_recompose_scheduling(paid_store, monkeypatch, settle, boundary):
     s = paid_store
     # Reach the existing latency cap so the first background attempt is paid.
     assert composer.compose(UID, 'ep1', collaborators=s.c, background=True) == 'settling'
@@ -155,7 +164,22 @@ def test_member_fence_refusal_reuses_bounded_recompose_scheduling(paid_store, mo
             s.revisions[s.paths['c1']] += timedelta(seconds=1)
         return original_update(*args, **kwargs)
 
-    monkeypatch.setattr(composer.episodes_db, 'update_episode', update)
+    if boundary == 'write':
+        monkeypatch.setattr(composer.episodes_db, 'update_episode', update)
+    else:
+        original_read = composer.conversations_db.get_conversation
+        visibility_reads = {}
+
+        def read(*args, **kwargs):
+            if s.calls:
+                call = len(s.calls)
+                visibility_reads[call] = visibility_reads.get(call, 0) + 1
+                if visibility_reads[call] == 3:  # after both fingerprint snapshot reads
+                    s.db.rows[s.paths['c1']]['structured']['overview'] = f'Newer notes {call}'
+                    s.revisions[s.paths['c1']] += timedelta(seconds=1)
+            return original_read(*args, **kwargs)
+
+        monkeypatch.setattr(composer.conversations_db, 'get_conversation', read)
     monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
     outcomes = []
     monkeypatch.setattr(composer.metrics, 'record_compose', lambda result, seconds, **_: outcomes.append(result))
@@ -165,5 +189,6 @@ def test_member_fence_refusal_reuses_bounded_recompose_scheduling(paid_store, mo
     assert not composer._inflight and not composer._rerun
     assert bool(composer._deferred) is settle
     assert not _episode_now(s).get('composed_fingerprint')
+    assert all('composed_fingerprint' not in row for tx in s.db.transactions for _, row in tx.sets)
     if settle:
         assert 590 < composer.settle_delay(_episode_now(s)) <= 600
