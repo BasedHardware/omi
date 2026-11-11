@@ -381,6 +381,41 @@ def test_a_stamp_failure_keeps_the_survey_open_for_the_next_tick(monkeypatch):
     assert projector.finish_backoff.surveyed is True
 
 
+def test_a_stamp_failure_on_a_full_page_restarts_the_whole_survey(monkeypatch):
+    """A full page moves the cursor past the failed row; a later short page must not close."""
+    monkeypatch.setenv(LEVER, 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
+    log, ids = finish_log(persisted=3)
+    now = [1000.0]
+    projector = silent_projector(log)
+    projector.clock = lambda: now[0]
+    failing = ids[0]
+    real, attempts = log.defer_finish, []
+
+    def defer_finish(sid, state, at):
+        attempts.append(sid)
+        if sid == failing and len(attempts) == 1:
+            raise RuntimeError('synthetic stamp failure')
+        return real(sid, state, at)
+
+    log.defer_finish = defer_finish
+    # The first page is full, so discovery advances past the unstamped row.
+    projector.sweep(limit=2)
+    assert PROJECTION_FINISH_DUE_FIELD not in log.results[failing]
+    assert PROJECTION_FINISH_DUE_FIELD in log.results[ids[1]]
+    # The short page that ends the walk must not close the survey behind it.
+    now[0] += 1
+    projector.sweep(limit=2)
+    assert projector.finish_backoff.surveyed is False
+    # The walk restarted, so the row is rediscovered and stamped.
+    now[0] += 1
+    walked = []
+    projector._finish = Mock(side_effect=lambda sid, *_a: walked.append(sid))
+    projector.sweep(limit=2)
+    assert failing in walked
+    assert PROJECTION_FINISH_DUE_FIELD in log.results[failing]
+
+
 def test_projection_page_due_cursor_and_seed_shapes():
     class Query:
         def __init__(self):

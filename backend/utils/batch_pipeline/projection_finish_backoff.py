@@ -24,7 +24,9 @@ class FinishBackoff:
         # every row on it carries a clock: the filtered page cannot see a row
         # whose stamp failed, so closing early would lose that obligation.
         self.survey_short = False
-        self.stamp_failed = False
+        # Rows whose stamp failed in this survey; a full page moves the cursor
+        # past them, so the failure must restart the walk.
+        self.unstamped: set[str] = set()
 
     def page(self, size: int) -> list[str]:
         """The finish page: legacy while the lever is off, clock-filtered when on."""
@@ -35,6 +37,7 @@ class FinishBackoff:
             # enable must survey again before it filters.
             self.surveyed = False
             self.survey_short = False
+            self.unstamped.clear()
             return discovery.next(limit=size)
         due_before = self.projector.clock() if self.surveyed else None
         page = discovery.next(limit=size, due_before=due_before)
@@ -44,11 +47,17 @@ class FinishBackoff:
         return page
 
     def survey_done(self) -> None:
-        """Close the survey only after its last page is durably stamped."""
-        if self.survey_short and not self.stamp_failed:
-            self.surveyed = True
+        """Close the survey only after every surveyed row is durably stamped."""
+        if not self.survey_short:
+            return
         self.survey_short = False
-        self.stamp_failed = False
+        if not self.unstamped:
+            self.surveyed = True
+            return
+        # The cursor passed a row that kept no clock: restart the walk.
+        discovery = self.projector.finish_discovery
+        discovery.after = None
+        discovery.seeded = False
 
     def settled(self, segment_id: str, entry: dict | None, result) -> None:
         """Defer this row only after a walk that produced no completion.
@@ -57,12 +66,13 @@ class FinishBackoff:
         of being deferred is left alone. ``entry`` is ``None`` when the row read
         itself failed; the store then stamps only a row still in a finish state.
         """
+        self.unstamped.discard(segment_id)
         if not projection_finish_backoff_enabled() or result is not None:
             return
         state = entry.get('projection_state') if entry else None
         try:
             self.projector.store.defer_finish(segment_id, state, self.projector.clock())
         except Exception:
-            # The row keeps no clock, so the next tick must survey it again.
-            self.stamp_failed = True
+            # The row keeps no clock, so the rest of the survey must find it.
+            self.unstamped.add(segment_id)
             raise

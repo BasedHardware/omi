@@ -1253,8 +1253,9 @@ wake, completion) writes both fields in the same transaction: a move into
 `persisted`/`ready` stamps due now and step 0, and any other state deletes
 them, so no obligation waits on a stale clock. A blocked or failed survey walk
 also stamps the row, because the filtered page cannot see a row without a
-clock. Rollback is the one switch; the fields are additive and unread when off,
-so no backfill is needed.
+clock. A failed stamp keeps the survey open and restarts the unfiltered walk
+from the front. Rollback is the one switch; the fields are additive and unread
+when off, so no backfill is needed.
 
 The existing oldest-age and over-SLA guards cannot detect a sub-900 s delay
 introduced by this lever: the oldest-age max is already saturated by a
