@@ -1,3 +1,4 @@
+import 'lag_work_registry.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:developer' show Timeline;
@@ -39,7 +40,9 @@ class LagRecorder {
     this.watchdogPeriod = const Duration(milliseconds: 250),
     int Function()? nowUs,
     DateTime Function()? wallClock,
-  })  : _nowUs = nowUs ?? (() => Timeline.now),
+    LagWorkRegistry? workRegistry,
+  })  : _workRegistry = workRegistry ?? lagWork,
+        _nowUs = nowUs ?? (() => Timeline.now),
         _wallClock = wallClock ?? DateTime.now;
 
   static const int slowUs = 16667;
@@ -53,6 +56,7 @@ class LagRecorder {
   static const int _worstKept = 12;
   static const int _maxSurfaces = 40;
 
+  final LagWorkRegistry _workRegistry;
   final LagEmitter emit;
   final Duration watchdogPeriod;
   final int Function() _nowUs;
@@ -281,6 +285,10 @@ class LagRecorder {
       'surface': _surface,
       'interaction': _interactionAt(_nowUs()).name,
       'blocked_ms': _ms(lateUs),
+      // Include completed work overlapping the delayed tick, not just work
+      // still active when the event loop finally lets the timer run.
+      'work_in_flight': _workRegistry.overlapping(_nowUs() - lateUs - watchdogPeriod.inMicroseconds, _nowUs()),
+      'work_registry_dropped': _workRegistry.dropped,
     };
     _keepWorst(_worstStalls, record, 'blocked_ms');
     _emit('mobile_lag_stall', record);

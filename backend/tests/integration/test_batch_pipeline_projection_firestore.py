@@ -1345,9 +1345,21 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
     for index in range(12):
         lane.projector.store.ref('jobs', f'held-{index:02d}').set(
-            {'owner_id': 'synthetic-first' if index < 10 else 'synthetic-other', 'recovery_state': 'prepared'}
+            {
+                'owner_id': 'synthetic-first' if index < 10 else 'synthetic-other',
+                'state': 'quarantined',
+                'recovery_state': 'prepared',
+            }
         )
+    # A committed job marked held by a quarantine-held projection is never a candidate.
+    lane.projector.store.ref('jobs', 'held-05a').set(
+        {'owner_id': 'synthetic-first', 'state': 'committed', 'recovery_state': 'held'}
+    )
     recovery = QuarantineRecovery(lane.store, Mock())
+    # These deliberately sparse records model discovery only. Real policy
+    # loading correctly refuses them before dispatch; isolate that separate
+    # authority boundary instead of accidentally relying on its held fallback.
+    monkeypatch.setattr(module, 'load_stage_policy', lambda *a, **kw: ({}, None))
     recovery.recover = Mock(return_value='held')
     original = module.recovery_candidates
     query = Mock(wraps=original)
@@ -1357,9 +1369,10 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
     assert query.call_count == 2
     assert query.call_args.kwargs['after_id'] == 'held-09'
     assert recovery.recover.call_args.args == ('held-11', 'synthetic-other')
-    assert recovery.sweep() == {}  # Empty tail resets cursor, without an extra query.
-    assert query.call_count == 3
+    # A short second page already proves end-of-scan. The next scan must
+    # restart immediately, rather than spending an empty-tail query first.
     assert recovery.sweep() == {'held': 10}
+    assert query.call_count == 3
     assert query.call_args.kwargs['after_id'] is None
 
 
@@ -1717,7 +1730,7 @@ def test_superseded_settlement_rechecks_fences_after_failed_assignment(lane, mon
                 )
             elif kind == 'generation':
                 lane.client.collection('batch_pipeline_privacy').document(privacy_owner_key(lane.uid)).set(
-                    {'generation': 1}
+                    {'generation': 1, 'blocked': False, 'purging': False}
                 )
             else:
                 batch.ledger.update({'job_id': 'other-job'})
@@ -1978,3 +1991,27 @@ def test_local_repair_cli_refuses_invalid_namespace_non_loopback_and_prod_overri
     refusals(['--stage', 'local'], dict(base, FIRESTORE_EMULATOR_HOST='10.9.8.7:8080'), 'loopback emulator')
     refusals(['--stage', 'local'], base, 'loopback emulator')
     refusals(['--stage', 'prod'], base, 'wrong identity')
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_assignment_hold_stamps_deadline_on_result_and_receipt(lane, monkeypatch, enabled):
+    from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', str(enabled).lower())
+    batch = multipart(lane, 3)
+    ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=0)
+    # A pre-change release preserves additive markers; a fresh hold must renew them.
+    lane.projector.store.ref('results', batch.ids[0]).update(
+        {'held_expired_at': 1, 'held_expired_reason': 'held_expired'}
+    )
+    lane.projector.project(batch.ids[0])
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['projection_state'] == 'quarantine_held'
+    if enabled:
+        assert row['held_expired_at'] is None and row['held_expired_reason'] is None
+        assert row['held_deadline_at'] == lane.clock() + HELD_DEAD_LETTER_SECONDS
+        assert row['projection_parts']['0']['held_deadline_at'] == row['held_deadline_at']
+    else:
+        assert row['held_expired_at'] == 1 and row['held_expired_reason'] == 'held_expired'
+        assert 'held_deadline_at' not in row
+        assert 'held_deadline_at' not in row['projection_parts']['0']

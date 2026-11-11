@@ -12,7 +12,7 @@ import typer
 from rich.markup import escape
 
 from omi_cli.client import path_segment
-from omi_cli.datetime_options import ISO_DATETIME_FORMATS
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS, as_utc
 from omi_cli.errors import UsageError
 from omi_cli.json_input import load_json_input
 from omi_cli.models import CONVERSATION_TEXT_MAX_LENGTH, CONVERSATION_TITLE_MAX_LENGTH, ConversationTextSource
@@ -57,6 +57,11 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
+    if start_date is not None and end_date is not None and as_utc(start_date) > as_utc(end_date):
+        raise UsageError(
+            message="Invalid date filter range",
+            detail="--start-date cannot be after --end-date.",
+        )
     server_page_size = 200
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
@@ -187,6 +192,11 @@ def create_conversation(
     }
     if text_source_spec is not None:
         body["text_source_spec"] = text_source_spec
+    if started_at is not None and finished_at is not None and as_utc(started_at) > as_utc(finished_at):
+        raise UsageError(
+            message="Invalid datetime range",
+            detail="--started-at cannot be after --finished-at.",
+        )
     if started_at is not None:
         body["started_at"] = started_at.isoformat()
     if finished_at is not None:
@@ -262,6 +272,11 @@ def from_segments(
     body: dict[str, object] = {"transcript_segments": segments, "language": cleaned_lang}
     if source is not None:
         body["source"] = source
+    if started_at is not None and finished_at is not None and as_utc(started_at) > as_utc(finished_at):
+        raise UsageError(
+            message="Invalid datetime range",
+            detail="--started-at cannot be after --finished-at.",
+        )
     if started_at is not None:
         body["started_at"] = started_at.isoformat()
     if finished_at is not None:

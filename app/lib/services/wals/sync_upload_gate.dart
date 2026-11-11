@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/sync_upload_refusal.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -284,28 +285,46 @@ class SyncUploadGate {
         }
         rethrow;
       } catch (error) {
-        if (error is SyncUploadHttpException && error.statusCode >= 500 && (error.retryAfterSeconds ?? 0) > 0) {
+        if (error is SyncUploadHttpException &&
+            error.statusCode >= 500 &&
+            (error.retryAfterSeconds ?? 0) > 0 &&
+            !isRecordingScopedSyncWaitReasonCode(error.reasonCode)) {
           // An unscoped 5xx with an explicit Retry-After (sync dispatch
           // unavailable while an account gate holds, ledger-fence cutover) is
           // the server asking this account to pause — the same instruction a
           // scoped 503/429 encodes. Without this, a drain keeps failing every
           // remaining batch against the same gate for as long as it holds.
           // backendBusy is in-memory, so an app restart re-probes immediately.
+          // A recording-scoped custody wait is excluded: it holds only that
+          // recording, so pausing the account would stall every other WAL
+          // behind one stuck conversation (2026-11-07 503 storm).
           _limiter.markLimited(
             retryAfterSeconds: error.retryAfterSeconds,
             reason: RateLimitReason.backendBusy,
           );
         }
-        _recordUploadFailure(
-          error,
-          attemptId: attemptId,
-          recordingId: conversationId,
-          fileCount: files.length,
-          totalBytes: totalBytes,
-          claimsLiveCapture: claimLiveCapture,
-          startedAt: startedAt,
-          telemetrySource: telemetrySource,
-        );
+        if (error is SyncUploadHttpException && isRecordingScopedSyncWaitReasonCode(error.reasonCode)) {
+          // The WAL stays pending until its record is complete: a wait, not a failure.
+          _mirrorUpload(
+            attemptId: attemptId,
+            phase: 'deferred',
+            source: telemetrySource,
+            occurredAt: _clock(),
+            latencyMs: _latencyMs(startedAt),
+            httpStatus: error.statusCode,
+          );
+        } else {
+          _recordUploadFailure(
+            error,
+            attemptId: attemptId,
+            recordingId: conversationId,
+            fileCount: files.length,
+            totalBytes: totalBytes,
+            claimsLiveCapture: claimLiveCapture,
+            startedAt: startedAt,
+            telemetrySource: telemetrySource,
+          );
+        }
         rethrow;
       }
     } finally {
@@ -491,7 +510,7 @@ class RecordingUploadTelemetry {
     // rate limit is still `rate_limited`.
     if (error is SyncRateLimitedException) return 'rate_limited';
     if (error is TimeoutException) return 'timeout';
-    if (error is SocketException) return 'network';
+    if (isTransientNetworkError(error)) return 'network';
     if (error is SyncUploadHttpException) {
       if (error.statusCode == 401 || error.statusCode == 403) return 'authentication';
       if (error.statusCode >= 500) return 'server';

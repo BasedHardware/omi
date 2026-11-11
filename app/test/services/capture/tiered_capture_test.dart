@@ -17,6 +17,7 @@ import '../../support/capture/scripted_device_connection.dart';
 void main() {
   late Directory directory;
   late CaptureReplayWorld world;
+  final hardwareMuteWrites = <bool>[];
   final pendant = BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
   Future<void> connect() async {
     world.deviceConnection = ScriptedDeviceConnection();
@@ -40,7 +41,12 @@ void main() {
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('tiered_capture_');
-    world = await CaptureReplayWorld.boot(tempDir: directory, pendantCodec: BleAudioCodec.opus);
+    hardwareMuteWrites.clear();
+    world = await CaptureReplayWorld.boot(
+      tempDir: directory,
+      pendantCodec: BleAudioCodec.opus,
+      deviceMuteWriter: (id, muted) async => hardwareMuteWrites.add(muted),
+    );
     await connect();
   });
   tearDown(() async {
@@ -59,6 +65,7 @@ void main() {
     }
     expect(world.controller.silencePaused, false);
     expect(world.controller.isPaused, false);
+    expect(hardwareMuteWrites, isEmpty);
     expect(world.controller.activeRecordingId, recording);
     expect(socket.closeCalls, 0);
     expect(socket.sentBinary, hasLength(300));
@@ -245,8 +252,10 @@ void main() {
 
   test('manual pause takes over silence reason and prevents auto resume', () async {
     await legacySilencePause();
+    hardwareMuteWrites.clear();
     await world.controller.pauseCapture();
     expect(world.controller.silencePaused, false);
+    expect(hardwareMuteWrites, [true]);
     await world.controller.resumeAfterSilence();
     expect(world.controller.isPaused, true);
   });

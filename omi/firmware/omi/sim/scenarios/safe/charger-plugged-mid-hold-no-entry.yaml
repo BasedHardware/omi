@@ -1,0 +1,15 @@
+id: safe/charger-plugged-mid-hold-no-entry
+summary: >
+  Manual entry needs the charger asserted for the whole hold. A charger that
+  arrives part-way through a long hold does not count.
+committee: [1]
+tags: [fix]
+initial: {charging: false}
+timeline:
+  - {t: 0, hold: 11000}
+  - {t: 4000, charger: on}
+end: 15000
+expect:
+  boot_count: 1
+  boots:
+    - {exit: stop, safe: false}

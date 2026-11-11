@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
+from dataclasses import replace
 import threading
 import time
 
 from config import live_stt_state
-from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, routing_on
+from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, routing_on, window_ja_admits
+from config.parakeet_ja import ja_window_configured
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
-from config.live_stt_resilience import escape_excludes_benched_enabled
+from config.live_stt_resilience import escape_best_rate_primary_enabled, escape_excludes_benched_enabled
 from utils.stt.live_gate import GateState, gate_rate
+from utils.stt.live_primary_guard import effective_primary_stages
 from utils.stt.live_health import bounded_language
 from utils.stt.live_metrics import COST_DECISION, COST_SHADOW, COST_ALL_DEGRADED
 from utils.stt.provider_resilience import ProviderCircuitBreaker
@@ -57,6 +60,10 @@ def _family_supports(target: Target, language: str, engine_models: dict[str, str
     lang = language.strip().lower().split('-', 1)[0]
     if target.family == 'parakeet':
         engine = (engine_models or {}).get('parakeet')
+        if engine == 'parakeet-window' and (engine_models or {}).get('parakeet_window_language') == 'ja':
+            # The ja pool serves Japanese only, and the session applied the owner
+            # ramp when it chose it. Any other required language needs v3 or a vendor.
+            return lang == 'ja' and ja_window_configured()
         model = 'nvidia/parakeet-tdt-0.6b-v3' if engine == 'parakeet-window' else 'nvidia/parakeet-rnnt-1.1b'
         return lang in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[model]
     if target.family == 'modulate':
@@ -73,6 +80,10 @@ def permission_reason(
     account_states=None,
 ) -> str | None:
     """Closed deny reason for one target, or None when dialing is permitted."""
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    if gpu_fleet_off() and target.family == 'parakeet':
+        return 'capability'
     if 'streaming' not in target.features:
         return 'capability'
     if not engine_matches(target, engine_models):
@@ -202,6 +213,38 @@ def escape_admits(stages) -> bool:
     return not (escape_excludes_benched_enabled() and any(stage > 0 for stage in stages))
 
 
+# The same evidence bar as a 5->25 promotion: below this many outcomes,
+# failures/n is not comparable evidence for choosing the escape's lead.
+ESCAPE_RATE_SAMPLE_MINIMUM = 30
+
+
+def escape_lead_by_proven_rate(ordered, states):
+    """Keep a worse-failure-rate target from leading the availability escape.
+
+    2026-10-28: a freshly promoted 6.2% stage-25 modulate led a ~1% stage-5
+    soniox purely on stage order and then became sole primary. While any
+    stage-5+ candidate holds a trial-sized sample, the lead must be that
+    best-rate candidate unless the current lead is proven and no worse.
+    Targets below the sample minimum keep their stage order.
+    """
+    if not escape_best_rate_primary_enabled():
+        return ordered
+    proven = []
+    for target in ordered:
+        state = states.get(target.id, GateState())
+        if state.stage >= 5 and state.n >= ESCAPE_RATE_SAMPLE_MINIMUM:
+            proven.append((state.failures / state.n, -state.stage, target.cost_per_audio_hour, target))
+    if not proven:
+        return ordered
+    best = min(proven, key=lambda item: item[:3])
+    best_rate = best[0]
+    lead = states.get(ordered[0].id, GateState())
+    if lead.stage >= 5 and lead.n >= ESCAPE_RATE_SAMPLE_MINIMUM and lead.failures / lead.n <= best_rate:
+        return ordered
+    best = best[3]
+    return [best, *(target for target in ordered if target is not best)]
+
+
 def select(
     targets,
     states,
@@ -219,7 +262,9 @@ def select(
             not target.capable(code, features) for code in required_languages
         ):
             reason = 'capability'
-        elif not assigned(uid, target.id, target.ramp()):
+        elif not assigned(uid, target.id, target.ramp()) or not all(
+            window_ja_admits(target, uid, code) for code in (language, *required_languages)
+        ):
             reason = 'ramp_skip'
         else:
             eligible.append(target)
@@ -228,6 +273,15 @@ def select(
                 continue
             reason = 'capacity_skip'
         COST_DECISION.labels(target=target.id, reason=reason).inc()
+
+    raw_stages = {target.id: states.get(target.id, GateState()).stage for target in available}
+    effective = effective_primary_stages(available, raw_stages)
+    if effective != raw_stages:
+        states = dict(states)
+        for target in available:
+            if effective[target.id] != raw_stages[target.id]:
+                states[target.id] = replace(states.get(target.id, GateState()), stage=effective[target.id])
+                COST_DECISION.labels(target=target.id, reason='sole_primary_guard').inc()
 
     for target in available:
         state = states.get(target.id, GateState())
@@ -260,10 +314,12 @@ def select(
         # Availability escape: health stages demote, they cannot remove the
         # whole chain. Config ramps and account gates remain hard exclusions.
         # Strictly stage-ordered; benched targets stay out while any stage>0
-        # target is available.
+        # target is available, and the lead is never a worse-failure-rate
+        # target while a proven stage-5+ candidate exists.
         result = sorted(available, key=health_order)
         if exclude_benched:
             result = [target for target in result if states.get(target.id, GateState()).stage > 0]
+        result = escape_lead_by_proven_rate(result, states)
     elif not result and eligible:
         # All capacity-signalled/cooled: normal admission decides one escape.
         result = sorted(eligible, key=capacity_refused_at)

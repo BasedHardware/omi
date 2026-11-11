@@ -189,7 +189,8 @@ jobs:
         with:
           source_sha: ${{ steps.admitted-source.outputs.source_sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 
       - name: Google Auth
         id: auth
@@ -376,6 +377,9 @@ jobs:
             DEMAND_PROCESSING_PERCENT=0
             PROACTIVITY_V2_POSTHOG_TOKEN=phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
             PROACTIVITY_V2_POSTHOG_HOST=https://us.posthog.com
+            OMI_FLAGS_FIRESTORE_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            OMI_FLAGS_FIRESTORE_DATABASE=omi-flags
+            OMI_FLAGS_SOURCE=dual
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             USE_VERTEX_AI=true
             TTS_PROVIDER=gemini

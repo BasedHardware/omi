@@ -1,0 +1,12 @@
+id: power/pin-and-soft-reset-are-fresh-trials
+summary: Pin and ordinary software resets in normal mode never count as failed boots.
+tags: [guard]
+timeline:
+  - {t: 5000, power: pin_reset}
+  - {t: 10000, power: soft_reset}
+  - {t: 15000, power: pin_reset}
+  - {t: 20000, power: soft_reset}
+end: 25000
+expect:
+  boot_count: 5
+  every: {safe: false, boot_count: 1}

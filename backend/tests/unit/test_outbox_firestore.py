@@ -22,7 +22,6 @@ PAYLOAD = {'conversation_id': 'c', 'language': 'en'}
 @pytest.fixture
 def rows(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
     return state
 
@@ -42,7 +41,7 @@ def test_enqueue_writes_a_mark_compatible_row_and_wakes_after_commit(rows):
     result = _enqueue(600.0, policy_id='p1')
     row = state_rows[KEY]
     assert result.row_id == KEY and not result.coalesced and result.wake_token == row['task_token']
-    assert row['due_at'] == 600.0 and row['policy_id'] == 'p1' and row['uid'] == 'u'
+    assert row['due_at'] == 120.0 and row['policy_id'] == 'p1' and row['uid'] == 'u'
     assert tasks[-1]['task_token'] == row['task_token']  # non-transactional enqueue wakes itself
     # The same row is claimable by today's run(): row compatibility (invariant 7).
     assert reprocess.run(KEY, row['task_token'], lambda *_: None, now=601) == 'processed'
@@ -52,6 +51,7 @@ def test_enqueue_writes_a_mark_compatible_row_and_wakes_after_commit(rows):
 def test_enqueue_coalesces_with_min_and_max_rules(rows):
     state_rows, _tasks = rows
     _enqueue(600.0)
+    state_rows[KEY]['summary_seen'] = True
     assert _enqueue(900.0, coalesce='max').coalesced
     assert state_rows[KEY]['due_at'] == 900.0 and state_rows[KEY]['version'] == 2
     assert _enqueue(300.0, coalesce='min').coalesced
@@ -168,6 +168,42 @@ def test_defer_mints_a_new_wake_and_release_keeps_it(rows):
     assert outbox.release(claim, 'locked', now=601)
     assert state_rows[KEY]['lease_until'] == 0 and state_rows[KEY]['task_token'] == claim.wake_token
     assert isinstance(outbox.claim_key(KEY, claim.wake_token, 120, now=602), Claim)  # the queue retry claims
+
+
+def test_long_stuck_custody_deferral_polls_hourly_on_the_consumer_route(rows):
+    # The C3 consumer serves prod; the same episode rule as the sync handler's run() applies (#24264).
+    state_rows, _ = rows
+    grace = reprocess.STUCK_DEFER_GRACE_SECONDS
+    _enqueue(1.0)
+    claim = _claim(rows, now=10)
+    outbox.defer(claim, 130.0, 'redirect_unresolved', now=10)
+    assert state_rows[KEY]['deferred_since'] == 10 and state_rows[KEY]['due_at'] == 130.0  # fresh: cadence kept
+    late = 10 + grace
+    claim = _claim(rows, now=late)
+    outbox.defer(claim, late + 120, 'redirect_unresolved', now=late)
+    assert state_rows[KEY]['deferred_since'] == 10
+    assert state_rows[KEY]['due_at'] == late + reprocess.STUCK_DEFER_POLL_SECONDS
+    assert state_rows[KEY]['task_due_at'] == state_rows[KEY]['wake_check_after'] == state_rows[KEY]['due_at']
+
+
+def test_new_cause_or_completed_callback_restarts_the_consumer_episode(rows):
+    state_rows, _ = rows
+    grace = reprocess.STUCK_DEFER_GRACE_SECONDS
+    _enqueue(1.0)
+    outbox.defer(_claim(rows, now=10), 20.0, 'redirect_unresolved', now=10)
+    late = 10 + grace
+    # A different cause starts a new episode: its first deferral keeps the requested cadence.
+    outbox.defer(_claim(rows, now=late), late + 120, 'pending_live_bridge', now=late)
+    assert state_rows[KEY]['deferred_since'] == late and state_rows[KEY]['due_at'] == late + 120
+    # A cause outside the stuck set never backs off, however long it lasts.
+    later = late + grace
+    outbox.defer(_claim(rows, now=later), later + 30, 'not_due', now=later)
+    assert state_rows[KEY]['due_at'] == later + 30
+    # A completed callback ends the episode.
+    claim = _claim(rows, now=later + 40)
+    _enqueue(later + 1, now=later + 40)  # an append during processing: ack re-arms instead of retiring the row
+    assert outbox.ack(claim, 'processed', now=later + 41)
+    assert 'deferred_since' not in state_rows[KEY]
 
 
 def test_transactional_enqueue_defers_the_wake_to_the_caller(rows, monkeypatch):

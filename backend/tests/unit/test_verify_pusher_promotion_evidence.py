@@ -28,6 +28,9 @@ REPOSITORY = "gcr.io/based-hardware-dev/pusher"
 LIVE_WINDOW_TRANSCRIPT = "the wizard who had vanished"
 
 
+pytestmark = pytest.mark.usefixtures('isolated_git_env')
+
+
 def writer_live_segment_window(
     transcript: str = LIVE_WINDOW_TRANSCRIPT,
     *,
@@ -1199,9 +1202,16 @@ def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference
         if isinstance(entry.get("valueFrom"), dict) and isinstance(entry["valueFrom"].get("configMapKeyRef"), dict)
     }
     assert explicit_refs == {
+        # The speaker-pass kill switch must follow the isolated canary config,
+        # just like the pre-existing Pusher references below.
+        "BATCH_FINAL_PASS_ENABLED": config_name,
         "PROACTIVITY_REDIS_HOST": config_name,
         "REDIS_DB_HOST": config_name,
         "TYPESENSE_HOST": config_name,
+        "RECORD_TOKEN_LEASE_MODE": config_name,
+        "RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT": config_name,
+        "RECORD_TOKEN_LEASE_SECONDS": config_name,
+        "RECORD_TOKEN_LEASE_DEPLOYED_AT": config_name,
     }
 
 

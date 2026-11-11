@@ -18,3 +18,10 @@ Map<String, int> fillingSeconds(List<PendingWorkItem> pending) {
   }
   return filling;
 }
+
+/// What a Home row is still adding: an episode's row adds up its members' sync jobs.
+int? homeRowFilling(Map<String, int> filling, String rowId, Set<String>? episodeConversationIds) {
+  if (episodeConversationIds == null) return filling[rowId];
+  final total = episodeConversationIds.fold<int>(0, (sum, id) => sum + (filling[id] ?? 0));
+  return total > 0 ? total : null;
+}

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/review.dart' as api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/review.dart';
-import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.dart';
 import 'package:omi/pages/review/widgets/recent_change_groups.dart';
 import 'package:omi/pages/review/widgets/recent_change_row.dart';
@@ -11,25 +10,21 @@ import 'package:omi/pages/review/widgets/recent_change_sheet.dart';
 import 'package:omi/pages/review/widgets/review_parts.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
 
 typedef ReviewChangesLoader = Future<ApiResult<ReviewChangesPage>> Function({String? cursor});
 typedef ReviewChangeToggler = Future<ApiResult<ReviewChange>> Function(String changeId, {required bool undone});
 
-/// What Omi changed on its own in the last 30 days, grouped by what changed. Each row shows the
-/// change itself (before → after) and opens every place it landed, in context, with Undo. A
-/// back-office screen reached from Review; nothing here is pushed at the user.
+/// What Omi changed on its own in the last 30 days, grouped by day. Each row shows the change's
+/// title with Undo, and opens every place it landed, in context. A back-office screen reached from
+/// Review; nothing here is pushed at the user.
 class RecentChangesPage extends StatefulWidget {
-  const RecentChangesPage({super.key, this.loadChanges, this.setUndone, this.openConversation, this.openTasks});
+  const RecentChangesPage({super.key, this.loadChanges, this.setUndone, this.openConversation});
 
   final ReviewChangesLoader? loadChanges;
   final ReviewChangeToggler? setUndone;
 
   /// Opens a source conversation; defaults to the conversation detail page.
   final void Function(BuildContext context, String conversationId)? openConversation;
-
-  /// Opens the task list from a task change; defaults to the Tasks page.
-  final void Function(BuildContext context)? openTasks;
 
   @override
   State<RecentChangesPage> createState() => _RecentChangesPageState();
@@ -39,7 +34,7 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   /// Ticks whenever [_changes] or [_busy] change, so an open sheet follows the page.
   final _revision = ValueNotifier<int>(0);
   List<ReviewChange> _changes = const [];
-  Map<RecentChangeSection, List<RecentChangeGroup>> _groups = const {};
+  Map<DateTime, List<RecentChangeGroup>> _groups = const {};
   String? _cursor;
   bool _loading = true;
   bool _failed = false;
@@ -64,7 +59,7 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
   void _update(VoidCallback change) {
     setState(() {
       change();
-      _groups = groupRecentChanges(_changes);
+      _groups = groupRecentChangesByDay(_changes);
     });
     _revision.value++;
   }
@@ -155,12 +150,6 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
     openChatBlockConversation(context, conversationId: conversationId);
   }
 
-  void _openTasks(BuildContext context) {
-    final open = widget.openTasks;
-    if (open != null) return open(context);
-    routeToPage(context, const ActionItemsPage());
-  }
-
   void _openGroup(RecentChangeGroup group) {
     showOmiSheet<void>(
       context: context,
@@ -196,11 +185,11 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
           child: Text(l10n.reviewChangesIntro, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
         ),
       ];
-      for (final MapEntry(key: section, value: groups) in _groups.entries) {
+      final dates = OmiDateFormat.of(context);
+      for (final MapEntry(key: day, value: groups) in _groups.entries) {
         rows.add(Padding(
           padding: const EdgeInsets.only(top: OmiSpacing.sm),
-          child: ReviewSectionLabel(
-              key: ValueKey('recent_changes_section_${section.name}'), label: _sectionLabel(context, section)),
+          child: ReviewSectionLabel(key: ValueKey('recent_changes_day_$day'), label: dates.dayHeader(day)),
         ));
         for (final group in groups) {
           rows.add(Padding(
@@ -210,7 +199,6 @@ class _RecentChangesPageState extends State<RecentChangesPage> {
               busy: group.changes.any((c) => _busy.contains(c.changeId)),
               onOpen: () => _openGroup(group),
               onToggleAll: () => _toggleGroup(group),
-              onOpenTask: () => _openTasks(context),
             ),
           ));
         }

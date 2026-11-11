@@ -4,6 +4,51 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: batch-pipeline-tuning-disclosure
+    command: ["python3", ".github/scripts/check_batch_tuning_disclosure.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}", "--run-tests"]
+    triggers: ["backend/config/batch_pipeline.py", "backend/utils/batch_pipeline/**", "backend/charts/batch-pipeline-worker/**", "backend/charts/pusher/**", "backend/utils/pusher_*.py", ".github/scripts/*check_batch_tuning_disclosure.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    requires_pr_body: true
+    reason: "Retro P6 / #24481 retune: numeric capacity changes disclose before/after values and new pipeline states name an exit; explicit reasoned waivers keep this a disclosure ratchet"
+  - id: cv1-battery-soc
+    command: ["bash", "omi/firmware/omi/tests/battery/run.sh"]
+    triggers: ["omi/firmware/omi/src/battery.c", "omi/firmware/omi/src/lib/core/lib/battery/battery.h", "omi/firmware/omi/src/lib/core/battery_guard*", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/battery/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#20483: charger voltage must not inflate the last off-charger SOC; reject edge-spanning samples and keep disconnected BAS current"
+
+  - id: cv1-device-name
+    command: ["python3", "omi/firmware/omi/tests/test_device_name.py"]
+    triggers: ["omi/firmware/omi/src/settings.c", "omi/firmware/omi/src/lib/core/settings.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/features.h", "omi/firmware/omi/tests/test_device_name*", "omi/firmware/omi/tests/settings_stubs/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#23743: reject partial NVS names without publishing them and keep advertising bytes immutable across BLE RX updates"
+  - id: firmware-ota-slot-geometry
+    command: ["python3", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]
+    triggers: ["omi/firmware/boards/omi/pm_static.yml", "omi/firmware/tools/cv1/pinned-partitions.yml", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]
+    lanes: ["local", "ci"]
+    reason: "#13855: moved OTA slots away from the installed bootloader's compiled addresses, which would stop later OTAs from applying"
+  - id: firmware-capture-mute-durability
+    command: ["bash", "omi/firmware/omi/tests/run_capture_mute_test.sh"]
+    triggers: ["omi/firmware/omi/src/settings.c", "omi/firmware/omi/src/lib/core/capture_mute*", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14293: a failed NVS write must not receive a successful mute ACK or change the confirmed runtime mute"
+  - id: cv1-power-control
+    command: ["bash", "omi/firmware/omi/tests/run_power_control_test.sh"]
+    triggers: ["omi/firmware/omi/src/lib/core/power_control_gatt.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/features.h", "omi/firmware/omi/src/lib/core/capture_mute*", "omi/firmware/omi/src/settings.c", "omi/firmware/omi/tests/test_power*", "omi/firmware/omi/tests/test_capture_mute_settings.c", "omi/firmware/omi/tests/run_power_control_test.sh", "omi/firmware/omi/tests/settings_stubs/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#23735: share the persistent mute owner instead of resuming on disconnect; queue orderly shutdown outside the system workqueue"
+  - id: cv1-bootloader-region-tests
+    command: ["python3", "omi/firmware/scripts/ci/test_cv1_bootloader.py"]
+    triggers: ["omi/firmware/scripts/ci/**", "omi/firmware/bootloader/cv1-bootloader-policy.json", "omi/firmware/omi/sysbuild*", "omi/firmware/omi/sysbuild/**", "omi/firmware/omi/src/mcuboot_boot_zephyr.c", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-11-07 CV1 jig: stock MCUboot in 3.0.21/.23/.24 wire-flash assets reads corrupted SPI NOR while SD drives MISO; reject every unapproved boot region"
+  - id: cv1-tested-release-contract-tests
+    command: ["python3", "omi/firmware/scripts/ci/test_cv1_release.py"]
+    triggers: ["omi/firmware/scripts/ci/**", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-11-03 CV1 bench finding: rebuilds change randomized signed bytes and the installed overwrite-only loader cannot undo a bad boot; reject untested promotion and unintended radio packaging"
   - id: pcloud-backup-contract-tests
     command: ["bash", "scripts/run-plugin-pcloud-tests.sh"]
     triggers: ["plugins/omi-pcloud-app/**", "plugins/omi-plugin-sdk/**", "backend/utils/plugin_transport.py", "backend/utils/plugin_backup_audio.py", "scripts/run-plugin-pcloud-tests.sh", ".github/checks-manifest.yaml"]
@@ -29,11 +74,22 @@ checks:
     triggers: ["backend/**/*.py", "config/feature-flags.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-10-18 policy-window incident: obligations admitted at first-summary percent zero were graded under another revision's policy; fail reads of snapshot-owned batch keys outside the immutable resolver; keep live switches behind their helper and warn on unowned E1b worker/process keys"
+  - id: record-token-lease-promql
+    command: ["bash", "scripts/dev-harness/run-python.sh", "backend/scripts/check_record_token_lease_promql.py"]
+    triggers: ["backend/charts/monitoring/**", "backend/tests/promql/record_token_lease.py", "backend/scripts/check_record_token_lease_promql.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#25018 pre-review: prove the actual lease backlog warning across CronJob replacement, invalid clocks and release gaps with real PromQL instead of uncaught manual-only backtests"
   - id: monitoring-alert-backtest-lint
     command: ["python3", "backend/scripts/alert_backtest.py", "--lint"]
     triggers: ["backend/charts/monitoring/alerts/**", "backend/charts/monitoring/metric-inventory.prod.json", "backend/scripts/alert_backtest.py", "backend/tests/unit/test_monitoring_alert_backtest.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-10-13 absent-rule audit: retired proactive metric and kube_endpoint_address_available could never evaluate; fingerprinted legacy debt cannot admit new dead selectors or edited rules"
+  - id: ui-author-approval-tests
+    command: ["node", "--test", ".github/scripts/tests/ui-author-approval.test.cjs"]
+    triggers: [".github/scripts/ui-author-approval.cjs", ".github/scripts/tests/ui-author-approval.test.cjs", ".github/workflows/ui-author-approval.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#24477: the generated Swift client exceeds the Contents API inline limit; immutable blob evidence must remain complete without exempting generated UI declarations or bypassing human approval"
   - id: ui-evidence
     command: ["python3", ".github/scripts/check_ui_evidence.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", "web/frontend/src/**", "web/admin/app/**", ".github/scripts/check_ui_evidence.py", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
@@ -57,7 +113,7 @@ checks:
     reason: "The 2026-09-24 inventory found an incorrect notes-v2 default and missing calendar, memory and JIT gates in the handwritten catalog; code reads and deploy declarations now require reviewed registry entries and a deterministic rendered doc"
   - id: feature-flag-registry-fixtures
     command: ["python3", "scripts/test_check_feature_flag_registry.py"]
-    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/render_feature_flag_registry.py", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
+    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/git_test_env.py", "scripts/render_feature_flag_registry.py", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Registry extraction, uniqueness, date warnings, retirement and rendered-doc drift must remain covered by hermetic fixtures"
   - id: posthog-flag-sync-fixtures
@@ -273,7 +329,7 @@ checks:
     reason: "the Python SDK's Deepgram handshake uses the websockets 14 API; exercise the actual client at the minimum supported version so an incompatible dependency floor cannot silently disable transcription"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "scripts/git_test_env.py", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered, and the mobile-verify selection/discovery contract (SCA-490) executes here — journey runner, session evidence contract, and Makefile edits must keep it selected"
   - id: windows-update-feed-probe-tests
@@ -286,6 +342,12 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
+  - id: firmware-safe-mode-host
+    command: ["make", "-C", "omi/firmware/tests", "test"]
+    triggers: ["omi/firmware/omi/**", "omi/firmware/boards/omi/**", "omi/firmware/tests/**", "omi/firmware/tools/cv1/jig_gestures*", "omi/firmware/tools/cv1/test_jig_gestures.py"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "CV1 safe-mode recovery must count failed boots without NVS wear, survive same-version DFU, and preserve the fielded OTA slot geometry"
   - id: pre-push-firmware-formatter-prerequisite
     command: ["bash", "scripts/test-pre-push-firmware-format-prerequisite.sh"]
     triggers: ["scripts/pre-push", "scripts/test-pre-push-firmware-format-prerequisite.sh", ".github/checks-manifest.yaml"]
@@ -306,6 +368,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/test-pre-push-backend-test-cap.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11018: the over-broad-selection fallback swapped in the diff's own changed backend test files without re-applying PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES, so a diff changing more than the cap ran unbounded while printing 'cap is 40'; the bounded push gate must never run more than the cap it advertises"
+  - id: pr-preflight-git-env
+    command: ["bash", "scripts/test-pr-preflight-git-env.sh"]
+    triggers: ["scripts/pr-preflight", "scripts/test-pr-preflight-git-env.sh", "scripts/git_test_env.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-11-04 00:10Z: preflight inherited a lane's GIT_DIR/GIT_WORK_TREE and nested git init wrote core.worktree into the shared config, redirecting every linked worktree; isolate children only after selecting the intended tree"
   - id: pre-push-hook-git-env
     command: ["bash", "scripts/test-pre-push-git-env.sh"]
     triggers: ["scripts/pre-push", "scripts/test-pre-push-git-env.sh", ".github/checks-manifest.yaml"]
@@ -364,12 +431,12 @@ checks:
     reason: "#11641: a self-signed developer build carrying the production bundle id wrote certificate-pinned TCC records that no re-grant could clear, breaking Screen Recording and Microphone on a user's Mac for days; a build not signed for release must never claim the production identifiers"
   - id: desktop-release-process-guards
     command: ["bash", "scripts/run-release-process-guards.sh"]
-    triggers: ["codemagic.yaml", ".github/workflows/desktop_promote_beta.yml", ".github/scripts/check-release-process-guards.py", ".github/scripts/git_bash.py", "scripts/dev-harness/_resolve_python.sh", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/firmware_release.yml", "omi/firmware/scripts/ci/**", "codemagic.yaml", ".github/workflows/desktop_promote_beta.yml", ".github/scripts/check-release-process-guards.py", ".github/scripts/git_bash.py", "scripts/dev-harness/_resolve_python.sh", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "normal Beta promotion must stay on Codemagic signed-smoke evidence and must not reintroduce a qualification-completion trigger"
   - id: desktop-release-process-guard-tests
     command: ["bash", "scripts/run-release-process-guard-tests.sh"]
-    triggers: [".github/scripts/check-release-process-guards.py", ".github/scripts/test_check_release_process_guards.py", ".github/scripts/git_bash.py", "codemagic.yaml", ".github/scripts/fixtures/codemagic_workflow_contract/**", "scripts/run-release-process-guard-tests.sh", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/firmware_release.yml", "omi/firmware/scripts/ci/**", ".github/scripts/check-release-process-guards.py", ".github/scripts/test_check_release_process_guards.py", ".github/scripts/git_bash.py", "codemagic.yaml", ".github/scripts/fixtures/codemagic_workflow_contract/**", "scripts/run-release-process-guard-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10351: the 94-test self-suite behind the release-process guard ran in no lane, so guard regressions accumulated silently until the suite itself was red on main"
   - id: failure-class-retirement-author
@@ -490,6 +557,16 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "all changes must be free of whitespace errors and conflict markers"
+  - id: new-file-headers
+    command: ["python3", ".github/scripts/check_new_file_headers.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/agent/src/**/*.ts", ".github/scripts/check_new_file_headers.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14527 merged the 75-line headerless app/lib/backend/http/api_result.dart (the C3 typed-result contract) with no statement of what it owns; a new first-party source file must say what it owns and the constraint it upholds where the next reader looks first"
+  - id: new-file-headers-tests
+    command: ["python3", ".github/scripts/test_check_new_file_headers.py"]
+    triggers: [".github/scripts/check_new_file_headers.py", ".github/scripts/test_check_new_file_headers.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "header detection must keep accepting top-of-file and after-import comment blocks while rejecting marker-only comments, parse failures, and wrongly exempting tests, generated files, __init__.py and small files"
 
   - id: twitter-app-callback-error-escaping-tests
     command: ["python3", "plugins/omi-twitter-app/test_callback_error_escaping.py"]
@@ -551,7 +628,7 @@ checks:
     reason: "the guard-artifact ratchet's counting window, threshold, allowlist shrink rule, and shallow-history skip must stay behaviorally covered"
   - id: failure-class-cli-tests
     command: ["python3", "scripts/test_failure_class.py"]
-    triggers: ["scripts/failure-class", "scripts/test_failure_class.py", ".github/failure-classes/**", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/failure-class", "scripts/test_failure_class.py", "scripts/git_test_env.py", ".github/failure-classes/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the failure-class CLI is the registry's only schema authority; its hermetic tests had no blocking lane and had silently gone stale"
   - id: desktop-changelog-data
@@ -754,6 +831,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Ray-Ban DAT launch collision requires the Meta and mcumgr SwiftProtobuf copies to remain in mutually exclusive iOS pod graphs"
+  - id: ios-rayban-audio-capture
+    command: ["ruby", "app/ios/test/rayban_audio_capture_test.rb"]
+    triggers: ["app/ios/Runner/RayBanMeta/RayBanMetaAudioCapture.swift", "app/ios/test/rayban_audio_capture_test.rb", "app/ios/test/rayban_audio_capture_test.swift", "app/ios/test/fixtures/rayban_audio_avfoundation.swift", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "FC-stopped-capture-retains-audio-session: failed Ray-Ban setup must release a partially acquired tap/engine/session before retry; execute the actual capture class with injected framework effects and type-check against the real iOS SDK"
   - id: rayban-dat-xcode-graph
     command: ["ruby", "app/ios/test/rayban_dat_xcode_graph_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Flutter/raybanDat*.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/Runner.xcodeproj/xcshareddata/xcschemes/raybanDat.xcscheme", "app/ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved", "app/ios/test/rayban_dat_xcode_graph_test.rb", ".github/checks-manifest.yaml"]
@@ -1099,6 +1182,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_diarizer.yml", ".github/workflows/gcp_models.yml", ".github/workflows/gcp_parakeet.yml", ".github/workflows/gcp_nllb_translation.yml", ".github/workflows/gcp_notifications_job.yml", ".github/workflows/gcp_plugins.yml", "plugins/**/*.py", "plugins/Dockerfile"]
     lanes: ["local", "ci"]
     reason: "#9857: deployable Python images must contain the transitive first-party imports of their runtime entrypoints"
+  - id: backend-runtime-image-third-party-closure
+    command: ["python3", "backend/scripts/runtime_image_contracts.py", "check-third-party"]
+    triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/**/pylock*.toml", "backend/**/requirements*.txt", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", "plugins/**/*.py", "plugins/Dockerfile", "plugins/requirements.txt", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#24490/#24366: the worker image shipped without deepgram-sdk and langdetect because only the full lock was tested; every reachable third-party import must map to a distribution its image's closed lock installs"
   - id: backend-logging-entrypoints
     command: ["python3", "backend/scripts/check_logging_entrypoints.py", "--base", "{base}"]
     triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/charts/**/*.yaml", "backend/charts/**/*.yml", "backend/runtime_images.json", "backend/logging_rollout_pending.json", ".github/checks-manifest.yaml"]
@@ -1228,7 +1316,7 @@ checks:
     command: ["python3", ".github/scripts/test_desktop_codemagic_failure_recovery.py"]
     triggers: [".github/scripts/desktop-codemagic-failure-recovery.py", ".github/scripts/desktop-codemagic-recovery-profiles.json", ".github/scripts/test_desktop_codemagic_failure_recovery.py", ".github/workflows/desktop_codemagic_failure_recovery.yml", "desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "failed desktop Codemagic builds must emit a credential-safe exact-build recovery capsule and prescribe a manual rehearsal only for locally reproducible gates"
+    reason: "an operator-dispatched recovery run (build_id of a failed desktop Codemagic build) must emit a credential-safe exact-build recovery capsule and prescribe a manual rehearsal only for locally reproducible gates"
   - id: desktop-release-rehearsal-contract
     command: ["bash", "desktop/macos/tests/test-desktop-release-rehearsal.sh"]
     triggers: ["desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/tests/test-desktop-release-rehearsal.sh", ".github/checks-manifest.yaml"]
@@ -1566,6 +1654,11 @@ checks:
     triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
+  - id: hume-ai-route-auth-tests
+    command: ["python3", "plugins/hume-ai/test_hume_tools_auth.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hume-ai's /audio, /save-emotion-memory and /force-send-notification routes take uid from the query string with no caller authentication and write emotion memories into any user's Omi account with the app's integration key or push notifications to any user; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
   - id: dead-code-ratchet
     command: ["python3", ".github/scripts/check_dead_code.py"]
     triggers: ["app/lib/**", "app/pubspec.yaml", "backend/**/*.py", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
@@ -1853,12 +1946,12 @@ checks:
     reason: "B0's unexecuted controls and B1's two keyed chat controls expose a real addressability gap; explicit route declarations, the route registry and the adopted-file protections guard catalogued navigation and control keys without a changed-file no-growth debt ratchet"
   - id: app-addressability-check-tests
     command: ["python3", "scripts/test_check_app_addressability.py"]
-    triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/check_app_addressability.py", "scripts/test_check_app_addressability.py", "scripts/git_test_env.py", "app/contracts/addressability/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Token scan must reject unknown explicit route declarations without taxing helpers or dialogs; adopted-file removal stays blocked"
   - id: registry-conflict-resolver-tests
     command: ["python3", "scripts/test_resolve_registry_conflict.py"]
-    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", "scripts/git_test_env.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
   - id: mobile-event-registry
@@ -1906,6 +1999,36 @@ checks:
     triggers: [".github/scripts/check_speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hermetic fixtures cover f-string, format, % and concatenation detection plus the legal log-message and static-label neighbors"
+  - id: docs-site-gate
+    command: ["python3", ".github/scripts/check_docs_site.py"]
+    triggers: ["docs/**", ".github/scripts/check_docs_site.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "docs.omi.me had no gate: three app pages linked /doc/developer/api and OmiConsumer linked /doc/hardware/consumer, none of which resolved, and the 2026-10 docs overhaul moved or deleted 20+ public pages that had zero redirect coverage, so nav-to-file, orphan, broken-link, image and redirect-shadow classes must fail deterministically"
+  - id: docs-site-gate-fixtures
+    command: ["python3", ".github/scripts/test_check_docs_site.py"]
+    triggers: [".github/scripts/check_docs_site.py", ".github/scripts/test_check_docs_site.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the docs gate is the guard for its failure classes, so each class (missing nav file, orphan, broken link, broken image, redirect-source link, redirect shadow, dead redirect target) stays covered by a hermetic fixture"
+  - id: docs-volatile-facts
+    command: ["python3", ".github/scripts/check_docs_volatile_facts.py"]
+    triggers: ["docs/**", ".github/scripts/check_docs_volatile_facts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hand-written docs pages shipped review-SLA promises ('reviewed within 24 hours' in two places), hardware prices, rotting counts ('22+ tools/integrations' in three places), retired bounty links and a model-name table that churns with every provider switch; the lint freezes those classes out of hand-written pages with an explicit allowlist for provider-topic, setup-pin, legacy and generated pages"
+  - id: docs-volatile-facts-fixtures
+    command: ["python3", ".github/scripts/test_check_docs_volatile_facts.py"]
+    triggers: [".github/scripts/check_docs_volatile_facts.py", ".github/scripts/test_check_docs_volatile_facts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every pattern class plus the allowlist and api-reference exemptions stay behaviorally covered"
+  - id: cli-commands-doc-drift
+    command: ["python3", "sdks/python-cli/tools/gen_commands_doc.py", "--check"]
+    triggers: ["sdks/python-cli/omi_cli/**", "sdks/python-cli/tools/gen_commands_doc.py", "docs/doc/developer/cli/commands.mdx", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the CLI commands page told readers to run 'omi --help for the live version' while itself missing the version/ask/chat commands, the entire omi local group, the --timeout flag and two env vars; the tree and inventory are now generated from the Typer registrations so the page cannot lag the code"
+  - id: mcp-tools-doc-drift
+    command: ["python3", "scripts/generate_mcp_tools_doc.py", "--check"]
+    triggers: ["backend/utils/mcp_server/registry.py", "scripts/generate_mcp_tools_doc.py", "docs/doc/developer/mcp/tools.mdx", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the MCP tools page hand-paraphrased all 26 advertised tools and had already lagged the registry (missing fields/summary_only/cursor/timezone parameters on conversation and screen-activity tools); the tool inventory (name, description, scope) is now generated from TOOL_SPECS so an undocumented new tool fails the drift check"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

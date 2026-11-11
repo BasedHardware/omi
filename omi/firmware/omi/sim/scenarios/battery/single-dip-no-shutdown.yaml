@@ -1,0 +1,15 @@
+id: battery/single-dip-no-shutdown
+summary: >
+  Committee item 6. One sagging sample (e.g. a radio burst) below the
+  threshold, then recovery, must not power off.
+committee: [6]
+tags: [fix]
+timeline:
+  - {t: 9000, battery_mv: 3400}
+  - {t: 11000, battery_mv: 3900}
+  - {t: 29000, battery_mv: 3400}
+  - {t: 41000, battery_mv: 3800}
+end: 60000
+expect:
+  boots:
+    - {exit: stop, is_off: false, not_log: ["Battery critical level reached"]}

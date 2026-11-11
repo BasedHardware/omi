@@ -32,8 +32,16 @@ EPISODE = {
 
 @pytest.fixture
 def client(monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from database import episodes
+
+    store = StrictFirestore()
+    store.rows[('users', 'uid-1', 'episodes', 'e1')] = episodes.seal('uid-1', EPISODE)
+    monkeypatch.setattr(router_module.home_read.conversations, 'db', store)
+    # This admission/wire fixture has legacy episodes; recorded timeline CAS
+    # is exercised by the recorded-time service/emulator suites.
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     # The capability marker is Redis; test_episodes_client_gate covers it.
     monkeypatch.setattr(router_module.client_gate, 'note_client_seen', lambda uid: False)
     monkeypatch.setattr(router_module.service, 'last_closed_episode', lambda uid, fresh=False: None)
@@ -96,13 +104,33 @@ def test_lookup_wrap_up_and_dismiss(client, monkeypatch):
         'dismiss_item',
         lambda uid, eid, item_id: calls.append(('dismiss', eid, item_id)) or dict(EPISODE),
     )
+    checked = []
+    monkeypatch.setattr(
+        router_module.home_read, 'schedule_missed_composes', lambda uid, rows, wires: checked.append(rows[0]['id']) or 0
+    )
     assert http.get('/v1/episodes/by-conversation/c1').json()['episode']['id'] == 'e1'
+    assert checked == ['e1']  # The lookup Home calls carries the composer safety net.
     assert http.post('/v1/episodes/e1/wrap-up', json={'conversation_id': 'c1'}).status_code == 200
     assert http.post('/v1/episodes/e1/wrap-up').status_code == 200
     assert http.post('/v1/episodes/e1/items/p1/dismiss').status_code == 200
     assert calls == [('wrap', 'e1', 'c1'), ('wrap', 'e1', None), ('dismiss', 'e1', 'p1')]
     monkeypatch.setattr(router_module.service, 'wrap_up', lambda uid, eid, conversation_id: None)
     assert http.post('/v1/episodes/missing/wrap-up').status_code == 404
+
+
+def test_opening_the_episode_page_triggers_the_deferred_compose(client, monkeypatch):
+    _, http = client
+    closed = {**EPISODE, 'status': 'closed', 'close_reason': 'idle', 'closed_at': T0}
+    monkeypatch.setattr(router_module.service, 'episode_by_id', lambda uid, eid: closed if eid == 'e1' else None)
+    opened = []
+    monkeypatch.setattr(
+        router_module.home_read, 'schedule_opened_compose', lambda uid, ep: opened.append(ep['id']) or True
+    )
+    assert http.get('/v1/episodes/e1').status_code == 200
+    assert opened == ['e1']
+    # A missing episode never reaches the trigger.
+    assert http.get('/v1/episodes/missing').status_code == 404
+    assert opened == ['e1']
 
 
 def test_idle_closed_recap_is_discoverable_and_directly_reachable(client, monkeypatch):
@@ -176,14 +204,14 @@ def test_list_rejects_invalid_window_and_page_arguments(client, params):
     assert http.get('/v1/episodes', params=params).status_code == 422
 
 
-def test_list_store_channel_never_reads(client, monkeypatch):
+def test_list_unknown_channel_never_reads(client, monkeypatch):
     _, http = client
     monkeypatch.setattr(router_module.home_read, 'list_episode_window', lambda *a, **kw: pytest.fail('must not read'))
     assert (
         http.get(
             '/v1/episodes',
             params={'from': T0.isoformat(), 'to': T0.isoformat()},
-            headers={'X-Omi-App-Channel': 'store'},
+            headers={'X-Omi-App-Channel': 'unknown'},
         ).json()['enabled']
         is False
     )

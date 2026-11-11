@@ -30,6 +30,16 @@ def contracts_module():
     return _load_contract_module()
 
 
+@pytest.fixture(scope='module')
+def dependencies_module():
+    sys.path.insert(0, str(SCRIPT_PATH.parent))
+    try:
+        import runtime_image_dependencies
+    finally:
+        sys.path.remove(str(SCRIPT_PATH.parent))
+    return runtime_image_dependencies
+
+
 def _contract(contracts_module, name):
     return next(contract for contract in contracts_module.load_contracts() if contract.name == name)
 
@@ -57,6 +67,31 @@ def test_source_copy_skips_local_openapi_venv(contracts_module, tmp_path):
     contracts_module._copy_source(source, dest)
     assert (dest / 'main.py').is_file()
     assert not (dest / '.openapi-venv').exists()
+
+
+@pytest.mark.parametrize('scratch', ['_temp', '_samples', '_speech_profiles', '_segments'])
+def test_source_copy_skips_untracked_scratch_directories(contracts_module, tmp_path, scratch):
+    source = tmp_path / 'backend'
+    source.mkdir()
+    (source / 'main.py').write_text('ok\n', encoding='utf-8')
+    (source / scratch).mkdir()
+    (source / scratch / 'written-by-a-test.bin').write_text('transient\n', encoding='utf-8')
+    dest = tmp_path / 'staged'
+    contracts_module._copy_source(source, dest)
+    assert (dest / 'main.py').is_file()
+    assert not (dest / scratch).exists()
+
+
+def test_scratch_directory_names_do_not_hide_nested_source(contracts_module, tmp_path):
+    source = tmp_path / 'backend'
+    (source / 'utils' / '_segments').mkdir(parents=True)
+    (source / 'utils' / '_segments' / 'merge.py').write_text('ok\n', encoding='utf-8')
+    (source / 'utils' / '_temp').mkdir()
+    (source / 'utils' / '_temp' / 'helper.py').write_text('ok\n', encoding='utf-8')
+    dest = tmp_path / 'staged'
+    contracts_module._copy_source(source, dest)
+    assert (dest / 'utils' / '_segments' / 'merge.py').is_file()
+    assert (dest / 'utils' / '_temp' / 'helper.py').is_file()
 
 
 def _contract_with_dockerfile(contracts_module, tmp_path, dockerfile_text):
@@ -170,6 +205,159 @@ def test_relative_import_resolution_keeps_the_current_package(contracts_module):
     )
 
 
+def test_import_scans_observe_source_changes_between_invocations(contracts_module, tmp_path):
+    (tmp_path / 'main.py').write_text('import package\nimport added\n', encoding='utf-8')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / '__init__.py').write_text('import json\n', encoding='utf-8')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\nCOPY package/ ./package/\n', encoding='utf-8')
+    contract = replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('main',),
+    )
+
+    def assert_external():
+        assert contracts_module.source_closure_errors(contract) == []
+        assert 'added' not in contracts_module.first_party_import_closure(contract, contract.entrypoints)
+        assert 'added' in contracts_module.third_party_dependency_modules(contract)
+
+    assert_external()
+    added = tmp_path / 'added.py'
+    added.write_text('import external_dependency\n', encoding='utf-8')
+    assert any("'added'" in error for error in contracts_module.source_closure_errors(contract))
+    assert 'added' in contracts_module.first_party_import_closure(contract, contract.entrypoints)
+    dependencies = contracts_module.third_party_dependency_modules(contract)
+    assert 'external_dependency' in dependencies
+    assert 'added' not in dependencies
+    added.unlink()
+    assert_external()
+
+
+def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(contracts_module, tmp_path):
+    (tmp_path / 'main.py').write_text(
+        'def lazy():\n    import added\nclass Nested:\n    from package import child\n', encoding='utf-8'
+    )
+    (tmp_path / 'added.py').write_text('import json\n', encoding='utf-8')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / '__init__.py').write_text('', encoding='utf-8')
+    (package / 'child.py').write_text('import json\n', encoding='utf-8')
+    contracts = []
+    for name, copies in (
+        ('complete', 'COPY added.py ./\nCOPY package/ ./package/\n'),
+        ('missing-lazy', 'COPY package/ ./package/\n'),
+        ('missing-child', 'COPY added.py ./\nCOPY package/__init__.py ./package/__init__.py\n'),
+    ):
+        dockerfile = tmp_path / name
+        dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\n' + copies, encoding='utf-8')
+        contracts.append(
+            replace(
+                _contract(contracts_module, 'pusher'),
+                name=name,
+                dockerfile=dockerfile,
+                target=None,
+                build_context=tmp_path,
+                source_root=tmp_path,
+                entrypoint_source_root=tmp_path,
+                entrypoints=('main',),
+            )
+        )
+
+    errors = contracts_module.check_source_closures(contracts)
+    assert not any(error.startswith('complete:') for error in errors)
+    assert any(error.startswith('missing-lazy:') and "'added'" in error for error in errors)
+    assert any(error.startswith('missing-child:') and "'package.child'" in error for error in errors)
+
+
+def test_shared_staging_keeps_context_and_entrypoint_boundaries(contracts_module, tmp_path):
+    first = tmp_path / 'first'
+    second = tmp_path / 'second'
+    first.mkdir()
+    second.mkdir()
+    (first / 'main.py').write_text('import json\n')
+    (first / 'other.py').write_text('import json\n')
+    (second / 'main.py').write_text('import missing\n')
+    (second / 'missing.py').write_text('import json\n')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\n')
+    template = replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=first,
+        source_root=first,
+        entrypoint_source_root=first,
+        entrypoints=('main',),
+    )
+    contracts = [
+        replace(template, name='complete'),
+        replace(template, name='other-entrypoint', entrypoints=('other',)),
+        replace(
+            template, name='other-context', build_context=second, source_root=second, entrypoint_source_root=second
+        ),
+    ]
+
+    errors = contracts_module.check_source_closures(contracts)
+
+    assert not any(error.startswith('complete:') for error in errors)
+    assert any(error.startswith('other-entrypoint:') and "'other'" in error for error in errors)
+    assert any(error.startswith('other-context:') and "'missing'" in error for error in errors)
+    # The same COPY key must be restaged after a source edit, even after errors.
+    (first / 'main.py').write_text('def lazy():\n    import other\n')
+    errors = contracts_module.check_source_closures(contracts)
+    assert any(error.startswith('complete:') and "'other'" in error for error in errors)
+    (first / 'main.py').write_text('import json\n')
+    assert contracts_module.check_source_closures([contracts[0]]) == []
+
+
+def test_shared_staging_still_validates_each_workdir(contracts_module, tmp_path):
+    from pathlib import PurePosixPath
+
+    (tmp_path / 'main.py').write_text('import json\n')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py /app/main.py\n')
+    contract = replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('main',),
+        workdir=PurePosixPath('/app'),
+    )
+
+    with pytest.raises(contracts_module.ContractError, match='outside WORKDIR'):
+        contracts_module.check_source_closures([contract, replace(contract, workdir=PurePosixPath('/elsewhere'))])
+
+
+def test_shared_import_summary_observes_edits_and_invalid_syntax(contracts_module, tmp_path):
+    source = tmp_path / 'main.py'
+    source.write_text('import json\n')
+    contract = replace(
+        _contract(contracts_module, 'pusher'),
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+    )
+    trees = {}
+    assert 'added' not in contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
+
+    source.write_text('class Nested:\n    def lazy(self):\n        from package import child\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'child.py').write_text('import json\n')
+    assert 'package.child' in contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
+    source.write_text('def broken(:\n')
+    with pytest.raises(SyntaxError):
+        contracts_module.first_party_import_closure(contract, ('main',), _import_trees=trees)
+
+
 def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
     pusher = _contract(contracts_module, 'pusher')
     dependencies = contracts_module.third_party_dependency_modules(pusher)
@@ -197,6 +385,7 @@ def test_structured_model_fallback_imports_without_plugin_sdk(tmp_path):
     shutil.copy(BACKEND_DIR / 'models' / '__init__.py', models_root / '__init__.py')
     shutil.copy(BACKEND_DIR / 'models' / 'conversation_enums.py', models_root / 'conversation_enums.py')
     shutil.copy(BACKEND_DIR / 'models' / 'structured.py', models_root / 'structured.py')
+    shutil.copy(BACKEND_DIR / 'models' / 'task_due.py', models_root / 'task_due.py')
 
     probe = '''
 import builtins
@@ -891,10 +1080,318 @@ def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, n
 
 def test_gpu_batch_retry_cap_does_not_reach_cloud_tasks(contracts_module):
     contract = _contract(contracts_module, 'batch-pipeline-worker')
-    closure = contracts_module.first_party_import_closure(contract, contract.entrypoints)
+    # The image also hosts the separate CPU seal-sweeper CronJob. Preserve this
+    # process boundary on the GPU entrypoint rather than unioning both hosts.
+    gpu_contract = replace(contract, entrypoints=('diarizer.batch_pipeline_runtime',))
+    closure = contracts_module.first_party_import_closure(gpu_contract, gpu_contract.entrypoints)
     assert 'utils.capture.retry_cap' in closure
     assert 'utils.sync.retry_hygiene' not in closure
     assert 'utils.cloud_tasks' not in closure
     assert not any(
-        module.startswith('google.cloud.tasks') for module in contracts_module.third_party_dependency_modules(contract)
+        module.startswith('google.cloud.tasks')
+        for module in contracts_module.third_party_dependency_modules(gpu_contract)
     )
+    sweeper = contracts_module.first_party_import_closure(contract, ('scripts.record_seal_sweep',))
+    assert 'utils.batch_pipeline.record_seal_repair' in sweeper
+    assert 'diarizer.batch_pipeline_runtime' not in sweeper
+    assert 'diarizer.batch_pipeline_models' not in sweeper
+
+
+def _third_party_contract(contracts_module, tmp_path, *, dockerfile_text, entrypoint_text, files):
+    (tmp_path / 'entrypoint.py').write_text(entrypoint_text, encoding='utf-8')
+    for name, text in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text(dockerfile_text, encoding='utf-8')
+    return replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('entrypoint',),
+        dependency_probe_exclusions=frozenset(),
+    )
+
+
+_PYLOCK_DOCKERFILE = (
+    'FROM python:3.11-slim\n'
+    'COPY pylock.worker.toml /app/pylock.worker.toml\n'
+    'RUN pip install --no-cache-dir uv==0.11.13 && uv pip sync --system /app/pylock.worker.toml\n'
+    'WORKDIR /app\n'
+    'COPY entrypoint.py ./\n'
+)
+
+
+def _pylock(*names):
+    return 'lock-version = "1.0"\n' + ''.join(f'\n[[packages]]\nname = "{name}"\nversion = "1.0"\n' for name in names)
+
+
+def test_third_party_closure_rejects_an_import_missing_from_the_image_lock(
+    contracts_module, dependencies_module, tmp_path
+):
+    # The #24490 shape: a reachable `from deepgram import ...` while the worker
+    # lock lacks deepgram-sdk. The full backend lock had it, so unit CI passed.
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=_PYLOCK_DOCKERFILE,
+        entrypoint_text='import numpy\nfrom deepgram import DeepgramClient\nimport langdetect\n',
+        files={'pylock.worker.toml': _pylock('numpy', 'uv')},
+    )
+
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
+
+    assert installed.sources[0].endswith('pylock.worker.toml')
+    assert installed.open_reasons == ()
+    assert len(errors) == 1
+    assert 'deepgram, langdetect' in errors[0]
+    assert 'numpy' not in errors[0].split('(', 1)[0]
+
+
+def test_third_party_closure_maps_import_names_to_distributions(contracts_module, dependencies_module, tmp_path):
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=_PYLOCK_DOCKERFILE,
+        entrypoint_text=(
+            'from deepgram import DeepgramClient\n'
+            'import yaml\n'
+            'from PIL import Image\n'
+            'import google\n'
+            'from google.cloud import firestore, tasks_v2\n'
+            'from google.cloud.exceptions import NotFound\n'
+            'from google.protobuf import json_format\n'
+            'from pyannote.audio import Pipeline\n'
+            'import audioop\n'
+        ),
+        files={
+            'pylock.worker.toml': _pylock(
+                'Deepgram_SDK',
+                'PyYAML',
+                'pillow',
+                'google-cloud-firestore',
+                'google-cloud-tasks',
+                'google-cloud-core',
+                'protobuf',
+                'pyannote.audio',
+            )
+        },
+    )
+
+    errors, _ = dependencies_module.third_party_closure_errors(contract)
+
+    assert errors == []
+
+
+def test_third_party_closure_fails_closed_on_an_unmapped_namespace_submodule(contracts_module, dependencies_module):
+    assert dependencies_module.module_distribution_candidates('google') is None
+    assert dependencies_module.module_distribution_candidates('google.cloud') is None
+    # A submodule under a bare namespace must name a real distribution, never
+    # fall back to the namespace and pass.
+    candidates = dependencies_module.module_distribution_candidates('google.cloud.unmapped_v1.Thing')
+    assert candidates is not None
+    assert 'google-cloud-unmapped' in candidates
+    assert all(candidate != 'google' for candidate in candidates)
+
+
+def test_third_party_closure_does_not_judge_an_open_dependency_set(contracts_module, dependencies_module, tmp_path):
+    # A range-pinned requirements file does not list transitive distributions,
+    # so an absent name may still be installed: report it, never fail on it.
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=(
+            'FROM python:3.11-slim\n'
+            'WORKDIR /app\n'
+            'COPY requirements.txt .\n'
+            'RUN pip3 install --no-cache-dir -r requirements.txt\n'
+            'COPY entrypoint.py .\n'
+        ),
+        entrypoint_text='import starlette\n',
+        files={'requirements.txt': 'fastapi>=0.100.0\n'},
+    )
+
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
+
+    assert errors == []
+    assert installed.open_reasons and 'unpinned fastapi>=0.100.0' in installed.open_reasons[0]
+
+
+def test_third_party_closure_follows_requirement_includes_through_directory_copies(
+    contracts_module, dependencies_module, tmp_path
+):
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=(
+            'FROM python:3.11-slim AS builder\n'
+            'ENV PATH="/opt/venv/bin:$PATH"\n'
+            'RUN python -m venv /opt/venv\n'
+            'COPY reqs/ /tmp/reqs/\n'
+            'RUN pip install --no-cache-dir -r /tmp/reqs/job/requirements.txt\n'
+            'FROM python:3.11-slim\n'
+            'COPY --from=builder /opt/venv /opt/venv\n'
+            'WORKDIR /app\n'
+            'COPY entrypoint.py .\n'
+        ),
+        entrypoint_text='import requests\nimport jwt\n',
+        files={
+            'reqs/requirements.txt': (
+                '# This file is autogenerated by pip-compile with Python 3.11\n'
+                'requests==2.33.0\n# comment\nPyJWT==2.10.1 ; python_version >= "3.9"\n'
+                'pywin32==306 ; sys_platform == "win32"\n'
+            ),
+            'reqs/job/requirements.txt': '-r ../requirements.txt\n',
+        },
+    )
+
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
+
+    assert installed.open_reasons == ()
+    assert installed.distributions == {'requests', 'pyjwt'}
+    assert errors == []
+
+
+def test_third_party_closure_leaves_a_hand_pinned_list_open(contracts_module, dependencies_module, tmp_path):
+    # Every line pinned with == still omits whatever its packages pull in.
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=(
+            'FROM python:3.11-slim\nWORKDIR /app\nCOPY requirements.txt .\n'
+            'RUN pip install -r requirements.txt\nCOPY entrypoint.py .\n'
+        ),
+        entrypoint_text='import starlette\n',
+        files={'requirements.txt': 'fastapi==0.121.0\n'},
+    )
+
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
+
+    assert errors == []
+    assert any('pinned by hand' in reason for reason in installed.open_reasons)
+
+
+def test_third_party_closure_ignores_a_stage_copied_only_for_a_binary(contracts_module, dependencies_module, tmp_path):
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=(
+            'FROM python:3.11-slim AS tools\n'
+            'COPY pylock.tools.toml /tmp/pylock.tools.toml\n'
+            'RUN uv pip sync /tmp/pylock.tools.toml --python /opt/venv/bin/python\n'
+            'FROM python:3.11-slim\n'
+            'COPY --from=tools /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg\n'
+            'COPY pylock.worker.toml /app/pylock.worker.toml\n'
+            'RUN uv pip sync --system /app/pylock.worker.toml\n'
+            'WORKDIR /app\nCOPY entrypoint.py ./\n'
+        ),
+        entrypoint_text='import deepgram\n',
+        files={'pylock.tools.toml': _pylock('deepgram-sdk'), 'pylock.worker.toml': _pylock('numpy')},
+    )
+
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
+
+    assert 'deepgram-sdk' not in installed.distributions
+    assert len(errors) == 1 and 'deepgram' in errors[0]
+
+
+def test_third_party_closure_credits_a_copied_builder_environment(contracts_module, dependencies_module, tmp_path):
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=(
+            'FROM python:3.11-slim AS builder\n'
+            'COPY pylock.worker.toml /tmp/pylock.worker.toml\n'
+            'RUN uv pip sync /tmp/pylock.worker.toml --python /opt/venv/bin/python --compile-bytecode\n'
+            'FROM python:3.11-slim\n'
+            'COPY --from=builder /opt/venv /opt/venv\n'
+            'WORKDIR /app\nCOPY entrypoint.py ./\n'
+        ),
+        entrypoint_text='from deepgram import DeepgramClient\n',
+        files={'pylock.worker.toml': _pylock('deepgram-sdk')},
+    )
+
+    assert dependencies_module.third_party_closure_errors(contract)[0] == []
+
+
+def test_third_party_closure_explicit_mapping_is_authoritative(contracts_module, dependencies_module):
+    # An unrelated distribution named like a longer import path must not
+    # satisfy a module whose owner is mapped explicitly or by its top level.
+    assert dependencies_module.module_distribution_candidates('deepgram.clients.listen') == ('deepgram-sdk',)
+    assert dependencies_module.module_distribution_candidates('fastapi.FastAPI') == ('fastapi',)
+    assert dependencies_module.module_distribution_candidates('google.protobuf.json_format') == ('protobuf',)
+    # API-version suffixes are dropped only under namespace packages.
+    assert dependencies_module.module_distribution_candidates('mylib_v2.thing') == ('mylib-v2',)
+    assert 'google-cloud-tasks' in dependencies_module.module_distribution_candidates('google.cloud.tasks_v2')
+
+
+def test_third_party_closure_excludes_lock_entries_whose_marker_misses_the_image(contracts_module, dependencies_module):
+    applies = dependencies_module.marker_applies_to_image
+    assert applies("platform_machine == 'x86_64' and sys_platform == 'linux'")
+    assert applies("python_full_version < '3.13' and platform_machine == 'x86_64'")
+    assert applies("implementation_name != 'pypy'")
+    assert not applies("sys_platform == 'darwin'")
+    assert not applies("python_full_version >= '3.12'")
+    assert not applies("extra == 'gpu'")  # undecidable here: never credited
+
+
+def test_registered_image_dependency_sets_are_classified(contracts_module, dependencies_module):
+    # The full closure walk runs in the backend-runtime-image-third-party-closure
+    # manifest check; this pins which registered images it judges.
+    closed = {
+        contract.name
+        for contract in contracts_module.load_contracts()
+        if not dependencies_module.installed_dependencies(contract).open_reasons
+    }
+    assert {'batch-pipeline-worker', 'backend', 'backend-api', 'backend-pusher', 'pusher'} <= closed
+    assert 'parakeet' not in closed and 'plugins' not in closed
+
+
+def test_third_party_closure_credits_only_installs_into_the_copied_environment(
+    contracts_module, dependencies_module, tmp_path
+):
+    # The backend builder installs uv into the system interpreter before it
+    # activates /opt/venv; only the venv is copied into the image.
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=(
+            'FROM python:3.11-slim AS builder\n'
+            'RUN python -m venv /opt/venv\n'
+            'RUN python3 -m pip install --no-cache-dir "uv==0.11.13"\n'
+            'ENV PATH="/opt/venv/bin:$PATH"\n'
+            'COPY pylock.worker.toml /tmp/pylock.worker.toml\n'
+            'RUN pip install --no-cache-dir "langdetect==1.0.9"\n'
+            'FROM python:3.11-slim\n'
+            'COPY --from=builder /opt/venv /opt/venv\n'
+            'WORKDIR /app\nCOPY entrypoint.py ./\n'
+        ),
+        entrypoint_text='import langdetect\n',
+        files={'pylock.worker.toml': _pylock('numpy')},
+    )
+
+    installed = dependencies_module.installed_dependencies(contract)
+
+    assert 'uv' not in installed.distributions
+    assert 'langdetect' in installed.distributions
+
+
+def test_third_party_closure_namespace_matches_only_the_provider_component(dependencies_module):
+    candidates = dependencies_module.module_distribution_candidates('google.cloud.tasks_v2.jobs_v1.client.Client')
+    assert candidates == ('google-cloud-tasks-v2', 'google-cloud-tasks')
+    assert dependencies_module.module_distribution_candidates('google.auth.transport.requests') == ('google-auth',)
+
+
+def test_third_party_closure_leaves_patch_sensitive_python_markers_undecided(dependencies_module):
+    applies = dependencies_module.marker_applies_to_image
+    assert applies("python_full_version >= '3.11'")
+    assert applies("python_full_version >= '3.10.2'")
+    assert not applies("python_full_version >= '3.11.15'")  # depends on the floating patch
+    assert not applies("python_full_version < '3.11.4'")
+    assert not applies("python_full_version == '3.11'")  # true only for 3.11.0
+    assert not applies("python_full_version <= '3.11.99'")
+    assert applies("python_full_version != '3.10.4'")

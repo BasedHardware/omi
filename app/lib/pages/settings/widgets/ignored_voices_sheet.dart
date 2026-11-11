@@ -14,18 +14,20 @@ Future<void> showIgnoredVoicesSheet(
   BuildContext context, {
   IgnoredVoicesLoader load = api.getIgnoredVoices,
   IgnoredVoiceRestorer restore = api.restoreIgnoredVoice,
+  void Function(String conversationId, int speakerId)? onRestored,
 }) =>
     showOmiSheet<void>(
       context: context,
       title: context.l10n.ignoredVoicesTitle,
-      builder: (_) => _IgnoredVoices(load: load, restore: restore),
+      builder: (_) => _IgnoredVoices(load: load, restore: restore, onRestored: onRestored),
     );
 
 class _IgnoredVoices extends StatefulWidget {
-  const _IgnoredVoices({required this.load, required this.restore});
+  const _IgnoredVoices({required this.load, required this.restore, this.onRestored});
 
   final IgnoredVoicesLoader load;
   final IgnoredVoiceRestorer restore;
+  final void Function(String conversationId, int speakerId)? onRestored;
 
   @override
   State<_IgnoredVoices> createState() => _IgnoredVoicesState();
@@ -63,6 +65,7 @@ class _IgnoredVoicesState extends State<_IgnoredVoices> {
     if (!mounted) return;
     setState(() => _restoring.remove(key));
     if (result is ApiSuccess) {
+      widget.onRestored?.call(voice.conversationId, voice.speakerId);
       OmiHaptics.success();
       setState(() => _voices = _voices?.where((v) => v != voice).toList());
       OmiFeedback.confirm(context, context.l10n.voiceRestoredToast);

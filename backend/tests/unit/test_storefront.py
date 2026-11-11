@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from database import app_review_config
 from models.users import PlanType, Subscription
 from models.storefront import StorefrontUsage
 from routers import storefront as route
@@ -252,6 +253,32 @@ def test_review_hidden_response_reads_no_subscription_price_or_usage(client, mon
     assert response.json()['show_subscription_ui'] is False
     assert response.json()['tiers'] == [] and response.json()['current'] is None
     read.assert_not_called()
+
+
+def test_android_review_config_document_hides_storefront(client, monkeypatch):
+    class InlineMemoryCache:
+        def get_or_fetch(self, key, fetch_fn, ttl=30):
+            assert key == 'app_review_config:android'
+            assert ttl == 60
+            return fetch_fn()
+
+    review_doc = Mock(exists=True)
+    review_doc.to_dict.return_value = {'hidden_versions': ['1.0.531'], 'reviewer_uids': []}
+    firestore = Mock()
+    firestore.collection.return_value.document.return_value.get.return_value = review_doc
+    monkeypatch.setattr(app_review_config, 'db', firestore)
+    monkeypatch.setattr(app_review_config, 'get_memory_cache', lambda: InlineMemoryCache())
+    monkeypatch.setattr(route, 'should_hide_subscription_ui', app_review_config.should_hide_subscription_ui)
+
+    response = client.get(
+        '/v2/payments/plans',
+        headers={'X-App-Platform': 'android', 'X-App-Version': '1.0.531+607'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['show_subscription_ui'] is False
+    assert response.json()['tiers'] == []
+    firestore.collection.return_value.document.assert_called_once_with('android')
 
 
 def test_every_surface_has_identical_presentation_and_read_only_subscription(client, monkeypatch):

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-prerecorded-single-vendor-refusal-outage",
+  "violated_contract": "An explicit pre-recorded STT credit refusal or open provider breaker must degrade to an admitted independent provider without changing the client response shape or duplicating uncertain paid work.",
+  "canonical_prevention": "Use one shared default-on, language- and duration-bounded failover boundary, preserve the original failure when replacement refuses, and contract-test refusal classification, single submission, caller metadata and kill-switch rollback.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_prerecorded_soniox_failover.py",
+    "backend/tests/unit/test_soniox_batch.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/pre_recorded.py",
+    "backend/config/prerecorded_vendor.py"
+  ],
+  "status": "open"
+}

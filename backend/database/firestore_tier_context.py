@@ -124,11 +124,16 @@ def invalidate_subscription(uid: str) -> None:
         return
 
 
-def current_tier() -> str:
+def current_tier(uid: str | None = None) -> str:
     """The hot probe path: no lock, cache lookup, uid label, logging, or I/O."""
     try:
         owner = _request_owner.get()
-        if owner is not None and not owner.closed and owner.expires_at > time.monotonic():
+        if (
+            owner is not None
+            and (uid is None or owner.uid == uid)
+            and not owner.closed
+            and owner.expires_at > time.monotonic()
+        ):
             return bounded_tier(owner.tier)
     except Exception:
         pass

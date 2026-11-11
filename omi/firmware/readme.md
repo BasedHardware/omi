@@ -22,6 +22,12 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
 - `boards/`: Custom board definitions and configurations
 - `scripts/`: Build and utility scripts
 
+## Host regressions without hardware
+
+Run `python3 omi/firmware/omi/tests/run_host_regressions.py` from the monorepo root.
+See [test scope and prerequisites](omi/tests/host/README.md). These host shims do
+not replace embedded builds, device tests or OTA/recovery qualification.
+
 ## Building and flashing the Firmware
 
 Follow the instructions in our [official documentation](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
@@ -73,3 +79,7 @@ On CV1, disconnected audio is packed into a raw-sector ring on soldered SD NAND,
 The DevKit has a separate file-based SD storage implementation.
 
 The format of each packet is different to the streaming audio packets.
+
+## Contributor checks without a jig
+
+Run the [CV1 contributor tools](tools/cv1/README.md) for shared-C host checks and key-free application-object compilation. See the [personal OTA/recovery design](docs/ota-development.md) for the everyday-user requirement and current migration limits. These tools do not flash, sign, publish or change device trust.

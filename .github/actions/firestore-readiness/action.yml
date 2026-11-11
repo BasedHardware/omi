@@ -17,8 +17,11 @@ inputs:
     description: Firestore database id
     required: false
     default: '(default)'
-  credentials_json:
-    description: Read-only Firestore service account credentials (secrets.GCP_FIRESTORE_READONLY_CREDENTIALS)
+  workload_identity_provider:
+    description: Workload identity provider the calling job already deploys under (deploy pool; main-ref only)
+    required: true
+  service_account:
+    description: Read-only Firestore index-check service account (omi-ci-index-check@based-hardware.iam.gserviceaccount.com)
     required: true
   verify_credential_project:
     description: Set to 'true' to also require the credential's selected project to equal project_id
@@ -38,7 +41,6 @@ runs:
         FIRESTORE_SOURCE_SHA: ${{ inputs.source_sha }}
         FIRESTORE_PROJECT_ID: ${{ inputs.project_id }}
         FIRESTORE_DATABASE: ${{ inputs.database }}
-        GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ inputs.credentials_json }}
       run: |
         set -euo pipefail
         if [[ ! "$FIRESTORE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ || "$FIRESTORE_SOURCE_SHA" == "0000000000000000000000000000000000000000" ]]; then
@@ -51,10 +53,6 @@ runs:
         fi
         if [ -z "$FIRESTORE_DATABASE" ]; then
           echo "::error title=Missing Firestore database::Set the target Firestore database id before deploying."
-          exit 1
-        fi
-        if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then
-          echo "::error title=Missing Firestore read-only credentials::Set GCP_FIRESTORE_READONLY_CREDENTIALS in the selected environment before deploying."
           exit 1
         fi
 
@@ -83,7 +81,9 @@ runs:
       id: firestore-readonly-auth
       uses: google-github-actions/auth@v3
       with:
-        credentials_json: ${{ inputs.credentials_json }}
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.service_account }}
+        project_id: ${{ inputs.project_id }}
         export_environment_variables: false
         create_credentials_file: true
 

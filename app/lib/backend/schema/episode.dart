@@ -2,6 +2,17 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/gen/episodes_wire.g.dart' as wire;
 
+/// One point of a composed moment, with optional supporting specifics under it.
+class EpisodePoint {
+  const EpisodePoint(this.text, {this.details = const []});
+
+  final String text;
+  final List<String> details;
+
+  factory EpisodePoint.fromGenerated(wire.GeneratedEpisodePoint p) =>
+      EpisodePoint(p.text, details: p.details ?? const []);
+}
+
 /// One stretch of speech inside an episode's conversation, with Omi's short heading for it.
 class EpisodeMoment {
   const EpisodeMoment({
@@ -12,6 +23,7 @@ class EpisodeMoment {
     this.startOffset = 0,
     this.endOffset = 0,
     this.heading = '',
+    this.points = const [],
   });
 
   final String id;
@@ -23,6 +35,9 @@ class EpisodeMoment {
   final double startOffset;
   final double endOffset;
   final String heading;
+
+  /// A composed episode's sections: what happened in this stretch. Empty for live moments.
+  final List<EpisodePoint> points;
 
   Duration get duration {
     final span = endedAt.difference(startedAt);
@@ -37,6 +52,7 @@ class EpisodeMoment {
         startOffset: m.startOffset,
         endOffset: m.endOffset,
         heading: m.heading,
+        points: [for (final p in m.points ?? const <wire.GeneratedEpisodePoint>[]) EpisodePoint.fromGenerated(p)],
       );
 }
 
@@ -112,6 +128,9 @@ class Episode {
     this.emoji = '',
     this.members = const [],
     this.bullets = const [],
+    this.lede = '',
+    this.composeDeferred = false,
+    this.followUps = const [],
     this.people = const [],
     this.items = const [],
     this.moments = const [],
@@ -131,6 +150,13 @@ class Episode {
   final String emoji;
   final List<ServerConversation> members;
   final List<String> bullets;
+
+  /// A composed episode's one- or two-sentence summary above its sections; empty while live.
+  final String lede;
+  final bool composeDeferred;
+
+  /// A composed episode's next steps, as written by the composer.
+  final List<String> followUps;
   final List<String> people;
   final List<EpisodeItem> items;
   final List<EpisodeMoment> moments;
@@ -141,15 +167,34 @@ class Episode {
   final DateTime? stateUpdatedAt;
   final DateTime? timerStartedAt;
 
+  /// Composed by the closed-episode composer: the page reads as sections rather than notes.
+  bool get composed => moments.any((m) => m.points.isNotEmpty) || (!live && lede.trim().isNotEmpty);
+
+  /// Closed but its summary hasn't landed yet: the notes are drafts, so Home keeps showing processing.
+  /// Past [summaryWait] the summary is treated as failed, and Home shows the plain conversations.
+  /// A device clock far behind the server counts as past the wait, so it can't re-read forever.
+  bool awaitingSummary(DateTime now) =>
+      !live && !composed && now.difference(closedAt ?? lastActivityAt).abs() < summaryWait;
+
+  static const summaryWait = Duration(minutes: 15);
+
   List<EpisodeItem> get visibleItems => [
         for (final item in items)
-          if (item.visible) item
+          if (item.visible) item,
       ];
 
-  Episode copyWith({List<EpisodeItem>? items, bool? live, List<ServerConversation>? members}) => Episode(
+  Episode copyWith({
+    List<EpisodeItem>? items,
+    bool? live,
+    bool? composeDeferred,
+    List<ServerConversation>? members,
+    List<String>? conversationIds,
+    DateTime? startedAt,
+  }) =>
+      Episode(
         id: id,
         live: live ?? this.live,
-        startedAt: startedAt,
+        startedAt: startedAt ?? this.startedAt,
         lastActivityAt: lastActivityAt,
         closedAt: closedAt,
         closeReason: closeReason,
@@ -157,10 +202,13 @@ class Episode {
         emoji: emoji,
         members: members ?? this.members,
         bullets: bullets,
+        lede: lede,
+        composeDeferred: composeDeferred ?? this.composeDeferred,
+        followUps: followUps,
         people: people,
         items: items ?? this.items,
         moments: moments,
-        conversationIds: conversationIds,
+        conversationIds: conversationIds ?? this.conversationIds,
         sources: sources,
         stateUpdatedAt: stateUpdatedAt,
         timerStartedAt: timerStartedAt,
@@ -183,11 +231,16 @@ class Episode {
               startedAt: m.startedAt.toLocal(),
               finishedAt: m.finishedAt?.toLocal(),
               structured: Structured(m.title, '', emoji: m.emoji),
-              status: ConversationStatus.values
-                  .firstWhere((s) => s.name == m.status, orElse: () => ConversationStatus.completed),
-            )
+              status: ConversationStatus.values.firstWhere(
+                (s) => s.name == m.status,
+                orElse: () => ConversationStatus.completed,
+              ),
+            ),
         ],
         bullets: e.bullets ?? const [],
+        lede: e.lede,
+        composeDeferred: e.composeDeferred,
+        followUps: e.followUps ?? const [],
         people: e.people ?? const [],
         items: [for (final item in e.provisionalItems ?? const []) EpisodeItem.fromGenerated(item)],
         moments: [for (final moment in e.moments ?? const []) EpisodeMoment.fromGenerated(moment)],

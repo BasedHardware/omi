@@ -67,7 +67,9 @@ def test_short_clip_quiet_minimum_never_persists_the_brain(monkeypatch):
     from utils.llm import notes_short_clip
 
     monkeypatch.setenv(packet.FLAG, 'serve')
-    conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='one word')], started_at=None, photos=[])
+    conversation = SimpleNamespace(
+        transcript_segments=[SimpleNamespace(text='one word')], started_at=None, photos=[], language='en'
+    )
     minimum = notes_short_clip.quiet_minimum('synthetic-account', conversation, tz='UTC')
     assert minimum is not None
     assert minimum.emoji == NEUTRAL_EMOJI

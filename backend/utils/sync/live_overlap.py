@@ -31,7 +31,7 @@ def _strict_overlap_seconds(row: dict, incoming: dict, *, require_device: bool =
         or not compatible_capture(row, incoming)
         or row.get('deleted')
         or row.get('sync_merged_into')
-        or row.get('status') not in ('completed', 'in_progress')
+        or row.get('status') not in ('completed', 'in_progress', 'processing')
     ):
         return 0
     left, right = conversation_span(row), conversation_span(incoming)
@@ -67,7 +67,7 @@ def discoverable_live_overlap(row: dict, incoming: dict) -> bool:
         not compatible_capture(row, incoming)
         or row.get('deleted')
         or row.get('sync_merged_into')
-        or row.get('status') not in ('completed', 'in_progress')
+        or row.get('status') not in ('completed', 'in_progress', 'processing')
     ):
         return False
     if _strict_overlap_seconds(row, incoming) > 0:

@@ -14,13 +14,13 @@ sweep. A provider unit is admitted exactly once, so a second ``enqueue`` of an o
 
 from __future__ import annotations
 
-import random
 import re
-import time
 import uuid
 from typing import Any, Callable, Literal, Mapping
 
+from config.policy import sweep_age
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
+from utils.observability.sweep_age import skip_ancient
 
 Row = dict[str, Any]
 _ROW_ID = re.compile('[0-9a-f]{64}')
@@ -105,6 +105,7 @@ class FirestoreProviderSttOutbox:
         self._privacy_blocked = privacy_blocked
         self._create_wake = create_wake or _default_wake
         self._collection = collection
+        self._sweep_cursor: Any = None  # The production factory caches this instance across maintenance ticks.
 
     # --- plumbing -------------------------------------------------------------------------------
     def _client(self) -> Any:
@@ -118,28 +119,9 @@ class FirestoreProviderSttOutbox:
         return (client or self._client()).collection(self._collection or collection_name()).document(row_id)
 
     def _mutate(self, row_id: str, operation: Callable[[Row | None], tuple[Row | None, Any]]) -> Any:
-        """Optimistic CAS on one document, as the enrichment outbox does (fenced by update time)."""
-        from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
-        from google.cloud import firestore
+        from database.outbox_cas import mutate
 
-        ref = self._ref(row_id)
-        for attempt in range(10):
-            snapshot = ref.get()
-            old = snapshot.to_dict() if snapshot.exists else None
-            new, result = operation(old)
-            if new == old:
-                return result
-            try:
-                if old is None:
-                    ref.create(new)
-                else:
-                    ref.update(new, option=firestore.LastUpdateOption(snapshot.update_time))
-                return result
-            except (AlreadyExists, FailedPrecondition, NotFound):
-                if attempt == 9:
-                    raise
-                time.sleep(random.uniform(0.005, min(0.2, 0.01 * 2**attempt)))
-        raise AssertionError('provider-stt outbox CAS must return or raise within its retry budget')
+        return mutate(self._ref(row_id), operation)
 
     def _wake(self, row: Mapping[str, Any]) -> None:
         self._create_wake(row['segment_id'], row['task_token'], float(row['due_at']))
@@ -194,7 +176,13 @@ class FirestoreProviderSttOutbox:
             old = snapshot.to_dict() if snapshot.exists else None
             new, (coalesced, row) = upsert(old)
             if new != old:
-                transaction.set(ref, new)
+                # Inside the batch admission view the set waits for its flush: a write here would make
+                # every later read of that transaction a read-after-write, which Firestore refuses.
+                defer = getattr(tx, 'defer_set', None)
+                if defer is not None:
+                    defer(ref, new)
+                else:
+                    transaction.set(ref, new)
         token = None if coalesced else row['task_token']
         if token and tx is None:
             try:
@@ -322,7 +310,17 @@ class FirestoreProviderSttOutbox:
             .where(filter=FieldFilter('state', '==', OPEN))
             .limit(max(1, min(limit, 500)))
         )
-        for snapshot in query.stream():
+        # The state single-field index already includes document-ID ordering. Advance even over
+        # age-skipped rows, without writing them; a short/empty page wraps the next bounded pass.
+        paged = sweep_age.enabled()
+        if paged:
+            query = query.order_by('__name__')
+            if self._sweep_cursor is not None:
+                query = query.start_after(self._sweep_cursor)
+        page = list(query.stream())
+        if paged:
+            self._sweep_cursor = page[-1] if len(page) == max(1, min(limit, 500)) else None
+        for snapshot in page:
             row = snapshot.to_dict() or {}
             try:
                 if self._blocked(snapshot.id, row['owner_id']):
@@ -334,6 +332,8 @@ class FirestoreProviderSttOutbox:
                     or row.get('lease_until', 0) > now
                     or now - float(row.get('woken_at') or 0) < REWAKE_AFTER_SECONDS
                 ):
+                    continue
+                if skip_ancient(row, 'provider-stt', now=now):
                     continue
                 if row.get('lease_token'):
                     expired += 1

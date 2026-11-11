@@ -1,0 +1,127 @@
+{{- if and .Values.enabled .Values.recordSealWorker.enabled (eq .Values.stage "prod") }}
+{{- include "batch-pipeline-worker.recordTokenLeaseGuard" . }}
+{{- if ne .Release.Namespace "prod-omi-backend" }}
+{{- fail "record seal worker requires prod-omi-backend; staging uses hermetic fixtures" }}
+{{- end }}
+{{- if or (lt (int .Values.recordSealWorker.maxReplicas) 1) (gt (int .Values.recordSealWorker.maxReplicas) 16) }}
+{{- fail "recordSealWorker.maxReplicas must be 1..16 (repair CPU ceiling)" }}
+{{- end }}
+{{- if lt (int .Values.recordSealWorker.targetBacklogPerWorker) 1 }}
+{{- fail "recordSealWorker.targetBacklogPerWorker must be positive" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: record-seal-worker
+spec:
+  # HPA owns replicas after creation; do not reset its count during upgrades.
+  selector:
+    matchLabels: {app.kubernetes.io/name: record-seal-worker}
+  strategy:
+    rollingUpdate: {maxSurge: 0, maxUnavailable: 1}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: record-seal-worker, service_name: record-seal-worker}
+    spec:
+      serviceAccountName: {{ required "existing worker KSA required" .Values.serviceAccountName }}
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: cloud.google.com/gke-accelerator, operator: DoesNotExist}
+                  - key: cloud.google.com/gke-nodepool
+                    operator: NotIn
+                    values: [batch-pipeline-pool, batch-pipeline-pool-spot, parakeet-pool]
+      containers:
+        - name: seal
+          image: "{{ required "image.repository required" .Values.image.repository }}@{{ required "image.digest required" .Values.image.digest }}"
+          command: [python, scripts/record_seal_worker.py]
+          ports: [{name: metrics, containerPort: 8080}]
+          readinessProbe:
+            httpGet: {path: /metrics, port: metrics}
+          env:
+            - {name: RECORD_SEAL_REPAIR_ENABLED, value: {{ .Values.recordSealWorker.runtimeEnabled | quote }}}
+            - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}
+            - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
+            - {name: RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED, value: {{ .Values.recordSealRules.uploadFailedRepairEnabled | quote }}}
+            - {name: RECORD_TOKEN_LEASE_MODE, value: {{ .Values.recordTokenLease.mode | quote }}}
+            - {name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT, value: {{ .Values.recordTokenLease.servePercent | quote }}}
+            - {name: RECORD_TOKEN_LEASE_SECONDS, value: {{ .Values.recordTokenLease.seconds | quote }}}
+            - {name: RECORD_TOKEN_LEASE_DEPLOYED_AT, value: {{ .Values.recordTokenLease.deployedAt | quote }}}
+            - {name: RECORD_SEAL_REPAIR_SERVER_FLAGS, value: {{ .Values.recordSealWorker.serverFlags | toJson | quote }}}
+            - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - {name: OMI_ENV_STAGE, value: prod}
+            - {name: OMI_FIRESTORE_DATA_PLANE_PROJECT, value: {{ .Values.dataPlaneProject | quote }}}
+            - {name: BUCKET_BATCH_PIPELINE, value: {{ .Values.bucket | quote }}}
+            - {name: BATCH_PIPELINE_ENABLED, value: "false"}
+            - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "false"}
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+            - {name: HOME, value: /tmp}
+            - name: ENCRYPTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "worker secretName required" .Values.secretName }}
+                  key: ENCRYPTION_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 62m, memory: 128Mi}
+            limits: {cpu: 250m, memory: 512Mi}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: record-seal-worker
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: record-seal-worker}
+  minReplicas: 1
+  maxReplicas: {{ .Values.recordSealWorker.maxReplicas }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies: [{type: Pods, value: 4, periodSeconds: 60}]
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies: [{type: Percent, value: 50, periodSeconds: 60}]
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: omi_record_seal_backlog
+          selector:
+            matchLabels:
+              namespace: {{ .Release.Namespace }}
+              worker_release: {{ .Release.Name }}
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.recordSealWorker.targetBacklogPerWorker | quote }}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: record-seal-worker
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: record-seal-worker}
+  targetLabels:
+    fromPod:
+      - {from: service_name, to: service_name}
+  endpoints: [{port: metrics, path: /metrics, interval: 15s}]
+{{- end }}

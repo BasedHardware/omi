@@ -824,9 +824,10 @@ def test_cas_detects_revision_change_even_when_values_returned_to_original(tmp_p
 def test_kept_title_rollback_sdk_patch(tmp_path):
     client, runtime, source = setup(tmp_path, apply=True, kept=True, text=TEXT)
     result = evaluate(runtime, source)
-    # Represent Firestore's field-path result to exercise rollback's whole-row CAS.
-    patch = client.rows[ROW_PATH].pop('structured.title')
-    client.rows[ROW_PATH]['structured']['title'] = patch
+    # The shared strict fake applies Firestore field paths, so verify the
+    # resulting document before exercising rollback's whole-row CAS.
+    assert client.rows[ROW_PATH]['structured']['title']
+    assert 'structured.title' not in client.rows[ROW_PATH]
     target = repair.RunLog(tmp_path / 'rollback', source.config)
     assert repair.rollback(runtime, source, target)['outcomes'] == {'written': 1}
     assert client.transactions[-1].updates[0][1] == {'structured.title': ''}

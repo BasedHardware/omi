@@ -11,7 +11,7 @@ from config import repeat_work, sync_reprocess
 from database import conversations
 from models.structured import Structured
 from utils.conversations import llm_input_dedupe as dedupe
-from utils.other import storage
+from utils.other import storage, raw_audio_read
 from utils.other.playback_identity import source_fingerprint
 from utils.sync import repeat_work_metrics as metrics
 from utils.sync.poll_limit import with_poll_hint
@@ -137,30 +137,6 @@ def test_conversation_artifact_paths_are_immutable_per_fingerprint(monkeypatch):
     assert bucket.blob.call_args_list[1].args == ('playback/u/c/conversation-fp-b.mp3',)
 
 
-def test_revision_mode_reuses_loaded_snapshot_without_firestore_reads(monkeypatch):
-    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
-    monkeypatch.setattr(conversations, 'get_conversation', Mock(side_effect=AssertionError('extra read')))
-    monkeypatch.setattr(conversations, 'get_conversation_raw_snapshot', Mock(side_effect=AssertionError('extra read')))
-    conv = SimpleNamespace(id='c', sync_content_revision=4, structured=Structured(title='old'), discarded=False)
-    generate = Mock(return_value=Structured(title='Durable notes'))
-    hashes = {}
-    output = dedupe.notes('u', conv, {'transcript': 'Ship Friday'}, generate, hashes, language='en')
-    conv.structured = output
-    for name, value in hashes.items():
-        setattr(conv, name, value)  # Simulate the existing durable payload commit.
-    assert dedupe.notes('u', conv, {'transcript': 'Ship Friday'}, generate, {}, language='en') == output
-    generate.assert_called_once()
-    conv.sync_content_revision += 1
-    dedupe.notes('u', conv, {'transcript': 'Ship Friday'}, generate, {}, language='en')
-    assert generate.call_count == 2
-    digest, matched = dedupe.l1_input('u', conv, {'owner': 'u', 'language': 'en'})
-    assert not matched
-    conv.l1_llm_input_hash = digest
-    assert dedupe.l1_input('u', conv, {'owner': 'u', 'language': 'en'}) == (digest, True)
-    monkeypatch.setenv('REPEAT_WORK_LLM_VERSION', 'next-model')
-    assert not dedupe.l1_input('u', conv, {'owner': 'u', 'language': 'en'})[1]
-
-
 def test_default_off_flags_are_independent(monkeypatch):
     for name in (
         'PLAYBACK_ON_DEMAND_ENABLED',
@@ -168,12 +144,17 @@ def test_default_off_flags_are_independent(monkeypatch):
         'SYNC_POLL_BACKOFF_ENABLED',
         'SYNC_REPROCESS_COALESCE_ENABLED',
         'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED',
+        'OMI_ENV_STAGE',
+        'FIRESTORE_EMULATOR_HOST',
     ):
         monkeypatch.delenv(name, raising=False)
-    assert not repeat_work.playback_on_demand() and not repeat_work.revision_reuse() and not repeat_work.poll_backoff()
-    assert not sync_reprocess.coalesce_enabled() and not sync_reprocess.dedupe_enabled()
+    assert not repeat_work.playback_on_demand() and not repeat_work.poll_backoff()
+    # 2026-11-01 (repeatflags): dedupe is the serving default everywhere; the
+    # outbox coalesce default needs an outbox-owning runtime (prod/emulator).
+    assert not sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
-    assert sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
+    # The retired setting is ignored; surviving child defaults stay independent.
+    assert not sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
     assert not repeat_work.playback_on_demand() and not repeat_work.poll_backoff()
 
 
@@ -188,31 +169,6 @@ def test_poll_hint_uses_only_response_state_and_surface_demand(monkeypatch):
     for state in ['completed', 'failed', 'partial_failure']:
         assert with_poll_hint({'status': state})['poll_after_ms'] == 0
     assert row == {'status': 'queued', 'job_id': 'j'}
-
-
-def test_call_join_is_content_free_scoped_and_counts_actual_callbacks(monkeypatch, caplog):
-    from langchain_core.outputs import LLMResult
-    from utils.llm.usage_tracker import LLMUsageCallback
-
-    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
-    caplog.set_level('INFO', logger=metrics.__name__)
-    handler = LLMUsageCallback()
-    conv = SimpleNamespace(id='secret-conversation-id', sync_content_revision=5, transcript='DO NOT LOG THIS')
-
-    @metrics.conversation_scope
-    def process(uid, conversation):
-        handler.on_llm_end(LLMResult(generations=[]))
-        handler.on_llm_error(RuntimeError('DO NOT LOG ERROR CONTENT'))
-        metrics.record_final(uid, conversation)
-
-    before = metrics.CALLS.labels('completed')._value.get()
-    process('secret-uid', conv)
-    handler.on_llm_end(LLMResult(generations=[]))  # Outside scope: no join.
-    assert metrics.CALLS.labels('completed')._value.get() - before == 1
-    assert len(caplog.records) == 3
-    assert 'conversation_key=' in caplog.text and 'revision=5' in caplog.text
-    assert 'secret-' not in caplog.text and 'DO NOT LOG' not in caplog.text
-    assert 'secret' not in str(metrics.CALLS.collect())
 
 
 def test_source_replacement_during_build_is_rejected():
@@ -288,7 +244,7 @@ def test_late_upload_covering_raw_fragment_keeps_sample_clock_identity(monkeypat
     monkeypatch.setattr(storage, 'list_packs', lambda *_: [])
     fragment = dict(timestamp=1010.00025, path='raw-live/u/c/pack', generation='8', raw_end=1011.0, size=32000)
     projection = Mock(side_effect=[[fragment], []])
-    monkeypatch.setattr(storage, 'uncovered_raw_packs', projection)
+    monkeypatch.setattr(raw_audio_read, 'uncovered_raw_packs', projection)
     during_upload = storage.list_audio_chunks('u', 'c', source_identity=True)
     stamped = conversations._finalize_audio_file_group('u', 'c', during_upload[:1], []).dict()
     after_upload = storage.list_audio_chunks('u', 'c', source_identity=True)
@@ -394,25 +350,6 @@ def test_stamped_download_pins_generation_and_never_reads_unstamped_sibling(monk
         )
     bucket.blob.assert_called_once_with(path)
     bucket.blob.return_value.download_as_bytes.assert_called_once_with(if_generation_match='7')
-
-
-def test_initial_generation_calls_join_the_chosen_durable_id(monkeypatch, caplog):
-    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
-    caplog.set_level('INFO', logger=metrics.__name__)
-
-    @metrics.conversation_scope
-    def process(uid, conversation):
-        metrics.bind_generation(uid, 'generated-c')
-        metrics.record_llm_call('completed', 'conv_structure')
-        metrics.record_feature(uid, conversation, 'notes', 'invoked')
-        metrics.record_final(uid, SimpleNamespace(id='generated-c', sync_content_revision=None))
-
-    process('u', SimpleNamespace())
-    assert len(caplog.records) == 3
-    keys = {record.message.split('conversation_key=')[1].split()[0] for record in caplog.records}
-    assert len(keys) == 1
-    assert 'feature=notes' in caplog.text
-    assert metrics._scope.get() is None
 
 
 @pytest.fixture(scope='module')

@@ -13,8 +13,10 @@ from config.batch_live_preview import capture_snapshot
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import capture_compatible as server_batch_capture_compatible
 from config.server_batch import has_audio as server_batch_has_audio
-from database.server_batch_audio import close_server_batch_audio
+from routers.listen.batch_close import close_batch_archive
 from config.server_batch import request_eligible as server_batch_request_eligible
+from config.server_batch import capture_language as server_batch_capture_language
+from config.server_batch import continuation_language as server_batch_continuation_language
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
 from database.stale_conversation_recovery import get_stale_recovery_page
@@ -26,8 +28,8 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from routers.listen.policy import persist_conversation_policy
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
+from utils.executors import start_background_task
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
-from utils.live_speaker_carry import carried_receipt
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
@@ -146,7 +148,7 @@ class LiveConversationController:
             now=self.clock(),
             timeout=self.host.conversation_creation_timeout,
             proposed=proposed,
-            **({'language': self.host.language} if isinstance(getattr(self.host, 'language', None), str) else {}),
+            language=server_batch_continuation_language(self.host),
             allow_server_batch=server_batch_request_eligible(self.host, existing_capture=True),
         )
 
@@ -177,7 +179,7 @@ class LiveConversationController:
             device_id=self.host.client_device_context.client_device_id,
             arrival_at=self.clock(),
             timeout=self.host.conversation_creation_timeout,
-            language=getattr(self.host, 'language', None),
+            language=server_batch_continuation_language(self.host, existing),
         ):
             return False
         self.host.recording_session_id = pointer['recording_session_id']
@@ -395,22 +397,9 @@ class LiveConversationController:
                 return False
         if server_batch_owned(data):
             # Commit the silence/partial-window tail before creating a batch obligation.
-            receiver = getattr(self.host, 'receiver', None)
-            raw_archive = getattr(receiver, 'raw_archive', None)
-            if conversation_id == self.host.state.current_conversation_id and raw_archive is not None:
-                await raw_archive.close()
-                if getattr(self.host.state, 'active', False) is not True and not await self.host.persistence.call(
-                    close_server_batch_audio, self.host.request.uid, conversation_id
-                ):
-                    return False
-                data = await self.host.persistence.call(
-                    conversations_db.get_conversation,
-                    self.host.request.uid,
-                    conversation_id,
-                    read_site=FirestoreReadSite.LISTEN_PROCESS_CONVERSATION,
-                )
-                if not data:
-                    return False
+            data = await close_batch_archive(self.host, conversation_id, data)
+            if not data:
+                return False
             if server_batch_has_audio(data):
                 return await self.schedule_finalization(conversation_id)
         if data.get('transcript_segments') or data.get('photos'):
@@ -646,13 +635,14 @@ class LiveConversationController:
             # Finalization parses the stamp as CalendarMeetingContext even when
             # its window means continuity hydration has nothing left to fetch.
             external_data['calendar_meeting_context']['title'] = meeting.get('title') or ''
+        server_batch_requested = server_batch_request_eligible(self.host)
         conversation = Conversation(
             id=conversation_id,
             created_at=self.clock(),
             started_at=self.clock(),
             finished_at=self.clock(),
             structured=Structured(),
-            language=self.host.language,
+            language=server_batch_capture_language(self.host) if server_batch_requested else self.host.language,
             transcript_segments=[],
             photos=[],
             status=ConversationStatus.in_progress,
@@ -685,7 +675,9 @@ class LiveConversationController:
                 and not previous.get('is_locked')
                 and self._active_speaker_scope() == carry_from[1]
             ):
-                carry = carried_receipt(previous, carry_from[1])
+                from utils.recording_speakers import recording_carry
+
+                carry = await self.host.persistence.call(recording_carry, request.uid, previous, carry_from[1])
                 automatic_donor = previous
         # The modeled field's None default is omitted, never stamped:
         # persist is merge=True, so a dumped None would become an
@@ -709,7 +701,7 @@ class LiveConversationController:
                         and server_batch_owned(getattr(self.host, 'batch_record_capture', None) or {})
                     ),
                 }
-                if server_batch_request_eligible(self.host)
+                if server_batch_requested
                 else {}
             ),
         )
@@ -775,6 +767,22 @@ class LiveConversationController:
             owner_carry_donor=automatic_donor,
         )
         self.send_conversation_session(binding, self.host.recording_session_id)
+
+    async def rollover_after_transcript_decode_failure(self) -> None:
+        """Move live speech first, then finalize the displaced generation normally.
+
+        This also covers multi-channel sessions, which have no lifecycle sweep.
+        Finalization outlives socket teardown and cannot block the persist loop.
+        """
+        previous_id = self.host.state.current_conversation_id
+        try:
+            await self.create_new_in_progress_conversation(rollover=True)
+        finally:
+            if previous_id and self.host.state.current_conversation_id != previous_id:
+                start_background_task(
+                    self._finalize_isolated(self.process_conversation, previous_id, stage='transcript_decode_rollover'),
+                    name='listen_transcript_decode_finalization',
+                )
 
     async def prepare(self) -> Optional[str]:
         if self.host.is_multi_channel:

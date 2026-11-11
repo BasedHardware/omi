@@ -170,6 +170,8 @@ sys.modules["database._client"].db = MagicMock()
 conversations_db = _stub_module("database.conversations")
 conversations_db.get_conversations = MagicMock(return_value=[])
 conversations_db.get_conversations_by_id = MagicMock(return_value=[])
+conversations_db.get_conversation = MagicMock(return_value=None)
+conversations_db.is_soft_deleted = MagicMock(side_effect=lambda c: bool(c and c.get('deleted')))
 
 # Stub database.users
 users_db = _stub_module("database.users")
@@ -467,6 +469,7 @@ action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",
 )
+action_items_svc.conversations_db = conversations_db
 router_mod = _load_module_from_file(
     "routers.tools",
     BACKEND_DIR / "routers" / "tools.py",
@@ -962,6 +965,37 @@ class TestCreateActionItemText:
         result = action_items_svc.create_action_item_text(uid="test-uid", description="Test", due_at="bad-date")
         assert "Error" in result
 
+    def test_missing_conversation_rejected(self):
+        conversations_db.get_conversation.reset_mock()
+        conversations_db.get_conversation.return_value = None
+        result = action_items_svc.create_action_item_text(
+            uid="test-uid", description="Test", conversation_id="conv-missing"
+        )
+        assert "Error" in result
+        assert "not found" in result.lower()
+        action_items_db.create_action_item.assert_not_called()
+
+    def test_soft_deleted_conversation_rejected(self):
+        conversations_db.get_conversation.reset_mock()
+        conversations_db.get_conversation.return_value = {'id': 'conv-del', 'deleted': True}
+        result = action_items_svc.create_action_item_text(
+            uid="test-uid", description="Test", conversation_id="conv-del"
+        )
+        assert "Error" in result
+        assert "not found" in result.lower()
+        action_items_db.create_action_item.assert_not_called()
+
+    def test_valid_conversation_accepted(self):
+        conversations_db.get_conversation.reset_mock()
+        conversations_db.get_conversation.return_value = {'id': 'conv-live', 'deleted': False}
+        result = action_items_svc.create_action_item_text(
+            uid="test-uid", description="Test", conversation_id="conv-live"
+        )
+        assert "Added" in result
+        action_items_db.create_action_item.assert_called_once()
+        call_args = action_items_db.create_action_item.call_args[0]
+        assert call_args[1]['conversation_id'] == 'conv-live'
+
 
 # ===========================================================================
 # Tests: update_action_item_text
@@ -987,6 +1021,13 @@ class TestUpdateActionItemText:
         action_items_db.get_action_item.return_value = {'id': 'ai-1', 'description': 'Test', 'is_locked': True}
         result = action_items_svc.update_action_item_text(uid="test-uid", action_item_id="ai-1", completed=True)
         assert "paid plan" in result.lower()
+
+    def test_soft_deleted_item_rejected(self):
+        action_items_db.get_action_item.return_value = {'id': 'ai-1', 'description': 'Test', 'deleted': True}
+        result = action_items_svc.update_action_item_text(uid="test-uid", action_item_id="ai-1", completed=True)
+        assert "Error" in result
+        assert "not found" in result.lower()
+        action_items_db.update_action_item.assert_not_called()
 
     def test_no_changes(self):
         action_items_db.get_action_item.return_value = {'id': 'ai-1', 'description': 'Test'}
@@ -1181,6 +1222,27 @@ class TestRouterEndpoints:
         body = resp.json()
         assert body["tool_name"] == "update_action_item"
         assert "completed" in body["result_text"].lower()
+
+    def test_create_action_item_endpoint_with_soft_deleted_conversation(self):
+        conversations_db.get_conversation.return_value = {'id': 'conv-del', 'deleted': True}
+        resp = self.client.post(
+            "/v1/tools/action-items",
+            json={"description": "Test task", "conversation_id": "conv-del"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "create_action_item"
+        assert body["is_error"] is True
+        assert "not found" in body["result_text"].lower()
+
+    def test_update_action_item_endpoint_soft_deleted_task(self):
+        action_items_db.get_action_item.return_value = {'id': 'ai-del', 'description': 'Task', 'deleted': True}
+        resp = self.client.patch("/v1/tools/action-items/ai-del", json={"completed": True})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "update_action_item"
+        assert body["is_error"] is True
+        assert "not found" in body["result_text"].lower()
 
     def test_create_calendar_event_endpoint(self):
         resp = self.client.post(

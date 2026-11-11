@@ -103,6 +103,7 @@ CaptureDependencies _deps({
     codec: codec ?? (_) async => BleAudioCodec.pcm16,
     microphonePermission: () async => true,
     refreshConversation: () async {},
+    excludeSpeaker: (_, __) async => false,
     telemetry:
         telemetry ?? RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
   );
@@ -1036,6 +1037,7 @@ void main() {
         refreshConversation: d.refreshConversation,
         telemetry: d.telemetry,
         ensureDeviceConnection: d.ensureDeviceConnection,
+        excludeSpeaker: d.excludeSpeaker,
       );
       final p = composeCaptureProvider(deps);
       await p.streamRecording();
@@ -1268,6 +1270,7 @@ void main() {
         refreshConversation: d.refreshConversation,
         telemetry: d.telemetry,
         ensureDeviceConnection: d.ensureDeviceConnection,
+        excludeSpeaker: d.excludeSpeaker,
       );
       final p = composeCaptureProvider(deps);
       await p.changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);

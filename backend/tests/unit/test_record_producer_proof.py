@@ -1,4 +1,4 @@
-"""No token TTL: only scoped current-pod evidence or legacy attestation."""
+"""Original producer proof in off mode, plus the opt-in lease predicate matrix."""
 
 from datetime import datetime, timezone
 import json
@@ -109,6 +109,24 @@ def test_absence_inventory_must_postdate_process_start_uncertainty(load):
     assert not proof.producer_tokens_dead({'t': {'pod': 'new', 'process_started_at': 998}}, load([]))
 
 
+def test_abandoned_token_is_dead_without_pod_proof_but_reconnect_is_live(load):
+    abandoned = {'pod': 'live', 'process_started_at': 900, 'abandoned_at': 950}
+    current = load([pod('live', 800)])
+    assert proof.producer_tokens_dead({'old': abandoned}, current)
+    assert proof.producer_tokens_dead({'old': abandoned}, None)
+    assert proof.producer_tokens_dead({'old': abandoned}, {**current, 'captured_at': 1})
+    assert not proof.producer_tokens_dead(
+        {'old': abandoned, 'new': {'pod': 'live', 'process_started_at': 900}}, current
+    )
+
+
+@pytest.mark.parametrize('abandoned', [None, True, '950', float('nan'), float('inf'), 899])
+def test_malformed_abandon_attestation_never_proves_dead(load, abandoned):
+    token = {'t': {'pod': 'live', 'process_started_at': 900, 'abandoned_at': abandoned}}
+    assert not proof.producer_tokens_dead(token, load([pod('live', 800)]))
+    assert not proof.producer_tokens_dead(token, None)
+
+
 @pytest.mark.parametrize('raw', [{}, {'kind': 'List', 'apiVersion': 'v1', 'items': []}])
 def test_malformed_list_refuses(tmp_path, monkeypatch, raw):
     monkeypatch.setattr(proof.time, 'time', lambda: 1000)
@@ -116,3 +134,54 @@ def test_malformed_list_refuses(tmp_path, monkeypatch, raw):
     path.write_text(json.dumps(raw))
     with pytest.raises(ValueError):
         proof.load_pusher_pod_proof(path, datetime.fromtimestamp(999, timezone.utc).isoformat())
+
+
+@pytest.mark.parametrize(
+    'expiry,signal,dead',
+    [
+        (999, 1, False),  # heartbeat still inside 3600s
+        (999, -3000, False),  # invalid epoch
+        (999, 500, False),
+        (1000, 1, False),  # strict boundary
+    ],
+)
+def test_lease_needs_both_deadlines_load_safe(load, monkeypatch, expiry, signal, dead):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    token = {
+        't': {
+            'pod': 'live',
+            'process_started_at': 900,
+            'last_signal_at': signal,
+            'lease_expires_at': expiry,
+            'signal_source': 'frames',
+        }
+    }
+    assert proof.producer_tokens_dead(token, load([pod('live', 800)]), uid='synthetic') is dead
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {},
+        {'lease_expires_at': 9999},
+        {'last_signal_at': 9000},
+        {'lease_expires_at': float('nan')},
+        {'last_signal_at': True},
+        {'lease_expires_at': 6401},
+    ],
+)
+def test_three_quiet_clocks_and_malformed_fields(monkeypatch, change):
+    monkeypatch.setattr(proof.time, 'time', lambda: 10000)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    value = {
+        'pod': 'live',
+        'process_started_at': 100,
+        'last_signal_at': 1,
+        'lease_expires_at': 3601,
+        'signal_source': 'custody_append',
+        **change,
+    }
+    expected = change in ({}, {'lease_expires_at': 9999}, {'lease_expires_at': 6401})
+    assert proof.producer_tokens_dead({'s': value}, None, uid='synthetic') is expected

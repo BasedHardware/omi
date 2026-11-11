@@ -27,8 +27,6 @@ description: "Create and retrieve conversations via the Developer API"
   </Card>
 </CardGroup>
 
----
-
 ## Saved transcripts awaiting processing
 
 When funded processing is paused at an account's allowance limit, conversation
@@ -241,8 +239,6 @@ List results may be up to 10 seconds stale after any write. Response bodies rema
   </Accordion>
 </AccordionGroup>
 
----
-
 ## Create Conversation from Text
 
 <Card title="POST /v1/dev/user/conversations" icon="upload" color="#3b82f6" horizontal>
@@ -349,8 +345,6 @@ List results may be up to 10 seconds stale after any write. Response bodies rema
 <Note>
 Memories and action items are extracted asynchronously. Use the GET endpoints to retrieve them after creation.
 </Note>
-
----
 
 ## Create Conversation from Transcript Segments
 
@@ -511,8 +505,6 @@ intent prevents backlog recreation. No automatic tombstone expiry is currently c
 Unlike text-based conversations, transcript segments ARE stored in the `transcript_segments` field and can be retrieved with `include_transcript=true`.
 </Note>
 
----
-
 ## Get Single Conversation
 
 <Card title="GET /v1/dev/user/conversations/{conversation_id}" icon="file" color="#22c55e" horizontal>
@@ -594,8 +586,6 @@ Unlike text-based conversations, transcript segments ARE stored in the `transcri
   }
   ```
 </Accordion>
-
----
 
 ## Update Conversation
 
@@ -697,8 +687,6 @@ Unlike text-based conversations, transcript segments ARE stored in the `transcri
 Use `discarded: true` to hide a conversation from the main list without permanently deleting it.
 </Tip>
 
----
-
 ## Delete Conversation
 
 <Card title="DELETE /v1/dev/user/conversations/{conversation_id}" icon="trash" color="#ef4444" horizontal>
@@ -761,8 +749,6 @@ Use `discarded: true` to hide a conversation from the main list without permanen
 <Warning>
 This action is permanent. Deleted conversations and their associated photos cannot be recovered. Consider using `PATCH` with `discarded: true` to hide a conversation instead.
 </Warning>
-
----
 
 ## Use Case: Upload Meeting Transcript
 
@@ -861,8 +847,6 @@ This action is permanent. Deleted conversations and their associated photos cann
     ```
   </Tab>
 </Tabs>
-
----
 
 ## Use Case: Export Conversations
 
@@ -966,7 +950,6 @@ This action is permanent. Deleted conversations and their associated photos cann
     ```
   </Tab>
 </Tabs>
-
 
 ## Public shared notes for agents
 

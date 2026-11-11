@@ -107,6 +107,28 @@ void main() {
       expect(deleted, ['a']);
     });
 
+    testWidgets('a refused delete restores the row and shows an error', (tester) async {
+      final a = _conversation('a');
+      provider.conversations = [a];
+      provider.conversationDeleteFetcherOverride = (_) async => false;
+      await pump(
+        tester,
+        Consumer<ConversationProvider>(
+          builder: (_, current, __) => current.conversations.isEmpty ? const SizedBox.shrink() : deleteButton([a]),
+        ),
+      );
+
+      await tester.tap(find.text('delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('delete'), findsNothing);
+
+      await tester.pump(OmiFeedbackTiming.undo);
+      await tester.pumpAndSettle();
+
+      expect(provider.conversations.map((c) => c.id), ['a']);
+      expect(find.text('Unable to Delete Conversation'), findsOneWidget);
+    });
+
     testWidgets('a bulk delete shows one toast that counts and restores them all', (tester) async {
       final a = _conversation('a');
       final b = _conversation('b');

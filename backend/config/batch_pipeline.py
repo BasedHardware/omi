@@ -1,10 +1,16 @@
 """Default-off batch admission cohort. Existing lane classification stays upstream."""
 
+from config.policy import kill_switch
 from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 from enum import IntEnum
+import hashlib
+import logging
 import math
 import os
+import re
+import secrets
+import threading
 
 from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
@@ -25,6 +31,63 @@ class Priority(IntEnum):
 
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
+
+# Terminal exclusion keeps future nonterminal strings visible; the census gates missing/null state.
+MERGE_POLL_TERMINAL_STATES = tuple(
+    'committed dead quarantined privacy_blocked partial_retired provider_superseded'.split()
+)
+
+
+def held_poll_skip_enabled() -> bool:
+    from config.refactor_modes import default_off
+
+    return default_off('BATCH_HELD_POLL_SKIP_ENABLED')
+
+
+# A full grace window is also given to pre-field rows on first observation.
+HELD_DEAD_LETTER_SECONDS = 7 * 86400
+RECORD_DEAD_LETTER_SECONDS = 14 * 86400
+
+
+def batch_held_dead_letter_enabled() -> bool:
+    """Ship-on record/held deadlines and expiry; manual requeue remains available when off."""
+    from config.policy.kill_switches import kill_switch
+
+    return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
+
+
+def projection_source_deleted_enabled() -> bool:
+    """Ship-on no-text settlement for a deleted source without a tombstone or redirect."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED',
+        os.getenv('BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def projection_ghost_settle_enabled() -> bool:
+    """Default OFF: normalize aged ghost hints; production enable needs David."""
+    return kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED')
+
+
+def projection_restorable_cap_expiry_enabled() -> bool:
+    """Default OFF: allow the existing one-time expiry CAS for restorable capped holds."""
+    return kill_switch('BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED')
+
+
+def projection_ghost_settle_cohort() -> tuple[str, bool]:
+    """Inert measurement label; return whether invalid config used the fallback."""
+    label = os.getenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', 'g1')
+    valid = re.fullmatch(r'[A-Za-z0-9_-]{1,16}', label) is not None
+    return (label, False) if valid else ('g1', True)
+
+
+def projection_hold_recovery_enabled() -> bool:
+    """Ship-on hold age gate and automatic redrive; false restores old behavior."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED',
+        os.getenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
 
 T = TypeVar('T')
 
@@ -165,11 +228,57 @@ def shared_live_enabled() -> bool:
     return resolve_stage_policy('', 'scheduler').shared_live
 
 
+def control_candidate_fanout(fanout: int | None = None) -> int:
+    """Bound hint reads; 64 restores the previous candidate query width."""
+    try:
+        value = int(os.getenv('BATCH_CONTROL_CANDIDATE_FANOUT', '16') if fanout is None else fanout)
+    except ValueError:
+        return 16
+    return min(64, max(1, value))
+
+
+def admission_parallel_calls_enabled() -> bool:
+    return os.getenv('BATCH_ADMISSION_PARALLEL_CALLS', 'true').strip().lower() != 'false'
+
+
+def idle_poll_max_seconds() -> float:
+    """Bound empty-lane backoff; 2 restores fixed polling."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS', '10'))
+    except ValueError:
+        return 10.0
+    return min(30.0, max(2.0, value)) if math.isfinite(value) else 10.0
+
+
 SCHEDULER_SHARDS = 64
 
 
 def shard_spread_enabled() -> bool:
     return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
+
+
+def skip_unchanged_control_write_enabled() -> bool:
+    """Admission skips rewriting its scheduler control shard when the append left it unchanged.
+
+    Every admission and every pull wrote the same 64 shared shards; an identical rewrite only
+    turned concurrent admissions and pulls into commit conflicts. False restores the write.
+    """
+    return os.getenv('BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED', 'true').strip().lower() != 'false'
+
+
+def pull_multi_lease_enabled() -> bool:
+    return os.getenv('BATCH_PULL_MULTI_LEASE_ENABLED', 'true').strip().lower() != 'false'
+
+
+def pull_busy_borrow_enabled() -> bool:
+    """Ship-on: a pump's non-first lanes take backfill while every fresh shard is claimed.
+
+    A claimed fresh shard is being served by its claimant, so a second lane that
+    found only claimed fresh shards may lease recent/deep work instead of idling.
+    Each pump's first lane keeps strict fresh-first. ``false`` restores strict
+    fresh-first on every lane.
+    """
+    return os.getenv('BATCH_PULL_BUSY_BORROW_ENABLED', 'true').strip().lower() != 'false'
 
 
 def scheduler_control_key(hashed_owner: str) -> str:
@@ -317,6 +426,29 @@ def worker_validation_disposition_enabled() -> bool:
     )
 
 
+STRICT_VAD_SHADOW_PERCENT_DEFAULT = 10.0
+
+
+def strict_vad_shadow_percent() -> float:
+    """Sampled share of the CPU strict-VAD shadow; 0 disables, 100 restores full."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '10').strip())
+    except ValueError:
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    if not math.isfinite(value):
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    return min(100.0, max(0.0, value))
+
+
+def strict_vad_shadow_sampled(segment_id: str) -> bool:
+    """Deterministic by segment hash: a re-leased unit samples identically."""
+    if not segment_id:
+        return False
+    from config.policy import cohort_bucket
+
+    return cohort_bucket(segment_id, '') < strict_vad_shadow_percent()
+
+
 def head_priority_enabled() -> bool:
     from config.policy import resolve_stage_policy
 
@@ -370,10 +502,95 @@ def recovery_dispatch_interval_seconds() -> float:
     return value if 1 <= value <= RECOVERY_DISPATCH_INTERVAL_MAX else RECOVERY_DISPATCH_INTERVAL_DEFAULT
 
 
+SERVING_METRICS_MIN_REFRESH_DEFAULT = 30.0
+SERVING_METRICS_MIN_REFRESH_MAX = 60.0
+
+
+def serving_metrics_min_refresh_seconds() -> float:
+    """Ship-on: one queue-gauge refresh per serving instance per interval.
+
+    Every serving instance refreshed the same global gauges on each 20 s
+    supervisor tick and each scrape; the policy-hold walk in ``oldest`` made
+    that about 1.6M Firestore reads/h at 28 instances. The guard calls the
+    sample blind after 120 s, so the cap stays at 60 s. ``off`` or a value
+    <= 0 is the kill switch: refresh on every call. Malformed or out-of-range
+    values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS', '').strip().lower()
+    if not raw:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if 1 <= value <= SERVING_METRICS_MIN_REFRESH_MAX else SERVING_METRICS_MIN_REFRESH_DEFAULT
+
+
+ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS = 1800
+ALLOWANCE_HOLD_RETRY_MAX_SECONDS = 86400
+
+
+def allowance_hold_retry_seconds() -> int:
+    """Ship-on re-lease hold for an exhausted plan allowance or usage budget.
+
+    An exhausted allowance is durable until the plan changes, so a held unit's
+    lease + admission RPC + defer + requeue cycle runs for nothing while it
+    waits; the scheduler escalation ladder keeps today's behaviour below this
+    value. ``60`` restores the former short cycle (steady 300 s after
+    escalation). Malformed or out-of-range values keep the default.
+    """
+    raw = os.getenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '').strip()
+    if not raw:
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    if not math.isfinite(value):
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    return int(value) if 1 <= value <= ALLOWANCE_HOLD_RETRY_MAX_SECONDS else ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+
+
 def projection_pagination_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED')
+
+
+def projection_striping_enabled() -> bool:
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
+
+
+PROJECTION_DISCOVERY_STRIPES = 4096
+_projection_discovery_stripe_value: int | None = None
+_PROJECTION_DISCOVERY_LOCK = threading.Lock()
+
+
+def projection_discovery_stripe() -> int:
+    """Choose and log one process-local random phase, without network I/O.
+
+    Replicas may share hostname/PID. Fresh entropy separates them; 4096 buckets
+    reduce collisions at 30-50 instances. Restarts may choose a different phase.
+    """
+    global _projection_discovery_stripe_value
+    with _PROJECTION_DISCOVERY_LOCK:
+        if _projection_discovery_stripe_value is None:
+            identity = f'{os.getenv("K_REVISION", "")}:{secrets.randbits(128)}'
+            _projection_discovery_stripe_value = (
+                int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], 'big') % PROJECTION_DISCOVERY_STRIPES
+            )
+            logging.getLogger(__name__).info(
+                'event=batch_projection_discovery action=start stripe=%d stripes=%d',
+                _projection_discovery_stripe_value,
+                PROJECTION_DISCOVERY_STRIPES,
+            )
+        return _projection_discovery_stripe_value
 
 
 def owner_chain_projection_enabled() -> bool:
@@ -390,6 +607,13 @@ def recovered_merge_release_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
+
+
+def recovery_owner_only_enabled() -> bool:
+    """Kill switch: post-recovery requests drain their owner without global maintenance."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED')
 
 
 def sweep_owner_chain_enabled() -> bool:
@@ -413,11 +637,113 @@ def projection_pending_page_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
 
 
+def projection_followup_page_enabled() -> bool:
+    """Kill switch: discover only finishable receipts, without per-row fetches."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
+
+
 def owner_drain_enabled() -> bool:
     """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
+
+
+def serving_projection_sweep_enabled() -> bool:
+    """Only ``off`` disables serving-instance discovery; owner wakes still run."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP')
+
+
+def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, min(int(raw), maximum))
+    except ValueError:
+        return default
+
+
+def serving_sweep_page_rows() -> int:
+    """Bound projection discovery pages; unset restores the existing 100 rows."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', '100'), 100, 200, 50)
+
+
+_serving_budget_warned = False
+_SERVING_BUDGET_WARNING_LOCK = threading.Lock()
+
+
+def _serving_effective_tick(page_rows: int, requested_tick: int) -> float:
+    """Never reduce discovery pages to meet the 20 rows/s supervisor budget."""
+    global _serving_budget_warned
+    budget_tick = page_rows / 20
+    effective_tick = max(10, requested_tick, budget_tick)
+    if requested_tick < budget_tick:
+        with _SERVING_BUDGET_WARNING_LOCK:
+            if not _serving_budget_warned:
+                _serving_budget_warned = True
+                logging.getLogger(__name__).warning(
+                    'event=batch_serving_config action=read_budget requested_tick_seconds=%d '
+                    'effective_page_rows=%d effective_tick_seconds=%g max_rows_per_second=20',
+                    requested_tick,
+                    page_rows,
+                    effective_tick,
+                )
+    return effective_tick
+
+
+def serving_tick_seconds() -> float:
+    """Clamp sleep to 10-60 s and enforce the combined serving discovery budget."""
+    requested_tick = _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', '20'), 20, 60, 0)
+    return _serving_effective_tick(serving_sweep_page_rows(), requested_tick)
+
+
+def projection_pump_enabled() -> bool:
+    """Process-role opt-in: only ``true`` starts the otherwise inert pump."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED')
+
+
+def projection_pump_tick_seconds() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_TICK_SECONDS', '20'), 20, 60, 2)
+
+
+def projection_pump_sweep_pages() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_SWEEP_PAGES', '1'), 1, 4)
+
+
+def max_owner_drains() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 16)
+
+
+def projection_drain_claim_aware_enabled() -> bool:
+    """Default on; only off disables claim-aware owner-drain admission and backoff."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_DRAIN_CLAIM_AWARE')
+
+
+def projection_drain_privacy_backoff_enabled() -> bool:
+    """Default on; only off disables zero-progress privacy turn backoff."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
+
+
+def projection_drain_live_target_backoff_enabled() -> bool:
+    """Default on; only off disables bounded awaiting-live-target owner backoff."""
+    return kill_switch('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF')
+
+
+def projection_privacy_refusal_resume_enabled() -> bool:
+    """Default on; only off disables recovery from a stale privacy refusal."""
+    return kill_switch('PROJECTION_PRIVACY_REFUSAL_RESUME')
+
+
+def projection_drain_privacy_backoff_seconds() -> int:
+    return _pump_bound(os.getenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180'), 180, 900, 30)
 
 
 def projection_index_deferred_enabled() -> bool:
@@ -465,6 +791,42 @@ def projection_prefetch_depth() -> int:
     return value if 0 <= value <= PROJECTION_PREFETCH_MAX else PROJECTION_PREFETCH_DEFAULT
 
 
+PROJECTION_FOLLOWUP_SLOTS_DEFAULT = 4
+PROJECTION_FOLLOWUP_SLOTS_MAX = 16
+
+
+def projection_followup_slots(default: int = PROJECTION_FOLLOWUP_SLOTS_DEFAULT) -> int:
+    """Concurrent async follow-ups per serving process; unset, malformed or out-of-range keeps ``default``."""
+    raw = os.getenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS', '').strip()
+    try:
+        value = int(raw) if raw else default
+    except ValueError:
+        return default
+    return value if 1 <= value <= PROJECTION_FOLLOWUP_SLOTS_MAX else default
+
+
+PROJECTION_FOLLOWUP_BACKOFF_DEFAULT = 900.0
+PROJECTION_FOLLOWUP_BACKOFF_MAX = 3600.0
+
+
+def projection_followup_backoff_seconds() -> float:
+    """Ship-on follow-up desync: per-process discovery offset plus bounded backoff; ``0`` is the kill switch.
+
+    The value is the longest one process skips an unchanged blocked/failed row
+    in its own discovery. ``0`` restores head-first discovery with no backoff.
+    Malformed or out-of-range values keep the default.
+    """
+    try:
+        value = float(
+            os.getenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS', str(PROJECTION_FOLLOWUP_BACKOFF_DEFAULT))
+        )
+    except ValueError:
+        return PROJECTION_FOLLOWUP_BACKOFF_DEFAULT
+    if not math.isfinite(value) or not 0 <= value <= PROJECTION_FOLLOWUP_BACKOFF_MAX:
+        return PROJECTION_FOLLOWUP_BACKOFF_DEFAULT
+    return value
+
+
 WORKER_PIPELINE_DEPTH_DEFAULT = 2
 WORKER_PIPELINE_DEPTH_MAX = 4
 
@@ -483,7 +845,26 @@ def worker_pipeline_depth() -> int:
     return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
 
 
-WORKER_IO_CONCURRENCY_DEFAULT = 3
+WORKER_PROCESSES_DEFAULT = 1
+WORKER_PROCESSES_MAX = 3
+
+
+def worker_processes() -> int:
+    """Independent pump processes sharing the pod's one GPU; ``1`` (default) runs no supervisor.
+
+    Each process loads its own model chain and keeps its own pump depth and
+    decoded-audio bound, so host and device memory scale with the count; the
+    chart sizes pod resources per count. Malformed or out-of-range values run
+    one process: a typo must never multiply the pod's memory.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_PROCESSES', str(WORKER_PROCESSES_DEFAULT)))
+    except ValueError:
+        return 1
+    return value if 1 <= value <= WORKER_PROCESSES_MAX else 1
+
+
+WORKER_IO_CONCURRENCY_DEFAULT = 5
 WORKER_IO_CONCURRENCY_MAX = 8
 
 
@@ -504,10 +885,10 @@ def stage_profiling_enabled() -> bool:
 
 
 def worker_io_concurrency() -> int:
-    """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
+    """Shared bounded artifact fetch/decode and persistence across pump lanes.
 
     1 restores the fully serial chain. Malformed or out-of-range values keep the
-    conservative default; GPU work and the chain lock are unaffected either way.
+    bounded default; GPU work and the chain lock are unaffected either way.
     """
     try:
         value = int(os.getenv('BATCH_PIPELINE_WORKER_IO_CONCURRENCY', str(WORKER_IO_CONCURRENCY_DEFAULT)))

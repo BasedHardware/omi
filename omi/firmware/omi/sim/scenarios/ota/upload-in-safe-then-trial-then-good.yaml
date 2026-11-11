@@ -1,0 +1,21 @@
+id: ota/upload-in-safe-then-trial-then-good
+summary: >
+  The recovery path end to end through the real mcumgr callback: enter SAFE
+  with the support gesture, an image-0 upload completes, the phone resets the
+  pendant, and the new image boots normally and stamps GOOD after 60 s.
+tags: [guard]
+initial: {charging: true}
+timeline:
+  - {t: 0, hold: 10600}
+  - {t: 15000, dfu: chunk}
+  - {t: 16000, dfu: chunk}
+  - {t: 17000, dfu: pending}
+  - {t: 20000, power: soft_reset}
+end: 90000
+expect:
+  boot_count: 2
+  boots:
+    - {safe: true, latched: false, log: ["SIM: dfu chunk image 0 -> accepted", "omi/bootstate=TRIAL",
+                                         "Safe mode DFU finished: fresh trial on next boot"]}
+    - {reset: software, safe: false, log: ["Device initialized successfully", "omi/bootstate=GOOD"]}
+  invariants: [no-stuck-safe]

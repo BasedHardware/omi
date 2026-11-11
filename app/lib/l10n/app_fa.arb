@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "شارژ باتری بالای 15 درصد",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "مطمئن شوید دستگاه شما 15 درصد شارژ دارد.",
+    "firmwareBatteryRequirement": "شارژ باتری بالای 30 درصد",
+    "firmwareEnsureBattery": "مطمئن شوید دستگاه شما 30 درصد شارژ دارد.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10369,6 +10366,8 @@
     "syncCardThrottlePaused": "همگام‌سازی برای مدت کوتاهی متوقف شده — به‌طور خودکار از سر گرفته می‌شود",
     "syncCardBackendBusy": "سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند",
     "unableToDetermineFirmwareVersion": "تعیین نسخه فعلی سفت‌افزار امکان‌پذیر نیست",
+    "applyCodeToCurrentPlan": "اعمال روی طرح فعلی",
+    "subscriptionCodeResult": "{result, select, applied{کد روی طرح فعلی شما اعمال شد.} refused{این کد قابل اعمال نیست. کد و طرح مورد نیاز را بررسی کنید.} conflict{کد قبلاً استفاده شده یا طرح شما از قبل تخفیف دارد.} rateLimited{تلاش‌های بیش از حد. صبر کنید و بعداً دوباره امتحان کنید.} other{کد اعمال نشد. دوباره امتحان کنید.}}",
     "promoCode": "کد تخفیف",
     "enterPromoCode": "کد تخفیف را وارد کنید",
     "invalidPromotionCode": "کد تخفیف نامعتبر.",
@@ -10771,7 +10770,8 @@
     "firmwareUpdateFailedTitle": "به‌روزرسانی ناموفق بود",
     "firmwareUpdateFailedMessage": "به‌روزرسانی کامل نشد. دستگاه شما همچنان میان‌افزار فعلی را دارد و استفاده از آن امن است. آن را شارژ و نزدیک تلفن نگه دارید، سپس دوباره امتحان کنید.",
     "firmwareDownloadFailedMessage": "به‌روزرسانی دانلود نشد و دستگاه شما تغییری نکرد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.",
-    "firmwareBatteryTooLow": "باتری {level}٪ است. پیش از به‌روزرسانی، دستگاه را دست‌کم تا ۱۵٪ شارژ کنید.",
+    "firmwareBatteryUnavailable": "سطح باتری هنوز در دسترس نیست. کمی صبر کنید و اگر وضعیت همین‌طور ماند، دوباره متصل شوید.",
+    "firmwareBatteryTooLow": "باتری {level}٪ است. پیش از به‌روزرسانی، دستگاه را دست‌کم تا ۳۰٪ شارژ کنید.",
     "startUpdate": "شروع به‌روزرسانی",
     "otaNotSupported": "این میان‌افزار از طریق Wi-Fi به‌روز نمی‌شود.",
     "otaConnectFailed": "اتصال به {deviceName} ممکن نشد. آن را روشن و نزدیک نگه دارید و دوباره امتحان کنید.",
@@ -11284,13 +11284,8 @@
     "reviewChangesSectionTerms": "نام‌ها و اصطلاحات",
     "reviewChangesSectionTitles": "عنوان‌ها و خلاصه‌ها",
     "reviewChangesSectionOther": "تغییرات دیگر",
-    "reviewChangeConversationCount": "{count, plural, =1{۱ گفتگو} other{{count} گفتگو}}",
-    "reviewChangePlaceCount": "{count, plural, =1{۱ مورد} other{{count} مورد}}",
-    "reviewChangeShowAll": "نمایش همه ({count})",
     "reviewChangeUndoAll": "لغو همه",
-    "reviewChangeSeeEvidence": "مشاهده شواهد",
     "reviewChangeViewConversation": "مشاهده گفتگو",
-    "reviewChangeViewTask": "مشاهده کار",
     "reviewChangesUndoPartial": "لغو {failed} از {total} ممکن نشد. دوباره امتحان کنید.",
     "reviewShowMore": "نمایش بیشتر",
     "entityKeptCurrent": "به‌روز نگه‌داشته‌شده توسط Omi",
@@ -11313,7 +11308,6 @@
     "tasksGroupByProject": "گروه‌بندی بر اساس پروژه",
     "tasksGroupByDate": "گروه‌بندی بر اساس تاریخ",
     "dreamReportTitle": "گزارش Dream",
-    "dreamReportShadowBanner": "حالت پیش‌نمایش: Dream نشان می‌دهد چه چیزی را تغییر می‌داد، اما هنوز چیزی در حساب شما تغییر نمی‌کند.",
     "dreamReportLiveBanner": "Dream این تغییرات را خودش اعمال می‌کند. هر کدام را می‌توانید در تغییرات اخیر واگرد کنید.",
     "dreamReportRunNow": "اجرا کن",
     "dreamReportRunLimit": "امروز اجرای دستی باقی نمانده",
@@ -11328,20 +11322,14 @@
     "dreamReportFailed": "ناموفق ({error})",
     "dreamReportTimedOut": "در حد زمانی متوقف شد",
     "dreamReportNothingFound": "چیزی برای رفع نیست",
-    "dreamReportStats": "{records} مورد خوانده شد · {tokens} توکن",
     "dreamReportWouldFix": "اصلاح می‌کرد",
     "dreamReportFixed": "اصلاح شد",
     "dreamReportWouldAsk": "از شما می‌پرسید",
     "dreamReportWouldSuggestTasks": "وظایفی پیشنهاد می‌کرد",
     "dreamReportLearnedWords": "واژه‌های یادگرفته‌شده",
-    "dreamReportFeedback": "به تیم Omi گزارش شد",
     "dreamReportDeletedItem": "مورد حذف‌شده",
-    "dreamReportPasses": "{count} از {limit} اجرا امروز",
-    "dreamReportQueued": "{count, plural, =0{تغییری در انتظار نیست} =1{۱ تغییر در انتظار} other{{count} تغییر در انتظار}}",
     "dreamReportRunsLeft": "{count, plural, =1{امروز ۱ اجرای دستی باقی مانده} other{امروز {count} اجرای دستی باقی مانده}}",
     "dreamReportFound": "{fixes, plural, =1{۱ اصلاح} other{{fixes} اصلاح}} · {asks, plural, =1{۱ پیشنهاد} other{{asks} پیشنهاد}}",
-    "dreamReportDropped": "{count, plural, =1{۱ تغییر قدیمی‌تر نادیده گرفته شد} other{{count} تغییر قدیمی‌تر نادیده گرفته شد}}",
-    "dreamReportPrivacyHeld": "{count, plural, =1{۱ گزارش به دلیل حریم خصوصی نگه داشته شد} other{{count} گزارش به دلیل حریم خصوصی نگه داشته شد}}",
     "speakerTagPromptExcerptSaved": "پاسخ برای این بخش ذخیره شد.",
     "pinPersonDescription": "افرادِ سنجاق‌شده بالای فهرست افراد شما می‌مانند و با پاک‌سازی حذف نمی‌شوند.",
     "chatAppsProblemFailed": "مشکلی پیش آمد. دوباره تلاش کنید.",
@@ -11541,6 +11529,9 @@
     "paywallTrialSaveAmount": "{amount} صرفه‌جویی کنید",
     "paywallTrialCta": "شروع با {price}",
     "paywallTrialCancelNote": "هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.",
+    "paywallMonthlyFallbackTitle": "هنوز برای یک سال کامل آماده نیستید؟",
+    "paywallMonthlyFallbackTrialBody": "به‌جای آن ماهانه شروع کنید. همان {days} روز رایگان، سپس ماهی {price}. هر زمان خواستید لغو کنید.",
+    "paywallMonthlyFallbackTrialCta": "ماهانه را رایگان امتحان کنید",
     "paywallTrialStarted": "دوره آزمایشی رایگان {days} روزه Omi Pro شما آغاز شد.",
     "paywallCancelAnytime": "هر زمان که بخواهید لغو کنید.",
     "connectAnAgent": "اتصال یک ایجنت",
@@ -11552,9 +11543,6 @@
     "syncCardTranscribingAmount": "تبدیل {amount} به گفتگو",
     "syncCardTranscribedOf": "{done} / {total} انجام شد · می‌توانید از این صفحه خارج شوید",
     "syncCardReadyAmount": "{amount} آماده همگام‌سازی",
-    "syncStepLabelDownload": "Omi → گوشی",
-    "syncStepLabelUpload": "آپلود",
-    "syncStepLabelTranscribe": "رونویسی",
     "syncDetailsTitle": "جزئیات همگام‌سازی",
     "syncDetailsRightNow": "همین حالا",
     "syncDetailsYourOmi": "Omi شما",
@@ -11562,7 +11550,6 @@
     "syncDetailsWaitingOnOmi": "در انتظار Omi",
     "syncDetailsWaitingOnPhone": "در انتظار این گوشی",
     "syncDetailsTranscribing": "در حال رونویسی در Omi",
-    "syncDetailsForSupport": "برای پشتیبانی",
     "syncDetailsAudioFiles": "فایل‌های صوتی",
     "syncDetailsServerJobs": "کارهای سرور (انجام‌شده / کل)",
     "syncDetailsCopy": "کپی جزئیات برای پشتیبانی",
@@ -11618,6 +11605,7 @@
     "activityAttentionStorageSubtitle": "ضبط‌ها متوقف شده‌اند",
     "activityAttentionUploadStalledTitle": "بارگذاری متوقف شده",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 ضبط در انتظار} other{{count} ضبط در انتظار}}",
+    "attentionRerunNotes": "ایجاد دوباره یادداشت‌ها",
     "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد",
     "activityAttentionSemantics": "فعالیت، نیاز به توجه",
     "connectAgentHeadline": "از حافظهٔ Omi خود در ChatGPT و عامل‌های هوش مصنوعی‌تان استفاده کنید",
@@ -11819,6 +11807,8 @@
     "episodeLiveFor": "زنده · {duration}",
     "episodeMomentsCount": "{count, plural, =1{۱ لحظه} other{{count} لحظه}}",
     "episodeMoments": "لحظه‌ها",
+    "episodeFollowUps": "پیگیری‌ها",
+    "episodeOpenTranscript": "باز کردن پی‌نوشت",
     "episodeSoFar": "تا اینجا",
     "episodeUpdatedJustNow": "همین حالا به‌روز شد · یادداشت کامل در پایان",
     "episodeUpdatedMinutesAgo": "{minutes} دقیقه پیش به‌روز شد · یادداشت کامل در پایان",
@@ -11876,19 +11866,13 @@
     "episodeContinues": "ادامه «{title}»",
     "episodeLiveSince": "· از {time}",
     "episodeNotesStartWithTranscript": "یادداشت‌ها با رسیدن پی‌نوشت نهایی شروع می‌شوند.",
-    "episodeOnDeviceNotesFootnote": "همان‌طور که حرف می‌زنی روی گوشی‌ات نوشته می‌شود. یادداشت‌های کامل همراه با پی‌نوشت نهایی می‌رسند.",
-    "episodeOnThisPhone": "روی این گوشی",
-    "episodeOpenTranscript": "باز کردن پی‌نوشت",
-    "liveCardTitle": "زنده",
     "livePreviewBehind": "پی‌نوشت نهایی حدود {duration} عقب است",
     "livePreviewCatchingUp": "پی‌نوشت نهایی در حال رسیدن است",
     "livePreviewNoEngineBody": "حرف‌هایت یک تا دو دقیقه بعد از گفتن اینجا ظاهر می‌شود.",
-    "livePreviewNoEngineTitle": "با امنیت ضبط می‌کند",
-    "livePreviewOnPhoneDivider": "زنده روی این گوشی",
+    "livePreviewOnPhoneDivider": "همین الان، روی این تلفن",
     "livePreviewTurnOnLiveText": "روشن کردن متن زنده",
     "deviceCatchUpOnItsWay": "در راه است",
     "deviceCatchUpWhenOnline": "وقتی آنلاین باشد",
-    "onTheWayCatchingUp": "{duration} درحال تکمیل",
     "onTheWayUploadsByItself": "خودش بارگذاری می‌کند. با رسیدن آن‌ها، گفتگوها تکمیل می‌شوند.",
     "onTheWayUploadsWhenOnline": "وقتی دوباره آنلاین باشید، خودش بارگذاری می‌کند. با رسیدن آن‌ها، گفتگوها تکمیل می‌شوند.",
     "onTheWayDayUploading": "درحال بارگذاری",
@@ -11896,10 +11880,6 @@
     "onTheWayDayQueued": "در صف",
     "onTheWayNoDate": "بدون تاریخ",
     "onTheWayFootnote": "ضبط‌هایی که موفق نمی‌شوند، در پس‌زمینه دوباره تلاش می‌شوند. هر آنچه نتوانیم رونویسی کنیم، به‌طور خودکار به ما گزارش داده می‌شود.",
-    "onTheWayDetailsForSupport": "جزئیات برای پشتیبانی",
-    "homeNoiseFoldHidden": "{count, plural, =1{۱ کلیپ کوتاه مخفی شده} other{{count} کلیپ کوتاه مخفی شده‌اند}}",
-    "homeNoiseFoldShow": "نمایش",
-    "homeNoiseFoldHide": "{count, plural, =1{مخفی‌کردن ۱ کلیپ کوتاه} other{مخفی‌کردن {count} کلیپ کوتاه}}",
     "deleteLocalRecordingsWarning": "{count, plural, =1{یک ضبط هنوز بارگذاری نشده است. اگر اکنون حذف کنید، از دست می‌رود — برای پایان بارگذاری، برنامه را باز نگه دارید.} other{{count} ضبط هنوز بارگذاری نشده‌اند. اگر اکنون حذف کنید، از دست می‌روند — برای پایان بارگذاری، برنامه را باز نگه دارید.}}",
     "deleteConfirmGraceSubtitle": "پیش از رفتن، ببینید چه اتفاقی برای داده‌هایتان می‌افتد.",
     "deletePauseConfirmation": "Omi متوقف شده است. هر زمان خواستید ضبط را از سر بگیرید.",
@@ -11941,5 +11921,286 @@
     "yearlySwitchUnavailable": "پرداخت سالانه اکنون برای طرح شما در دسترس نیست.",
     "yearlySwitchDoneTitle": "اکنون سالانه پرداخت می‌کنید",
     "yearlySwitchDoneBody": "امروز {amount} کسر شد. تمدید در {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} بخش} one{{count} بخش} two{{count} بخش} few{{count} بخش} many{{count} بخش} other{{count} بخش}}"
+    "chatAppsWaitingMessageIn": "پیام را در {app} ارسال کنید. به‌محض دریافت توسط Omi، این صفحه به‌روز می‌شود.",
+    "chatAppsCodeExpiredMessageIn": "کد جدید بگیرید و از {app} ارسال کنید.",
+    "episodeWritingNotes": "در حال نوشتن یادداشت‌ها…",
+    "homeStepTranscribing": "در حال رونویسی…",
+    "homeRecordingsCount": "{count, plural, other{{count} ضبط}}",
+    "episodeWritingNotesDetail": "اول متن را کامل می‌کنیم. می‌توانید این صفحه را ترک کنید.",
+    "episodeCoversUpTo": "تا {time} · یادداشت‌های کامل در پایان",
+    "liveTranscribedUpTo": "رونویسی تا {time}",
+    "liveAudioSaved": "{duration} ذخیره شد",
+    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.",
+    "searchNoiseFilter": "کلیپ‌های کوتاه",
+    "reviewChangeConversationCount": "{count, plural, =1{۱ گفتگو} other{{count} گفتگو}}",
+    "reviewChangePlaceCount": "{count, plural, =1{۱ مورد} other{{count} مورد}}",
+    "reviewChangeShowAll": "نمایش همه ({count})",
+    "reviewChangeSeeEvidence": "مشاهده شواهد",
+    "reviewChangeViewTask": "مشاهده کار",
+    "dreamReportShadowBanner": "حالت پیش‌نمایش: Dream نشان می‌دهد چه چیزی را تغییر می‌داد، اما هنوز چیزی در حساب شما تغییر نمی‌کند.",
+    "dreamReportStats": "{records} مورد خوانده شد · {tokens} توکن",
+    "dreamReportFeedback": "به تیم Omi گزارش شد",
+    "dreamReportPasses": "{count} از {limit} اجرا امروز",
+    "dreamReportQueued": "{count, plural, =0{تغییری در انتظار نیست} =1{۱ تغییر در انتظار} other{{count} تغییر در انتظار}}",
+    "dreamReportDropped": "{count, plural, =1{۱ تغییر قدیمی‌تر نادیده گرفته شد} other{{count} تغییر قدیمی‌تر نادیده گرفته شد}}",
+    "dreamReportPrivacyHeld": "{count, plural, =1{۱ گزارش به دلیل حریم خصوصی نگه داشته شد} other{{count} گزارش به دلیل حریم خصوصی نگه داشته شد}}",
+    "syncStepLabelDownload": "Omi → گوشی",
+    "syncStepLabelUpload": "آپلود",
+    "syncStepLabelTranscribe": "رونویسی",
+    "syncDetailsForSupport": "برای پشتیبانی",
+    "episodeOnDeviceNotesFootnote": "همان‌طور که حرف می‌زنی روی گوشی‌ات نوشته می‌شود. یادداشت‌های کامل همراه با پی‌نوشت نهایی می‌رسند.",
+    "episodeOnThisPhone": "روی این گوشی",
+    "livePreviewNoEngineTitle": "با امنیت ضبط می‌کند",
+    "onTheWayCatchingUp": "{duration} درحال تکمیل",
+    "onTheWayDetailsForSupport": "جزئیات برای پشتیبانی",
+    "homeNoiseFoldHidden": "{count, plural, =1{۱ کلیپ کوتاه مخفی شده} other{{count} کلیپ کوتاه مخفی شده‌اند}}",
+    "homeNoiseFoldShow": "نمایش",
+    "homeNoiseFoldHide": "{count, plural, =1{مخفی‌کردن ۱ کلیپ کوتاه} other{مخفی‌کردن {count} کلیپ کوتاه}}",
+    "speakerWholeRecording": "اعمال به کل ضبط",
+    "speakerSelectionChanged": "گوینده تغییر کرده است. خط‌ها را دوباره انتخاب کنید.",
+    "speakerRenameIssue": "{reason, select, limit{ضبط خیلی بزرگ است. خط‌های کمتری از یک گفتگو انتخاب کنید.} partial{بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.} other{بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.}}",
+    "speakerRecordingCoverage": "{state, select, scope{خطوط دیگر این صدا (پوشش ضبط تأیید نشده)} other{{count, plural, =1{نام 1 خط فقط در گفتگوهای موجود تغییر کرد.} other{نام {count} خط فقط در گفتگوهای موجود تغییر کرد.}}}}",
+    "episodeFinishingUp": "در حال اتمام…",
+    "buildAndShareApp": "اپلیکیشن سفارشی خود را بسازید و اشتراک‌گذاری کنید",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ اعضا و افزایش.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "در Omi، ما متعهد به حفاظت از حریم خصوصی شما هستیم. این صفحه به شما اجازه می‌دهد که کنترل کنید داده‌های شما چگونه ذخیره و استفاده می‌شوند.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی ایمن هستند. تنظیمات و گزینه‌های حریم خصوصی آینده خود را مرور کنید.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "پیکربندی ارائه‌دهنده STT",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "وارد کردن داده‌ها از منابع دیگر",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "کلمات درک‌شده از گفتگوهای شما.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "واقعیات و جزئیات یادآوری‌شده برای شما.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "کمک به تشخیص مشکلات",
+    "deleteKnowledgeGraphMessage": "این کار تمام داده‌های گراف دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادداشت‌های اصلی شما امن باقی خواهند ماند. گراف در طول زمان یا در درخواست بعدی بازسازی خواهد شد.",
+    "deleteKnowledgeGraphDesc": "تمام گره‌ها و اتصالات را پاک کنید",
+    "enhanceTranscriptAccuracyDesc": "هنگامی که مدل ما بهبود می‌یابد، می‌توانیم نتایج رونویسی بهتری برای ضبط‌های شما ارائه دهیم.",
+    "bestInClassTranscription": "بهترین کلاس رونویسی بدون راه‌اندازی",
+    "optimizedForConversation": "برای گفتگو بهینه‌سازی شده",
+    "highAccuracy": "دقت بالا",
+    "privacyFirst": "حریم خصوصی اول",
+    "keepGoing": "ادامه دهید، خیلی خوب انجام می‌دهید",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "سفر رشد شخصی شما با هوش مصنوعی که به هر کلمه شما گوش می‌دهد.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "firmwareBatteryAbove15": "شارژ باتری بالای 15 درصد",
+    "@firmwareBatteryAbove15": {
+        "description": "Firmware update step title about battery level"
+    },
+    "configureSttProvider": "ارائه‌دهنده تبدیل گفتار به متن را پیکربندی کنید",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "پاک کردن تمام گره‌ها و اتصالات",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "خوش‌آمدید به Omi! دستیار هوش مصنوعی شما آماده‌است تا در گفتگوها، وظایف و بسیاری مورد دیگر به شما کمک کند.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "گفتگوها به‌طور خودکار پردازش می‌شوند",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "بلافاصله بینش‌ها و خلاصه‌ها را دریافت کنید",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "امتیازی برای کمک به شما\nدر تمرکز بر اجرا.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "یک گفتگو شروع کنید و بگذارید جادو شروع شود",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "دستیار هوش مصنوعی قابل پوشیدن",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "تنظیم و کنترل یادآوری‌های خود",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "تنظیم تمام یادآوری‌ها به حالت خصوصی",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "تنظیم تمام یادآوری‌ها به حالت عمومی",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "زبان ترجیحی خود را برای بهترین تجربه Omi انتخاب کنید",
+    "enableFeaturesForBestExperience": "ویژگی‌ها را برای بهترین تجربه Omi بر روی دستگاه خود فعال کنید.",
+    "deliveryTimeDescription": "زمان دریافت خلاصه روزانه خود",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "پیکربندی ارائه‌دهنده STT",
+    "setConversationEndDescription": "تنظیم زمان خودکار پایان گفتگوها",
+    "clearNodesDescription": "تمام گره‌ها و اتصالات را پاک کنید",
+    "deleteKnowledgeGraphWarning": "این تمام داده‌های نمودار دانش مشتق‌شده را حذف می‌کند. خاطرات اصلی شما ایمن می‌مانند.",
+    "createAndShareYourApp": "برنامه خود را ایجاد و اشتراک کنید",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "رمزگذاری از سر به سر استاندارد طلایی برای حریم‌خصوصی است. هنگامی که فعال باشد، داده‌های شما قبل از ارسال به سرورهای ما در دستگاه شما رمزگذاری می‌شوند. این بدان معناست که هیچ کس، حتی Omi، نمی‌تواند محتوای شما را دسترسی کند.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "داده‌های شما با کلیدی منحصر به فرد برای شما در سرورهای ما، میزبان‌شده در Google Cloud، رمزگذاری می‌شوند. این بدان معناست که محتوای خام شما برای هیچ کس، از جمله کارکنان Omi یا Google، مستقیماً از پایگاه داده قابل دسترسی نیست.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "برای حداکثر امنیت فعال کنید جایی که فقط شما می‌توانید داده‌های خود را دسترسی کنید. برای اطلاعات بیشتر لمس کنید.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "Omi شما، آزاد شده. بی‌محدود بروید برای امکانات بی‌پایان.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "در Omi، ما حریم خصوصی شما را بسیار جدی می‌گیریم. ما می‌خواهیم در مورد داده‌هایی که جمع‌آوری می‌کنیم و نحوه استفاده از آن برای بهبود محصول خود برای شما شفاف باشیم. در اینجا آنچه باید بدانید:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "ما متعهد هستیم داده‌هایی که جمع‌آوری می‌کنیم را تنها برای بهتر کردن Omi برای شما استفاده کنیم. حریم خصوصی و اعتماد شما برای ما بسیار اهمیت دارند.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "از اینکه کاربر ارزشمندی از Omi هستید تشکر می‌کنیم. اگر سؤالات یا نگرانی‌ای دارید، لطفا با ما تماس بگیرید team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "این تمام داده‌های نمودار دانش مشتق‌شده (گره‌ها و اتصالات) را حذف خواهد کرد. یادآوری‌های اصلی شما ایمن خواهند ماند. نمودار در طول زمان یا بعد از درخواست بعدی بازسازی خواهد شد.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "بعد از اینکه یک فرد ایجاد شود، می‌توانید به رونویس مکالمه بروید و بخش‌های مرتبط با آن‌ها را تعیین کنید، به این ترتیب Omi می‌تواند صوت آن‌ها را نیز تشخیص دهد!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "برنامه سفارشی خود را بسازید و به اشتراک بگذارید",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "@processingProgress": {
+        "description": "Progress label showing current/total items",
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "onboardingChooseYourPreference": "ترجیح خود را انتخاب کنید",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "دسترسی مورد نیاز را اعطا کنید",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "انتخاب کنید کدام سرویس‌گیر را مورد اتصال قرار دهید",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "تماس‌های شما خصوصی و ایمن هستند",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "هنگامی که Omi به تلفن شما متصل نیست، صوت را به‌طور محلی روی حافظه داخلی‌اش ذخیره می‌کند. شما هرگز ضبط را از دست نمی‌دهید.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "چند مجوز را فعال کنید تا Omi بتواند جادو کند.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "هوش مصنوعی پیشرفته — هزاران گفتگو + اتوماسیون عاملی",
+    "syncCardProgressOf": "{current} از {total}",
+    "newestFirst": "ابتدا جدیدترین‌ها",
+    "backgroundModeNote": "فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.",
+    "alwaysInContext": "همیشه در زمینه",
+    "conversationsNotCapturedCount": "ثبت نشده ({count})",
+    "memoryAllowUse": "اجازه استفاده",
+    "memoryDontUse": "استفاده نکن",
+    "speakerTagPromptSubtitle": "بررسی سریع صداهای دو روز گذشته",
+    "transcriptionsPendingCount": "رونویسی‌های در انتظار {count}",
+    "captureRecoveryBanner": "Omi صدا ارسال نمی‌کند — برای اتصال دوباره ضربه بزنید",
+    "capturePendantDisconnectedDetail": "آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.",
+    "pinPersonSubtitle": "{name} را نگه دارید و حضورش را در گفتگوهایتان انتظار داشته باشید",
+    "pinPersonHonestLine": "Omi پیش از تطبیق صداهای مشابه از شما می‌پرسد.",
+    "speakerTagPromptHintConfirm": "پاسخ «بله» اطمینان درباره {name} را بالا می‌برد.",
+    "localCopiesSection": "نسخه‌های محلی",
+    "capturePendantDisconnectedShort": "Omi خودش دوباره وصل می‌شود",
+    "forYou": "برای شما",
+    "stopThese": "توقف این موارد",
+    "meetingActionItemsTitle": "موارد اقدام",
+    "addToTasks": "افزودن به وظایف",
+    "showInTranscript": "نمایش رونوشت",
+    "tentativeTaskDueDate": "سررسید حدود {date}",
+    "tentativeTaskDueDateSemantics": "سررسید احتمالی {date}",
+    "openTask": "باز کردن وظیفه",
+    "completeTask": "تکمیل وظیفه",
+    "reopenTask": "بازگشایی وظیفه",
+    "addingToTasks": "در حال افزودن به وظایف",
+    "taskAddedToTasks": "وظیفه ایجاد شد",
+    "completedStatus": "تکمیل شده",
+    "notCompletedStatus": "در انتظار",
+    "referralAffiliate": "برنامه همکاری در فروش",
+    "referralCampaignTerms": "دوستان ۱۰٪ تخفیف دستگاه Omi می‌گیرند. خرید ۲ دوست متفاوت اول ۲ ماه Pro و خرید ۳ دوست متفاوت بعدی ۳ ماه دیگر باز می‌کند. حداکثر ۵ دوست و مجموعاً ۵ ماه.",
+    "referralMilestone": "{months} ماه Pro · {count}/{target} خرید",
+    "referralClaim": "دریافت پاداش",
+    "referralClaimed": "{months} ماه Pro دریافت شد",
+    "referralRewardPending": "پاداش تا پایان اشتراک پولی شما ذخیره می‌شود.",
+    "referralCampaignTitle": "Omi را معرفی کنید. Pro رایگان بگیرید.",
+    "referralCampaignSubtitle": "۱۰٪ تخفیف Omi برای آن‌ها. تا ۵ ماه Pro برای شما.",
+    "referralShareInvite": "اشتراک‌گذاری دعوت",
+    "referralYourRewards": "پاداش‌های شما",
+    "referralRewardFirstTitle": "۲ ماه Pro",
+    "referralRewardFirstDetail": "وقتی ۲ دوست Omi بخرند",
+    "referralRewardSecondTitle": "۳ ماه دیگر",
+    "referralRewardSecondDetail": "وقتی ۳ دوست دیگر بخرند",
+    "referralClaimShort": "دریافت",
+    "paymentDeclinedTitle": "کارت شما رد شد",
+    "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید",
+    "hasLinkedTasksLabel": "دارای کارهای مرتبط",
+    "hasTasksFilter": "دارای کار",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

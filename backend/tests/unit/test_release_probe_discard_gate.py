@@ -199,7 +199,9 @@ class TestReleaseProbeSkipsTheDiscardVerdict:
         """631d6ced's fixture loop could not make the keep line deterministic:
         the durable word count depends on STT yield and late flushes, so the
         gate itself must not run for the probe uid."""
-        conversation = _conversation([_segment('he began a confused complaint against the wizard', 0.0, 4.0)])
+        conversation = _conversation(
+            [_segment('he began a confused complaint against the wizard while everyone listened in silence', 0.0, 8.0)]
+        )
         gate = MagicMock(return_value=True)
 
         with (
@@ -219,7 +221,9 @@ class TestReleaseProbeSkipsTheDiscardVerdict:
 
     def test_regular_uid_still_receives_the_discard_verdict(self):
         # Speech the deterministic rules leave to the model.
-        conversation = _conversation([_segment('coming over there in a second', 0.0, 3.0)])
+        conversation = _conversation(
+            [_segment('coming over there in a second after we finish talking about the weather', 0.0, 8.0)]
+        )
         gate = MagicMock(return_value=True)
 
         with (

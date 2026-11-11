@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from config import directory_routing
+from database.directory.wipe import purge_owner_planes
+
 from database.messaging import MessagingStore
 
 import asyncio
@@ -50,6 +53,7 @@ from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import delete_canonical_memory_maintenance_registry_entry
+from utils.other.lake_wipe import destroy_owner_lake_keys, purge_owner_lake_content
 from utils.other.storage import delete_all_conversation_recordings, delete_all_user_storage_objects
 from utils.retrieval.frame_request_storage import (
     delete_all_frame_request_pixels_for_user,
@@ -187,6 +191,12 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
     except Exception as e:
         record_failure('required_failures', 'screen_activity_vectors', e)
         logger.error(f'delete_account purge screen activity vectors failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        vector_db.delete_all_user_vector_copies(uid)
+    except Exception as e:
+        record_failure('required_failures', 'all_vector_copies', e)
+        logger.error(f'delete_account purge all vector copies failed for {uid}: {sanitize(str(e))}')
 
     try:
         result['recordings_deleted'] = delete_all_conversation_recordings(uid) or 0
@@ -429,6 +439,13 @@ def background_wipe_user_data(
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
             raise RuntimeError(f'required derived purge failed: {failed_operations}')
+        if directory_routing.directory_configured():
+            current_operation = 'cell_directory_purge'
+            heartbeat()
+            purge_owner_planes(uid)
+        current_operation = 'lake_prefix_purge'
+        heartbeat()
+        purge_owner_lake_content(uid)
         current_operation = 'firestore_user_data'
         heartbeat()
         wipe_result = users_db.delete_user_data(uid)
@@ -443,6 +460,9 @@ def background_wipe_user_data(
         current_operation = 'memory_maintenance_registry'
         heartbeat()
         _delete_memory_maintenance_registry(uid)
+        current_operation = 'lake_key_destroy'
+        heartbeat()
+        destroy_owner_lake_keys(uid)
         logger.info('delete_account background wipe complete')
     except Exception as e:
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')

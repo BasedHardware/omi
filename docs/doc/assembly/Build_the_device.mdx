@@ -1,16 +1,20 @@
 ---
-title: "Building the Device"
+title: "Building the device"
 icon: "screwdriver"
 description: "Step-by-step guide to assemble your own Omi device from parts."
 ---
 
-## Before You Start
+<Warning>
+**Legacy guide.** Builds the original DevKit 1. Community-maintained and unsupported. See the [series introduction](/doc/assembly/introduction).
+</Warning>
+
+## Before you start
 
 <CardGroup cols={2}>
-  <Card title="Parts List" icon="list-check" href="/doc/assembly/Buying_Guide">
+  <Card title="Parts list" icon="list-check" href="/doc/assembly/Buying_Guide">
     Make sure you have all required components
   </Card>
-  <Card title="3D Print Case" icon="cube" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/triangle%20v1">
+  <Card title="3D print case" icon="cube" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/triangle%20v1">
     Download and print the case STL files
   </Card>
 </CardGroup>
@@ -19,12 +23,10 @@ description: "Step-by-step guide to assemble your own Omi device from parts."
 If you don't have access to a 3D printer, check [Makerspace.com](https://makerspace.com/) for printing locations near you, or use an online 3D printing service.
 </Tip>
 
----
-
-## Assembly Instructions
+## Assembly instructions
 
 <Steps>
-  <Step title="Prepare the Components">
+  <Step title="Prepare the components">
     Gather all your parts: XIAO board, battery, switch, wires, and 3D printed case.
 
     <Frame>
@@ -32,7 +34,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Frame>
   </Step>
 
-  <Step title="Cut the Black Wire">
+  <Step title="Cut the black wire">
     Cut the black wire approximately **2/3 inch (17mm)** from the base of the battery connector.
 
     <Frame>
@@ -40,7 +42,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Frame>
   </Step>
 
-  <Step title="Strip the Wire Ends">
+  <Step title="Strip the wire ends">
     Remove a small portion of insulation from both ends of the cut wire using a wire stripper.
 
     <Note>
@@ -52,7 +54,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Frame>
   </Step>
 
-  <Step title="Solder the Components">
+  <Step title="Solder the components">
     Follow the soldering diagram to connect the battery to the board. The switch goes in-line with the black (ground) wire.
 
     <Frame>
@@ -64,7 +66,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Warning>
   </Step>
 
-  <Step title="Secure the Switch">
+  <Step title="Secure the switch">
     Insert the switch securely into the battery connector circuit.
 
     <Frame>
@@ -72,7 +74,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Frame>
   </Step>
 
-  <Step title="Place Battery and Board in Case">
+  <Step title="Place the battery and board in the case">
     Carefully place the battery and board into the 3D-printed case.
 
     <Frame>
@@ -80,7 +82,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Frame>
   </Step>
 
-  <Step title="Position the Switch">
+  <Step title="Position the switch">
     Insert the switch into the notch next to the USB-C slot.
 
     <Frame>
@@ -88,7 +90,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Frame>
   </Step>
 
-  <Step title="Manage the Wires">
+  <Step title="Manage the wires">
     Twist the longer red wire gently to help organize it within the case.
 
     <Frame>
@@ -96,7 +98,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Frame>
   </Step>
 
-  <Step title="Curl the Wire">
+  <Step title="Curl the wire">
     Carefully curl the twisted wire and place it to the side to ensure it fits within the case.
 
     <Frame>
@@ -104,7 +106,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Frame>
   </Step>
 
-  <Step title="Attach the Lid">
+  <Step title="Attach the lid">
     Align the lid with the case using the ridges as a guide and snap it into place.
 
     <Frame>
@@ -112,7 +114,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
     </Frame>
   </Step>
 
-  <Step title="Secure the Case">
+  <Step title="Secure the case">
     Apply even pressure around the edges to ensure the seams snap securely into place.
 
     <Frame>
@@ -121,9 +123,7 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
   </Step>
 </Steps>
 
----
-
-## Charging Instructions
+## Charging instructions
 
 <Warning>
 **Important:** Omi can only charge when it is powered **ON**. The device will not charge if powered off.
@@ -133,23 +133,21 @@ If you don't have access to a 3D printer, check [Makerspace.com](https://makersp
 - The LED will indicate charging status
 - A full charge takes approximately 1-2 hours
 
----
-
 ## Congratulations!
 
 You now have a fully assembled Omi device!
 
 <CardGroup cols={2}>
-  <Card title="Flash Firmware" icon="bolt" href="/doc/get_started/Flash_device">
+  <Card title="Flash firmware" icon="bolt" href="/doc/get_started/Flash_device">
     Install the latest firmware on your device
   </Card>
-  <Card title="Set Up the App" icon="mobile" href="/doc/get_started/introduction">
+  <Card title="Set up the app" icon="mobile" href="/doc/get_started/what-is-omi">
     Download and configure the Omi app
   </Card>
-  <Card title="Get Support" icon="wrench" href="/doc/info/Support">
+  <Card title="Get support" icon="wrench" href="/doc/info/Support">
     Having issues? Get help from our community or contact support
   </Card>
-  <Card title="Join Community" icon="discord" href="http://discord.omi.me">
+  <Card title="Join the community" icon="discord" href="http://discord.omi.me">
     Get help from the community on Discord
   </Card>
 </CardGroup>

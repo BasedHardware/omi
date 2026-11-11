@@ -1,12 +1,22 @@
 # Released-memory change projection
 
-`database.memory_change_head` adds one content-free random token per owner to
+`database.memory_change_head` adds one content-free version head per owner to
 the **same Commit RPC** as every change to `memory_items`, historical
 `memories`, or `memory_historical_overrides`. It covers set/create/update,
 field transforms, hard deletes, batches, transactions and sync/async clients.
 It preserves the source writes, preconditions, transaction identity and source
 write-result cardinality. A failed commit changes neither source nor token.
 The installer runs alongside the existing SDK read probe in `database._client`.
+
+Schema2 adds a server `commit_generation` increment in that same head Write.
+GAPIC can retry a successful Commit after losing its acknowledgement; its
+prepared request UUID alone can recur and restore an older cache key. The
+server generation changes on every successful application, including source
+transforms and otherwise identical head payloads. Cache identity combines
+generation, request token and exact server `update_time` (nanoseconds
+preserved), so head deletion/recreation cannot restore an older identity.
+Missing, malformed or saturated generations retain source reads. The existing
+`released_memory_changes_v1` document path stays unchanged; its schema is2.
 
 Non-atomic BatchWrite cannot publish a safe atomic token. Before any matching
 bulk mutation, its owner head is permanently marked `blocked=true`; failure to
@@ -34,9 +44,13 @@ only disables reuse and does not suppress any source query. No Redis dependency,
 polling change, field/index migration or recurring scan is introduced.
 
 MCP conversation cards reuse fs-p1's atomic
-`users/{uid}/list_serving_versions/conversations.version`. They require its
-`OMI_LIST_VERSION_EPOCH` and enabled `OMI_LIST_PROJECTION_WRITER_ENABLED`, in
-addition to P2's gate. Missing P1 metadata falls back to the existing MCP path.
+`users/{uid}/list_serving_versions/conversations`. They require schema2,
+an atomically incremented `commit_generation`, exact snapshot revision, a
+`v2:<unique-epoch>` P1 `OMI_LIST_VERSION_EPOCH` and enabled
+`OMI_LIST_PROJECTION_WRITER_ENABLED`, in addition to P2's gate. Legacy P1
+UUID-only heads lack that retry-safe capability and retain the existing MCP
+source path. P1's owner must provide the capability and prove ambiguous-success
+retry parity before MCP reuse is enabled; an epoch alone is not proof.
 P2 adds no second conversation head. Offset skips are charged only on source
 queries, while partial-stream prefixes keep their previous budget behavior.
 
@@ -44,16 +58,20 @@ queries, while partial-stream prefixes keep their previous budget behavior.
 
 The change-head writer is always on. `MEMORY_RELEASED_PROJECTION=off` is the
 reader kill switch; the reader preference defaults on.
-`MEMORY_RELEASED_WRITERS_COVERED=v1:<unique-rollout-epoch>` is a separate,
+`MEMORY_RELEASED_WRITERS_COVERED=v2:<unique-rollout-epoch>` is a separate,
 initially absent **fleet writer coverage attestation**, required before reuse.
 An individual process installing the hook is insufficient evidence.
+Clear any old v1 coverage before rollout. Old readers reject v2 epochs, and new
+readers reject v1 epochs/schema1 heads. Never re-enable a UUID-only attestation.
 
 1. The rollout lead ships the writer to backend, sync/backfill/integration,
    listen, pusher, desktop-backend and any jobs/scripts that mutate these
    collections. Audit direct SDK, non-Python and raw-RPC writers too. A writer
    that does not import `database._client` is outside automatic coverage.
 2. Before T3's cutoff (2026-10-24 07:30Z), the lead verifies source release
-   identity on all writer runtimes and synthetic create/update/delete canaries.
+   identity on all writer runtimes and synthetic create/update/delete canaries,
+   including successful-but-unacknowledged retry with an interleaved deletion
+   and repeated source Increment without another writer.
    If coverage cannot be proved, report the blocker and leave reuse disabled.
 3. Only after that proof, the lead sets a new unique coverage epoch across
    participating readers. MCP additionally waits for P1 coverage and its epoch.
@@ -95,3 +113,10 @@ PYTHONPATH=backend firebase emulators:exec --only firestore \
 
 This verifies source contracts locally; it does not establish fleet coverage,
 deployed p95, production parity, or realized billing savings.
+
+`tests/integration/test_released_memory_retry_emulator.py` uses the pinned
+SDK's actual Commit retry policy: apply A, fill the cache, optionally delete B,
+lose A's acknowledgement, then replay the same prepared A request. Both the
+interleaved-delete and source-Increment cases failed on schema1 and pass with
+the server generation/revision contract. Run only against the dedicated
+`demo-fs-p2-retry` localhost emulator, through the heavy gate and explicit list.

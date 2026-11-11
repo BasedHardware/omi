@@ -31,6 +31,7 @@ SCHEMA_GROUPS = {
             'EpisodeMember',
             'EpisodeListResponse',
             'EpisodeMoment',
+            'EpisodePoint',
             'EpisodeProvisionalItem',
             'Episode',
             'EpisodeLiveResponse',
@@ -163,6 +164,9 @@ SCHEMA_GROUPS = {
             'Translation',
             'TranscriptSegment',
             'ActionItem',
+            'TaskDue',
+            'ReminderIntent',
+            'ReminderOrigin',
             'AppResult',
             'PluginResult',
             'Event',
@@ -185,6 +189,7 @@ SCHEMA_GROUPS = {
             'ConversationSpeakers',
             'AudioTimelineProvenance',
             'Conversation',
+            'RecordAudioPartial',
             'ProjectedActionItem',
             'ProjectedSection',
             'ProjectedEvent',
@@ -235,6 +240,8 @@ SCHEMA_GROUPS = {
         'schemas': (
             'EvidenceRef',
             'ActionItemResponse',
+            'TaskDue',
+            'ReminderOrigin',
             'ActionItemCreateRequest',
             'ActionItemUpdateRequest',
             'ActionItemsResponse',
@@ -258,6 +265,8 @@ SCHEMA_GROUPS = {
         'schemas': (
             'EvidenceRef',
             'ActionItemResponse',
+            'TaskDue',
+            'ReminderOrigin',
             'TaskCreatePayload',
             'TaskChangePayload',
             'GoalMetric',
@@ -321,6 +330,7 @@ SCHEMA_GROUPS = {
     'api_keys': {
         'output': DEFAULT_OUTPUT_DIR / 'api_keys_wire.g.dart',
         'schemas': (
+            'ConnectorAccess',
             'DevApiKey',
             'DevApiKeyCreated',
             'McpApiKey',
@@ -530,6 +540,7 @@ SCHEMA_GROUPS = {
             'HeldAudioRecording',
             'HeldAudioSummary',
             'ProcessingBacklog',
+            'PaymentIssue',
             'UserSubscriptionResponse',
             'UsageStats',
             'UsageHistoryPoint',
@@ -598,6 +609,10 @@ SCHEMA_GROUPS = {
             'MemoryEditResponse',
             'MemoryRevertRequest',
         ),
+    },
+    'flags': {
+        'output': DEFAULT_OUTPUT_DIR / 'flags_wire.g.dart',
+        'schemas': ('ClientFlag', 'ClientFlagsResponse'),
     },
     'goals': {
         'output': DEFAULT_OUTPUT_DIR / 'goals_wire.g.dart',

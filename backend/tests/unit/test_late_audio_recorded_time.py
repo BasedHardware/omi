@@ -213,7 +213,7 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
     c = service.Collaborators(firestore_client=store, now=lambda: NOW)
     # No provider calls: recovery content stays in the real member conversations.
     # Exercise production repointing, including closed episodes, on each append.
-    monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
+    monkeypatch.setattr(service, '_record_recovered', lambda *a, **kw: 'skipped_applied')
     monkeypatch.setattr(
         episode_finalize,
         'schedule_synced_intake_attach',
@@ -350,6 +350,11 @@ def test_listen_persistence_uses_late_intake_before_live_writes(monkeypatch, tra
     from routers.listen.transcripts import TranscriptProcessor
 
     store = StrictFirestore()
+    monkeypatch.setattr(
+        transcript_module.conversations_db,
+        'get_conversation',
+        lambda uid, cid, **kw: dict(store.rows[('users', uid, 'conversations', cid)]),
+    )
     monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', lambda uid, incoming: intake(store, incoming))
     monkeypatch.setattr(late_audio.outbox, 'mark', lambda *a, **kw: None)
     monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', lambda *a: None)
@@ -428,6 +433,7 @@ def test_live_ownership_rotates_at_exactly_four_hours():
 
 def test_realtime_transport_does_not_open_arrival_time_episode_for_late_speech(monkeypatch):
     import asyncio
+    import threading
     from utils.episodes import live
 
     monkeypatch.setattr(live.client_gate, 'client_seen_cached', lambda uid: True)
@@ -435,7 +441,13 @@ def test_realtime_transport_does_not_open_arrival_time_episode_for_late_speech(m
         live.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {'started_at': T0, 'source': 'omi'}
     )
     calls = []
-    monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', lambda *a: calls.append(a))
+    event_loop_thread = threading.get_ident()
+
+    def schedule(*args):
+        assert threading.get_ident() != event_loop_thread
+        calls.append(args)
+
+    monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', schedule)
 
     def reject(*a, **kw):
         raise AssertionError('historical speech reached live tracker')
@@ -652,7 +664,7 @@ def test_first_sync_finalization_reconciles_single_capped_owner(monkeypatch, tim
         ],
     )
     c = service.Collaborators(firestore_client=store, now=lambda: T0 + timedelta(hours=8))
-    monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
+    monkeypatch.setattr(service, '_record_recovered', lambda *a, **kw: 'skipped_applied')
     seen = []
     monkeypatch.setattr(service, '_reconcile', lambda uid, episode, *a: seen.append(episode['id']) or 'finalized')
     assert service._on_finalized('u', 'long', row, 'sync_update', None, c) == 'finalized'
@@ -669,3 +681,36 @@ def test_fresh_capture_after_user_close_opens_a_new_occasion(timeline_store):
     assert service._attach_once('u', 'fresh', 'omi', T0 + timedelta(minutes=21), c) == 'opened'
     assert episodes.get_current_episode('u', firestore_client=store)['id'] != old['id']
     assert episodes.get_episode('u', old['id'], firestore_client=store)['status'] == 'closed'
+
+
+def test_late_words_become_one_line_across_batches_and_a_retry_adds_nothing(monkeypatch):
+    store = StrictFirestore()
+    monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', lambda uid, incoming: intake(store, incoming))
+    monkeypatch.setattr(late_audio.outbox, 'mark', lambda *a, **k: None)
+    monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', lambda *a: None)
+    row = {
+        'id': 'live',
+        'source': 'omi',
+        'started_at': T0,
+        'client_device_id': 'pendant',
+        'data_protection_level': 'standard',
+    }
+
+    def word(id_, text, start):
+        return {
+            'id': id_,
+            'text': text,
+            'start': start,
+            'end': start + 0.2,
+            'speaker': 'SPEAKER_00',
+            'speaker_id': 1,
+            'stt_provider': 'soniox',
+            'speaker_id_scope': 'sock:1',
+        }
+
+    first = [word('a', 'some', 0.0), word('b', 'orange', 0.5)]
+    late_audio.ingest_late_transcript('u', row, first)
+    assigned = late_audio.ingest_late_transcript('u', row, [word('c', 'spot.', 1.0)])
+    assert [s['text'] for s in assigned['transcript_segments']] == ['some orange spot.']
+    retried = late_audio.ingest_late_transcript('u', row, first)
+    assert [s['text'] for s in retried['transcript_segments']] == ['some orange spot.']

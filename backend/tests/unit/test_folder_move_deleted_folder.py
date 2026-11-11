@@ -21,6 +21,8 @@ The fake below models the one server behavior that matters here: `update()` on a
 missing document raises NotFound.
 """
 
+from database.ports.folders import FolderUpdate
+
 from unittest.mock import patch
 
 from google.api_core.exceptions import NotFound
@@ -171,7 +173,7 @@ def test_move_off_a_deleted_folder_does_not_500():
     folders_store = {'work': {'conversation_count': 0}}
 
     fake = _FakeDb(conversations, folders_store)
-    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
+    with patch.object(folders, 'get_firestore_client', return_value=fake):
         # Pre-fix this raised NotFound from the old folder's count refresh.
         assert folders.move_conversation_to_folder('u1', 'conv-1', 'work') is True
 
@@ -188,7 +190,7 @@ def test_bulk_move_off_a_deleted_folder_does_not_500():
     folders_store = {'work': {'conversation_count': 0}}
 
     fake = _FakeDb(conversations, folders_store)
-    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
+    with patch.object(folders, 'get_firestore_client', return_value=fake):
         assert folders.bulk_move_conversations_to_folder('u1', ['conv-1', 'conv-2'], 'work') == 2
 
     assert folders_store['work']['conversation_count'] == 2
@@ -200,7 +202,7 @@ def test_delete_folder_without_a_default_target_unfiles_instead_of_orphaning():
     folders_store = {'doomed': {'conversation_count': 1, 'order': 0}}
 
     fake = _FakeDb(conversations, folders_store)
-    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
+    with patch.object(folders, 'get_firestore_client', return_value=fake):
         assert folders.delete_folder('u1', 'doomed') is True
 
     assert 'doomed' not in folders_store
@@ -216,7 +218,7 @@ def test_delete_folder_still_moves_conversations_to_the_default_folder():
     }
 
     fake = _FakeDb(conversations, folders_store)
-    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
+    with patch.object(folders, 'get_firestore_client', return_value=fake):
         assert folders.delete_folder('u1', 'doomed') is True
 
     assert conversations['conv-1']['folder_id'] == 'other'
@@ -231,7 +233,7 @@ def test_delete_default_folder_excludes_self_and_unfiles_conversations():
     }
 
     fake = _FakeDb(conversations, folders_store)
-    with patch.object(folders, 'db', fake), patch.object(folders, 'get_firestore_client', return_value=fake):
+    with patch.object(folders, 'get_firestore_client', return_value=fake):
         assert folders.delete_folder('u1', 'legacy-other') is True
 
     assert 'legacy-other' not in folders_store
@@ -244,11 +246,11 @@ def test_create_folder_tolerates_null_order_in_existing_folder():
         'corrupted': {'name': 'Corrupted', 'order': None},
     }
 
-    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+    with patch.object(folders, 'get_firestore_client', return_value=_FakeDb(conversations, folders_store)):
         created = folders.create_folder('u1', name='New Folder')
 
-    assert created['order'] == 1
-    assert folders_store[created['id']]['order'] == 1
+    assert created.order == 1
+    assert folders_store[created.id]['order'] == 1
 
 
 def test_update_folder_db_ignores_null_non_nullable_fields_and_allows_null_description():
@@ -264,14 +266,14 @@ def test_update_folder_db_ignores_null_non_nullable_fields_and_allows_null_descr
         }
     }
 
-    with patch.object(folders, 'db', _FakeDb(conversations, folders_store)):
+    with patch.object(folders, 'get_firestore_client', return_value=_FakeDb(conversations, folders_store)):
         assert (
             folders.update_folder(
                 'u1',
                 'f1',
-                {'name': None, 'color': None, 'icon': None, 'order': None, 'description': None},
+                FolderUpdate(name=None, color=None, icon=None, order=None, description=None),
             )
-            is True
+            is not None
         )
 
     assert folders_store['f1']['name'] == 'Work'

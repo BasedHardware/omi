@@ -1,0 +1,9 @@
+{
+  "description": "Invented exact-input embeddings replay; no production content or vectors.",
+  "documents": [
+    {"text": "Pilot budget review: approved for Friday.", "vector": [0.125, -0.5, 1.0]},
+    {"text": "Pilot budget review: proposed for Friday.", "vector": [0.25, -0.5, 1.0]},
+    {"text": "Giữ nguyên dấu tiếng Việt. 日本語の会議。", "vector": [-0.25, 0.5, 1.0]}
+  ],
+  "batches": [[0, 1, 0, 2], [2, 0], [1, 1, 2]]
+}

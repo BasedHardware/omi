@@ -20,6 +20,13 @@ ProvisionalItemKind = Literal['task', 'reminder']
 ProvisionalItemStatus = Literal['provisional', 'kept', 'dropped', 'dismissed']
 
 
+class EpisodePoint(BaseModel):
+    """One point of a composed moment, with optional supporting specifics under it."""
+
+    text: str
+    details: list[str] = Field(default_factory=list)
+
+
 class EpisodeMoment(BaseModel):
     id: str
     conversation_id: str
@@ -29,6 +36,8 @@ class EpisodeMoment(BaseModel):
     start_offset: float = 0.0
     end_offset: float = 0.0
     heading: str = ''
+    # Composed episodes: what happened in this stretch, the episode page's sections.
+    points: list[EpisodePoint] = Field(default_factory=list)
 
 
 class EpisodeProvisionalItem(BaseModel):
@@ -53,6 +62,11 @@ class EpisodeMember(BaseModel):
     id: str
     title: str = ''
     emoji: str = ''
+    # The conversation's one-line gist (notes `gist`, at most 12 words); empty on legacy notes.
+    gist: str = ''
+    # The conversation's Home row step (utils/conversations/home_step.py); null when the
+    # projection is off or the row has no step. Read-time only, never stored.
+    home_step: Optional[str] = None
     started_at: datetime
     finished_at: Optional[datetime] = None
     status: str = 'completed'
@@ -70,6 +84,12 @@ class Episode(BaseModel):
     emoji: str = ''
     members: list[EpisodeMember] = Field(default_factory=list)
     bullets: list[str] = Field(default_factory=list)
+    # Composed episodes: one or two sentences above the moments; empty for the live running state.
+    lede: str = ''
+    # Explicit server signal: only deferred notes warrant bounded detail polling.
+    compose_deferred: bool = False
+    # Composed episodes: next steps someone committed to, as written by the composer.
+    follow_ups: list[str] = Field(default_factory=list)
     people: list[str] = Field(default_factory=list)
     provisional_items: list[EpisodeProvisionalItem] = Field(default_factory=list)
     moments: list[EpisodeMoment] = Field(default_factory=list)

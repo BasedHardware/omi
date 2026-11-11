@@ -2708,7 +2708,8 @@
             "open",
             "select",
             "copy_conversation_id",
-            "test_prompt"
+            "test_prompt",
+            "export_transcript"
           ]
         },
         "surface": {
@@ -3643,7 +3644,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -3665,7 +3667,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -3687,7 +3690,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -4506,6 +4510,69 @@
       "correlation": null
     },
     {
+      "id": "paywallMonthlyFallbackShown",
+      "wire_name": "Paywall Monthly Fallback Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallMonthlyFallbackAccepted",
+      "wire_name": "Paywall Monthly Fallback Accepted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "purchased",
+            "cancelled",
+            "failed"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallMonthlyFallbackDismissed",
+      "wire_name": "Paywall Monthly Fallback Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
       "id": "onboardingWebviewShown",
       "wire_name": "Onboarding Webview Shown",
       "status": "active",
@@ -4961,10 +5028,49 @@
         "wal-upload-refusals"
       ],
       "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueShown",
+      "wire_name": "Subscription Payment Issue Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueUpdateTapped",
+      "wire_name": "Subscription Payment Issue Update Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssuePortalOpened",
+      "wire_name": "Subscription Payment Issue Portal Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {
-    "source": "docs/finops/telemetry-transport-contract.md section 4",
+    "source": "backend/docs/telemetry-transport-contract.md section 4",
     "note": "Legacy required events stay in the events array. Recording Requested is documented here with request_origin semantics. It is not inserted into events[] in this change because the registry generator would also rewrite app/lib/utils/analytics/registry/events.g.dart, which is outside the admin and analytics write boundary. Parent regenerates that Dart file if the event is later promoted into events[].",
     "recording_requested": {
       "wire_name": "Recording Requested",

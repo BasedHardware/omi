@@ -1,15 +1,14 @@
-"""Contract pins for the 2026-10-24 prod Cloud Run right-sizing (the lead's costcut).
+"""Contract pins for the margin-20 prod Cloud Run targets (2026-11-04).
 
-The T4 deploy (image 646e54d7, run 40138604325) re-asserted backend-sync at
-4Gi / max 80: #23495 had mirrored the 05:54Z right-sizing, not the evening
-costcut. These pins hold every deploy source -- the workflow fallback, the
-deploy-action flags, the ops-train values and the staging shape -- to the
-costcut values, so the next train can no longer silently revert them.
+Read-only serving revisions before this change: backend 8Gi/cpu 2/concurrency 20;
+backend-sync 6Gi/cpu 2/concurrency 20; backfill 3Gi/cpu 2/concurrency 6;
+integration 4Gi/cpu 2/concurrency 80. Seven-day application-memory histogram
+p95/max upper bounds (GiB): backend 1.312/1.710, sync 1.007/3.786,
+backfill 0.882/1.149, integration 1.312/2.229. Sync and integration stay put.
 
-Live reference (ro-prod, 2026-10-24 22:50Z): backend 8Gi/cpu 2/concurrency 20/
-min 3/max 100; backend-sync 6Gi/cpu 2/min 5/max 50; backend-sync-backfill
-4Gi/cpu 2/concurrency 6/min 0 (cap redis_guard-bounded, live 16);
-backend-integration 2Gi/cpu 2/concurrency 40/min 3/max 50.
+The deploy flags and staging shape must agree on backend 4Gi and backfill
+2Gi/concurrency 6 (concurrency 10 unqualified, Luna P2 on #24596). Rollback restores 8Gi and 3Gi;
+service min/max ownership remains with the existing ops/Redis guard contract.
 """
 
 from __future__ import annotations
@@ -36,11 +35,18 @@ def test_workflow_backend_sync_memory_fallback_is_the_costcut_value():
     )
 
 
-def test_prod_deploy_flags_match_the_live_right_sizing():
+def test_deploy_action_accepts_the_5gi_sync_trial_value():
+    # 5Gi is a trial value (vars.BACKEND_SYNC_MEMORY), not the fallback: the 10-25 fleet peak was
+    # 4.74 GiB and the runbook's 4.9 GiB sample predates it, so 6Gi stays until a trial qualifies 5Gi.
+    text = (REPO_ROOT / '.github' / 'actions' / 'deploy-backend-stack' / 'action.yml').read_text(encoding='utf-8')
+    assert 'case "$SYNC_MEMORY" in 4Gi|5Gi|6Gi|8Gi) ;;' in text
+
+
+def test_prod_deploy_flags_match_the_margin20_target():
     model = dc.source_model('prod')
 
     backend = model['backend'].scale
-    assert (backend['memory'], backend['cpu'], backend['concurrency']) == ('8Gi', '2', 20)
+    assert (backend['memory'], backend['cpu'], backend['concurrency']) == ('4Gi', '2', 20)
     assert (backend['revision_min'], backend['revision_max']) == (3, 100)
 
     sync = model['backend-sync'].scale
@@ -51,22 +57,24 @@ def test_prod_deploy_flags_match_the_live_right_sizing():
 
     backfill = model['backend-sync-backfill'].scale
     assert (backfill['memory'], backfill['cpu'], backfill['concurrency'], backfill['revision_min']) == (
-        '4Gi',
+        '2Gi',
         '2',
         6,
         0,
     )
 
     integration = model['backend-integration'].scale
-    assert (integration['memory'], integration['cpu'], integration['concurrency']) == ('2Gi', '2', 40)
-    assert (integration['revision_min'], integration['revision_max']) == (3, 50)
+    # 2026-11-01 packing (#24308): LLM-bound enrichment runs 80 per instance with 64 postprocess threads.
+    assert (integration['memory'], integration['cpu'], integration['concurrency']) == ('4Gi', '2', 80)
+    assert (integration['revision_min'], integration['revision_max']) == (3, 35)
 
 
 def test_ops_train_values_match_the_live_right_sizing():
     model = dc.source_model('prod')
 
     sync = model['backend-sync'].ops_scale
-    assert (sync['service_min'], sync['service_max']) == (5, 50)
+    # Legacy-dark (2026-11-04, David e53a35) dropped the warm floor 5 -> 0.
+    assert (sync['service_min'], sync['service_max']) == (0, 40)
 
     # redis_guard owns the backfill cap between its bounds (live 16).
     backfill = model['backend-sync-backfill'].ops_scale

@@ -16,6 +16,7 @@ import pytest
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.sync.assignment import assign_in_transaction, needs_fragment_review
+from utils.sync.absorption_metrics import record_assignment_metrics
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 
@@ -46,7 +47,7 @@ def chunk(key, timestamp, text='A narrated explanation of this chapter.', device
 def intake(store, incoming, *, candidate_id=None, target_id=None):
     # Two independent clients share only their durable store, never a job lock.
     with store.lock:
-        return assign_in_transaction(
+        result = assign_in_transaction(
             store.transaction(),
             store.collection('users').document('u'),
             incoming,
@@ -56,6 +57,10 @@ def intake(store, incoming, *, candidate_id=None, target_id=None):
             encode=deepcopy,
             invalidate=lambda payload: None,
         )
+        # Production consumes transient metric observations immediately after
+        # the successful transaction, before rows can be reused or processed.
+        record_assignment_metrics(result[0])
+        return result
 
 
 def conversations(store):
@@ -287,6 +292,8 @@ def test_filler_is_preserved_and_promoted_regardless_of_speakers(is_user, speake
     assert not created and promoted['id'] == review['id']
     assert promoted['sync_relevance'] == 'keep'
     assert promoted['discarded'] is False
+    assert promoted['relevance_decision']['verdict'] == 'keep'
+    assert promoted['relevance_decision']['trigger'] == 'sync_intake'
 
 
 @pytest.mark.parametrize('text', ['Help!', 'Yes', 'No', '嗯，请明天联系我', 'I love you', 'Mm 1234', '1234', ''])
@@ -302,6 +309,7 @@ def test_subsecond_meaningful_speech_is_kept(text):
     result, _, _ = intake(StrictFirestore(), short)
     assert result['sync_relevance'] == 'keep'
     assert result['discarded'] is False
+    assert result['relevance_decision']['verdict'] == 'keep'
 
 
 def test_separated_fillers_wait_for_finalization_without_losing_transcript_or_audio():
