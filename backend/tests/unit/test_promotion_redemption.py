@@ -186,7 +186,7 @@ def test_failed_stripe_update_gives_the_code_back():
     env.release.assert_called_once_with('promo_1')
 
 
-def test_redemption_retains_issuance_provenance_on_claim_promo_and_subscription():
+def test_redemption_retains_issuance_provenance_without_coupling_it_to_code_benefit():
     subscription = _subscription(metadata={'uid': 'uid_1', 'sub_type': 'unlimited', 'unrelated': 'kept'})
     with _Env(subscription=subscription, promos=[_promo(metadata=ISSUANCE)]) as env:
         result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
@@ -196,20 +196,16 @@ def test_redemption_retains_issuance_provenance_on_claim_promo_and_subscription(
     promo_params = env.promo_modify.call_args.kwargs
     assert promo_params['active'] is False
     assert promo_params['metadata'] == {
-        **ATTRIBUTION,
         'redeemed_by_uid': 'uid_1',
         'redeemed_subscription_id': 'sub_1',
     }
-    sub_params = env.sub_modify.call_args.kwargs
-    assert sub_params['metadata'] == {
-        'uid': 'uid_1',
-        'sub_type': 'unlimited',
-        'unrelated': 'kept',
-        **ATTRIBUTION,
-        'redeemed_promotion_code_id': 'promo_1',
+    assert env.sub_modify.call_args_list[0].kwargs == {
+        'discounts': [{'coupon': 'coupon_full'}],
+        'metadata': {'redeemed_promotion_code_id': 'promo_1'},
     }
+    # Stripe merges this optional allowlist without rewriting unrelated fields or uid.
+    assert env.sub_modify.call_args_list[1].kwargs == {'metadata': ATTRIBUTION}
     assert set(promo_params) == {'active', 'metadata'}
-    assert set(sub_params) == {'discounts', 'metadata'}
 
 
 @pytest.mark.parametrize('role', ['self', 'gift', 'unknown'])
@@ -236,9 +232,9 @@ def test_redemption_preserves_conflicting_existing_order_provenance():
     assert metadata['shopify_order_id'] == original['shopify_order_id']
     assert metadata['bundle_promotion_code_id'] == 'promo_original'
     assert metadata['bundle_redemption_role'] == 'unknown'
-    assert metadata['uid'] == 'uid_1'
-    assert metadata['sub_type'] == 'unlimited'
-    assert metadata['redeemed_promotion_code_id'] == 'promo_1'
+    assert 'uid' not in metadata
+    assert 'sub_type' not in metadata
+    assert env.sub_modify.call_args_list[0].kwargs['metadata']['redeemed_promotion_code_id'] == 'promo_1'
 
 
 @pytest.mark.parametrize(
@@ -264,7 +260,7 @@ def test_invalid_or_conflicting_provenance_does_not_change_redemption_result(met
     }
     assert env.claim.call_args.kwargs['attribution'] == {}
     subscription_metadata = env.sub_modify.call_args.kwargs['metadata']
-    assert subscription_metadata == {'uid': 'uid_1', 'redeemed_promotion_code_id': 'promo_1'}
+    assert subscription_metadata == {'redeemed_promotion_code_id': 'promo_1'}
 
 
 def test_endpoint_returns_the_refusal_as_a_client_error():
@@ -276,3 +272,28 @@ def test_endpoint_returns_the_refusal_as_a_client_error():
         with pytest.raises(HTTPException) as excinfo:
             payment.redeem_code_endpoint(payment.RedeemCodeRequest(code='OMI-AAAA-BBBB'), uid='uid_1')
     assert (excinfo.value.status_code, excinfo.value.detail) == (409, 'used')
+
+
+@pytest.mark.parametrize(
+    'failure', [RuntimeError('optional metadata unavailable'), redemption.stripe.StripeError('metadata')]
+)
+def test_optional_attribution_write_failure_does_not_undo_code_benefit(failure):
+    with _Env(promos=[_promo(metadata=ISSUANCE)]) as env:
+
+        def apply_or_fail_metadata(subscription_id, **kwargs):
+            if kwargs.get('metadata', {}).get('attribution_schema'):
+                raise failure
+            return _obj({**env.subscription, **kwargs})
+
+        env.sub_modify.side_effect = apply_or_fail_metadata
+        result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+
+    assert result['status'] == 'applied'
+    assert env.sub_modify.call_args_list[0].kwargs == {
+        'discounts': [{'coupon': 'coupon_full'}],
+        'metadata': {'redeemed_promotion_code_id': 'promo_1'},
+    }
+    assert env.sub_modify.call_count == 2
+    env.release.assert_not_called()
+    assert env.promo_modify.call_count == 1
+    assert env.promo_modify.call_args.kwargs['active'] is False

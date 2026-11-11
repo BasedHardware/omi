@@ -116,24 +116,15 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
         raise RedemptionError(409, 'This code has already been used.')
 
     try:
-        # Stripe merges these fields with the original issuance metadata.
         stripe.PromotionCode.modify(
             promo['id'],
             active=False,
-            metadata={
-                **attribution,
-                'redeemed_by_uid': uid,
-                'redeemed_subscription_id': subscription_id,
-            },
+            metadata={'redeemed_by_uid': uid, 'redeemed_subscription_id': subscription_id},
         )
-        subscription_metadata = stripe_utils.merge_promotion_attribution(
-            subscription.get('metadata') or {}, attribution
-        )
-        subscription_metadata['redeemed_promotion_code_id'] = promo['id']
         updated = stripe.Subscription.modify(
             subscription_id,
             discounts=[{'coupon': coupon['id']}],
-            metadata=subscription_metadata,
+            metadata={'redeemed_promotion_code_id': promo['id']},
         ).to_dict()
     except Exception as e:
         logger.error(f"Promotion code redemption failed for {uid}: {sanitize(str(e))}")
@@ -141,6 +132,17 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
         if isinstance(e, stripe.StripeError):
             raise RedemptionError(400, 'Could not apply this code. Please try again.') from e
         raise
+
+    if attribution:
+        try:
+            merged = stripe_utils.merge_promotion_attribution(subscription.get('metadata') or {}, attribution)
+            attribution_metadata = {
+                key: merged[key] for key in stripe_utils.PROMOTION_ATTRIBUTION_METADATA_KEYS if key in merged
+            }
+            stripe.Subscription.modify(subscription_id, metadata=attribution_metadata)
+        except Exception:
+            # Optional provenance must never undo an already applied code benefit.
+            logger.warning('Optional promotion attribution update failed')
 
     logger.info(f"Redeemed promotion code {promo['id']} onto {subscription_id} for {uid}")
     if updated.get('status') == 'trialing':
