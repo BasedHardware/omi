@@ -1,5 +1,7 @@
 'use client';
 
+import { CHECKOUT_POPUP_BLOCKED, openCheckoutWindow } from '@/lib/checkoutWindow';
+
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Crown, CreditCard, Loader2, AlertCircle } from 'lucide-react';
@@ -196,7 +198,10 @@ export function PlansSheet({
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
           // here. trackUpgradeCancelled exists for a client that can observe it.
-          window.open(result.url, '_blank');
+          if (!openCheckoutWindow(result.url)) {
+            setError(CHECKOUT_POPUP_BLOCKED);
+            return;
+          }
           onOpenChange(false);
           // Listen for window focus to refresh subscription
           const handleFocus = () => {

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-browser-checkout-launch-result-ignored",
+  "violated_contract": "Creating a checkout session does not prove that the browser opened checkout. A refused new-tab launch must keep the purchase surface retryable and must not install success-return behavior or dismiss the offer as though checkout opened.",
+  "canonical_prevention": "Check the browser launch result at the shared checkout boundary. On a null handle or launch exception, retain the selected plan and show a recoverable popup instruction. Dismiss the offer and install the return refresh only after a launch succeeds.",
+  "canonical_prevention_artifact": [
+    "web/app/src/lib/checkoutWindow.ts",
+    "web/app/src/components/settings/__tests__/PlansSheet.checkout.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/app/src/components/settings/**",
+    "web/app/src/lib/checkoutWindow.ts"
+  ],
+  "status": "open"
+}
