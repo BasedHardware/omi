@@ -76,3 +76,10 @@ Future<ApiResult<EpisodePageRead>> getEpisodes(DateTime from, DateTime to, {Stri
             nextCursor: page.nextCursor);
       },
     );
+
+/// Full retained membership, including the short clips omitted from Home's projection.
+Future<ApiResult<Episode>> getEpisode(String episodeId, {ApiSend? send}) => executeApi(
+      send: send,
+      request: ApiRequest(url: '${Env.apiBaseUrl}v1/episodes/${_id(episodeId)}', method: 'GET'),
+      decode: (body) => Episode.fromGenerated(wire.GeneratedEpisode.fromJson(_object(body))),
+    );

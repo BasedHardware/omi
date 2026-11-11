@@ -13,7 +13,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from utils.conversations.transcribing_hold import transcription_presentation
-from utils.conversations import phase_shadow
+from utils.conversations import home_step, phase_shadow
 
 from config.episodes import (
     home_hide_below_floor_rows_enabled,
@@ -36,7 +36,7 @@ from models.episode import EpisodeCloseReason
 from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded, is_completed_below_floor
-from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, user_zone_provider
+from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, neutralize_minimum_title, user_zone_provider
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,7 @@ MEMBER_FIELDS = [
     'structured',
     'user_title',
     'data_protection_level',
+    'is_locked',
     'relevance_decision',
     'discarded',
     'deleted',
@@ -114,6 +115,8 @@ MEMBER_FIELDS = [
     'created_at',
     'status',
     'finalization_status',
+    'summary_retryable',
+    'record_upload_failed',
     'sync_relevance_user_kept',
     'has_photos',
     'photos',
@@ -374,8 +377,7 @@ def project_episode(
             phase_shadow.observe('episode_member', row, False, episode=episode)
             continue
         phase_shadow.observe('episode_member', row, True, episode=episode)
-        from utils.conversations.home_titles import neutralize_minimum_title
-
+        step = home_step.classify(row)
         row = neutralize_minimum_title(row, tz_name_provider=zone)
         structured: dict[str, Any] = row.get('structured') or {}
         title = structured.get('title') or ''
@@ -406,6 +408,10 @@ def project_episode(
                 'id': cid,
                 'title': title,
                 'emoji': structured.get('emoji') or '',
+                'overview': structured.get('overview') or '',
+                'home_step': step,
+                'is_locked': bool(row.get('is_locked')),
+                'title_provenance': structured.get('title_provenance'),
                 'started_at': started,
                 'finished_at': finished,
                 'status': status,
