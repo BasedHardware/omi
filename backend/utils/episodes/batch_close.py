@@ -70,7 +70,7 @@ def attach_admitted_batch_capture(
         return 'skipped'
     try:
         c = collaborators or service.Collaborators(firestore_client=conversations.db)
-        outcome = service.attach_recorded(
+        service.attach_recorded(
             uid,
             conversation_id,
             row,
@@ -84,7 +84,9 @@ def attach_admitted_batch_capture(
             # longest possible capture instead of expiring mid-recording.
             deadline_floor=started + timedelta(seconds=MAX_EPISODE_SECONDS + SLA_SECONDS),
         )
-        return 'closed' if outcome == 'closed' else 'attached'
+        return 'attached'
+    except service.AdmissionClosed:
+        return 'closed'
     except Exception as error:
         logger.warning('event=episode_batch_admission_attach exception_type=%s', type(error).__name__)
         record_fallback(

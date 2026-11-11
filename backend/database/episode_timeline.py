@@ -337,7 +337,7 @@ def attach_recorded(
     deadline_floor: datetime | None = None,
     detach_from: str | None = None,
     admission: bool = False,
-) -> dict[str, Any]:
+) -> dict[str, Any] | str:
     """Place a capture once. Its owner never changes when the capture spans a cap.
 
     The episode's recorded window stops at four hours or the next occasion;
@@ -410,8 +410,8 @@ def attach_recorded(
             detach_from=detach_from,
             admission=admission,
         )
-        if canonical == episode_recorded_components.ADMISSION_CLOSED:
-            return episode_recorded_components.ADMISSION_CLOSED
+        if isinstance(canonical, str):
+            return canonical
         if canonical is not None:
             episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, canonical['id'])
             if detach and canonical['id'] != detach_from:

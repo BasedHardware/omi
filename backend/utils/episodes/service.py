@@ -119,6 +119,10 @@ SYNC_UPDATE = 'sync_update'
 FINALIZE_MIN_WORDS = 8
 
 
+class AdmissionClosed(Exception):
+    """The audio close already owns the capture: a late admission attached nothing."""
+
+
 @dataclass
 class Collaborators:
     """Seams for tests; production uses the module defaults."""
@@ -1679,7 +1683,7 @@ def attach_recorded(
     deadline_floor=None,
     detach_from=None,
     admission=False,
-) -> dict[str, Any] | str:
+) -> dict[str, Any]:
     template = new_episode(
         conversation_id=conversation_id,
         started_at=started,
@@ -1704,8 +1708,8 @@ def attach_recorded(
         attach_row=row,
         admission=admission,
     )
-    if placed == 'closed':
-        return 'closed'
+    if isinstance(placed, str):
+        raise AdmissionClosed()
     placed.pop('_recorded_windows', None)
     return placed
 

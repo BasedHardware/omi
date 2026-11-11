@@ -164,7 +164,7 @@ def attach(
     deadline_floor=None,
     detach_from=None,
     admission=False,
-):
+) -> dict[str, Any] | str | None:
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
     root = client.collection('users').document(uid)
