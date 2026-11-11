@@ -49,7 +49,7 @@ overlapping, truncated or checksum-invalid HEX fails closed. Changing asset
 checksums in provenance does not bypass the boot-region gate. Inspect manually:
 
 ```sh
-python3 omi/firmware/scripts/ci/cv1_bootloader.py path/to/Omi_CV1_vX.hex
+python3 omi/firmware/scripts/ci/cv1_bootloader.py --app-only path/to/Omi_CV1_vX.hex
 ```
 
 The new custom build remains a separate **bench artifact**, not a release

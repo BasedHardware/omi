@@ -94,12 +94,30 @@ def app_hex(image, target):
     inspect_hex(target)
 
 
+def inspect_role(path, role):
+    result = inspect_hex(path)
+    if role is None:
+        return result
+    memory = read_hex(path)
+    minimum = BOOT_END if role == 'app' else 0
+    if min(memory) < minimum or max(memory) >= 0xf6000:
+        raise ValueError('Wire image includes bytes outside the allowed app-core window (storage/UICR/network excluded)')
+    if bytes(memory.get(BOOT_END + i, 0xff) for i in range(4)) != bytes.fromhex('3db8f396'):
+        raise ValueError('Wire image is missing the signed app header at 0x10000')
+    if role == 'manufacturing' and result['kind'] != 'approved-bootloader':
+        raise ValueError('Manufacturing image must contain an approved bootloader, not just an app')
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('hex', type=Path, nargs='+')
+    role = parser.add_mutually_exclusive_group()
+    role.add_argument('--app-only', action='store_const', dest='role', const='app')
+    role.add_argument('--require-bootloader', action='store_const', dest='role', const='manufacturing')
     args = parser.parse_args()
     for path in args.hex:
-        print(json.dumps({'file': path.name, **inspect_hex(path)}, sort_keys=True))
+        print(json.dumps({'file': path.name, **inspect_role(path, args.role)}, sort_keys=True))
 
 
 if __name__ == '__main__':

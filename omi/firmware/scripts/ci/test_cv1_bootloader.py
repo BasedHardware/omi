@@ -90,6 +90,18 @@ class BootRegionTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertIn('requires exactly one MCUboot main.c replacement', result.stdout)
 
+    def test_manual_recovery_and_manufacturing_roles_fail_closed(self):
+        boot.app_hex(bytes.fromhex('3db8f396') + bytes(28), self.hex)
+        self.assertEqual(boot.inspect_role(self.hex, 'app')['kind'], 'bootloader-free')
+        with self.assertRaisesRegex(ValueError, 'must contain an approved bootloader'):
+            boot.inspect_role(self.hex, 'manufacturing')
+        for address in (0xf6000, 0xff8000, 0x1000000):
+            memory = boot.read_hex(self.hex)
+            memory[address] = 1
+            boot.write_hex(self.hex, memory)
+            with self.assertRaisesRegex(ValueError, 'outside'):
+                boot.inspect_role(self.hex, 'app')
+
     def test_pending_manufacturing_candidate_is_not_approved(self):
         boot.write_hex(self.hex, self.memory)
         self.policy.write_text(json.dumps({'approved_boot_sha256': [],

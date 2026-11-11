@@ -40,7 +40,11 @@ normalizing device pointers to internal/ram/external device identity:
 
 The .24 release HEX contains a valid MCUboot header at 0x10000, a 0x200-byte
 header, a 0x406c4-byte application payload and signed version 3.0.24+0. Its
-payload and signature fit well before storage. Key and slot compatibility
+payload and signature fit well before storage. Offline RSA-PSS/SHA-256
+verification of the released OTA signed image with the public key extracted
+from .19 passed; its signed SHA-256 is
+`b92ef865d865ad47242a4f70d050225cc65f42705b9d9c2931d4402a0c852978`
+and its length is 264724 bytes (ending at 0x50a14 when placed at 0x10000). Key and slot compatibility
 therefore support pairing the .19 loader with that app; the app version need
 not be changed merely to use a different compatible bootloader.
 
@@ -68,6 +72,12 @@ adding .19 to `approved_boot_sha256`. Until then the policy pins it as an
 unapproved manufacturing candidate, and releases remain app-only. A successful
 app-only OTA on a .19-shipped unit would preserve the .19 loader, consistent
 with Gettop's claim; this does not establish their shipment count.
+
+Manufacturing must validate the complete app-core wire image with
+`python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader manufacturing-app.hex`.
+This requires an allowlisted boot region and signed app header, and excludes
+storage, UICR and network-core addresses. The candidate hash cannot pass merely
+because it is listed under `manufacturing_candidate`; approval is separate.
 
 ## Fielded stock 3.0.21 units
 
