@@ -14,11 +14,75 @@
       },
       "oauth_client": [
         {
+          "client_id": "183101876530-0uo019he7r1tm28si53rdbtcbv9a8eva.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.omi.app",
+            "certificate_hash": "e5d9e582484ea85ed0dfabd4be4cacbbd76a9fac"
+          }
+        },
+        {
+          "client_id": "183101876530-8dr5s5u0rlgoldfdkf0n9040hpjbldq7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.omi.app",
+            "certificate_hash": "aa6571b701f1ab80af84f1aa279bbf1242e2da3f"
+          }
+        },
+        {
+          "client_id": "183101876530-9vchld5hi2572nq49nj59thhrqcrs2de.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.omi.app",
+            "certificate_hash": "06b7450603f3d5d2505fdf907edbb282d165b02b"
+          }
+        },
+        {
           "client_id": "183101876530-cl1020tigpkverkof9ak5j1p0d0kpm7h.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.omi.app",
             "certificate_hash": "7f062e7b219e30189c2cfef20171d200157a40a4"
+          }
+        },
+        {
+          "client_id": "183101876530-emfkuiaj225p231tian0ob2ab4gj68kb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.omi.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "183101876530-et7b0rvjlll42oj645h7cqdfv7341h4b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.omi.app",
+            "certificate_hash": "17d100faf4f6911bedadf0d3d4b2f489eb7d20c5"
+          }
+        },
+        {
+          "client_id": "183101876530-h8spf0ellgef6du6g7i8939fgem62op6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.omi.app",
+            "certificate_hash": "e3e4b17f76b87e91ce5825bd540af76e89a5571c"
+          }
+        },
+        {
+          "client_id": "183101876530-q16odnl756q4g4qt0r8vc381dqp226na.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.omi.app",
+            "certificate_hash": "f31d6a526cd3360d89b1f95f3d9cac6300b6bbee"
+          }
+        },
+        {
+          "client_id": "183101876530-ukmb5fongdmm94m6jtugnled0o9b3o14.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.omi.app",
+            "certificate_hash": "39cfb6233f1a3047626a6f6278dd836a92fd7a05"
           }
         },
         {

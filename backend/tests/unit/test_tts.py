@@ -86,6 +86,36 @@ def test_default_output_format():
     assert DEFAULT_OUTPUT_FORMAT == "mp3_44100_128"
 
 
+# ---------------------------------------------------------------------------
+# output_format plumbing
+#
+# The bug this guards: output_format used to be sent in the POST body only,
+# where ElevenLabs ignores it, so every client silently received MP3. The RN
+# DevKit 2 speaker path asks for ulaw_8000 (8 kHz mu-law) and MP3 bytes
+# mu-law-decoded are a loud buzz, not speech.
+# ---------------------------------------------------------------------------
+def test_device_format_is_supported():
+    assert "ulaw_8000" in tts_router._EL_OUTPUT_FORMATS
+    assert DEFAULT_OUTPUT_FORMAT in tts_router._EL_OUTPUT_FORMATS
+
+
+def test_output_format_rejected_when_unsupported():
+    # Anything not on the allowlist must fail before touching the URL.
+    for bad in ("", "mp3", "vorbis_48000", "../../history", "pcm_16000; x=1"):
+        assert bad not in tts_router._EL_OUTPUT_FORMATS
+
+
+def test_el_url_puts_format_in_query_not_body():
+    url = tts_router._el_tts_url("VOICEID123", "ulaw_8000")
+    assert url == "https://api.elevenlabs.io/v1/text-to-speech/VOICEID123?output_format=ulaw_8000"
+
+
+def test_media_type_matches_format_family():
+    assert tts_router._el_output_media_type("mp3_44100_128") == "audio/mpeg"
+    assert tts_router._el_output_media_type("pcm_16000") == "audio/L16"
+    assert tts_router._el_output_media_type("ulaw_8000") == "audio/basic"
+
+
 def test_request_model_applies_defaults():
     req = TtsSynthesizeRequest(text="hello")
     assert req.text == "hello"

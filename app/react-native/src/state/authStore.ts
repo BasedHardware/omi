@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { observeAuth, signOut, signInWithGoogle, signInWithApple } from '@/auth/firebaseAuth';
+import { setAuthToken } from '@/api/omiApi';
+import { DEV_AUTH_TOKEN, DEV_BYPASS_AUTH, DEV_UID } from '@/devFlags';
 
 /**
  * Marks the session created by loginWithoutAccount(). Anything that must not talk
@@ -30,6 +32,15 @@ export const useAuthStore = create<AuthState>((set) => ({
   loading: true,
   error: null,
   init: () => {
+    // Dev-only bypass: seed a synthetic session backed by a local-backend token
+    // (e.g. ADMIN_KEY) so capture/STT/TTS work without Firebase sign-in. __DEV__
+    // is compile-time false in release builds, so this path is unreachable there.
+    if (DEV_BYPASS_AUTH && DEV_AUTH_TOKEN) {
+      setAuthToken(DEV_AUTH_TOKEN);
+      set({ uid: DEV_UID, token: DEV_AUTH_TOKEN, loading: false, isDemo: false, error: null });
+      console.warn('[auth] DEV_BYPASS_AUTH active — using local dev token, Firebase auth skipped');
+      return () => {};
+    }
     const unsub = observeAuth((uid, token) => {
       set({ uid, token, loading: false, isDemo: false });
     });

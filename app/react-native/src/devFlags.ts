@@ -7,11 +7,7 @@
  * an explicit opt-in, so simply having a debug build does not silently disable
  * authentication for everyone who works on this app.
  *
- * Enable with:
- *   EXPO_PUBLIC_DEV_BYPASS_AUTH=1 npx expo start
- *
- * EXPO_PUBLIC_* is inlined by Metro at bundle time, so changing it needs a Metro
- * restart, not just a reload.
+ * EXPO_PUBLIC_* is inlined by Metro at bundle time — restart Metro after changes.
  */
 
 /**
@@ -61,4 +57,25 @@ function expoExtra(): Record<string, unknown> | undefined {
 export const DEV_LOCAL_BRAIN: boolean =
   typeof __DEV__ !== 'undefined' &&
   __DEV__ &&
-  process.env.EXPO_PUBLIC_DEV_LOCAL_BRAIN === '1'
+  process.env.EXPO_PUBLIC_DEV_LOCAL_BRAIN === '1';
+
+/**
+ * Dev-only auth bypass for local backend testing (NEVER true in release builds).
+ *
+ * Seeds a synthetic session with a bearer token the local backend accepts
+ * (the dev harness ADMIN_KEY prefix), so capture/STT/TTS/agent work without
+ * Firebase. Use only against a local/dev backend.
+ *
+ *   EXPO_PUBLIC_DEV_BYPASS_AUTH=1 \
+ *   EXPO_PUBLIC_DEV_AUTH_TOKEN=local-dev-admin-key-devuser \
+ *   EXPO_PUBLIC_DEV_UID=devuser
+ */
+export const DEV_BYPASS_AUTH: boolean =
+  typeof __DEV__ !== 'undefined' &&
+  __DEV__ &&
+  process.env.EXPO_PUBLIC_DEV_BYPASS_AUTH === '1';
+
+// Default matches the dev harness (scripts/dev-harness/dev_harness/config.py: ADMIN_KEY).
+export const DEV_AUTH_TOKEN: string =
+  process.env.EXPO_PUBLIC_DEV_AUTH_TOKEN || 'local-dev-admin-key-devuser';
+export const DEV_UID: string = process.env.EXPO_PUBLIC_DEV_UID || 'devuser';

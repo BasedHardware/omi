@@ -17,6 +17,8 @@ interface CaptureState {
   connecting: boolean;
   error: string | null;
   segments: TranscriptSegment[];
+  /** Snapshot of the previous session's segments (kept after stop for UI). */
+  lastSegments: TranscriptSegment[];
   voiceprint: Voiceprint;
   stream: DeepgramStream | null;
   start: () => void;
@@ -63,6 +65,7 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
   connecting: false,
   error: null,
   segments: [],
+  lastSegments: [],
   voiceprint: createVoiceprint(),
   stream: null,
   start: () => {
@@ -118,7 +121,7 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
       url,
     );
 
-    set({ connecting: true, error: null, stream: next });
+    set({ connecting: true, error: null, lastSegments: [], stream: next });
     next.connect();
   },
   startFromOmi: (codec) => {
@@ -156,14 +159,21 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
               set({ error: `Could not enable device audio: ${omiBle.startAudioError() ?? 'unknown'}` });
               return;
             }
-            omiBle.onAudio(
-              (bytes) => get().stream?.sendAudio(bytes.buffer as ArrayBuffer),
-              (e) => {
-                console.error('[capture] omi audio error:', e);
-                get().stop();
-                set({ error: 'Device audio stream failed.' });
-              },
-            );
+            try {
+              omiBle.onAudio(
+                (bytes) => get().stream?.sendAudio(bytes.buffer as ArrayBuffer),
+                (e) => {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  console.error('[capture] omi audio error:', msg);
+                  get().stop();
+                  set({ error: `Device audio stream failed: ${msg}. Reconnect the DevKit and try again.` });
+                },
+              );
+            } catch (e) {
+              console.error('[capture] omi audio subscribe error:', e);
+              get().stop();
+              set({ error: `Device audio unavailable: ${e instanceof Error ? e.message : String(e)}` });
+            }
           });
         },
         onError: (err) => {
@@ -178,7 +188,7 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
       url,
     );
 
-    set({ connecting: true, error: null, stream: next });
+    set({ connecting: true, error: null, lastSegments: [], stream: next });
     next.connect();
   },
   stop: () => {
@@ -188,7 +198,6 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
     // after a stop means the device keeps pushing audio into a dead stream.
     omiBle.stopAudio();
     get().stream?.close();
-    set({ recording: false, connecting: false, stream: null, source: null });
 
     // Persist before clearing, so a stop still leaves the words behind. This is
     // what makes the assistant work with no account: there is nothing on the
@@ -200,7 +209,17 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
         source ?? 'mic'
       ).catch((e) => console.warn('[capture] could not save locally:', e));
     }
-    set({ segments: [], voiceprint: createVoiceprint() });
+    // Keep a snapshot in lastSegments so the dev/UI can still display what was
+    // heard after the session ends (segments is cleared for the next session).
+    set({
+      recording: false,
+      connecting: false,
+      stream: null,
+      source: null,
+      lastSegments: segments,
+      segments: [],
+      voiceprint: createVoiceprint(),
+    });
   },
   pushSegment: (seg) => set({ segments: [...get().segments, seg] }),
   /** Writes this session's segments to on-device storage. Called on stop(). */

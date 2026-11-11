@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   View,
@@ -18,7 +18,7 @@ import { DEV_LOCAL_BRAIN } from '@/devFlags';
 import { useCaptureStore } from '@/state/captureStore';
 import { makeTonePcm, playPcm16Mono8k } from '@/services/omiSpeaker';
 import { tts } from '@/services/tts';
-import { useVoiceAgentStore } from '@/services/voiceAgent';
+import { useVoiceAgentStore, utteranceFrom } from '@/services/voiceAgent';
 import {
   omiBle,
   OMI,
@@ -52,6 +52,17 @@ export default function DevOmiDeviceScreen() {
   const [listening, setListening] = useState(false);
   const capture = useCaptureStore();
   const agent = useVoiceAgentStore();
+  const transcriptRef = useRef<ScrollView>(null);
+  const displaySegments = capture.segments.length > 0 ? capture.segments : capture.lastSegments;
+  const liveWords = utteranceFrom(displaySegments);
+  const interimPreview = displaySegments
+    .filter((s) => !s.isFinal && s.text.trim())
+    .map((s) => s.text.trim())
+    .join(' ');
+
+  useEffect(() => {
+    if (displaySegments.length > 0) transcriptRef.current?.scrollToEnd({ animated: true });
+  }, [displaySegments.length, capture.recording, interimPreview]);
 
   const say = useCallback((line: string) => {
     setLog((p) => [line, ...p].slice(0, 14));
@@ -241,10 +252,18 @@ export default function DevOmiDeviceScreen() {
           <Text style={[styles.label, { color: theme.textSecondary }]}>AUDIO</Text>
           <Text style={[styles.line, { color: theme.text }]}>
             chunks: {audioChunks} · bytes: {audioBytes}
-            {listening ? ' · listening' : ''}
+            {listening ? ' · raw listening' : ''}
+          </Text>
+          <Text style={[styles.dim, { color: theme.textSecondary }]}>
+            Raw BLE audio counter only — don&apos;t run together with “Device → STT” / voice agent (they share the mic stream).
           </Text>
           <View style={styles.row}>
-            <Btn label="Start audio" onPress={startAudio} bg="#16a34a" />
+            <Btn
+              label="Start audio"
+              onPress={startAudio}
+              bg="#16a34a"
+              disabled={capture.recording || capture.connecting}
+            />
             <Btn label="Stop" onPress={stopAudio} bg="#444" />
           </View>
           <Btn
@@ -266,24 +285,32 @@ export default function DevOmiDeviceScreen() {
             }}
           />
 
-          <Text style={[styles.label, { color: theme.textSecondary }]}>TRANSCRIBE</Text>
+          <Text style={[styles.label, { color: theme.textSecondary }]}>LIVE TRANSCRIPTION</Text>
           <Text style={[styles.line, { color: theme.text }]}>
             {capture.recording
-              ? `streaming to STT · ${capture.segments.length} segments`
+              ? `listening (live) · ${capture.segments.length} segments`
               : capture.connecting
-                ? 'connecting…'
-                : 'idle'}
+                ? 'connecting to STT…'
+                : displaySegments.length > 0
+                  ? `idle · last utterance captured`
+                  : 'idle'}
           </Text>
           {capture.error ? (
             <Text style={[styles.err, { color: '#fca5a5' }]}>{capture.error}</Text>
+          ) : null}
+          {listening ? (
+            <Text style={[styles.err, { color: '#fbbf24' }]}>
+              Raw “Start audio” is on — stop it before Device → STT or it will steal the mic stream.
+            </Text>
           ) : null}
           <View style={styles.row}>
             <Btn
               label="Device -> STT"
               bg="#2563eb"
-              disabled={capture.recording || capture.connecting || !identity}
+              disabled={capture.recording || capture.connecting || !identity || listening}
               onPress={() => {
                 if (!identity) return;
+                if (listening) stopAudio();
                 capture.startFromOmi(identity.codec);
                 say(`startFromOmi(${identity.codec})`);
               }}
@@ -291,22 +318,64 @@ export default function DevOmiDeviceScreen() {
             <Btn
               label="Stop STT"
               bg="#444"
-              disabled={!capture.recording}
+              disabled={!capture.recording && !capture.connecting}
               onPress={() => {
                 capture.stop();
                 say('capture.stop()');
               }}
             />
           </View>
-          {capture.segments.length > 0 && (
-            <>
-              {capture.segments.slice(-6).map((sg, i) => (
-                <Text key={i} style={[styles.line, { color: theme.text }]}>
-                  {sg.speaker}: {sg.text}
+          <View style={styles.row}>
+            <Btn
+              label="Stop & ask agent"
+              bg="#7c3aed"
+              disabled={(!capture.recording && !capture.connecting && !liveWords) || !identity}
+              onPress={() => {
+                say('stop & ask agent');
+                void agent.ask();
+              }}
+            />
+          </View>
+          <View style={[styles.transcriptBox, { backgroundColor: theme.backgroundElement, borderColor: theme.backgroundSelected }]}>
+            <ScrollView
+              ref={transcriptRef}
+              nestedScrollEnabled
+              style={styles.transcriptScroll}
+              contentContainerStyle={styles.transcriptContent}
+            >
+              {displaySegments.length === 0 ? (
+                <Text style={[styles.dim, { color: theme.textSecondary }]}>
+                  {capture.recording || capture.connecting
+                    ? 'Listening… speak now (words will appear live).'
+                    : 'No transcript yet. Start “Device → STT” or attach button + double-tap.'}
                 </Text>
-              ))}
-            </>
-          )}
+              ) : (
+                displaySegments.map((sg, i) => (
+                  <Text
+                    key={`${sg.start}-${i}-${sg.isFinal}`}
+                    style={[
+                      styles.line,
+                      { color: theme.text },
+                      !sg.isFinal ? { color: theme.textSecondary, fontStyle: 'italic' } : null,
+                    ]}
+                  >
+                    {sg.isFinal ? '' : '… '}
+                    {sg.speaker}: {sg.text}
+                  </Text>
+                ))
+              )}
+            </ScrollView>
+          </View>
+          {interimPreview ? (
+            <Text style={[styles.dim, { color: theme.textSecondary, fontStyle: 'italic' }]}>
+              hearing: {interimPreview}
+            </Text>
+          ) : null}
+          {liveWords ? (
+            <Text style={[styles.line, { color: theme.text }]}>
+              will send to agent: &quot;{liveWords}&quot;
+            </Text>
+          ) : null}
 
           <Text style={[styles.label, { color: theme.textSecondary }]}>SPEAKER</Text>
           <Text style={[styles.dim, { color: theme.textSecondary }]}>
@@ -406,5 +475,8 @@ const styles = StyleSheet.create({
   dim: { fontSize: 12 },
   mono: { fontSize: 11, fontFamily: 'monospace' },
   err: { fontSize: 12 },
-  row: { flexDirection: 'row', gap: Spacing.two },
+  row: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap' },
+  transcriptBox: { borderWidth: 1, borderRadius: 8, minHeight: 120, maxHeight: 220, overflow: 'hidden' },
+  transcriptScroll: { flex: 1 },
+  transcriptContent: { padding: 10, gap: 6 },
 });

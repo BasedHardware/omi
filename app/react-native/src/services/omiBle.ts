@@ -357,6 +357,7 @@ export class OmiBle {
 
   onBattery(onChange: (pct: number) => void): void {
     const d = this.requireDevice();
+    this.stopBattery();
     this.batterySub = d.monitorCharacteristicForService(
       OMI.batteryService,
       OMI.batteryLevel,
@@ -382,15 +383,30 @@ export class OmiBle {
    * backend expects the codec declared and 16 kHz for all of them, so the next
    * step is to forward these chunks to the same websocket the phone mic uses --
    * not to unpack PCM here.
+   *
+   * Always replaces any existing audio subscription first: react-native-ble-plx
+   * cancels the displaced native monitor, which would otherwise surface as a
+   * spurious "Operation was cancelled" error to the previous consumer (e.g. the
+   * dev "Start audio" counter vs capture/STT).
    */
   onAudio(onBytes: (bytes: Uint8Array) => void, onError?: (e: unknown) => void): void {
     const d = this.requireDevice();
+    // Tear down any existing monitor first to avoid duplicate native
+    // subscriptions (which previously caused "Operation was cancelled" on the
+    // displaced handler). Clearing the ref before remove() prevents races.
+    const prev = this.audioSub;
+    this.audioSub = null;
+    prev?.remove();
     this.audioSub = d.monitorCharacteristicForService(
       OMI.service,
       OMI.audioDataStream,
       (error, chunk) => {
         if (error) {
-          this.lastAudioError = error.message || String(error);
+          const anyErr = error as { errorCode?: unknown; reason?: unknown; message?: unknown };
+          this.lastAudioError =
+            typeof anyErr.reason === 'string' && anyErr.reason
+              ? `${String(anyErr.message ?? 'BLE error')} (${anyErr.reason})`
+              : error.message || String(error);
           onError?.(error);
           return;
         }
@@ -467,6 +483,7 @@ export class OmiBle {
    */
   onSpeakerNotify(onPump: () => void, onError?: (e: unknown) => void): void {
     const d = this.requireDevice();
+    this.stopSpeakerNotify();
     this.speakerSub = d.monitorCharacteristicForService(OMI.service, OMI.audioSpeaker, (error, chunk) => {
       if (error) {
         onError?.(error);
@@ -489,6 +506,7 @@ export class OmiBle {
    */
   onButton(onEvent: (code: number) => void, onError?: (e: unknown) => void): void {
     const d = this.requireDevice();
+    this.stopButton();
     this.buttonSub = d.monitorCharacteristicForService(
       OMI.buttonService,
       OMI.buttonTrigger,
