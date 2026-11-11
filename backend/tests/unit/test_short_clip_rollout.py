@@ -468,3 +468,22 @@ def test_minimum_vector_writer_skips_embedding_and_index_work(pc, monkeypatch, u
     embedding.assert_not_called()
     upsert.assert_not_called()
     metadata.assert_not_called()
+
+
+def test_external_integration_creation_uses_processing_without_speaker_segments(pc, monkeypatch):
+    from models.conversation import ExternalIntegrationCreateConversation
+    from utils.conversations import processing_speakers
+
+    monkeypatch.setenv('CONVERSATION_SPEAKER_RESOLUTION_ENABLED', 'true')
+    spies = _spy_managed_effects(monkeypatch, pc)
+    completed = _stub_completed_for_normal_path(monkeypatch, pc)
+    # Restore the real speaker boundary: the rest of this legacy coordinator
+    # fixture stubs persistence/providers, not the regression under test.
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', processing_speakers.resolve_speakers_for_processing)
+    incoming = ExternalIntegrationCreateConversation(
+        text='Synthetic integration text', started_at=START, finished_at=START
+    )
+    result = pc.process_conversation('synthetic-account', 'en', incoming)
+    assert result is completed
+    spies['get_structured'].assert_called_once()
+    pc.lifecycle_service.create_completed_conversation.assert_called_once()

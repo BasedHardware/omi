@@ -698,12 +698,17 @@ def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_cl
 
 def _normalize_dead_letter_cause(cause: str) -> str:
     """Map any live failure code onto the closed counter/log cause vocabulary."""
+    if cause in {'deterministic_processing_failed', 'transient_processing_failed'}:
+        return 'processing_failed'
     return cause if cause in FINALIZATION_DEAD_LETTER_CAUSES else 'unknown'
 
 
 def _terminal_failure_row_code(failure_code: str) -> str:
     """Preserve the conversation retry vocabulary for every terminal owner."""
-    if failure_code in SMART_MERGE_INCOMPLETE_CODES:
+    if failure_code in SMART_MERGE_INCOMPLETE_CODES or failure_code in {
+        'deterministic_processing_failed',
+        'transient_processing_failed',
+    }:
         return 'processing_failed'
     if failure_code in {'invalid_job', 'worker_failed'}:
         return 'final_attempt_failed'

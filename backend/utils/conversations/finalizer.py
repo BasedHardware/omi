@@ -222,7 +222,11 @@ async def _episode_after_absorb(uid: str, donor_id: str, trigger: ProcessingTrig
 
 
 class ConversationFinalizationError(RuntimeError):
-    """A retryable persisted-conversation finalization failure."""
+    """A persisted-conversation failure classified by its owning entrypoint.
+
+    Generic processing_failed wrappers retain their exception chain; absent
+    evidence of a transient cause, entrypoints apply the deterministic cap.
+    """
 
     def __init__(self, code: str):
         self.code = code
