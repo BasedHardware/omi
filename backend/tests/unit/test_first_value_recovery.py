@@ -67,7 +67,13 @@ def _projection(**changes):
         'metadata': {'uid': 'fixture-user'},
         'items': {
             'data': [
-                {'price': {'id': 'fixture-monthly-price', 'recurring': {'interval': 'month', 'interval_count': 1}}},
+                {
+                    'id': 'fixture-subscription-item',
+                    'price': {
+                        'id': 'fixture-monthly-price',
+                        'recurring': {'interval': 'month', 'interval_count': 1},
+                    },
+                },
             ]
         },
     }
@@ -86,6 +92,17 @@ def _projection(**changes):
             'billing_reason': 'subscription_create',
             'status': 'paid',
             'amount_paid': 3000,
+            'lines': {
+                'data': [
+                    {
+                        'type': 'subscription',
+                        'subscription': 'fixture-subscription',
+                        'subscription_item': 'fixture-subscription-item',
+                        'price': {'id': 'fixture-monthly-price'},
+                        'amount': 3000,
+                    }
+                ]
+            },
             'status_transitions': {'paid_at': paid_at},
         },
         **changes,
@@ -166,6 +183,38 @@ def test_zero_unpaid_renewal_or_mismatched_invoice_never_admits(monkeypatch, inv
     assert recovery.verified_direct_monthly_start(projection) is None
 
 
+@pytest.mark.parametrize(
+    'line_change',
+    [
+        {'amount': 0},
+        {'price': {'id': 'other-monthly-price'}},
+        {'subscription': 'other-subscription'},
+        {'subscription_item': 'other-subscription-item'},
+        {'type': 'invoiceitem'},
+    ],
+)
+def test_invoice_must_pay_for_the_same_single_monthly_subscription_item(monkeypatch, line_change):
+    monkeypatch.setattr(recovery, 'resolve_stripe_price_plan', lambda _price: PlanType.unlimited)
+    projection = _projection()
+    projection['paid_invoice']['lines']['data'][0].update(line_change)
+    assert recovery.verified_direct_monthly_start(projection) is None
+
+
+def test_another_invoice_or_subscription_item_cannot_fund_a_free_recurring_line(monkeypatch):
+    monkeypatch.setattr(recovery, 'resolve_stripe_price_plan', lambda _price: PlanType.unlimited)
+    projection = _projection()
+    projection['paid_invoice']['lines']['data'][0]['amount'] = 0
+    projection['paid_invoice']['lines']['data'].append(
+        {'type': 'invoiceitem', 'price': {'id': 'other-price'}, 'amount': 3000}
+    )
+    assert recovery.verified_direct_monthly_start(projection) is None
+
+    projection = _projection()
+    items = projection['subscription_obj']['items']['data']
+    items.append({'id': 'other-item', 'price': {'id': 'other-price'}})
+    assert recovery.verified_direct_monthly_start(projection) is None
+
+
 def test_trial_conversion_reactivation_replacement_and_creator_app_never_admit(monkeypatch):
     monkeypatch.setattr(recovery, 'resolve_stripe_price_plan', lambda _price: PlanType.unlimited)
     excluded = [
@@ -200,21 +249,35 @@ async def test_off_billing_projection_has_zero_stripe_or_background_first_value_
 
 
 @pytest.mark.asyncio
-async def test_candidate_fetches_only_its_latest_invoice_on_stripe_executor(monkeypatch):
+async def test_candidate_ack_schedules_before_bounded_post_response_invoice_retrieval(monkeypatch):
     monkeypatch.setattr(billing_webhook, 'recovery_enabled', lambda: True)
     monkeypatch.setattr(recovery, 'resolve_stripe_price_plan', lambda _price: PlanType.unlimited)
     retrieved = Mock()
     retrieved.to_dict.return_value = _projection()['paid_invoice']
     retrieve = Mock(return_value=retrieved)
     monkeypatch.setattr(billing_webhook.stripe.Invoice, 'retrieve', retrieve)
+    monkeypatch.setattr(billing_webhook.lifecycle, 'emit_billing_product_event', Mock())
+    monkeypatch.setattr(billing_webhook.lifecycle, 'emit_billing_plan_changed', Mock())
+    enrolled = Mock()
+    monkeypatch.setattr(billing_webhook, 'enroll_verified_paid_start', enrolled)
     background = Mock()
     projection = _projection()
     projection.pop('paid_invoice')
 
     await billing_webhook.schedule_billing_webhook_events(background, **projection)
 
-    retrieve.assert_called_once_with('fixture-invoice')
-    assert background.add_task.call_args.kwargs['paid_invoice']['amount_paid'] == 3000
+    # No provider await/call delays acknowledgement; the exact projection is
+    # handed to FastAPI first and only its post-response callback retrieves.
+    retrieve.assert_not_called()
+    task = background.add_task.call_args.args[0]
+    assert task is billing_webhook.emit_billing_webhook_events
+    task(*background.add_task.call_args.args[1:], **background.add_task.call_args.kwargs)
+    retrieve.assert_called_once_with(
+        'fixture-invoice',
+        timeout=billing_webhook.STRIPE_INVOICE_TIMEOUT_SECONDS,
+        max_retries=billing_webhook.STRIPE_INVOICE_MAX_RETRIES,
+    )
+    assert enrolled.call_args.kwargs['paid_invoice']['amount_paid'] == 3000
 
 
 def test_assignment_is_stable_and_split_before_eligibility(monkeypatch):
@@ -352,7 +415,16 @@ def test_client_capability_requires_real_permission_and_valid_iana_zone():
         now=NOW,
         firestore_client=client,
     )
-    assert unknown['client_time_zone'] == 'UTC'
+    assert unknown['client_time_zone'] is None
+    assert unknown['push_permission_granted_at'] is None
+    assert recovery._client_capability_current(unknown, NOW) is False
+    stale_client = _strict({('users', 'fixture-user', 'first_value_starts', START_ID): unknown})
+    assert (
+        recovery.claim_prompt(
+            'fixture-user', START_ID, unknown, recovery.CAPTURE, 'in_app', now=NOW, firestore_client=stale_client
+        )
+        is None
+    )
 
 
 def test_quiet_hours_and_paid_end_cancellation_and_value_suppress():
@@ -484,6 +556,37 @@ def test_product_probe_requires_actual_ready_result_and_never_emits_identifiers(
     )
     assert result['capture_saved_at'] == START_AT + timedelta(hours=1)
     assert recovery.prompt_kind(result, recovery.RESULT, now=NOW) is False
+
+
+@pytest.mark.parametrize(
+    'row_change',
+    [{'status': 'failed'}, {'visibility': 'hidden'}, {'discarded': True}, {'is_locked': True}],
+)
+def test_failed_hidden_or_locked_conversation_is_never_saved_value(monkeypatch, row_change):
+    created_at = START_AT + timedelta(hours=1)
+    row = {'created_at': created_at, 'status': 'processing', **row_change}
+    client = FakeFirestore(
+        {
+            'users/fixture-user/conversations/result-1': row,
+            f'users/fixture-user/first_value_starts/{START_ID}': _start(),
+        }
+    )
+    emitted = []
+    monkeypatch.setattr(recovery, '_emit_value', lambda *args: emitted.append(args))
+
+    result = recovery.probe_start(
+        'fixture-user', START_ID, _start(signal_coverage='pending'), now=NOW, firestore_client=client
+    )
+
+    assert 'capture_saved_at' not in result
+    assert emitted == []
+    ready_row = {
+        **row,
+        'status': 'failed' if row_change.get('status') == 'failed' else 'completed',
+        'summary_completed_at': created_at,
+    }
+    client.docs['users/fixture-user/conversations/result-1'] = ready_row
+    assert recovery.record_result_open('fixture-user', 'result-1', now=NOW, firestore_client=client) == 0
 
 
 def test_control_result_open_still_records_value_and_stops_worker_after_rollback(monkeypatch):

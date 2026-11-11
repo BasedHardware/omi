@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-first-value-recovery.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic capture-recovery claim rendered through the real first-value prompt queue and Omi confirmation dialog in dark iOS styling.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

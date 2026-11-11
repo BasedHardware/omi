@@ -1,3 +1,6 @@
+/// Authenticated EXP-005 wire client; accepts only server-issued local recovery routes.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 

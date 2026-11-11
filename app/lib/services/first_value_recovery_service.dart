@@ -1,3 +1,6 @@
+/// Coordinates EXP-005 prompts; identity epochs reject stale responses and prompt CTAs never count as result opens.
+library;
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';

@@ -70,12 +70,12 @@ def paid_start_id(uid: str, subscription_id: str, created: int) -> str:
     return hashlib.sha256(_start_key(uid, subscription_id, created).encode()).hexdigest()[:32]
 
 
-def _first_price(subscription: Mapping[str, Any]) -> Mapping[str, Any]:
+def _single_subscription_item(subscription: Mapping[str, Any]) -> Mapping[str, Any] | None:
     items = subscription.get('items')
     data = items.get('data') if isinstance(items, Mapping) else None
-    first = data[0] if isinstance(data, list) and data else None
-    price = first.get('price') if isinstance(first, Mapping) else None
-    return price if isinstance(price, Mapping) else {}
+    if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], Mapping):
+        return None
+    return data[0]
 
 
 def _direct_monthly_start_details(kwargs: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -106,7 +106,12 @@ def _direct_monthly_start_details(kwargs: Mapping[str, Any]) -> dict[str, Any] |
     current_period_end = obj.get('current_period_end')
     if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in (created, current_period_end)):
         return None
-    price = _first_price(obj)
+    item = _single_subscription_item(obj)
+    if item is None or not isinstance(item.get('id'), str) or not item.get('id'):
+        return None
+    price = item.get('price')
+    if not isinstance(price, Mapping):
+        return None
     recurring = price.get('recurring')
     if (
         not isinstance(recurring, Mapping)
@@ -132,6 +137,7 @@ def _direct_monthly_start_details(kwargs: Mapping[str, Any]) -> dict[str, Any] |
         'subscription_id': subscription_id,
         'customer_id': customer_id,
         'invoice_id': invoice_id,
+        'subscription_item_id': item['id'],
         'price_id': price_id,
         'current_period_end': int(current_period_end),
     }
@@ -145,7 +151,7 @@ def initial_direct_monthly_invoice_id(kwargs: Mapping[str, Any]) -> str | None:
 
 
 def verified_direct_monthly_start(kwargs: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Require owner/subscription-matched, positive cash proof for a new direct monthly start."""
+    """Require owner/subscription-matched, positive paid-invoice proof for a new direct monthly start."""
 
     details = _direct_monthly_start_details(kwargs)
     if details is None:
@@ -156,6 +162,13 @@ def verified_direct_monthly_start(kwargs: Mapping[str, Any]) -> dict[str, Any] |
     transitions = invoice.get('status_transitions')
     paid_at = transitions.get('paid_at') if isinstance(transitions, Mapping) else None
     amount_paid = invoice.get('amount_paid')
+    lines = invoice.get('lines')
+    line_data = lines.get('data') if isinstance(lines, Mapping) else None
+    line = line_data[0] if isinstance(line_data, list) and len(line_data) == 1 else None
+    if not isinstance(line, Mapping):
+        return None
+    line_price = line.get('price')
+    line_amount = line.get('amount')
     if (
         invoice.get('id') != details['invoice_id']
         or invoice.get('subscription') != details['subscription_id']
@@ -165,6 +178,14 @@ def verified_direct_monthly_start(kwargs: Mapping[str, Any]) -> dict[str, Any] |
         or isinstance(amount_paid, bool)
         or not isinstance(amount_paid, (int, float))
         or amount_paid <= 0
+        or not isinstance(line_price, Mapping)
+        or line_price.get('id') != details['price_id']
+        or line.get('subscription') != details['subscription_id']
+        or line.get('subscription_item') != details['subscription_item_id']
+        or line.get('type') != 'subscription'
+        or isinstance(line_amount, bool)
+        or not isinstance(line_amount, (int, float))
+        or line_amount <= 0
         or isinstance(paid_at, bool)
         or not isinstance(paid_at, (int, float))
         or paid_at <= 0
@@ -290,6 +311,16 @@ def _emit_value(uid: str, variant: str, kind: str, paid_start_at: datetime, valu
     )
 
 
+def _visible_saved_conversation(row: Mapping[str, Any]) -> bool:
+    return (
+        row.get('status') not in {'failed', 'hidden'}
+        and row.get('visibility') != 'hidden'
+        and not row.get('discarded')
+        and not row.get('deleted')
+        and not row.get('is_locked')
+    )
+
+
 def probe_start(
     uid: str,
     start_id: str,
@@ -306,7 +337,7 @@ def probe_start(
         return dict(start, signal_coverage='invalid_paid_start')
     rows, truncated = _probe_conversations(uid, paid_start_at, client)
     result: dict[str, Any] = dict(start)
-    saved = [row for row in rows if not row.get('discarded') and not row.get('deleted') and not row.get('is_locked')]
+    saved = [row for row in rows if _visible_saved_conversation(row)]
     saved_at = min(
         (created for row in saved if (created := _aware(row.get('created_at'))) is not None),
         default=None,
@@ -354,17 +385,19 @@ def record_client_capability(
 ) -> dict[str, Any]:
     """Record only shipping-mobile protocol, actual permission and a valid IANA zone."""
 
-    if not time_zone or len(time_zone) > 64:
-        return dict(start)
-    try:
-        ZoneInfo(time_zone)
-    except ZoneInfoNotFoundError:
-        return dict(start)
+    valid_time_zone = bool(time_zone) and len(time_zone) <= 64
+    if valid_time_zone:
+        try:
+            ZoneInfo(time_zone)
+        except ZoneInfoNotFoundError:
+            valid_time_zone = False
+    # A failed refresh is explicit unknown coverage, never permission to reuse
+    # stale consent/location evidence for a later background push.
     updates = {
         'client_protocol': 1,
-        'client_time_zone': time_zone,
+        'client_time_zone': time_zone if valid_time_zone else None,
         'client_capability_at': now,
-        'push_permission_granted_at': now if notifications_authorized else None,
+        'push_permission_granted_at': now if notifications_authorized and valid_time_zone else None,
     }
     _start_ref(uid, start_id, _client(firestore_client)).set(updates, merge=True)
     return dict(start, **updates)
@@ -454,7 +487,10 @@ def _current_suppression(user: Mapping[str, Any], start: Mapping[str, Any], *, n
 def _local_date_or_suppression(
     user: Mapping[str, Any], now: datetime, start: Mapping[str, Any] | None = None
 ) -> tuple[str | None, str | None]:
-    time_zone = (start or {}).get('client_time_zone') or user.get('time_zone')
+    if start is not None and start.get('client_protocol') == 1:
+        time_zone = start.get('client_time_zone')
+    else:
+        time_zone = (start or {}).get('client_time_zone') or user.get('time_zone')
     try:
         local = now.astimezone(ZoneInfo(str(time_zone)))
     except (KeyError, TypeError, ZoneInfoNotFoundError):
@@ -469,9 +505,7 @@ def _local_date_or_suppression(
 def _ready_result_available(row: Mapping[str, Any], start: Mapping[str, Any]) -> bool:
     return (
         row.get('status') == 'completed'
-        and not row.get('discarded')
-        and not row.get('deleted')
-        and not row.get('is_locked')
+        and _visible_saved_conversation(row)
         and _aware(row.get('summary_completed_at')) is not None
         and _aware(row.get('summary_completed_at')) == _aware(start.get('ready_result_at'))
     )
@@ -585,14 +619,7 @@ def record_result_open(uid: str, conversation_id: str, *, now: datetime, firesto
     snapshot = client.collection('users').document(uid).collection('conversations').document(conversation_id).get()
     row = snapshot.to_dict() or {} if snapshot.exists else {}
     ready_at = _aware(row.get('summary_completed_at'))
-    if (
-        row.get('status') != 'completed'
-        or ready_at is None
-        or ready_at > now
-        or row.get('discarded')
-        or row.get('deleted')
-        or row.get('is_locked')
-    ):
+    if row.get('status') != 'completed' or ready_at is None or ready_at > now or not _visible_saved_conversation(row):
         return 0
     updated = 0
     for start in recent_starts(uid, now=now, firestore_client=client):

@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Default-dark experiment implementation only; both flags remain disabled and no store user receives changed behavior."
+}
