@@ -54,6 +54,7 @@ podAnnotations:
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels:
   env: dev
+  service_name: pusher
   # The development Prometheus job keeps this target in the development
   # evidence plane as a second boundary alongside its namespace selector.
 
