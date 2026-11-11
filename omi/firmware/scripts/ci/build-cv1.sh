@@ -53,14 +53,12 @@ echo "Updating west modules (shallow)..."
 west update -o=--depth=1 -n
 west zephyr-export
 
-# The production config lives in omi.conf; Zephyr builds prj.conf by default,
-# so copy it across. This keeps CONFIG_BT_DIS_FW_REV_STR (the firmware version
-# baked into the binary) in sync with omi.conf, the release source of truth.
-cp "$FW/omi/omi.conf" "$FW/omi/prj.conf"
-
+# Select the production app config through sysbuild's image-scoped setting.
+# Do not create an untracked prj.conf: the later simulator gate requires a
+# clean firmware checkout when it records the exact source SHA.
 echo "Building $BOARD with sysbuild..."
 west build -o=-j2 -b "$BOARD" "$FW/omi" --sysbuild -d build --pristine always \
-  -- -DBOARD_ROOT="$FW" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+  -- -DBOARD_ROOT="$FW" -Domi_CONF_FILE="$FW/omi/omi.conf" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 # Fail loud if any expected artifact is missing (silent-drop prevention).
 test -s build/omi/zephyr/zephyr.elf
