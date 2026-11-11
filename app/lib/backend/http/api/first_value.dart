@@ -1,4 +1,5 @@
-/// Authenticated EXP-005 wire client; accepts only server-issued local recovery routes.
+/// Owns the authenticated EXP-005 wire client and its optional prompt envelope.
+/// Accepts only server-issued local recovery routes; failures stay typed.
 library;
 
 import 'dart:async';

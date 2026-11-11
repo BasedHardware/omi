@@ -1,4 +1,5 @@
-/// Coordinates EXP-005 prompts; identity epochs reject stale responses and prompt CTAs never count as result opens.
+/// Coordinates EXP-005 prompt presentation and authenticated ready-result navigation.
+/// Identity epochs reject stale responses; prompt CTAs never count as result opens.
 library;
 
 import 'dart:async';

@@ -171,10 +171,8 @@ def test_emitters_route_through_shared_capture():
 
 
 def test_closed_experiment_names_survive_but_raw_identifiers_do_not():
-    assert (
-        telemetry.server_event_properties('u', {'experiment_id': 'EXP-001-day3-reengagement'})['experiment_id']
-        == 'EXP-001-day3-reengagement'
-    )
+    for experiment in ('EXP-001-day3-reengagement', 'EXP-005-first-value-recovery'):
+        assert telemetry.server_event_properties('u', {'experiment_id': experiment})['experiment_id'] == experiment
     assert 'experiment_id' not in telemetry.server_event_properties('u', {'experiment_id': 'private-uid'})
 
 
