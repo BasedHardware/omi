@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "ریکارڈنگز روک دی گئی ہیں",
     "activityAttentionUploadStalledTitle": "اپ لوڈ رک گیا ہے",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 ریکارڈنگ انتظار میں ہے} other{{count} ریکارڈنگز انتظار میں ہیں}}",
+    "attentionRerunNotes": "نوٹس دوبارہ بنائیں",
     "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا",
     "activityAttentionSemantics": "ایکٹیویٹی، توجہ درکار ہے",
     "connectAgentHeadline": "ChatGPT اور اپنے AI ایجنٹس میں اپنی Omi میموری استعمال کریں",

@@ -13694,6 +13694,9 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Wygeneruj notatki ponownie';
+
+  @override
   String get attentionSummaryFailed => 'Nie udało się podsumować tej rozmowy';
 
   @override

@@ -77,6 +77,26 @@ environment_shared:
         FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_TOKEN_LEASE_MODE:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_MODE
+          category: rollout
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+          category: rollout
+        RECORD_TOKEN_LEASE_SECONDS:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_SECONDS
+          category: rollout
+        RECORD_TOKEN_LEASE_DEPLOYED_AT:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_DEPLOYED_AT
+          category: rollout
         BATCH_PIPELINE_SERVING_ENABLED:
           value: 'false'
           category: rollout
@@ -528,6 +548,26 @@ environment_shared:
         PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
         HOSTED_LID_API_URL: {value: '', category: service_discovery}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_TOKEN_LEASE_MODE:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_MODE
+          category: rollout
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+          category: rollout
+        RECORD_TOKEN_LEASE_SECONDS:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_SECONDS
+          category: rollout
+        RECORD_TOKEN_LEASE_DEPLOYED_AT:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_DEPLOYED_AT
+          category: rollout
         LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
@@ -684,6 +724,18 @@ environment_shared:
     config_map:
       name: '{env}-omi-backend-config'
       entries:
+        RECORD_TOKEN_LEASE_MODE:
+          source: environment
+          default: 'off'
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+          source: environment
+          default: '0'
+        RECORD_TOKEN_LEASE_SECONDS:
+          source: environment
+          default: '3600'
+        RECORD_TOKEN_LEASE_DEPLOYED_AT:
+          source: environment
+          default: '0'
         LADDER_V1_PLUS_MONTH_PRICE_ID:
           source: environment
           default: ''
@@ -948,6 +1000,22 @@ environment_shared:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_TOKEN_LEASE_MODE:
+            env_var: RECORD_TOKEN_LEASE_MODE
+            default: 'off'
+            category: rollout
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+            env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+            default: '0'
+            category: rollout
+          RECORD_TOKEN_LEASE_SECONDS:
+            env_var: RECORD_TOKEN_LEASE_SECONDS
+            default: '3600'
+            category: rollout
+          RECORD_TOKEN_LEASE_DEPLOYED_AT:
+            env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
+            default: '0'
+            category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1334,6 +1402,22 @@ environment_shared:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_TOKEN_LEASE_MODE:
+            env_var: RECORD_TOKEN_LEASE_MODE
+            default: 'off'
+            category: rollout
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+            env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+            default: '0'
+            category: rollout
+          RECORD_TOKEN_LEASE_SECONDS:
+            env_var: RECORD_TOKEN_LEASE_SECONDS
+            default: '3600'
+            category: rollout
+          RECORD_TOKEN_LEASE_DEPLOYED_AT:
+            env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
+            default: '0'
+            category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1696,6 +1780,22 @@ environment_shared:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_TOKEN_LEASE_MODE:
+            env_var: RECORD_TOKEN_LEASE_MODE
+            default: 'off'
+            category: rollout
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+            env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+            default: '0'
+            category: rollout
+          RECORD_TOKEN_LEASE_SECONDS:
+            env_var: RECORD_TOKEN_LEASE_SECONDS
+            default: '3600'
+            category: rollout
+          RECORD_TOKEN_LEASE_DEPLOYED_AT:
+            env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
+            default: '0'
+            category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -2033,6 +2133,22 @@ environment_shared:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_TOKEN_LEASE_MODE:
+            env_var: RECORD_TOKEN_LEASE_MODE
+            default: 'off'
+            category: rollout
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+            env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+            default: '0'
+            category: rollout
+          RECORD_TOKEN_LEASE_SECONDS:
+            env_var: RECORD_TOKEN_LEASE_SECONDS
+            default: '3600'
+            category: rollout
+          RECORD_TOKEN_LEASE_DEPLOYED_AT:
+            env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
+            default: '0'
+            category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
             category: rollout
           BATCH_PIPELINE_WORKER_ENABLED:

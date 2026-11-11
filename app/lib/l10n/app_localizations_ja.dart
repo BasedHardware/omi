@@ -13462,6 +13462,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'ノートを再生成';
+
+  @override
   String get attentionSummaryFailed => 'この会話を要約できませんでした';
 
   @override

@@ -51,6 +51,18 @@ def test_classify(data, expected):
     assert home_step.classify(data) == expected
 
 
+def test_row_level_projection_provenance_is_writing_notes_without_structured_provenance():
+    stamped = row(
+        structured={'title': '', 'overview': ''},
+        summary_title_provenance='server_minimum',
+        summary_due_at=NOW.timestamp(),
+    )
+    assert home_step.classify(stamped) == 'writing_notes'
+    # No debt means no summary will ever replace the stand-in: hide it, do not
+    # present Writing notes forever.
+    assert home_step.classify({**stamped, 'summary_due_at': None}) == 'noise'
+
+
 def test_restamped_finished_title_is_never_processing_forever():
     """GLM P1 on #24732: neutralize re-stamps server_minimum on read for finished rows."""
     settled = minimum('Thank you.', summary_due_at=None)

@@ -80,6 +80,10 @@ def conv():
     conversations_db_stub = AutoMockModule("database.conversations")
     conversations_db_stub.get_conversation = MagicMock(return_value={"id": "c1", "status": "completed"})
 
+    # Deletion's typed lake error is a lazy collaborator of this isolated router.
+    object_lake_stub = ModuleType("utils.other.object_lake")
+    object_lake_stub.LakeFetchError = type("LakeFetchError", (Exception,), {})
+
     fakes: dict[str, ModuleType] = {
         "ulid": AutoMockModule("ulid"),
         "pinecone": AutoMockModule("pinecone"),
@@ -100,6 +104,7 @@ def conv():
         "google.cloud.firestore_v1": AutoMockModule("google.cloud.firestore_v1"),
         "utils.other.endpoints": endpoints_stub,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
+        "utils.other.object_lake": object_lake_stub,
         "utils.screen_frames": AutoMockModule("utils.screen_frames"),
         "utils.screen_frames.store": AutoMockModule("utils.screen_frames.store"),
         "utils.conversations.factory": AutoMockModule("utils.conversations.factory"),

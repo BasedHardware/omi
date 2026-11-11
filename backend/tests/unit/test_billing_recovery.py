@@ -134,6 +134,60 @@ def test_without_an_open_attempted_invoice_there_is_nothing_to_pay(invoice):
     assert billing_recovery.payment_issue_from_stripe('uid-1', _stripe_sub(), invoice) is None
 
 
+def _recovery_eligible(subscription=None, previous=None, invoice=None, uid='uid-1'):
+    return billing_recovery.payment_recovery_notification_eligible(
+        uid,
+        subscription or _stripe_sub(),
+        {'status': 'active'} if previous is None else previous,
+        _invoice() if invoice is None else invoice,
+    )
+
+
+@pytest.mark.parametrize('status', ['past_due', 'unpaid'])
+def test_first_transition_to_either_recoverable_status_is_notification_eligible(status):
+    assert _recovery_eligible(subscription=_stripe_sub(status=status)) is True
+
+
+@pytest.mark.parametrize('previous', [{}, {'status': 'past_due'}, {'status': 'unpaid'}])
+def test_missing_or_already_recoverable_previous_status_fails_closed(previous):
+    assert _recovery_eligible(previous=previous) is False
+
+
+@pytest.mark.parametrize(
+    'invoice',
+    [
+        {'status': 'paid'},
+        {'attempted': False},
+        {'amount_remaining': 0},
+        {'billing_reason': 'subscription_update'},
+        None,
+    ],
+)
+def test_notification_requires_open_attempted_cycle_invoice_with_remaining_amount(invoice):
+    candidate = _invoice() if invoice is not None else {}
+    candidate.update(invoice or {})
+    assert _recovery_eligible(invoice=candidate) is False
+
+
+@pytest.mark.parametrize(
+    'overrides',
+    [
+        {'cancel_at_period_end': True},
+        {'cancel_at': NOW + DAY},
+        {'collection_method': 'send_invoice'},
+        {'metadata': {'uid': 'uid-1', 'app_id': 'creator-app'}},
+    ],
+)
+def test_canceled_emailed_and_marketplace_subscriptions_do_not_notify(overrides):
+    assert _recovery_eligible(subscription=_stripe_sub(**overrides)) is False
+
+
+def test_first_trial_charge_and_missing_uid_do_not_notify():
+    first_trial = _stripe_sub(trial_end=NOW - DAY, current_period_start=NOW - DAY)
+    assert _recovery_eligible(subscription=first_trial) is False
+    assert _recovery_eligible(uid='') is False
+
+
 class _Obj:
     def __init__(self, data):
         self._data = data

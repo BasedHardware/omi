@@ -13687,6 +13687,9 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Стварыць нататкі зноў';
+
+  @override
   String get attentionSummaryFailed => 'Не ўдалося падсумаваць гэту размову';
 
   @override

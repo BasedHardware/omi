@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Registrazioni in pausa",
     "activityAttentionUploadStalledTitle": "Caricamento bloccato",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 registrazione in attesa} other{{count} registrazioni in attesa}}",
+    "attentionRerunNotes": "Rigenera le note",
     "attentionSummaryFailed": "Impossibile riassumere questa conversazione",
     "activityAttentionSemantics": "Attività, richiede attenzione",
     "connectAgentHeadline": "Usa la tua memoria di Omi in ChatGPT e nei tuoi agenti IA",

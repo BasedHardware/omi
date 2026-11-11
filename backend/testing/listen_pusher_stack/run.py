@@ -253,6 +253,14 @@ class Stack:
                 # Child logs are evidence when a process fails to bind; avoid
                 # losing a short Python traceback in the file buffer.
                 'PYTHONUNBUFFERED': '1',
+                # The allowlist drops ambient limits too. Bound numerical pools
+                # in each fresh child, including lifecycle pusher restarts.
+                'OMP_NUM_THREADS': '1',
+                'OPENBLAS_NUM_THREADS': '1',
+                'MKL_NUM_THREADS': '1',
+                'VECLIB_MAXIMUM_THREADS': '1',
+                'NUMEXPR_NUM_THREADS': '1',
+                'BLIS_NUM_THREADS': '1',
             }
         )
         if self.memory_enabled is not None:

@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Ieraksti apturēti",
     "activityAttentionUploadStalledTitle": "Augšupielāde apstājusies",
     "activityAttentionUploadRecordings": "{count, plural, =1{Gaida 1 ieraksts} other{Gaida {count} ieraksti}}",
+    "attentionRerunNotes": "Izveidot piezīmes vēlreiz",
     "attentionSummaryFailed": "Šo sarunu neizdevās apkopot",
     "activityAttentionSemantics": "Aktivitāte, pieprasa uzmanību",
     "connectAgentHeadline": "Izmantojiet savu Omi atmiņu ChatGPT un savos MI aģentos",
