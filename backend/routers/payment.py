@@ -74,6 +74,7 @@ from utils.subscription import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.subscription_events import record_subscription_event
+from utils.observability.renewal_observations import observe_verified_event
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -1214,7 +1215,9 @@ async def stripe_webhook(
     async def run_db(function, *args, **kwargs):
         return await run_blocking(db_executor, function, *args, **kwargs)
 
-    return await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
+    result = await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
+    await observe_verified_event(event)
+    return result
 
 
 @fresh_reader
