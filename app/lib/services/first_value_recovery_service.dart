@@ -22,6 +22,7 @@ class FirstValueRecoveryService {
   FirstValueApi? _injectedApi;
   FirstValueApi get _api => _injectedApi ??= FirstValueApi();
   bool _checking = false;
+  bool get _identityReady => AnalyticsManager.identityKnown && (AnalyticsManager.currentIdentity?.isNotEmpty ?? false);
 
   @visibleForTesting
   set debugApi(FirstValueApi api) => _injectedApi = api;
@@ -49,29 +50,42 @@ class FirstValueRecoveryService {
   }
 
   Future<void> checkOnAppOpen() async {
-    if (_checking) return;
+    if (_checking || !_identityReady) return;
     _checking = true;
     final identityEpoch = AnalyticsManager.identityEpoch;
     try {
       final capability = await _clientCapability();
-      final result = await _api.prompt(
-        notificationPermission: capability['notificationPermission'],
-        timeZone: capability['timeZone'],
-      );
-      if (identityEpoch != AnalyticsManager.identityEpoch || result is! ApiSuccess<FirstValuePrompt?>) return;
-      final prompt = result.data;
-      if (prompt == null || !AnalyticsManager.identityKnown) return;
+      if (identityEpoch != AnalyticsManager.identityEpoch || !_identityReady) return;
+      // Consent-governed observation is independent of delivery/intake. Dark
+      // client releases must be measurable before the activation-volume gate.
+      AnalyticsManager().track('First Value Recovery Client Capability', properties: {
+        'protocol': 1,
+        'notification_permission': capability['notificationPermission'] ?? 'unknown',
+        if (capability['timeZone'] != null) 'time_zone': capability['timeZone'],
+      });
       PromptQueue.instance.enqueue(
-        'first-value-${prompt.kind}',
+        'first-value-recovery',
         PromptPriority.normal,
-        canShowNow: () => identityEpoch == AnalyticsManager.identityEpoch && AnalyticsManager.identityKnown,
+        canShowNow: () => identityEpoch == AnalyticsManager.identityEpoch && _identityReady,
         show: (context) async {
+          // Do not consume the durable claim while a higher-priority prompt
+          // blocks the queue, or after the authenticated identity changes.
+          if (identityEpoch != AnalyticsManager.identityEpoch || !_identityReady) return;
+          final result = await _api.prompt(
+            notificationPermission: capability['notificationPermission'],
+            timeZone: capability['timeZone'],
+          );
+          if (!context.mounted ||
+              identityEpoch != AnalyticsManager.identityEpoch ||
+              result is! ApiSuccess<FirstValuePrompt?>) return;
+          final prompt = result.data;
+          if (prompt == null || !_identityReady) return;
           final l10n = context.l10n;
           final capture = prompt.kind == 'capture';
           final confirmed = await showOmiConfirm(
             context,
             title: capture ? l10n.deviceNotConnected : l10n.summaryGenerated,
-            message: l10n.captureEveryMoment,
+            message: capture ? l10n.captureEveryMoment : l10n.reviewAndManageConversations,
             confirmLabel: capture ? l10n.connectDevice : l10n.open,
           );
           if (confirmed && identityEpoch == AnalyticsManager.identityEpoch) {
@@ -85,6 +99,7 @@ class FirstValueRecoveryService {
   }
 
   Future<bool> openReadyResultFromPush() async {
+    if (!_identityReady) return false;
     final identityEpoch = AnalyticsManager.identityEpoch;
     final result = await _api.prompt(navigation: true);
     if (identityEpoch != AnalyticsManager.identityEpoch || result is! ApiSuccess<FirstValuePrompt?>) return false;

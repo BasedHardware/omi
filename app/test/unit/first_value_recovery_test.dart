@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/services/first_value_recovery_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -42,6 +43,9 @@ void main() {
   test(
     'ready navigation authenticates the prompt instead of reading an FCM object id',
     () async {
+      AnalyticsManager.resetForTesting();
+      AnalyticsManager().bindIdentity('synthetic-owner');
+      addTearDown(AnalyticsManager.resetForTesting);
       late ApiRequest observed;
       final api = FirstValueApi(
         baseUrl: 'https://fixture.invalid/',
@@ -87,6 +91,22 @@ void main() {
       });
     },
   );
+
+  test('unknown or signed-out identity cannot consume a prompt', () async {
+    AnalyticsManager.resetForTesting();
+    addTearDown(AnalyticsManager.resetForTesting);
+    var requests = 0;
+    FirstValueRecoveryService.instance.debugApi = FirstValueApi(
+        baseUrl: 'https://fixture.invalid/',
+        send: (_) async {
+          requests++;
+          return http.Response('{"prompt":null}', 200);
+        });
+    await FirstValueRecoveryService.instance.checkOnAppOpen();
+    AnalyticsManager().bindIdentity(null);
+    await FirstValueRecoveryService.instance.checkOnAppOpen();
+    expect(requests, 0);
+  });
 
   test('released generic route remains available for a ready notification', () {
     expect(

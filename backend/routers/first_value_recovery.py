@@ -68,12 +68,12 @@ def get_recovery_prompt(
                 if kind is None:
                     continue
                 prompt = recovery.resolve_push_navigation(uid, candidate['start_id'], start, kind, now=now)
-                if prompt is not None:
+                if prompt is not None and recovery_enabled():
                     return {'prompt': prompt}
                 continue
             for prompt_kind in recovery.iter_candidate_kinds(start, now=now):
                 prompt = recovery.claim_prompt(uid, candidate['start_id'], start, prompt_kind, 'in_app', now=now)
-                if prompt is not None:
+                if prompt is not None and recovery_enabled():
                     _event(uid, str(start.get('variant')), prompt_kind, 'delivery', 'claimed')
                     return {'prompt': prompt}
     except Exception as error:
@@ -84,8 +84,8 @@ def get_recovery_prompt(
 
 @router.post('/v1/first-value/recovery/result-open')
 def record_result_open(request: ResultOpenRequest, uid: str = Depends(auth.get_current_user_uid)) -> dict[str, int]:
-    # Outcome ownership is independent of new intake/delivery: a rollback must
-    # not make the already randomized control and treatment arms unmeasurable.
+    if not recovery_enabled():
+        return {'recorded': 0}
     return {'recorded': recovery.record_result_open(uid, request.conversation_id, now=datetime.now(timezone.utc))}
 
 

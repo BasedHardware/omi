@@ -116,7 +116,15 @@ class NotificationUtil {
 
   static Future<bool> handleFcmDataTap(Map<String, dynamic> data, {RecordReference? objectId}) async {
     if (data['notification_type'] == firstValueReadyNotificationType && data['action'] == 'open_ready_result') {
-      return FirstValueRecoveryService.instance.openReadyResultFromPush();
+      final attempt = ProductTelemetry.instance.start(
+        ProductJourney.notificationOpen,
+        surface: ProductSurface.notification,
+        objectId: objectId,
+      );
+      final handled = await FirstValueRecoveryService.instance.openReadyResultFromPush();
+      attempt.complete(handled ? ProductOutcome.success : ProductOutcome.failure,
+          failure: handled ? ProductFailure.none : ProductFailure.timeout);
+      return handled;
     }
     final route = routeFromFcmData(data);
     if (route == null) return false;

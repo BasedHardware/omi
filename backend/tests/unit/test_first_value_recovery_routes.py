@@ -34,7 +34,7 @@ def test_off_prompt_does_no_eligibility_query(monkeypatch):
     selected.assert_not_called()
 
 
-def test_off_preserves_outcome_measurement_but_not_pendant_eligibility_writes(monkeypatch):
+def test_off_stops_outcome_and_pendant_io(monkeypatch):
     result = Mock(return_value=1)
     pendant = Mock(side_effect=AssertionError('off pendant write'))
     selected = Mock(side_effect=AssertionError('off pendant eligibility read'))
@@ -43,10 +43,10 @@ def test_off_preserves_outcome_measurement_but_not_pendant_eligibility_writes(mo
     monkeypatch.setattr(recovery, 'record_pendant_connection', pendant)
     client = _client(monkeypatch, False)
     assert client.post('/v1/first-value/recovery/result-open', json={'conversation_id': 'result-1'}).json() == {
-        'recorded': 1
+        'recorded': 0
     }
     assert client.post('/v1/first-value/recovery/pendant-connection').json() == {'recorded': False}
-    result.assert_called_once()
+    result.assert_not_called()
     pendant.assert_not_called()
     selected.assert_not_called()
 
@@ -100,3 +100,18 @@ def test_push_navigation_returns_only_an_existing_result_claim(monkeypatch):
     assert response.json()['prompt']['route'] == '/conversation/result-1'
     resolved.assert_called_once()
     claimed.assert_not_called()
+
+
+def test_kill_after_claim_prevents_in_app_response(monkeypatch):
+    client = _client(monkeypatch, True)
+    monkeypatch.setattr(recovery, 'recent_starts', lambda uid, now: [{'start_id': 'synthetic'}])
+    monkeypatch.setattr(recovery, 'record_client_capability', lambda uid, sid, start, **kw: start)
+    monkeypatch.setattr(recovery, 'probe_start', lambda uid, sid, start, **kw: start)
+    monkeypatch.setattr(recovery, 'iter_candidate_kinds', lambda start, now: iter(['capture']))
+
+    def claim(*a, **kw):
+        monkeypatch.setattr(routes, 'recovery_enabled', lambda: False)
+        return {'kind': 'capture', 'route': '/settings/device'}
+
+    monkeypatch.setattr(recovery, 'claim_prompt', claim)
+    assert client.get('/v1/first-value/recovery/prompt').json() == {'prompt': None}

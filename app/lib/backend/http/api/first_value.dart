@@ -68,7 +68,7 @@ class FirstValueApi {
           headers: const {protocolHeader: '1'},
           body: jsonEncode({'conversation_id': conversationId}),
         ),
-        decode: (body) => ((jsonDecode(body) as Map<String, dynamic>)['recorded'] as num?) != null,
+        decode: (body) => (((jsonDecode(body) as Map<String, dynamic>)['recorded'] as num?) ?? 0) > 0,
         send: send,
       ).timeout(
         const Duration(seconds: 15),

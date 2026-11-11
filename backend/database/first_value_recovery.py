@@ -19,7 +19,9 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config.first_value_recovery import intake_admitted, recovery_enabled
-from config.plan_catalog import PlanType, resolve_stripe_price_plan
+from config.plan_catalog import PAID_PLAN_TYPES, PlanType, resolve_stripe_price_plan
+from utils.conversations.fragment_visibility import is_completed_rule_discard, is_settling_fragment
+from utils.sync import bridge_pending
 from database._client import get_firestore_client
 from database.firestore_index_registry import (
     FIRST_VALUE_DUE_PUSH_QUERY,
@@ -73,7 +75,13 @@ def paid_start_id(uid: str, subscription_id: str, created: int) -> str:
 def _single_subscription_item(subscription: Mapping[str, Any]) -> Mapping[str, Any] | None:
     items = subscription.get('items')
     data = items.get('data') if isinstance(items, Mapping) else None
-    if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], Mapping):
+    if (
+        not isinstance(items, Mapping)
+        or items.get('has_more') is not False
+        or not isinstance(data, list)
+        or len(data) != 1
+        or not isinstance(data[0], Mapping)
+    ):
         return None
     return data[0]
 
@@ -165,7 +173,7 @@ def verified_direct_monthly_start(kwargs: Mapping[str, Any]) -> dict[str, Any] |
     lines = invoice.get('lines')
     line_data = lines.get('data') if isinstance(lines, Mapping) else None
     line = line_data[0] if isinstance(line_data, list) and len(line_data) == 1 else None
-    if not isinstance(line, Mapping):
+    if not isinstance(line, Mapping) or lines.get('has_more') is not False:
         return None
     line_price = line.get('price')
     line_amount = line.get('amount')
@@ -175,6 +183,10 @@ def verified_direct_monthly_start(kwargs: Mapping[str, Any]) -> dict[str, Any] |
         or invoice.get('customer') != details['customer_id']
         or invoice.get('billing_reason') != 'subscription_create'
         or invoice.get('status') != 'paid'
+        or invoice.get('paid_out_of_band') is not False
+        or not isinstance(invoice.get('total'), (int, float))
+        or isinstance(invoice.get('total'), bool)
+        or invoice['total'] <= 0
         or isinstance(amount_paid, bool)
         or not isinstance(amount_paid, (int, float))
         or amount_paid <= 0
@@ -190,6 +202,21 @@ def verified_direct_monthly_start(kwargs: Mapping[str, Any]) -> dict[str, Any] |
         or not isinstance(paid_at, (int, float))
         or paid_at <= 0
     ):
+        return None
+    # A positive invoice may fund tax/fees while a discounted monthly line is
+    # free. Combined pretax credits already include discount credits: subtract
+    # that list once when supplied, otherwise use legacy discount amounts.
+    credits = line.get('pretax_credit_amounts')
+    credits = credits if credits is not None else line.get('discount_amounts', [])
+    if not isinstance(credits, list):
+        return None
+    amounts: list[float] = []
+    for credit in credits:
+        amount = credit.get('amount') if isinstance(credit, Mapping) else None
+        if isinstance(amount, bool) or not isinstance(amount, (int, float)) or amount < 0:
+            return None
+        amounts.append(float(amount))
+    if line_amount - sum(amounts) <= 0:
         return None
     return {
         'uid': details['uid'],
@@ -318,6 +345,10 @@ def _visible_saved_conversation(row: Mapping[str, Any]) -> bool:
         and not row.get('discarded')
         and not row.get('deleted')
         and not row.get('is_locked')
+        and not row.get('dream_duplicate_of')
+        and not bridge_pending.hidden(row)
+        and not is_settling_fragment(row)
+        and not is_completed_rule_discard(row)
     )
 
 
@@ -468,8 +499,10 @@ def _current_suppression(user: Mapping[str, Any], start: Mapping[str, Any], *, n
     subscription = user.get('subscription')
     if not isinstance(subscription, Mapping):
         return 'paid_coverage_missing'
-    if subscription.get('status') == 'inactive':
+    if subscription.get('status') != 'active':
         return 'paid_ended'
+    if subscription.get('plan') not in PAID_PLAN_TYPES:
+        return 'paid_coverage_missing'
     if subscription.get('stripe_subscription_id') != start.get('subscription_id'):
         return 'paid_changed'
     if subscription.get('current_price_id') != start.get('price_id'):
@@ -613,7 +646,7 @@ def resolve_push_navigation(
 def record_result_open(uid: str, conversation_id: str, *, now: datetime, firestore_client: Any = None) -> int:
     """Validate the owned ready result, then record the value event in every arm."""
 
-    if not conversation_id or '/' in conversation_id:
+    if not recovery_enabled() or not conversation_id or '/' in conversation_id:
         return 0
     client = _client(firestore_client)
     snapshot = client.collection('users').document(uid).collection('conversations').document(conversation_id).get()
@@ -624,9 +657,7 @@ def record_result_open(uid: str, conversation_id: str, *, now: datetime, firesto
     updated = 0
     for start in recent_starts(uid, now=now, firestore_client=client):
         paid_start_at = _aware(start.get('paid_start_at'))
-        if paid_start_at is None or ready_at < paid_start_at or _aware(start.get('result_opened_at')) is not None:
-            continue
-        if ready_at < now and start.get('ready_result_conversation_id') not in {None, conversation_id}:
+        if paid_start_at is None or now < paid_start_at or _aware(start.get('result_opened_at')) is not None:
             continue
         _start_ref(uid, start['start_id'], client).set(
             {'result_opened_at': now, 'ready_result_conversation_id': conversation_id, 'next_push_probe_at': None},

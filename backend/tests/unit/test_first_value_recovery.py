@@ -50,6 +50,8 @@ def _user(**changes):
             'current_price_id': 'fixture-monthly-price',
             'current_period_end': int((NOW + timedelta(days=20)).timestamp()),
             'cancel_at_period_end': False,
+            'plan': 'unlimited',
+            'status': 'active',
         },
         **changes,
     }
@@ -66,6 +68,7 @@ def _projection(**changes):
         'latest_invoice': 'fixture-invoice',
         'metadata': {'uid': 'fixture-user'},
         'items': {
+            'has_more': False,
             'data': [
                 {
                     'id': 'fixture-subscription-item',
@@ -74,7 +77,7 @@ def _projection(**changes):
                         'recurring': {'interval': 'month', 'interval_count': 1},
                     },
                 },
-            ]
+            ],
         },
     }
     return {
@@ -92,7 +95,10 @@ def _projection(**changes):
             'billing_reason': 'subscription_create',
             'status': 'paid',
             'amount_paid': 3000,
+            'total': 3000,
+            'paid_out_of_band': False,
             'lines': {
+                'has_more': False,
                 'data': [
                     {
                         'type': 'subscription',
@@ -101,7 +107,7 @@ def _projection(**changes):
                         'price': {'id': 'fixture-monthly-price'},
                         'amount': 3000,
                     }
-                ]
+                ],
             },
             'status_transitions': {'paid_at': paid_at},
         },
@@ -237,7 +243,11 @@ def test_trial_conversion_reactivation_replacement_and_creator_app_never_admit(m
 async def test_off_billing_projection_has_zero_stripe_or_background_first_value_io(monkeypatch):
     monkeypatch.setattr(billing_webhook, 'recovery_enabled', lambda: False)
     retrieve = Mock(side_effect=AssertionError('Stripe is forbidden while off'))
-    monkeypatch.setattr(billing_webhook.stripe.Invoice, 'retrieve', retrieve)
+    http = Mock()
+    factory = Mock(return_value=Mock(invoices=Mock(retrieve=retrieve)))
+    monkeypatch.setattr(billing_webhook.stripe, 'api_key', 'synthetic-key')
+    monkeypatch.setattr(billing_webhook.stripe, 'RequestsClient', Mock(return_value=http))
+    monkeypatch.setattr(billing_webhook.stripe, 'StripeClient', factory)
     background = Mock()
     projection = _projection()
     projection.pop('paid_invoice')
@@ -255,7 +265,11 @@ async def test_candidate_ack_schedules_before_bounded_post_response_invoice_retr
     retrieved = Mock()
     retrieved.to_dict.return_value = _projection()['paid_invoice']
     retrieve = Mock(return_value=retrieved)
-    monkeypatch.setattr(billing_webhook.stripe.Invoice, 'retrieve', retrieve)
+    http = Mock()
+    factory = Mock(return_value=Mock(invoices=Mock(retrieve=retrieve)))
+    monkeypatch.setattr(billing_webhook.stripe, 'api_key', 'synthetic-key')
+    monkeypatch.setattr(billing_webhook.stripe, 'RequestsClient', Mock(return_value=http))
+    monkeypatch.setattr(billing_webhook.stripe, 'StripeClient', factory)
     monkeypatch.setattr(billing_webhook.lifecycle, 'emit_billing_product_event', Mock())
     monkeypatch.setattr(billing_webhook.lifecycle, 'emit_billing_plan_changed', Mock())
     enrolled = Mock()
@@ -272,11 +286,10 @@ async def test_candidate_ack_schedules_before_bounded_post_response_invoice_retr
     task = background.add_task.call_args.args[0]
     assert task is billing_webhook.emit_billing_webhook_events
     task(*background.add_task.call_args.args[1:], **background.add_task.call_args.kwargs)
-    retrieve.assert_called_once_with(
-        'fixture-invoice',
-        timeout=billing_webhook.STRIPE_INVOICE_TIMEOUT_SECONDS,
-        max_retries=billing_webhook.STRIPE_INVOICE_MAX_RETRIES,
-    )
+    retrieve.assert_called_once_with('fixture-invoice')
+    billing_webhook.stripe.RequestsClient.assert_called_once_with(timeout=5)
+    assert factory.call_args.kwargs['http_client'] is http
+    assert factory.call_args.kwargs['max_network_retries'] == 0
     assert enrolled.call_args.kwargs['paid_invoice']['amount_paid'] == 3000
 
 
@@ -589,13 +602,16 @@ def test_failed_hidden_or_locked_conversation_is_never_saved_value(monkeypatch, 
     assert recovery.record_result_open('fixture-user', 'result-1', now=NOW, firestore_client=client) == 0
 
 
-def test_control_result_open_still_records_value_and_stops_worker_after_rollback(monkeypatch):
-    monkeypatch.setattr(recovery, 'recovery_enabled', lambda: False)
-    ready_at = START_AT + timedelta(hours=2)
+@pytest.mark.parametrize('ready_offset', [timedelta(hours=2), -timedelta(days=1)])
+def test_control_result_open_records_any_owned_ready_result(monkeypatch, ready_offset):
+    monkeypatch.setattr(recovery, 'recovery_enabled', lambda: True)
+    ready_at = START_AT + ready_offset
     client = FakeFirestore(
         {
             'users/fixture-user/conversations/result-1': {'status': 'completed', 'summary_completed_at': ready_at},
-            f'users/fixture-user/first_value_starts/{START_ID}': _start(variant='control'),
+            f'users/fixture-user/first_value_starts/{START_ID}': _start(
+                variant='control', ready_result_conversation_id='result-2'
+            ),
             'users/fixture-user/conversations/result-2': {'status': 'processing'},
         }
     )
@@ -621,3 +637,68 @@ def test_ready_push_contains_no_object_identifier(monkeypatch):
     assert 'target_id' not in intent.data
     assert 'user_id' not in intent.data
     assert dispatcher.RESULT_BODY == 'Open Omi to read your result.'
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'paid_out_of_band': True},
+        {'paid_out_of_band': None},
+        {'total': 0},
+        {'lines': {'has_more': True, 'data': []}},
+    ],
+)
+def test_ambiguous_invoice_funding_or_pagination_never_admits(monkeypatch, change):
+    monkeypatch.setattr(recovery, 'resolve_stripe_price_plan', lambda _: PlanType.unlimited)
+    projection = _projection()
+    projection['paid_invoice'].update(change)
+    assert recovery.verified_direct_monthly_start(projection) is None
+
+
+@pytest.mark.parametrize('credit_field', ['discount_amounts', 'pretax_credit_amounts'])
+def test_fully_credited_monthly_line_cannot_be_funded_by_fees(monkeypatch, credit_field):
+    monkeypatch.setattr(recovery, 'resolve_stripe_price_plan', lambda _: PlanType.unlimited)
+    projection = _projection()
+    projection['paid_invoice']['lines']['data'][0][credit_field] = [{'amount': 3000}]
+    assert recovery.verified_direct_monthly_start(projection) is None
+
+
+def test_kill_stops_result_outcome_io(monkeypatch):
+    monkeypatch.setattr(recovery, 'recovery_enabled', lambda: False)
+    monkeypatch.setattr(recovery, '_client', Mock(side_effect=AssertionError('off outcome IO')))
+    assert recovery.record_result_open('fixture-user', 'result-1', now=NOW) == 0
+
+
+@pytest.mark.parametrize(
+    'status,plan', [('canceled', 'unlimited'), ('past_due', 'unlimited'), ('active', 'basic'), ('active', None)]
+)
+def test_current_access_uncertainty_or_cancellation_suppresses(status, plan):
+    user = _user()
+    user['subscription'].update(status=status, plan=plan)
+    assert recovery._current_suppression(user, _start(), now=NOW) is not None
+
+
+@pytest.mark.parametrize(
+    'row',
+    [
+        {'dream_duplicate_of': 'synthetic-parent'},
+        {'sync_bridge_pending': {'expires_at': 9999999999}},
+        {'relevance_decision': {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'filler_only'}},
+    ],
+)
+def test_canonical_hidden_metadata_is_not_saved(row):
+    assert not recovery._visible_saved_conversation({'status': 'completed', **row})
+
+
+def test_invalid_current_capability_revokes_previous_permission():
+    client = FakeFirestore()
+    updated = recovery.record_client_capability(
+        'fixture-user',
+        START_ID,
+        _start(),
+        notifications_authorized=False,
+        time_zone='not/a/zone',
+        now=NOW,
+        firestore_client=client,
+    )
+    assert not recovery._client_capability_current(updated, NOW)

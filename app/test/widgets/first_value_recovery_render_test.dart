@@ -61,86 +61,106 @@ void main() {
     await _loadFonts();
   });
 
-  testWidgets('paid start capture recovery dialog uses the real prompt path', (
-    tester,
-  ) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    tester.view.physicalSize = const Size(393, 852);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    addTearDown(PromptQueue.instance.reset);
-    addTearDown(AnalyticsManager.resetForTesting);
-    OmiColors.active = OmiColors.forBrightness(Brightness.dark);
-    AnalyticsManager.resetForTesting();
-    AnalyticsManager().bindIdentity('synthetic-owner');
-    final identityEpoch = AnalyticsManager.identityEpoch;
-    FirstValueRecoveryService.instance.debugApi = FirstValueApi(
-      baseUrl: 'https://fixture.invalid/',
-      send: (request) async {
-        expect(request.headers[FirstValueApi.protocolHeader], '1');
-        expect(request.headers[FirstValueApi.permissionHeader], 'granted');
-        expect(request.headers[FirstValueApi.timeZoneHeader], 'UTC');
-        return http.Response(
-          '{"prompt":{"kind":"capture","channel":"in_app","route":"/settings/device"}}',
-          200,
-        );
-      },
-    );
-    FirstValueRecoveryService.instance.debugNotificationPermission = () async => true;
-    FirstValueRecoveryService.instance.debugTimeZone = () async => 'UTC';
-    addTearDown(() {
-      FirstValueRecoveryService.instance.debugNotificationPermission = null;
-      FirstValueRecoveryService.instance.debugTimeZone = null;
-    });
-
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: _boundary,
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          navigatorKey: globalNavigatorKey,
-          theme: buildOmiTheme(brightness: Brightness.dark),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: SizedBox.expand()),
-        ),
-      ),
-    );
-    await tester.runAsync(FirstValueRecoveryService.instance.checkOnAppOpen);
-    await tester.pump();
-    await tester.pumpAndSettle();
-
-    expect(find.text('Device Not Connected'), findsOneWidget);
-    expect(find.text('Connect Device'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    if (output.isNotEmpty) {
-      await tester.runAsync(() async {
-        final render = _boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-        final image = await render.toImage(pixelRatio: 3);
-        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-        await Directory(output).create(recursive: true);
-        await File(
-          '$output/001-mobile-ios-first-value-recovery.png',
-        ).writeAsBytes(bytes!.buffer.asUint8List());
+  for (final kind in ['capture', 'result']) {
+    testWidgets('paid start $kind recovery dialog uses the real prompt path', (
+      tester,
+    ) async {
+      final capture = kind == 'capture';
+      final route = capture ? '/settings/device' : '/conversation/result-1';
+      var requests = 0;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      tester.view.physicalSize = const Size(393, 852);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      addTearDown(PromptQueue.instance.reset);
+      addTearDown(AnalyticsManager.resetForTesting);
+      OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+      AnalyticsManager.resetForTesting();
+      AnalyticsManager().bindIdentity('synthetic-owner');
+      final identityEpoch = AnalyticsManager.identityEpoch;
+      FirstValueRecoveryService.instance.debugApi = FirstValueApi(
+        baseUrl: 'https://fixture.invalid/',
+        send: (request) async {
+          requests++;
+          expect(request.headers[FirstValueApi.protocolHeader], '1');
+          expect(request.headers[FirstValueApi.permissionHeader], 'granted');
+          expect(request.headers[FirstValueApi.timeZoneHeader], 'UTC');
+          return http.Response(
+            jsonEncode({
+              'prompt': {'kind': kind, 'channel': 'in_app', 'route': route}
+            }),
+            200,
+          );
+        },
+      );
+      FirstValueRecoveryService.instance.debugNotificationPermission = () async => true;
+      FirstValueRecoveryService.instance.debugTimeZone = () async => 'UTC';
+      addTearDown(() {
+        FirstValueRecoveryService.instance.debugNotificationPermission = null;
+        FirstValueRecoveryService.instance.debugTimeZone = null;
       });
-    }
 
-    final opened = <String>[];
-    Future<bool> opener(String route, {bool Function()? canOpen}) async {
-      opened.add(route);
-      return true;
-    }
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: _boundary,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            navigatorKey: globalNavigatorKey,
+            theme: buildOmiTheme(brightness: Brightness.dark),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: SizedBox.expand()),
+          ),
+        ),
+      );
+      PromptQueue.instance.blocked = () => true;
+      await tester.runAsync(FirstValueRecoveryService.instance.checkOnAppOpen);
+      await tester.pump();
+      expect(requests, 0, reason: 'A blocked prompt must not consume a server claim');
+      PromptQueue.instance.blocked = () => false;
+      await tester.runAsync(() async {
+        PromptQueue.instance.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump();
+      await tester.pumpAndSettle();
 
-    HomeNavigation.register(opener);
-    addTearDown(() => HomeNavigation.unregister(opener));
-    await tester.tap(find.text('Connect Device'));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-    await tester.pumpAndSettle();
-    expect(find.text('Device Not Connected'), findsNothing);
-    expect(PromptQueue.instance.showingId, isNull);
-    expect(tester.takeException(), isNull);
-    expect(AnalyticsManager.identityEpoch, identityEpoch);
-    expect(opened, ['/settings/device']);
-    debugDefaultTargetPlatformOverride = null;
-  });
+      final title = capture ? 'Device Not Connected' : 'Summary generated';
+      final button = capture ? 'Connect Device' : 'Open';
+      expect(find.text(title), findsOneWidget);
+      expect(requests, 1);
+      expect(find.text(button), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      if (output.isNotEmpty) {
+        await tester.runAsync(() async {
+          final render = _boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+          final image = await render.toImage(pixelRatio: 3);
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          await Directory(output).create(recursive: true);
+          await File(
+            '$output/${capture ? '001-mobile-ios-first-value-recovery' : '002-mobile-ios-first-value-ready'}.png',
+          ).writeAsBytes(bytes!.buffer.asUint8List());
+        });
+      }
+
+      final opened = <String>[];
+      Future<bool> opener(String route, {bool Function()? canOpen}) async {
+        opened.add(route);
+        return true;
+      }
+
+      HomeNavigation.register(opener);
+      addTearDown(() => HomeNavigation.unregister(opener));
+      await tester.tap(find.text(button));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(find.text(title), findsNothing);
+      expect(PromptQueue.instance.showingId, isNull);
+      expect(tester.takeException(), isNull);
+      expect(AnalyticsManager.identityEpoch, identityEpoch);
+      expect(opened, [route]);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
 }

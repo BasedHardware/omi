@@ -30,15 +30,26 @@ def _with_paid_invoice_proof(projection: Mapping[str, Any]) -> dict[str, Any]:
     if invoice_id is None:
         return result
     try:
-        invoice = (
-            dict(latest_invoice)
-            if isinstance(latest_invoice, dict)
-            else stripe.Invoice.retrieve(
-                invoice_id,
-                timeout=STRIPE_INVOICE_TIMEOUT_SECONDS,
-                max_retries=STRIPE_INVOICE_MAX_RETRIES,
-            ).to_dict()
-        )
+        if isinstance(latest_invoice, Mapping):
+            invoice = dict(latest_invoice)
+        else:
+            api_key = stripe.api_key
+            if not isinstance(api_key, str) or not api_key:
+                return result
+            http = stripe.RequestsClient(timeout=STRIPE_INVOICE_TIMEOUT_SECONDS)
+            try:
+                invoice = (
+                    stripe.StripeClient(
+                        api_key,
+                        stripe_version=stripe.api_version,
+                        http_client=http,
+                        max_network_retries=STRIPE_INVOICE_MAX_RETRIES,
+                    )
+                    .invoices.retrieve(invoice_id)
+                    .to_dict()
+                )
+            finally:
+                http.close()
         result['paid_invoice'] = invoice
     except Exception as error:
         # Missing proof excludes this start; ordinary billing telemetry and the
