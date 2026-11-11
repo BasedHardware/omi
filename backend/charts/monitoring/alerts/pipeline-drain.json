@@ -272,7 +272,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_projection_drain_oldest_age_seconds and (time() - omi_batch_timeliness_observed_at_seconds < 900)) or vector(0)",
+          "expr": "max(omi_batch_projection_drain_oldest_age_seconds and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) or vector(0)",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
@@ -325,7 +325,7 @@
       "summary": "Owner drain claim_busy share exceeds 50% or advanced rows fall below 10/s for 15 minutes while pending projection debt exists.",
       "user_impact": "Batch audio may wait longer for admission or publication.",
       "scope": "Completed owner_drain turns, fleet-weighted over 5m; only fresh all-epoch projection debt enables the alert. No turn samples while debt exists count as zero progress. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
-      "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 900 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
+      "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 1200 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
       "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "($A > 0.5 || $B < 10) && $C > 0 for 15m",
@@ -379,7 +379,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900))",
+          "expr": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,

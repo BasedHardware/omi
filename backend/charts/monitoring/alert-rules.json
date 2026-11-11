@@ -24906,7 +24906,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) or vector(0)",
+          "expr": "max((omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -24926,7 +24926,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+          "expr": "(time() - max((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))))) or vector(1e9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -24986,7 +24986,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)",
+          "expression": "($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120)",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "D",
@@ -25098,7 +25098,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+          "expr": "(time() - max((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))))) or vector(1e9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -25118,7 +25118,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 900",
+          "expression": "$A >= 1200",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "D",
@@ -25175,9 +25175,9 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "The batch timeliness sample has not refreshed in 15 minutes, so the 2h alarm is blind.",
+      "summary": "The batch timeliness sample has not refreshed in 20 minutes, so the 2h alarm is blind.",
       "user_impact": "Late batch transcripts could go unnoticed while the sample is stale.",
-      "scope": "omi_batch_timeliness_observed_at_seconds; refreshed at most every 5 minutes per batch worker. A never-taken sample reads as stale.",
+      "scope": "Newest numeric timeliness observation across GKE and Cloud Run, retained over 20m; leader cadence defaults to 300s and clamps to 60-600s. Stale at 1200s, including delivery delay; never-taken samples read as stale.",
       "verification": "Check omi_batch_timeliness_samples_total by outcome: error means Firestore reads failed, disabled means the kill switch is off.",
       "safe_next_action": "If disabled, confirm that was intended. If error, read the batch_timeliness_sample warning log on the worker.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
@@ -25231,7 +25231,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_scan_truncated)",
+          "expr": "max(omi_batch_timeliness_scan_truncated and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -28604,7 +28604,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_projection_drain_oldest_age_seconds and (time() - omi_batch_timeliness_observed_at_seconds < 900)) or vector(0)",
+          "expr": "max(omi_batch_projection_drain_oldest_age_seconds and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) or vector(0)",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
@@ -28657,7 +28657,7 @@
       "summary": "Owner drain claim_busy share exceeds 50% or advanced rows fall below 10/s for 15 minutes while pending projection debt exists.",
       "user_impact": "Batch audio may wait longer for admission or publication.",
       "scope": "Completed owner_drain turns, fleet-weighted over 5m; only fresh all-epoch projection debt enables the alert. No turn samples while debt exists count as zero progress. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
-      "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 900 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
+      "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 1200 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
       "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "($A > 0.5 || $B < 10) && $C > 0 for 15m",
@@ -28711,7 +28711,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900))",
+          "expr": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
@@ -29390,7 +29390,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) >= 10000) or on() vector(0))",
+          "expr": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) >= 10000) or on() vector(0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -29474,7 +29474,7 @@
       "scope": "Fleet-max pre-epoch assignment_held stock: growth below the 10000 count cap, or stock at/above it; fresh samples only.",
       "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
       "safe_next_action": "Inspect assignment/projection recovery and the aggregate batch custody census. At 10000 the bounded count means at least 10000, not measured growth; repair the held leg and drain below the cap without deleting audio.",
-      "threshold": "(Stock >1000 AND 1h growth >50) OR stock >=10000, with sample age <900s for 15m. Saturation is actionable stock, not proof of growth; a capped flat series must keep paging. Lever 0 reports exact stock and keeps the same >=10000 condition. Normal control is synthetic, not a claimed healthy day.",
+      "threshold": "(Stock >1000 AND 1h growth >50) OR stock >=10000, with sample age <1200s for 15m. Saturation is actionable stock, not proof of growth; a capped flat series must keep paging. Lever 0 reports exact stock and keeps the same >=10000 condition. Normal control is synthetic, not a claimed healthy day.",
       "runbook": "backend/charts/monitoring/critical-failures.md"
     },
     "labels": {
@@ -32598,7 +32598,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_held_oldest_age_seconds{leg=\"staged_input\"} and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900))",
+          "expr": "max(omi_batch_held_oldest_age_seconds{leg=\"staged_input\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,

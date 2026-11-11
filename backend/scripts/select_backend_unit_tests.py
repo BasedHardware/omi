@@ -110,6 +110,7 @@ MEMORY_POLICY_CORE_TESTS = (
 # intentional-exception check below — single source so the two lists cannot
 # drift apart and silently stop selecting the monitoring unit contracts.
 MONITORING_CONTRACT_SOURCES = (
+    'backend/charts/monitoring/core-features/recording-rules.yaml',
     'backend/charts/backend-secrets/',
     'backend/charts/monitoring/prometheus-adapter/',
     'backend/scripts/diff_prod_adapter.py',
@@ -259,6 +260,11 @@ LIFECYCLE_SOURCE_REGRESSION_TESTS = {
 }
 
 AREA_TESTS = (
+    (
+        ('backend/utils/batch_pipeline/', 'backend/database/batch_pipeline_', 'backend/deploy/cloud_run_gmp_sync.yaml'),
+        (),
+        ('tests/unit/test_timeliness_metrics_are_scraped.py',),
+    ),
     (
         (
             'backend/utils/conversations/',
@@ -414,6 +420,7 @@ AREA_TESTS = (
         (),
         (
             'tests/unit/test_monitoring_*.py',
+            'tests/unit/test_timeliness_metrics_are_scraped.py',
             'tests/unit/test_serving_podmonitoring_chart.py',
             'tests/unit/test_firestore_attribution_charts.py',
             'tests/unit/test_backend_secrets_chart.py',
