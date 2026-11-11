@@ -27,14 +27,19 @@ from config import refactor_modes
 from config import record_seal_repair as config
 from config import record_partial as partial_config
 from config.record_audio import record_identity
+from config import record_seal_rules as lease
+from database import record_custody_receipts
+from database.batch_pipeline_store import promote_record_recoveries
+from utils.batch_pipeline.record_producer_proof import leases_would_release
 from database.firestore_read_origin import read_origin
 from database.record_partial import finish_partial
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
-from utils.observability.firestore_probe_export import collect_child_probe, launch_with_probe
+from utils.observability.firestore_probe_export import collect_child_probe, launch_with_probe, REPAIR_OLDEST
 from utils.observability.fallback import record_fallback
 
 MAX_ROWS = 1024
 MAX_SCAN = 10000
+CUSTODY_MAINTENANCE_SECONDS = 30  # Per phase, independent of the audio-repair budget.
 # Final day of the stored 14-day barrier deadline gets priority over recency.
 NEAR_DEAD_LETTER_SECONDS = 86400
 _age_order_index_warned = False
@@ -116,6 +121,13 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     budget.check()
     row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
     budget.check()
+    if row.get('record_audio_partial') and not job.get('partial_coordinator'):
+        from database.batch_pipeline_record_lease_recovery import recovery_segment
+
+        continuation_id = recovery_segment(uid, cid)
+        continuation = store.run(lambda tx: tx.get('jobs', continuation_id))
+        if continuation.get('partial_coordinator'):
+            job_id, job = continuation_id, continuation
     blocker = pending_blocker(row)
     if reason_out is not None:
         reason_out['blocker'] = blocker
@@ -137,6 +149,18 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     proof = inventory()
     require_fresh_proof(proof)  # Required for every attempted seal or rearm.
     if partial:
+        if (
+            reason_out is not None
+            and lease.token_lease_mode() == 'shadow'
+            and leases_would_release(
+                row.get('record_upload_sessions'),
+                proof,
+                uid=uid,
+                row=row,
+                job=job,
+            )
+        ):
+            reason_out['lease_reason'] = 'lease_would_expire'
         if reason_out is not None:
             reason = job.get('partial_reason')
             reason_out['partial_reason'] = reason if reason in partial_config.REASONS else 'tail_lost_or_unproven'
@@ -173,6 +197,8 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     if len(entries) != 1:
         return 'unknown'
     disposition = entries[0].get('disposition')
+    if reason_out is not None and entries[0].get('lease_reason') == 'lease_would_expire':
+        reason_out['lease_reason'] = 'lease_would_expire'
     if (
         not row.get('record_audio_closed')
         and partial_config.enabled()
@@ -348,6 +374,7 @@ def discover_jobs(
     max_scan=128,
     selected_cursors=None,
     progress=lambda _: None,
+    metric_ages=None,
     urgent=False,
     invalid_clock_counts=None,
 ):
@@ -470,6 +497,11 @@ def discover_jobs(
         path = f'users/{uid}/conversations/{cid}'
         # Preserve selection/cursors even for zero or negative clocks. Only the metric is absent.
         rows.append((path, max(0, int(age)) if valid_metric_clock(enqueued) else None))
+        # Keep invalid-clock jobs eligible and preserve their exact cursor.
+        # Only the exported gauge excludes them; future clocks already fail
+        # the unchanged minimum-age check above.
+        if metric_ages is not None and valid_metric_clock(enqueued):
+            metric_ages.append(max(0, int(age)))
         if selected_cursors is not None:
             selected_cursors[path] = cursor
         if len(rows) >= max_rows:
@@ -639,6 +671,7 @@ def coordinate(
                 gap = 'negative_or_unknown'
                 blocker = None
                 trimmed = 0
+                lease_reason = None
                 partial_reason = 'tail_lost_or_unproven'
                 if finished:
                     try:
@@ -646,6 +679,8 @@ def coordinate(
                         candidate = result.get('trimmed_divergent_overlaps', 0)
                         trimmed = candidate if type(candidate) is int and 0 <= candidate <= 4096 else 0
                         disposition = result.get('disposition')
+                        if result.get('lease_reason') == 'lease_would_expire':
+                            lease_reason = 'lease_would_expire'
                         candidate = result.get('blocker')
                         blocker = candidate if candidate in BLOCKERS else None
                         candidate = result.get('proof_reason')
@@ -688,6 +723,7 @@ def coordinate(
                             **({'blocker': blocker} if blocker else {}),
                             'trimmed_divergent_overlaps': trimmed,
                             'disposition': disposition,
+                            **({'lease_reason': lease_reason} if lease_reason else {}),
                             **({'partial_reason': partial_reason} if disposition == 'partial_finished' else {}),
                             **({'seal_age_seconds': age if sealed else 0} if age is not None else {}),
                             **({'proof_reason': reason} if disposition == 'proof_refused' else {}),
@@ -766,7 +802,7 @@ def run(*, progress=lambda _: None):
     config.require_runtime()
     with silent_dependencies():
         from database._client import get_firestore_client
-        from utils.batch_pipeline.record_seal_budget import SweepBudget
+        from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
         from utils.batch_pipeline.record_seal_repair_cursor import RepairCursor
         from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof, require_fresh_proof
 
@@ -778,6 +814,7 @@ def run(*, progress=lambda _: None):
             frontier = RepairCursor(client, config.cursor_secret())
             selected_cursors, job_cursors = {}, {}
             job_rows, jobs_saturated, jobs_cursor = [], False, None
+            job_metric_ages = []
             jobs_frontier, urgent_frontier = None, None
             urgent_rows, urgent_cursors, urgent_cursor = [], {}, None
             invalid_clock_counts = Counter()
@@ -792,6 +829,7 @@ def run(*, progress=lambda _: None):
                     max_rows=allocation,
                     selected_cursors=job_cursors,
                     progress=progress,
+                    metric_ages=job_metric_ages,
                 )
                 ordinary_reserve = min(len(job_rows), max(1, allocation // 4))
                 if refactor_modes.record_seal_repair_age_order() and allocation > ordinary_reserve:
@@ -805,6 +843,7 @@ def run(*, progress=lambda _: None):
                             selected_cursors=urgent_cursors,
                             urgent=True,
                             invalid_clock_counts=invalid_clock_counts,
+                            metric_ages=job_metric_ages,
                         )
                         jobs_saturated = jobs_saturated or urgent_saturated
                     except FailedPrecondition:
@@ -846,10 +885,45 @@ def run(*, progress=lambda _: None):
                     jobs_frontier.write(jobs_cursor, budget)
                 if urgent_frontier:
                     urgent_frontier.write(urgent_cursor, budget)
+            metric_ages = job_metric_ages + [age for path, age in rows if age is not None and path not in job_cursors]
             rows = job_rows + [
                 (path, age) for path, age in rows if path not in job_cursors and path not in urgent_cursors
             ]
             saturated = saturated or jobs_saturated
+    # Reuse discovery's bounded, content-free age sample. No additional query
+    # and no activation of the idle seal worker's scanner are needed.
+    REPAIR_OLDEST.set(max(metric_ages, default=0))
+    if mode == 'apply':
+        # The checked-in production seal worker is idle. The active repair
+        # CronJob must resume parked accepted bytes in off/shadow/serve too.
+        try:
+            with silent_dependencies():
+                promotion_budget = SweepBudget(CUSTODY_MAINTENANCE_SECONDS)
+                with promotion_budget.interrupt_io():
+                    promoted = promote_record_recoveries(
+                        client, 'batch_pipeline_prod', time.time(), budget=promotion_budget
+                    )
+            progress({'event': 'record_token_recovery_promotion', 'outcome': 'completed', 'promoted': promoted})
+        except BudgetExhausted:
+            progress({'event': 'record_token_recovery_promotion', 'outcome': 'budget_exhausted'})
+        except Exception:
+            progress({'event': 'record_token_recovery_promotion', 'outcome': 'error'})
+        try:
+            with silent_dependencies():
+                expiry_budget = SweepBudget(CUSTODY_MAINTENANCE_SECONDS)
+                with expiry_budget.interrupt_io():
+                    expired = record_custody_receipts.prune(client, now=time.time(), budget=expiry_budget)
+            progress(
+                {
+                    'event': 'record_custody_receipts_expiry',
+                    'outcome': 'saturated' if expired >= record_custody_receipts.MAX_PER_RUN else 'completed',
+                    'deleted': expired,
+                }
+            )
+        except BudgetExhausted:
+            progress({'event': 'record_custody_receipts_expiry', 'outcome': 'budget_exhausted'})
+        except Exception:
+            progress({'event': 'record_custody_receipts_expiry', 'outcome': 'error'})
     last_attempted, last_job_attempted, last_urgent_attempted = None, None, None
 
     def attempted(path):

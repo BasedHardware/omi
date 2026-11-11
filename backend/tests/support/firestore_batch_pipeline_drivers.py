@@ -29,6 +29,23 @@ def _poll_skip_modes(client):
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        CoveredByEntry(
+            'database.record_custody_receipts.prune',
+            covered_by=('database.record_custody_receipts.expired_page',),
+            reason='bounded cleanup delegates its only query to expired_page; deletes use document batches',
+            expect_observed=False,
+            body_digest='a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
+        ),
+        DriverEntry(
+            'database.record_custody_receipts.expired_page',
+            neutrals={
+                'now': (2000000000.0, 'expiry cutoff only'),
+                'budget': (
+                    SimpleNamespace(check=lambda: None, timeout=lambda maximum=10: maximum),
+                    'RPC deadline only',
+                ),
+            },
+        ),
         DriverEntry(
             'database.batch_pipeline_record_dead_letter.record_dead_letter_stock',
             domains={'namespace': namespaces},
@@ -92,6 +109,7 @@ def entries():
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
                 'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
+                'metric_ages': (None, 'output-only validated gauge samples; no filter or ordering change'),
             },
         ),
         DriverEntry(
@@ -459,11 +477,18 @@ def entries():
             domains={'namespace': namespaces, 'after': [None, 'owner-hash']},
             neutrals={'limit': (50, 'bounded page size')},
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.promote_record_recoveries',
+            covered_by=('database.batch_pipeline_store.due',),
+            reason='bounded promotion delegates its waiting-state query to due; promotion uses document transactions',
+            expect_observed=False,
+            body_digest='ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
+        ),
         DriverEntry(
             'database.batch_pipeline_store.due',
             domains={
                 'namespace': namespaces,
-                'state': ['leased', 'retry', 'result_ready', 'record_pending'],
+                'state': ['leased', 'retry', 'result_ready', 'record_pending', 'record_recovery_waiting'],
                 'limit': [1, 100, 500, 999],
             },
             neutrals={'now': (1.0, 'timestamp operand only')},
