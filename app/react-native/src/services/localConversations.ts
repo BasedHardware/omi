@@ -223,7 +223,11 @@ export async function appendSegments(
     last.segments.push(...added);
     last.endedAt = startedAt;
     await persist(scope, gen, list);
-    return isStale(scope, gen) ? null : last;
+    if (isStale(scope, gen)) return null;
+    void import('./localBrain/pipeline')
+      .then((m) => m.processConversationObject(last))
+      .catch((e) => console.warn('[localConversations] brain processing failed:', e));
+    return last;
   }
 
   const convo: StoredConversation = {
@@ -245,7 +249,13 @@ export async function appendSegments(
 
   const next = [...list, convo].slice(-MAX_CONVERSATIONS);
   await persist(scope, gen, next);
-  return isStale(scope, gen) ? null : convo;
+  if (isStale(scope, gen)) return null;
+  // Best-effort local brain processing (summary/memory/task/graph). Fire-and-forget
+  // so capture/save latency is not coupled to extraction work.
+  void import('./localBrain/pipeline')
+    .then((m) => m.processConversationObject(convo))
+    .catch((e) => console.warn('[localConversations] brain processing failed:', e));
+  return convo;
 }
 
 /** First meaningful words, so a list is scannable before anything is read. */

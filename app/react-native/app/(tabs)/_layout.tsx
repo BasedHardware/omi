@@ -1,11 +1,6 @@
 import React from 'react';
 import { Tabs, Redirect } from 'expo-router';
 import { useAuthStore } from '@/state/authStore';
-import HomeScreen from '@/screens/HomeScreen';
-import ConversationsScreen from '@/screens/ConversationsScreen';
-import GoalsScreen from '@/screens/GoalsScreen';
-import AppsScreen from '@/screens/AppsScreen';
-import SettingsScreen from '@/screens/SettingsScreen';
 
 export default function TabsLayout() {
   const uid = useAuthStore((s) => s.uid);
@@ -20,7 +15,21 @@ export default function TabsLayout() {
   }
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: '#000000',
+          borderTopColor: '#2C2C2E',
+          borderTopWidth: 0.5,
+          height: 60,
+          paddingTop: 6,
+        },
+        tabBarActiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: '#8E8E93',
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+      }}
+    >
       <Tabs.Screen name="home" options={{ title: 'Home' }} />
       <Tabs.Screen name="conversations" options={{ title: 'Conversations' }} />
       <Tabs.Screen name="goals" options={{ title: 'Goals' }} />

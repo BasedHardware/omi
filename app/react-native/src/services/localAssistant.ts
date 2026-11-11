@@ -1,4 +1,5 @@
 import { searchLocal, knownSpeakers, type SearchHit } from './localConversations';
+import { retrieveContext, type RetrievedContext } from './localBrain/retriever';
 
 /**
  * The local assistant: answers from what is on the device.
@@ -27,6 +28,8 @@ export interface AssistantAnswer {
   hits: SearchHit[];
   /** Speakers the user could filter by, when the question implied one. */
   speakerHint?: string;
+  /** Richer local brain context (summaries/memories/tasks/graph-derived evidence). */
+  context?: RetrievedContext;
 }
 
 const NO_CONTEXT =
@@ -74,9 +77,42 @@ export async function answerLocally(text: string): Promise<AssistantAnswer> {
     };
   }
 
-  const hits = await searchLocal(topic, { speaker, limit: 6 });
+  const context = await retrieveContext(topic, { speaker, limit: 6 }).catch(() => null);
+  const hits = context?.hits ?? (await searchLocal(topic, { speaker, limit: 6 }));
 
   if (hits.length === 0) {
+    // If no direct segment hits, we can still answer from derived local memories/tasks
+    // when evidence exists, but we must stay grounded and explicit.
+    const mem = context?.memories?.[0];
+    const task = context?.tasks?.[0];
+    const sum = context?.summaries?.[0]?.highlights?.[0];
+    if (mem && wantsRecall) {
+      return {
+        text: `From what I’ve remembered locally: ${mem.text}`,
+        kind: 'summary',
+        hits: [],
+        speakerHint: speaker,
+        context: context ?? undefined,
+      };
+    }
+    if (sum && wantsRecall) {
+      return {
+        text: `From a local summary: ${sum}`,
+        kind: 'summary',
+        hits: [],
+        speakerHint: speaker,
+        context: context ?? undefined,
+      };
+    }
+    if (task && /\b(task|todo|remind|reminder|follow up)\b/i.test(q)) {
+      return {
+        text: `Related open ${task.kind}: ${task.title}`,
+        kind: 'summary',
+        hits: [],
+        speakerHint: speaker,
+        context: context ?? undefined,
+      };
+    }
     if (wantsRecall) {
       return {
         text: speaker
@@ -85,47 +121,49 @@ export async function answerLocally(text: string): Promise<AssistantAnswer> {
         kind: 'empty',
         hits: [],
         speakerHint: speaker,
+        context: context ?? undefined,
       };
     }
-    return { text: CANNOT_GENERATE, kind: 'unsupported', hits: [], speakerHint: speaker };
+    return { text: CANNOT_GENERATE, kind: 'unsupported', hits: [], speakerHint: speaker, context: context ?? undefined };
   }
 
-  // hits.length was just checked, but noUncheckedIndexedAccess still cannot see
-  // that, and the alternative is a non-null assertion on something a refactor
-  // could break silently.
   const best = hits[0];
-  if (!best) return { text: NO_CONTEXT, kind: 'empty', hits: [] };
+  if (!best) return { text: NO_CONTEXT, kind: 'empty', hits: [], speakerHint: speaker, context: context ?? undefined };
   const strongEnough = best.score >= 0.5;
 
   if (!strongEnough) {
-    // Weak matches are worse than none: a wrong quote about what someone said is
-    // the worst failure mode this assistant has.
     return {
       text: `Nothing here clearly matches "${topic}". Closest was: "${best.text}" — was that what you meant?`,
       kind: 'empty',
       hits,
       speakerHint: speaker,
+      context: context ?? undefined,
     };
   }
 
   if (wantsRecall) {
+    const quotes = hits.slice(0, 3).map((h) => `${h.speaker}: "${h.text}"`).join('\n');
+    const evidenceNote = context?.summaries?.[0]?.highlights?.[0]
+      ? `\n\nSummary context: ${context.summaries[0].highlights[0]}`
+      : '';
     return {
-      text: hits
-        .slice(0, 3)
-        .map((h) => `${h.speaker}: "${h.text}"`)
-        .join('\n'),
+      text: `${quotes}${evidenceNote}`,
       kind: 'quote',
       hits,
       speakerHint: speaker,
+      context: context ?? undefined,
     };
   }
 
-  // Non-recall informational query with strong local evidence: summarize closest match.
+  const summaryHint = context?.summaries?.[0]?.highlights?.[0];
+  const memoryHint = context?.memories?.[0]?.text;
+  const extra = memoryHint ? `\nRelated memory: ${memoryHint}` : summaryHint ? `\nSummary: ${summaryHint}` : '';
   return {
-    text: `Closest thing on this device: ${best.speaker}: "${best.text}"`,
+    text: `Closest thing on this device: ${best.speaker}: "${best.text}"${extra}`,
     kind: 'summary',
     hits,
     speakerHint: speaker,
+    context: context ?? undefined,
   };
 }
 
