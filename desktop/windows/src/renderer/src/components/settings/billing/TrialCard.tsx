@@ -58,7 +58,6 @@ export function TrialCard(props: {
   useEffect(() => {
     const raw = { allowance_kind: 'trial', surface: 'settings', reason: 'trial_expired' }
     observation.current.allowance(trial.trial_expired === true, raw)
-    observation.current.allowance(trial.trial_expired === true, raw, true)
   }, [trial.trial_expired])
 
   if (trial.trial_expired) {
@@ -69,7 +68,17 @@ export function TrialCard(props: {
         title="Trial Ended"
         subtitle="Upgrade to keep unlimited access"
         trailing={
-          <button onClick={onViewPlans} className="btn-primary">
+          <button
+            onClick={() => {
+              trackPurchaseEvent('upgradeTapped', {
+                plan: 'unknown',
+                billing_interval: 'unknown',
+                source: 'windows_billing'
+              })
+              onViewPlans()
+            }}
+            className="btn-primary"
+          >
             View Plans
           </button>
         }

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, cleanup, waitFor, fireEvent, screen } from '@testing-library/react'
 import { SettingsSearchProvider } from '../SettingsSearchProvider'
 import { toast } from '../../../lib/toast'
+import { trackPurchaseEvent } from '../../../lib/analytics'
 
 const fetchSubscription = vi.fn()
 const startCheckout = vi.fn()
@@ -100,5 +101,49 @@ describe('PlanUsageTab checkout errors', () => {
         body: 'stripe down'
       })
     )
+  })
+})
+
+describe('actual plan-grid purchase exposure', () => {
+  it.each([
+    ['server-hidden', { show_subscription_ui: false }],
+    ['empty catalog', { available_plans: [] }]
+  ])('does not count a %s catalog as a rendered paywall', async (_, override) => {
+    fetchSubscription.mockResolvedValue({ ...freeSubscription(), ...override })
+    vi.mocked(trackPurchaseEvent).mockClear()
+    const { PlanUsageTab } = await import('./PlanUsageTab')
+    render(
+      <SettingsSearchProvider>
+        <PlanUsageTab />
+      </SettingsSearchProvider>
+    )
+    await screen.findByRole('button', { name: 'Refresh' })
+    expect(screen.queryByRole('button', { name: 'Select Omi Pro' })).toBeNull()
+    expect(
+      vi.mocked(trackPurchaseEvent).mock.calls.filter(([id]) => id === 'paywallViewed')
+    ).toHaveLength(0)
+  })
+
+  it('counts the rendered catalog once across subscription refresh', async () => {
+    vi.mocked(trackPurchaseEvent).mockClear()
+    const { PlanUsageTab } = await import('./PlanUsageTab')
+    render(
+      <SettingsSearchProvider>
+        <PlanUsageTab />
+      </SettingsSearchProvider>
+    )
+    await screen.findByRole('button', { name: 'Select Omi Pro' })
+    expect(
+      vi.mocked(trackPurchaseEvent).mock.calls.filter(([id]) => id === 'paywallViewed')
+    ).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement).disabled).toBe(
+        false
+      )
+    )
+    expect(
+      vi.mocked(trackPurchaseEvent).mock.calls.filter(([id]) => id === 'paywallViewed')
+    ).toHaveLength(1)
   })
 })

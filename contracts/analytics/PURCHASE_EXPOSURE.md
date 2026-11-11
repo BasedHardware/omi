@@ -68,3 +68,5 @@ Legacy Paywall Opened, Upgrade Succeeded/Attributed and Upgrade Cancelled behavi
 Upgrade Modal Clicked/Dismissed remain legacy app-update signals and must not be used as purchase views.
 The checked-in consumer is an offline presence query, not a deployed dashboard, session funnel, revenue
 measurement or causal conversion estimate. Missing client events mean unobserved, not failure.
+
+The Electron trial-expiry card is a reminder, not an allowance block: it reports server trial expiry under the distinct trial dimension and a bounded View Plans intent, but never Allowance Block Shown. The new settings plan view requires the actual nonempty, server-visible catalog render branch; the legacy settings impression remains unchanged. A committed render is not proof of eye attention or viewport dwell.

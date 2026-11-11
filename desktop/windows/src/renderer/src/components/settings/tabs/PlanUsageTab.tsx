@@ -76,12 +76,6 @@ export function PlanUsageTab(): React.JSX.Element {
     paywallTracked.current = true
     // The plan grid lives on this settings tab. This is a settings impression,
     // not a blocked purchase gate. The usage-limit popup keeps its own source.
-    exposure.current.view({
-      source: 'windows_settings_view',
-      current_plan: canonicalPlanId(sub.subscription.plan) ?? 'unknown',
-      surface: 'settings_plans',
-      catalog_tier: 'not_applicable'
-    })
     trackPaywallOpened('windows_settings_view', canonicalPlanId(sub.subscription.plan) ?? 'unknown')
   }, [sub])
 
@@ -126,6 +120,19 @@ export function PlanUsageTab(): React.JSX.Element {
     () => (subscription ? orderedCatalog(subscription, sub?.available_plans) : []),
     [subscription, sub?.available_plans]
   )
+
+  useEffect(() => {
+    // Preserve the legacy settings impression separately. The new event requires
+    // the actual catalog render branch, not merely a loaded subscription.
+    if (loading || !subscription || sub?.show_subscription_ui === false || catalog.length === 0)
+      return
+    exposure.current.view({
+      source: 'windows_settings_view',
+      current_plan: canonicalPlanId(subscription.plan) ?? 'unknown',
+      surface: 'settings_plans',
+      catalog_tier: 'not_applicable'
+    })
+  }, [loading, subscription, sub?.show_subscription_ui, catalog.length])
 
   const onManage = async (): Promise<void> => {
     setPortalBusy(true)
