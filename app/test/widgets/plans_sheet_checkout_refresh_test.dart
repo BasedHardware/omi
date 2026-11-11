@@ -337,6 +337,24 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+  testWidgets('subframe trusted success preserves legacy pop but never reports new completion', (tester) async {
+    final webView = _WebView();
+    var refreshes = 0;
+    await _pumpSheet(tester,
+        webView: webView,
+        refreshedSubscription: _subscription(PlanType.unlimitedV2, _paidAllowance),
+        onSubscriptionRequest: () => refreshes++);
+    final decision = await webView.navigation.navigate(
+        NavigationRequest(url: '${Env.apiBaseUrl}v1/payments/success?session_id=fixture', isMainFrame: false));
+    expect(decision, NavigationDecision.prevent);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(PlansSheet), findsOneWidget);
+    expect(refreshes, 1); // Existing success result still refreshes authoritative subscription state.
+    webView.navigation.navigate(NavigationRequest(url: '${Env.apiBaseUrl}v1/payments/success', isMainFrame: true));
+    await AnalyticsManager.flushPending(force: true);
+    expect(telemetry.propertiesOf('Subscription Checkout Completed'), isEmpty);
+  });
   testWidgets('exact trusted success permits its session query, deduplicates and suppresses late callbacks',
       (tester) async {
     final webView = _WebView();

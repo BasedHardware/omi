@@ -44,7 +44,15 @@ it('window opened is emitted only after show, never URL acquisition or instantia
   window.emit('ready-to-show')
   expect(window.show).toHaveBeenCalledOnce()
   expect(opened).toHaveBeenCalledOnce()
-  window.webContents.emit('will-redirect', {}, 'https://api.test/v1/payments/success')
+  window.webContents.emit(
+    'will-redirect',
+    {},
+    'https://api.test/v1/payments/success',
+    false,
+    true,
+    17,
+    9
+  )
   expect(await result).toBe('success')
   expect(window.destroyed).toBe(true)
 })
@@ -90,7 +98,7 @@ it.each([
     const result = openCheckoutWindow('https://checkout.stripe.test/private', vi.fn(), verified)
     const window = mocks.windows[0]
     window.emit('ready-to-show')
-    window.webContents.emit('will-redirect', {}, url)
+    window.webContents.emit('will-redirect', {}, url, false, true, 17, 9)
     window.webContents.emit('did-navigate', {}, 'https://api.test/v1/payments/success')
     expect(await result).toBe('success')
     expect(verified).toHaveBeenCalledTimes(trusted ? 1 : 0)
@@ -108,7 +116,15 @@ it.each(['cancel', 'closed', 'failure'])(
     if (outcome === 'closed') window.emit('closed')
     if (outcome === 'failure')
       window.webContents.emit('did-fail-load', {}, -2, 'fixture', 'fixture', true)
-    window.webContents.emit('will-redirect', {}, 'https://api.test/v1/payments/success')
+    window.webContents.emit(
+      'will-redirect',
+      {},
+      'https://api.test/v1/payments/success',
+      false,
+      true,
+      17,
+      9
+    )
     await result
     expect(verified).not.toHaveBeenCalled()
   }
@@ -153,8 +169,38 @@ it('verification follows main-owned configured API origin, including a nondefaul
   ].entries()) {
     const verified = vi.fn()
     const result = openCheckoutWindow('https://checkout.stripe.test/private', vi.fn(), verified)
-    mocks.windows[index].webContents.emit('will-redirect', {}, url)
+    mocks.windows[index].webContents.emit('will-redirect', {}, url, false, true, 17, 9)
     expect(await result).toBe('success')
     expect(verified).toHaveBeenCalledTimes(index)
   }
 })
+
+it.each([
+  ['details main', { isMainFrame: true }, undefined, true],
+  ['deprecated main', {}, true, true],
+  ['details subframe', { isMainFrame: false }, false, false],
+  ['deprecated subframe', {}, false, false],
+  ['unknown frame', {}, undefined, false],
+  ['details subframe overrides legacy', { isMainFrame: false }, true, false]
+])(
+  'redirect frame authority: %s retains legacy success with bounded verification',
+  async (_label, details, isMainFrame, expected) => {
+    const verified = vi.fn()
+    const result = openCheckoutWindow('https://checkout.stripe.test/private', vi.fn(), verified)
+    const window = mocks.windows[0]
+    window.emit('ready-to-show')
+    window.webContents.emit(
+      'will-redirect',
+      details,
+      'https://api.test/v1/payments/success?session_id=fixture',
+      false,
+      isMainFrame,
+      17,
+      9
+    )
+    // An unverified legacy terminal outcome cannot acquire a later main-frame observation.
+    window.webContents.emit('did-navigate', {}, 'https://api.test/v1/payments/success', 200, 'OK')
+    expect(await result).toBe('success')
+    expect(verified).toHaveBeenCalledTimes(expected ? 1 : 0)
+  }
+)

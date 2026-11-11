@@ -91,6 +91,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
               Logger.debug('Payment successful, closing webview');
               // Success navigation is a client observation, not accepted payment.
               if (mounted &&
+                  request.isMainFrame &&
                   !_hasError &&
                   context.read<UsageProvider>().showSubscriptionUI &&
                   _verifiedSuccess(request.url, successUrl)) widget.onCheckoutCompleted?.call();

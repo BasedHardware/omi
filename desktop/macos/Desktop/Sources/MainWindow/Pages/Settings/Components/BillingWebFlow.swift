@@ -95,7 +95,7 @@ struct BillingWebView: NSViewRepresentable {
         return
       }
 
-      if handleNavigation(url) {
+      if handleNavigation(url, isMainFrame: navigationAction.targetFrame?.isMainFrame) {
         decisionHandler(.cancel)
         return
       }
@@ -105,7 +105,7 @@ struct BillingWebView: NSViewRepresentable {
 
     /// Preserve legacy flow resolution; only verified navigation reaches the new observation.
     @discardableResult
-    func handleNavigation(_ url: URL) -> Bool {
+    func handleNavigation(_ url: URL, isMainFrame: Bool?) -> Bool {
       guard
         let matched = flow.completionURLs.compactMap(URL.init(string:)).first(where: {
           PurchaseCheckoutObservation.matches(url, completionURL: $0)
@@ -114,7 +114,10 @@ struct BillingWebView: NSViewRepresentable {
       if matched.pathComponents.last == "cancel" {
         finish(.cancelled)
       } else {
-        finish(.completed, verifiedNavigation: PurchaseCheckoutObservation.verifiedMatches(url, completionURL: matched))
+        finish(
+          .completed,
+          verifiedNavigation: isMainFrame == true
+            && PurchaseCheckoutObservation.verifiedMatches(url, completionURL: matched))
       }
       return true
     }

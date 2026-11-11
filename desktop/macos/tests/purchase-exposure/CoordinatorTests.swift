@@ -27,7 +27,8 @@ struct CoordinatorTests {
           })
         if case .completed = outcome {
           precondition(
-            coordinator.handleNavigation(URL(string: "https://fixture.invalid/v1/payments/success?session_id=fixture")!)
+            coordinator.handleNavigation(
+              URL(string: "https://fixture.invalid/v1/payments/success?session_id=fixture")!, isMainFrame: true)
           )
         } else {
           coordinator.finish(outcome)
@@ -63,10 +64,36 @@ struct CoordinatorTests {
             guard case .completed = outcome else { preconditionFailure("legacy outcome changed") }
             continuation.resume()
           })
-        precondition(coordinator.handleNavigation(URL(string: raw)!))
-        coordinator.handleNavigation(URL(string: "https://fixture.invalid/v1/payments/success")!)
+        precondition(coordinator.handleNavigation(URL(string: raw)!, isMainFrame: true))
+        coordinator.handleNavigation(URL(string: "https://fixture.invalid/v1/payments/success")!, isMainFrame: true)
       }
       precondition(completed == 0)
+    }
+    // Otherwise-trusted subframe/missing-target success retains legacy UI, without new completion.
+    for isMainFrame: Bool? in [false, nil] {
+      var completed = 0
+      var callbacks = 0
+      let observation = PurchaseCheckoutObservation(
+        context: PurchaseCheckoutContext(plan: "plus", interval: "month", source: "macos_billing"),
+        sink: { event, _ in if event == .checkoutCompleted { completed += 1 } })
+      observation.opened()
+      let flow = BillingWebFlow(
+        title: "Fixture", url: URL(string: "https://fixture.invalid/checkout")!,
+        completionURLs: ["https://fixture.invalid/v1/payments/success"], purchase: observation)
+      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        let coordinator = BillingWebView.Coordinator(
+          flow: flow,
+          onComplete: { outcome in
+            guard case .completed = outcome else { preconditionFailure("legacy outcome changed") }
+            callbacks += 1
+            continuation.resume()
+          })
+        precondition(
+          coordinator.handleNavigation(
+            URL(string: "https://fixture.invalid/v1/payments/success?session_id=fixture")!, isMainFrame: isMainFrame))
+        coordinator.handleNavigation(URL(string: "https://fixture.invalid/v1/payments/success")!, isMainFrame: true)
+      }
+      precondition(callbacks == 1 && completed == 0)
     }
     // Dismiss/failure terminal state wins over a later trusted navigation.
     for failed in [false, true] {
@@ -82,7 +109,7 @@ struct CoordinatorTests {
       await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
         let coordinator = BillingWebView.Coordinator(flow: flow, onComplete: { _ in continuation.resume() })
         if !failed { coordinator.finish(.dismissed) }
-        coordinator.handleNavigation(URL(string: "https://fixture.invalid/v1/payments/success")!)
+        coordinator.handleNavigation(URL(string: "https://fixture.invalid/v1/payments/success")!, isMainFrame: true)
       }
       precondition(completed == 0)
     }

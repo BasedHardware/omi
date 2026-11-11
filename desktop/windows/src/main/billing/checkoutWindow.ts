@@ -121,14 +121,24 @@ export function openCheckoutWindow(
     // A navigation to the completion route ends the flow. `will-redirect` and
     // `will-navigate` catch the 30x hop and any in-page link; `did-navigate`
     // is the backstop for a fully-loaded completion page.
-    const onNavigate = (_e: unknown, navUrl: string): void => {
+    const onNavigate = (navUrl: string, isMainFrame: boolean): void => {
       const outcome = outcomeForUrl(navUrl)
       if (outcome)
-        finish(outcome, outcome === 'success' && !failedNavigation && verifiedSuccess(navUrl))
+        finish(
+          outcome,
+          isMainFrame && outcome === 'success' && !failedNavigation && verifiedSuccess(navUrl)
+        )
     }
-    win.webContents.on('will-redirect', onNavigate)
-    win.webContents.on('will-navigate', onNavigate)
-    win.webContents.on('did-navigate', onNavigate)
+    win.webContents.on('will-redirect', (details, navUrl, _isInPlace, isMainFrame) => {
+      // Installed Electron exposes both details and the deprecated fourth argument.
+      // A present details flag takes precedence; absence alone is never main-frame authority.
+      const mainFrame =
+        details.isMainFrame === undefined ? isMainFrame === true : details.isMainFrame === true
+      onNavigate(navUrl, mainFrame)
+    })
+    // Electron guarantees these two event types are main-frame-only.
+    win.webContents.on('will-navigate', (_e, navUrl) => onNavigate(navUrl, true))
+    win.webContents.on('did-navigate', (_e, navUrl) => onNavigate(navUrl, true))
     win.webContents.on('did-fail-load', (_e, _code, _description, _url, isMainFrame) => {
       if (isMainFrame !== false) failedNavigation = true
     })

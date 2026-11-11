@@ -42,6 +42,15 @@ new observation data. Legacy lookalike/prefix/port/userinfo outcomes can still r
 without emitting new completion telemetry. Cancellation, dismissal, failure and late callbacks cannot
 turn an unverified outcome into verified completion. No return URL or identifier is added to IPC.
 
+Verified completion additionally requires main-frame authority. Flutter uses NavigationRequest.isMainFrame;
+native macOS forwards WKNavigationAction.targetFrame?.isMainFrame and treats a missing target as unknown.
+Electron will-redirect uses the installed event details isMainFrame flag, or the explicit deprecated fourth
+argument when details lack the field; unknown/subframe redirects never verify completion. Its will-navigate
+and did-navigate events are documented main-frame-only. Legacy subframe success can still pop/resolve
+as before, but consumes the existing terminal lifetime without emitting new completion; a later main-frame
+callback cannot retroactively verify it. This observation guard changes no checkout UI or payment authority.
+See [Electron webContents navigation events](https://www.electronjs.org/docs/latest/api/web-contents).
+
 Desktop popup block observations describe presentation, including optimistic local chat refusal while
 the latest server snapshot still allows use. They deduplicate per presentation and use unknown reason
 when no authoritative exhaustion cause exists; they never create an authoritative reach. Remounting
