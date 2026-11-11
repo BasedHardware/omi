@@ -4,8 +4,10 @@ import logging
 import threading
 import time
 from collections import OrderedDict
+from concurrent.futures import Future
 from contextlib import nullcontext
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
 
@@ -29,6 +31,7 @@ from database import conversations, episodes
 from database._client import get_firestore_client
 from database.firestore_cache_metrics import record_request
 from database.firestore_retry import FIRESTORE_NO_RETRY
+from database.fsr_read_cache import plane_id
 from database.firestore_read_origin import read_origin
 from utils.read_cache_shadow import compare_hit
 from utils.episodes.timeline import ownership_end
@@ -143,6 +146,8 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
     edits, deletions and visibility changes may remain stale until expiry. Hits
     never extend the TTL; expired entries must read again (including on errors).
     This memo is only a read projection, never authority for a mutation.
+    Cache misses share only calls enrolled before the owner starts fetching.
+    Later arrivals read fresh; single-flight never retains completed results.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     all_ids: list[str] = []
@@ -173,7 +178,7 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
             except Exception:
                 pass  # Even broken observation must preserve the cached response.
             return deepcopy(cached[1])
-    result = _fetch_members(uid, ids, client)
+    result = _fetch_members_coalesced(uid, ids, client)
     if cache_key is not None:
         with _members_cache_lock:
             # Count read/prepare latency against the TTL, so a slow fetch never
@@ -184,6 +189,86 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
                 while len(_members_cache) > MEMBERS_CACHE_MAX_ENTRIES:
                     _members_cache.popitem(last=False)
     return result
+
+
+MEMBERS_FLIGHT_MAX_ENTRIES = 128
+MEMBERS_FLIGHT_MAX_IDS = 1000
+
+
+@dataclass
+class _MembersFlight:
+    future: Future[dict[str, dict[str, Any]]]
+    accepting: bool = True
+
+
+_members_flights: dict[tuple[str, str, tuple[str, ...]], _MembersFlight] = {}
+_members_flights_lock = threading.Lock()
+_members_flight_local = threading.local()
+
+
+def _flight_event(result: str) -> None:
+    try:
+        record_request('fsr_episode_members_flight', result)
+    except Exception:
+        pass  # Observation must never change a serving read.
+
+
+def _fetch_members_coalesced(uid: str, ids: list[str], client: Any) -> dict[str, dict[str, Any]]:
+    """Enroll only before the owner fetch starts, never into an older snapshot.
+
+    Closing enrollment under the map lock before _fetch_members ensures each
+    enrolled request began before the underlying read. An unfinished read may
+    already hold a snapshot predating a later request's completed deletion/edit;
+    that later request must bypass, even while preparation is still running.
+    The closed record stays until completion for bounded capacity accounting.
+
+    The owner fetches inline: no child executor job can queue behind its own
+    waiters. Nested reads bypass *all* flights to avoid self-waits and cycles
+    between keys. Sync-route cancellation cannot cancel another caller's read;
+    BaseException completion still wakes every waiter and permits a fresh retry.
+    """
+    if not ids or not lever_enabled('episode_members_singleflight', uid):
+        return _fetch_members(uid, ids, client)
+    if len(ids) > MEMBERS_FLIGHT_MAX_IDS or getattr(_members_flight_local, 'active', False):
+        _flight_event('bypass')
+        return _fetch_members(uid, ids, client)
+    key = (plane_id(client), uid, tuple(sorted(ids)))
+    with _members_flights_lock:
+        flight = _members_flights.get(key)
+        owner = flight is None
+        if owner and len(_members_flights) < MEMBERS_FLIGHT_MAX_ENTRIES:
+            flight = _MembersFlight(Future())
+            flight.future.set_running_or_notify_cancel()  # Private; waiters cannot cancel the shared read.
+            _members_flights[key] = flight
+        elif flight is not None and not flight.accepting:
+            flight = None  # Keep the closed record; never overwrite another owner's flight.
+    if flight is None:
+        _flight_event('bypass')
+        return _fetch_members(uid, ids, client)
+    if not owner:
+        _flight_event('coalesced')
+        return deepcopy(flight.future.result())  # Owner runs inline, not queued behind its waiters.
+    _members_flight_local.active = True
+    try:
+        _flight_event('owner')
+        with _members_flights_lock:
+            flight.accepting = False
+        result = _fetch_members(uid, ids, client)
+    except BaseException as error:
+        with _members_flights_lock:
+            if _members_flights.get(key) is flight:
+                del _members_flights[key]
+        flight.future.set_exception(error)
+        _flight_event('error')
+        raise
+    else:
+        with _members_flights_lock:
+            if _members_flights.get(key) is flight:
+                del _members_flights[key]
+        flight.future.set_result(result)
+        return deepcopy(result)
+    finally:
+        _members_flight_local.active = False
 
 
 def _fetch_members(uid, ids, client, *, timeout=None):

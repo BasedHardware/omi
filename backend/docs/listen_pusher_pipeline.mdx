@@ -9584,6 +9584,18 @@ missing clocks excluded by age ordering. Neither clock usable in an age sample a
 `omi_batch_timeliness_scan_truncated{leg="staged_input"}` to 1 for the existing
 scan-blind warning. These observations are not a distinct-row fleet census.
 
+### Explicit calendar request preservation
+
+`EXPLICIT_CALENDAR_REQUEST_KEEP` defaults on. A bounded, complete segment-level
+`put … on my/the calendar` or `add … to my/the calendar` instruction bypasses
+the short-clip compute minimum and shares the explicit-instruction keep contract
+with deterministic relevance, content classification and minimum salience.
+This only preserves input for normal adjudication; it does not create an event
+or action, join speakers, or override privacy/manual-selection contracts.
+Explicit `false` (also off/0/no) restores the previous reminder-only exemption.
+Affected fleet users and extra model dollars/day are unknown; this reverses
+compute savings for protected cases. Existing general floor behavior remains.
+
 ## Batch abstention display
 
 `SPEAKER_ABSTENTION_UNKNOWN_LABEL_ENABLED` defaults on (`default_on` parser).

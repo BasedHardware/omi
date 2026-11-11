@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-calendar-request-thinned-before-adjudication",
+  "violated_contract": "An explicit calendar instruction must survive short-clip cost-thinning and later relevance gates so normal downstream adjudication can assess it. A reminder-only exemption must not send a direct put-on-calendar or add-content-to-calendar instruction to an empty deterministic minimum.",
+  "canonical_prevention": "Use one bounded segment-level keep instruction guard across short-clip admission, deterministic relevance, content classification and minimum salience. Preserve existing reminder, authority and privacy contracts; test false rollback, non-instruction controls and the production notes boundary without directly authorizing an event or action.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_calendar_request_keep.py",
+    "backend/tests/unit/test_short_clip_rollout.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/relevance_rules.py",
+    "backend/utils/llm/notes_short_clip.py",
+    "backend/utils/conversations/relevance_content.py",
+    "backend/utils/conversations/relevance_salience.py"
+  ],
+  "status": "open"
+}

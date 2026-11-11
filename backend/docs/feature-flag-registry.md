@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-10 -->
+<!-- feature-flag-registry as-of: 2026-11-11 -->
 
 # Feature-flag authority registry
 
@@ -120,7 +120,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-11-10.
+None as of 2026-11-11.
 
 ## Flags
 
@@ -445,6 +445,7 @@ and an explicit empty literal renders as `''`.
 | `BATCH_VENDOR_OVERFLOW_ENABLED` | Default on; inside the vendor-routing cohort, a fresh unit that would start on GPU starts on the table's next healthy primary vendor while the GPU ring reads saturated (oldest admissible fresh unit past BATCH_VENDOR_OVERFLOW_ENTER_SECONDS with at least BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS waiting). false keeps every capable unit on GPU | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `BATCH_VENDOR_ROUTING_ENABLED` | Default on; all-vendor batch route selection at intake. false serves today's routing (GPU where Parakeet serves, else Modulate) to every owner | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `BATCH_VENDOR_SPEAKER_TURNS_ENABLED` | Default on: vendor-route batch units keep the vendor's own speaker turns and join the GPU unit scope, sync-off centroids and conversation linking | backend | env | open | — | — | — | — | keep | keep | — | backlog-refactor |
+| `BILLING_RENEWAL_OBSERVATIONS_ENABLED` | Default on; best-effort immutable renewal attempt observations; off performs no observation IO | backend | env | open | — | — | — | — | keep | keep | — | churn-lead |
 | `CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED` | Default on; regenerate a capture-group primary's notes once per group revision when confirmed same-event members carry meeting context the primary lacks | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `CAP_HOLD_DURABLE_REDRIVE_ENABLED` | Default on; awaited periodic recovery of persisted processing choices, staged live sources and fragment cleanup | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `CAP_HOLD_FLEET_SNAPSHOT_ENABLED` | Default on; refresh the held-content fleet gauge asynchronously with its own bounded RPC budget | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
@@ -499,6 +500,7 @@ and an explicit empty literal renders as `''`.
 | `EPISODE_MOMENT_OUTPUT_VALIDATOR` | Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_OUTPUT_LANGUAGE_PIN` | Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_RECORDED_TIME_ENABLED` | Default on; resolve episode ownership by recorded timestamps for every device and late capture | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
+| `EXPLICIT_CALENDAR_REQUEST_KEEP` | Default on; preserve direct put-on-calendar and add-content-to-calendar requests through short-clip and relevance thinning | backend | env | open | — | — | — | — | keep | keep | — | quality-lead |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | auditfix |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_THROTTLE_DECAY_ENABLED` | Decay expired throttle and quiet warnings on read; set off to restore restrict-only decay | backend | env | open | — | — | — | — | keep | keep | — | backend |
@@ -1091,6 +1093,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_VENDOR_ROUTING_SHADOW_PERCENT` — Default zero; owners outside the routing cohort whose table decision is computed and logged (event=batch_vendor_route_shadow, no ids) while their routing stays unchanged (fail: closed)
 - `BATCH_VENDOR_ROUTING_UID_ALLOWLIST` — Comma-separated owners routed from the vendor route table regardless of percent; default empty; env only, no cohort-document membership (fail: closed)
 - `BATCH_VENDOR_SPEAKER_TURNS_ENABLED` — Default on: vendor-route batch units keep the vendor's own speaker turns and join the GPU unit scope, sync-off centroids and conversation linking (fail: open)
+- `BILLING_RENEWAL_OBSERVATIONS_ENABLED` — Default on; best-effort immutable renewal attempt observations; off performs no observation IO (fail: open)
 - `BILLING_WEBHOOK_LEDGER_ENABLED` — Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint (fail: closed)
 - `CALLS_RECAP_MODE` — Boundary call metadata and completed-local-day revision-aware recap states; default shadow (fail: closed)
 - `CALLS_RECAP_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
@@ -1188,6 +1191,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_MOMENT_OUTPUT_VALIDATOR` — Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels (fail: open)
 - `EPISODE_OUTPUT_LANGUAGE_PIN` — Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language (fail: open)
 - `EPISODE_RECORDED_TIME_ENABLED` — Default on; resolve episode ownership by recorded timestamps for every device and late capture (fail: open)
+- `EXPLICIT_CALENDAR_REQUEST_KEEP` — Default on; preserve direct put-on-calendar and add-content-to-calendar requests through short-clip and relevance thinning (fail: open)
 - `FAIR_USE_THROTTLE_DECAY_ENABLED` — Decay expired throttle and quiet warnings on read; set off to restore restrict-only decay (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
