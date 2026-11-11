@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -69,6 +70,9 @@ def main():
     digest = hashlib.sha256(candidate).hexdigest()
     report = {
         'schema_version': 1,
+        'source_sha': os.environ.get('GITHUB_SHA', 'local-unrecorded'),
+        'run_id': os.environ.get('GITHUB_RUN_ID'),
+        'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT'),
         'factory_boot_sha256': hashlib.sha256(factory).hexdigest(),
         'candidate_boot_sha256': digest,
         'public_key_sha256': KEY_SHA256,

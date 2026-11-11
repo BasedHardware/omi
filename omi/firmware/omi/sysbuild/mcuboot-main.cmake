@@ -1,4 +1,5 @@
-# MCUboot's project() includes this overlay before it declares its sources.
+# The MCUboot-only Zephyr module includes this application overlay before
+# upstream declares its sources.
 # Defer replacement until the upstream directory has added main.c. All other
 # upstream bootutil, crypto, signing and partition logic remains SDK-owned.
 function(cv1_replace_mcuboot_main)
@@ -25,4 +26,4 @@ function(cv1_replace_mcuboot_main)
   endif()
   message(STATUS "CV1 MCUboot: Omi SD initialization main selected")
 endfunction()
-cmake_language(DEFER CALL cv1_replace_mcuboot_main)
+cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL cv1_replace_mcuboot_main)

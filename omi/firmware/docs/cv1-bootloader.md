@@ -61,7 +61,7 @@ assets; the presence of Omi's sequence alone is not an approval.
 The existing manual `firmware_release.yml` builds production sysbuild with
 NCS 2.9.0 at commit `7787b264984022cda64d9629278942053e6462a5`, its west
 manifest's module revisions and the workflow's digest-pinned CI image.
-`omi/sysbuild.cmake` installs an MCUboot-only CMake application overlay.
+`omi/sysbuild.cmake` registers an MCUboot-only Zephyr module containing the CMake application overlay.
 The overlay replaces exactly one SDK `boot/zephyr/main.c` source with Omi's
 source after MCUboot declares its sources; zero or multiple matches abort
 configuration. It applies to the documented developer sysbuild command too.
