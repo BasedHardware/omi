@@ -13,31 +13,43 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('off response and both server-owned prompt routes decode closed', () {
-    expect(FirstValuePrompt.fromResponse('{"prompt":null}'), isNull);
+    expect(FirstValueResponse.fromResponse('{"prompt":null}').prompt, isNull);
     expect(
-      FirstValuePrompt.fromResponse(
+      FirstValueResponse.fromResponse(
         '{"prompt":{"kind":"capture","route":"/settings/device"}}',
-      )?.route,
+      ).prompt?.route,
       '/settings/device',
     );
     expect(
-      FirstValuePrompt.fromResponse(
+      FirstValueResponse.fromResponse(
         '{"prompt":{"kind":"result","route":"/conversation/result-1"}}',
-      )?.route,
+      ).prompt?.route,
       '/conversation/result-1',
     );
     expect(
-      () => FirstValuePrompt.fromResponse(
+      () => FirstValueResponse.fromResponse(
         '{"prompt":{"kind":"result","route":"https://elsewhere.invalid"}}',
       ),
       throwsFormatException,
     );
     expect(
-      () => FirstValuePrompt.fromResponse(
+      () => FirstValueResponse.fromResponse(
         '{"prompt":{"kind":"other","route":"/settings/device"}}',
       ),
       throwsFormatException,
     );
+  });
+
+  test('valid empty response stays distinct from transport and decode failures', () async {
+    Future<ApiResult<FirstValueResponse>> response(int status, String body) => FirstValueApi(
+          baseUrl: 'https://fixture.invalid/',
+          send: (_) async => http.Response(body, status),
+        ).prompt();
+    final empty = await response(200, '{"prompt":null}');
+    expect(empty, isA<ApiSuccess<FirstValueResponse>>());
+    expect((empty as ApiSuccess<FirstValueResponse>).data.prompt, isNull);
+    expect(await response(500, '{}'), isA<ApiFailure<FirstValueResponse>>());
+    expect(await response(200, '{}'), isA<ApiFailure<FirstValueResponse>>());
   });
 
   test(

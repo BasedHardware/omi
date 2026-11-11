@@ -77,8 +77,8 @@ class FirstValueRecoveryService {
           );
           if (!context.mounted ||
               identityEpoch != AnalyticsManager.identityEpoch ||
-              result is! ApiSuccess<FirstValuePrompt?>) return;
-          final prompt = result.data;
+              result is! ApiSuccess<FirstValueResponse>) return;
+          final prompt = result.data.prompt;
           if (prompt == null || !_identityReady) return;
           final l10n = context.l10n;
           final capture = prompt.kind == 'capture';
@@ -102,8 +102,8 @@ class FirstValueRecoveryService {
     if (!_identityReady) return false;
     final identityEpoch = AnalyticsManager.identityEpoch;
     final result = await _api.prompt(navigation: true);
-    if (identityEpoch != AnalyticsManager.identityEpoch || result is! ApiSuccess<FirstValuePrompt?>) return false;
-    final prompt = result.data;
+    if (identityEpoch != AnalyticsManager.identityEpoch || result is! ApiSuccess<FirstValueResponse>) return false;
+    final prompt = result.data.prompt;
     if (prompt == null || prompt.kind != 'result') return false;
     return HomeNavigation.openRoute(prompt.route);
   }

@@ -12,11 +12,18 @@ class FirstValuePrompt {
 
   final String kind;
   final String route;
+}
 
-  static FirstValuePrompt? fromResponse(String body) {
+/// A valid empty prompt is data inside a successful envelope, never an HTTP failure.
+class FirstValueResponse {
+  const FirstValueResponse({this.prompt});
+  final FirstValuePrompt? prompt;
+
+  static FirstValueResponse fromResponse(String body) {
     final decoded = jsonDecode(body) as Map<String, dynamic>;
+    if (!decoded.containsKey('prompt')) throw const FormatException('missing first-value prompt');
     final prompt = decoded['prompt'];
-    if (prompt == null) return null;
+    if (prompt == null) return const FirstValueResponse();
     if (prompt is! Map<String, dynamic>) throw const FormatException('invalid first-value prompt');
     final kind = prompt['kind'];
     final route = prompt['route'];
@@ -25,7 +32,7 @@ class FirstValuePrompt {
     }
     if (kind == 'capture' && route != '/settings/device') throw const FormatException('invalid capture route');
     if (kind == 'result' && !route.startsWith('/conversation/')) throw const FormatException('invalid result route');
-    return FirstValuePrompt(kind: kind, route: route);
+    return FirstValueResponse(prompt: FirstValuePrompt(kind: kind, route: route));
   }
 }
 
@@ -39,7 +46,7 @@ class FirstValueApi {
   final String baseUrl;
   final ApiSend? send;
 
-  Future<ApiResult<FirstValuePrompt?>> prompt({
+  Future<ApiResult<FirstValueResponse>> prompt({
     bool navigation = false,
     String? notificationPermission,
     String? timeZone,
@@ -54,7 +61,7 @@ class FirstValueApi {
             if (timeZone != null) timeZoneHeader: timeZone,
           },
         ),
-        decode: FirstValuePrompt.fromResponse,
+        decode: FirstValueResponse.fromResponse,
         send: send,
       ).timeout(
         const Duration(seconds: 15),
