@@ -17,13 +17,8 @@ struct UsageLimitPopupView: View {
     AnalyticsManager.shared.purchaseEvent(event, properties)
   })
   private func recordBlock() {
-    let kind = reason == "trial_expired" ? "trial" : reason == "floating_bar" ? "chat" : reason
-    guard ["transcription", "trial", "chat"].contains(kind) else { return }
-    let authoritative = kind != "chat" || FloatingBarUsageLimiter.shared.serverQuota?.allowed == false
-    purchaseObservation.allowance(
-      authoritative, kind: kind, surface: kind == "transcription" ? "capture" : "chat",
-      reason: kind == "trial" ? "trial_expired" : kind == "chat" ? "chat_quota_exhausted" : "plan_allowance_exhausted",
-      block: true)
+    purchaseObservation.usageLimitBlock(
+      reason: reason, chatAuthoritative: FloatingBarUsageLimiter.shared.serverQuota?.allowed == false)
   }
   private var headline: String {
     "You've hit your monthly limit"

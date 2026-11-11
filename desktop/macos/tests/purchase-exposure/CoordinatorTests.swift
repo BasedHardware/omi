@@ -25,7 +25,13 @@ struct CoordinatorTests {
             callbacks += 1
             continuation.resume()
           })
-        coordinator.finish(outcome)
+        if case .completed = outcome {
+          precondition(
+            coordinator.handleNavigation(URL(string: "https://fixture.invalid/v1/payments/success?session_id=fixture")!)
+          )
+        } else {
+          coordinator.finish(outcome)
+        }
         coordinator.finish(.completed)  // A late callback cannot change the terminal observation.
       }
       precondition(callbacks == 1)
@@ -36,6 +42,49 @@ struct CoordinatorTests {
       } else {
         precondition(!events.contains(.checkoutCompleted))
       }
+    }
+    // Real coordinator navigation entry: legacy port/userinfo aliases still resolve UI, but never telemetry.
+    for raw in [
+      "https://fixture.invalid:444/v1/payments/success",
+      "https://user@fixture.invalid/v1/payments/success",
+    ] {
+      var completed = 0
+      let observation = PurchaseCheckoutObservation(
+        context: PurchaseCheckoutContext(plan: "plus", interval: "month", source: "macos_billing"),
+        sink: { event, _ in if event == .checkoutCompleted { completed += 1 } })
+      observation.opened()
+      let flow = BillingWebFlow(
+        title: "Fixture", url: URL(string: "https://fixture.invalid/checkout")!,
+        completionURLs: ["https://fixture.invalid/v1/payments/success"], purchase: observation)
+      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        let coordinator = BillingWebView.Coordinator(
+          flow: flow,
+          onComplete: { outcome in
+            guard case .completed = outcome else { preconditionFailure("legacy outcome changed") }
+            continuation.resume()
+          })
+        precondition(coordinator.handleNavigation(URL(string: raw)!))
+        coordinator.handleNavigation(URL(string: "https://fixture.invalid/v1/payments/success")!)
+      }
+      precondition(completed == 0)
+    }
+    // Dismiss/failure terminal state wins over a later trusted navigation.
+    for failed in [false, true] {
+      var completed = 0
+      let observation = PurchaseCheckoutObservation(
+        context: PurchaseCheckoutContext(plan: "plus", interval: "month", source: "macos_billing"),
+        sink: { event, _ in if event == .checkoutCompleted { completed += 1 } })
+      let flow = BillingWebFlow(
+        title: "Fixture", url: URL(string: "https://fixture.invalid/checkout")!,
+        completionURLs: ["https://fixture.invalid/v1/payments/success"], purchase: observation)
+      observation.opened()
+      if failed { observation.finish(success: false) }
+      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        let coordinator = BillingWebView.Coordinator(flow: flow, onComplete: { _ in continuation.resume() })
+        if !failed { coordinator.finish(.dismissed) }
+        coordinator.handleNavigation(URL(string: "https://fixture.invalid/v1/payments/success")!)
+      }
+      precondition(completed == 0)
     }
     print(
       "PASS: actual native BillingWebView coordinator success/cancel/dismiss boundaries and SwiftUI modifier compile")

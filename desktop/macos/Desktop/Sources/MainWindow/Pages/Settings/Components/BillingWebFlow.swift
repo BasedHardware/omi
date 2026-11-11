@@ -95,19 +95,28 @@ struct BillingWebView: NSViewRepresentable {
         return
       }
 
-      if let matchedCompletionURL = flow.completionURLs.compactMap(URL.init(string:)).first(where: {
-        PurchaseCheckoutObservation.matches(url, completionURL: $0)
-      }) {
-        if matchedCompletionURL.pathComponents.last == "cancel" {
-          finish(.cancelled)
-        } else {
-          finish(.completed)
-        }
+      if handleNavigation(url) {
         decisionHandler(.cancel)
         return
       }
 
       decisionHandler(.allow)
+    }
+
+    /// Preserve legacy flow resolution; only verified navigation reaches the new observation.
+    @discardableResult
+    func handleNavigation(_ url: URL) -> Bool {
+      guard
+        let matched = flow.completionURLs.compactMap(URL.init(string:)).first(where: {
+          PurchaseCheckoutObservation.matches(url, completionURL: $0)
+        })
+      else { return false }
+      if matched.pathComponents.last == "cancel" {
+        finish(.cancelled)
+      } else {
+        finish(.completed, verifiedNavigation: PurchaseCheckoutObservation.verifiedMatches(url, completionURL: matched))
+      }
+      return true
     }
 
     func webView(
@@ -129,10 +138,14 @@ struct BillingWebView: NSViewRepresentable {
       purchase?.finish(success: false)
     }
 
-    func finish(_ outcome: BillingWebFlowOutcome) {
+    func finish(_ outcome: BillingWebFlowOutcome, verifiedNavigation: Bool = false) {
       guard !completionHandled else { return }
       completionHandled = true
-      if case .completed = outcome { purchase?.finish(success: true) } else { purchase?.finish(success: false) }
+      if case .completed = outcome {
+        purchase?.finish(success: verifiedNavigation)
+      } else {
+        purchase?.finish(success: false)
+      }
       DispatchQueue.main.async {
         self.onComplete(outcome)
       }

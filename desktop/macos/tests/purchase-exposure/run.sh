@@ -14,5 +14,6 @@ xcrun swiftc -parse-as-library -target arm64-apple-macosx14.0 -I "$work" \
   "$root/Desktop/Sources/MainWindow/Pages/Settings/Components/PurchaseTelemetry.swift" \
   "$root/Desktop/Sources/MainWindow/Pages/Settings/Components/PurchaseExposureModifier.swift" \
   "$root/Desktop/Sources/MainWindow/Pages/Settings/Components/BillingWebFlow.swift" \
+  "$root/Desktop/Sources/UsageLimitPopupView.swift" \
   "$root/tests/purchase-exposure/ThemeStubs.swift" "$root/tests/purchase-exposure/CoordinatorTests.swift" -o "$work/coordinator-test"
 "$work/coordinator-test"

@@ -162,7 +162,8 @@ export function PlanUsageTab(): React.JSX.Element {
           upgradeSubscription,
           openCheckout: (url) =>
             openSubscriptionCheckout(
-              (address, onOpened) => window.omi.openCheckout(address, onOpened),
+              (address, onOpened, onCompleted) =>
+                window.omi.openCheckout(address, onOpened, onCompleted),
               url,
               tier,
               priceTitle,

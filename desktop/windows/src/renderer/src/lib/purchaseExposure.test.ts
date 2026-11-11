@@ -17,9 +17,11 @@ it('tap, actual open callback, success navigation are three different boundaries
   trackUpgradePlanSelected('unlimited_v2', 'Monthly', 'windows_settings_view')
   let opened!: () => void
   let finish!: (result: 'success') => void
+  let verified!: () => void
   const flow = openSubscriptionCheckout(
-    (_url, onOpened) => {
+    (_url, onOpened, onCompleted) => {
       opened = onOpened!
+      verified = onCompleted!
       return new Promise((resolve) => {
         finish = resolve
       })
@@ -35,6 +37,8 @@ it('tap, actual open callback, success navigation are three different boundaries
   opened()
   expect(names().filter((e) => e === 'Subscription Checkout Opened')).toHaveLength(1)
   expect(names()).not.toContain('Subscription Checkout Completed')
+  verified()
+  verified()
   finish('success')
   await flow
   expect(names().filter((e) => e === 'Subscription Checkout Completed')).toHaveLength(1)
@@ -129,6 +133,44 @@ it.each(['success', 'cancel', 'closed', 'error'] as const)(
     ).catch(() => {})
     onOpened()
     expect(names()).not.toContain('Subscription Checkout Opened')
+    expect(names()).not.toContain('Subscription Checkout Completed')
+  }
+)
+
+it('legacy success without the main verification signal is not a new completion', async () => {
+  let late!: () => void
+  expect(
+    await openSubscriptionCheckout(
+      async (_url, opened, completed) => {
+        opened?.()
+        late = completed!
+        return 'success'
+      },
+      'checkout',
+      'plus',
+      'month',
+      'windows_billing'
+    )
+  ).toBe('success')
+  late()
+  expect(names().filter((name) => name === 'Subscription Checkout Opened')).toHaveLength(1)
+  expect(names()).not.toContain('Subscription Checkout Completed')
+})
+it.each(['cancel', 'closed', 'error', 'unopened'] as const)(
+  'verification alone cannot complete %s',
+  async (outcome) => {
+    await openSubscriptionCheckout(
+      async (_url, opened, completed) => {
+        if (outcome !== 'unopened') opened?.()
+        completed?.()
+        if (outcome === 'error') throw new Error('unavailable')
+        return outcome === 'unopened' ? 'success' : outcome
+      },
+      'checkout',
+      'plus',
+      'month',
+      'windows_billing'
+    ).catch(() => {})
     expect(names()).not.toContain('Subscription Checkout Completed')
   }
 )

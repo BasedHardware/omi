@@ -90,8 +90,10 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
               _checkoutFinished = true;
               Logger.debug('Payment successful, closing webview');
               // Success navigation is a client observation, not accepted payment.
-              if (mounted && !_hasError && context.read<UsageProvider>().showSubscriptionUI)
-                widget.onCheckoutCompleted?.call();
+              if (mounted &&
+                  !_hasError &&
+                  context.read<UsageProvider>().showSubscriptionUI &&
+                  _verifiedSuccess(request.url, successUrl)) widget.onCheckoutCompleted?.call();
               Navigator.of(context).pop(true); // Pop with success result
               return NavigationDecision.prevent;
             }
@@ -110,6 +112,19 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && context.read<UsageProvider>().showSubscriptionUI) widget.onCheckoutOpened?.call();
     });
+  }
+
+  // Observation-only: legacy route resolution above remains unchanged.
+  bool _verifiedSuccess(String raw, String configuredSuccess) {
+    final actual = Uri.tryParse(raw);
+    final expected = Uri.tryParse(configuredSuccess);
+    if (actual == null || expected == null || !actual.hasAuthority || !expected.hasAuthority) return false;
+    if (actual.authority.contains('@') || expected.authority.contains('@')) return false;
+    return (expected.scheme == 'https' || expected.scheme == 'http') &&
+        actual.scheme == expected.scheme &&
+        actual.host == expected.host &&
+        actual.port == expected.port &&
+        actual.path == expected.path;
   }
 
   Future<void> _retry() async {

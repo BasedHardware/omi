@@ -307,6 +307,65 @@ void main() {
     expect(telemetry.propertiesOf('Subscription Checkout Opened'), hasLength(1));
     expect(telemetry.propertiesOf('Subscription Checkout Completed'), isEmpty);
   });
+  for (final item in <String, String>{
+    'prefix': 'http://127.0.0.1:1/v1/payments/success-extra',
+    'extra path': 'http://127.0.0.1:1/v1/payments/success/extra',
+    'trailing slash': 'http://127.0.0.1:1/v1/payments/success/',
+    'host': 'http://other.invalid:1/v1/payments/success',
+    'host suffix': 'http://127.0.0.1.evil.invalid:1/v1/payments/success',
+    'scheme': 'https://127.0.0.1:1/v1/payments/success',
+    'port': 'http://127.0.0.1:2/v1/payments/success',
+    'userinfo': 'http://user@127.0.0.1:1/v1/payments/success',
+    'empty userinfo': 'http://@127.0.0.1:1/v1/payments/success',
+  }.entries) {
+    testWidgets('new completion rejects ${item.key} while preserving the legacy delegate decision', (tester) async {
+      final webView = _WebView();
+      await _pumpSheet(tester,
+          webView: webView,
+          refreshedSubscription: _subscription(PlanType.unlimitedV2, _paidAllowance),
+          onSubscriptionRequest: () {});
+      final decision = await webView.navigation.navigate(NavigationRequest(url: item.value, isMainFrame: true));
+      expect(
+          decision,
+          item.value.startsWith('${Env.apiBaseUrl}v1/payments/success')
+              ? NavigationDecision.prevent
+              : NavigationDecision.navigate);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await AnalyticsManager.flushPending(force: true);
+      expect(telemetry.propertiesOf('Subscription Checkout Completed'), isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+  testWidgets('exact trusted success permits its session query, deduplicates and suppresses late callbacks',
+      (tester) async {
+    final webView = _WebView();
+    await _pumpSheet(tester,
+        webView: webView,
+        refreshedSubscription: _subscription(PlanType.unlimitedV2, _paidAllowance),
+        onSubscriptionRequest: () {});
+    webView.navigation
+        .navigate(NavigationRequest(url: '${Env.apiBaseUrl}v1/payments/success?session_id=fixture', isMainFrame: true));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    webView.navigation.navigate(NavigationRequest(url: '${Env.apiBaseUrl}v1/payments/success', isMainFrame: true));
+    await AnalyticsManager.flushPending(force: true);
+    expect(telemetry.propertiesOf('Subscription Checkout Completed'), hasLength(1));
+  });
+  testWidgets('dismissal suppresses a late trusted success', (tester) async {
+    final webView = _WebView();
+    await _pumpSheet(tester,
+        webView: webView,
+        refreshedSubscription: _subscription(PlanType.unlimitedV2, _paidAllowance),
+        onSubscriptionRequest: () {});
+    final navigator = Navigator.of(tester.element(find.byType(PaymentWebViewPage)));
+    navigator.pop(false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    webView.navigation.navigate(NavigationRequest(url: '${Env.apiBaseUrl}v1/payments/success', isMainFrame: true));
+    await AnalyticsManager.flushPending(force: true);
+    expect(telemetry.propertiesOf('Subscription Checkout Completed'), isEmpty);
+  });
   testWidgets('embedded web paywall views only ready content and not repeated ready messages', (tester) async {
     final platform = _WebView();
     WebViewPlatform.instance = platform;

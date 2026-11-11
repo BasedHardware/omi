@@ -24,6 +24,18 @@ final class PurchaseObservation {
     guard active.insert(key).inserted else { return }
     sink(event, raw)
   }
+  /// Called only by a mounted usage-limit popup. Presentation is independent of server reach.
+  func usageLimitBlock(reason: String, chatAuthoritative: Bool) {
+    let candidate = reason == "trial_expired" ? "trial" : reason == "floating_bar" ? "chat" : reason
+    let kind = ["transcription", "trial", "chat"].contains(candidate) ? candidate : "unknown"
+    let authoritative = kind != "unknown" && (kind != "chat" || chatAuthoritative)
+    let cause =
+      !authoritative
+      ? "unknown"
+      : kind == "trial" ? "trial_expired" : kind == "chat" ? "chat_quota_exhausted" : "plan_allowance_exhausted"
+    allowance(true, kind: kind, surface: kind == "transcription" ? "capture" : "chat", reason: cause, block: true)
+  }
+
 }
 
 struct PurchaseCheckoutContext {
@@ -62,6 +74,18 @@ final class PurchaseCheckoutObservation {
     var properties = context.properties
     properties["result"] = "client_navigation_completed"
     sink(.checkoutCompleted, PurchaseContract.properties(.checkoutCompleted, properties))
+  }
+  /// Strict observation only. The legacy matcher below still owns product resolution.
+  static func verifiedMatches(_ url: URL, completionURL: URL) -> Bool {
+    guard let actual = URLComponents(url: url, resolvingAgainstBaseURL: false),
+      let expected = URLComponents(url: completionURL, resolvingAgainstBaseURL: false),
+      let scheme = expected.scheme?.lowercased(), ["http", "https"].contains(scheme),
+      actual.user == nil, actual.password == nil, expected.user == nil, expected.password == nil
+    else { return false }
+    let defaultPort = scheme == "https" ? 443 : 80
+    return actual.scheme?.lowercased() == scheme && actual.host?.lowercased() == expected.host?.lowercased()
+      && expected.host != nil && (actual.port ?? defaultPort) == (expected.port ?? defaultPort)
+      && actual.percentEncodedPath == expected.percentEncodedPath
   }
   /// Same completion URL comparison the WKWebView rail already used.
   static func matches(_ url: URL, completionURL: URL) -> Bool {

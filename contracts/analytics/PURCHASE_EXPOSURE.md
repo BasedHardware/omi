@@ -16,10 +16,10 @@ or account identifiers in these event properties. Existing SDK identity is outsi
 | --- | --- |
 | Subscription Paywall Viewed | One committed presentation/mount of the actual sheet, grid or paywall; never an opener intent, repeated build or frame. Hidden surfaces do not count. Remote Flutter web content waits for its ready message. |
 | Subscription Allowance Reached | An existing authoritative allowance/quota answer, backend refusal or server-owned cap payload. Repeated snapshots deduplicate until observed recovery or observer reset. Optimistic chat deltas, unavailable/invalid allowance reads and free/on-device policy alone are excluded. |
-| Subscription Allowance Block Shown | The corresponding useful block UI is mounted, independently of whether a paced automatic paywall opens. Rebuilds deduplicate. A remounted block is a new presentation. |
+| Subscription Allowance Block Shown | The corresponding useful block UI is mounted, independently of authoritative reach or whether a paced automatic paywall opens. An optimistic local refusal still counts its rendered block; unavailable server cause uses unknown reason. Rebuilds deduplicate. A remounted block is a new presentation. |
 | Subscription Upgrade Tapped | Existing upgrade CTA intent/confirmation boundary, alongside legacy Upgrade Plan Selected; contextual navigation CTAs without a selected price use unknown plan/interval. |
 | Subscription Checkout Opened | A URL has been obtained and checkout is mounted/opened. Flutter uses the committed WebView route; native macOS uses the billing sheet appearance; Electron uses ready-to-show IPC after showing the window; web and external macOS chat require a successful browser open. Getting a URL alone never counts. |
-| Subscription Checkout Completed | The existing client success-navigation boundary. **Not accepted payment, entitlement, fulfillment or revenue.** Emitted independently of subsequent subscription refresh/polling; a successful navigation may precede refresh lag. Cancellation, dismissal and failed checkout-page navigation never complete. Upgrade-in-place and reactivation retain Upgrade Succeeded without inventing checkout completion. |
+| Subscription Checkout Completed | A verified client success navigation at the configured API origin and exact terminal pathname, independently of permissive legacy flow resolution. **Not accepted payment, entitlement, fulfillment or revenue.** Emitted independently of subsequent subscription refresh/polling; a successful navigation may precede refresh lag. Cancellation, dismissal and failed checkout-page navigation never complete. Upgrade-in-place and reactivation retain Upgrade Succeeded without inventing checkout completion. |
 | Subscription Restore Attempted / Result | Flutter's three existing restore actions refresh subscription state. Results inspect the fresh read/error, including swallowed request errors; stale paid state cannot produce succeeded. Only succeeded, no_entitlement and failed are currently observable. These actions have no cancellation signal, so they do not emit cancelled. |
 
 Allowances are observations per authoritative observer and surface, not unique account-level cap hits.
@@ -27,6 +27,25 @@ The same cap can be observed on several surfaces. Locked-content previews expose
 boolean, so their block kind/reason use unknown rather than inferring a billing cause. Reopening a block can produce another exposure while
 repeated snapshots within its observer do not produce another reach. There is no persistent person,
 record or billing-period identifier in these properties. An unobserved recovery cannot be inferred.
+
+Legacy resolution and verified completion observation are separate. Flutter retains its legacy prefix-based
+route pop, but the new callback additionally parses and matches the configured success scheme, host,
+effective port and exact path, rejecting userinfo. Electron keeps legacy outcome strings for product
+callers; main verifies against main-owned VITE_OMI_API_BASE (the same configuration/default authority as
+main auth), exact success path and no userinfo, and returns only a closed outcome/observedCompletion
+pair internally. Preload projects the original outcome and optional verified callback; the renderer
+requires observed window opening plus verified success. Callback/visibility transport failures cannot
+replace the product outcome. Native macOS retains its legacy matcher and UI completionURLs; a separate
+coordinator observation compares configured scheme/host/effective port/exact encoded path and rejects
+userinfo. Default HTTP(S) ports normalize; success session queries are allowed but never transported in
+new observation data. Legacy lookalike/prefix/port/userinfo outcomes can still resolve exactly as before
+without emitting new completion telemetry. Cancellation, dismissal, failure and late callbacks cannot
+turn an unverified outcome into verified completion. No return URL or identifier is added to IPC.
+
+Desktop popup block observations describe presentation, including optimistic local chat refusal while
+the latest server snapshot still allows use. They deduplicate per presentation and use unknown reason
+when no authoritative exhaustion cause exists; they never create an authoritative reach. Remounting
+after dismissal counts another block. Server reach observations and quota/allowance gates are unchanged.
 
 ## Platform coverage
 

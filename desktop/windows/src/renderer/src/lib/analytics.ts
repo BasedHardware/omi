@@ -155,7 +155,11 @@ export function trackPurchaseEvent(id: PurchaseEventId, raw: Record<string, unkn
 
 /** `opened` comes from the main window ready-to-show IPC, never invocation intent. */
 export async function openSubscriptionCheckout(
-  open: (url: string, onOpened?: () => void) => Promise<'success' | 'cancel' | 'closed'>,
+  open: (
+    url: string,
+    onOpened?: () => void,
+    onCompleted?: () => void
+  ) => Promise<'success' | 'cancel' | 'closed'>,
   url: string,
   plan: string,
   interval: string,
@@ -169,17 +173,24 @@ export async function openSubscriptionCheckout(
   }
   let reported = false
   let terminal = false
+  let verifiedCompletion = false
   let outcome: 'success' | 'cancel' | 'closed'
   try {
-    outcome = await open(url, () => {
-      if (reported || terminal) return
-      reported = true
-      trackPurchaseEvent('checkoutOpened', { ...properties, result: 'opened' })
-    })
+    outcome = await open(
+      url,
+      () => {
+        if (reported || terminal) return
+        reported = true
+        trackPurchaseEvent('checkoutOpened', { ...properties, result: 'opened' })
+      },
+      () => {
+        if (!terminal && reported) verifiedCompletion = true
+      }
+    )
   } finally {
     terminal = true
   }
-  if (outcome === 'success' && reported)
+  if (outcome === 'success' && reported && verifiedCompletion)
     trackPurchaseEvent('checkoutCompleted', {
       ...properties,
       result: 'client_navigation_completed'

@@ -678,6 +678,8 @@ export type UpdateCheckResult = {
 
 /** Result of an in-app Stripe Checkout flow (main/billing/checkoutWindow). */
 export type CheckoutOutcome = 'success' | 'cancel' | 'closed'
+/** Internal main/preload observation; carries no checkout URL or identity. */
+export type CheckoutObservationResult = { outcome: CheckoutOutcome; observedCompletion: boolean }
 
 /** A file chosen for chat attachment. Produced in the main process by the native
  *  file picker (`chat:openFiles`, which reads the bytes) or built in the renderer
@@ -822,7 +824,11 @@ export type OmiBridgeApi = {
   /** Open a Stripe Checkout URL in a modal in-app window; resolves when the flow
    *  completes ('success'/'cancel' at the backend redirect) or the user closes it
    *  ('closed'). Only displays Stripe's hosted page — completes no payment. */
-  openCheckout: (url: string, onOpened?: () => void) => Promise<CheckoutOutcome>
+  openCheckout: (
+    url: string,
+    onOpened?: () => void,
+    onCompleted?: () => void
+  ) => Promise<CheckoutOutcome>
   /** Open a web URL (e.g. the Stripe customer portal) in the system browser. */
   openExternalUrl: (url: string) => Promise<boolean>
   /** Poll an external-integration developer's setup-completed webhook from the

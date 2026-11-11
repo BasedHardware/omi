@@ -52,12 +52,13 @@ export function UsageLimitPopup(): React.JSX.Element | null {
       surface: 'usage_limit_popup'
     })
     exposure.current.allowance(
-      usageLimitIsAuthoritative(),
+      true,
       {
         allowance_kind: reason === 'trial_expired' ? 'trial' : reason,
         surface: reason === 'transcription' ? 'capture' : 'chat',
-        reason:
-          reason === 'trial_expired'
+        reason: !usageLimitIsAuthoritative()
+          ? 'unknown'
+          : reason === 'trial_expired'
             ? 'trial_expired'
             : reason === 'transcription'
               ? 'plan_allowance_exhausted'

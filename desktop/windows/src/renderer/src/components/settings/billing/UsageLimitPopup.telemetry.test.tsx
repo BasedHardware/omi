@@ -41,12 +41,28 @@ it('an observed limit is not a view or block until its UI mounts; rerenders do n
   expect(sink.mock.calls.filter(([id]) => id === 'allowanceBlockShown')).toHaveLength(2)
   expect(sink.mock.calls.filter(([id]) => id === 'allowanceReached')).toHaveLength(1)
 })
-it('optimistic local refusal may show its existing UI, but is not an authoritative allowance block', () => {
-  render(
+it('optimistic rendered popup counts a block with unknown cause, never reach; rebuild/dismiss/reopen dedup', () => {
+  const tree = render(
     <MemoryRouter>
       <UsageLimitPopup />
     </MemoryRouter>
   )
   act(() => showUsageLimit('chat', false))
-  expect(sink.mock.calls.map(([id]) => id)).toEqual(['paywallViewed'])
+  expect(sink.mock.calls.map(([id]) => id)).toEqual(['paywallViewed', 'allowanceBlockShown'])
+  expect(sink.mock.calls.find(([id]) => id === 'allowanceBlockShown')?.[1]).toEqual({
+    allowance_kind: 'chat',
+    surface: 'chat',
+    reason: 'unknown'
+  })
+  tree.rerender(
+    <MemoryRouter>
+      <UsageLimitPopup />
+    </MemoryRouter>
+  )
+  act(() => showUsageLimit('chat', false))
+  expect(sink.mock.calls.filter(([id]) => id === 'allowanceBlockShown')).toHaveLength(1)
+  act(() => dismissUsageLimit())
+  act(() => showUsageLimit('chat', false))
+  expect(sink.mock.calls.filter(([id]) => id === 'allowanceBlockShown')).toHaveLength(2)
+  expect(sink.mock.calls.filter(([id]) => id === 'allowanceReached')).toHaveLength(0)
 })

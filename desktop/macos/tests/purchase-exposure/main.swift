@@ -60,3 +60,33 @@ for event: PurchaseEvent in [
   precondition(output["url"] == nil && output["uid"] == nil && output["error"] == nil)
 }
 print("PASS: native purchase presentation, allowance, checkout navigation/terminal and privacy boundaries")
+
+// The actual popup's observation mapping counts optimistic UI, not server exhaustion.
+var popupEvents: [(PurchaseEvent, [String: String])] = []
+let popupSink: PurchaseObservation.Sink = { popupEvents.append(($0, $1)) }
+let popup = PurchaseObservation(sink: popupSink)
+popup.usageLimitBlock(reason: "floating_bar", chatAuthoritative: false)
+popup.usageLimitBlock(reason: "floating_bar", chatAuthoritative: false)
+precondition(popupEvents.count == 1 && popupEvents[0].0 == .allowanceBlockShown)
+precondition(popupEvents[0].1["reason"] == "unknown" && popupEvents[0].1["allowance_kind"] == "chat")
+PurchaseObservation(sink: popupSink).usageLimitBlock(reason: "floating_bar", chatAuthoritative: false)
+precondition(popupEvents.count == 2)  // Dismiss/remount gets a fresh presentation lifetime.
+PurchaseObservation(sink: popupSink).usageLimitBlock(reason: "chat", chatAuthoritative: true)
+precondition(popupEvents.last?.1["reason"] == "chat_quota_exhausted")
+precondition(!popupEvents.contains { $0.0 == .allowanceReached })
+for raw in [
+  "https://fixture.invalid:444/v1/payments/success", "https://user@fixture.invalid/v1/payments/success",
+  "https://@fixture.invalid/v1/payments/success", "http://fixture.invalid/v1/payments/success",
+  "https://other.invalid/v1/payments/success", "https://fixture.invalid.evil.invalid/v1/payments/success",
+  "https://fixture.invalid/v1/payments/success-extra", "https://fixture.invalid/v1/payments/success/",
+] {
+  precondition(!PurchaseCheckoutObservation.verifiedMatches(URL(string: raw)!, completionURL: success))
+}
+precondition(
+  PurchaseCheckoutObservation.verifiedMatches(
+    URL(string: "https://fixture.invalid:443/v1/payments/success?session_id=fixture")!, completionURL: success))
+precondition(
+  PurchaseCheckoutObservation.verifiedMatches(
+    URL(string: "http://fixture.invalid:80/v1/payments/success")!,
+    completionURL: URL(string: "http://fixture.invalid/v1/payments/success")!))
+print("PASS: popup optimism is visible block only; strict origin/port/path/userinfo observation")
