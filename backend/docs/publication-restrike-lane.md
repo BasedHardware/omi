@@ -56,6 +56,32 @@ the wasted GPU pass also adds load that feeds the same contention family.
   registered in `config/flag_budget.json` under the batch record lane /
   rollout lead owner.
 
+## Storm alignment: land the replay after the measured window
+
+`FirestoreStore.run` stamps the window its storm damper armed for the
+exhausted label onto the raised chain (`error.retry_after`). The lane used
+to discard that measurement and re-strike on the bare ladder — 0.25s,
+0.5s, 1.0s against windows that reach 4.0s — so when the first loss carried
+a window deeper than the ladder step, every re-strike fired into the
+window's interior: the store's entry consult then slept the residual out
+inside the fenced call, which is a blocking `time.sleep` on the
+db-executor thread the publication occupies, and a chain that still lost
+inside the wave re-armed the shared window the lane had just re-entered.
+Three re-strikes against a deep window could park a publication's executor
+thread for most of the window while producing zero committed transitions.
+
+Each attempt now waits
+`max(ladder step, min(measured window, storm cap))` with the storm cap at
+4.0s (`PUBLICATION_RESTRIKE_STORM_MAX_SECONDS`, the store damper's window
+cap). The measured window shifts WHEN the replay lands, never the attempt
+budget: still at most three re-strikes, and every hostile payload — a
+foreign exception, an exhaustion with no stamped window (damper disabled,
+Postgres job store), a non-finite or negative value — keeps the documented
+ladder byte-for-byte. A mid-lane re-exhaustion stamps a fresh window, and
+the very next wait re-aims at it.
+
+Failure-Class: FC-publication-restrike-collides-inside-the-armed-storm-window
+
 ## What deliberately did not change
 
 - The deferred publication-drain lane (the `batch_merge_drain` family) is

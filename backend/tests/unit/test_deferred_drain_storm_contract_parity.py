@@ -222,7 +222,9 @@ def test_parity_pump_helper_rejects_nonfinite():
 
 
 def test_parity_pump_helper_clamps_at_the_lane_max():
-    assert 'min(value, DRAIN_RETRY_MAX_SECONDS)' in PUMP_SOURCE
+    # The clamp lives in the shared _contention_storm_after cap argument;
+    # the drain helper's delegation is the lane-max pin.
+    assert 'return _contention_storm_after(error, DRAIN_RETRY_MAX_SECONDS)' in PUMP_SOURCE
 
 
 def test_parity_pump_helper_reads_the_stamped_attribute():

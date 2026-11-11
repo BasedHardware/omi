@@ -101,21 +101,16 @@ def deferred_drain_delay(attempt: int) -> float:
     return min(DRAIN_RETRY_MAX_SECONDS, DRAIN_RETRY_BASE_SECONDS * (2 ** (attempt - 1)))
 
 
-def contention_retry_after(error: BaseException | None) -> float:
+def _contention_storm_after(error: BaseException | None, cap: float) -> float:
     """The storm damper's applied retry-after carried on a contention exhaustion.
 
     ``FirestoreStore.run`` stamps the window its storm damper actually armed
-    for the drain's label onto the exhausted chain's ``retry_after``. On that
-    measured signal the deferred lane lands its next re-drain after the armed
-    window instead of colliding inside it: a fixed 0.5s re-offer against a
-    document the damper just spaced waits out the same window inside
-    ``store.run`` and burns a full five-attempt chain — the lockstep burn the
-    damper exists to prevent — once per lane attempt until the budget dies.
-    Only a positive finite number counts; a foreign exception, an exhaustion
-    raised with no damper in scope, hostile or malformed input all keep the
-    legacy fixed ladder. Never raises. The clamp keeps the lane's documented
-    horizon (the max backoff step) unchanged: a storm shifts WHEN the next
-    attempt lands, never the attempt budget or its ceiling.
+    for the exhausted label onto the raised chain's ``retry_after``. Only a
+    positive finite number counts; a foreign exception, an exhaustion raised
+    with no damper in scope, hostile or malformed input all return ``0.0``
+    (the caller keeps its legacy fixed schedule). Never raises. The clamp
+    keeps each lane's documented horizon unchanged: a storm shifts WHEN the
+    next attempt lands, never the attempt budget or its ceiling.
     """
     value = getattr(error, 'retry_after', None)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -123,7 +118,20 @@ def contention_retry_after(error: BaseException | None) -> float:
     value = float(value)
     if not math.isfinite(value) or value <= 0.0:
         return 0.0
-    return min(value, DRAIN_RETRY_MAX_SECONDS)
+    return min(value, cap)
+
+
+def contention_retry_after(error: BaseException | None) -> float:
+    """The storm window the deferred publication-drain lane lands after.
+
+    On that measured signal the deferred lane lands its next re-drain after the
+    armed window instead of colliding inside it: a fixed 0.5s re-offer against a
+    document the damper just spaced waits out the same window inside
+    ``store.run`` and burns a full five-attempt chain — the lockstep burn the
+    damper exists to prevent — once per lane attempt until the budget dies.
+    The clamp is the drain lane's documented horizon (the max backoff step).
+    """
+    return _contention_storm_after(error, DRAIN_RETRY_MAX_SECONDS)
 
 
 # Bounded publication re-strike lane. A publication transition that exhausts
@@ -144,10 +152,28 @@ def contention_retry_after(error: BaseException | None) -> float:
 # the result reports ``restrike_committed`` at INFO and the owner's ordered
 # drain proceeds as with any accepted publication.
 #
+# Storm alignment: the exhausted chain arrives carrying the window the
+# store's damper armed for the label (``retry_after``, stamped by
+# ``FirestoreStore.run``). Re-striking on the bare ladder fires into that
+# window's interior: the entry consult then sleeps the residual out inside
+# the fenced call — a blocking OS-level sleep on the db-executor thread
+# the publication occupies — and a chain that still loses inside the wave
+# re-arms the shared window the lane just re-entered. Each attempt
+# therefore waits ``max(ladder step, min(measured window, storm cap))``:
+# the measured storm shifts WHEN the replay lands, never the attempt
+# budget. An exhaustion with no stamped window (the damper disabled, a
+# foreign store) keeps the documented ladder byte-for-byte.
+#
 # Failure-Class: FC-publication-contention-discards-completed-gpu-results
+# Failure-Class: FC-publication-restrike-collides-inside-the-armed-storm-window
 PUBLICATION_RESTRIKE_BASE_SECONDS = 0.25
 PUBLICATION_RESTRIKE_MAX_SECONDS = 2.0
 PUBLICATION_RESTRIKE_MAX_ATTEMPTS = 3
+# The storm term's own ceiling: the store's damper caps an armed window at
+# 4.0s (``FirestoreStore.STORM_DAMPER_CAP_SECONDS``), so a window deeper
+# than the ladder's 2.0s cap must still be clearable. ``utils`` stays
+# independent of ``database`` internals by pinning the literal here.
+PUBLICATION_RESTRIKE_STORM_MAX_SECONDS = 4.0
 
 
 def publication_restrike_delay(attempt: int) -> float:
@@ -165,6 +191,22 @@ def publication_restrike_delay(attempt: int) -> float:
     if attempt > PUBLICATION_RESTRIKE_MAX_ATTEMPTS:
         return PUBLICATION_RESTRIKE_MAX_SECONDS
     return min(PUBLICATION_RESTRIKE_MAX_SECONDS, PUBLICATION_RESTRIKE_BASE_SECONDS * (2 ** (attempt - 1)))
+
+
+def publication_restrike_storm_after(error: BaseException | None) -> float:
+    """The measured window a publication re-strike must land after.
+
+    The ladder above answers "when does this lane try again on its own
+    schedule"; this answers "when did the damper measure the label's hot
+    documents go quiet". A re-strike that ignores it fires into the window's
+    interior, where the entry consult parks the publication's db-executor
+    thread on a blocking sleep for the residual and a chain that still loses
+    re-arms the storm the lane just re-entered. The clamp is the lane's own
+    storm ceiling — the store damper's window cap — so the deepest measured
+    window stays clearable while the lane's horizon stays bounded and
+    documented. Never raises; every hostile shape keeps the ladder answer.
+    """
+    return _contention_storm_after(error, PUBLICATION_RESTRIKE_STORM_MAX_SECONDS)
 
 
 def publication_loss_is_contention(error: BaseException) -> bool:
@@ -1050,12 +1092,22 @@ class Pump:
         would only replay the same refusal) or when every re-strike also
         lost; ``error`` then carries the final exception for the legacy
         catch site, whose lost-marker and ERROR line are unchanged.
+
+        Each attempt waits
+        ``max(ladder step, min(measured storm window, storm cap))``. The
+        measured window rides the exception the store stamped at the last
+        exhaustion, so a mid-lane re-exhaustion re-aims the very next wait
+        at the freshly armed window; a wait never shortens below the
+        documented ladder step.
         """
         error = first_error
         for attempt in range(1, PUBLICATION_RESTRIKE_MAX_ATTEMPTS + 1):
             if not publication_loss_is_contention(error):
                 return False, False, error
             delay = publication_restrike_delay(attempt)
+            storm = publication_restrike_storm_after(error)
+            if storm > delay:
+                delay = storm
             logger.info(
                 'event=batch_publication outcome=restrike_wait attempt=%d delay_ms=%d exception_type=%s',
                 attempt,

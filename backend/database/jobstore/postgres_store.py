@@ -230,10 +230,12 @@ class PostgresStore:
     # -- Store protocol -----------------------------------------------------------------------
     def run(self, body: Callable[[PostgresTransaction], T]) -> T:
         last: BaseException | None = None
+        applied_wait = 0.0
         for attempt in range(MAX_SERIALIZATION_RETRIES):
             if attempt:
                 # Jittered, bounded: two bodies that deadlocked must not collide again in lockstep.
-                time.sleep(random.uniform(0, min(0.2, 0.005 * 2**attempt)))
+                applied_wait = random.uniform(0, min(0.2, 0.005 * 2**attempt))
+                time.sleep(applied_wait)
             with self.pool.connection() as conn:
                 try:
                     with conn.transaction():
@@ -247,7 +249,14 @@ class PostgresStore:
                     if not _is_retryable(exc):
                         raise
                     last = exc
-        raise JobStoreContentionExhausted('job store transaction kept conflicting') from last
+        # The storm-alignment contract FirestoreStore.run follows: stamp the
+        # inter-attempt window the chain actually applied onto the exhaustion,
+        # so a downstream re-offer (the pump's deferred drain and re-strike
+        # lanes read ``retry_after``) lands after the spacing this store was
+        # using when its budget died instead of re-colliding on the bare
+        # ladder. Without the stamp the measurement dies with the chain and
+        # the next lane re-offer fires blind into the same conflicting row.
+        raise JobStoreContentionExhausted('job store transaction kept conflicting', retry_after=applied_wait) from last
 
     def probe(self, table: str, key: str) -> dict:
         """Advisory point read outside any transaction ({} if missing).
