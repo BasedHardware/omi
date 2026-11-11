@@ -74,6 +74,10 @@ class BatchPlane:
         monkeypatch.setattr(purge, '_delete_job', self.delete_job)
         monkeypatch.setattr(purge, 'mirror_refresh', lambda *a: None)
         monkeypatch.setattr(purge, '_shadow_mode', lambda: False)
+        from tests.unit.test_conversation_delete_gate_wait import _Transaction
+
+        monkeypatch.setattr(purge, '_in_transaction', lambda _client, body: body(_Transaction(client)))
+        self.fenced = 0
         monkeypatch.setattr(
             retention,
             'delete_batch_object',
@@ -110,10 +114,16 @@ class BatchPlane:
         if self.row_cost:
             self.sleep(self.row_cost)
 
-    def erase_artifact(self, uid, namespace, snapshot, data, delete_uri):
+    def _fence(self, fence):
+        if fence is not None:
+            fence(None)  # the real fence reads the gate/hold documents; fakes ignore transactions
+            self.fenced += 1
+
+    def erase_artifact(self, uid, namespace, snapshot, data, delete_uri, fence=None, client=None):
         self._cost()
         if data.get('uri'):
             delete_uri(uid, data['uri'])
+        self._fence(fence)
         self.client.docs.pop(f'{namespace}_artifacts/{snapshot.id}', None)
         self.erased.append(('artifacts', snapshot.id))
 
@@ -123,13 +133,15 @@ class BatchPlane:
             row = self.client.docs[path]
             self.client.docs[path] = {'owner_key': row.get('owner_key'), 'projection_state': 'erased'}
 
-    def erase_result(self, _client, namespace, snapshot):
+    def erase_result(self, _client, namespace, snapshot, fence=None):
         self._cost()
+        self._fence(fence)
         self._erase_result_doc(namespace, snapshot.id)
         self.erased.append(('results', snapshot.id))
 
-    def delete_job(self, _client, namespace, snapshot, *, retain_ordering):
+    def delete_job(self, _client, namespace, snapshot, *, retain_ordering, fence=None):
         self._cost()
+        self._fence(fence)
         self.client.docs.pop(f'{namespace}_jobs/{snapshot.id}', None)
         self._erase_result_doc(namespace, snapshot.id)
         self.erased.append(('jobs', snapshot.id))
@@ -368,19 +380,19 @@ def test_units_stop_at_the_row_cap_and_the_time_budget():
     clock = {'now': 0.0}
     units = _Units(clock)
 
-    def erase(_row):
+    def erase(_row, _authority):
         units.sizes[-1] += 1
 
-    assert purge._in_units(units, list(range(25)), erase, lambda: clock['now']) == 25
+    assert purge._in_units(units, list(range(25)), erase, lambda: clock['now'], lambda: None) == 25
     assert units.sizes == [10, 10, 5]
 
     units.sizes.clear()
 
-    def slow_erase(_row):
+    def slow_erase(_row, _authority):
         units.sizes[-1] += 1
         clock['now'] += 0.6
 
-    purge._in_units(units, list(range(7)), slow_erase, lambda: clock['now'])
+    purge._in_units(units, list(range(7)), slow_erase, lambda: clock['now'], lambda: None)
     assert units.sizes == [3, 3, 1]  # 0.0, 0.6, 1.2 start; 1.8 >= 1.5 stops the unit
 
 
@@ -398,8 +410,9 @@ def test_foreground_delete_gets_204_while_a_full_page_purge_runs(
 
         class Timed:
             def __enter__(self):
-                context.__enter__()
+                authority = context.__enter__()
                 self.started = time.monotonic()
+                return authority
 
             def __exit__(self, *exc):
                 holds.append(time.monotonic() - self.started)

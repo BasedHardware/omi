@@ -41,6 +41,7 @@ from database.batch_pipeline_purge import row_belongs as _belongs
 from database.batch_pipeline_purge import row_references as _references
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 from database.batch_pipeline_shadow_hook import shadow_mode_enabled as _shadow_mode
+from database.legal_holds import remote_outcome_known
 
 PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow')
 DISCOVER_TABLES = ('jobs', 'results')
@@ -77,7 +78,11 @@ class Progress(Protocol):
         ...
 
     def unit(self) -> ContextManager[Any]:
-        """One destructive unit: account gate + ownership check, then a yield."""
+        """One destructive unit: account gate + ownership check; yields its ``UnitAuthority``."""
+        ...
+
+    def settle_stuck(self, resolve: Callable[[str], bool]) -> None:
+        """Settle a gate left held by an unknown remote outcome before taking a new one."""
         ...
 
     def expired(self) -> bool:
@@ -100,12 +105,35 @@ def _ensure_budget(progress: Progress) -> None:
         raise PurgeCheckpointed()
 
 
-def _in_units(progress: Progress, rows: list[Any], erase: Callable[[Any], None], clock: Callable[[], float]) -> int:
+def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
+    @firestore.transactional
+    def run(transaction):
+        return body(transaction)
+
+    return run(client.transaction())
+
+
+def _fenced_delete(client: Any, reference: Any, fence: Callable[[Any], None]) -> None:
+    def body(transaction):
+        fence(transaction)  # the erasing transaction itself re-proves authority
+        transaction.delete(reference)
+
+    _in_transaction(client, body)
+
+
+def _in_units(
+    progress: Progress,
+    rows: list[Any],
+    erase: Callable[[Any, Any], None],
+    clock: Callable[[], float],
+    settle: Callable[[], None],
+) -> int:
     pending = list(rows)
     erased = 0
     while pending:
         _ensure_budget(progress)
-        with progress.unit():
+        settle()
+        with progress.unit() as authority:
             started = clock()
             done = 0
             while (
@@ -113,7 +141,7 @@ def _in_units(progress: Progress, rows: list[Any], erase: Callable[[Any], None],
                 and done < UNIT_MAX_ROWS
                 and (done == 0 or (clock() - started < UNIT_BUDGET_SECONDS and not progress.expired()))
             ):
-                erase(pending.pop(0))
+                erase(pending.pop(0), authority)
                 done += 1
             erased += done
     return erased
@@ -161,15 +189,34 @@ def purge_conversation(
         if progress.expired():
             raise PurgeCheckpointed()
 
-    def erase_dependent(namespace: str, table: str) -> Callable[[Any], None]:
-        def erase(item: Any) -> None:
+    def remote_delete(authority: Any) -> Callable[[str, str], None]:
+        # Every object delete holds the gate until its outcome is known (UnitAuthority.remote).
+        def delete(owner: str, uri: str) -> None:
+            authority.remote(lambda: delete_uri(owner, uri), target=uri)
+
+        return delete
+
+    def resolve(target: str) -> bool:
+        try:
+            delete_uri(uid, target)
+            return True
+        except BaseException as error:  # noqa: BLE001 - classified as known/unknown
+            return remote_outcome_known(error)
+
+    def settle() -> None:
+        progress.settle_stuck(resolve)
+
+    def erase_dependent(namespace: str, table: str) -> Callable[[Any, Any], None]:
+        def erase(item: Any, authority: Any) -> None:
             snapshot, data = item
             if table == 'artifacts':
-                _erase_artifact(uid, namespace, snapshot, data, delete_uri)
+                _erase_artifact(
+                    uid, namespace, snapshot, data, remote_delete(authority), fence=authority.fence, client=client
+                )
                 return
             for uri in _references(data):
-                delete_uri(uid, uri)
-            snapshot.reference.delete()
+                remote_delete(authority)(uid, uri)
+            _fenced_delete(client, snapshot.reference, authority.fence)
             mirror_refresh(namespace, [(table, snapshot.id)])
 
         return erase
@@ -222,7 +269,7 @@ def purge_conversation(
                                 or (table == 'intakes' and segments.intersection(data.get('segment_ids') or []))
                             ):
                                 matches.append((snapshot, data))
-                        erased += _in_units(progress, matches, erase_dependent(namespace, table), clock)
+                        erased += _in_units(progress, matches, erase_dependent(namespace, table), clock, settle)
                         mark(position)
                     mark({'ns': ns_index, 'phase': phase, 'table': table_index + 1, 'after': None})
             elif phase == 'parked':
@@ -243,7 +290,7 @@ def purge_conversation(
                             continue  # Already handled in ``dependents``, including pending writes.
                         if _belongs(data, conversation_id) or data.get('segment_id') in segments:
                             matches.append((snapshot, data))
-                    erased += _in_units(progress, matches, erase_dependent(namespace, 'artifacts'), clock)
+                    erased += _in_units(progress, matches, erase_dependent(namespace, 'artifacts'), clock, settle)
                     mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': cursor})
             elif phase == 'segments':
                 while True:
@@ -254,34 +301,39 @@ def purge_conversation(
                     for chunk_start in range(0, len(pending), UNIT_MAX_ROWS):
                         chunk = pending[chunk_start : chunk_start + UNIT_MAX_ROWS]
                         bindings = []
-                        _ensure_budget(progress)
                         for segment_id in chunk:
+                            # Each read is its own batch: none starts past the budget.
+                            _ensure_budget(progress)
                             job = client.collection(f'{namespace}_jobs').document(segment_id).get()
+                            _ensure_budget(progress)
                             result = client.collection(f'{namespace}_results').document(segment_id).get()
                             bindings.append((segment_id, job, result))
                         done: list[str] = []
 
-                        def erase_binding(item: Any, namespace: str = namespace, done: list[str] = done) -> None:
+                        def erase_binding(
+                            item: Any, authority: Any, namespace: str = namespace, done: list[str] = done
+                        ) -> None:
                             segment_id, job, result = item
                             result_data = (result.to_dict() or {}) if result.exists else {}
                             if job.exists:
                                 for uri in _references(job.to_dict() or {}) | _references(result_data):
-                                    delete_uri(uid, uri)
-                                _delete_job(client, namespace, job, retain_ordering=True)
+                                    remote_delete(authority)(uid, uri)
+                                _delete_job(client, namespace, job, retain_ordering=True, fence=authority.fence)
                             elif result_data and result_data.get('projection_state') != 'erased':
                                 for uri in _references(result_data):
-                                    delete_uri(uid, uri)
-                                _erase_result(client, namespace, result)
+                                    remote_delete(authority)(uid, uri)
+                                _erase_result(client, namespace, result, fence=authority.fence)
                                 mirror_refresh(namespace, [('results', segment_id)])
                             done.append(segment_id)
 
                         _ensure_budget(progress)
-                        with progress.unit():
+                        settle()
+                        with progress.unit() as authority:
                             started = clock()
                             for item in bindings:
                                 if done and (clock() - started >= UNIT_BUDGET_SECONDS or progress.expired()):
                                     break
-                                erase_binding(item)
+                                erase_binding(item, authority)
                             # Records go only after their binding is gone, under the same ownership.
                             progress.segments_done(namespace, done)
                         erased += len(done)
@@ -290,6 +342,7 @@ def purge_conversation(
                     mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': None})
             elif phase == 'shadow' and _shadow_mode():
                 _ensure_budget(progress)
+                settle()
                 with progress.unit():
                     purge_jobstore_owner(namespace, uid)
             if phase_index + 1 < len(PHASES):

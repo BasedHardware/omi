@@ -432,3 +432,84 @@ def test_real_firestore_rpc_past_the_unit_deadline_is_not_sent(plane):
     with rpc_deadline.rpc_deadline(rpc_deadline.now() + 5):
         ref.set({'erased': True})  # one bounded attempt on the real client
     assert ref.get().to_dict() == {'erased': True}
+
+
+def test_slow_remote_erasure_keeps_the_gate_until_it_resolves_real_transport(monkeypatch, plane, route):
+    """Reviewer round-4 probe as a regression: a slowly progressing storage response outlives the unit's
+    10 s expiry. Real google-cloud-storage SDK and requests transport over a loopback socket, real gate,
+    real hold writer, real public route. The gate must not change hands, nor a hold commit, before the
+    erasure's outcome is known."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from google.cloud import storage
+    from database import legal_holds
+    from utils.other import local_storage
+
+    cid = f'conv-{uuid4().hex[:8]}'
+    _delete(plane, route, cid)
+    _conversation(plane, 'foreground-conversation')
+    entered, erased_at, timeline = threading.Event(), {}, {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_DELETE(self):
+            timeline['http_started'] = time.monotonic()
+            entered.set()
+            self.wfile.write(b'HTTP/1.1 204 No Content\r\nX-Progress: ')
+            self.wfile.flush()
+            for _ in range(13):  # progress below the socket read timeout, past the unit expiry
+                time.sleep(1)
+                self.wfile.write(b'x')
+                self.wfile.flush()
+            erased_at['t'] = time.monotonic()  # the remote side effect lands here
+            self.wfile.write(b'\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
+            self.wfile.flush()
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    client = storage.Client(
+        project='demo-slow-http',
+        credentials=AnonymousCredentials(),
+        client_options={'api_endpoint': f'http://127.0.0.1:{server.server_port}'},
+    )
+    monkeypatch.setattr(local_storage, 'create_storage_client', lambda: client)
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-bucket')
+    uri = f'gs://synthetic-bucket/batch-pipeline/batch_pipeline_prod/owners/{plane.key}/audio/a.enc#123'
+    artifact = plane.client.collection('batch_pipeline_prod_artifacts').document('artifact-1')
+    artifact.set({'owner_key': plane.key, 'owner_id': plane.uid, 'conversation_ids': [cid], 'uri': uri})
+    [(job, generation)] = _reconcile(monkeypatch)
+    errors = []
+    worker = threading.Thread(target=lambda: _run_capturing(job, generation, errors))
+    try:
+        worker.start()
+        assert entered.wait(10)
+        time.sleep(10.5)  # past the unit gate's 10 s expiry, request still in flight
+        hold_attempt = {}
+        try:
+            legal_holds.place_legal_hold(plane.uid, issuer='admin')
+            hold_attempt['committed_at'] = time.monotonic()
+        except legal_holds.DestructiveOperationInProgress:
+            hold_attempt['rejected_at'] = time.monotonic()
+        with TestClient(route.app) as foreground:
+            response = foreground.delete('/v1/conversations/foreground-conversation?cascade=true')
+        timeline['foreground_done'] = time.monotonic()
+        worker.join(20)
+        assert 'rejected_at' in hold_attempt, 'a hold committed while the erasure was unresolved'
+        assert response.status_code == 204
+        assert erased_at['t'] < timeline['foreground_done']  # authority moved only after the erasure landed
+        legal_holds.place_legal_hold(plane.uid, issuer='admin')  # now it can, and nothing erases after it
+        assert not worker.is_alive()
+    finally:
+        worker.join(20)
+        server.shutdown()
+        server.server_close()
+        client.close()
+
+
+def _run_capturing(job, generation, errors):
+    try:
+        _quick(job, generation)
+    except BaseException as error:  # the late response overran the unit: retryable failure, debt kept
+        errors.append(type(error).__name__)

@@ -193,8 +193,29 @@ def gate_client(monkeypatch):
                 now or legal_holds.datetime.now(legal_holds.timezone.utc),
             )
 
+    def mark_remote(uid, *, kind, token, inflight, firestore_client=None, target=None):
+        with lock:
+            legal_holds._mark_remote_erasure_transaction.to_wrap(
+                client.transaction(),
+                client,
+                uid,
+                kind,
+                token,
+                inflight,
+                legal_holds.datetime.now(legal_holds.timezone.utc),
+                target,
+            )
+
+    def settle(uid, *, kind, token, firestore_client=None):
+        with lock:
+            return legal_holds._settle_remote_erasure_transaction.to_wrap(
+                client.transaction(), client, uid, kind, token, legal_holds.datetime.now(legal_holds.timezone.utc)
+            )
+
     monkeypatch.setattr(legal_holds, 'acquire_destructive_operation', acquire)
     monkeypatch.setattr(legal_holds, 'finish_destructive_operation', finish)
+    monkeypatch.setattr(legal_holds, 'mark_remote_erasure', mark_remote)
+    monkeypatch.setattr(legal_holds, 'settle_stuck_remote_erasure', settle)
     monkeypatch.setattr(legal_holds, 'account_deletion_firestore_client', lambda **_kwargs: client)
     return client
 

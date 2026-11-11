@@ -1,10 +1,13 @@
-"""A hard wall-clock deadline for every RPC made inside a bounded destructive unit.
+"""A wall-clock deadline for every RPC made inside a bounded destructive unit or run.
 
 Per-request ``timeout`` arguments do not bound SDK-internal retries (the GCS
 generation-match policy retries for 120 s) or calls the caller never sees
-(transaction begin/commit/rollback, credential refresh). Inside ``rpc_deadline``
-each call on a bound Firestore or storage client runs once, with no SDK retry,
-and only for the time left; past the deadline it raises before sending.
+(transaction begin/commit/rollback). Inside ``rpc_deadline`` each call on a
+bound Firestore or storage client runs once, with no SDK retry, and with a
+timeout no longer than the time left; past the deadline it raises before
+sending. This bounds latency only: a request already sent can still take
+effect remotely after its client-side timeout, which is why remote erasures
+are tracked as in flight on the account gate (``legal_holds``).
 Outside the scope a bound client behaves exactly as before.
 """
 
@@ -61,6 +64,20 @@ def rpc_deadline(at: float) -> Iterator[None]:
         _DEADLINE.reset(token)
 
 
+@contextmanager
+def override(at: float) -> Iterator[None]:
+    """Replace the current deadline with ``at``; callers cap ``at`` by any deadline they must still honour."""
+    token = _DEADLINE.set(at)
+    try:
+        yield
+    finally:
+        _DEADLINE.reset(token)
+
+
+def current() -> float | None:
+    return _DEADLINE.get()
+
+
 def _left_or_raise(name: str) -> float | None:
     left = remaining()
     if left is None:
@@ -99,7 +116,7 @@ def bind_firestore_client(client: Any) -> Any:
 
 
 def bind_storage_client(client: Any) -> Any:
-    """Bound ``client``'s HTTP session, credential refresh included, by ``rpc_deadline``; idempotent."""
+    """Cap ``client``'s HTTP timeouts by ``rpc_deadline`` and refuse to send past it; idempotent."""
     session = getattr(client, '_http', None)  # google-auth AuthorizedSession shared by every storage call
     request = getattr(session, 'request', None)
     if session is None or not callable(request) or getattr(session, _MARK, False) is True:
@@ -109,8 +126,8 @@ def bind_storage_client(client: Any) -> Any:
     def bounded(*args: Any, **kwargs: Any) -> Any:
         left = _left_or_raise('storage')
         if left is not None:
-            # Total time for the call, including any token refresh it triggers.
-            kwargs['max_allowed_time'] = left
+            # No max_allowed_time: it raises only after a response already arrived,
+            # which would disguise a definitive outcome as an unknown one.
             timeout = kwargs.get('timeout')
             if isinstance(timeout, tuple):
                 kwargs['timeout'] = tuple(min(float(part), left) for part in timeout)
@@ -127,7 +144,9 @@ __all__ = [
     'RpcDeadlineExceeded',
     'bind_firestore_client',
     'bind_storage_client',
+    'current',
     'now',
+    'override',
     'remaining',
     'rpc_deadline',
 ]

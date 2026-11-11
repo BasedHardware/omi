@@ -85,7 +85,7 @@ def test_bound_firestore_rpcs_are_one_attempt_bounded_by_the_time_left(mono):
         assert api.calls[-1][1]['timeout'] == rpc_deadline.ROLLBACK_GRACE_SECONDS
 
 
-def test_bound_storage_session_caps_total_time_including_credential_refresh(mono):
+def test_bound_storage_session_caps_timeouts_and_refuses_past_the_deadline(mono):
     calls = []
     session = SimpleNamespace(request=lambda *args, **kwargs: calls.append(kwargs))
     client = SimpleNamespace(_http=session)
@@ -94,7 +94,7 @@ def test_bound_storage_session_caps_total_time_including_credential_refresh(mono
     assert calls[-1] == {'timeout': 60}
     with rpc_deadline.rpc_deadline(mono.now + 4):
         session.request('DELETE', 'https://storage', timeout=(60, 60))
-        assert calls[-1] == {'timeout': (4, 4), 'max_allowed_time': 4}
+        assert calls[-1] == {'timeout': (4, 4)}  # no max_allowed_time: it fires only after a response
         mono.now += 5
         with pytest.raises(rpc_deadline.RpcDeadlineExceeded):
             session.request('DELETE', 'https://storage')
@@ -109,8 +109,10 @@ def test_storage_delete_inside_a_unit_disables_the_120s_generation_retry(monkeyp
     monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-bucket')
     client = MagicMock()
     blob = client.bucket.return_value.blob.return_value
+    retention.delete_batch_object('synthetic-owner', _object_uri(), storage_client=client)
+    assert blob.delete.call_args.kwargs == {'if_generation_match': 123}  # unchanged for ordinary callers
     retention.delete_batch_object('synthetic-owner', _object_uri(), timeout=5.0, storage_client=client)
-    assert blob.delete.call_args.kwargs == {'if_generation_match': 123, 'timeout': 5.0}  # unchanged outside units
+    assert blob.delete.call_args.kwargs == {'if_generation_match': 123, 'timeout': 5.0, 'retry': None}
     with rpc_deadline.rpc_deadline(mono.now + 3):
         retention.delete_batch_object('synthetic-owner', _object_uri(), timeout=5.0, storage_client=client)
         assert blob.delete.call_args.kwargs == {'if_generation_match': 123, 'timeout': 3, 'retry': None}

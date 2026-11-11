@@ -26,7 +26,8 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database import rpc_deadline
-from database.legal_holds import LegalHoldActive, assert_account_deletion_permitted, bounded_destructive_unit
+from database import legal_holds
+from database.legal_holds import LegalHoldActive, assert_account_deletion_permitted
 
 COLLECTION = 'conversation_batch_purge_jobs'
 SEGMENTS = 'segments'
@@ -36,6 +37,8 @@ LEASE_SECONDS = 300
 # No unit or read batch starts past this; with bounded units and checkpointing that
 # leaves minutes inside the 1500 s Cloud Tasks dispatch deadline / handler timeout.
 RUN_BUDGET_SECONDS = 1200
+# Every RPC of the run, inside or outside units, is bounded by budget + this margin (< 1500 s).
+RUN_FINALIZE_SECONDS = 120
 # A dispatched generation that never ran (lost task, old consumer, exhausted
 # retries) is redriven after this, doubling per attempt up to the cap.
 REDRIVE_SECONDS = 600
@@ -301,17 +304,30 @@ class RunProgress:
         _in_transaction(self.client, body)
 
     @contextmanager
-    def unit(self) -> Iterator[None]:
-        # Every RPC while the gate is held (ownership check included) is deadline-bound; see bounded_destructive_unit.
-        with bounded_destructive_unit(self.uid, kind=GATE_KIND, wait_seconds=UNIT_GATE_WAIT_SECONDS):
+    def unit(self) -> Iterator[legal_holds.UnitAuthority]:
+        # Erasures under the unit are fenced by its authority; see bounded_destructive_unit.
+        with legal_holds.bounded_destructive_unit(
+            self.uid, kind=GATE_KIND, wait_seconds=UNIT_GATE_WAIT_SECONDS
+        ) as authority:
 
             def renew(transaction):
                 self._owned(transaction)
                 transaction.update(self._ref(), self._renewal())
 
             _in_transaction(self.client, renew)
-            yield
+            yield authority
         self._sleep(UNIT_YIELD_SECONDS)
+
+    def settle_stuck(self, resolve: Callable[[str], bool]) -> None:
+        """Settle a unit gate left held by an unknown remote outcome, under that gate's own token."""
+        client = legal_holds.account_deletion_firestore_client()
+        stuck = legal_holds.stuck_remote_erasure(self.uid, kind=GATE_KIND, firestore_client=client)
+        if stuck is None:
+            return
+        token, target = stuck
+        # Re-issuing the same generation-pinned delete: a definitive answer settles the old request too.
+        if resolve(target):
+            legal_holds.settle_stuck_remote_erasure(self.uid, kind=GATE_KIND, token=token, firestore_client=client)
 
     def expired(self) -> bool:
         return self._checkpointed and self._clock() - self._started >= self._budget
@@ -371,32 +387,34 @@ def run_job(
     def finish(outcome: str) -> bool:
         return finish_run(job, generation, token, outcome, firestore_client=client)
 
-    try:
-        tombstone = client.collection('users').document(uid).collection(TOMBSTONES).document(conversation_id)
-        if not tombstone.get().exists:
-            # Account wipe removed the subtree after erasing every batch row it owned.
-            _drop_segment_records(client, job)
-            return 'no_tombstone' if finish('completed') else 'superseded'
-        # Cheap preflight so a held obligation does not rescan; every unit re-checks under the gate.
-        assert_account_deletion_permitted(uid)
-        purge_conversation(uid, conversation_id, progress, clock=clock)
-        if _owes_segments(client, job):
-            raise RuntimeError('batch purge finished with segment erasure still recorded')
-    except RunSuperseded:
-        return 'superseded'
-    except LegalHoldActive:
-        finish('held')
-        return 'held'
-    except PurgeCheckpointed:
-        finish('checkpointed')
-        return 'checkpointed'
-    except BaseException:
+    # Out-of-unit reads, queries, checkpoints and finalization cannot outlive the handler either.
+    with rpc_deadline.rpc_deadline(rpc_deadline.now() + budget_seconds + RUN_FINALIZE_SECONDS):
         try:
-            finish('failed')
-        except Exception:
-            pass  # The lease expires; the original failure is what the queue must see.
-        raise
-    return 'purged' if finish('completed') else 'superseded'
+            tombstone = client.collection('users').document(uid).collection(TOMBSTONES).document(conversation_id)
+            if not tombstone.get().exists:
+                # Account wipe removed the subtree after erasing every batch row it owned.
+                _drop_segment_records(client, job)
+                return 'no_tombstone' if finish('completed') else 'superseded'
+            # Cheap preflight so a held obligation does not rescan; every unit re-checks under the gate.
+            assert_account_deletion_permitted(uid)
+            purge_conversation(uid, conversation_id, progress, clock=clock)
+            if _owes_segments(client, job):
+                raise RuntimeError('batch purge finished with segment erasure still recorded')
+        except RunSuperseded:
+            return 'superseded'
+        except LegalHoldActive:
+            finish('held')
+            return 'held'
+        except PurgeCheckpointed:
+            finish('checkpointed')
+            return 'checkpointed'
+        except BaseException:
+            try:
+                finish('failed')
+            except Exception:
+                pass  # The lease expires; the original failure is what the queue must see.
+            raise
+        return 'purged' if finish('completed') else 'superseded'
 
 
 __all__ = [

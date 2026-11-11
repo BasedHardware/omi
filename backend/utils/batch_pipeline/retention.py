@@ -80,7 +80,8 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
         elif timeout is None:
             blob.delete(if_generation_match=generation)
         else:
-            blob.delete(if_generation_match=generation, timeout=timeout)
+            # A caller that bounds the call wants one attempt, not the 120 s generation retry.
+            blob.delete(if_generation_match=generation, timeout=timeout, retry=None)
     except NotFound:
         pass
 

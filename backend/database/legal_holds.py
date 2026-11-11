@@ -15,7 +15,7 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 from uuid import uuid4
 
 from google.api_core.exceptions import Aborted
@@ -59,6 +59,12 @@ UNIT_BODY_SECONDS = 5.0
 UNIT_HOLD_SECONDS = 8.0
 UNIT_EXPIRY_SECONDS = 10.0
 UNIT_RELEASE_RETRY_SECONDS = 0.2
+# Settling a remote erasure whose outcome is unknown, and clearing its mark, after the body deadline.
+UNIT_REMOTE_RESOLVE_ATTEMPTS = 2
+UNIT_REMOTE_RESOLVE_SECONDS = 3.0
+UNIT_REMOTE_CLEAR_SECONDS = 3.0
+# A gate held this long by an unknown remote outcome is settled by the next run.
+UNIT_REMOTE_STUCK_SECONDS = 60.0
 _gate_wait_sleep = time.sleep
 _gate_wait_clock = time.monotonic
 _RELEASE_CONTENTION_ATTEMPTS = 5
@@ -157,8 +163,9 @@ def _gate_blocks(gate: dict[str, Any] | None, now: datetime, *, kind: str | None
     if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND:
         return False
     expires_at = gate.get("expires_at")
-    if expires_at is not None and now >= expires_at:
-        # A bounded unit's holder sends no RPC after its deadline, which precedes this.
+    if expires_at is not None and now >= expires_at and not gate.get("remote_inflight"):
+        # Past a bounded unit's expiry its Firestore erasures are fenced by token, so
+        # a successor is safe; a remote erasure still in flight keeps the gate held.
         return False
     return (now - gate["started_at"]).total_seconds() < GATE_STALE_AFTER_SECONDS
 
@@ -607,6 +614,175 @@ def _finish_through_contention(uid: str, kind: str, token: str, outcome: str, cl
             _gate_wait_sleep(0.05 * (attempt + 1) + _gate_wait_jitter())
 
 
+@transactional
+def _mark_remote_erasure_transaction(
+    transaction: Any,
+    client: Any,
+    uid: str,
+    kind: str,
+    token: str,
+    inflight: bool,
+    now: datetime,
+    target: str | None = None,
+) -> None:
+    hold_ref = _document(client, f"{LEGAL_HOLDS_COLLECTION}/{uid}")
+    gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
+    if inflight:
+        _assert_hold_inactive(hold_ref.get(transaction=transaction))
+    gate = _validated_gate(gate_ref.get(transaction=transaction))
+    if gate is None or gate["state"] != "running" or gate["uid"] != uid or gate["kind"] != kind:
+        raise DestructiveGateTakeover("remote erasure no longer owns the account gate")
+    if gate["token"] != token:
+        raise DestructiveGateTakeover("remote erasure no longer owns the account gate")
+    if inflight and gate.get("expires_at") is not None and now >= gate["expires_at"]:
+        raise DestructiveGateTakeover("unit gate expired before its remote erasure was sent")
+    transaction.set(
+        gate_ref,
+        {
+            **gate,
+            "remote_inflight": inflight,
+            "remote_inflight_at": now if inflight else None,
+            "remote_target": target if inflight else None,
+        },
+    )
+
+
+def mark_remote_erasure(
+    uid: str, *, kind: str, token: str, inflight: bool, firestore_client: Any, target: str | None = None
+) -> None:
+    """Record (or clear) that this unit has an irreversible remote erasure whose outcome is unknown."""
+    _mark_remote_erasure_transaction(
+        firestore_client.transaction(), firestore_client, uid, kind, token, inflight, datetime.now(timezone.utc), target
+    )
+
+
+def stuck_remote_erasure(uid: str, *, kind: str, firestore_client: Any) -> tuple[str, str] | None:
+    """(token, target) of a unit gate left held by a remote erasure whose outcome stayed unknown."""
+    gate = _validated_gate(_document(firestore_client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get())
+    if gate is None or gate["state"] != "running" or gate["kind"] != kind or not gate.get("remote_inflight"):
+        return None
+    since = gate.get("remote_inflight_at")
+    target = gate.get("remote_target")
+    if not isinstance(since, datetime) or not isinstance(target, str) or not target:
+        return None
+    if (datetime.now(timezone.utc) - since).total_seconds() < UNIT_REMOTE_STUCK_SECONDS:
+        return None
+    return gate["token"], target
+
+
+@transactional
+def _settle_remote_erasure_transaction(
+    transaction: Any, client: Any, uid: str, kind: str, token: str, now: datetime
+) -> bool:
+    gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
+    gate = _validated_gate(gate_ref.get(transaction=transaction))
+    if gate is None or gate["state"] != "running" or gate["kind"] != kind or gate["token"] != token:
+        return False
+    if not gate.get("remote_inflight"):
+        return False
+    transaction.set(
+        gate_ref,
+        {**gate, "state": "failed", "finished_at": now, "remote_inflight": False, "remote_target": None},
+    )
+    return True
+
+
+def settle_stuck_remote_erasure(uid: str, *, kind: str, token: str, firestore_client: Any) -> bool:
+    """Release a stuck unit gate once its remote erasure is proven settled (same gate token, still in flight)."""
+    return _settle_remote_erasure_transaction(
+        firestore_client.transaction(), firestore_client, uid, kind, token, datetime.now(timezone.utc)
+    )
+
+
+def remote_outcome_known(error: BaseException) -> bool:
+    """Whether a failed remote call provably did not leave a request that could still apply.
+
+    Any HTTP response ends that request's server-side processing, and a call we
+    refused to send never started. Only a transport failure without a response
+    (timeout, reset, refused connection) is unknown.
+    """
+    if isinstance(error, rpc_deadline.RpcDeadlineExceeded):
+        return True  # refused before sending
+    if getattr(error, "response", None) is not None and isinstance(getattr(error, "code", None), int):
+        return True  # google.api_core HTTP error: the server answered
+    return not isinstance(error, (TimeoutError, ConnectionError, OSError)) and not _is_transport_error(error)
+
+
+def _is_transport_error(error: BaseException) -> bool:
+    names = {klass.__name__ for klass in type(error).__mro__}
+    return bool(names & {"RequestException", "TransportError", "Timeout", "ConnectionError", "ReadTimeout"})
+
+
+class UnitAuthority:
+    """The account-gate authority of one bounded unit, for the destructive work done under it."""
+
+    def __init__(self, uid: str, kind: str, token: str, client: Any, ceiling: float | None):
+        self.uid, self.kind, self.token, self.client = uid, kind, token, client
+        self._ceiling = ceiling
+        self.unresolved = False
+
+    def fence(self, transaction: Any) -> None:
+        """Re-prove, in the caller's erasing transaction, no active hold and this unit's gate token."""
+        assert_destructive_operation_transaction(
+            transaction, self.client, uid=self.uid, kind=self.kind, token=self.token
+        )
+
+    def _after_call(self, seconds: float) -> Any:
+        at = rpc_deadline.now() + seconds
+        return rpc_deadline.override(at if self._ceiling is None else min(at, self._ceiling))
+
+    def remote(self, call: Callable[[], Any], *, target: str | None = None) -> Any:
+        """Run one irreversible remote erasure without letting the gate change hands until its outcome is known.
+
+        The in-flight mark commits before the request is sent and keeps the gate
+        blocking (expiry ignored) until a definitive outcome clears it. An outcome
+        that stays unknown leaves the gate held: fail closed.
+        """
+        mark_remote_erasure(
+            self.uid, kind=self.kind, token=self.token, inflight=True, firestore_client=self.client, target=target
+        )
+        try:
+            result = call()
+        except BaseException as error:
+            if not remote_outcome_known(error) and not self._resolve(call):
+                self.unresolved = True
+                logger.error("remote erasure outcome unknown; account gate stays held: %s", type(error).__name__)
+                raise
+            self._clear()
+            raise
+        self._clear()
+        return result
+
+    def _resolve(self, call: Callable[[], Any]) -> bool:
+        # A definitive answer to the same generation-pinned delete settles the earlier request too.
+        for _ in range(UNIT_REMOTE_RESOLVE_ATTEMPTS):
+            with self._after_call(UNIT_REMOTE_RESOLVE_SECONDS):
+                try:
+                    call()
+                    return True
+                except BaseException as error:  # noqa: BLE001 - classified below
+                    if remote_outcome_known(error):
+                        return True
+        return False
+
+    def _clear(self) -> None:
+        with self._after_call(UNIT_REMOTE_CLEAR_SECONDS):
+            for attempt in range(_RELEASE_CONTENTION_ATTEMPTS):
+                try:
+                    mark_remote_erasure(
+                        self.uid, kind=self.kind, token=self.token, inflight=False, firestore_client=self.client
+                    )
+                    return
+                except Exception as error:  # noqa: BLE001 - an uncleared mark only keeps the gate held
+                    if attempt + 1 == _RELEASE_CONTENTION_ATTEMPTS:
+                        self.unresolved = True
+                        logger.error(
+                            "remote erasure mark not cleared; account gate stays held: %s", type(error).__name__
+                        )
+                        return
+                    _gate_wait_sleep(UNIT_RELEASE_RETRY_SECONDS)
+
+
 @contextmanager
 def bounded_destructive_unit(
     uid: str,
@@ -614,35 +790,41 @@ def bounded_destructive_unit(
     kind: str = "explicit_memory_deletion",
     wait_seconds: float = 0.0,
     firestore_client: Any | None = None,
-) -> Iterator[str]:
-    """Hold the account gate for one short destructive unit, never longer than ``UNIT_HOLD_SECONDS``.
+) -> Iterator[UnitAuthority]:
+    """Hold the account gate for one short destructive unit.
 
-    Every RPC the body makes on deadline-bound clients (``database.rpc_deadline``)
-    must finish by ``UNIT_BODY_SECONDS`` after the winning acquisition attempt
-    started, or it raises without being sent; the release then gets the rest of
-    ``UNIT_HOLD_SECONDS``. The gate document also expires at
-    ``UNIT_EXPIRY_SECONDS``, so even a release that never lands cannot keep a
-    foreground delete waiting past its budget.
+    Authority, not a timer, decides safety: every Firestore erasure re-proves
+    this unit's token and the absence of a hold inside its own transaction
+    (``UnitAuthority.fence``), and a remote erasure keeps the gate held until its
+    outcome is known (``UnitAuthority.remote``). The timers only bound latency:
+    body RPCs on deadline-bound clients get ``UNIT_BODY_SECONDS`` from the
+    winning acquisition attempt, the release the rest of ``UNIT_HOLD_SECONDS``,
+    and the gate document expires at ``UNIT_EXPIRY_SECONDS`` unless a remote
+    erasure is in flight, so a lost release cannot keep a foreground delete
+    waiting past its budget.
     """
 
     if _ACTIVE_GATE.get() is not None:
         raise DestructiveOperationInProgress("bounded unit cannot nest inside another destructive gate")
     token = uuid4().hex
     client = rpc_deadline.bind_firestore_client(account_deletion_firestore_client(firestore_client=firestore_client))
+    ceiling = rpc_deadline.current()
     started = _acquire_with_same_kind_wait(
         uid, kind=kind, token=token, client=client, wait_seconds=wait_seconds, expires_in=UNIT_EXPIRY_SECONDS
     )
+    authority = UnitAuthority(uid, kind, token, client, ceiling)
     reset = _ACTIVE_GATE.set((uid, kind, token))
     outcome = "completed"
     try:
         with rpc_deadline.rpc_deadline(started + UNIT_BODY_SECONDS):
-            yield token
+            yield authority
     except BaseException:
         outcome = "failed"
         raise
     finally:
         _ACTIVE_GATE.reset(reset)
-        _release_bounded_unit(uid, kind, token, outcome, client, started + UNIT_HOLD_SECONDS)
+        if not authority.unresolved:
+            _release_bounded_unit(uid, kind, token, outcome, client, started + UNIT_HOLD_SECONDS)
 
 
 def _release_bounded_unit(uid: str, kind: str, token: str, outcome: str, client: Any, deadline: float) -> None:
@@ -773,7 +955,12 @@ __all__ = [
     "LegalHoldAuthorityUnavailable",
     "acquire_destructive_operation",
     "assert_account_deletion_permitted",
+    "UnitAuthority",
     "bounded_destructive_unit",
+    "mark_remote_erasure",
+    "remote_outcome_known",
+    "settle_stuck_remote_erasure",
+    "stuck_remote_erasure",
     "assert_destructive_operation_transaction",
     "assert_destructive_gate_still_ours",
     "assert_no_destructive_operation_transaction",
