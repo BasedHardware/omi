@@ -413,3 +413,122 @@ def test_unknown_tools_and_excess_calls_return_bounded_errors(store, monkeypatch
     assert results[0] == 'error: unknown tool'
     assert results[-1] == 'error: excerpt call budget exhausted'
     assert store.episode['usage']['composer_tool_calls'] == config.COMPOSER_EXCERPT_MAX_CALLS
+
+
+@pytest.mark.parametrize('count', [1, 5, 20, 60])
+@pytest.mark.parametrize('has_notes', [True, False])
+def test_aggregate_prompt_cap_includes_all_notes_and_transcript_fallback(count, has_notes):
+    rows = [_row(str(i), T0 + timedelta(minutes=i), 1, lines=[(0, 'speech ' * 50_000)]) for i in range(count)]
+    for row in rows:
+        row['structured'] = {
+            'title': 'title ' * 10_000,
+            'overview': 'overview "\\\n' * 30_000 if has_notes else '',
+            'gist': 'gist ' * 10_000 if has_notes else '',
+            'sections': [{'heading': 'Section', 'body': 'body ' * 20_000}] if has_notes else [],
+            'action_items': [{'description': 'action ' * 10_000}],
+        }
+    kwargs = dict(owner='David', tz=ZoneInfo('UTC'), language='English')
+    messages = composer.build_notes_first_messages(rows, **kwargs)
+    assert composer._input_chars(messages, [composer.TRANSCRIPT_EXCERPT_TOOL]) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
+    assert sum(len(text) for _, text in messages) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
+    assert '[... notes truncated ...]' in messages[1][1] or 'quieter minutes left out' in messages[1][1]
+    assert messages == composer.build_notes_first_messages(rows, **kwargs)
+    positions = [messages[1][1].index(f'=== Recording {i + 1} (') for i in range(count)]
+    assert positions == sorted(positions)
+
+
+def test_note_allocations_are_proportional_and_floor_scales_down():
+    blocks = ['a' * 100_000, 'b' * 300_000]
+    result = composer._bounded_notes(blocks, 10_000)
+    assert len(result[1]) > 2 * len(result[0])
+    result = composer._bounded_notes(['x' * 10_000] * 60, 6000)
+    assert all(len(block) <= 100 for block in result)
+    assert all('[... notes truncated ...]' in block for block in result)
+
+
+@pytest.mark.parametrize('size', [1, 15_000, 300_000])
+def test_tool_turn_resends_count_toward_one_compose_ceiling(size):
+    rows = [_row('c1', T0, 180, overview='notes ' * size)]
+    seen = []
+
+    def invoke(uid, messages, *, tools=None):
+        seen.append((list(messages), tools))
+        return _tool_reply(call_id=str(len(seen))) if tools else _reply()
+
+    composer._compose_notes_first(
+        UID, rows, owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English', invoke=invoke
+    )
+    assert (
+        sum(composer._input_chars(messages, tools) for messages, tools in seen) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
+    )
+    assert seen[-1][1] is None
+    if size == 300_000:
+        assert len(seen) == 1  # large input answers directly instead of buying another resend
+
+
+def test_oversized_tool_history_is_refused_before_the_next_paid_call():
+    rows = [_row('c1', T0, 180)]
+    calls = []
+
+    def invoke(uid, messages, **kwargs):
+        calls.append(messages)
+        reply = _tool_reply()
+        reply.content = 'x' * config.COMPOSER_MAX_TRANSCRIPT_CHARS
+        return reply
+
+    with pytest.raises(composer.ComposeFailed, match='input_budget'):
+        composer._compose_notes_first(
+            UID, rows, owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English', invoke=invoke
+        )
+    assert len(calls) == 1
+
+
+def test_repair_cannot_bypass_the_compose_input_ceiling(store, monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+
+    def invoke(uid, messages, **kwargs):
+        calls.append(messages)
+        return SimpleNamespace(content='x' * config.COMPOSER_MAX_TRANSCRIPT_CHARS, usage_metadata={})
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert len(calls) == 1
+    assert store.episode['title'] == 'old'
+    assert store.episode['compose_failures'] == 1
+
+
+def test_off_payload_is_exactly_the_existing_full_builder(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, 'off')
+    expected = composer.build_messages(
+        list(store.rows.values()), owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English'
+    )
+    monkeypatch.setattr(
+        composer, 'build_notes_first_messages', lambda *args, **kwargs: pytest.fail('off path used notes')
+    )
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert calls[0][0] == expected
+    assert calls[0][1] is None
+
+
+@pytest.mark.parametrize('full_is_cheaper', [True, False])
+def test_full_transcript_fallback_is_only_used_when_cheaper(full_is_cheaper):
+    row = _row('c1', T0, 180, overview='short notes', lines=[(0, 'speech ' * 100_000)])
+    if full_is_cheaper:
+        row['transcript_segments'] = []
+        row['structured']['sections'] = [{'body': 'section ' * 100_000}]
+    seen = []
+    kwargs = dict(owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English')
+    notes = composer.build_notes_first_messages([row], **kwargs)
+    full = composer.build_messages([row], **kwargs)
+
+    def invoke(uid, messages, **options):
+        seen.append((messages, options.get('tools')))
+        return _reply()
+
+    composer._compose_notes_first(UID, [row], invoke=invoke, **kwargs)
+    assert (seen[0][0] == full) is full_is_cheaper
+    if full_is_cheaper:
+        assert composer._input_chars(full) < composer._input_chars(notes, [composer.TRANSCRIPT_EXCERPT_TOOL])
+        assert seen[0][1] is None
+    assert composer._input_chars(*seen[0]) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS

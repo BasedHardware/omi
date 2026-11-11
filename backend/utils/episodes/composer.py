@@ -403,11 +403,54 @@ def _notes_block(index: int, row: Mapping[str, Any], owner: str, tz: ZoneInfo, *
     return '\n'.join(lines)
 
 
+def _input_chars(messages: Sequence[Any], tools: Any = None) -> int:
+    """Conservative serialized characters, including roles, tool arguments and results.
+
+    This is a character ceiling, not a token or provider-attempt billing estimate.
+    """
+    payload = [
+        message.model_dump() if hasattr(message, 'model_dump') else {'role': message[0], 'content': message[1]}
+        for message in messages
+    ]
+    return len(json.dumps({'messages': payload, 'tools': tools}, ensure_ascii=False, sort_keys=True))
+
+
+def _bounded_notes(blocks: list[str], budget: int) -> list[str]:
+    """Allocate serialized characters proportionally, retaining input/recording order."""
+    sizes = [len(json.dumps(block, ensure_ascii=False)) - 2 for block in blocks]
+    if sum(sizes) <= budget:
+        return blocks
+    floor = min(512, budget // max(1, 2 * len(blocks)))
+    shares = [min(size, floor) for size in sizes]
+    remaining = budget - sum(shares)
+    weights = [size - share for size, share in zip(sizes, shares)]
+    total = sum(weights)
+    shares = [share + remaining * weight // total for share, weight in zip(shares, weights)]
+    # Integer rounding goes to earlier recordings, deterministically.
+    for index in range(budget - sum(shares)):
+        shares[index] += 1
+    marker = '\n[... notes truncated ...]'
+    out = []
+    for block, size, share in zip(blocks, sizes, shares):
+        if size <= share:
+            out.append(block)
+            continue
+        lo, hi = 0, len(block)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if len(json.dumps(block[:mid] + marker, ensure_ascii=False)) - 2 <= share:
+                lo = mid
+            else:
+                hi = mid - 1
+        out.append(block[:lo] + marker if len(json.dumps(marker)) - 2 <= share else '')
+    return out
+
+
 def build_notes_first_messages(
     members: Sequence[Mapping[str, Any]], *, owner: str, tz: ZoneInfo, language: str
 ) -> list[tuple[str, str]]:
     """Notes-first prompt: member notes by default, raw transcript only on demand or when absent."""
-    per_member = max(4000, COMPOSER_MAX_TRANSCRIPT_CHARS // max(1, len(members)))
+    per_member = COMPOSER_MAX_TRANSCRIPT_CHARS // max(1, len(members))
     blocks = [_notes_block(index, row, owner, tz, transcript_budget=per_member) for index, row in enumerate(members)]
     system = NOTES_FIRST_SYSTEM_PROMPT.format(
         owner=owner,
@@ -417,7 +460,15 @@ def build_notes_first_messages(
         excerpt_minutes=COMPOSER_EXCERPT_MAX_SECONDS // 60,
         max_calls=COMPOSER_EXCERPT_MAX_CALLS,
     )
-    return [('system', system), ('human', '\n\n'.join(blocks))]
+    # Count system text, JSON escaping, separators and the tool schema inside the
+    # same full-mode constant. No note field or transcript fallback bypasses it.
+    empty = [('system', system), ('human', '\n\n'.join('' for _ in blocks))]
+    budget = max(0, COMPOSER_MAX_TRANSCRIPT_CHARS - _input_chars(empty, [TRANSCRIPT_EXCERPT_TOOL]))
+    blocks = _bounded_notes(blocks, budget)
+    messages = [('system', system), ('human', '\n\n'.join(blocks))]
+    if _input_chars(messages, [TRANSCRIPT_EXCERPT_TOOL]) > COMPOSER_MAX_TRANSCRIPT_CHARS:
+        raise ComposeFailed('input_budget')  # oversized owner/language framing
+    return messages
 
 
 def _content(reply: Any) -> str:
@@ -525,11 +576,40 @@ def _compose_notes_first(
     The last turn is sent without tools, so the model must answer inside the turn cap.
     """
     messages: list[Any] = list(build_notes_first_messages(members, owner=owner, tz=tz, language=language))
-    input_tokens = output_tokens = tool_calls = used_chars = 0
+    # A full-transcript request is an optional cheaper exit, never a way around
+    # the aggregate ceiling. Compare complete serialized requests, not raw speech.
+    full = build_messages(members, owner=owner, tz=tz, language=language)
+    if '[... notes truncated ...]' in messages[1][1] and _input_chars(full) < _input_chars(
+        messages, [TRANSCRIPT_EXCERPT_TOOL]
+    ):
+        reply = invoke(uid, full)
+        data = parse_reply(reply) if parse_reply is not None else parse(_content(reply))
+        record_fallback(
+            component='conversation_notes',
+            from_mode='episode_compose_notes_first',
+            to_mode='episode_compose_full',
+            reason='input_budget',
+            outcome='recovered',
+            log=logger,
+        )
+        input_tokens, output_tokens = _usage(reply)
+        return data, reply, input_tokens, output_tokens, 0
+    input_tokens = output_tokens = tool_calls = used_chars = sent_chars = 0
     reply: Any = None
     for turn in range(COMPOSER_NOTES_FIRST_MAX_TURNS):
-        last = turn == COMPOSER_NOTES_FIRST_MAX_TURNS - 1
-        reply = invoke(uid, messages, tools=None if last else [TRANSCRIPT_EXCERPT_TOOL])
+        # Resends include all notes and accumulated AI/tool messages. Leave room
+        # for a tool-free answer, otherwise ask for the answer on this turn.
+        remaining = COMPOSER_MAX_TRANSCRIPT_CHARS - sent_chars
+        with_tools = _input_chars(messages, [TRANSCRIPT_EXCERPT_TOOL])
+        last = (
+            turn == COMPOSER_NOTES_FIRST_MAX_TURNS - 1 or with_tools * 2 + COMPOSER_EXCERPT_MAX_TOTAL_CHARS > remaining
+        )
+        tools = None if last else [TRANSCRIPT_EXCERPT_TOOL]
+        size = _input_chars(messages, tools)
+        if size > remaining:
+            raise ComposeFailed('input_budget')
+        sent_chars += size
+        reply = invoke(uid, messages, tools=tools)
         turn_in, turn_out = _usage(reply)
         input_tokens += turn_in
         output_tokens += turn_out
@@ -1444,11 +1524,16 @@ def _compose(
     language = {'en': 'English'}.get(language, language)
     mode = 'notes_first' if notes_first else 'full'
     call_started = datetime.now(timezone.utc)
-    input_tokens = output_tokens = tool_calls = paid_calls = 0
+    input_tokens = output_tokens = tool_calls = paid_calls = sent_chars = 0
     repaired = False
 
     def call(payload: list[Any], **kwargs: Any) -> Any:
-        nonlocal input_tokens, output_tokens, paid_calls
+        nonlocal input_tokens, output_tokens, paid_calls, sent_chars
+        if notes_first:
+            size = _input_chars(payload, kwargs.get('tools'))
+            if sent_chars + size > COMPOSER_MAX_TRANSCRIPT_CHARS:
+                raise ComposeFailed('input_budget')
+            sent_chars += size
         # Do not start a turn unless both provider attempts fit inside our claim.
         if (
             paid_calls >= min(COMPOSER_MAX_PAID_TURNS, permitted_turns)

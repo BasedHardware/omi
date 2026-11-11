@@ -13,11 +13,29 @@ already paid to produce. When the model needs exact detail, it calls
 `get_transcript_excerpt(recording, start, end)` and gets a bounded raw excerpt
 from one recording.
 
-A member with no notes still gets its transcript, bounded like the full path.
+A member with no readable notes still gets its transcript within the same aggregate input cap.
 The output schema, chapter mapping, fingerprint, lease, settle window and
 failure backoff are unchanged.
 
 ## Bounds
+
+- The complete notes-first request is capped at `COMPOSER_MAX_TRANSCRIPT_CHARS`
+  (240,000 characters), including system text, serialized message framing/escaping
+  and tool schema. All fields (title, overview, gist, sections, actions and missing-note
+  transcript fallback) share this cap. Recording order is unchanged. Shares reserve
+  at most 512 characters per member, scaled down to half the available budget divided
+  by member count, then distribute the remainder proportionally to serialized size.
+  Prefix truncation uses a stable `[... notes truncated ...]` marker.
+- Cumulative serialized input over all logical calls in one compose, including
+  notes/history resends, tool schemas/results and the optional repair, is also capped
+  at 240,000 characters. A turn goes tool-free when another resend plus excerpt
+  headroom would exceed the remaining allowance. Oversized history or repair input
+  is refused before invocation and follows existing bounded failure/backoff handling.
+  This is a character bound, not a token or hidden provider-attempt billing claim.
+- The existing full-transcript request may replace notes-first only when its complete
+  serialized input is strictly smaller than the capped notes-first request. It is
+  sent without tools and cannot exceed the cap. With the flag off the existing full
+  builder and call path are unchanged.
 
 - Per excerpt call: at most 4,000 characters and 15 minutes of one recording.
 - Per compose: at most 4 excerpt calls and 12,000 excerpt characters.
@@ -65,7 +83,7 @@ bump and no recompose wave.
 
 ## Split-review dispositions
 
-L9 follows L8a #25073 and L8b #25065. It remains default OFF until David's side-by-side verdict. Compare cumulative billed input and output, logical turns, retries and failures per completed compose on identical episodes, not excerpt characters alone. A tool loop may resend notes and exceed full-mode input; no savings claim or automatic ramp is made.
+L9 follows L8a #25073 and L8b #25065. It remains default OFF until David's side-by-side verdict. Compare cumulative billed input and output, logical turns, retries and failures per completed compose on identical episodes, not excerpt characters alone. All logical input resends now count against the full-mode character limit; provider retry billing and content quality still require the comparison. No savings claim or automatic ramp is made.
 
 The lease covers five reasoning turns plus one repair, with two bounded provider attempts per turn, retry headroom and a write margin. Full mode retains the L8b claim duration while L9 is off. Every new turn checks remaining deadline and claim ownership; stale release/final writes are fenced. A two-replica regression crosses 240 seconds through tool turns and repair. Mid-loop failure counts every paid turn toward backoff (correctness P2-1).
 
