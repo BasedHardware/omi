@@ -9222,6 +9222,24 @@ class AppLocalizationsTe extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'ప్రస్తుత ఫర్మ్‌వేర్ సంస్కరణను నిర్ధారించలేకపోయాము';
 
   @override
+  String get applyCodeToCurrentPlan => 'ప్రస్తుత ప్లాన్‌కు వర్తింపజేయండి';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'మీ ప్రస్తుత ప్లాన్‌కు కోడ్ వర్తింపజేయబడింది.',
+        'refused': 'ఈ కోడ్ వర్తింపజేయలేము. కోడ్ మరియు అవసరమైన ప్లాన్‌ను తనిఖీ చేయండి.',
+        'conflict': 'కోడ్ ఇప్పటికే ఉపయోగించబడింది లేదా మీ ప్లాన్‌కు ఇప్పటికే తగ్గింపు ఉంది.',
+        'rateLimited': 'చాలా ప్రయత్నాలు. వేచి ఉండి తర్వాత మళ్లీ ప్రయత్నించండి.',
+        'other': 'కోడ్ వర్తింపజేయలేకపోయాము. మళ్లీ ప్రయత్నించండి.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'ప్రోమో కోడ్';
 
   @override

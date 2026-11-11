@@ -10366,6 +10366,8 @@
     "syncCardThrottlePaused": "Sinhronizacija je za kratek čas ustavljena — samodejno se bo nadaljevala",
     "syncCardBackendBusy": "Strežniki Omi so obremenjeni — vaši posnetki se bodo sinhronizirali, ko se sprosti zmogljivost",
     "unableToDetermineFirmwareVersion": "Trenutne različice vdelane programske opreme ni mogoče določiti",
+    "applyCodeToCurrentPlan": "Uporabi za trenutni paket",
+    "subscriptionCodeResult": "{result, select, applied{Koda je uporabljena za vaš trenutni paket.} refused{Te kode ni mogoče uporabiti. Preverite kodo in zahtevani paket.} conflict{Koda je že uporabljena ali pa vaš paket že ima popust.} rateLimited{Preveč poskusov. Počakajte in poskusite pozneje.} other{Kode ni bilo mogoče uporabiti. Poskusite znova.}}",
     "promoCode": "Promocijska koda",
     "enterPromoCode": "Vnesite promocijsko kodo",
     "invalidPromotionCode": "Neveljavna promocijska koda.",

@@ -4387,8 +4387,34 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.pipeline_ledger.iter_global_window',
+        base={'start': 0, 'end': 10**12},
+        domains={'limit': [1, 5000]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.retention_start',
+        base={},
+    )
+)
+_add(
+    DriverEntry(
         'database.pipeline_ledger.census_window',
         base={'start': 0, 'end': 10**12, 'uid': 'u-driver'},
         domains={'limit': [1, 5000]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger_census._capture_creates',
+        base={'start_epoch': 0, 'end_epoch': 10**9},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger_census.census',
+        base={'start': 0, 'end': 10**12},
+        domains={'limit': [1, 5000], 'now': [None, 10**12]},
     )
 )

@@ -9194,6 +9194,24 @@ class AppLocalizationsBs extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nije moguće odrediti trenutnu verziju firmvera';
 
   @override
+  String get applyCodeToCurrentPlan => 'Primijeni na trenutni plan';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kod je primijenjen na vaš trenutni plan.',
+        'refused': 'Ovaj kod se ne može primijeniti. Provjerite kod i potreban plan.',
+        'conflict': 'Kod je već iskorišten ili vaš plan već ima popust.',
+        'rateLimited': 'Previše pokušaja. Pričekajte i pokušajte kasnije.',
+        'other': 'Kod nije moguće primijeniti. Pokušajte ponovo.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promo kod';
 
   @override

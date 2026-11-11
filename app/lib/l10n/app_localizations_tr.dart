@@ -9183,6 +9183,24 @@ class AppLocalizationsTr extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Mevcut donanım yazılımı sürümü belirlenemiyor';
 
   @override
+  String get applyCodeToCurrentPlan => 'Mevcut Plana Uygula';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kod mevcut planınıza uygulandı.',
+        'refused': 'Bu kod uygulanamıyor. Kodu ve gerekli planı kontrol edin.',
+        'conflict': 'Kod zaten kullanılmış veya planınızda zaten indirim var.',
+        'rateLimited': 'Çok fazla deneme. Lütfen bekleyip daha sonra tekrar deneyin.',
+        'other': 'Kod uygulanamadı. Lütfen tekrar deneyin.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promosyon kodu';
 
   @override
