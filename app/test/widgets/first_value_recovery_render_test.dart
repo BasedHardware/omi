@@ -283,6 +283,135 @@ void main() {
     });
   }
 
+  for (final staleCompletion in ['preparation', 'claim']) {
+    testWidgets('new identity proceeds while old preparation completes during $staleCompletion', (tester) async {
+      await _mountHome(tester);
+      final service = FirstValueRecoveryService.instance;
+      final oldLookup = Completer<http.Response>();
+      final currentLookup = Completer<http.Response>();
+      final currentClaim = Completer<http.Response>();
+      final preparations = <String?>[];
+      final claims = <String?>[];
+      service.debugApi = FirstValueApi(
+        baseUrl: 'https://fixture.invalid/',
+        send: (request) {
+          final owner = AnalyticsManager.currentIdentity;
+          if (request.url.endsWith('/prepare')) {
+            preparations.add(owner);
+            return owner == 'synthetic-owner' ? oldLookup.future : currentLookup.future;
+          }
+          claims.add(owner);
+          return currentClaim.future;
+        },
+      );
+      PromptQueue.instance.blocked = () => true;
+      final oldCheck = service.checkOnAppOpen();
+      await tester.pump();
+      await service.checkOnAppOpen();
+      expect(preparations, ['synthetic-owner'], reason: 'Same-epoch checks share the in-flight guard');
+
+      AnalyticsManager().bindIdentity('current-owner');
+      final currentCheck = service.checkOnAppOpen();
+      await tester.pump();
+      await service.checkOnAppOpen();
+      expect(preparations, ['synthetic-owner', 'current-owner']);
+      expect(claims, isEmpty);
+      if (staleCompletion == 'preparation') {
+        oldLookup.complete(http.Response('{"ready":true}', 200));
+        await tester.pump();
+        await oldCheck;
+        await service.checkOnAppOpen();
+        expect(preparations, ['synthetic-owner', 'current-owner'],
+            reason: 'Old cleanup must not clear the current in-flight guard');
+        expect(PromptQueue.instance.pendingIds, isEmpty, reason: 'Stale readiness cannot enqueue');
+      }
+
+      currentLookup.complete(http.Response('{"ready":true}', 200));
+      await tester.pump();
+      await currentCheck;
+      final currentPromptId = 'first-value-recovery-${AnalyticsManager.identityEpoch}';
+      expect(PromptQueue.instance.pendingIds, [currentPromptId]);
+      await service.checkOnAppOpen();
+      expect(preparations, ['synthetic-owner', 'current-owner'], reason: 'Queued work is deduplicated');
+      expect(claims, isEmpty, reason: 'Global hold forbids even a current-identity claim');
+
+      final higher = Completer<void>();
+      PromptQueue.instance.enqueue('existing-safety', PromptPriority.high, show: (_) => higher.future);
+      PromptQueue.instance.blocked = () => false;
+      PromptQueue.instance.pump();
+      await tester.pump();
+      expect(PromptQueue.instance.showingId, 'existing-safety');
+      expect(claims, isEmpty, reason: 'Higher-priority presenter must finish before claiming');
+      higher.complete();
+      await tester.pump();
+      expect(claims, ['current-owner']);
+      expect(PromptQueue.instance.showingId, currentPromptId);
+
+      if (staleCompletion == 'claim') {
+        oldLookup.complete(http.Response('{"ready":true}', 200));
+        await tester.pump();
+        await oldCheck;
+      }
+      await service.checkOnAppOpen();
+      expect(preparations, ['synthetic-owner', 'current-owner'], reason: 'Showing work is deduplicated');
+      expect(claims, ['current-owner'], reason: 'Late old readiness must never claim');
+      expect(PromptQueue.instance.pendingIds, isEmpty);
+      expect(find.text('Device Not Connected'), findsNothing);
+
+      currentClaim.complete(http.Response('{"prompt":{"kind":"result","route":"/conversation/current"}}', 200));
+      await tester.pumpAndSettle();
+      expect(find.text('Summary generated'), findsOneWidget);
+      expect(claims, ['current-owner']);
+      globalNavigatorKey.currentState!.pop(false);
+      await tester.pumpAndSettle();
+      expect(PromptQueue.instance.showingId, isNull);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('stale queued identity cannot deduplicate the new account prompt', (tester) async {
+    await _mountHome(tester);
+    final service = FirstValueRecoveryService.instance;
+    final preparations = <String?>[];
+    final claims = <String?>[];
+    service.debugApi = FirstValueApi(
+      baseUrl: 'https://fixture.invalid/',
+      send: (request) async {
+        if (request.url.endsWith('/prepare')) {
+          preparations.add(AnalyticsManager.currentIdentity);
+          return http.Response('{"ready":true}', 200);
+        }
+        claims.add(AnalyticsManager.currentIdentity);
+        return http.Response('{"prompt":{"kind":"capture","route":"/settings/device"}}', 200);
+      },
+    );
+    PromptQueue.instance.blocked = () => true;
+    await service.checkOnAppOpen();
+    final oldPromptId = 'first-value-recovery-${AnalyticsManager.identityEpoch}';
+    expect(PromptQueue.instance.pendingIds, [oldPromptId]);
+    AnalyticsManager().bindIdentity('current-owner');
+    await service.checkOnAppOpen();
+    final currentPromptId = 'first-value-recovery-${AnalyticsManager.identityEpoch}';
+    expect(PromptQueue.instance.pendingIds, [oldPromptId, currentPromptId]);
+    await service.checkOnAppOpen();
+    expect(preparations, ['synthetic-owner', 'current-owner']);
+    expect(claims, isEmpty);
+
+    PromptQueue.instance.blocked = () => false;
+    PromptQueue.instance.pump();
+    await tester.pumpAndSettle();
+    expect(claims, ['current-owner'], reason: 'Stale queued work drains without claiming');
+    expect(find.text('Device Not Connected'), findsOneWidget);
+    expect(PromptQueue.instance.showingId, currentPromptId);
+    expect(PromptQueue.instance.pendingIds, isEmpty);
+    await service.checkOnAppOpen();
+    expect(preparations, ['synthetic-owner', 'current-owner']);
+    globalNavigatorKey.currentState!.pop(false);
+    await tester.pumpAndSettle();
+    expect(PromptQueue.instance.showingId, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('higher priority prompt retains the queue before any first-value claim', (tester) async {
     await _mountHome(tester);
     var claims = 0;

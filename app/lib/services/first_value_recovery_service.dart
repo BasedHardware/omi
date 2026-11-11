@@ -22,7 +22,7 @@ class FirstValueRecoveryService {
 
   FirstValueApi? _injectedApi;
   FirstValueApi get _api => _injectedApi ??= FirstValueApi();
-  bool _checking = false;
+  int? _checkingEpoch;
   bool get _identityReady => AnalyticsManager.identityKnown && (AnalyticsManager.currentIdentity?.isNotEmpty ?? false);
 
   @visibleForTesting
@@ -51,9 +51,14 @@ class FirstValueRecoveryService {
   }
 
   Future<void> checkOnAppOpen() async {
-    if (_checking || !_identityReady) return;
-    _checking = true;
+    if (!_identityReady) return;
     final identityEpoch = AnalyticsManager.identityEpoch;
+    // A new account must not inherit an old account's HTTP or queue dedupe guard.
+    final promptId = 'first-value-recovery-$identityEpoch';
+    if (_checkingEpoch == identityEpoch ||
+        PromptQueue.instance.showingId == promptId ||
+        PromptQueue.instance.pendingIds.contains(promptId)) return;
+    _checkingEpoch = identityEpoch;
     try {
       final capability = await _clientCapability();
       if (identityEpoch != AnalyticsManager.identityEpoch || !_identityReady) return;
@@ -78,7 +83,7 @@ class FirstValueRecoveryService {
         return;
       }
       PromptQueue.instance.enqueue(
-        'first-value-recovery',
+        promptId,
         PromptPriority.normal,
         show: (context) async {
           // Do not consume the durable claim while a higher-priority prompt
@@ -113,7 +118,8 @@ class FirstValueRecoveryService {
         },
       );
     } finally {
-      _checking = false;
+      // An older request may finish while the current account is still checking.
+      if (_checkingEpoch == identityEpoch) _checkingEpoch = null;
     }
   }
 
