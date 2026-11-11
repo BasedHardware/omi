@@ -111,3 +111,24 @@ it('server quota observation ignores optimistic local exhaustion', async () => {
   expect(names().filter((e) => e === 'Subscription Allowance Reached')).toHaveLength(2)
   expect(names()).not.toContain('Subscription Allowance Block Shown')
 })
+
+it.each(['success', 'cancel', 'closed', 'error'] as const)(
+  'unopened %s and late visibility callbacks never invent exposure or completion',
+  async (outcome) => {
+    let onOpened!: () => void
+    await openSubscriptionCheckout(
+      async (_url, callback) => {
+        onOpened = callback!
+        if (outcome === 'error') throw new Error('unavailable')
+        return outcome
+      },
+      'checkout',
+      'plus',
+      'month',
+      'windows_billing'
+    ).catch(() => {})
+    onOpened()
+    expect(names()).not.toContain('Subscription Checkout Opened')
+    expect(names()).not.toContain('Subscription Checkout Completed')
+  }
+)

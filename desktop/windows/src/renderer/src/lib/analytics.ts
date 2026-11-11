@@ -12,6 +12,14 @@ const POSTHOG_KEY =
   (import.meta.env.VITE_POSTHOG_KEY as string) || 'phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y'
 
 export function trackEvent(event: string, properties: Record<string, unknown> = {}): void {
+  captureEvent(event, properties, { $os: 'Windows', platform: 'windows' })
+}
+
+function captureEvent(
+  event: string,
+  properties: Record<string, unknown>,
+  runtime: { $os: 'Windows' | 'Linux' | 'unknown'; platform: 'windows' | 'linux' | 'unknown' }
+): void {
   const distinctId = auth.currentUser?.uid ?? 'anonymous'
   void fetch(`${POSTHOG_HOST}/i/v0/e/`, {
     method: 'POST',
@@ -23,8 +31,7 @@ export function trackEvent(event: string, properties: Record<string, unknown> = 
       properties: {
         ...properties,
         $lib: 'omi-windows',
-        $os: 'Windows',
-        platform: 'windows'
+        ...runtime
       }
     })
   }).catch(() => {
@@ -135,7 +142,12 @@ export function trackUpgradeCancelled(): void {
 export function trackPurchaseEvent(id: PurchaseEventId, raw: Record<string, unknown>): void {
   const { name, properties } = purchasePayload(id, raw)
   try {
-    trackEvent(name, properties)
+    // The preload reports process.platform. Never label a missing/other runtime as Windows.
+    const platform = typeof window === 'undefined' ? undefined : window.electron?.process?.platform
+    captureEvent(name, properties, {
+      $os: platform === 'win32' ? 'Windows' : platform === 'linux' ? 'Linux' : 'unknown',
+      platform: platform === 'win32' ? 'windows' : platform === 'linux' ? 'linux' : 'unknown'
+    })
   } catch {
     /* Telemetry never changes purchase behavior. */
   }
@@ -156,12 +168,18 @@ export async function openSubscriptionCheckout(
     stage: 'in_app_checkout'
   }
   let reported = false
-  const outcome = await open(url, () => {
-    if (reported) return
-    reported = true
-    trackPurchaseEvent('checkoutOpened', { ...properties, result: 'opened' })
-  })
-  if (outcome === 'success')
+  let terminal = false
+  let outcome: 'success' | 'cancel' | 'closed'
+  try {
+    outcome = await open(url, () => {
+      if (reported || terminal) return
+      reported = true
+      trackPurchaseEvent('checkoutOpened', { ...properties, result: 'opened' })
+    })
+  } finally {
+    terminal = true
+  }
+  if (outcome === 'success' && reported)
     trackPurchaseEvent('checkoutCompleted', {
       ...properties,
       result: 'client_navigation_completed'

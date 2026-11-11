@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./firebase', () => ({ auth: { currentUser: { uid: 'user-123' } } }))
 
-import { trackEvent, trackPaywallOpened, trackUpgradePlanSelected } from './analytics'
+import {
+  trackEvent,
+  trackPaywallOpened,
+  trackUpgradePlanSelected,
+  trackPurchaseEvent
+} from './analytics'
 
 describe('analytics capture contract', () => {
   beforeEach(() => {
@@ -31,6 +36,38 @@ describe('analytics capture contract', () => {
       }
     })
   })
+
+  it.each([
+    ['win32', 'windows', 'Windows'],
+    ['linux', 'linux', 'Linux'],
+    ['darwin', 'unknown', 'unknown'],
+    [undefined, 'unknown', 'unknown']
+  ])(
+    'attributes new purchase events from runtime %s, never caller-supplied platform',
+    (runtime, platform, os) => {
+      vi.stubGlobal('window', { electron: { process: { platform: runtime } } })
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response())
+      trackPurchaseEvent('checkoutOpened', {
+        plan: 'plus',
+        billing_interval: 'month',
+        source: 'windows_billing',
+        stage: 'hosted_checkout',
+        result: 'opened',
+        platform: 'spoofed'
+      })
+      expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).properties).toEqual({
+        plan: 'plus',
+        billing_interval: 'month',
+        source: 'windows_billing',
+        stage: 'hosted_checkout',
+        result: 'opened',
+        $lib: 'omi-windows',
+        $os: os,
+        platform
+      })
+      vi.unstubAllGlobals()
+    }
+  )
 
   it.each(['index.html', 'capture.html', 'glow.html', 'insight-toast.html'])(
     'allows PostHog capture from %s',
