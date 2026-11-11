@@ -89,7 +89,9 @@ async def claim_preview_batch_custody(receiver) -> bool:
             attach_admitted_batch_capture,
             receiver.host.request.uid,
             conversation_id,
-            dict(receiver.host.batch_record_capture or {}),
+            # The full claim row carries the recorded clocks; the snapshot is
+            # eligibility only and would make the admission attach a no-op.
+            dict(row),
         ),
         name='listen_batch_admission_attach',
     )

@@ -5,7 +5,8 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
-from config.episodes import episodes_enabled_for
+from config.batch_timeliness import SLA_SECONDS
+from config.episodes import MAX_EPISODE_SECONDS, episodes_enabled_for
 from config.recorded_time import (
     batch_admission_attach_enabled,
     batch_close_attach_enabled,
@@ -77,6 +78,10 @@ def attach_admitted_batch_capture(
             started + timedelta(seconds=1),
             c,
             pending_transcription=True,
+            # The capture may still be recording for MAX_EPISODE_SECONDS. The
+            # delivery SLA starts at admission, so floor the deadline past the
+            # longest possible capture instead of expiring mid-recording.
+            deadline_floor=started + timedelta(seconds=MAX_EPISODE_SECONDS + SLA_SECONDS),
         )
         return 'attached'
     except Exception as error:
@@ -103,8 +108,8 @@ def _moved_owner(
     """The episode the real recorded window selects, when it is not the current owner.
 
     The admission attach decides on the recorded start alone. If the completed
-    window now belongs to a different occasion, the provisional member is
-    detached from the admission episode before the close attach re-places it.
+    window now belongs to a different occasion, the close attach re-places the
+    member and removes the stale provisional membership in the same transaction.
     A capture that never joined at admission has no owner to move.
     """
     current = row.get('episode_id')
@@ -149,11 +154,19 @@ def attach_closed_batch_capture(
         finished = datetime.fromtimestamp(row['server_batch_audio_end'], timezone.utc)
         c = collaborators or service.Collaborators(firestore_client=conversations.db)
         moved_from = _moved_owner(uid, conversation_id, row, started, finished, c)
-        if moved_from:
-            service.episode_timeline.detach_recorded(
-                uid, conversation_id, episode_id=moved_from, firestore_client=c.firestore_client
-            )
-        owner = service.attach_recorded(uid, conversation_id, row, started, finished, c, pending_transcription=True)
+        # Attach first and remove the stale provisional membership in the same
+        # transaction. A failed attach leaves the member where it was; a failed
+        # detach leaves a duplicate, never an orphaned capture.
+        owner = service.attach_recorded(
+            uid,
+            conversation_id,
+            row,
+            started,
+            finished,
+            c,
+            pending_transcription=True,
+            detach_from=moved_from,
+        )
         late_member.joined(uid, conversation_id, row, owner, c)
         return 'attached'
     except Exception as error:

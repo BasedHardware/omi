@@ -773,7 +773,9 @@ class LiveConversationController:
                     attach_admitted_batch_capture,
                     request.uid,
                     conversation_id,
-                    dict(self.host.batch_record_capture or {}),
+                    # The snapshot is eligibility only; the payload carries the
+                    # clocks the admission attach needs to place the member.
+                    {**payload, **(self.host.batch_record_capture or {})},
                 ),
                 name='listen_batch_admission_attach',
             )

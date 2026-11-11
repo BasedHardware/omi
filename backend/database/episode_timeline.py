@@ -107,6 +107,8 @@ def _attach_recorded_window(
     candidates: Callable | None = None,
     fence_row: Any = None,
     pending_at: datetime | None = None,
+    deadline_floor: datetime | None = None,
+    detach_from: str | None = None,
 ) -> dict[str, Any]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
 
@@ -120,13 +122,17 @@ def _attach_recorded_window(
         members = episodes.read_memberships(
             transaction, client, uid, [conversation_id], admit_conversation_id=conversation_id
         )
-        pending_patch = episode_batch_pending.read_patch(transaction, client, uid, conversation_id, pending_at)
+        pending_patch = episode_batch_pending.read_patch(
+            transaction, client, uid, conversation_id, pending_at, deadline_floor=deadline_floor
+        )
         rows = (candidates or recorded_candidates)(
             uid, started, finished, firestore_client=client, transaction=transaction
         )
         selected = choose(rows, started, started)
         # A conversation belongs to the episode it started in, even past a cap.
         owner_id = member_row.get('episode_id')
+        if detach_from and owner_id == detach_from:
+            owner_id = None
         existing = None
         if owner_id:
             snapshot = root.collection('episodes').document(owner_id).get(transaction=transaction)
@@ -258,6 +264,64 @@ def attach_existing_recorded(
     )
 
 
+def _detach_plan(transaction, client, uid, conversation_id, episode_id):
+    """Read a movable provisional membership and return ``(ref, updated_owner)``.
+
+    Reads only, so the caller can apply the write after its own read phase. The
+    live path owns a live episode's membership, and the current pointer is never
+    a provisional owner, so both are refused.
+    """
+    root = client.collection('users').document(uid)
+    links = root.collection('episode_links')
+    member = links.document(conversation_id).get(transaction=transaction).to_dict() or {}
+    if member.get('episode_id') != episode_id:
+        return None
+    ref = root.collection('episodes').document(episode_id)
+    owner = episodes.unseal(uid, ref.get(transaction=transaction).to_dict())
+    if owner is None or conversation_id not in (owner.get('conversation_ids') or []):
+        return None
+    if owner.get('status') == 'live':
+        return None
+    current = links.document('current').get(transaction=transaction).to_dict() or {}
+    if current.get('episode_id') == episode_id:
+        return None
+    row = root.collection('conversations').document(conversation_id).get(transaction=transaction).to_dict() or {}
+    if (
+        not row.get('episode_transcription_pending_at')
+        or row.get('record_projection_revision')
+        or row.get('transcript_segments')
+    ):
+        return None
+    remaining = [cid for cid in owner.get('conversation_ids') or [] if cid != conversation_id]
+    if not remaining:
+        return None
+    facts = {cid: fact for cid, fact in (owner.get('recorded_members') or {}).items() if cid != conversation_id}
+    result = {
+        **owner,
+        'conversation_ids': remaining,
+        'member_activity': {
+            cid: at for cid, at in (owner.get('member_activity') or {}).items() if cid != conversation_id
+        },
+        'recorded_members': facts,
+        'recovered_conversation_ids': [
+            cid for cid in owner.get('recovered_conversation_ids') or [] if cid != conversation_id
+        ],
+        'discarded_conversation_ids': [
+            cid for cid in owner.get('discarded_conversation_ids') or [] if cid != conversation_id
+        ],
+        'parallel_content_spans': {
+            cid: at for cid, at in (owner.get('parallel_content_spans') or {}).items() if cid != conversation_id
+        },
+        'state_version': int(owner.get('state_version') or 0) + 1,
+    }
+    if facts:
+        result['started_at'] = min(fact['start'] for fact in facts.values())
+        result['last_activity_at'] = max(fact['end'] for fact in facts.values())
+    if result.get('primary_conversation_id') == conversation_id:
+        result['primary_conversation_id'] = remaining[0]
+    return ref, result
+
+
 def attach_recorded(
     uid: str,
     conversation_id: str,
@@ -270,6 +334,8 @@ def attach_recorded(
     firestore_client: Any = None,
     attach_row: Any = None,
     pending_at: datetime | None = None,
+    deadline_floor: datetime | None = None,
+    detach_from: str | None = None,
 ) -> dict[str, Any]:
     """Place a capture once. Its owner never changes when the capture spans a cap.
 
@@ -288,6 +354,9 @@ def attach_recorded(
         # only inside this callback: Firestore retries must issue fresh queries.
         fence = client.collection('users').document(uid).collection('episode_links').document('recorded_timeline')
         revision = fence.get(transaction=transaction).to_dict() or {}
+        # Read the old provisional membership before any write. The write lands
+        # after the attach, so a failed attach leaves the member where it was.
+        detach = _detach_plan(transaction, client, uid, conversation_id, detach_from) if detach_from else None
         # Metadata-only close attachment has not recovered/finalized transcript
         # evidence. Do not stamp (or reset) its completed sync-attach memo.
         key = (
@@ -336,9 +405,13 @@ def attach_recorded(
             transaction=transaction,
             fence_row=revision,
             pending_at=pending_at,
+            deadline_floor=deadline_floor,
+            detach_from=detach_from,
         )
         if canonical is not None:
             episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, canonical['id'])
+            if detach and canonical['id'] != detach_from:
+                transaction.set(detach[0], episodes.seal(uid, detach[1]))
             return canonical
         result = _attach_recorded_window(
             uid,
@@ -353,9 +426,13 @@ def attach_recorded(
             candidates=reuse_candidates,
             fence_row=revision,
             pending_at=pending_at,
+            deadline_floor=deadline_floor,
+            detach_from=detach_from,
         )
         result.pop('_window_end')
         episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, result['id'])
+        if detach and result['id'] != detach_from:
+            transaction.set(detach[0], episodes.seal(uid, detach[1]))
         return {**result, '_recorded_windows': [result]}
 
     return transcript_pointer.run_preloaded_transactional(client, attach, transient=True)
@@ -385,47 +462,11 @@ def detach_recorded(
         links = root.collection('episode_links')
         fence = links.document('recorded_timeline')
         revision = fence.get(transaction=transaction).to_dict() or {}
+        plan = _detach_plan(transaction, client, uid, conversation_id, episode_id)
+        if plan is None:
+            return False
         member = links.document(conversation_id).get(transaction=transaction).to_dict() or {}
-        if member.get('episode_id') != episode_id:
-            return False
-        ref = root.collection('episodes').document(episode_id)
-        owner = episodes.unseal(uid, ref.get(transaction=transaction).to_dict())
-        if owner is None or conversation_id not in (owner.get('conversation_ids') or []):
-            return False
-        row = root.collection('conversations').document(conversation_id).get(transaction=transaction).to_dict() or {}
-        if (
-            not row.get('episode_transcription_pending_at')
-            or row.get('record_projection_revision')
-            or row.get('transcript_segments')
-        ):
-            return False
-        remaining = [cid for cid in owner.get('conversation_ids') or [] if cid != conversation_id]
-        if not remaining:
-            return False
-        facts = {cid: fact for cid, fact in (owner.get('recorded_members') or {}).items() if cid != conversation_id}
-        result = {
-            **owner,
-            'conversation_ids': remaining,
-            'member_activity': {
-                cid: at for cid, at in (owner.get('member_activity') or {}).items() if cid != conversation_id
-            },
-            'recorded_members': facts,
-            'recovered_conversation_ids': [
-                cid for cid in owner.get('recovered_conversation_ids') or [] if cid != conversation_id
-            ],
-            'discarded_conversation_ids': [
-                cid for cid in owner.get('discarded_conversation_ids') or [] if cid != conversation_id
-            ],
-            'parallel_content_spans': {
-                cid: at for cid, at in (owner.get('parallel_content_spans') or {}).items() if cid != conversation_id
-            },
-            'state_version': int(owner.get('state_version') or 0) + 1,
-        }
-        if facts:
-            result['started_at'] = min(fact['start'] for fact in facts.values())
-            result['last_activity_at'] = max(fact['end'] for fact in facts.values())
-        if result.get('primary_conversation_id') == conversation_id:
-            result['primary_conversation_id'] = remaining[0]
+        ref, result = plan
         transaction.set(ref, episodes.seal(uid, result))
         transaction.update(root.collection('conversations').document(conversation_id), {'episode_id': None})
         transaction.set(

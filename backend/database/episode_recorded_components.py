@@ -158,6 +158,8 @@ def attach(
     transaction=None,
     fence_row=None,
     pending_at=None,
+    deadline_floor=None,
+    detach_from=None,
 ):
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
@@ -168,9 +170,17 @@ def attach(
     def commit(transaction):
         revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
-        pending_patch = episode_batch_pending.read_patch(transaction, client, uid, cid, pending_at)
-        if linked.get('episode_id'):
-            owner = collection.document(linked['episode_id']).get(transaction=transaction).to_dict() or {}
+        pending_patch = episode_batch_pending.read_patch(
+            transaction, client, uid, cid, pending_at, deadline_floor=deadline_floor
+        )
+        linked_owner = linked.get('episode_id')
+        if detach_from and linked_owner == detach_from:
+            # The close is moving this member out of its provisional owner. Place
+            # it in the episode the real window selects, then remove the stale
+            # membership in the same transaction.
+            linked_owner = None
+        if linked_owner:
+            owner = collection.document(linked_owner).get(transaction=transaction).to_dict() or {}
             if not _automatic(owner):
                 return None
             # Proof is written only by a complete canonical repartition. A note,
@@ -207,7 +217,7 @@ def attach(
                 )
                 if (
                     same_span
-                    and member.get('episode_id') == linked['episode_id']
+                    and member.get('episode_id') == linked_owner
                     and member.get('source') == source
                     and not is_relevance_discarded(member)
                     and not any(member.get(k) for k in ('deleted', 'sync_merged_into'))

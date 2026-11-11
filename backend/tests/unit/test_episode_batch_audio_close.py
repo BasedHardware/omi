@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from routers.listen import batch_close as close
+from routers.listen import conversations as listen_conversations
+from routers.listen import preview_custody
 from routers.listen.conversations import LiveConversationController
 from utils.episodes import batch_close as attachment, service, home_read
 from database import episode_timeline, episodes
@@ -442,7 +444,7 @@ def test_audio_close_finalizes_the_admitted_end_without_renewing_the_deadline(ti
     assert episode['conversation_ids'] == ['capture']
 
 
-def test_boundary_move_detaches_the_provisional_member_before_the_close_attach(timeline_store):
+def test_boundary_move_moves_the_provisional_member_atomically_at_the_close_attach(timeline_store):
     store = timeline_store
     path = ('users', 'owner', 'conversations', 'capture')
     entered = datetime(2026, 11, 3, tzinfo=timezone.utc)
@@ -456,7 +458,8 @@ def test_boundary_move_detaches_the_provisional_member_before_the_close_attach(t
     store.rows[('users', 'owner', 'episode_links', 'capture')] = {'episode_id': 'e1', 'episode_ids': ['e1']}
     store.rows[('users', 'owner', 'episodes', 'e1')] = {
         'id': 'e1',
-        'status': 'live',
+        'status': 'closed',
+        'close_reason': 'gap',
         'started_at': datetime.fromtimestamp(1000, timezone.utc),
         'last_activity_at': datetime.fromtimestamp(1001, timezone.utc),
         'conversation_ids': ['capture', 'other'],
@@ -547,3 +550,164 @@ def test_admission_retry_does_not_attach_twice(timeline_store):
     assert store.rows[path]['episode_id'] == episode_id
     assert store.rows[('users', 'owner', 'episodes', episode_id)]['state_version'] == version
     assert store.rows[('users', 'owner', 'episodes', episode_id)]['conversation_ids'] == ['capture']
+
+
+@pytest.mark.asyncio
+async def test_admission_boundaries_pass_a_clock_carrying_row(timeline_store, monkeypatch):
+    """Both production call sites must hand the attach a row with a clock.
+
+    The eligibility snapshot drops ``started_at``/``created_at``, so passing it
+    alone makes the admission attach a silent no-op. Drive the real preview
+    promotion and the real fresh-create path, not a hand-built row.
+    """
+    store = timeline_store
+    monkeypatch.setattr(attachment.conversations, 'db', store)
+    started = datetime(2026, 11, 3, tzinfo=timezone.utc)
+    pending = []
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    def start_background_task(coro, *, name):
+        pending.append(coro)
+
+    # --- preview custody: the full claim row, not capture_snapshot(row) ---
+    claimed = {
+        'id': 'preview-capture',
+        'record_lane_owner': 'batch_live_v1',
+        'external_data': {'server_batch_only': True},
+        'private_cloud_sync_enabled': True,
+        'uses_custom_stt': False,
+        'data_protection_level': 'enhanced',
+        'language': 'en',
+        'started_at': started,
+        'created_at': started,
+        'server_batch_audio_closed': False,
+        'has_content': False,
+        'episode_id': None,
+    }
+    store.rows[('users', 'owner', 'conversations', 'preview-capture')] = dict(claimed)
+    receiver = SimpleNamespace(
+        host=SimpleNamespace(
+            request=SimpleNamespace(uid='owner', language='en'),
+            state=SimpleNamespace(current_conversation_id='preview-capture'),
+            local_preview_batch=True,
+            use_custom_stt=False,
+            server_batch_only=False,
+            private_cloud_sync_enabled=True,
+            server_batch_byok=False,
+            is_multi_channel=False,
+            pusher_enabled=True,
+            batch_record_capture=None,
+            language='en',
+        ),
+        cloud_live_suppressed=True,
+        _cloud_live_deferred_by='local_preview',
+        _preview_batch_claims=set(),
+        raw_archive=SimpleNamespace(durable=True),
+    )
+    monkeypatch.setattr(preview_custody, 'preview_batch_custody_enabled', lambda: True)
+    monkeypatch.setattr(preview_custody, 'claim_server_batch_lane', lambda *a, **kw: dict(claimed))
+    monkeypatch.setattr(preview_custody, 'run_blocking', run_blocking)
+    monkeypatch.setattr(preview_custody, 'start_background_task', start_background_task)
+    assert await preview_custody.claim_preview_batch_custody(receiver) is True
+    assert pending, 'the promotion must schedule the admission attach'
+    await pending.pop()
+    assert store.rows[('users', 'owner', 'conversations', 'preview-capture')]['episode_id']
+
+    # --- fresh create: the payload clocks, not capture_snapshot(payload) ---
+    async def call(function, *args, **kwargs):
+        if function is listen_conversations.lifecycle_service.open_live_recording_session:
+            return {'requires_rollover': False, 'conversation_id': 'listen-capture'}
+        if function is listen_conversations.lifecycle_service.create_in_progress_conversation:
+            payload = args[1]
+            payload['record_lane_owner'] = 'batch_live_v1'
+            payload['external_data'] = {**(payload.get('external_data') or {}), 'server_batch_only': True}
+            payload['data_protection_level'] = 'enhanced'
+            store.rows[('users', 'owner', 'conversations', 'listen-capture')] = dict(payload)
+            return True
+        return None
+
+    controller = LiveConversationController.__new__(LiveConversationController)
+    controller.clock = lambda: started
+    controller.host = SimpleNamespace(
+        request=SimpleNamespace(
+            uid='owner',
+            source='desktop',
+            language='en',
+            conversation_role=None,
+            call_id=None,
+            geolocation=None,
+            onboarding_mode=False,
+            screen_evidence_pass=False,
+        ),
+        state=SimpleNamespace(current_conversation_id=None),
+        client_conversation_id=None,
+        recording_session_id=None,
+        recording_session_ids_by_conversation={},
+        persistence=SimpleNamespace(call=call),
+        client_device_context=SimpleNamespace(client_device_id='device', platform='macos'),
+        language='en',
+        private_cloud_sync_enabled=True,
+        use_custom_stt=False,
+        is_multi_channel=False,
+        pusher_enabled=True,
+        server_batch_only=False,
+        batch_record_capture=None,
+        conversation_creation_timeout=30,
+        speakers=SimpleNamespace(refresh_for_conversation=AsyncMock()),
+    )
+    controller._persist_policy_and_arm_quiet_check = AsyncMock()
+    controller._adopt_capture_timeline = Mock()
+    controller._refresh_speakers = AsyncMock()
+    controller.send_conversation_session = Mock()
+    controller._active_calendar_meeting = AsyncMock(return_value=None)
+    monkeypatch.setattr(listen_conversations, 'server_batch_request_eligible', lambda *a, **kw: True)
+    monkeypatch.setattr(listen_conversations, 'server_batch_capture_language', lambda host: 'en')
+    monkeypatch.setattr(listen_conversations, 'server_batch_capture_compatible', lambda *a, **kw: True)
+    monkeypatch.setattr(listen_conversations, 'run_blocking', run_blocking)
+    monkeypatch.setattr(listen_conversations, 'start_background_task', start_background_task)
+    await controller.create_new_in_progress_conversation()
+    assert pending, 'the fresh create must schedule the admission attach'
+    await pending.pop()
+    assert store.rows[('users', 'owner', 'conversations', 'listen-capture')]['episode_id']
+
+
+def test_admission_deadline_survives_a_capture_longer_than_the_sla(timeline_store, monkeypatch):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    started = datetime(2026, 11, 3, tzinfo=timezone.utc)
+    store.rows[path] = capture(
+        server_batch_audio_closed=False,
+        server_batch_audio_start=None,
+        server_batch_audio_end=None,
+        has_content=False,
+        episode_id=None,
+        started_at=started,
+        created_at=started,
+    )
+    c = service.Collaborators(firestore_client=store, now=lambda: started)
+    assert attachment.attach_admitted_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    deadline = store.rows[path]['episode_transcription_deadline_at']
+    assert deadline >= started + timedelta(seconds=7200 + 4 * 60 * 60)
+    # The capture records for 8000s: past the 2h SLA, inside the 4h episode cap.
+    closed_at = started + timedelta(seconds=8000)
+    store.rows[path].update(
+        server_batch_audio_closed=True,
+        server_batch_audio_start=started.timestamp(),
+        server_batch_audio_end=closed_at.timestamp(),
+        has_content=True,
+    )
+    c.now = lambda: closed_at
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    member = store.rows[path]
+    assert member['episode_transcription_deadline_at'] == deadline, 'the close never renews the deadline'
+    monkeypatch.setattr(
+        home_read,
+        'datetime',
+        SimpleNamespace(now=lambda tz: closed_at, fromtimestamp=datetime.fromtimestamp),
+    )
+    episode = store.rows[('users', 'owner', 'episodes', member['episode_id'])]
+    wire = home_read.project_episode('owner', episode, members={'capture': member})
+    assert wire['members'][0]['title'] == 'Transcribing…'
+    assert wire['members'][0]['status'] == 'processing'
