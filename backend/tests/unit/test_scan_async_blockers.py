@@ -715,7 +715,11 @@ def database_context_source(tmp_path):
                     read_user(uid)
 
             def not_a_context_manager(uid):
-                return object()
+                # Not a @contextmanager and not pure: the db effect keeps the
+                # direct call a blocking finding even under the pure-classifier
+                # exemption (FC-async-blocker-gate-false-positive-on-pure-db-
+                # classifiers), which exempts only provably pure functions.
+                return get_user(uid)
             '''),
         encoding='utf-8',
     )
@@ -824,3 +828,423 @@ def test_context_exemption_does_not_hide_blocking_calls_in_with_body(scanner, tm
         ''',
     )
     assert [call['call'] for finding in results['mixed_await_sync_db'] for call in finding['db_calls']] == ['get_user']
+
+
+# --------------------------------------------------------------------------
+# Pure database-module classifiers (FC-async-blocker-gate-false-positive-on-
+# pure-db-classifiers). database.* modules export pure classification helpers
+# (database.firestore_transaction_retry.is_transaction_contention walks an
+# exception cause chain and never touches the wire). Flagging their calls
+# misbooks the batch publication re-strike lane as an event-loop stall and
+# failed the async-blocker gate on every PR that touched it, parking the
+# landed prod-error fixes on the branch. The exemption is source-resolved
+# like the context-manager one and every conservative refusal below pins a
+# way the proof must stay closed.
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+def classifier_database_source(tmp_path):
+    database_dir = tmp_path / "database"
+    database_dir.mkdir(parents=True)
+    (database_dir / "users.py").write_text(
+        textwrap.dedent('''
+            from database import _client
+
+            def get_user(uid):
+                return _client.get_collection('users').document(uid).get()
+            '''),
+        encoding='utf-8',
+    )
+
+
+def _write_classifier_module(tmp_path, body: str) -> None:
+    (tmp_path / "database" / "classifiers.py").write_text(
+        textwrap.dedent(body),
+        encoding='utf-8',
+    )
+
+
+PURE_CLASSIFIER_BODY = '''
+
+def _is_contention(error):
+    current = error
+    while current is not None:
+        if isinstance(current, Aborted):
+            return True
+        current = current.__cause__
+    return False
+
+is_contention = _is_contention
+'''
+
+
+def test_pure_db_classifier_behind_local_helper_is_not_blocking(scanner, tmp_path, classifier_database_source):
+    """The exact publication re-strike lane shape: async -> local sync wrapper -> classifier."""
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n' + PURE_CLASSIFIER_BODY,
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        def publication_loss_is_contention(error):
+            if isinstance(error, ValueError):
+                return True
+            return is_contention(error)
+
+        async def restrike(first_error):
+            if not publication_loss_is_contention(first_error):
+                return False
+            await checkpoint()
+            return True
+        ''',
+    )
+    assert results['async_helpers_with_blocking'] == []
+    assert results['mixed_await_sync_db'] == []
+
+
+def test_pure_db_classifier_direct_async_call_is_not_blocking(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n' + PURE_CLASSIFIER_BODY,
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error)
+        ''',
+    )
+    assert results['async_helpers_with_blocking'] == []
+
+
+def test_pure_db_classifier_alias_and_origin_imports_are_both_exempt(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n' + PURE_CLASSIFIER_BODY,
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import _is_contention, is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error) or _is_contention(first_error)
+        ''',
+    )
+    assert results['async_helpers_with_blocking'] == []
+
+
+def test_chained_alias_export_is_exempt(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(
+        tmp_path,
+        '''
+        from google.api_core.exceptions import Aborted
+
+        def _is_contention_impl(error):
+            return isinstance(error, Aborted)
+
+        _is_contention = _is_contention_impl
+
+        is_contention = _is_contention
+        ''',
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error)
+        ''',
+    )
+    assert results['async_helpers_with_blocking'] == []
+
+
+def test_classifier_that_gains_a_db_call_through_its_helper_stays_blocking(
+    scanner, tmp_path, classifier_database_source
+):
+    """Drift auto-revokes the exemption: the proof re-resolves on every scan."""
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n'
+        'from database.users import get_user\n'
+        + PURE_CLASSIFIER_BODY.replace(
+            'current = current.__cause__',
+            'get_user(current)\n        current = current.__cause__',
+        ),
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_direct_db_call_in_classifier_stays_blocking(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n' 'from database.users import get_user\n' '''
+        def is_contention(uid):
+            return get_user(uid) is not None
+        ''',
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        async def classify(uid):
+            return is_contention(uid)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_decorated_classifier_is_not_exempt(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n' '''
+        def lru_cache_stub(function):
+            return function
+
+        @lru_cache_stub
+        def is_contention(error):
+            return isinstance(error, Aborted)
+        ''',
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_generator_classifier_is_not_exempt(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n' '''
+        def contention_stream(errors):
+            for error in errors:
+                yield isinstance(error, Aborted)
+        ''',
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import contention_stream
+
+        async def classify(errors):
+            return contention_stream(errors)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_classifier_with_offload_wrapper_inside_is_not_exempt(scanner, tmp_path, classifier_database_source):
+    """A body that offloads exists because the wrapped work blocks: refuse purity.
+
+    Pinned at the resolver directly: the realistic call shape (``await``) is
+    already exempt as a coroutine handoff, so the resolver contract is what
+    keeps an offloading "classifier" out of the exemption.
+    """
+    _write_classifier_module(
+        tmp_path,
+        '''
+        def is_contention(event_loop, error):
+            return event_loop.run_in_executor(None, classify_remote, error)
+
+        def classify_remote(error):
+            return True
+        ''',
+    )
+    module_tree = scanner.ast.parse((tmp_path / "database" / "classifiers.py").read_text(encoding="utf-8"))
+    exported = scanner._database_pure_callable_imports(
+        module_tree,
+        str(tmp_path / "caller.py"),
+        {},
+    )
+    assert exported == set()
+
+
+def test_purity_exemption_does_not_hide_calls_in_arguments(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n' + PURE_CLASSIFIER_BODY,
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+        from database.users import get_user
+
+        async def classify(uid):
+            return is_contention(get_user(uid))
+        ''',
+    )
+    assert [call['call'] for finding in results['async_helpers_with_blocking'] for call in finding['db_calls']] == [
+        'get_user'
+    ]
+
+
+def test_missing_classifier_source_stays_blocking(scanner, tmp_path, classifier_database_source):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.missing import is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_unparsable_classifier_source_stays_blocking(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(tmp_path, 'def broken(:\n')
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_ambiguous_duplicate_classifier_defs_stay_blocking(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n' '''
+        def is_contention(error):
+            return isinstance(error, Aborted)
+
+        def is_contention(error):
+            return False
+        ''',
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_alias_cycle_is_not_exempt(scanner, tmp_path, classifier_database_source):
+    _write_classifier_module(
+        tmp_path,
+        '''
+        is_contention = _other_name
+
+        _other_name = is_contention
+        ''',
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_alias_to_imported_foreign_name_is_not_exempt(scanner, tmp_path, classifier_database_source):
+    """An alias whose origin is not a module def resolves to nothing provable."""
+    _write_classifier_module(
+        tmp_path,
+        '''
+        from google.api_core.exceptions import is_aborted_type
+
+        is_contention = is_aborted_type
+        ''',
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.classifiers import is_contention
+
+        async def classify(first_error):
+            return is_contention(first_error)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_import_module_attribute_call_stays_blocking(scanner, tmp_path, classifier_database_source):
+    """The exemption covers the direct imported-name call only, never attribute calls."""
+    _write_classifier_module(
+        tmp_path,
+        'from google.api_core.exceptions import Aborted\n' + PURE_CLASSIFIER_BODY,
+    )
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database import classifiers
+
+        async def classify(first_error):
+            return classifiers.is_contention(first_error)
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_publication_restrike_lane_is_gate_clean(scanner):
+    """The real blackout regression: the batch pump's re-strike lane must scan clean.
+
+    Failed the async-blocker manifest check on every candidate PR after the
+    lane landed (async_helpers_with_blocking: pump.py _restrike_publication
+    -> publication_loss_is_contention -> is_transaction_contention), which
+    kept every landed prod-error fix unpublishable. Scans only the two real
+    modules in the finding path so the per-test CPU stays far under the
+    fast-unit budget even under lane load; the full-lane pins live in
+    test_async_gate_batch_lane_real_module_grid.py.
+    """
+    pump_path = scanner.Path(BACKEND_DIR / "utils" / "batch_pipeline" / "pump.py")
+    retry_path = scanner.Path(BACKEND_DIR / "database" / "firestore_transaction_retry.py")
+    results = scanner.scan_dirs([str(pump_path), str(retry_path)])
+    restrike_findings = [
+        finding
+        for finding in results['async_helpers_with_blocking']
+        if finding.get('function') == '_restrike_publication'
+    ]
+    assert restrike_findings == []

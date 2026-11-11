@@ -58,7 +58,7 @@ raise site and every boundary mapping so the two cannot drift apart.
 ## Verification
 
 `backend/tests/unit/test_staged_audio_decode_terminal_parity.py` pins
-the decoder and envelope raise-site matrix; 
+the decoder and envelope raise-site matrix;
 `test_fetch_decode_typed_boundary_parity.py` pins the boundary mapping
 and its stage scoping; `test_staged_audio_ladder_stop_parity.py` pins
 the attempt economics (terminal at attempt 1, ladder parity for untyped

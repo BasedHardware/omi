@@ -402,6 +402,161 @@ def _database_context_manager_imports(tree: ast.Module, source_path: str, cache:
     return names
 
 
+# Offload wrappers a function body may hide blocking work behind. A "pure"
+# candidate containing one is not pure: the wrapper exists precisely because
+# the wrapped call blocks, and this analysis cannot see inside the callable
+# the wrapper receives. Conservative: refuse purity instead of guessing.
+_OFFLOAD_WRAPPER_CALLS = frozenset({'run_blocking', 'to_thread', 'run_in_executor'})
+
+
+def _function_contains_yield(function: ast.FunctionDef) -> bool:
+    """True when the function (or anything nested in it) is a generator."""
+    for child in ast.walk(function):
+        if isinstance(child, (ast.Yield, ast.YieldFrom)):
+            return True
+    return False
+
+
+def _function_contains_offload_wrapper(function: ast.FunctionDef) -> bool:
+    """True when the function body calls an offload wrapper directly."""
+    for child in ast.walk(function):
+        if isinstance(child, ast.Call):
+            if isinstance(child.func, ast.Name) and child.func.id in _OFFLOAD_WRAPPER_CALLS:
+                return True
+            if isinstance(child.func, ast.Attribute) and child.func.attr in _OFFLOAD_WRAPPER_CALLS:
+                return True
+    return False
+
+
+def _module_alias_assignments(tree: ast.Module) -> Dict[str, str]:
+    """Map module-level ``name = target_name`` assignments to their targets.
+
+    The database modules export classification helpers through a deliberate
+    public alias (``is_transaction_contention = _is_transaction_contention``),
+    so the resolver must look through assignments to reach the defining
+    function. Only simple single-target single-name assignments count;
+    anything else (tuples, attributes, subscripts, calls) is not an alias
+    this analysis can prove.
+    """
+    aliases: Dict[str, str] = {}
+    for statement in tree.body:
+        if not isinstance(statement, ast.Assign):
+            continue
+        if len(statement.targets) != 1 or not isinstance(statement.targets[0], ast.Name):
+            continue
+        if not isinstance(statement.value, ast.Name):
+            continue
+        aliases[statement.targets[0].id] = statement.value.id
+    return aliases
+
+
+def _resolve_alias_chain(name: str, aliases: Dict[str, str], max_hops: int = 5) -> Optional[str]:
+    """Follow a bounded chain of module-level name aliases to its origin."""
+    seen = {name}
+    current = name
+    for _ in range(max_hops):
+        target = aliases.get(current)
+        if target is None:
+            return current
+        if target in seen:
+            return None  # alias cycle: nothing provable
+        seen.add(target)
+        current = target
+    return None
+
+
+def _module_pure_callable_names(tree: ast.Module, effects: LocalHelperEffects) -> Set[str]:
+    """Return the module-level functions this analysis can prove pure.
+
+    A pure callable is a single top-level sync ``def`` with no decorators,
+    no generator behavior, no offload wrappers, and an empty blocking-effect
+    set under the module's own imports. Deliberately narrower than the
+    context-manager shape: a plain function has no protocol boundary (no
+    ``__enter__``/``__exit__``) where a decorator's wrapper I/O could hide,
+    so any decorator at all disqualifies it.
+    """
+    pure: Set[str] = set()
+    for name, function in _module_sync_helpers(tree).items():
+        if function.decorator_list:
+            continue
+        if _function_contains_yield(function):
+            continue
+        if _function_contains_offload_wrapper(function):
+            continue
+        if effects.get(name):
+            continue
+        pure.add(name)
+    return pure
+
+
+def _database_pure_callable_imports(tree: ast.Module, source_path: str, cache: Dict[Path, Set[str]]) -> Set[str]:
+    """Resolve provably pure callables imported from ``database.*`` modules.
+
+    The db-imports heuristic classifies every name imported from a
+    ``database.*`` module as blocking persistence I/O. That is right for the
+    accessors, but these modules also export pure classification helpers --
+    ``database.firestore_transaction_retry.is_transaction_contention`` walks
+    an exception cause chain with ``isinstance`` and never touches the
+    wire. Calling one from an async helper cannot block the loop, and
+    flagging it misbooks a designed platform lane as a production error:
+    the async-blocker gate then fails every PR touching the batch
+    publication re-strike lane and the landed error-signature fixes stay
+    parked on the branch instead of shipping.
+
+    The proof is the same source resolution the context-manager exemption
+    uses: parse the module, run the module-local effect analysis with the
+    module's own imports, and exempt only names that resolve -- through
+    module-level aliases if needed -- to a provably pure function. Stricter
+    than the context-manager shape on purpose (no decorators, no generator,
+    no offload wrappers). Missing, unparsable, ambiguous, or impure source
+    stays conservatively classified as DB, exactly like the context-manager
+    resolution. The exemption covers only the direct call of the imported
+    name; its arguments and everything around the call stay fully checked.
+
+    Failure-Class: FC-async-blocker-gate-false-positive-on-pure-db-classifiers
+    """
+    imports = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith('database.') and not node.level
+    ]
+    if not imports:
+        return set()
+    root = next((parent for parent in Path(source_path).resolve().parents if (parent / 'database').is_dir()), None)
+    if root is None:
+        return set()
+    names: Set[str] = set()
+    for node in imports:
+        module_path = root.joinpath(*(node.module or '').split('.')).with_suffix('.py')
+        if module_path not in cache:
+            cache[module_path] = set()
+            try:
+                source = module_path.read_text(encoding='utf-8')
+                module_tree = ast.parse(source, filename=str(module_path))
+            except (OSError, UnicodeError, SyntaxError):
+                continue
+            db_names, db_modules = get_db_imports(source)
+            utility_db, utility_network = get_sync_utility_imports(source)
+            effects = analyze_local_sync_helpers(
+                module_tree,
+                db_names | utility_db,
+                db_modules,
+                get_storage_imports(source),
+                get_prerecorded_stt_imports(source),
+                utility_network,
+            )
+            pure = _module_pure_callable_names(module_tree, effects)
+            aliases = _module_alias_assignments(module_tree)
+            exported: Set[str] = set(pure)
+            for alias_name in aliases:
+                origin = _resolve_alias_chain(alias_name, aliases)
+                if origin in pure:
+                    exported.add(alias_name)
+            cache[module_path] = exported
+        names.update(alias.asname or alias.name for alias in node.names if alias.name in cache[module_path])
+    return names
+
+
 def _scan_function_body(
     node: FunctionNode,
     db_names: Set[str],
@@ -410,6 +565,7 @@ def _scan_function_body(
     prerecorded_stt_names: Set[str],
     sync_network_names: Set[str],
     context_manager_names: Optional[Set[str]] = None,
+    pure_callable_names: Optional[Set[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Return direct blocking calls in a function body, excluding nested scopes."""
     db_calls: List[Dict[str, Any]] = []
@@ -435,6 +591,18 @@ def _scan_function_body(
             continue
         line = child.lineno
         if line in offloaded or line in nested:
+            continue
+        # A provably pure callable imported from a database module cannot
+        # block the loop. The exemption covers only the direct call of the
+        # imported name outside a with-statement (with-context expressions
+        # belong to the context-manager resolution) and never its arguments,
+        # which stay fully checked below.
+        if (
+            pure_callable_names
+            and id(child) not in context_calls
+            and isinstance(child.func, ast.Name)
+            and child.func.id in pure_callable_names
+        ):
             continue
         # `await f()` yields to the event loop; it is the correct way to call an async
         # helper, including the async accessors in `database.*`. Counting it as blocking
@@ -521,6 +689,7 @@ def analyze_local_sync_helpers(
     prerecorded_stt_names: Set[str],
     sync_network_names: Set[str],
     context_manager_names: Optional[Set[str]] = None,
+    pure_callable_names: Optional[Set[str]] = None,
 ) -> LocalHelperEffects:
     """Compute the shortest blocking path reachable from each local sync helper.
 
@@ -542,6 +711,7 @@ def analyze_local_sync_helpers(
             prerecorded_stt_names,
             sync_network_names,
             context_manager_names,
+            pure_callable_names,
         )
         direct_by_field = {
             "db_calls": db_calls,
@@ -602,6 +772,7 @@ def scan_async_function(
     prerecorded_stt_names: Optional[Set[str]] = None,
     sync_network_names: Optional[Set[str]] = None,
     context_manager_names: Optional[Set[str]] = None,
+    pure_callable_names: Optional[Set[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Scan direct and module-local transitive blocking calls on the event loop."""
     db_calls, file_io, network_io, sleeps, body_call_lines = _scan_function_body(
@@ -612,6 +783,7 @@ def scan_async_function(
         prerecorded_stt_names or set(),
         sync_network_names or set(),
         context_manager_names,
+        pure_callable_names,
     )
     if local_helper_effects:
         propagated = _propagated_helper_calls(node, local_helper_effects)
@@ -659,6 +831,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
     files_scanned = 0
 
     context_manager_cache: Dict[Path, Set[str]] = {}
+    pure_callable_cache: Dict[Path, Set[str]] = {}
     for fpath in collect_py_files(dirs):
         with open(fpath, encoding="utf-8") as f:
             source = f.read()
@@ -675,6 +848,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
         utility_db_names, sync_network_names = get_sync_utility_imports(source)
         db_names.update(utility_db_names)
         context_manager_names = _database_context_manager_imports(tree, fpath, context_manager_cache)
+        pure_callable_names = _database_pure_callable_imports(tree, fpath, pure_callable_cache)
         local_helper_effects = analyze_local_sync_helpers(
             tree,
             db_names,
@@ -683,6 +857,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
             prerecorded_stt_names,
             sync_network_names,
             context_manager_names,
+            pure_callable_names,
         )
         module_level_nodes = set(tree.body)
         is_dependency_module = os.path.basename(fpath) == 'dependencies.py'
@@ -713,6 +888,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
                 prerecorded_stt_names=prerecorded_stt_names,
                 sync_network_names=sync_network_names,
                 context_manager_names=context_manager_names,
+                pure_callable_names=pure_callable_names,
             )
             unmanaged_offloads = _unmanaged_to_thread_calls(node, asyncio_module_names, asyncio_to_thread_names)
             endpoint_has_await = has_await(node)
