@@ -1,6 +1,16 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'utils/retrieval/tools/edit_tools.py': [
+        ('update_conversation', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('update_conversation', 'summary_due_at', 'None', ('summary_due_at',)),
+    ],
+    'database/chat_edits.py': [
+        ('apply_update.apply', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('apply_update.apply', 'summary_due_at', 'due', ('summary_due_at',)),
+        ('restore.apply', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('restore.apply', 'summary_due_at', 'due', ('summary_due_at',)),
+    ],
     'database/cells/adapters/action_items.py': [
         (
             'CellActionItems.retire_for_conversation',
@@ -1193,6 +1203,8 @@ FIELD_SITES = {
         ),
     ],
     'database/conversation_mutations.py': [
+        ('_apply_operation', 'summary_due_at', 'None', ('structured.title', 'summary_due_at', 'user_title')),
+        ('_apply_operation', 'summary_due_at', 'None', ('summary_due_at',)),
         (
             'apply_conversation_sync_mutation',
             'status',
@@ -1309,7 +1321,10 @@ FIELD_SITES = {
             ('record_audio_partial',),
         ),
         ('promote_final_pass_if_current.commit', 'status', "'resolved'", ('participant_speaker_ids', 'status')),
+        ('restore_conversation_from_discarded._restore', 'summary_due_at', 'due', ('summary_due_at',)),
+        ('restore_conversation_from_discarded._restore', 'summary_due_at', 'due', ('summary_due_at',)),
         ('transition_conversation_status', 'status', 'status', ('status',)),
+        ('update_conversation_title', 'summary_due_at', 'None', ('structured.title', 'summary_due_at', 'user_title')),
         (
             'upsert_conversation_with_lifecycle._write_processing_result',
             'record_audio_partial',
@@ -2839,6 +2854,7 @@ FIELD_SITES = {
         ('merge_result', 'summary_completed_at', "existing['summary_completed_at']", ('summary_completed_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
@@ -2854,6 +2870,8 @@ FIELD_SITES = {
             'current + deadline_seconds()',
             ('summary_blocked_reason', 'summary_due_at', 'summary_empty_failures', 'summary_empty_rearms'),
         ),
+        ('stamp_projection_debt', 'summary_due_at', 'current + deadline_seconds()', ('summary_due_at',)),
+        ('stamp_projection_debt', 'summary_first_pending_at', 'current', ('summary_first_pending_at',)),
     ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))
@@ -3846,6 +3864,13 @@ FIELD_SITES = {
             ('age_days', 'due', 'history', 'kind', 'loop_id', 'opened_on', 'status', 'times_surfaced', 'what', 'who'),
         ),
     ],
+    # Account-wipe results, not conversation lifecycle writes. The conservative
+    # inventory also tracks response maps containing a status key.
+    'utils/other/lake_wipe.py': [
+        ('destroy_owner_lake_keys', 'status', "'destroyed'", ('status', 'versions_destroyed')),
+        ('purge_owner_lake_content', 'status', "'noop'", ('status',)),
+        ('purge_owner_lake_content', 'status', "'purged'", ('candidates_deleted', 'objects_deleted', 'status')),
+    ],
     'utils/other/daily_recap.py': [
         ('_state', 'status', 'status', ('created_at', 'date', 'generated_at', 'status')),
         ('finish_legacy_stub', 'status', "'generated'", ('generated_at', 'status')),
@@ -3982,11 +4007,17 @@ FIELD_SITES = {
     'utils/subscription.py': [('reconcile_basic_plan_with_stripe', 'status', 'SubscriptionStatus.active', ('status',))],
     'utils/sync/assignment.py': [
         (
+            '_donor_redirect_patch',
+            'summary_due_at',
+            'None',
+            ('deleted', 'discarded', 'summary_due_at', 'sync_content_revision', 'sync_merged_into'),
+        ),
+        (
             'assign_in_transaction.plan',
             'sync_bridge_pending',
-            "{'target_id': pending_target['id'], 'expires_at': time.time() + " 'bridge_pending.MAX_WAIT_SECONDS}',
+            "{'target_id': pending_target['id'], 'expires_at': time.time() + bridge_pending.MAX_WAIT_SECONDS}",
             ('sync_bridge_pending',),
-        )
+        ),
     ],
     'utils/sync/completed_status.py': [
         (

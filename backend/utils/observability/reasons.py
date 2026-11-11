@@ -83,6 +83,7 @@ class ReasonFamily(StrEnum):
     RECURRING_VOICE = 'recurring_voice'
     RECORD_GAP_FILL = 'record_gap_fill'
     RECORD_RETAINED_ACK = 'record_retained_ack'
+    PIPELINE_LEDGER = 'pipeline_ledger'
 
 
 class PusherPcmStage(StrEnum):
@@ -821,3 +822,23 @@ class IdentitySpeechOutcome(StrEnum):
     PERSON = 'person'
     RECURRING = 'recurring'
     UNNAMED = 'unnamed'
+
+
+class PipelineLedgerOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OK = 'ok'
+    ERROR = 'error'
+    DISABLED = 'disabled'
+    DUPLICATE = 'duplicate'
+    STALE = 'stale'
+    ILLEGAL = 'illegal'
+    TERMINAL = 'terminal'
+
+
+class PipelineLedgerFailureReason(StrEnum):
+    UNKNOWN = 'unknown'
+    TIMEOUT = 'timeout'
+    UNAVAILABLE = 'unavailable'
+    PERMISSION = 'permission'
+    INVALID = 'invalid'
+    OTHER = 'other'

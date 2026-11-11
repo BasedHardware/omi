@@ -180,9 +180,13 @@ def test_worker_metrics_are_scraped_into_the_hpa_prometheus():
         '__meta_kubernetes_pod_phase': 'Running',
     }
     # The adapter joins freshness on (namespace, worker_release, pod): relabels
-    # must add exactly namespace+pod, never touch priority/worker_release.
+    # must preserve namespace+pod, never touch priority/worker_release.
     labels = {r['target_label']: r['source_labels'] for r in scrape['relabel_configs'] if 'target_label' in r}
-    assert labels == {'namespace': ['__meta_kubernetes_namespace'], 'pod': ['__meta_kubernetes_pod_name']}
+    assert labels == {
+        'namespace': ['__meta_kubernetes_namespace'],
+        'pod': ['__meta_kubernetes_pod_name'],
+        'service_name': ['__meta_kubernetes_pod_label_service_name'],
+    }
     assert 'metric_relabel_configs' not in scrape
     # Freshness cutoff is 60s; 15s keeps two samples in window and matches the
     # chart's GMP PodMonitoring cadence.
@@ -315,7 +319,11 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
     ]:
         d, h, monitor = deployments[name], hpas[name]['spec'], monitors[name]['spec']
         pod = d['spec']['template']
-        assert d['spec']['selector']['matchLabels'] == pod['metadata']['labels'] == monitor['selector']['matchLabels']
+        assert d['spec']['selector']['matchLabels'] == monitor['selector']['matchLabels']
+        assert pod['metadata']['labels'] == {
+            **d['spec']['selector']['matchLabels'],
+            'service_name': 'batch-pipeline-worker',
+        }
         assert pod['metadata']['labels']['app.kubernetes.io/instance'] == name
         assert pod['spec']['nodeSelector']['cloud.google.com/gke-nodepool'] == pool
         assert 'topologySpreadConstraints' not in pod['spec']
@@ -810,7 +818,10 @@ def test_t4_fallback_is_a_zero_replica_t4_sibling_without_hpa():
     assert t4['spec']['replicas'] == 0
     pod = t4['spec']['template']
     assert pod['metadata']['labels']['app.kubernetes.io/instance'] == 'synthetic-worker-t4'
-    assert t4['spec']['selector']['matchLabels'] == pod['metadata']['labels']
+    assert pod['metadata']['labels'] == {
+        **t4['spec']['selector']['matchLabels'],
+        'service_name': 'batch-pipeline-worker',
+    }
     assert pod['spec']['nodeSelector'] == {
         **primary['spec']['template']['spec']['nodeSelector'],
         'cloud.google.com/gke-nodepool': 'batch-pipeline-t4-pool',

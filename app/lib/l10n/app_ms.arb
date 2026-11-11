@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Rakaman dijedakan",
     "activityAttentionUploadStalledTitle": "Muat naik terhenti",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 rakaman menunggu} other{{count} rakaman menunggu}}",
+    "attentionRerunNotes": "Jana semula nota",
     "attentionSummaryFailed": "Perbualan ini tidak dapat diringkaskan",
     "activityAttentionSemantics": "Aktiviti, memerlukan perhatian",
     "connectAgentHeadline": "Gunakan memori Omi anda dalam ChatGPT dan ejen AI anda",

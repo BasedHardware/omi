@@ -962,11 +962,21 @@ def _named(uid: str, row: Mapping[str, Any], c: Any) -> list[dict[str, Any]]:
     return owner._named_segments(uid, _segments(row), c)
 
 
-def _members(uid: str, episode: Mapping[str, Any], c: Any) -> tuple[str, list[dict[str, Any]]]:
+def _members(
+    uid: str,
+    episode: Mapping[str, Any],
+    c: Any,
+    *,
+    revisions: Optional[dict[str, Optional[datetime]]] = None,
+) -> tuple[str, list[dict[str, Any]]]:
     """('ok' | 'waiting', retained visible members sorted by start)."""
     members = []
     for cid in _retained_ids(episode):
         row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        if revisions is not None:
+            # get_conversation carries the snapshot's canonical update_time in
+            # updated_at, including after decoding and Home projection.
+            revisions[cid] = row.get('updated_at') if row else None
         if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
             continue
         if str(row.get('status') or '') not in _DONE:
@@ -986,6 +996,7 @@ def _write(
     updates: _Updates,
     *,
     guard: Optional[Callable[[Mapping[str, Any]], Optional[str]]] = None,
+    expected_member_revisions: Optional[Mapping[str, Optional[datetime]]] = None,
 ) -> str:
     """CAS write with bounded retries. ``guard(current)`` returns an outcome to stop, or None."""
     outcome = 'conflict'
@@ -1006,9 +1017,14 @@ def _write(
                 expected_version=int(current.get('state_version') or 0),
                 updates=payload,
                 firestore_client=c.firestore_client,
+                expected_member_revisions=expected_member_revisions,
             )
             return 'written'
         except episodes_db.EpisodeConflict as error:
+            if str(error) == 'member_revision_changed':
+                # The normal recompute path will pick up the new evidence. Do
+                # not retry the stale payload or the window-only fallback.
+                return 'superseded'
             outcome = 'conflict' if str(error) == 'state_version_changed' else 'refused'
     return outcome
 
@@ -1247,6 +1263,7 @@ def _write_single_member(
     members: Sequence[Mapping[str, Any]],
     print_: str,
     member_ids: list[str],
+    member_revisions: Mapping[str, Optional[datetime]],
 ) -> str:
     """Persist the code-built notes for a one-conversation episode. Never raises to callers."""
     composed = single_member_updates(members[0])
@@ -1265,7 +1282,10 @@ def _write_single_member(
             'compose_deferred_at': None,
         }
 
-    written = _write(uid, episode_id, c, finish)
+    def guard(current: Mapping[str, Any]) -> Optional[str]:
+        return 'superseded' if current.get('state_version') != episode.get('state_version') else None
+
+    written = _write(uid, episode_id, c, finish, guard=guard, expected_member_revisions=member_revisions)
     if written == 'refused':
         # Older data can refuse a window change: keep the notes on the window it already has.
         written = _write(
@@ -1273,10 +1293,12 @@ def _write_single_member(
             episode_id,
             c,
             lambda current: {k: v for k, v in finish(current).items() if k != 'member_activity'},
+            guard=guard,
+            expected_member_revisions=member_revisions,
         )
     if written == 'written':
         return 'composed_single'
-    return written if written in {'live', 'no_episode', 'conflict', 'refused'} else 'conflict'
+    return written if written in {'live', 'no_episode', 'conflict', 'refused', 'superseded'} else 'conflict'
 
 
 def _compose(
@@ -1287,7 +1309,8 @@ def _compose(
         return 'no_episode'
     if policy.is_live(episode):
         return 'live'
-    state, members = _members(uid, episode, c)
+    member_revisions: dict[str, Optional[datetime]] = {}
+    state, members = _members(uid, episode, c, revisions=member_revisions)
     if state == 'waiting':
         return 'waiting'
     member_ids = sorted(str(row['id']) for row in members)
@@ -1313,8 +1336,17 @@ def _compose(
             'summary_needs_regeneration': False,
             'compose_deferred_at': None,
         }
-        _write(uid, episode_id, c, stamp)
-        return 'empty'
+        written = _write(
+            uid,
+            episode_id,
+            c,
+            stamp,
+            guard=lambda current: (
+                'superseded' if current.get('state_version') != episode.get('state_version') else None
+            ),
+            expected_member_revisions=member_revisions,
+        )
+        return 'empty' if written == 'written' else written
     print_ = fingerprint(members)
     single = episode_single_member_compose_enabled() and len(members) == 1
     if (
@@ -1342,7 +1374,7 @@ def _compose(
         return 'unchanged'
     if single and has_notes(members[0]):
         # No model call, so no lease, settle window or failure backoff: the notes are already paid for.
-        return _write_single_member(uid, episode_id, c, episode, members, print_, member_ids)
+        return _write_single_member(uid, episode_id, c, episode, members, print_, member_ids, member_revisions)
     if not force and _backed_off(episode, print_):
         return 'backoff'
     if episode_compose_settle_enabled() and background and not force:
@@ -1483,16 +1515,24 @@ def _compose(
     # The model call took seconds: re-read the evidence. A discard, a transcript upgrade or a
     # membership change since then makes this result stale; its own trigger composes again.
     fresh_episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode
-    fresh_state, fresh = _members(uid, fresh_episode, c)
+    fresh_revisions: dict[str, Optional[datetime]] = {}
+    fresh_state, fresh = _members(uid, fresh_episode, c, revisions=fresh_revisions)
     superseded = fresh_state != 'ok' or fingerprint(fresh) != print_
-    removed_member = bool(set(member_ids) - set(_retained_ids(fresh_episode)))
+    member_changed = bool(set(member_ids) - set(_retained_ids(fresh_episode)))
     # Waiting members collapse _members to []; check visibility of the original
     # paid set separately so an actual removal/hidden member still cannot leak.
     for cid in member_ids:
         row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
-        if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
-            removed_member = True
-    if superseded and (not keep_paid or removed_member):
+        # Preserve the fingerprint snapshot's revisions; never adopt later reads.
+        if (
+            not row
+            or cid not in fresh_revisions
+            or row.get('updated_at') != fresh_revisions[cid]
+            or hidden_member(row)
+            or not conversations_db.is_visible_conversation(row)
+        ):
+            member_changed = True
+    if member_changed or (superseded and not keep_paid):
         _write(uid, episode_id, c, lambda current: _release(current, print_, lease_token))
         return 'superseded'
 
@@ -1545,7 +1585,7 @@ def _compose(
             return None if keep_paid else 'superseded'
         return None
 
-    written = _write(uid, episode_id, c, finish, guard=finish_guard)
+    written = _write(uid, episode_id, c, finish, guard=finish_guard, expected_member_revisions=fresh_revisions)
     if written == 'refused':
         # Older data can refuse a window change: keep the paid notes on the window it already has.
         written = _write(
@@ -1554,6 +1594,7 @@ def _compose(
             c,
             lambda current: {k: v for k, v in finish(current).items() if k != 'member_activity'},
             guard=finish_guard,
+            expected_member_revisions=fresh_revisions,
         )
     if written in {'conflict', 'refused'}:
         _record_failure(uid, episode_id, c, print_, lease_token=lease_token)

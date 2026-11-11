@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "녹음 일시중지됨",
     "activityAttentionUploadStalledTitle": "업로드 중단됨",
     "activityAttentionUploadRecordings": "{count, plural, =1{녹음 1개 대기 중} other{녹음 {count}개 대기 중}}",
+    "attentionRerunNotes": "노트 다시 생성",
     "attentionSummaryFailed": "이 대화를 요약하지 못했습니다",
     "activityAttentionSemantics": "활동, 주의 필요",
     "connectAgentHeadline": "ChatGPT와 AI 에이전트에서 Omi 메모리를 사용하세요",

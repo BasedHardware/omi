@@ -13657,6 +13657,9 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Luo muistiinpanot uudelleen';
+
+  @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
 
   @override

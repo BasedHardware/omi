@@ -13635,6 +13635,9 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'नोट्स फिर से बनाएँ';
+
+  @override
   String get attentionSummaryFailed => 'इस बातचीत का सारांश नहीं बन सका';
 
   @override

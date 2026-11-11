@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "การบันทึกหยุดชั่วคราว",
     "activityAttentionUploadStalledTitle": "การอัปโหลดหยุดชะงัก",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 รายการกำลังรอ} other{{count} รายการกำลังรอ}}",
+    "attentionRerunNotes": "สร้างบันทึกอีกครั้ง",
     "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้",
     "activityAttentionSemantics": "กิจกรรม ต้องดำเนินการ",
     "connectAgentHeadline": "ใช้ความจำ Omi ของคุณใน ChatGPT และเอเจนต์ AI ของคุณ",

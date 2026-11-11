@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Opnames gepauzeerd",
     "activityAttentionUploadStalledTitle": "Upload vastgelopen",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 opname wacht} other{{count} opnames wachten}}",
+    "attentionRerunNotes": "Notities opnieuw genereren",
     "attentionSummaryFailed": "Dit gesprek kon niet worden samengevat",
     "activityAttentionSemantics": "Activiteit, aandacht nodig",
     "connectAgentHeadline": "Gebruik je Omi-geheugen in ChatGPT en je AI-agents",

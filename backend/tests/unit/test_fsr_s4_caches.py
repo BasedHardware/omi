@@ -156,16 +156,16 @@ def test_deletion_negative_cache_read_count(env, monkeypatch, enabled, expected)
     from database import privacy_check_metrics as metrics
 
     calls = metrics.CALLS.labels('deletion_marker', 'live')._value.get()
-    decisions = metrics.CHECKS.labels('deletion_marker', 'live', 'allow')._value.get()
-    reads = metrics.READS.labels('deletion_marker', 'live', 'miss')._value.get()
+    decisions = metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get()
+    reads = metrics.READS.labels('deletion_marker', 'live', 'miss', 'unattributed')._value.get()
     if enabled:
         enable(monkeypatch, 'deletion_marker_cache')
     for _ in range(6):
         assert deletion.get_user_deletion_wipe_status('u') is None
     assert len(env[0].reads) == expected
     assert metrics.CALLS.labels('deletion_marker', 'live')._value.get() == calls + 6
-    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow')._value.get() == decisions + 6
-    assert metrics.READS.labels('deletion_marker', 'live', 'miss')._value.get() == reads + expected
+    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get() == decisions + 6
+    assert metrics.READS.labels('deletion_marker', 'live', 'miss', 'unattributed')._value.get() == reads + expected
 
 
 def test_deletion_next_request_fenced_after_real_intent_writer(env, monkeypatch):
@@ -192,7 +192,7 @@ async def test_deletion_request_dedupe_counts_every_decision_but_only_issued_rea
 
     enable(monkeypatch, 'request_read_dedupe')
     calls = metrics.CALLS.labels('deletion_marker', 'live')._value.get()
-    decisions = metrics.CHECKS.labels('deletion_marker', 'live', 'allow')._value.get()
+    decisions = metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get()
     scope = cache.request_read_scope()
     await anext(scope)
     try:
@@ -202,7 +202,7 @@ async def test_deletion_request_dedupe_counts_every_decision_but_only_issued_rea
         await scope.aclose()
     assert len(env[0].reads) == 6  # Deletion marker is not memoized in request scope (Issue #24647)
     assert metrics.CALLS.labels('deletion_marker', 'live')._value.get() == calls + 6
-    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow')._value.get() == decisions + 6
+    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get() == decisions + 6
 
 
 def test_lever_off_writer_still_fences_enabled_readers(env, monkeypatch):

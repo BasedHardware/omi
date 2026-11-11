@@ -25703,6 +25703,17 @@
             "title": "Duration Seconds",
             "type": "number"
           },
+          "home_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Step"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -25774,6 +25785,11 @@
           },
           "enabled": {
             "title": "Enabled",
+            "type": "boolean"
+          },
+          "home_processing_today": {
+            "default": false,
+            "title": "Home Processing Today",
             "type": "boolean"
           },
           "items": {

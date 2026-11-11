@@ -13706,6 +13706,9 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'గమనికలను మళ్లీ సృష్టించండి';
+
+  @override
   String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
 
   @override

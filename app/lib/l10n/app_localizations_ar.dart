@@ -13577,6 +13577,9 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'إعادة إنشاء الملاحظات';
+
+  @override
   String get attentionSummaryFailed => 'تعذّر تلخيص هذه المحادثة';
 
   @override

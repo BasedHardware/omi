@@ -32,6 +32,18 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
+# Terminal exclusion keeps future nonterminal strings visible; the census gates missing/null state.
+MERGE_POLL_TERMINAL_STATES = tuple(
+    'committed dead quarantined privacy_blocked partial_retired provider_superseded'.split()
+)
+
+
+def held_poll_skip_enabled() -> bool:
+    from config.refactor_modes import default_off
+
+    return default_off('BATCH_HELD_POLL_SKIP_ENABLED')
+
+
 # A full grace window is also given to pre-field rows on first observation.
 HELD_DEAD_LETTER_SECONDS = 7 * 86400
 RECORD_DEAD_LETTER_SECONDS = 14 * 86400

@@ -13652,6 +13652,9 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Tạo lại ghi chú';
+
+  @override
   String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
 
   @override

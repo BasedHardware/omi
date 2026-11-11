@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Записи призупинено",
     "activityAttentionUploadStalledTitle": "Завантаження зупинилося",
     "activityAttentionUploadRecordings": "{count, plural, =1{Очікує 1 запис} other{Очікують {count} записи}}",
+    "attentionRerunNotes": "Створити нотатки знову",
     "attentionSummaryFailed": "Не вдалося підсумувати цю розмову",
     "activityAttentionSemantics": "Активність, потребує уваги",
     "connectAgentHeadline": "Використовуйте пам'ять Omi у ChatGPT і своїх ШІ-агентах",

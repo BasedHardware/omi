@@ -13685,6 +13685,9 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Izveidot piezīmes vēlreiz';
+
+  @override
   String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
 
   @override

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +15,7 @@ os.environ.setdefault(
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 from config import episodes as config
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.episodes import composer, service
 
 UID = 'single-member-uid'
@@ -373,3 +375,180 @@ def test_refused_member_activity_retries_only_the_window_field(store, monkeypatc
     assert all('member_activity' in update for update in attempts[:3])
     assert 'member_activity' not in attempts[-1]
     assert store.episode['lede'] and store.episode['moments']
+
+
+@pytest.fixture
+def transactional_store(monkeypatch):
+    """Exercise the real episode CAS with strict read-before-write semantics."""
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_COMPOSER_THRIFT_ENV, raising=False)
+    episode_path = ('users', UID, 'episodes', 'ep1')
+    member_path = ('users', UID, 'conversations', 'c1')
+    end = T0 + timedelta(minutes=2)
+    db = StrictFirestore(
+        {
+            episode_path: composer.episodes_db.seal(UID, _episode(last_activity_at=end, member_activity={'c1': end})),
+            member_path: _row(),
+        }
+    )
+    revisions = {member_path: T0}
+    original_get = StrictFirestoreDocument.get
+    member_reads = []
+
+    def get(ref, transaction=None, **kwargs):
+        snapshot = original_get(ref, transaction=transaction, **kwargs)
+        snapshot.update_time = revisions.get(ref.path)
+        if ref.path == member_path:
+            member_reads.append(transaction)
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+
+    def read_member(uid, cid, *, firestore_client=None):
+        # Keep canonical snapshot metadata, while omitting unrelated photo and
+        # Home projection reads from this persistence-boundary test.
+        ref = db.collection('users').document(uid).collection('conversations').document(cid)
+        return composer.conversations_db.document_data_with_revision(ref.get())
+
+    monkeypatch.setattr(composer.conversations_db, 'get_conversation', read_member)
+    c = _c()
+    c.firestore_client = db
+    return SimpleNamespace(
+        db=db, c=c, revisions=revisions, episode_path=episode_path, member_path=member_path, reads=member_reads
+    )
+
+
+def test_single_member_normal_write_validates_member_in_the_episode_transaction(transactional_store):
+    s = transactional_store
+    assert composer.compose(UID, 'ep1', collaborators=s.c) == 'composed_single'
+    episode = composer.episodes_db.get_episode(UID, 'ep1', firestore_client=s.db)
+    assert episode['title'] == 'Launch plan and pricing'
+    assert episode['state_version'] == 4
+    assert episode['composed_fingerprint'] == composer.fingerprint([_row()])
+    assert s.reads[0] is None
+    assert s.reads[-1] is s.db.transactions[-1]
+    assert s.db.transactions[-1].sets[0][0] == s.episode_path
+
+
+@pytest.mark.parametrize('change', ['notes', 'transcript', 'timing', 'hidden', 'deleted'])
+def test_single_member_refuses_changed_member_snapshot(transactional_store, monkeypatch, change):
+    s = transactional_store
+    original_update = composer.episodes_db.update_episode
+    attempts = []
+
+    def update(*args, **kwargs):
+        attempts.append(kwargs)
+        row = s.db.rows[s.member_path]
+        if change == 'notes':
+            row['structured']['gist'] = 'Newer finalized notes'
+        elif change == 'transcript':
+            row['transcript_segments'][0]['text'] = 'Corrected speech'
+        elif change == 'timing':
+            row['recorded_end'] += timedelta(seconds=10)
+        elif change == 'hidden':
+            row['discarded'] = True
+        else:
+            del s.db.rows[s.member_path]
+        s.revisions[s.member_path] += timedelta(seconds=1)
+        return original_update(*args, **kwargs)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', update)
+    assert composer.compose(UID, 'ep1', collaborators=s.c) == 'superseded'
+    assert len(attempts) == 1  # no stale retry or window-only fallback
+    assert not any(tx.sets for tx in s.db.transactions)
+    assert 'composed_fingerprint' not in s.db.rows[s.episode_path]
+    if change == 'notes':
+        monkeypatch.setattr(composer.episodes_db, 'update_episode', original_update)
+        assert composer.compose(UID, 'ep1', collaborators=s.c) == 'composed_single'
+        assert composer.episodes_db.get_episode(UID, 'ep1', firestore_client=s.db)['lede'] == 'Newer finalized notes'
+
+
+@pytest.mark.parametrize('member_changed', [False, True])
+def test_newer_replica_notes_survive_a_stale_single_member_write(transactional_store, monkeypatch, member_changed):
+    s = transactional_store
+    original_update = composer.episodes_db.update_episode
+    attempts = []
+
+    def update(*args, **kwargs):
+        attempts.append(kwargs)
+        row = s.db.rows[s.member_path]
+        if member_changed:
+            row['structured']['gist'] = 'Newer replica notes'
+            s.revisions[s.member_path] += timedelta(seconds=1)
+        # Another replica finishes its compose after our snapshot and before
+        # our CAS. Its notes and fingerprint must both survive.
+        winner = {**composer.single_member_updates(row), 'composed_fingerprint': composer.fingerprint([row])}
+        winner['lede'] = 'Newer replica notes'
+        original_update(UID, 'ep1', expected_version=3, updates=winner, firestore_client=s.db)
+        return original_update(*args, **kwargs)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', update)
+    assert composer.compose(UID, 'ep1', collaborators=s.c) == 'superseded'
+    episode = composer.episodes_db.get_episode(UID, 'ep1', firestore_client=s.db)
+    assert episode['lede'] == 'Newer replica notes'
+    assert episode['composed_fingerprint'] == composer.fingerprint([s.db.rows[s.member_path]])
+    assert episode['state_version'] == 4
+    assert len(attempts) == 1
+
+
+def test_stale_empty_compose_cannot_clear_newly_finalized_notes(transactional_store, monkeypatch):
+    s = transactional_store
+    s.db.rows[s.member_path]['transcript_segments'] = []
+    original_update = composer.episodes_db.update_episode
+
+    def update(*args, **kwargs):
+        s.db.rows[s.member_path] = _row()
+        s.revisions[s.member_path] += timedelta(seconds=1)
+        return original_update(*args, **kwargs)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', update)
+    assert composer.compose(UID, 'ep1', collaborators=s.c) == 'superseded'
+    episode = composer.episodes_db.get_episode(UID, 'ep1', firestore_client=s.db)
+    assert episode['title'] == 'old' and episode['bullets'] == ['David: Yeah.']
+    assert episode.get('composed_fingerprint') is None
+
+
+@pytest.mark.parametrize('missing', [False, True])
+def test_unchanged_empty_snapshot_can_still_be_cleared(transactional_store, missing):
+    s = transactional_store
+    if missing:
+        del s.db.rows[s.member_path]
+    else:
+        s.db.rows[s.member_path]['transcript_segments'] = []
+    assert composer.compose(UID, 'ep1', collaborators=s.c) == 'empty'
+    episode = composer.episodes_db.get_episode(UID, 'ep1', firestore_client=s.db)
+    assert episode['title'] == '' and episode['bullets'] == []
+    assert episode['composed_fingerprint']
+
+
+def test_missing_member_arrival_refuses_stale_empty_write(transactional_store, monkeypatch):
+    s = transactional_store
+    del s.db.rows[s.member_path]
+    original_update = composer.episodes_db.update_episode
+
+    def update(*args, **kwargs):
+        s.db.rows[s.member_path] = _row()
+        return original_update(*args, **kwargs)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', update)
+    assert composer.compose(UID, 'ep1', collaborators=s.c) == 'superseded'
+    assert not any(tx.sets for tx in s.db.transactions)
+
+
+def test_window_only_fallback_retains_member_freshness_guard(transactional_store, monkeypatch):
+    s = transactional_store
+    original_update = composer.episodes_db.update_episode
+    attempts = []
+
+    def update(*args, **kwargs):
+        attempts.append(kwargs)
+        if 'member_activity' in kwargs['updates']:
+            s.db.rows[s.member_path]['structured']['gist'] = 'A newer gist during window refusal'
+            s.revisions[s.member_path] += timedelta(seconds=1)
+            raise composer.episodes_db.EpisodeConflict('member_window_refused')
+        return original_update(*args, **kwargs)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', update)
+    assert composer.compose(UID, 'ep1', collaborators=s.c) == 'superseded'
+    assert len(attempts) == 4  # existing bounded window retries, then one fenced fallback
+    assert not any(tx.sets for tx in s.db.transactions)

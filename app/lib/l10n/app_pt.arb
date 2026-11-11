@@ -4218,6 +4218,7 @@
     "activityAttentionStorageSubtitle": "Gravações pausadas",
     "activityAttentionUploadStalledTitle": "Envio parado",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 gravação aguardando} other{{count} gravações aguardando}}",
+    "attentionRerunNotes": "Gerar notas novamente",
     "attentionSummaryFailed": "Não foi possível resumir esta conversa",
     "activityAttentionSemantics": "Atividade, requer atenção",
     "connectAgentHeadline": "Use sua memória do Omi no ChatGPT e nos seus agentes de IA",

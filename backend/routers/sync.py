@@ -174,6 +174,7 @@ from utils.sync.repeat_work_metrics import (
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
+from config.firestore_read_levers import lever_enabled
 from utils.subscription import (
     TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS,
     has_transcription_credits,
@@ -792,10 +793,18 @@ async def sync_local_files_v2(
 
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
-    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+    # Reuse the first answer. At 0, preserve the old wrapper + conditional second lookup,
+    # including its different lock decision if allowance state changes between calls.
+    if lever_enabled('sync_allowance_single_resolve', uid):
+        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        has_credits = allowance.managed
+    else:
+        has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+        allowance = None
     should_lock = False
     if not has_credits:
-        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        if allowance is None:
+            allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
         should_lock = (
             allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
             and allowance.reason != 'usage_budget_exhausted'

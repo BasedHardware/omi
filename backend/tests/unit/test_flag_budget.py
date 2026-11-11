@@ -64,6 +64,7 @@ HELPER_KILL_SWITCHES = {
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
     'HOME_HIDE_BELOW_FLOOR_ROWS',
     'EPISODE_COMPOSER_THRIFT',
+    'SUMMARY_PROJECTION_DEBT_ENABLED',
     'EPISODE_COMPOSER_REUSE',
     'EPISODE_COMPOSER_NOTES_FIRST',
     'HOME_EMPTY_OUTPUT_NOISE',
@@ -204,6 +205,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
     assert helper_names == HELPER_KILL_SWITCHES | {
         'CONVERSATION_TERMINAL_FAMILY_MODE',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'BATCH_HELD_POLL_SKIP_ENABLED',
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
@@ -278,6 +280,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         elif name in {
             'EPISODE_COMPOSER_THRIFT',
             'EPISODE_COMPOSER_NOTES_FIRST',
+            'SUMMARY_PROJECTION_DEBT_ENABLED',
             'HOME_EMPTY_OUTPUT_NOISE',
             'EPISODE_COMPOSER_REUSE',
         }:

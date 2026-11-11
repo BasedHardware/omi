@@ -13654,6 +13654,9 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Znovu vytvořit poznámky';
+
+  @override
   String get attentionSummaryFailed => 'Tuto konverzaci se nepodařilo shrnout';
 
   @override

@@ -17,7 +17,7 @@ from fastapi import BackgroundTasks, Request, Header, HTTPException, APIRouter, 
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import List, Optional
+from typing import List, Mapping, Optional
 import uuid
 import time
 from urllib.parse import urljoin
@@ -29,7 +29,7 @@ from database import (
     action_items as action_items_db,
 )
 from database.locked_content import has_recoverable_locked_content
-from database.redis_db import set_credits_invalidation_signal
+from database.redis_db import claim_payment_recovery_notification, set_credits_invalidation_signal
 from config.plan_catalog import _paid_period_still_open, plan_uses_overage
 from utils.subscription_state_machine import (
     project_subscription,
@@ -45,11 +45,18 @@ from utils.billing_currency import (
     subscription_currency,
 )
 from utils.storefront_copy import format_money
-from utils.billing_flags import webhook_ledger_enabled
+from utils.billing_flags import payment_recovery_notification_enabled, webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.fair_use import clear_fair_use_on_upgrade
-from utils.notifications import send_notification, send_subscription_paid_personalized_notification
+from utils.notifications import send_subscription_paid_personalized_notification
+from utils.notification_dispatch import (
+    NotificationIntent,
+    NotificationKind,
+    dispatch_notification,
+    dispatch_notification_async,
+)
+from utils import billing_recovery
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
 from utils.subscription import (
     get_basic_plan_limits,
@@ -740,11 +747,16 @@ def create_checkout_session_endpoint(
 
     # Validate promotion code early — reject invalid codes before any subscription changes
     resolved_checkout_promo_id = None
+    resolved_checkout_attribution = None
     if request.promotion_code:
-        promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+        promo_list = stripe.PromotionCode.list(
+            code=request.promotion_code, active=True, limit=1, expand=['data.coupon']
+        )
         if not promo_list.data:
             raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
-        resolved_checkout_promo_id = promo_list.data[0].id
+        resolved_promotion = promo_list.data[0]
+        resolved_checkout_promo_id = resolved_promotion.id
+        resolved_checkout_attribution = stripe_utils.promotion_code_attribution(resolved_promotion)
 
     # Only the exact current JPY price may reactivate; never open new Checkout.
     if management_only and currency_binding is not None:
@@ -781,13 +793,18 @@ def create_checkout_session_endpoint(
         raise HTTPException(status_code=400, detail="trial_unavailable")
     trial_period_days = request.trial_days or None
     try:
+        checkout_options = {
+            'customer_id': existing_customer_id,
+            'promotion_code_id': resolved_checkout_promo_id,
+            'trial_period_days': trial_period_days,
+        }
+        if resolved_checkout_attribution is not None:
+            checkout_options['promotion_attribution'] = resolved_checkout_attribution
         session = stripe_utils.create_subscription_checkout_session(
             uid,
             request.price_id,
             idempotency_key,
-            customer_id=existing_customer_id,
-            promotion_code_id=resolved_checkout_promo_id,
-            trial_period_days=trial_period_days,
+            **checkout_options,
         )
     except stripe.error.InvalidRequestError as e:
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
@@ -1144,6 +1161,95 @@ def cancel_subscription_endpoint(
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
+async def _schedule_payment_recovery_notification(
+    background_tasks: BackgroundTasks | None,
+    uid: str,
+    subscription_obj: Mapping,
+    previous_attributes: Mapping | None,
+    persisted_subscription: Subscription,
+    billing_owner_confirmed: bool,
+) -> None:
+    """Claim and schedule only after persistence; pre-claim failures remain webhook-retryable."""
+    if (
+        not payment_recovery_notification_enabled()
+        or not billing_owner_confirmed
+        or persisted_subscription.stripe_subscription_id != subscription_obj.get('id')
+        or not billing_recovery.payment_recovery_transition(subscription_obj, previous_attributes)
+    ):
+        return
+
+    latest_invoice = subscription_obj.get('latest_invoice')
+    invoice = latest_invoice if isinstance(latest_invoice, Mapping) else None
+    if invoice is None and isinstance(latest_invoice, str) and latest_invoice:
+        invoice = await run_blocking(stripe_executor, lambda: stripe.Invoice.retrieve(latest_invoice).to_dict())
+    invoice_id = invoice.get('id') if invoice is not None else None
+    if not isinstance(invoice_id, str) or not invoice_id.strip():
+        invoice_id = latest_invoice if isinstance(latest_invoice, str) else None
+    if not isinstance(invoice_id, str) or not invoice_id.strip():
+        raise ValueError('Payment recovery notification requires a current invoice id')
+    if not billing_recovery.payment_recovery_notification_eligible(uid, subscription_obj, previous_attributes, invoice):
+        return
+    claimed = await run_blocking(db_executor, claim_payment_recovery_notification, uid, invoice_id.strip())
+    if not claimed:
+        return
+
+    intent = NotificationIntent(
+        user_id=uid,
+        title=billing_recovery.PAYMENT_RECOVERY_NOTIFICATION_TITLE,
+        body=billing_recovery.PAYMENT_RECOVERY_NOTIFICATION_BODY,
+        source='stripe_subscription_recovery',
+        kind=NotificationKind.PAYMENT_RECOVERY,
+        data={'type': 'payment_issue', 'navigate_to': '/conversations'},
+    )
+    if background_tasks is not None:
+        background_tasks.add_task(dispatch_notification, intent)
+    else:
+        # Direct Python callers have no FastAPI response task container.
+        await dispatch_notification_async(intent)
+
+
+def _update_checkout_subscription_metadata(uid: str, session: dict) -> None:
+    """Converge account and optional order attribution from verified Stripe objects."""
+    subscription_id = session.get('subscription')
+    if not subscription_id:
+        return
+    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+    subscription_obj = stripe_sub.to_dict() if stripe_sub else {}
+    promotion_ids = stripe_utils.checkout_promotion_code_ids(session)
+    if not promotion_ids and (subscription_obj.get('discounts') or subscription_obj.get('discount')):
+        # Legacy or non-expanded Checkout payloads can omit total_details. Discount IDs
+        # themselves are not resolvable, so ask Stripe for the authoritative expansion.
+        stripe_sub = stripe.Subscription.retrieve(subscription_id, expand=['discounts'])
+        subscription_obj = stripe_sub.to_dict() if stripe_sub else {}
+        promotion_ids = stripe_utils.subscription_promotion_code_ids(subscription_obj)
+    items = (subscription_obj.get('items') or {}).get('data') or []
+    price_id = items[0]['price']['id'] if items else None
+    sub_type = get_plan_type_from_price_id(price_id).value if price_id else 'unknown'
+
+    if len(promotion_ids) > 1:
+        logger.warning('Ignoring ambiguous Checkout promotion attribution')
+    promotion_id = promotion_ids[0] if len(promotion_ids) == 1 else None
+    attribution = {}
+    if promotion_id:
+        # The signed Session supplies only the discount reference. Fresh server-side
+        # retrieval is the sole authority for issuer-written provenance and code ID.
+        promotion = stripe.PromotionCode.retrieve(promotion_id, expand=['coupon'])
+        if promotion.get('id') == promotion_id:
+            attribution = stripe_utils.promotion_code_attribution(promotion)
+        else:
+            logger.warning('Ignoring mismatched Checkout promotion attribution')
+
+    metadata = {
+        **(subscription_obj.get('metadata') or {}),
+        'uid': uid,
+        'sub_type': sub_type,
+    }
+    if promotion_id:
+        metadata['redeemed_promotion_code_id'] = promotion_id
+    metadata = stripe_utils.merge_promotion_attribution(metadata, attribution)
+    stripe.Subscription.modify(subscription_id, metadata=metadata)
+
+
 @router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'], response_model=PaymentMutationResponse)
 async def stripe_webhook(
     request: Request, stripe_signature: str = Header(None), background_tasks: BackgroundTasks = None
@@ -1233,6 +1339,15 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             if checkout_decision.outcome in ('duplicate_checkout', 'replacement_checkout'):
                 if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
+                    # Code-bearing replays can converge optional provenance, but legacy
+                    # discount-free duplicate Checkouts must not gain a Stripe dependency.
+                    if stripe_utils.checkout_promotion_code_ids(session):
+                        try:
+                            await run_blocking(stripe_executor, _update_checkout_subscription_metadata, uid, session)
+                        except Exception:
+                            logger.warning(
+                                'Optional Checkout attribution update failed; continuing entitlement reconciliation'
+                            )
                     # The paid plan is already stored. Stripe retries this
                     # delivery when unlock raises. Do not acknowledge it until
                     # unlock and the idempotent fair-use clear both finish:
@@ -1277,23 +1392,11 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:
-                    price_id = None
-                    stripe_sub = await run_blocking(
-                        stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
-                    )
-                    if stripe_sub:
-                        subscription_obj = stripe_sub.to_dict()
-                        if subscription_obj and subscription_obj['items']['data']:
-                            price_id = subscription_obj['items']['data'][0]['price']['id']
-                    sub_type = get_plan_type_from_price_id(price_id).value if price_id else "unknown"
-                    await run_blocking(
-                        stripe_executor,
-                        lambda: stripe.Subscription.modify(
-                            subscription_id, metadata={"uid": uid, "sub_type": sub_type}
-                        ),
-                    )
-                except Exception as e:
-                    logger.error(f"Error updating subscription metadata: {e}")
+                    await run_blocking(stripe_executor, _update_checkout_subscription_metadata, uid, session)
+                except Exception:
+                    # Optional provenance and the pre-existing best-effort metadata write
+                    # must never become an entitlement or notification dependency.
+                    logger.warning('Optional Checkout attribution update failed; continuing entitlement reconciliation')
 
                 # Send paid notification if applicable
                 try:
@@ -1456,6 +1559,14 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                     await run_blocking(
                         db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
+                    )
+                    await _schedule_payment_recovery_notification(
+                        background_tasks,
+                        uid,
+                        subscription_obj,
+                        event.get('data', {}).get('previous_attributes'),
+                        new_subscription,
+                        billing_owner_confirmed,
                     )
                     # Emit after the durable write; replacement adoption is
                     # reconciliation, not an incoming-event start or churn.

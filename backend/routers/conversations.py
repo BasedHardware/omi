@@ -136,6 +136,7 @@ from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.journey_metrics_contract import resolve_client_kind
+from utils.other import object_lake
 from utils.product_metrics import extract_app_build, record_product_event
 from utils.product_telemetry import emit_product_event
 from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
@@ -1526,11 +1527,16 @@ def _delete_conversation_under_gate(
                     'event=conversation_delete action=task_vectors outcome=error exception_type=%s', type(e).__name__
                 )
         # Snapshot retained bridge donors before shared metadata cleanup removes them.
-        source_ids = (
-            (conversations_db.get_conversation(uid, conversation_id) or {}).get('sync_merged_from', [])
-            if os.getenv('BUCKET_CANONICAL_AUDIO')
-            else []
-        )
+        # A previous lake-purge attempt may already have removed the transcript blob.
+        source_ids = []
+        if os.getenv('BUCKET_CANONICAL_AUDIO'):
+            try:
+                raw = conversations_db.get_conversation_raw_snapshot(
+                    uid, conversation_id, field_paths=['sync_merged_from']
+                )
+            except Exception as error:
+                raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+            source_ids = (raw or {}).get('sync_merged_from', [])
         background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
@@ -1543,7 +1549,10 @@ def _delete_conversation_under_gate(
     # is gone.
     delete_conversation_screen_frames(uid, conversation_id)
 
-    delete_conversation_and_frame_evidence(uid, conversation_id)
+    try:
+        delete_conversation_and_frame_evidence(uid, conversation_id)
+    except object_lake.LakeFetchError as error:
+        raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
 
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)

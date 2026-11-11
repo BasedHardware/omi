@@ -9,11 +9,14 @@ import { ConversationTile, ConversationTileSkeleton } from './ConversationTile';
 import { RecapTile } from './RecapTile';
 
 interface ConversationGalleryProps {
+  showFailedStatus?: boolean;
   groups: TimelineDayGroup[];
   selectedId: string | null;
   onConversationClick: (conversation: Conversation) => void;
   onRecapClick: (recap: DailySummary) => void;
   onStarToggle?: (id: string, starred: boolean) => Promise<void> | void;
+  onConversationUpdate?: (conversation: Conversation) => void;
+  onRetryResolved?: (id: string) => void;
   isSelectionMode?: boolean;
   selectedIds?: Set<string>;
   onSelect?: (id: string) => void;
@@ -28,11 +31,14 @@ interface ConversationGalleryProps {
 const LOAD_MORE_THRESHOLD_PX = 400;
 
 export function ConversationGallery({
+  showFailedStatus = false,
   groups,
   selectedId,
   onConversationClick,
   onRecapClick,
   onStarToggle,
+  onConversationUpdate,
+  onRetryResolved,
   isSelectionMode = false,
   selectedIds,
   onSelect,
@@ -86,14 +92,14 @@ export function ConversationGallery({
     >
       {groups.map((group) => (
         <section key={group.key} className="mb-8">
-          <div className="sticky top-0 z-10 -mx-5 px-5 py-2.5 bg-bg-primary/90 backdrop-blur-sm border-b border-stroke mb-4">
+          <div className="sticky top-0 z-10 -mx-5 mb-4 border-b border-stroke bg-bg-primary/90 px-5 py-2.5 backdrop-blur-sm">
             <h2 className="text-xs font-medium uppercase tracking-[0.14em] text-text-tertiary">
               {group.label}
             </h2>
           </div>
 
           <div
-            className="grid gap-3 items-stretch auto-rows-auto"
+            className="grid auto-rows-auto items-stretch gap-3"
             style={{
               gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))',
             }}
@@ -109,11 +115,14 @@ export function ConversationGallery({
                 />
               ) : (
                 <ConversationTile
+                  showFailedStatus={showFailedStatus}
                   key={`conversation-${item.id}`}
                   conversation={item.conversation}
                   isSelected={selectedId === item.id}
                   onClick={() => onConversationClick(item.conversation)}
                   onStarToggle={onStarToggle}
+                  onConversationUpdate={onConversationUpdate}
+                  onRetryResolved={onRetryResolved}
                   isSelectionMode={isSelectionMode}
                   isChecked={selectedIds?.has(item.id) ?? false}
                   onSelect={onSelect}
@@ -128,7 +137,7 @@ export function ConversationGallery({
 
       {loading && groups.length > 0 && (
         <div className="flex justify-center py-6">
-          <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
+          <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
         </div>
       )}
     </div>
@@ -140,7 +149,7 @@ export function ConversationGallerySkeleton() {
     <div className="px-5 pb-8">
       {[0, 1].map((section) => (
         <div key={section} className="mb-8">
-          <div className="h-3 w-24 rounded bg-bg-tertiary animate-pulse mb-4" />
+          <div className="mb-4 h-3 w-24 animate-pulse rounded bg-bg-tertiary" />
           <div
             className="grid gap-3"
             style={{

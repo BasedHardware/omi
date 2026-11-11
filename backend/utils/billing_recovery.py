@@ -22,6 +22,34 @@ from utils.subscription import get_plan_type_from_price_id, is_paid_plan
 logger = logging.getLogger(__name__)
 
 RECOVERABLE_STATUSES = frozenset({'past_due', 'unpaid'})
+PAYMENT_RECOVERY_NOTIFICATION_TITLE = 'Payment declined'
+PAYMENT_RECOVERY_NOTIFICATION_BODY = 'Update your payment method to restore your subscription benefits.'
+
+
+def payment_recovery_transition(
+    subscription: Mapping[str, Any], previous_attributes: Optional[Mapping[str, Any]]
+) -> bool:
+    """A verified status transition, not a later recovery-state update."""
+    previous_status = (previous_attributes or {}).get('status')
+    return bool(
+        previous_status
+        and previous_status not in RECOVERABLE_STATUSES
+        and subscription.get('status') in RECOVERABLE_STATUSES
+    )
+
+
+def payment_recovery_notification_eligible(
+    uid: str,
+    subscription: Mapping[str, Any],
+    previous_attributes: Optional[Mapping[str, Any]],
+    invoice: Optional[Mapping[str, Any]],
+) -> bool:
+    """Fail closed unless a first lapse has a payable first-party renewal."""
+    if not uid or not payment_recovery_transition(subscription, previous_attributes):
+        return False
+    if (subscription.get('metadata') or {}).get('app_id'):
+        return False
+    return payment_issue_from_stripe(uid, subscription, invoice) is not None
 
 
 def payment_issue_from_stripe(
