@@ -154,6 +154,9 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
+    'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
+    'database.user_usage._s4_month_cache': '14a6b7d82ee83ec56f552ab798b0021e2342ffd920dcdbe2a8e851ec32029f28',
     'database.action_items.FirestoreActionItems.iter_all': '1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
     'database.action_items.FirestoreActionItems.list_ids': '3948d1bcd948a5e6a36d39aef7d4a69bf19562b5fab40edf1e6775aa1165f7d7',
     'database.goals.FirestoreGoals.get_all': '9c29c7df864273b95db4bcad94948043418ce4b29c740ab0732816e2d59564e7',
@@ -3172,6 +3175,22 @@ _add(DriverEntry('database.user_usage.get_monthly_chat_usage', base={'uid': UID}
 _add(DriverEntry('database.user_usage.get_monthly_history_for_year', base={'uid': UID, 'date': T0}))
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats', base={'uid': UID, 'date': T0}))
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats_since', base={'uid': UID, 'date': T0, 'start_date': T0}))
+_add(
+    CoveredByEntry(
+        'database.user_usage._s4_month_cache',
+        covered_by=('database.user_usage._fresh_month_stats',),
+        reason='decorator schedules a hit-only background callback; the fresh reader driver records both query variants',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.user_usage._s4_month_cache'],
+    )
+)
+_add(
+    DriverEntry(
+        'database.user_usage._fresh_month_stats',
+        base={'uid': UID, 'date': T0, 'timeout': 5.0},
+        domains={'start_date': [None, T0]},
+    )
+)
 _add(DriverEntry('database.user_usage.get_today_usage_stats', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(USAGE_UNITS_DRIVER)
 _add(
@@ -3921,18 +3940,50 @@ for _method in ('claim', 'sweep'):
 _add(
     DriverEntry(
         'database.summary_debt_queries.due_conversations',
-        neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
+        neutrals={
+            'now': (T0.timestamp(), 'timestamp operand only'),
+            'limit': (500, 'per-query ceiling; shared tick budget is enforced by caller'),
+        },
         domains={
+            'phase': ['near_expiry', 'newest'],
             'after': [
                 None,
                 {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'},
+                {
+                    'phase': 'newest',
+                    'window': 0,
+                    'pending': None,
+                    'due': T0.timestamp(),
+                    'path': 'users/synthetic/conversations/c',
+                },
                 {'due': T0.timestamp(), 'pending': T0.timestamp() - 60, 'path': 'users/synthetic/conversations/c'},
+                *[
+                    {
+                        'phase': 'newest',
+                        'window': 72 * 3600,
+                        'due': due,
+                        'pending': T0.timestamp() - 60,
+                        'path': 'users/synthetic/conversations/c',
+                    }
+                    for due in (0, -10, T0, float('inf'))
+                ],
                 {
                     'due': T0.timestamp() - 300000,
                     'pending': T0.timestamp() - 300000,
                     'path': 'users/synthetic/conversations/c',
                 },
-            ]
+                *[
+                    {
+                        'phase': phase,
+                        'window': window,
+                        'due': T0.timestamp() - 1,
+                        'pending': T0.timestamp() - (window - 100 if phase == 'near_expiry' else 60),
+                        'path': 'users/synthetic/conversations/c',
+                    }
+                    for phase in ('near_expiry', 'newest')
+                    for window in (72 * 3600, 0)
+                ],
+            ],
         },
         trials=2,
         patchers=(
@@ -4311,5 +4362,46 @@ _add(
         base={'self': _PortRepoArgument(FirestoreActionItems)},
         domains={'updated_since': [None, T0]},
         neutrals={'limit': _LIMIT, 'cursor': (None, 'opaque keyset; first-page query shape')},
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.iter_window',
+        base={'start': 0, 'end': 10**12, 'uid': 'u-driver'},
+        domains={'limit': [1, 5000]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.iter_global_window',
+        base={'start': 0, 'end': 10**12},
+        domains={'limit': [1, 5000]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.retention_start',
+        base={},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.census_window',
+        base={'start': 0, 'end': 10**12, 'uid': 'u-driver'},
+        domains={'limit': [1, 5000]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger_census._capture_creates',
+        base={'start_epoch': 0, 'end_epoch': 10**9},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger_census.census',
+        base={'start': 0, 'end': 10**12},
+        domains={'limit': [1, 5000], 'now': [None, 10**12]},
     )
 )

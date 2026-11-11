@@ -36,7 +36,13 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_batch_record_dead_letter_total/'
       - 'prometheus.googleapis.com/omi_batch_record_dead_letter_units/'
       - 'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/'
+      # Backlog state machine alerts (charts/monitoring/alerts/backlog-state-machine.json).
+      - 'prometheus.googleapis.com/omi_backlog_state_transitions_total/'
+      - 'prometheus.googleapis.com/omi_capture_retry_cap_total/'
       - 'prometheus.googleapis.com/omi_record_seal_nojob_'
+      # Lease soak and the late-append invariant consume these bounded families.
+      - 'prometheus.googleapis.com/omi_record_token_lease_'
+      - 'prometheus.googleapis.com/omi_record_token_late_append_total/'
       - 'prometheus.googleapis.com/omi_enrichment_obligation_'
       - 'prometheus.googleapis.com/omi_finalization_byok_'
       - 'prometheus.googleapis.com/omi_capture_finalization_failures_total/'

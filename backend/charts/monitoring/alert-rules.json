@@ -32682,5 +32682,617 @@
     },
     "record": null,
     "missingSeriesEvalsToResolve": 2
-  }
+  },
+  {
+    "uid": "omi-backlog-retry-cap-quarantine-rate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Retry cap quarantine rate (enforcement off by default)",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_capture_retry_cap_total{outcome=\"quarantine\"}[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 50",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Enforced retry caps are quarantining or failing more than 50 units in 30 minutes.",
+      "user_impact": "Affected recordings keep their audio but wait in a held state instead of retrying; sync uploads end failed and need a re-upload or operator redrive.",
+      "scope": "Counts committed cap decisions with outcome=quarantine across batch lease expiry and sync checks. Enforced for every uid only with CAPTURE_RETRY_CAP_ENFORCED on (default off); otherwise the CAPTURE_COVERAGE_MODE cohort. Agent tier only.",
+      "verification": "Read omi_capture_retry_cap_total by check and outcome, then batch worker failure reasons and sync dispatch errors.",
+      "safe_next_action": "Find the failure that exhausts attempts (worker crash, OOM, provider outage) before requeueing; requeue only after the cause is fixed. Rollback: CAPTURE_RETRY_CAP_ENFORCED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">50 quarantines in 30m for 5m; initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 51 quarantine decisions in 30m.",
+      "evaluated_good": "Synthetic: 50 quarantine decisions in 30m, or would_quarantine only."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-retry-cap-quarantine-rate",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-held-redrive-budget-spent",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Held units with a spent re-drive budget",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 64",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The nightly held pass or status-poll re-drives saw more than 64 units whose re-drive counter reached the max in an hour.",
+      "user_impact": "These recordings keep their audio but have been re-driven 3 times without a transcript and keep looping.",
+      "scope": "Counts new committed spent transitions once per unit, after the content/privacy CAS. Staging repairs, expired-today skips, refusals and later cycles of marked units are excluded. Agent tier only.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"} and sample worker failure reasons with an authorized operator read.",
+      "safe_next_action": "Fix the failure cause before requeueing. Never delete audio. Rollback: BATCH_HELD_REDRIVE_COUNTER_ENABLED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">64 in 1h for 5m (two nightly 32-row pages); initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 65 observations in 1h.",
+      "evaluated_good": "Synthetic: 64 observations in 1h."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-held-redrive-budget-spent",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-held-redrive-unit-looping",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "A held unit is still being re-driven after spending its re-drive budget",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 691200,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A held recording newly entered its spent re-drive state in the last hour.",
+      "user_impact": "The recording exhausted three held re-drives and failed again; retained audio needs investigation.",
+      "scope": "Pages only for a new committed held_redrive_budget_spent transition. The durable held_redrive_budget_spent_at marker prevents later cycles of the same unit from re-firing. Nightly, poll and operator paths share the content/privacy CAS; staging repairs are excluded. The >64/h rule covers volume.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"} over 1h, then inspect held_redrive_budget_spent_at and the unit failure history.",
+      "safe_next_action": "Investigate the worker, audio or provider failure before another re-drive. Audio and results are retained. BATCH_HELD_REDRIVE_COUNTER_ENABLED=false silences telemetry without changing custody or budget accounting.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">0 new spent transitions in 1h for 5m; the same unit cannot emit again.",
+      "evaluated_bad": "Synthetic: one unit commits its first re-drive after three held re-drives.",
+      "evaluated_good": "Synthetic: below-budget re-drives, refusals, staging repairs, or later cycles of an already marked unit."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-held-redrive-unit-looping",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-record-token-lease-late-append",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Record token lease",
+    "title": "Record token lease closed during uploader activity",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_record_token_late_append_total[5m])) > 0 or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "B",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-11-09T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Record token lease closed during uploader activity",
+      "user_impact": "Audio remains retained; record closure must not race an active uploader.",
+      "scope": "Server-observed custody appends/frame batches only. Backlog warning requires recent lease-based release activity.",
+      "verification": "Inspect late-append rate, signal-gap histogram and oldest unsealed age. No user-data reads required.",
+      "safe_next_action": "P4 auto-revert RECORD_TOKEN_LEASE_MODE to shadow/off; retain all raw audio; lead2 go before the next step.",
+      "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md",
+      "threshold": "Any late append pages immediately; non-falling backlog age warns during lease release activity.",
+      "evaluated_bad": "Synthetic late-append counter increases, or positive age slope with lease releases.",
+      "evaluated_good": "Synthetic zero late-appends and falling oldest-unsealed age."
+    },
+    "labels": {
+      "alert_identity": "omi-record-token-lease-late-append",
+      "component": "record-token-lease",
+      "impact": "product",
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "record-token-lease"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-record-token-lease-backlog",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Record token lease",
+    "title": "Record token lease backlog age is not falling",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(deriv((last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]))[30m:]) >= bool 0) and on() (last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]) > 0) and on() (sum(increase(omi_record_token_lease_expired_sealed_total[1h])) > 0) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "B",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-11-09T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Record token lease backlog age is not falling",
+      "user_impact": "Audio remains retained; record closure must not race an active uploader.",
+      "scope": "Server-observed custody appends/frame batches only. Backlog warning requires recent lease-based release activity.",
+      "verification": "Inspect late-append rate, signal-gap histogram and oldest unsealed age. No user-data reads required.",
+      "safe_next_action": "P4 auto-revert RECORD_TOKEN_LEASE_MODE to shadow/off; retain all raw audio; lead2 go before the next step.",
+      "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md",
+      "threshold": "Any late append pages immediately; non-falling backlog age warns during lease release activity.",
+      "evaluated_bad": "Synthetic late-append counter increases, or positive age slope with lease releases.",
+      "evaluated_good": "Synthetic zero late-appends and falling oldest-unsealed age."
+    },
+    "labels": {
+      "alert_identity": "omi-record-token-lease-backlog",
+      "component": "record-token-lease",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "record-token-lease"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+{"uid":"omi-pipeline-ledger-stuck","orgID":1,"folderUID":"betdycdziadc0e","ruleGroup":"Pipeline ledger","title":"Pipeline ledger rows are stuck past their stage deadline","condition":"E","data":[{"refId":"A","queryType":"","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"max by (stage) (omi_pipeline_ledger_stuck_rows)","instant":true,"intervalMs":1000,"maxDataPoints":43200,"refId":"A"}},{"refId":"D","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"D","type":"math","expression":"$A > 0"}},{"refId":"E","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"E","type":"reduce","expression":"D","reducer":"last"}}],"updated":"2026-11-11T00:00:00Z","noDataState":"Alerting","execErrState":"KeepLast","for":"10m","keep_firing_for":"0s","annotations":{"dashboard_url":"https://monitor.omi.me/d/omi-core-features","summary":"A ledger row is past its stage deadline for 10 minutes.","user_impact":"A capture is not reaching Home; the stage label names where it stopped.","scope":"Owner-scoped ledger census gauges refreshed on the operator read. Stage is a bounded enum; no uid or conversation id is a label.","verification":"Run the operator explain read for one affected conversation, then the stage runbook. A missing sample is covered by the sample-stale rule, not a healthy zero.","safe_next_action":"Redrive or settle the row through the stage runbook. This alert authorizes no runtime change.","runbook":"backend/charts/monitoring/batch-projection/pipeline-alerts.md","threshold":"$A > 0 for 10m"},"labels":{"alert_identity":"omi-pipeline-ledger-stuck","component":"pipeline-ledger","impact":"product","severity":"critical","instatus_component":"speech-processing","tier":"page","audience":"human","owner":"pipeline-driver"},"isPaused":false,"notification_settings":{"receiver":"Omi - Services Alerting (Telegram)","group_by":["alertname"],"group_wait":"30s","group_interval":"5m","repeat_interval":"4h","mute_time_intervals":[]},"record":null},
+{"uid":"omi-pipeline-ledger-sample-stale","orgID":1,"folderUID":"betdycdziadc0e","ruleGroup":"Pipeline ledger","title":"Pipeline ledger census sample is stale or never taken","condition":"E","data":[{"refId":"A","queryType":"","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"(time() - max(omi_pipeline_ledger_refreshed_at_seconds)) or vector(1e9)","instant":true,"intervalMs":1000,"maxDataPoints":43200,"refId":"A"}},{"refId":"D","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"D","type":"math","expression":"$A >= 900"}},{"refId":"E","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"E","type":"reduce","expression":"D","reducer":"last"}}],"updated":"2026-11-11T00:00:00Z","noDataState":"Alerting","execErrState":"KeepLast","for":"5m","keep_firing_for":"0s","annotations":{"dashboard_url":"https://monitor.omi.me/d/omi-core-features","summary":"The ledger census has not refreshed for 15 minutes.","user_impact":"Stuck gauges may be blind; a missing sample is not a healthy zero.","scope":"The operator census route sets refreshed_at on every successful read. A failed or skipped read leaves the old timestamp.","verification":"Check the operator census route and its service-OIDC audience/invoker configuration. Do not read a stale gauge as zero.","safe_next_action":"Restore the census read; the gate fails closed while the sample is stale.","runbook":"backend/charts/monitoring/batch-projection/pipeline-alerts.md","threshold":"$A >= 900 for 5m"},"labels":{"alert_identity":"omi-pipeline-ledger-sample-stale","component":"pipeline-ledger","impact":"product","severity":"critical","instatus_component":"speech-processing","tier":"page","audience":"human","owner":"pipeline-driver"},"isPaused":false,"notification_settings":{"receiver":"Omi - Services Alerting (Telegram)","group_by":["alertname"],"group_wait":"30s","group_interval":"5m","repeat_interval":"4h","mute_time_intervals":[]},"record":null},
+{"uid":"omi-pipeline-ledger-gate-receipt-stale","orgID":1,"folderUID":"betdycdziadc0e","ruleGroup":"Pipeline ledger","title":"Pipeline census gate receipt is older than one hour","condition":"E","data":[{"refId":"A","queryType":"","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"(time() - max(omi_pipeline_ledger_gate_receipt_generated_at_seconds)) or vector(1e9)","instant":true,"intervalMs":1000,"maxDataPoints":43200,"refId":"A"}},{"refId":"D","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"D","type":"math","expression":"$A >= 3600"}},{"refId":"E","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"E","type":"reduce","expression":"D","reducer":"last"}}],"updated":"2026-11-11T00:00:00Z","noDataState":"Alerting","execErrState":"KeepLast","for":"5m","keep_firing_for":"0s","annotations":{"dashboard_url":"https://monitor.omi.me/d/omi-core-features","summary":"The versioned census gate receipt is more than one hour old.","user_impact":"The ramp decision is using a stale receipt; G2 requires a fresh receipt.","scope":"The workspace gate runner writes the receipt timestamp as a Prometheus textfile. A missing file is Alerting, never a pass.","verification":"Run the gate runner for the current ramp profile and attach the new receipt. Do not advance on a stale receipt.","safe_next_action":"Re-run the gate; a PENDING/UNKNOWN receipt is not a pass.","runbook":"infra/metrics/pipeline-census/README.md","threshold":"$A >= 3600 for 5m"},"labels":{"alert_identity":"omi-pipeline-ledger-gate-receipt-stale","component":"pipeline-ledger","impact":"product","severity":"warning","instatus_component":"speech-processing","tier":"agent","audience":"agent","owner":"pipeline-driver"},"isPaused":false,"notification_settings":{"receiver":"Omi - Services Alerting (Telegram)","group_by":["alertname"],"group_wait":"5m","group_interval":"1h","repeat_interval":"24h","mute_time_intervals":["omi-tier-silent"]},"record":null}
 ]

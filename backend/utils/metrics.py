@@ -1,12 +1,11 @@
 import os
 import re
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
 from utils.conversation_relevance_labels import DECISION_TRIGGERS, TERMINAL_METRIC_TRIGGERS, TERMINAL_METRIC_REASONS
 
-from fastapi import Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -21,6 +20,9 @@ from utils import omi_flag_metrics as _omi_flag_metrics  # pyright: ignore[repor
 from utils.conversations import phase_shadow as _phase_shadow  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+
+if TYPE_CHECKING:
+    from fastapi import Response
 
 # All metrics endpoints import this module. prometheus_client otherwise exports a second _created
 # series for every Counter and Histogram child, including idle zero children.
@@ -1557,6 +1559,18 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     ['provider', 'terminal_state'],
 )
 
+OMI_BILLING_RENEWAL_OBSERVATIONS = Counter(
+    'omi_billing_renewal_observations_total',
+    'Verified billing observation deliveries, not distinct invoices or attempts',
+    ['outcome'],
+)
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='eligible')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='created')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='duplicate')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='projection_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='write_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='timeout')
+
 OMI_SUBSCRIPTION_EVENTS = Counter(
     'omi_subscription_events_total',
     'Stripe subscription lifecycle events observed via webhook. Counts webhook '
@@ -1653,7 +1667,13 @@ def record_action_items_list_cache(outcome: str) -> None:
     OMI_ACTION_ITEMS_LIST_CACHE_TOTAL.labels(outcome=outcome).inc()
 
 
-def metrics_response() -> Response:
+def metrics_response() -> 'Response':
+    # Imported here, not at module scope: this module is reachable from the
+    # record-seal row process (utils.observability.fallback -> utils.metrics),
+    # and fastapi/pydantic is ~60% of that process's import bill. Only the
+    # /metrics route needs the web framework.
+    from fastapi import Response
+
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

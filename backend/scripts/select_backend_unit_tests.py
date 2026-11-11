@@ -110,6 +110,7 @@ MEMORY_POLICY_CORE_TESTS = (
 # intentional-exception check below — single source so the two lists cannot
 # drift apart and silently stop selecting the monitoring unit contracts.
 MONITORING_CONTRACT_SOURCES = (
+    'backend/charts/backend-secrets/',
     'backend/charts/monitoring/prometheus-adapter/',
     'backend/scripts/diff_prod_adapter.py',
     'backend/charts/parakeet/',
@@ -413,6 +414,9 @@ AREA_TESTS = (
         (),
         (
             'tests/unit/test_monitoring_*.py',
+            'tests/unit/test_serving_podmonitoring_chart.py',
+            'tests/unit/test_firestore_attribution_charts.py',
+            'tests/unit/test_backend_secrets_chart.py',
             'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_journey_observability.py',
             'tests/unit/test_verify_pusher_live_alert_route.py',

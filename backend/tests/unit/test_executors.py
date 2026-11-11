@@ -222,6 +222,7 @@ def test_get_executor_metrics_returns_all_pools():
         'quiet_replay',
         'critical',
         'db',
+        'read_cache_shadow',
         'record_barrier',
         'llm',
         'stripe',

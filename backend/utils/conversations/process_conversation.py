@@ -85,6 +85,7 @@ from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
+from utils.conversations import l1_admission
 from utils.llm.notes_short_clip import quiet_minimum, has_explicit_reminder
 from utils.llm.notes_short_clip_policy import english_word_floor, selected_summary_app
 from utils.conversations.minimum_derived import is_server_minimum
@@ -1098,6 +1099,9 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
         # Quote grounding and the L1 fingerprint must see this same owner-only
         # input. Never mutate the retained transcript or the notes/task input.
         conversation = conversation.model_copy(update={'transcript_segments': owner_segments})
+    if l1_admission.skip(uid, conversation):
+        # Noise or short owner speech: nothing to remember, nothing written.
+        return
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(
