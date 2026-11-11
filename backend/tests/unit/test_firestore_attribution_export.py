@@ -17,6 +17,7 @@ import yaml
 
 from database import firestore_document_probe as probe
 from database import firestore_tier_context as tiers
+from utils import read_cache_shadow
 
 BACKEND = Path(__file__).resolve().parents[2]
 
@@ -172,7 +173,7 @@ def test_real_async_sdk_query_documents_count_once(monkeypatch, mode):
 def test_billed_counters_agree_after_real_exposition_and_keep_filter(tier, profile):
     token = tiers._request_owner.set(SimpleNamespace(tier=tier, expires_at=float('inf'), closed=False))
     registry = CollectorRegistry()
-    for counter in (probe.FIRESTORE_BILLED_READS, probe.FIRESTORE_BILLED_READS_BY_CALLER):
+    for counter in (probe.FIRESTORE_BILLED_READS, probe.FIRESTORE_BILLED_READS_BY_CALLER, read_cache_shadow.SHADOW):
         registry.register(counter)
     config = yaml.safe_load((BACKEND / 'deploy' / profile).read_text())
     keep = next(
@@ -193,8 +194,16 @@ def test_billed_counters_agree_after_real_exposition_and_keep_filter(tier, profi
         before = exported()
         for kind, exists, amount in [('lookup', True, 1), ('not_found', False, 3), ('query', True, 7)]:
             probe._record(('users', 'u', 'conversations'), exists, amount, kind=kind, caller='tests:export_parity')
+        read_cache_shadow._record('usage_month', 'match')
         after = exported()
         for name in ['omi_firestore_billed_reads_total', 'omi_firestore_billed_reads_by_caller_total']:
             assert after.get(name, 0) - before.get(name, 0) == 11, (profile, name)
+        assert after.get('omi_read_cache_shadow_total', 0) - before.get('omi_read_cache_shadow_total', 0) == 1
     finally:
         tiers._request_owner.reset(token)
+
+
+@pytest.mark.parametrize('profile', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
+def test_scrape_sample_caps_leave_headroom_for_tier_and_shadow_metrics(profile):
+    config = yaml.safe_load((BACKEND / 'deploy' / profile).read_text())
+    assert config['spec']['limits']['samples'] == 15000

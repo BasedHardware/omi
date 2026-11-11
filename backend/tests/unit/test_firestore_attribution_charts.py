@@ -1,6 +1,7 @@
 """Service identity must reach both GMP and the in-cluster Prometheus."""
 
 from pathlib import Path
+import shutil
 import subprocess
 
 import pytest
@@ -9,12 +10,20 @@ import yaml
 CHARTS = Path(__file__).resolve().parents[2] / 'charts'
 
 
+@pytest.fixture
+def helm():
+    executable = shutil.which('helm')
+    if executable is None:
+        pytest.skip('helm is not installed')
+    return executable
+
+
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
 @pytest.mark.parametrize(
     'chart,suffix',
     [('backend-listen', 'backend_listen'), ('pusher', 'pusher'), ('batch-pipeline-worker', 'batch-pipeline-worker')],
 )
-def test_workload_service_labels_render_and_are_exported(stage, chart, suffix):
+def test_workload_service_labels_render_and_are_exported(helm, stage, chart, suffix):
     directory = CHARTS / chart
     image = (
         ['--set-string', 'image.digest=sha256:' + 'a' * 64]
@@ -23,7 +32,7 @@ def test_workload_service_labels_render_and_are_exported(stage, chart, suffix):
     )
     result = subprocess.run(
         [
-            'helm',
+            helm,
             'template',
             'synthetic',
             str(directory),
@@ -61,6 +70,74 @@ def test_workload_service_labels_render_and_are_exported(stage, chart, suffix):
         assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'false'
     else:
         assert not jobs
+
+
+def test_sync_backfill_pilot_service_label_is_exported(helm):
+    result = subprocess.run(
+        [
+            helm,
+            'template',
+            'synthetic',
+            str(CHARTS / 'sync-backfill-worker'),
+            '--set-string',
+            'image.repository=synthetic',
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+            '--set-string',
+            'runtimeSecret=synthetic',
+            '--set-string',
+            'serviceAccount.gcpEmail=worker@synthetic.invalid',
+            '--set-string',
+            'worker.apiUrl=https://synthetic.run.app',
+            '--set-string',
+            'worker.audience=https://synthetic.run.app',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    deployment = next(doc for doc in docs if doc['kind'] == 'Deployment')
+    labels = deployment['spec']['template']['metadata']['labels']
+    assert labels['service_name'] == 'sync-backfill-worker'
+    monitor = next(doc for doc in docs if doc['kind'] == 'PodMonitoring')
+    assert monitor['spec']['selector']['matchLabels'].items() <= labels.items()
+    assert {'from': 'service_name', 'to': 'service_name'} in monitor['spec']['targetLabels']['fromPod']
+
+
+@pytest.mark.parametrize('labels', [None, {}])
+def test_batch_worker_accepts_empty_pod_labels(helm, tmp_path, labels):
+    override = tmp_path / 'labels.yaml'
+    override.write_text(yaml.safe_dump({'podLabels': labels}))
+    directory = CHARTS / 'batch-pipeline-worker'
+    result = subprocess.run(
+        [
+            helm,
+            'template',
+            'synthetic',
+            str(directory),
+            '-n',
+            'prod-omi-backend',
+            '-f',
+            str(directory / 'prod_omi_batch-pipeline-worker_values.yaml'),
+            '-f',
+            str(override),
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    assert deployments
+    for deployment in deployments:
+        assert (
+            deployment['spec']['selector']['matchLabels'].items()
+            <= deployment['spec']['template']['metadata']['labels'].items()
+        )
 
 
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
