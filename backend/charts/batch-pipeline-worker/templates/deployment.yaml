@@ -67,6 +67,9 @@ spec:
   template:
     metadata:
       labels:
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         app.kubernetes.io/name: batch-pipeline-worker
         app.kubernetes.io/instance: {{ .instance.name }}
     spec:

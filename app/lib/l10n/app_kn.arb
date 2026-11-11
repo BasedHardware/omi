@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ",
     "activityAttentionUploadStalledTitle": "ಅಪ್‌ಲೋಡ್ ನಿಂತಿದೆ",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್ ಕಾಯುತ್ತಿದೆ} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಕಾಯುತ್ತಿವೆ}}",
+    "attentionRerunNotes": "ಟಿಪ್ಪಣಿಗಳನ್ನು ಮತ್ತೆ ರಚಿಸಿ",
     "attentionSummaryFailed": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "activityAttentionSemantics": "ಚಟುವಟಿಕೆ, ಗಮನ ಬೇಕು",
     "connectAgentHeadline": "ChatGPT ಮತ್ತು ನಿಮ್ಮ AI ಏಜೆಂಟ್‌ಗಳಲ್ಲಿ ನಿಮ್ಮ Omi ಸ್ಮೃತಿಯನ್ನು ಬಳಸಿ",

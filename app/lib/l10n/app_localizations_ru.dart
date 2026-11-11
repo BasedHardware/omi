@@ -13699,6 +13699,9 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Создать заметки заново';
+
+  @override
   String get attentionSummaryFailed => 'Не удалось подвести итоги этого разговора';
 
   @override

@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "Запісы прыпынены",
     "activityAttentionUploadStalledTitle": "Загрузка спынілася",
     "activityAttentionUploadRecordings": "{count, plural, =1{Чакае 1 запіс} other{Чакаюць {count} запісы}}",
+    "attentionRerunNotes": "Стварыць нататкі зноў",
     "attentionSummaryFailed": "Не ўдалося падсумаваць гэту размову",
     "activityAttentionSemantics": "Актыўнасць, патрабуе ўвагі",
     "connectAgentHeadline": "Выкарыстоўвайце памяць Omi у ChatGPT і сваіх ІІ-агентах",

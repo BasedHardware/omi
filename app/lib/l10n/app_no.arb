@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Opptak satt på pause",
     "activityAttentionUploadStalledTitle": "Opplastingen har stoppet",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 opptak venter} other{{count} opptak venter}}",
+    "attentionRerunNotes": "Generer notater på nytt",
     "attentionSummaryFailed": "Kunne ikke oppsummere denne samtalen",
     "activityAttentionSemantics": "Aktivitet, krever oppmerksomhet",
     "connectAgentHeadline": "Bruk Omi-minnet ditt i ChatGPT og AI-agentene dine",

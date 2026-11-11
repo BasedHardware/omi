@@ -13651,6 +13651,9 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'নোট আবার তৈরি করুন';
+
+  @override
   String get attentionSummaryFailed => 'এই কথোপকথনের সারাংশ তৈরি করা যায়নি';
 
   @override

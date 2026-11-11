@@ -13684,6 +13684,9 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Jana semula nota';
+
+  @override
   String get attentionSummaryFailed => 'Perbualan ini tidak dapat diringkaskan';
 
   @override

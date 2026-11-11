@@ -13659,6 +13659,9 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Skapa anteckningar igen';
+
+  @override
   String get attentionSummaryFailed => 'Det gick inte att sammanfatta samtalet';
 
   @override

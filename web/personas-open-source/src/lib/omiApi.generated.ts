@@ -4113,6 +4113,7 @@ export interface PendingSyncResponse {
 export interface PendingWorkItem {
   conversation_ids: Array<string>;
   duration_seconds: number;
+  home_step?: string | null;
   id: string;
   kind: "conversation" | "sync_job";
   recording_count?: number;
@@ -4124,6 +4125,7 @@ export interface PendingWorkItem {
 export interface PendingWorkSnapshot {
   attention_unseen_count: number;
   enabled: boolean;
+  home_processing_today?: boolean;
   items: Array<PendingWorkItem>;
 }
 
