@@ -16,13 +16,13 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from testing.store_fixtures import store_backend  # noqa: F401
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
-from utils.batch_pipeline.input_retention import STAGING_BUCKET, TERMINAL_SECONDS
+from utils.batch_pipeline.input_retention import STAGING_BUCKET
 from utils.batch_pipeline.scheduler import owner_key
 
 pytestmark = pytest.mark.integration
 
 T0 = 1_800_000_000.0
-DUE = T0 + TERMINAL_SECONDS
+DUE = T0 + 29 * 86400  # Contract oracle: independent of the implementation threshold.
 SID = 'retained'
 AUDIO = f'gs://{STAGING_BUCKET}/synthetic/retained#7'
 
