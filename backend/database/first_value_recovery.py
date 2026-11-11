@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, cast
 from urllib.parse import quote
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -118,8 +118,8 @@ def verified_direct_monthly_start(kwargs: Mapping[str, Any]) -> dict[str, Any] |
         'uid': uid,
         'subscription_id': subscription_id,
         'price_id': price_id,
-        'created': int(created),
-        'current_period_end': int(current_period_end),
+        'created': int(cast(int, created)),
+        'current_period_end': int(cast(int, current_period_end)),
     }
 
 
