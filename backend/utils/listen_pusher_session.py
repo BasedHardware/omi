@@ -238,7 +238,10 @@ class ListenPusherSession:
             or (dispatch_generation is not None and dispatch_generation != existing.get('dispatch_generation'))
         ):
             existing = None
-        if existing is None and len(self.pending_conversation_requests) >= self.config.max_pending_requests:
+        if (
+            conversation_id not in self.pending_conversation_requests
+            and len(self.pending_conversation_requests) >= self.config.max_pending_requests
+        ):
             oldest_id = min(
                 self.pending_conversation_requests,
                 key=lambda k: self.pending_conversation_requests[k]['sent_at'],

@@ -1688,3 +1688,17 @@ async def test_reconnect_replay_cannot_reset_processing_send_budget():
         await session.connect()
     assert len([f for f in ws.sent if frame_type(f) == 104]) == pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS
     assert not session.pending_conversation_requests
+
+
+@pytest.mark.anyio
+async def test_new_generation_at_pending_capacity_does_not_evict_another_conversation():
+    clock = [1000.0]
+    session = make_session(config_overrides={'max_pending_requests': 2}, deps_overrides={'now': lambda: clock[0]})
+    await session.request_conversation_processing('conv-1', 'job-1', 1)
+    clock[0] += 1
+    await session.request_conversation_processing('conv-2', 'job-2', 1)
+    await session.request_conversation_processing('conv-2', 'job-2', 2)
+    assert set(session.pending_conversation_requests) == {'conv-1', 'conv-2'}
+    assert session.pending_conversation_requests['conv-1']['dispatch_generation'] == 1
+    assert session.pending_conversation_requests['conv-2']['dispatch_generation'] == 2
+    assert session.pending_conversation_requests['conv-2']['attempts'] == 0
