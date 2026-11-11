@@ -57,7 +57,9 @@ class FirstValueRecoveryService {
     final promptId = 'first-value-recovery-$identityEpoch';
     if (_checkingEpoch == identityEpoch ||
         PromptQueue.instance.showingId == promptId ||
-        PromptQueue.instance.pendingIds.contains(promptId)) return;
+        PromptQueue.instance.pendingIds.contains(promptId)) {
+      return;
+    }
     _checkingEpoch = identityEpoch;
     try {
       final capability = await _clientCapability();
@@ -91,7 +93,9 @@ class FirstValueRecoveryService {
           if (!context.mounted ||
               PromptQueue.instance.blocked() ||
               identityEpoch != AnalyticsManager.identityEpoch ||
-              !_identityReady) return;
+              !_identityReady) {
+            return;
+          }
           final result = await _api.prompt(
             notificationPermission: capability['notificationPermission'],
             timeZone: capability['timeZone'],
