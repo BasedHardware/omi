@@ -13,6 +13,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from utils.conversations.transcribing_hold import transcription_presentation
+from utils.conversations import home_step as home_step_projection
 from utils.conversations import phase_shadow
 
 from config.episodes import (
@@ -303,7 +304,7 @@ def _live(spent: list[float], now: float) -> list[float]:
 def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> int:
     """Safety net for the composer: a closed episode that is uncomposed, drifted, or whose visible
     members changed since its compose (a direct discard or delete) gets one, at most a few per read.
-    Returns how many were queued."""
+    A deferred late episode is left alone until its grace window ends. Returns how many were queued."""
     from utils.episodes import composer
 
     queued = 0
@@ -318,13 +319,26 @@ def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[d
                 continue
             if not composer.needs_compose(row, visible_member_ids=visible.get(str(row.get('id')), [])):
                 continue
-            if composer.schedule(uid, str(row.get('id')), throttle=True):
+            if composer.schedule(uid, str(row.get('id')), throttle=True, trigger='read'):
                 queued += 1
     except Exception as error:
         logger.warning(
             'event=episode_compose_schedule outcome=error source=read exception_type=%s', type(error).__name__
         )
     return queued
+
+
+def schedule_opened_compose(uid: str, episode: dict[str, Any] | None) -> bool:
+    """The episode page was opened: a deferred late episode composes now, at most once per window."""
+    from utils.episodes import composer
+
+    try:
+        return composer.schedule_opened(uid, episode)
+    except Exception as error:
+        logger.warning(
+            'event=episode_compose_schedule outcome=error source=open exception_type=%s', type(error).__name__
+        )
+        return False
 
 
 def _too_short_for_a_home_row(row: dict[str, Any]) -> bool:
@@ -376,6 +390,8 @@ def project_episode(
         phase_shadow.observe('episode_member', row, True, episode=episode)
         from utils.conversations.home_titles import neutralize_minimum_title
 
+        # Classify on the stored read copy, before the presentation rewrite below.
+        step = home_step_projection.classify(row)
         row = neutralize_minimum_title(row, tz_name_provider=zone)
         structured: dict[str, Any] = row.get('structured') or {}
         title = structured.get('title') or ''
@@ -406,6 +422,8 @@ def project_episode(
                 'id': cid,
                 'title': title,
                 'emoji': structured.get('emoji') or '',
+                'gist': str(structured.get('gist') or ''),
+                **({'home_step': step} if step else {}),
                 'started_at': started,
                 'finished_at': finished,
                 'status': status,

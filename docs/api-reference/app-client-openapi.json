@@ -16318,6 +16318,11 @@
             ],
             "title": "Closed At"
           },
+          "compose_deferred": {
+            "default": false,
+            "title": "Compose Deferred",
+            "type": "boolean"
+          },
           "conversation_ids": {
             "items": {
               "type": "string"
@@ -16545,6 +16550,22 @@
               }
             ],
             "title": "Finished At"
+          },
+          "gist": {
+            "default": "",
+            "title": "Gist",
+            "type": "string"
+          },
+          "home_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Step"
           },
           "id": {
             "title": "Id",
@@ -34623,6 +34644,12 @@
             },
             "title": "Events",
             "type": "array"
+          },
+          "gist": {
+            "default": "",
+            "description": "One line of at most 12 words saying what this conversation was about",
+            "title": "Gist",
+            "type": "string"
           },
           "insights": {
             "description": "Insights connecting supplied background context to this conversation; empty without background",
