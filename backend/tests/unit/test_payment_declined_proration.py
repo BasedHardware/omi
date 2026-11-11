@@ -20,7 +20,7 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -137,6 +137,12 @@ def _install_stub_modules() -> None:
     subscription_events_mod = types.ModuleType("utils.observability.subscription_events")
     subscription_events_mod.record_subscription_event = _shared_mock()
     sys.modules["utils.observability.subscription_events"] = subscription_events_mod
+
+    # The webhook seam imports this sibling; preload it so the parent package
+    # is not executed against the incomplete fallback stub above.
+    renewal_observations_mod = types.ModuleType("utils.observability.renewal_observations")
+    renewal_observations_mod.observe_verified_event = AsyncMock()
+    sys.modules["utils.observability.renewal_observations"] = renewal_observations_mod
 
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"
