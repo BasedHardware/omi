@@ -19,6 +19,12 @@ from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_projection_finish import (
+    PROJECTION_FINISH_DUE_FIELD,
+    PROJECTION_FINISH_STATES,
+    PROJECTION_FINISH_STEP_FIELD,
+    projection_finish_state_fields,
+)
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_privacy import HOLD_REASONS
 from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE as ARTIFACT_MISSING_REASON
@@ -218,6 +224,43 @@ class ProjectionStore:
         receipt.update(settled)
         self._mirror(binding)
 
+    def defer_finish(self, segment_id: str, state: str | None, now: float) -> bool:
+        """Bound when the finish page retries a row whose last walk changed nothing.
+
+        The fence re-reads ``projection_state`` inside the transaction. A row
+        that moved on is left untouched: its own state write already stamped it
+        due now, so a stale write can never defer a row with new work. Repeats
+        escalate 60 s, 300 s, 900 s and stay capped; only the lever's sweep
+        calls this, and a lever-off caller writes nothing. ``state`` is ``None``
+        when the sweep could not read the row: the clock is then stamped only
+        while the row is still in a finish state, so a failed read cannot strand
+        it and cannot touch a completed or pending row.
+        """
+        from config.batch_pipeline import PROJECTION_FINISH_BACKOFF_SECONDS, projection_finish_backoff_delay
+
+        @firestore.transactional
+        def commit(transaction):
+            ref = self.ref('results', segment_id)
+            row = ref.get(transaction=transaction).to_dict() or {}
+            current = row.get('projection_state')
+            if state is not None and current != state:
+                return False
+            if current not in PROJECTION_FINISH_STATES:
+                return False
+            previous = row.get(PROJECTION_FINISH_STEP_FIELD)
+            cap = len(PROJECTION_FINISH_BACKOFF_SECONDS) - 1
+            step = min(previous + 1, cap) if isinstance(previous, int) and previous >= 0 else 0
+            transaction.update(
+                ref,
+                {
+                    PROJECTION_FINISH_DUE_FIELD: now + projection_finish_backoff_delay(step),
+                    PROJECTION_FINISH_STEP_FIELD: step,
+                },
+            )
+            return True
+
+        return bool(self.run(commit))
+
     def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None):
 
         policy = policy or self.policy(segment_id)
@@ -228,7 +271,13 @@ class ProjectionStore:
             session.prepare(transaction, replay=False)
             if session.ledger.get('status') != 'completed':
                 raise ProjectionBlocked('client publication preceded durable completion')
-            transaction.update(session.result_ref, {'projection_state': 'completed'})
+            transaction.update(
+                session.result_ref,
+                {
+                    'projection_state': 'completed',
+                    **projection_finish_state_fields('completed', now),
+                },
+            )
 
         self.run(commit, policy=policy)
         self._mirror(binding)
@@ -404,7 +453,9 @@ class ProjectionStore:
                 # Ready receipts have completed their follow-ups even when a
                 # sibling is held. Settle their hints without inventing holds.
                 for ref in ready if group_ready else [session.result_ref]:
-                    transaction.update(ref, {'projection_state': 'ready'})
+                    transaction.update(
+                        ref, {'projection_state': 'ready', **projection_finish_state_fields('ready', now)}
+                    )
             return held
 
         held = self.run(commit, policy=policy)
@@ -640,7 +691,10 @@ class ProjectionStore:
                 # All assignment/enrichment receipts now exist. Wake held
                 # siblings in the same durable completion, including a crash
                 # before client publication or completion retention.
-                transaction.update(self.ref('results', sibling), {'projection_state': 'ready'})
+                transaction.update(
+                    self.ref('results', sibling),
+                    {'projection_state': 'ready', **projection_finish_state_fields('ready', now)},
+                )
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
             return result, True, captured_seconds
 

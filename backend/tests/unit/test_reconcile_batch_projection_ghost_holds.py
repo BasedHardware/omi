@@ -35,7 +35,7 @@ def test_predicate_selects_only_ghost_shape(entry, expected):
     assert repair.is_ghost_hold(entry) is expected
 
 
-def client_for(rows):
+def client_for(rows, *, stamped=False):
     """Only the query seam is mocked; writes assert the SDK's CAS option."""
     rows = {name: deepcopy(entry) for name, entry in rows.items()}
     refs = {}
@@ -47,7 +47,12 @@ def client_for(rows):
         ref = Mock(id=name)
 
         def update(payload, *, option, timeout, retry, name=name):
-            assert payload == {'projection_state': 'ready'}
+            if stamped:
+                assert payload['projection_state'] == 'ready'
+                assert isinstance(payload['projection_finish_due_at'], float)
+                assert payload['projection_finish_backoff_step'] == 0
+            else:
+                assert payload == {'projection_state': 'ready'}
             assert option._last_update_time == stamp
             assert retry is None and 0 < timeout <= 3
             rows[name].update(payload)
@@ -99,6 +104,15 @@ def test_apply_is_hint_only_idempotent_and_preserves_real_holds():
     assert rows == {**before, 'a': {**GHOST, 'projection_state': 'ready'}, 'c': {**GHOST, 'projection_state': 'ready'}}
     again = repair.reconcile(client, 'batch_pipeline_test_held', apply=True)
     assert again['scanned'] == 1 and again['matched'] == again['updated'] == 0
+
+
+def test_apply_stamps_the_finish_clock_when_the_lever_is_on(monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_BACKOFF_ENABLED', 'true')
+    client, rows, _, _ = client_for({'a': GHOST}, stamped=True)
+    counts = repair.reconcile(client, 'batch_pipeline_test_held', apply=True)
+    assert counts['updated'] == 1
+    assert rows['a']['projection_state'] == 'ready'
+    assert rows['a']['projection_finish_backoff_step'] == 0
 
 
 def test_concurrent_quarantine_change_cannot_be_overwritten():

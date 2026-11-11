@@ -231,15 +231,13 @@ FIELD_SITES = {
         (
             'ProjectionSession.persist',
             'projection_state',
-            "'quarantine_held' if held and all((part['state'] in "
-            "{'ready', 'quarantined'} for part in parts.values())) else "
-            "'persisted' if held else summary['state']",
+            "'quarantine_held' if quarantined else receipt['state']",
             ('projection', 'projection_state'),
         ),
         (
             'ProjectionSession.persist',
             'projection_state',
-            "'quarantine_held' if quarantined else receipt['state']",
+            "summary_state; literal aliases=[('summary_state', ('persisted', 'quarantine_held'))]",
             ('projection', 'projection_state'),
         ),
         (

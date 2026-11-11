@@ -529,6 +529,60 @@ def test_projection_cursor_survives_removal_of_its_source_row(h):
     assert h.store.projection_page(10, after=cursor)[0] == ['r0', 'r1']
 
 
+def test_projection_due_page_filters_orders_and_survives_cursor_removal(h):
+    rows = []
+    for key, state, committed, due in [
+        ('a', 'ready', 3.0, 10.0),
+        ('b', 'persisted', 3.0, 10.0),
+        ('c', 'ready', 1.0, 11.0),
+        ('future', 'ready', 0.0, 12.0),
+        ('pending', 'pending', 0.0, 10.0),
+        ('missing', 'ready', 0.0, None),
+    ]:
+        rows.append(('jobs', key, job(h, key)))
+        doc = {'segment_id': key, 'projection_state': state, 'committed_at': committed}
+        if due is not None:
+            doc['projection_finish_due_at'] = due
+        rows.append(('results', key, doc))
+    put_all(h, rows)
+    args = {'states': ('persisted', 'ready'), 'due_before': 11.0}
+    assert h.store.projection_page(10, **args) == (['a', 'b', 'c'], None)
+    ids, cursor = h.store.projection_page(2, **args)
+    assert (ids, cursor) == (['a', 'b'], (10.0, 3.0, 'b'))
+    put_all(h, [('results', 'b', {'segment_id': 'b', 'projection_state': 'completed', 'committed_at': 3.0})])
+    assert h.store.projection_page(2, after=cursor, **args) == (['c'], None)
+    assert h.store.projection_page(10, after=(10.0,), **args) == (['a', 'c'], None)
+    assert h.store.projection_page(10, after=(11.0,), **args) == (['c'], None)
+    assert h.store.projection_page(10, after=(12.0,), **args) == ([], None)
+    assert h.store.projection_page(10, states=('pending',)) == (['pending'], None)
+    assert h.store.projection_page(10, states=('ready',), after=(1.0, '')) == (['c', 'a'], None)
+
+
+@pytest.mark.parametrize('limit, expected', [(0, 1), (1, 1), (150, 150), (200, 200), (500, 200)])
+@pytest.mark.parametrize('due_before', [None, 10.0])
+def test_projection_page_uses_firestore_page_bounds(h, limit, expected, due_before):
+    rows = []
+    for i in range(201):
+        key = f'bound-{i:03}'
+        rows.append(('jobs', key, job(h, key)))
+        rows.append(
+            (
+                'results',
+                key,
+                {
+                    'segment_id': key,
+                    'projection_state': 'ready',
+                    'committed_at': 1.0,
+                    'projection_finish_due_at': 10.0,
+                },
+            )
+        )
+    put_all(h, rows)
+    ids, cursor = h.store.projection_page(limit, due_before=due_before)
+    assert ids == [f'bound-{i:03}' for i in range(expected)]
+    assert cursor == ((1.0, ids[-1]) if due_before is None else (10.0, 1.0, ids[-1]))
+
+
 # -- merge, capacity and projection hints (Store protocol parity, plan A3 step 1) ----------------------------
 def _pending(h, segment, owner='o', **fields):
     return ('jobs', segment, job(h, segment, owner=owner, merge_pending=True, **fields))

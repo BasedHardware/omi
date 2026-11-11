@@ -283,13 +283,14 @@ def entries():
             'database.batch_pipeline_store.projection_page',
             domains={
                 'namespace': namespaces,
-                'after': [None, (2.0, 'result-100')],
+                'after': [None, (2.0, 'result-100'), (2.0, 3.0, 'result-100')],
                 'states': [
                     ('pending', 'persisted', 'ready'),
                     ('pending',),
                     ('persisted', 'ready'),
                     ('pending', 'persisted', 'ready', 'quarantine_held'),
                 ],
+                'due_before': [None, 3000000.0],
             },
             neutrals={'limit': (100, 'bounded page size only')},
         ),
@@ -315,9 +316,12 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_page',
             covered_by=('database.batch_pipeline_store.projection_page',),
-            reason='store adapter forwards namespace, limit, keyset cursor and drain states unchanged',
+            reason='store adapter forwards namespace, limit, keyset cursor, drain states and the optional finish clock unchanged',
             expect_observed=False,
-            body_digest='bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
+            # Re-reviewed 2026-11-11: the adapter gained the optional `due_before` finish clock and
+            # forwards it unchanged; the cursor is now typed `tuple | None`. No query, read or bound
+            # changed, and the forwarded shape is still the recorded `projection_page` driver.
+            body_digest='93b2b60f115fd6139a36a571d40468e76d7962b5ffa8ca861e9572cfc0790785',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_pending',
