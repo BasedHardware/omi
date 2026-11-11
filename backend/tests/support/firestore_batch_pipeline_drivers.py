@@ -20,6 +20,12 @@ def _repair_age_orders(client):
     return patch.object(refactor_modes, 'record_seal_repair_age_order', side_effect=cycle((False, True)))
 
 
+def _poll_skip_modes(client):
+    from database import batch_pipeline_store
+
+    return patch.object(batch_pipeline_store, 'held_poll_skip_enabled', side_effect=cycle((False, True)))
+
+
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
@@ -65,6 +71,7 @@ def entries():
             trials=2,
             patchers=(_repair_age_orders,),
             domains={
+                'urgent': [False, True],
                 'after': [
                     None,
                     {
@@ -76,13 +83,14 @@ def entries():
                         'enqueued_at': 1.0,
                         'horizon': datetime(2026, 10, 1, tzinfo=timezone.utc),
                     },
-                ]
+                ],
             },
             neutrals={
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (8, 'in-memory candidate cap only'),
                 'max_scan': (128, 'aggregate scan bound only'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
+                'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
             },
         ),
@@ -393,8 +401,10 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.first_pending',
+            trials=2,
+            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
-            domains={'namespace': namespaces},
+            domains={'namespace': namespaces, 'skip_terminal': [False, True]},
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
         ),
         CoveredByEntry(
@@ -431,6 +441,8 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.fresh_pending',
+            trials=2,
+            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
             neutrals={'limit': (8, 'bounded page size')},

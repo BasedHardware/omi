@@ -604,6 +604,8 @@ class _PlansSheetState extends State<PlansSheet> {
             final checkoutResult = await routeToPage(context, PaymentWebViewPage(checkoutUrl: sessionData['url']!));
 
             if (checkoutResult == true) {
+              // Checkout completion is not local entitlement proof; refresh the backend-owned state.
+              await provider.fetchSubscription();
               if (mounted) OmiFeedback.confirm(context, l10n.subscriptionSuccessfulCharged);
               PlatformManager.instance.analytics.upgradeSucceeded(
                 previousPlan: currentSub.plan.wireName,
