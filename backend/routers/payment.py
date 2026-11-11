@@ -17,7 +17,7 @@ from fastapi import BackgroundTasks, Request, Header, HTTPException, APIRouter, 
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import List, Optional
+from typing import List, Mapping, Optional
 import uuid
 import time
 from urllib.parse import urljoin
@@ -29,7 +29,7 @@ from database import (
     action_items as action_items_db,
 )
 from database.locked_content import has_recoverable_locked_content
-from database.redis_db import set_credits_invalidation_signal
+from database.redis_db import claim_payment_recovery_notification, set_credits_invalidation_signal
 from config.plan_catalog import _paid_period_still_open, plan_uses_overage
 from utils.subscription_state_machine import (
     project_subscription,
@@ -45,11 +45,18 @@ from utils.billing_currency import (
     subscription_currency,
 )
 from utils.storefront_copy import format_money
-from utils.billing_flags import webhook_ledger_enabled
+from utils.billing_flags import payment_recovery_notification_enabled, webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.fair_use import clear_fair_use_on_upgrade
-from utils.notifications import send_notification, send_subscription_paid_personalized_notification
+from utils.notifications import send_subscription_paid_personalized_notification
+from utils.notification_dispatch import (
+    NotificationIntent,
+    NotificationKind,
+    dispatch_notification,
+    dispatch_notification_async,
+)
+from utils import billing_recovery
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
 from utils.subscription import (
     get_basic_plan_limits,
@@ -1144,6 +1151,53 @@ def cancel_subscription_endpoint(
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
+async def _schedule_payment_recovery_notification(
+    background_tasks: BackgroundTasks | None,
+    uid: str,
+    subscription_obj: Mapping,
+    previous_attributes: Mapping | None,
+    persisted_subscription: Subscription,
+    billing_owner_confirmed: bool,
+) -> None:
+    """Claim and schedule only after persistence; pre-claim failures remain webhook-retryable."""
+    if (
+        not payment_recovery_notification_enabled()
+        or not billing_owner_confirmed
+        or persisted_subscription.stripe_subscription_id != subscription_obj.get('id')
+        or not billing_recovery.payment_recovery_transition(subscription_obj, previous_attributes)
+    ):
+        return
+
+    latest_invoice = subscription_obj.get('latest_invoice')
+    invoice = latest_invoice if isinstance(latest_invoice, Mapping) else None
+    if invoice is None and isinstance(latest_invoice, str) and latest_invoice:
+        invoice = await run_blocking(stripe_executor, lambda: stripe.Invoice.retrieve(latest_invoice).to_dict())
+    invoice_id = invoice.get('id') if invoice is not None else None
+    if not isinstance(invoice_id, str) or not invoice_id.strip():
+        invoice_id = latest_invoice if isinstance(latest_invoice, str) else None
+    if not isinstance(invoice_id, str) or not invoice_id.strip():
+        raise ValueError('Payment recovery notification requires a current invoice id')
+    if not billing_recovery.payment_recovery_notification_eligible(uid, subscription_obj, previous_attributes, invoice):
+        return
+    claimed = await run_blocking(db_executor, claim_payment_recovery_notification, uid, invoice_id.strip())
+    if not claimed:
+        return
+
+    intent = NotificationIntent(
+        user_id=uid,
+        title=billing_recovery.PAYMENT_RECOVERY_NOTIFICATION_TITLE,
+        body=billing_recovery.PAYMENT_RECOVERY_NOTIFICATION_BODY,
+        source='stripe_subscription_recovery',
+        kind=NotificationKind.PAYMENT_RECOVERY,
+        data={'type': 'payment_issue', 'navigate_to': '/conversations'},
+    )
+    if background_tasks is not None:
+        background_tasks.add_task(dispatch_notification, intent)
+    else:
+        # Direct Python callers have no FastAPI response task container.
+        await dispatch_notification_async(intent)
+
+
 @router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'], response_model=PaymentMutationResponse)
 async def stripe_webhook(
     request: Request, stripe_signature: str = Header(None), background_tasks: BackgroundTasks = None
@@ -1456,6 +1510,14 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                     await run_blocking(
                         db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
+                    )
+                    await _schedule_payment_recovery_notification(
+                        background_tasks,
+                        uid,
+                        subscription_obj,
+                        event.get('data', {}).get('previous_attributes'),
+                        new_subscription,
+                        billing_owner_confirmed,
                     )
                     # Emit after the durable write; replacement adoption is
                     # reconciliation, not an incoming-event start or churn.
