@@ -3841,6 +3841,13 @@ FIELD_SITES = {
             ('age_days', 'due', 'history', 'kind', 'loop_id', 'opened_on', 'status', 'times_surfaced', 'what', 'who'),
         ),
     ],
+    # Account-wipe results, not conversation lifecycle writes. The conservative
+    # inventory also tracks response maps containing a status key.
+    'utils/other/lake_wipe.py': [
+        ('destroy_owner_lake_keys', 'status', "'destroyed'", ('status', 'versions_destroyed')),
+        ('purge_owner_lake_content', 'status', "'noop'", ('status',)),
+        ('purge_owner_lake_content', 'status', "'purged'", ('candidates_deleted', 'objects_deleted', 'status')),
+    ],
     'utils/other/daily_recap.py': [
         ('_state', 'status', 'status', ('created_at', 'date', 'generated_at', 'status')),
         ('finish_legacy_stub', 'status', "'generated'", ('generated_at', 'status')),
