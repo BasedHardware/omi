@@ -2271,7 +2271,7 @@ def test_terminalize_exhausted_requeued_job_closes_the_parked_row_and_its_conver
                 'decided_by': 'policy',
                 'reason': 'dead_letter_default',
                 'trigger': 'dead_letter',
-                'rules_version': 4,
+                'rules_version': RULES_VERSION,
             },
         },
     )
