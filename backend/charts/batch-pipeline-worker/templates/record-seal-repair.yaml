@@ -29,6 +29,7 @@ spec:
         metadata:
           labels:
             app.kubernetes.io/name: record-seal-repair
+            service_name: record-seal-repair
         spec:
           serviceAccountName: {{ required "existing worker KSA required" .Values.serviceAccountName }}
           automountServiceAccountToken: true

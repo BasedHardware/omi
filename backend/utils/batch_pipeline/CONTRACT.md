@@ -654,3 +654,19 @@ extra queries. Neither uses `BATCH_HELD_DEAD_LETTER_ENABLED`.
 No enablement is included: the lead owns a separate canary and expansion
 proposal after review. Rollback: set each switch to `false`; logs stop and the
 companion series disappears on collection. No data migration or cleanup.
+
+## Terminal-only merge polling (dark)
+
+`BATCH_HELD_POLL_SKIP_ENABLED` defaults OFF. ON, `fresh_pending` and transactional
+`first_pending` exclude committed/dead/quarantined/privacy_blocked/partial_retired/provider_superseded.
+Unknown strings stay visible; missing/null state is excluded in Firestore, Postgres and simulator.
+**Before enabling: all four prod/dev poll indexes MUST be READY, real query plans MUST succeed,
+and `scripts.batch_pipeline_poll_state_census --project PROJECT` MUST PASS (0).** Run from backend
+with `.venv/bin/python -m`; on this host source `~/.local/bin/gcp-agent-env.sh ro-prod` first.
+The read-only tool COUNTs pending minus pending-in-full-lifecycle-inventory per prod/dev jobs collection,
+prints one combined PASS (0)/FAIL (n) line and exits 0/1; API errors propagate nonzero. No job reads/writes.
+Dead GPU expiry/privacy fencing can retain merge_pending; recovery remains unchanged while merge/scheduler
+head lookup can advance. Held ready/retry/vendor_held heads keep capture order/fresh waiting;
+`held_merge_owners` always uses OFF. Oldest, held SLA gauges and stale-vendor watchdog are untouched.
+Unavailable ON queries fall back to exact OFF; OFF errors propagate. Rollback: flag OFF restores old queries/reads.
+No flag is replaced. Savings are Firestore-only, exclude index-entry costs, and stay booked at zero pending settled SKU.

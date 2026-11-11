@@ -5,6 +5,8 @@ podMonitoring:
   interval: 15s
 # The backend unit fixture (tests/unit/test_live_capture_retention_limits.py)
 # pins every *values.yaml declaration; base files carry the kill-switches off.
+podLabels:
+  service_name: backend-listen
 env:
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:

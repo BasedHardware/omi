@@ -9,6 +9,8 @@ recordTokenLease:
   servePercent: 0
   seconds: 3600
   deployedAt: 0
+podLabels:
+  service_name: batch-pipeline-worker
 recordSealRules:
   partialEnabled: true
   overlapTrimEnabled: true
