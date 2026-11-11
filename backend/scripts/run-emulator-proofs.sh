@@ -149,6 +149,11 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pending_deletion_conformance.py
 
+# PL-528/529/530: input-retention terminalization must preserve custody on every store.
+run_proof "retained staging-input conformance (sim + emulator required)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_input_retention_conformance.py
+
 if (( ${#failures[@]} )); then
   echo
   echo "Emulator proofs failed: ${#failures[@]}"
