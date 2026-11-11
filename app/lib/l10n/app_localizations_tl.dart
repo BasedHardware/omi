@@ -13759,6 +13759,9 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Bumuo muli ng mga tala';
+
+  @override
   String get attentionSummaryFailed => 'Hindi ma-summarize ang usapang ito';
 
   @override

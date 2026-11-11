@@ -1,3 +1,4 @@
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -374,6 +375,7 @@ class AuthService {
       });
 
   void _invalidateRefreshes() {
+    PendingWorkStore.instance.reset();
     _sessionGeneration++;
     _refreshInFlight = null;
     _sessionGenerationController.add(_sessionGeneration);

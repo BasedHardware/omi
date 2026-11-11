@@ -4225,6 +4225,7 @@
     "activityAttentionStorageSubtitle": "Optagelser sat på pause",
     "activityAttentionUploadStalledTitle": "Upload er gået i stå",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 optagelse venter} other{{count} optagelser venter}}",
+    "attentionRerunNotes": "Generér noter igen",
     "attentionSummaryFailed": "Samtalen kunne ikke opsummeres",
     "activityAttentionSemantics": "Aktivitet, kræver opmærksomhed",
     "connectAgentHeadline": "Brug din Omi-hukommelse i ChatGPT og dine AI-agenter",

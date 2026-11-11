@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "রেকর্ডিং বিরত",
     "activityAttentionUploadStalledTitle": "আপলোড থেমে আছে",
     "activityAttentionUploadRecordings": "{count, plural, =1{1টি রেকর্ডিং অপেক্ষায়} other{{count}টি রেকর্ডিং অপেক্ষায়}}",
+    "attentionRerunNotes": "নোট আবার তৈরি করুন",
     "attentionSummaryFailed": "এই কথোপকথনের সারাংশ তৈরি করা যায়নি",
     "activityAttentionSemantics": "অ্যাক্টিভিটি, মনোযোগ দরকার",
     "connectAgentHeadline": "ChatGPT ও আপনার AI এজেন্টগুলিতে আপনার Omi স্মৃতি ব্যবহার করুন",

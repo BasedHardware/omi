@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "रिकॉर्डिंग रोक दी गई हैं",
     "activityAttentionUploadStalledTitle": "अपलोड रुक गया है",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 रिकॉर्डिंग प्रतीक्षारत} other{{count} रिकॉर्डिंग प्रतीक्षारत}}",
+    "attentionRerunNotes": "नोट्स फिर से बनाएँ",
     "attentionSummaryFailed": "इस बातचीत का सारांश नहीं बन सका",
     "activityAttentionSemantics": "गतिविधि, ध्यान देना ज़रूरी",
     "connectAgentHeadline": "ChatGPT और अपने AI एजेंट्स में अपनी Omi मेमोरी का उपयोग करें",

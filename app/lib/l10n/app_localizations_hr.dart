@@ -13687,6 +13687,9 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Ponovno izradi bilješke';
+
+  @override
   String get attentionSummaryFailed => 'Ovaj razgovor nije bilo moguće sažeti';
 
   @override

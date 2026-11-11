@@ -13747,6 +13747,9 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'குறிப்புகளை மீண்டும் உருவாக்கு';
+
+  @override
   String get attentionSummaryFailed => 'இந்த உரையாடலைச் சுருக்க முடியவில்லை';
 
   @override
