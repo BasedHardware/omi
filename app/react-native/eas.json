@@ -10,7 +10,6 @@
     },
     "preview": {
       "distribution": "internal",
-      "credentialsSource": "local",
       "cache": {
         "disabled": true
       }
