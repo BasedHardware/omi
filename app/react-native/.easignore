@@ -1,8 +1,53 @@
-node_modules/
+# Reduce EAS upload archive size. Exclude dependencies/caches/build outputs,
+# but keep native project sources needed for builds.
+
+# Dependencies and package manager caches
 node_modules
-dist/
-.expo/
-android/
-ios/
-*.log
-.env
+.pnpm-store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Git and editor
+.git
+.vscode
+.idea
+*.iml
+.DS_Store
+
+# Expo/JS build outputs
+.expo
+.expo-shared
+dist
+web-build
+build
+
+# Android build artifacts and local machine files (keep android source/config)
+android/build
+android/.gradle
+android/.cxx
+android/app/build
+android/app/.cxx
+android/**/build
+android/**/.cxx
+android/local.properties
+**/*.apk
+**/*.aab
+
+# Gradle caches sometimes present in project
+.gradle
+
+# iOS build artifacts (keep sources if present)
+ios/build
+ios/Pods
+ios/Podfile.lock
+
+# Tests/coverage/misc caches
+coverage
+.tmp
+*.tsbuildinfo
+
+# Local credentials (do not upload)
+credentials.json
+android/keystores
