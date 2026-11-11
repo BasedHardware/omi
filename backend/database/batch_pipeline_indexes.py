@@ -12,6 +12,21 @@ def _desc(field):
 
 
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_{"fresh_" if fresh else ""}pending_nonterminal',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            tuple(
+                _asc(field)
+                for field in ('owner_key', 'merge_pending')
+                + (('fresh_capture',) if fresh else ())
+                + ('capture_at', 'segment_id', 'state', '__name__')
+            ),
+        )
+        for stage in ('prod', 'dev')
+        for fresh in (False, True)
+    ),
     # Repair keeps the existing ascending index for result-ready consumers and rollback.
     *(
         FirestoreIndexRequirement(
