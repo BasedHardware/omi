@@ -2955,6 +2955,8 @@
     "syncCardThrottlePaused": "Sinhronizācija īslaicīgi apturēta — tā atsāksies automātiski",
     "syncCardBackendBusy": "Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda",
     "unableToDetermineFirmwareVersion": "Nevar noteikt pašreizējo programmaparatūras versiju",
+    "applyCodeToCurrentPlan": "Piemērot pašreizējam plānam",
+    "subscriptionCodeResult": "{result, select, applied{Kods piemērots jūsu pašreizējam plānam.} refused{Šo kodu nevar piemērot. Pārbaudiet kodu un nepieciešamo plānu.} conflict{Kods jau izmantots vai jūsu plānam jau ir atlaide.} rateLimited{Pārāk daudz mēģinājumu. Uzgaidiet un mēģiniet vēlāk.} other{Kodu neizdevās piemērot. Mēģiniet vēlreiz.}}",
     "promoCode": "Reklāmas kods",
     "enterPromoCode": "Ievadiet reklāmas kodu",
     "invalidPromotionCode": "Nederīgs reklāmas kods.",

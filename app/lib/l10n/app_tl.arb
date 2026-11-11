@@ -10366,6 +10366,8 @@
     "syncCardThrottlePaused": "Pansamantalang naka-pause ang pag-sync — awtomatiko itong magpapatuloy",
     "syncCardBackendBusy": "Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli",
     "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware",
+    "applyCodeToCurrentPlan": "Ilapat sa Kasalukuyang Plan",
+    "subscriptionCodeResult": "{result, select, applied{Nailapat ang code sa kasalukuyan mong plan.} refused{Hindi mailapat ang code na ito. Suriin ang code at kinakailangang plan.} conflict{Nagamit na ang code o may diskuwento na ang plan mo.} rateLimited{Masyadong maraming pagsubok. Maghintay at subukan ulit mamaya.} other{Hindi mailapat ang code. Pakisubukang muli.}}",
     "promoCode": "Promo code",
     "enterPromoCode": "Ilagay ang promo code",
     "invalidPromotionCode": "Hindi valid na promo code.",

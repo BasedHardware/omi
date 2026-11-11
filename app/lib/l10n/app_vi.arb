@@ -2955,6 +2955,8 @@
     "syncCardThrottlePaused": "Đồng bộ hóa tạm dừng trong giây lát — sẽ tự động tiếp tục",
     "syncCardBackendBusy": "Máy chủ Omi đang quá tải — bản ghi của bạn sẽ được đồng bộ khi dung lượng được khôi phục",
     "unableToDetermineFirmwareVersion": "Không thể xác định phiên bản firmware hiện tại",
+    "applyCodeToCurrentPlan": "Áp dụng cho gói hiện tại",
+    "subscriptionCodeResult": "{result, select, applied{Đã áp dụng mã cho gói hiện tại của bạn.} refused{Không thể áp dụng mã này. Kiểm tra mã và gói được yêu cầu.} conflict{Mã đã được dùng hoặc gói của bạn đã có ưu đãi giảm giá.} rateLimited{Thử quá nhiều lần. Vui lòng chờ rồi thử lại sau.} other{Không thể áp dụng mã. Vui lòng thử lại.}}",
     "promoCode": "Mã khuyến mãi",
     "enterPromoCode": "Nhập mã khuyến mãi",
     "invalidPromotionCode": "Mã khuyến mãi không hợp lệ.",

@@ -9189,6 +9189,24 @@ class AppLocalizationsUr extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'موجودہ فرم ویئر ورژن کا تعین نہیں کیا جا سکا';
 
   @override
+  String get applyCodeToCurrentPlan => 'موجودہ پلان پر لاگو کریں';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'کوڈ آپ کے موجودہ پلان پر لاگو ہو گیا۔',
+        'refused': 'یہ کوڈ لاگو نہیں ہو سکتا۔ کوڈ اور مطلوبہ پلان چیک کریں۔',
+        'conflict': 'کوڈ پہلے استعمال ہو چکا ہے یا آپ کے پلان پر پہلے سے رعایت ہے۔',
+        'rateLimited': 'بہت زیادہ کوششیں۔ انتظار کریں اور بعد میں دوبارہ کوشش کریں۔',
+        'other': 'کوڈ لاگو نہیں ہو سکا۔ دوبارہ کوشش کریں۔',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'پرومو کوڈ';
 
   @override
