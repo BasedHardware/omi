@@ -94,7 +94,9 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
                   request.isMainFrame &&
                   !_hasError &&
                   context.read<UsageProvider>().showSubscriptionUI &&
-                  _verifiedSuccess(request.url, successUrl)) widget.onCheckoutCompleted?.call();
+                  _verifiedSuccess(request.url, successUrl)) {
+                widget.onCheckoutCompleted?.call();
+              }
               Navigator.of(context).pop(true); // Pop with success result
               return NavigationDecision.prevent;
             }

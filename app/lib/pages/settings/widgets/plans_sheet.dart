@@ -98,12 +98,14 @@ class _PlansSheetState extends State<PlansSheet> {
   void _observeStorefrontAllowance(PlanStorefront data) {
     final budget = _budgetCap(data);
     final mcp = data.showSubscriptionUi && data.usage?.mcpCapReached == true;
-    if (budget && !_budgetCapObserved)
+    if (budget && !_budgetCapObserved) {
       PlatformManager.instance.analytics
           .allowanceReached(kind: 'usage_budget', surface: 'storefront', reason: 'budget_exhausted');
-    if (mcp && !_mcpCapObserved)
+    }
+    if (mcp && !_mcpCapObserved) {
       PlatformManager.instance.analytics
           .allowanceReached(kind: 'mcp_daily_cap', surface: 'storefront', reason: 'mcp_cap_reached');
+    }
     _budgetCapObserved = budget;
     _mcpCapObserved = mcp;
   }

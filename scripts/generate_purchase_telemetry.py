@@ -32,7 +32,7 @@ export type PurchaseProperties<E extends PurchaseEventId> = {
 };
 
 // Project only declared keys. Unknown values collapse to a declared sentinel.
-export function purchasePayload(id: PurchaseEventId, raw: Record<string, unknown>) {
+export function purchasePayload(id: PurchaseEventId, raw: Record<string, unknown>): { name: typeof purchaseContract[PurchaseEventId]['name']; properties: Record<string, string> } {
   const spec = purchaseContract[id];
   const properties: Record<string, string> = {};
   for (const [key, values] of Object.entries(spec.properties)) {
@@ -49,12 +49,12 @@ export class PurchaseObservation {
   private viewed = false;
   private active = new Set<string>();
   constructor(private sink: (id: PurchaseEventId, raw: Record<string, unknown>) => void) {}
-  view(raw: Record<string, unknown>) {
+  view(raw: Record<string, unknown>): void {
     if (this.viewed) return;
     this.viewed = true;
     this.sink('paywallViewed', raw);
   }
-  allowance(reached: boolean, raw: Record<string, unknown>, block = false) {
+  allowance(reached: boolean, raw: Record<string, unknown>, block = false): void {
     const id = block ? 'allowanceBlockShown' : 'allowanceReached';
     const safe = purchasePayload(id, raw).properties;
     const key = id + ':' + safe.allowance_kind + ':' + safe.surface;

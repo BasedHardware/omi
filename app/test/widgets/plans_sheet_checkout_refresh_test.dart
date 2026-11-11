@@ -298,7 +298,7 @@ void main() {
         refreshedSubscription: _subscription(PlanType.unlimitedV2, _paidAllowance),
         onSubscriptionRequest: () {});
     webView.navigation
-        .resourceError(WebResourceError(errorCode: -2, description: 'fixture failure', isForMainFrame: true));
+        .resourceError(const WebResourceError(errorCode: -2, description: 'fixture failure', isForMainFrame: true));
     await tester.pump();
     webView.navigation.navigate(NavigationRequest(url: '${Env.apiBaseUrl}v1/payments/success', isMainFrame: true));
     await tester.pump();
@@ -400,10 +400,10 @@ void main() {
     await tester.pump();
     await AnalyticsManager.flushPending(force: true);
     expect(telemetry.propertiesOf('Subscription Paywall Viewed'), isEmpty);
-    platform.controller.channel!.onMessageReceived(JavaScriptMessage(message: '{"type":"ready"}'));
+    platform.controller.channel!.onMessageReceived(const JavaScriptMessage(message: '{"type":"ready"}'));
     await tester.pump();
     await AnalyticsManager.flushPending(force: true);
-    platform.controller.channel!.onMessageReceived(JavaScriptMessage(message: '{"type":"ready"}'));
+    platform.controller.channel!.onMessageReceived(const JavaScriptMessage(message: '{"type":"ready"}'));
     await tester.pump();
     await AnalyticsManager.flushPending(force: true);
     expect(telemetry.propertiesOf('Subscription Paywall Viewed'), hasLength(1));
