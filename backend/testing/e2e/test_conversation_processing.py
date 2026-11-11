@@ -115,7 +115,7 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
         transcript_segments=[
             TranscriptSegment(
                 id="seg-life-1",
-                text="We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow.",
+                text="We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow. I want these tests to verify durable memory persistence, retries after listener restarts, and exactly once integration delivery.",
                 speaker="SPEAKER_00",
                 is_user=True,
                 start=0.0,
@@ -138,7 +138,7 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle"
     assert (
         body["transcript_segments"][0]["text"]
-        == "We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow."
+        == "We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow. I want these tests to verify durable memory persistence, retries after listener restarts, and exactly once integration delivery."
     )
 
     # INV-TASK-2: an omi conversation has no Suggested surface to review a

@@ -63,7 +63,9 @@ HELPER_KILL_SWITCHES = {
     'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
     'HOME_HIDE_BELOW_FLOOR_ROWS',
+    'SUMMARY_PROJECTION_DEBT_ENABLED',
     'HOME_EMPTY_OUTPUT_NOISE',
+    'EPISODE_COMPOSER_REUSE',
 }
 
 SCOPE = (
@@ -201,6 +203,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
     assert helper_names == HELPER_KILL_SWITCHES | {
         'CONVERSATION_TERMINAL_FAMILY_MODE',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'BATCH_HELD_POLL_SKIP_ENABLED',
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
@@ -272,7 +275,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert data['retired']['SYNC_BACKFILL_INFLIGHT_LIMIT']['replaced_by'] == name
             assert entry['owner'] == 'omi-pipeline'
             assert entry['review_by'] == '2026-12-08'
-        elif name == 'HOME_EMPTY_OUTPUT_NOISE':
+        elif name in {'SUMMARY_PROJECTION_DEBT_ENABLED', 'HOME_EMPTY_OUTPUT_NOISE', 'EPISODE_COMPOSER_REUSE'}:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
         else:

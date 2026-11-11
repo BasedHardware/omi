@@ -95,6 +95,7 @@ def _install_stub_modules() -> None:
     db_mod.action_items = _shared_mock()
 
     redis_mod = sys.modules["database.redis_db"]
+    redis_mod.claim_payment_recovery_notification = _shared_mock()
     redis_mod.set_credits_invalidation_signal = _shared_mock()
 
     locked_content_mod = sys.modules["database.locked_content"]

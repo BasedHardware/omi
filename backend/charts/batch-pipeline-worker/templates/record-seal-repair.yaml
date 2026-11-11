@@ -28,6 +28,7 @@ spec:
         metadata:
           labels:
             app.kubernetes.io/name: record-seal-repair
+            service_name: record-seal-repair
         spec:
           serviceAccountName: {{ required "existing worker KSA required" .Values.serviceAccountName }}
           automountServiceAccountToken: true
@@ -44,10 +45,22 @@ spec:
               requiredDuringSchedulingIgnoredDuringExecution:
                 nodeSelectorTerms:
                   - matchExpressions:
+                      {{- if .Values.recordSealRepair.nodePool }}
+                      # CPU-only repair runs on the batch-pipeline pool (8-19% CPU) instead of the
+                      # saturated monitoring pool. Empty nodePool restores the old exclusion below.
+                      - key: cloud.google.com/gke-nodepool
+                        operator: In
+                        values: [{{ .Values.recordSealRepair.nodePool }}]
+                      {{- else }}
                       - {key: cloud.google.com/gke-accelerator, operator: DoesNotExist}
                       - key: cloud.google.com/gke-nodepool
                         operator: NotIn
                         values: [batch-pipeline-pool, batch-pipeline-pool-spot, parakeet-pool]
+                      {{- end }}
+          {{- with .Values.recordSealRepair.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           containers:
             - name: repair
               image: "{{ required "image.repository required" .Values.image.repository }}@{{ required "image.digest required" .Values.image.digest }}"
@@ -69,7 +82,6 @@ spec:
                 - {name: BUCKET_BATCH_PIPELINE, value: {{ .Values.bucket | quote }}}
                 - {name: BATCH_PIPELINE_ENABLED, value: "false"}
                 - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "false"}
-                - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
                 - {name: HOME, value: /tmp}
                 - name: ENCRYPTION_SECRET
                   valueFrom:
@@ -81,7 +93,7 @@ spec:
                 readOnlyRootFilesystem: true
                 capabilities: {drop: [ALL]}
               resources:
-                requests: {cpu: "2", memory: 4Gi}
+                requests: {cpu: {{ .Values.recordSealRepair.cpuRequest | quote }}, memory: 4Gi}
                 limits: {cpu: "4", memory: 8Gi}
               volumeMounts:
                 - {name: tmp, mountPath: /tmp}

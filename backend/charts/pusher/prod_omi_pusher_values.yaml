@@ -53,7 +53,8 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  service_name: pusher
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -141,6 +142,9 @@ env:
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
+  # Quiet-check empty exit; mirrors backend-listen (co-host env parity, lead2 9b4ffd).
+  - name: QUIET_EMPTY_EXIT_ENABLED
     value: 'true'
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
