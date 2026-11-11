@@ -29,6 +29,7 @@ class _FakeConvo:
     has its own tests below.
     """
 
+    id = 'c1'
     transcript_segments = [object()]
     discarded = False
     apps_results: list = []
