@@ -164,6 +164,10 @@ def _epoch(value: Any) -> float | None:
     return None
 
 
+# Public read helper for the C2 census; the write path keeps using ``_epoch``.
+epoch = _epoch
+
+
 def _pick(value: Any, existing: Mapping[str, Any] | None, key: str, default: Any = None) -> Any:
     return value if value is not None else (existing or {}).get(key, default)
 
@@ -399,6 +403,7 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
 
 
 CENSUS_FIELDS = (
+    'schema_version',
     'owner_key',
     'stage',
     'entered_at',
@@ -434,6 +439,9 @@ def iter_window(
     materialized before the first yield, so a truncated window raises
     :class:`LedgerWindowTruncated` without handing the caller a prefix. C2 must
     read through this helper, never the private store.
+
+    The fleet-global aggregate is the one documented exception and reads through
+    :func:`iter_global_window`; it is not a per-owner read.
     """
     start_epoch, end_epoch = _epoch(start), _epoch(end)
     if start_epoch is None or end_epoch is None or end_epoch <= start_epoch or limit <= 0:
@@ -453,6 +461,51 @@ def iter_window(
     for snapshot in snapshots:
         doc = snapshot.to_dict() or {}
         yield {key: doc.get(key) for key in CENSUS_FIELDS}
+
+
+def iter_global_window(
+    start: Any, end: Any, *, limit: int = DEFAULT_WINDOW_LIMIT, firestore_client: Any = None
+) -> Iterator[tuple[str | None, dict[str, Any]]]:
+    """Yield ``(owner_uid, row)`` across owners with ``admitted_at`` in ``[start, end)``.
+
+    The documented fleet-global exception to :func:`iter_window`'s owner scope:
+    the C2 census aggregates every owner. Same projection, bound and
+    fail-closed truncation. The uid is returned only to join the conversation
+    row; it is never part of a census response.
+    """
+    start_epoch, end_epoch = _epoch(start), _epoch(end)
+    if start_epoch is None or end_epoch is None or end_epoch <= start_epoch or limit <= 0:
+        raise ValueError('invalid ledger window')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    query = (
+        client.collection_group(COLLECTION)
+        .where(filter=firestore.FieldFilter('admitted_at', '>=', start_epoch))
+        .where(filter=firestore.FieldFilter('admitted_at', '<', end_epoch))
+        .limit(limit + 1)
+    )
+    snapshots = list(query.stream())
+    if len(snapshots) > limit:
+        raise LedgerWindowTruncated(f'ledger window exceeded {limit} rows')
+    for snapshot in snapshots:
+        doc = snapshot.to_dict() or {}
+        parts = str(getattr(snapshot.reference, 'path', '')).split('/')
+        uid = parts[1] if len(parts) >= 4 and parts[0] == 'users' else None
+        row = {key: doc.get(key) for key in CENSUS_FIELDS}
+        row['capture_id'] = snapshot.id
+        yield uid, row
+
+
+def retention_start(*, firestore_client: Any = None) -> float | None:
+    """The ledger's global earliest ``admitted_at``, or ``None`` when it is empty.
+
+    One bounded read on the retained collection-group index. The window's own
+    minimum is always ``>= start``, so only this value can prove full lookback.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    query = client.collection_group(COLLECTION).order_by('admitted_at').limit(1)
+    for snapshot in query.stream():
+        return _epoch((snapshot.to_dict() or {}).get('admitted_at'))
+    return None
 
 
 def census_window(

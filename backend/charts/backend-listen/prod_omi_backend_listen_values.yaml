@@ -101,6 +101,8 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
+    value: "true"
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}

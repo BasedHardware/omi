@@ -2990,6 +2990,8 @@
     "syncCardThrottlePaused": "Sinkronisasi dijeda sebentar — akan dilanjutkan secara otomatis",
     "syncCardBackendBusy": "Server Omi sedang sibuk — rekamanmu akan disinkronkan setelah kapasitas tersedia kembali",
     "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi firmware saat ini",
+    "applyCodeToCurrentPlan": "Terapkan ke Paket Saat Ini",
+    "subscriptionCodeResult": "{result, select, applied{Kode diterapkan ke paket Anda saat ini.} refused{Kode ini tidak dapat diterapkan. Periksa kode dan paket yang diperlukan.} conflict{Kode sudah digunakan atau paket Anda sudah mendapat diskon.} rateLimited{Terlalu banyak percobaan. Tunggu dan coba lagi nanti.} other{Kode tidak dapat diterapkan. Silakan coba lagi.}}",
     "promoCode": "Kode promo",
     "enterPromoCode": "Masukkan kode promo",
     "invalidPromotionCode": "Kode promo tidak valid.",

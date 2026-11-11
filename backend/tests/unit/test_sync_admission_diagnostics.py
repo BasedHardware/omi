@@ -24,6 +24,10 @@ def explicit_stage(monkeypatch):
 @pytest.fixture(autouse=True)
 def record_wait_memo(monkeypatch):
     memo = {}
+    # This suite isolates pending diagnostics; WAL memo behavior has its own
+    # expiry-aware Redis fake in test_sync_record_coverage_wait_memo.py.
+    monkeypatch.setattr(live_upload, 'cached_coverage_wait', lambda *_: False)
+    monkeypatch.setattr(live_upload, 'remember_coverage_wait', lambda *_: None)
     monkeypatch.setattr(
         live_upload, 'remember_record_wait', lambda uid, cid, reason: memo.__setitem__((uid, cid), reason)
     )
