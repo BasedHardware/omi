@@ -81,7 +81,7 @@ def test_accepted_repair_reaches_exact_owner_check_after_new_upload_lookback(
         checks.append((uid, content, job))
         return matches
 
-    monkeypatch.setattr(sync, 'repair_upload_owner_matches', owned, raising=False)
+    monkeypatch.setattr(sync, 'repair_upload_owner_matches', owned)
     archives = []
 
     def archive(*args, **kwargs):
