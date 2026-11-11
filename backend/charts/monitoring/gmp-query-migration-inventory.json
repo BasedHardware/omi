@@ -198,7 +198,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "max(omi_batch_held_oldest_age_seconds{leg=\"staged_input\"} and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900))",
+      "expression": "max(omi_batch_held_oldest_age_seconds{leg=\"staged_input\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
       "file": "alerts/batch-input-retention.json",
       "issues": [],
       "metrics": [
@@ -293,11 +293,12 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) or vector(0)",
+      "expression": "max((omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) or vector(0)",
       "file": "alerts/batch-timeliness.json",
       "issues": [],
       "metrics": [
-        "omi_batch_timeliness_new_oldest_age_seconds"
+        "omi_batch_timeliness_new_oldest_age_seconds",
+        "omi_batch_timeliness_observed_at_seconds"
       ],
       "owner_title": "Batch audio unit still unpublished after 2h",
       "owner_uid": "omi-batch-unit-unpublished-2h",
@@ -306,7 +307,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+      "expression": "(time() - max((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))))) or vector(1e9)",
       "file": "alerts/batch-timeliness.json",
       "issues": [],
       "metrics": [
@@ -345,7 +346,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+      "expression": "(time() - max((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))))) or vector(1e9)",
       "file": "alerts/batch-timeliness.json",
       "issues": [],
       "metrics": [
@@ -358,10 +359,11 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "max(omi_batch_timeliness_scan_truncated)",
+      "expression": "max(omi_batch_timeliness_scan_truncated and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
       "file": "alerts/batch-timeliness.json",
       "issues": [],
       "metrics": [
+        "omi_batch_timeliness_observed_at_seconds",
         "omi_batch_timeliness_scan_truncated"
       ],
       "owner_title": "Batch timeliness walk blind for 30 minutes",
@@ -408,7 +410,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) >= 10000) or on() vector(0))",
+      "expression": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) >= 10000) or on() vector(0))",
       "file": "alerts/critical-failures.json",
       "issues": [],
       "metrics": [
@@ -1390,7 +1392,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "max(omi_batch_projection_drain_oldest_age_seconds and (time() - omi_batch_timeliness_observed_at_seconds < 900)) or vector(0)",
+      "expression": "max(omi_batch_projection_drain_oldest_age_seconds and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) or vector(0)",
       "file": "alerts/pipeline-drain.json",
       "issues": [],
       "metrics": [
@@ -1404,7 +1406,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900))",
+      "expression": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
       "file": "alerts/pipeline-drain.json",
       "issues": [],
       "metrics": [
@@ -1430,6 +1432,45 @@
       ],
       "owner_title": "Oldest-age sampler gauge frozen for one hour",
       "owner_uid": "omi-oldest-age-gauge-flat-1h",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max by (stage) (omi_pipeline_ledger_stuck_rows)",
+      "file": "alerts/pipeline-ledger.json",
+      "issues": [],
+      "metrics": [
+        "omi_pipeline_ledger_stuck_rows"
+      ],
+      "owner_title": "Pipeline ledger rows are stuck past their stage deadline",
+      "owner_uid": "omi-pipeline-ledger-stuck",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_pipeline_ledger_refreshed_at_seconds)) or vector(1e9)",
+      "file": "alerts/pipeline-ledger.json",
+      "issues": [],
+      "metrics": [
+        "omi_pipeline_ledger_refreshed_at_seconds"
+      ],
+      "owner_title": "Pipeline ledger census sample is stale or never taken",
+      "owner_uid": "omi-pipeline-ledger-sample-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_pipeline_ledger_gate_receipt_generated_at_seconds)) or vector(1e9)",
+      "file": "alerts/pipeline-ledger.json",
+      "issues": [],
+      "metrics": [
+        "omi_pipeline_ledger_gate_receipt_generated_at_seconds"
+      ],
+      "owner_title": "Pipeline census gate receipt is older than one hour",
+      "owner_uid": "omi-pipeline-ledger-gate-receipt-stale",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -4070,7 +4111,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 273
+    "query_consumers": 276
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

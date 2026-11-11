@@ -9195,6 +9195,24 @@ class AppLocalizationsNl extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Kan de huidige firmwareversie niet bepalen';
 
   @override
+  String get applyCodeToCurrentPlan => 'Toepassen op huidig abonnement';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Code toegepast op je huidige abonnement.',
+        'refused': 'Deze code kan niet worden toegepast. Controleer de code en het vereiste abonnement.',
+        'conflict': 'Code al gebruikt, of je abonnement heeft al korting.',
+        'rateLimited': 'Te veel pogingen. Wacht en probeer het later opnieuw.',
+        'other': 'Code kon niet worden toegepast. Probeer het opnieuw.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promotiecode';
 
   @override

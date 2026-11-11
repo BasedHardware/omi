@@ -9165,6 +9165,24 @@ class AppLocalizationsSk extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nedá sa určiť aktuálna verzia firmvéru';
 
   @override
+  String get applyCodeToCurrentPlan => 'Použiť na aktuálny program';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kód bol použitý na váš aktuálny program.',
+        'refused': 'Tento kód sa nedá použiť. Skontrolujte kód a požadovaný program.',
+        'conflict': 'Kód už bol použitý alebo váš program už má zľavu.',
+        'rateLimited': 'Priveľa pokusov. Počkajte a skúste to neskôr.',
+        'other': 'Kód sa nepodarilo použiť. Skúste to znova.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promo kód';
 
   @override

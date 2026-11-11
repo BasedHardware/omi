@@ -39,6 +39,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "#23735: share the persistent mute owner instead of resuming on disconnect; queue orderly shutdown outside the system workqueue"
+  - id: cv1-bootloader-region-tests
+    command: ["python3", "omi/firmware/scripts/ci/test_cv1_bootloader.py"]
+    triggers: ["omi/firmware/scripts/ci/**", "omi/firmware/bootloader/cv1-bootloader-policy.json", "omi/firmware/omi/sysbuild*", "omi/firmware/omi/sysbuild/**", "omi/firmware/omi/src/mcuboot_boot_zephyr.c", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-11-07 CV1 jig: stock MCUboot in 3.0.21/.23/.24 wire-flash assets reads corrupted SPI NOR while SD drives MISO; reject every unapproved boot region"
   - id: cv1-tested-release-contract-tests
     command: ["python3", "omi/firmware/scripts/ci/test_cv1_release.py"]
     triggers: ["omi/firmware/scripts/ci/**", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]

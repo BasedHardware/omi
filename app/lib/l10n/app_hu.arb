@@ -3051,6 +3051,8 @@
     "syncCardThrottlePaused": "A szinkronizálás rövid időre szünetel — automatikusan folytatódik",
     "syncCardBackendBusy": "Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás",
     "unableToDetermineFirmwareVersion": "A jelenlegi firmware verziója nem határozható meg",
+    "applyCodeToCurrentPlan": "Alkalmazás a jelenlegi csomagra",
+    "subscriptionCodeResult": "{result, select, applied{A kódot alkalmaztuk a jelenlegi csomagodra.} refused{Ez a kód nem alkalmazható. Ellenőrizd a kódot és a szükséges csomagot.} conflict{A kódot már felhasználták, vagy a csomagod már kedvezményes.} rateLimited{Túl sok próbálkozás. Várj, és próbáld újra később.} other{Nem sikerült alkalmazni a kódot. Próbáld újra.}}",
     "promoCode": "Promóciós kód",
     "enterPromoCode": "Adja meg a promóciós kódot",
     "invalidPromotionCode": "Érvénytelen promóciós kód.",

@@ -9041,6 +9041,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => '현재 펌웨어 버전을 확인할 수 없습니다';
 
   @override
+  String get applyCodeToCurrentPlan => '현재 요금제에 적용';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': '현재 요금제에 코드가 적용되었습니다.',
+        'refused': '이 코드를 적용할 수 없습니다. 코드와 대상 요금제를 확인하세요.',
+        'conflict': '이미 사용된 코드이거나 요금제에 이미 할인이 적용되어 있습니다.',
+        'rateLimited': '시도 횟수가 너무 많습니다. 기다린 후 다시 시도하세요.',
+        'other': '코드를 적용하지 못했습니다. 다시 시도하세요.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => '프로모 코드';
 
   @override

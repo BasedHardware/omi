@@ -2955,6 +2955,8 @@
     "syncCardThrottlePaused": "सिंक थोड़ी देर के लिए रुका है — यह अपने आप फिर शुरू होगा",
     "syncCardBackendBusy": "Omi के सर्वर व्यस्त हैं — क्षमता उपलब्ध होते ही आपकी रिकॉर्डिंग सिंक हो जाएंगी",
     "unableToDetermineFirmwareVersion": "वर्तमान फ़र्मवेयर संस्करण निर्धारित नहीं किया जा सका",
+    "applyCodeToCurrentPlan": "मौजूदा प्लान पर लागू करें",
+    "subscriptionCodeResult": "{result, select, applied{कोड आपके मौजूदा प्लान पर लागू हो गया।} refused{यह कोड लागू नहीं हो सकता। कोड और आवश्यक प्लान जाँचें।} conflict{कोड पहले इस्तेमाल हो चुका है या आपके प्लान पर पहले से छूट है।} rateLimited{बहुत अधिक प्रयास। प्रतीक्षा करें और बाद में फिर कोशिश करें।} other{कोड लागू नहीं हुआ। फिर कोशिश करें।}}",
     "promoCode": "प्रोमो कोड",
     "enterPromoCode": "प्रोमो कोड दर्ज करें",
     "invalidPromotionCode": "अमान्य प्रोमो कोड।",

@@ -354,6 +354,10 @@ CLOUD_RUN_SYNC_EXPORTER_FILTER = (
 # consumer, read from GMP by the rightsizing runbook) alone re-created ~13k live
 # series per backend-sync instance generation through this release.
 CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_batch_timeliness_',
+    'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/',
+    'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/',
+    'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/',
     'prometheus.googleapis.com/omi_finalization_pair_',
     'prometheus.googleapis.com/omi_enrichment_summary_repair_',
     'prometheus.googleapis.com/omi_batch_record_pending_',

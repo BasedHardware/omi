@@ -356,6 +356,9 @@ nested in the existing batch cohort, so selecting 50% while batch admits 25%
 can suppress at most the batch-admitted 25%. This knob does not expand batch
 admission itself. The rollout lead owns mobile cohort expansion and deployment.
 
+`SYNC_RECORD_COVERAGE_WAIT_MEMO` defaults `true`; set `false` to bypass memo reads
+and writes and restore full WAL coverage checks on each admission.
+
 Web uses `SERVER_BATCH_ONLY_WEB_PERCENT` (default 0), a separate salted owner
 cohort keyed on authenticated `client_platform=web`; persisted source may be
 `unknown`. It uses the existing server-side pusher custody path, with no client
@@ -3266,6 +3269,14 @@ The [change note](listen_pusher_pipeline/changes/2026-11-07-home-processing-age.
 records the reader audit and unmeasured acceptance.
 
 ### Failure terminal summary recovery
+
+Processing-attention class 11 `recovery_structure_unavailable` items expire on
+read after seven days only while permanently non-retryable. The default-on
+`PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED` runtime/chart switch disables
+new expiry writes when `false`; retained inactive records never reactivate.
+Expiry transactionally checks the observed item version and retry claim before
+setting `expired_at` and `expiry_reason=non_retryable_ttl`. Timestamp handling,
+post-filter limits and endpoint contracts live in [pending work](pending-work.md).
 
 Only transient dead-letter failures with usable input and no prior
 summary get `summary_retryable=true`; enrichment and free-tier persistence clear

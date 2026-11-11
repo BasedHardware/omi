@@ -2,7 +2,9 @@
 
 Processing attention, pending-work projection and reprocess deduplication are
 always active in every environment. Both GET endpoints retain `enabled: true`
-for client compatibility. `HOME_STEP_PROJECTION` is an existing default-on
+for client compatibility. The default-on ops kill switch
+`PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED` controls only new
+read-time expiry writes; there are no PostHog calls. `HOME_STEP_PROJECTION` is an existing default-on
 presentation kill switch shared with conversation list `home_step`. It also gates
 `home_processing_today` in pending-work and its expanded candidate sources.
 Off returns false, uses the legacy `status == processing` query and omits
@@ -25,7 +27,20 @@ Attention id hashes finalization revision, sync content revision and job id;
 uid and conversation scope the item and retry claim collections. A terminal
 minimum title is not a successful summary. Read-time reconciliation resolves
 items whose owner disappeared, was soft deleted, or acquired an overview;
-there is no sweep or migration of historical failures. Seen/dismiss writes
+there is no sweep or migration of historical failures. Lazy expiry on either
+GET marks unresolved class 11 `recovery_structure_unavailable` items inactive
+at seven days from `created_at`, only when they remain non-retryable after
+claim reconciliation and have no in-progress retry. Other failure reasons,
+including `processing_failed`, `final_attempt_failed` and
+`durable_attempts_exhausted`, do not expire even if their stored retryable flag
+is false. Legacy naive timestamps are interpreted as UTC; ISO timestamps are
+normalized to UTC. Invalid or missing timestamps are retained. The transaction
+checks the exact observed item state and update time and rechecks the claim
+before writing `expired_at` and `expiry_reason=non_retryable_ttl`. Concurrent
+retry claims prevent stale expiry writes. Expiry retains the document and is
+terminal: setting the switch to `false` never reactivates expired items. The
+switch is declared in the runtime base and matching GKE chart env; change its
+value there and recompose `backend/deploy/runtime_env.yaml` for rollback. Seen/dismiss writes
 are immediately available to the next read. Concurrent resolution can appear
 one read later. Claim status is read from the common claim ledger, including
 claims made by the old reprocess endpoint.
@@ -41,10 +56,16 @@ stale completed debt alone never triggers an unbounded history walk. Supplementa
 queries use the default single-field index order (earliest due first).
 No composite index or collection-group query is needed.
 
-The attention projection reads at most 100 active documents, plus at most two
-direct reads per attention item. Folder/date/list-page filters are not involved.
-The unseen count describes this bounded window; GET attention-items, seen-all
-and retry-all use the full active set. Sync duration is unchanged.
+The attention projection reads at most 100 active documents after resolution/expiry filtering, plus at most two direct reads per unresolved
+attention item and transactional item and claim reads for an expiry candidate. It streams active attention
+documents until that many survive or the set ends, so filtered documents do not consume the window. GET attention-items reads the full active set.
+Live capture, discarded/deleted, completed and dead-letter rows are excluded.
+These queries use Firestore's default collection single-field indexes on
+`conversations.status` and `processing_attention_items.active`; no composite
+index or collection-group index is needed. Folder/date/list-page filters are
+not involved. The pending projection's unseen count describes this bounded
+window; GET attention-items, seen-all and retry-all use the full active set.
+The projection's windowed count is an addition to the shared contract. Sync duration is unchanged.
 
 Flutter chooses the user's current **local recorded day**, using `started_at`
 (or `created_at`), including recordings that cross midnight: after midnight they

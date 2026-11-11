@@ -235,6 +235,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
+        {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT", "value": "100"},
         {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "true"},
@@ -609,6 +610,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},'
+        r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
