@@ -17,6 +17,7 @@ import utils.other.notifications as notif
 
 
 class _FakeConvo:
+    id = 'c1'
     transcript_segments = [object()]
     discarded = False
     apps_results: list = []
