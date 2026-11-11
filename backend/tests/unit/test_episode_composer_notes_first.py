@@ -1,0 +1,564 @@
+"""Notes-first closed-episode compose: member notes by default, bounded transcript excerpts on demand."""
+
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from zoneinfo import ZoneInfo
+
+import pytest
+
+os.environ.setdefault(
+    'ENCRYPTION_SECRET',
+    'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
+)
+os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
+
+from config import episodes as config
+from utils.episodes import composer, metrics, service
+
+UID = 'notes-first-uid'
+T0 = datetime(2026, 10, 30, 7, 56, tzinfo=timezone.utc)  # 14:56 in Asia/Bangkok
+
+
+def _row(cid, start, minutes, *, title='T', overview='O', sections=None, lines=None):
+    lines = lines if lines is not None else [(0, 'We planned the launch.'), (60 * minutes - 30, 'Done.')]
+    return {
+        'id': cid,
+        'status': 'completed',
+        'started_at': start,
+        'finished_at': start + timedelta(minutes=minutes),
+        'recorded_start': start,
+        'recorded_end': start + timedelta(minutes=minutes),
+        'structured': {
+            'title': title,
+            'overview': overview,
+            'sections': sections or [],
+            'action_items': [{'description': 'Ship it'}],
+        },
+        'transcript_segments': [
+            {'start': s, 'end': s + 5, 'text': t, 'is_user': i % 2 == 0, 'speaker': 'SPEAKER_01'}
+            for i, (s, t) in enumerate(lines)
+        ],
+    }
+
+
+class Store:
+    def __init__(self, episode, rows):
+        self.episode = dict(episode)
+        self.rows = {r['id']: r for r in rows}
+        self.writes = []
+
+    def get_episode(self, uid, episode_id, firestore_client=None):
+        return dict(self.episode)
+
+    def update_episode(self, uid, episode_id, *, expected_version, updates, firestore_client=None, **_):
+        assert expected_version == self.episode['state_version']
+        self.writes.append(dict(updates))
+        self.episode.update(updates)
+        self.episode['state_version'] += 1
+        return self.episode
+
+    def get_conversation(self, uid, cid, firestore_client=None, **_):
+        row = self.rows.get(cid)
+        return dict(row) if row else None
+
+
+def _episode(**over):
+    base = {
+        'id': 'ep1',
+        'status': 'closed',
+        'started_at': T0,
+        'closed_at': T0 + timedelta(hours=3, minutes=10),
+        'conversation_ids': ['c1', 'c2'],
+        'discarded_conversation_ids': [],
+        'state_version': 5,
+        'title': 'old',
+        'bullets': ['David: Yeah.'],
+        'moments': [],
+        'usage': {'calls': 132},
+    }
+    base.update(over)
+    return base
+
+
+def _reply(**over):
+    data = {
+        'title': 'Omi app bugs and labeling tool',
+        'emoji': '🛠️',
+        'lede': 'David found two app regressions and explained the labeling tool.',
+        'chapters': [
+            {
+                'start': '15:00:00',
+                'end': '15:04:30',
+                'title': 'App regressions',
+                'points': [{'text': 'Ending an episode no longer shows the processing row.', 'details': []}],
+            }
+        ],
+        'people': ['Arjan'],
+        'follow_ups': ['Fix the processing row'],
+    }
+    data.update(over)
+    return SimpleNamespace(content=json.dumps(data), usage_metadata={'input_tokens': 8000, 'output_tokens': 500})
+
+
+def _tool_reply(recording=1, start='14:56:00', end='15:00:00', call_id='call-1'):
+    return SimpleNamespace(
+        content='',
+        tool_calls=[
+            {
+                'name': 'get_transcript_excerpt',
+                'args': {'recording': recording, 'start': start, 'end': end},
+                'id': call_id,
+            }
+        ],
+        usage_metadata={'input_tokens': 1000, 'output_tokens': 20},
+    )
+
+
+@pytest.fixture
+def store(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, raising=False)
+    monkeypatch.setattr(composer, '_deferred', {})
+    monkeypatch.setattr(composer, '_foreground', set())
+    monkeypatch.setattr(composer, '_recent', {})
+    monkeypatch.setattr(composer, '_inflight', set())
+    monkeypatch.setattr(composer, '_rerun', set())
+    rows = [_row('c1', T0, 180), _row('c2', T0 + timedelta(minutes=181), 8)]
+    s = Store(_episode(), rows)
+    monkeypatch.setattr(composer.episodes_db, 'get_episode', s.get_episode)
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', s.update_episode)
+    monkeypatch.setattr(composer.conversations_db, 'get_conversation', s.get_conversation)
+    return s
+
+
+def _c(invoke=None, calls=None):
+    def default(uid, messages, *, tools=None):
+        if calls is not None:
+            calls.append((messages, tools))
+        return _reply()
+
+    return service.Collaborators(
+        tz_name='Asia/Bangkok',
+        owner_name=lambda uid: 'David',
+        people_names=lambda uid, ids: {},
+        extras={'compose_invoke': invoke or default},
+    )
+
+
+def _enable(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, 'on')
+
+
+def test_off_by_default_keeps_the_full_transcript(store):
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    human = calls[0][0][1][1]
+    assert 'Transcript:\n[14:56:00] David: We planned the launch.' in human
+    assert 'Transcript: not included' not in human
+
+
+def test_on_sends_notes_and_no_raw_transcript(store, monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    messages, tools = calls[0]
+    human = messages[1][1]
+    assert 'Title: T' in human and 'Overview: O' in human
+    assert 'Action items: ["Ship it"]' in human
+    assert 'Transcript: not included' in human
+    assert 'We planned the launch.' not in human
+    assert tools and tools[0]['function']['name'] == 'get_transcript_excerpt'
+
+
+def test_a_member_without_notes_still_gets_its_transcript(store, monkeypatch):
+    _enable(monkeypatch)
+    store.rows['c2']['structured'] = {'title': '', 'overview': '', 'sections': [], 'action_items': []}
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    human = calls[0][0][1][1]
+    assert 'Recording 2' in human and 'Transcript:\n[17:57:00] David: We planned the launch.' in human
+
+
+def test_sections_are_rendered_into_the_notes_block(store, monkeypatch):
+    _enable(monkeypatch)
+    store.rows['c1']['structured']['sections'] = [
+        {'heading': 'Launch', 'body_markdown': 'Ship on Friday.'},
+        {'heading': '', 'body_markdown': 'Body only.'},
+    ]
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    human = calls[0][0][1][1]
+    assert '## Launch\nShip on Friday.' in human and 'Body only.' in human
+
+
+def test_tool_call_fetches_a_bounded_excerpt_and_sums_usage(store, monkeypatch):
+    _enable(monkeypatch)
+    replies = [_tool_reply(), _reply()]
+    seen = []
+
+    def invoke(uid, messages, *, tools=None):
+        seen.append((list(messages), tools))
+        return replies.pop(0)
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    # Both turns offer the tool; the second turn carries the first turn's tool result.
+    assert seen[0][1] and seen[1][1]
+    tool_messages = [m for m in seen[1][0] if getattr(m, 'type', '') == 'tool']
+    assert tool_messages and 'We planned the launch.' in tool_messages[0].content
+    written = store.writes[-1]
+    assert written['usage']['composer_input_tokens'] == 9000
+    assert written['usage']['composer_tool_calls'] == 1
+
+
+def test_the_last_turn_is_sent_without_tools(store, monkeypatch):
+    _enable(monkeypatch)
+    # Every turn asks for another excerpt; the last turn must be tool-free and its content parsed.
+    replies = [_tool_reply(call_id='a'), _tool_reply(call_id='b'), _tool_reply(call_id='c'), _tool_reply(call_id='d')]
+    calls = []
+
+    def invoke(uid, messages, *, tools=None):
+        calls.append(tools)
+        return replies.pop(0) if replies else _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert len(calls) == config.COMPOSER_NOTES_FIRST_MAX_TURNS
+    assert calls[-1] is None
+
+
+def test_excerpt_bounds_chars_time_and_calls():
+    row = _row('c1', T0, 180, lines=[(i * 60, f'line {i} ' + 'x' * 200) for i in range(180)])
+    tz = ZoneInfo('Asia/Bangkok')
+    text, spent = composer._excerpt(
+        [row], 'David', tz, {'recording': 1, 'start': '14:56:00', 'end': '17:56:00'}, remaining_chars=10_000
+    )
+    assert spent <= config.COMPOSER_EXCERPT_MAX_CHARS
+    assert len(text) <= config.COMPOSER_EXCERPT_MAX_CHARS
+    # A range wider than the per-call window is clamped, not rejected.
+    assert 'line 0' in text and 'line 179' not in text
+
+
+def test_excerpt_rejects_an_unknown_recording_and_exhausted_budget():
+    row = _row('c1', T0, 10)
+    tz = ZoneInfo('Asia/Bangkok')
+    assert composer._excerpt(
+        [row], 'David', tz, {'recording': 9, 'start': '14:56', 'end': '15:00'}, remaining_chars=100
+    )[0].startswith('error:')
+    assert composer._excerpt([row], 'David', tz, {'recording': 1, 'start': '14:56', 'end': '15:00'}, remaining_chars=0)[
+        0
+    ].startswith('error:')
+
+
+def test_l9_off_keeps_full_path_with_l8_on(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'on')
+    monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, 'off')
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert 'Transcript:\n[14:56:00]' in calls[0][0][1][1]
+
+
+def test_unknown_flag_value_stays_off(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, 'maybe')
+    assert config.composer_notes_first_enabled(UID) is False
+
+
+def test_operator_script_renders_a_stable_text_view():
+    from scripts import episode_composer_notes_first_diff as diff
+
+    text = diff._render(
+        {
+            'title': 'T',
+            'lede': 'L',
+            'follow_ups': ['F'],
+            'moments': [
+                {
+                    'started_at': T0,
+                    'ended_at': T0 + timedelta(minutes=1),
+                    'heading': 'H',
+                    'points': [{'text': 'P', 'details': ['D']}],
+                }
+            ],
+        }
+    )
+    assert text.splitlines() == [
+        'TITLE: T',
+        'LEDE: L',
+        'FOLLOW-UPS:',
+        '  - F',
+        f'CHAPTER {T0} - {T0 + timedelta(minutes=1)}: H',
+        '  * P',
+        '      - D',
+    ]
+
+
+def test_compose_tokens_are_recorded_by_mode():
+    before = metrics.EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode='notes_first')._value.get()
+    calls = metrics.EPISODE_COMPOSE_TOOL_CALLS.labels(mode='notes_first')._sum.get()
+    metrics.record_compose_reply('notes_first', 1234, 20)
+    metrics.record_compose_tools('notes_first', 2)
+    assert metrics.EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode='notes_first')._value.get() == before + 1234
+    assert metrics.EPISODE_COMPOSE_TOOL_CALLS.labels(mode='notes_first')._sum.get() == calls + 2
+    assert metrics.EPISODE_COMPOSE_INPUT_TOKENS_TOTAL._labelnames == ('mode',)
+    assert metrics.EPISODE_COMPOSE_TOOL_CALLS._labelnames == ('mode',)
+
+
+def test_l9_can_run_with_l8_killed(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    _enable(monkeypatch)
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert 'Transcript: not included' in calls[0][0][1][1]
+
+
+def test_l8_repairs_a_notes_first_reply_without_resending_notes(store, monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+
+    def invoke(uid, messages, **kwargs):
+        calls.append(messages)
+        if len(calls) == 1:
+            return SimpleNamespace(content='bad json', usage_metadata={'input_tokens': 10, 'output_tokens': 1})
+        return _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert calls[1][1][1] == 'bad json'
+    assert store.episode['usage']['composer_input_tokens'] == 8010
+
+
+def test_excerpt_respects_even_a_tiny_remaining_budget():
+    row = _row('c1', T0, 180)
+    text, spent = composer._excerpt(
+        [row],
+        'David',
+        ZoneInfo('Asia/Bangkok'),
+        {'recording': 1, 'start': '14:56:00', 'end': '14:57:00'},
+        remaining_chars=3,
+    )
+    assert spent == 0 and text == 'error: excerpt budget exhausted'
+    assert '[...' not in text
+
+
+@pytest.mark.parametrize('structured', [{'action_items': [{'description': 'Ship it'}]}, {'title': 'Title only'}])
+def test_non_body_notes_retain_the_member_transcript(store, monkeypatch, structured):
+    _enable(monkeypatch)
+    store.rows['c2']['structured'] = structured
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert 'Transcript:\n[17:57:00] David: We planned the launch.' in calls[0][0][1][1]
+
+
+def test_mid_loop_failure_counts_every_paid_turn(store, monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+
+    def invoke(uid, messages, **kwargs):
+        calls.append(messages)
+        if len(calls) == 3:
+            raise TimeoutError('provider failure')
+        return _tool_reply(call_id=str(len(calls)))
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert store.episode['compose_failures'] == 3
+    store.episode['compose_failed_at'] = T0
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'backoff'
+    assert len(calls) == 3
+
+
+def test_slow_tool_loop_and_repair_remain_fenced_for_the_entire_sequence(store, monkeypatch):
+    _enable(monkeypatch)
+    clock = [datetime.now(timezone.utc)]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0]
+
+    monkeypatch.setattr(composer, 'datetime', Clock)
+    replies = [_tool_reply(call_id=str(i)) for i in range(4)] + [
+        SimpleNamespace(content='malformed', usage_metadata={}),
+        _reply(),
+    ]
+    peers = []
+
+    def invoke(uid, messages, **kwargs):
+        clock[0] += timedelta(seconds=130)
+        if len(replies) < 5:
+            peers.append(composer.compose(UID, 'ep1', collaborators=_c()))
+        return replies.pop(0)
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    assert peers and set(peers) == {'leased'}
+    assert store.episode['usage']['composer_calls'] == 6
+
+
+def test_unknown_tools_and_excess_calls_return_bounded_errors(store, monkeypatch):
+    _enable(monkeypatch)
+    request = _tool_reply()
+    request.tool_calls = [{'name': 'unknown', 'args': {}, 'id': 'unknown'}] + [
+        {'name': 'get_transcript_excerpt', 'args': {'recording': 1, 'start': '14:56', 'end': '15:00'}, 'id': str(i)}
+        for i in range(config.COMPOSER_EXCERPT_MAX_CALLS + 1)
+    ]
+    seen = []
+
+    def invoke(uid, messages, **kwargs):
+        seen.append(list(messages))
+        return request if len(seen) == 1 else _reply()
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'composed'
+    results = [message.content for message in seen[-1] if getattr(message, 'type', '') == 'tool']
+    assert results[0] == 'error: unknown tool'
+    assert results[-1] == 'error: excerpt call budget exhausted'
+    assert store.episode['usage']['composer_tool_calls'] == config.COMPOSER_EXCERPT_MAX_CALLS
+
+
+@pytest.mark.parametrize('count', [1, 5, 20, 60])
+@pytest.mark.parametrize('has_notes', [True, False])
+def test_aggregate_prompt_cap_includes_all_notes_and_transcript_fallback(count, has_notes):
+    # Keep aggregate fixture size constant: every member count still exceeds the
+    # real cap, without making the 60-member case serialize tens of megabytes.
+    repeats = config.COMPOSER_MAX_TRANSCRIPT_CHARS // (8 * count)
+    rows = [_row(str(i), T0 + timedelta(minutes=i), 1, lines=[(0, 'speech ' * (4 * repeats))]) for i in range(count)]
+    for row in rows:
+        row['structured'] = {
+            'title': 'title ' * repeats,
+            'overview': 'overview "\\\n' * repeats if has_notes else '',
+            'gist': 'gist ' * repeats if has_notes else '',
+            'sections': [{'heading': 'Section', 'body': 'body ' * repeats}] if has_notes else [],
+            'action_items': [{'description': 'action ' * repeats}],
+        }
+    assert (
+        sum(len(row['structured']['title']) + len(row['structured']['action_items'][0]['description']) for row in rows)
+        > config.COMPOSER_MAX_TRANSCRIPT_CHARS
+    )
+    kwargs = dict(owner='David', tz=ZoneInfo('UTC'), language='English')
+    messages = composer.build_notes_first_messages(rows, **kwargs)
+    assert composer._input_chars(messages, [composer.TRANSCRIPT_EXCERPT_TOOL]) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
+    assert sum(len(text) for _, text in messages) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
+    assert '[... notes truncated ...]' in messages[1][1]
+    assert messages == composer.build_notes_first_messages(rows, **kwargs)
+    positions = [messages[1][1].index(f'=== Recording {i + 1} (') for i in range(count)]
+    assert positions == sorted(positions)
+
+
+def test_note_allocations_are_proportional_and_floor_scales_down():
+    blocks = ['a' * 100_000, 'b' * 300_000]
+    result = composer._bounded_notes(blocks, 10_000)
+    assert len(result[1]) > 2 * len(result[0])
+    result = composer._bounded_notes(['x' * 10_000] * 60, 6000)
+    assert all(len(block) <= 100 for block in result)
+    assert all('[... notes truncated ...]' in block for block in result)
+
+
+@pytest.mark.parametrize('size', [1, 15_000, 300_000])
+def test_tool_turn_resends_count_toward_one_compose_ceiling(size):
+    rows = [_row('c1', T0, 180, overview='notes ' * size)]
+    seen = []
+
+    def invoke(uid, messages, *, tools=None):
+        seen.append((list(messages), tools))
+        return _tool_reply(call_id=str(len(seen))) if tools else _reply()
+
+    composer._compose_notes_first(
+        UID, rows, owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English', invoke=invoke
+    )
+    assert (
+        sum(composer._input_chars(messages, tools) for messages, tools in seen) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
+    )
+    assert seen[-1][1] is None
+    if size == 300_000:
+        assert len(seen) == 1  # large input answers directly instead of buying another resend
+
+
+def test_oversized_tool_history_is_refused_before_the_next_paid_call():
+    rows = [_row('c1', T0, 180)]
+    calls = []
+
+    def invoke(uid, messages, **kwargs):
+        calls.append(messages)
+        reply = _tool_reply()
+        reply.content = 'x' * config.COMPOSER_MAX_TRANSCRIPT_CHARS
+        return reply
+
+    with pytest.raises(composer.ComposeFailed, match='input_budget'):
+        composer._compose_notes_first(
+            UID, rows, owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English', invoke=invoke
+        )
+    assert len(calls) == 1
+
+
+def test_repair_cannot_bypass_the_compose_input_ceiling(store, monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+
+    def invoke(uid, messages, **kwargs):
+        calls.append(messages)
+        return SimpleNamespace(content='x' * config.COMPOSER_MAX_TRANSCRIPT_CHARS, usage_metadata={})
+
+    assert composer.compose(UID, 'ep1', collaborators=_c(invoke=invoke)) == 'error'
+    assert len(calls) == 1
+    assert store.episode['title'] == 'old'
+    assert store.episode['compose_failures'] == 1
+
+
+def test_off_payload_is_exactly_the_existing_full_builder(store, monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_NOTES_FIRST_ENV, 'off')
+    expected = composer.build_messages(
+        list(store.rows.values()), owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English'
+    )
+    monkeypatch.setattr(
+        composer, 'build_notes_first_messages', lambda *args, **kwargs: pytest.fail('off path used notes')
+    )
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert calls[0][0] == expected
+    assert calls[0][1] is None
+
+
+@pytest.mark.parametrize('full_is_cheaper', [True, False])
+def test_full_transcript_fallback_is_only_used_when_cheaper(full_is_cheaper):
+    row = _row('c1', T0, 180, overview='short notes', lines=[(0, 'speech ' * 100_000)])
+    if full_is_cheaper:
+        row['transcript_segments'] = []
+        row['structured']['sections'] = [{'body': 'section ' * 100_000}]
+    seen = []
+    kwargs = dict(owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English')
+    notes = composer.build_notes_first_messages([row], **kwargs)
+    full = composer.build_messages([row], **kwargs)
+
+    def invoke(uid, messages, **options):
+        seen.append((messages, options.get('tools')))
+        return _reply()
+
+    composer._compose_notes_first(UID, [row], invoke=invoke, **kwargs)
+    assert (seen[0][0] == full) is full_is_cheaper
+    if full_is_cheaper:
+        assert composer._input_chars(full) < composer._input_chars(notes, [composer.TRANSCRIPT_EXCERPT_TOOL])
+        assert seen[0][1] is None
+    assert composer._input_chars(*seen[0]) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
+
+
+@pytest.mark.parametrize('extra_chars', [-1, 0, 1])
+def test_fallback_must_be_cheaper_than_the_tool_free_notes_request(monkeypatch, extra_chars):
+    rows = [_row('c1', T0, 180, overview='notes ' * 100_000)]
+    kwargs = dict(owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English')
+    notes = composer.build_notes_first_messages(rows, **kwargs)
+    assert '[... notes truncated ...]' in notes[1][1]
+    full = [('system', 'full'), ('human', '')]
+    padding = composer._input_chars(notes) + extra_chars - composer._input_chars(full)
+    full[1] = ('human', 'x' * padding)
+    assert composer._input_chars(full) == composer._input_chars(notes) + extra_chars
+    monkeypatch.setattr(composer, 'build_messages', lambda *args, **kwargs: full)
+    seen = []
+
+    def invoke(uid, messages, **options):
+        seen.append((messages, options.get('tools')))
+        return _reply()
+
+    composer._compose_notes_first(UID, rows, invoke=invoke, **kwargs)
+    assert (seen[0][0] == full) is (extra_chars < 0)
+    assert seen[0][1] is None
+    assert composer._input_chars(*seen[0]) <= composer._input_chars(notes)
