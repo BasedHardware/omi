@@ -28,6 +28,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/services/experiments/summary_generation_gate.dart';
+import 'package:omi/services/first_value_recovery_service.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/audio/conversation_playback_controller.dart';
@@ -398,6 +399,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         surface: ProductSurface.conversationDetail,
         objectId: RecordReference.fromId(conversation.id),
       );
+      unawaited(FirstValueRecoveryService.instance.recordResultOpen(conversation.id));
     });
   }
 

@@ -9,6 +9,7 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/first_value_recovery_service.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -95,6 +96,7 @@ class NotificationUtil {
   static const String captureRecoveryRepairAction = 'repair_device';
   static const String captureRecoveryRoute = '/settings/device';
   static const String chatAnswerPushType = 'chat_answer';
+  static const String firstValueReadyNotificationType = 'first_value_ready_result';
 
   static String? routeFromFcmData(Map<String, dynamic> data) {
     final pushType = data['push_type'];
@@ -113,6 +115,9 @@ class NotificationUtil {
   }
 
   static Future<bool> handleFcmDataTap(Map<String, dynamic> data, {RecordReference? objectId}) async {
+    if (data['notification_type'] == firstValueReadyNotificationType && data['action'] == 'open_ready_result') {
+      return FirstValueRecoveryService.instance.openReadyResultFromPush();
+    }
     final route = routeFromFcmData(data);
     if (route == null) return false;
     if (data['push_type'] == captureRecoveryPushType) {

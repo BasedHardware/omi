@@ -61,6 +61,7 @@ import 'package:omi/services/quick_actions_service.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
+import 'package:omi/services/first_value_recovery_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
@@ -401,6 +402,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Reload convos
       if (mounted) {
+        unawaited(FirstValueRecoveryService.instance.checkOnAppOpen());
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
         captureProvider.setMetricsAppActive(true);
@@ -516,6 +518,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     });
 
     HomeNavigation.register(_openRoute);
+    unawaited(FirstValueRecoveryService.instance.checkOnAppOpen());
     _listenToMessagesFromNotification();
     _listenToFreemiumThreshold();
     _checkForAnnouncements();
