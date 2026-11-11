@@ -140,6 +140,49 @@ async def test_failed_job_202_is_a_refusal_without_bump_or_late_count(monkeypatc
     assert metrics.LATE_APPEND._value.get() == counter
 
 
+async def test_same_job_retry_after_refusal_clears_token_and_records_recovery(monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(database.time, 'time', lambda: NOW)
+    client = custody_client({PATH: {**ROW, 'record_upload_sessions': {}, 'record_audio_closed': True}})
+    monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
+    session = 'custody:retry-refused-job'
+    receipt = (*PATH, 'record_custody_recoveries', hashlib.sha256(session.encode()).hexdigest())
+    recovery_path = ('batch_pipeline_dev_jobs', recovery_segment('synthetic', 'record'))
+    counter = metrics.LATE_APPEND._value.get()
+
+    @request.custody_upload
+    async def upload(status):
+        await request.begin_upload('synthetic', 'record', 'retry-refused-job')
+        assert session in client.rows[PATH]['record_upload_sessions']
+        request.stored(['local'], ['archive'])
+        return JSONResponse(status_code=202, content={'status': status})
+
+    assert (await upload('failed')).status_code == 202
+    assert client.rows[receipt]['accepted'] is False
+    assert not client.rows[PATH]['record_upload_sessions']
+    assert client.rows[PATH]['record_upload_revision'] == 7
+    assert recovery_path not in client.rows
+    assert metrics.LATE_APPEND._value.get() == counter
+
+    assert (await upload('queued')).status_code == 202
+    assert not client.rows[PATH]['record_upload_sessions']
+    assert client.rows[PATH]['record_upload_revision'] == 8
+    assert client.rows[receipt]['accepted'] is True
+    assert client.rows[receipt]['upload_revision'] == 8
+    assert client.rows[receipt]['late'] is True
+    assert client.rows[PATH]['record_audio_partial']['upload_revision'] == 8
+    assert client.rows[recovery_path]['partial_coordinator']
+    assert client.rows[recovery_path]['state'] == 'record_pending'
+    assert metrics.LATE_APPEND._value.get() == counter + 1
+    before = deepcopy(client.rows)
+    assert database.begin('synthetic', 'record', session, firestore_client=client)
+    assert database.finish('synthetic', 'record', session, accepted=True, firestore_client=client)
+    assert client.rows == before
+    assert metrics.LATE_APPEND._value.get() == counter + 1
+
+
 @pytest.mark.parametrize('status', ['completed', 'processing', 'recording'])
 @pytest.mark.parametrize('final_mode', ['off', 'shadow', 'serve'])
 async def test_captured_input_recovery_survives_status_and_rollback(monkeypatch, status, final_mode):

@@ -116,9 +116,8 @@ def finish(uid, cid, session, *, accepted, late_observed: bool = False, firestor
     def commit(tx):
         # A response lost after commit must not masquerade as a cleared fence.
         # Read before every potential write, including continuation creation.
-        previous = receipt.get(transaction=tx)
-        if previous.exists:
-            recorded = previous.to_dict() or {}
+        recorded = receipt.get(transaction=tx).to_dict() or {}
+        if recorded.get('accepted'):
             return bool(recorded.get('late')), recorded.get('finish_attempt') == attempt
         assert_batch_write_allowed(client, tx, uid, conversation_ids=(cid,))
         row = ref.get(transaction=tx).to_dict() or {}
