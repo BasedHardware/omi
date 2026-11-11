@@ -82,8 +82,19 @@ def _dimensions(items, *, truncated=False) -> dict[str, str]:
 def _record_outcome(outcome: str) -> None:
     from utils.metrics import OMI_BILLING_RENEWAL_OBSERVATIONS
 
-    if outcome in {'eligible', 'created', 'duplicate', 'projection_error', 'write_error', 'timeout'}:
-        OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome=outcome).inc()
+    # Literal labels make the closed vocabulary explicit to the label ratchet.
+    if outcome == 'eligible':
+        OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='eligible').inc()
+    elif outcome == 'created':
+        OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='created').inc()
+    elif outcome == 'duplicate':
+        OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='duplicate').inc()
+    elif outcome == 'projection_error':
+        OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='projection_error').inc()
+    elif outcome == 'write_error':
+        OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='write_error').inc()
+    elif outcome == 'timeout':
+        OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='timeout').inc()
 
 
 def project_event(event: Mapping, *, now: datetime | None = None):

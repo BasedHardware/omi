@@ -1564,8 +1564,12 @@ OMI_BILLING_RENEWAL_OBSERVATIONS = Counter(
     'Verified billing observation deliveries, not distinct invoices or attempts',
     ['outcome'],
 )
-for _renewal_outcome in ('eligible', 'created', 'duplicate', 'projection_error', 'write_error', 'timeout'):
-    OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome=_renewal_outcome)
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='eligible')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='created')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='duplicate')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='projection_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='write_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='timeout')
 
 OMI_SUBSCRIPTION_EVENTS = Counter(
     'omi_subscription_events_total',
