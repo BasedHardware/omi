@@ -1,5 +1,7 @@
 import SwiftUI
 
+// Owns purchase and allowance observations for each mounted presentation.
+// Observation eligibility and latches preserve existing billing and quota authority.
 private struct PurchaseExposureModifier: ViewModifier {
   let source: String
   let currentPlan: String

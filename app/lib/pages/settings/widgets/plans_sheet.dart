@@ -765,7 +765,8 @@ class _PlansSheetState extends State<PlansSheet> {
     if (usageProvider.isLoadingPlans) {
       return const Column(children: [PlanOptionShimmer(), SizedBox(height: 18), PlanOptionShimmer()]);
     }
-    if (usageProvider.availablePlans != null) {
+    final plans = usageProvider.availablePlans?['plans'];
+    if (plans is List && plans.isNotEmpty) {
       return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
     }
     return OmiErrorState(
@@ -836,6 +837,8 @@ class _PlansSheetState extends State<PlansSheet> {
         final isCancelled = sub?.cancelAtPeriodEnd ?? false;
         final hasScheduledUpgrade = _hasScheduledUpgrade();
         final plansLoaded = !provider.isLoadingPlans && provider.availablePlans != null;
+        final isOnAnnualPlan = _getCurrentPlanDetails()?['interval'] == 'year';
+        final rendersPlanOptions = !isUnlimited || isCancelled || (!hasScheduledUpgrade && !isOnAnnualPlan);
 
         String renewalDate = '—';
         final periodEnd = sub?.currentPeriodEnd;
@@ -964,7 +967,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                 message: l10n.annualPlanStartsAutomatically,
                               );
                             }
-                            if (_getCurrentPlanDetails()?['interval'] == 'year') {
+                            if (isOnAnnualPlan) {
                               // Already on the annual plan - only the cancel option applies.
                               return PlanStatusCard(
                                 icon: Icons.check_circle_outline,
@@ -987,7 +990,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       // Continue/Upgrade — hidden for same-tier annual (nothing to change) and for
                       // desktop-plan → mobile-tier switches.
                       if (shouldShowPlanContinueButton(
-                        isOnAnnualPlan: _getCurrentPlanDetails()?['interval'] == 'year',
+                        isOnAnnualPlan: isOnAnnualPlan,
                         hasScheduledUpgrade: hasScheduledUpgrade,
                         isCancelled: isCancelled,
                         plansLoaded: plansLoaded,
@@ -1100,7 +1103,7 @@ class _PlansSheetState extends State<PlansSheet> {
             ),
           ),
         ).withPurchaseExposure(
-          enabled: _storefrontGateResolved,
+          enabled: _storefrontGateResolved && rendersPlanOptions && _hasRenderedLegacyOptions(provider),
           source: widget.analyticsSource,
           surface: PaywallViewedSurface.plansSheet,
           currentPlan: sub?.plan.wireName ?? 'unknown',
@@ -1201,17 +1204,36 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
+  Map<String, List<Map<String, dynamic>>> _groupLegacyPlans(List<Map<String, dynamic>> plans) {
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final plan in plans) {
+      final planId = plan['plan_id'] as String? ?? '';
+      grouped.putIfAbsent(planId, () => []).add(plan);
+    }
+    return grouped;
+  }
+
+  Map<String, dynamic>? _legacyPriceForInterval(List<Map<String, dynamic>> plans, String interval) =>
+      plans.firstWhereOrNull((plan) => plan['interval'] == interval);
+
+  /// Mirrors the rendered cards, including the single-tier interval fallback.
+  /// Unknown plan identities are not a new billing gate: their rendered cards still count.
+  bool _hasRenderedLegacyOptions(UsageProvider provider) {
+    if (provider.isLoadingPlans) return false;
+    final raw = provider.availablePlans?['plans'];
+    if (raw is! List || raw.isEmpty) return false;
+    final groups = _groupLegacyPlans(raw.cast<Map<String, dynamic>>());
+    if (groups.length <= 1) return true;
+    final interval = selectedPlan == 'yearly' ? 'year' : 'month';
+    return groups.values.any((plans) => _legacyPriceForInterval(plans, interval) != null);
+  }
+
   /// Groups available plans by plan_id and shows one card per tier.
   Widget _buildTierPlanCards({required Map<String, dynamic> availablePlans}) {
     final plans = (availablePlans['plans'] as List).cast<Map<String, dynamic>>();
     _keepCurrentPriceSelected(plans);
 
-    // Group plans by plan_id
-    final Map<String, List<Map<String, dynamic>>> grouped = {};
-    for (final plan in plans) {
-      final planId = plan['plan_id'] as String? ?? '';
-      grouped.putIfAbsent(planId, () => []).add(plan);
-    }
+    final grouped = _groupLegacyPlans(plans);
 
     // If only 1 tier, fallback to old behavior (monthly/yearly cards)
     if (grouped.length <= 1) {
@@ -1233,7 +1255,8 @@ class _PlansSheetState extends State<PlansSheet> {
 
     // A tier with no price for this billing period renders no card, so it cannot stay selected.
     // Select the current plan's tier, or the first tier, among those shown for this period.
-    final visibleTierIds = sortedTierIds.where((tid) => grouped[tid]!.any((p) => p['interval'] == interval)).toList();
+    final visibleTierIds =
+        sortedTierIds.where((tid) => _legacyPriceForInterval(grouped[tid]!, interval) != null).toList();
     if (visibleTierIds.isNotEmpty && !visibleTierIds.contains(selectedTierId)) {
       final activeTier = visibleTierIds.firstWhereOrNull((tid) => grouped[tid]!.any((p) => p['is_active'] == true));
       selectedTierId = activeTier ?? visibleTierIds.first;
@@ -1253,7 +1276,7 @@ class _PlansSheetState extends State<PlansSheet> {
         const SizedBox(height: 18),
         ...sortedTierIds.map((tierId) {
           final tierPlans = grouped[tierId]!;
-          final planForPeriod = tierPlans.firstWhereOrNull((p) => p['interval'] == (isYearly ? 'year' : 'month'));
+          final planForPeriod = _legacyPriceForInterval(tierPlans, interval);
           if (planForPeriod == null) return const SizedBox.shrink();
 
           // The tier's display name comes from the backend (subscription available_plans).
