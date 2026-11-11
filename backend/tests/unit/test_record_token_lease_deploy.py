@@ -33,7 +33,7 @@ def production_render_inputs(monkeypatch):
     parsed = renderer['_load_yaml'](manifest)
     composer = staging_check._load_composer(root)
     staging = composer.compose_staging(inputs={'STAGING_REDIS_HOST': '10.0.0.7'})
-    return_inputs = (root, manifest, renderer, staging)
+    return_inputs = (root, manifest, renderer, staging, parsed)
     # Match the canonical renderer suite: parse real source during setup, then
     # exercise main and all emitted artifacts in the guarded test call.
     monkeypatch.setitem(renderer['main'].__globals__, '_load_yaml', lambda path: parsed)
@@ -60,7 +60,7 @@ def test_custody_lease_covers_the_rendered_sync_request_timeout(
     monkeypatch, tmp_path, production_render_inputs, frame_seconds
 ):
     # Actual production renderer outputs and action consumption; no cloud CLI.
-    root, manifest, renderer, staging = production_render_inputs
+    root, manifest, renderer, staging, parsed = production_render_inputs
     workflow_output = tmp_path / 'github-output'
     state_output = tmp_path / 'state.json'
     monkeypatch.setenv('GITHUB_OUTPUT', str(workflow_output))
@@ -188,7 +188,7 @@ def test_prod_active_repair_scrapes_age_and_release_counters_without_enabling_id
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
 def test_shared_rollout_inputs_reach_sync_listen_pusher_and_repair(monkeypatch, production_render_inputs, mode):
-    root, manifest, renderer, staging = production_render_inputs
+    root, manifest, renderer, staging, parsed = production_render_inputs
     expected = {
         'RECORD_TOKEN_LEASE_MODE': mode,
         'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '10',
@@ -208,7 +208,8 @@ def test_shared_rollout_inputs_reach_sync_listen_pusher_and_repair(monkeypatch, 
     )
     for service in staging['cloud_run']['services'].values():
         assert {key: service['env'][key]['value'] for key in expected_staging} == expected_staging
-    parsed = renderer['_load_yaml'](manifest)
+    # run_path's returned _load_yaml still references the original loader,
+    # even after patching main.__globals__; reuse the real fixture parse.
     state = renderer['_render_cloud_run_state'](parsed['environments']['prod'])
     sync_env = {entry['name']: entry.get('value') for entry in state['services']['backend-sync']['env']}
     assert {key: sync_env[key] for key in expected} == expected
