@@ -15,7 +15,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from utils.conversations import phase_shadow
 
-from database._client import db, run_transactional
+from database._client import db, get_firestore_client, run_transactional
 
 LIMIT = 100
 # Expiry cleanup runs inside the read path, so each query is bounded to
@@ -77,8 +77,13 @@ def expire_in_transaction(transaction: Any, observed: Any, now: datetime) -> boo
     return True
 
 
-def items_ref(uid: str) -> Any:
-    return db.collection('users').document(uid).collection('processing_attention_items')
+def items_ref(uid: str, *, firestore_client: Any | None = None) -> Any:
+    return (
+        (firestore_client or get_firestore_client())
+        .collection('users')
+        .document(uid)
+        .collection('processing_attention_items')
+    )
 
 
 def generation(row: dict[str, Any]) -> str:
@@ -139,11 +144,11 @@ def unresolved(row: dict[str, Any] | None) -> bool:
     return not bool(structured.get('overview'))
 
 
-def _scan_pages(uid: str, start_after: Any | None):
+def _scan_pages(uid: str, start_after: Any | None, *, firestore_client: Any | None = None):
     """Yield active items in bounded pages, advancing on the last scanned document."""
     cursor = start_after
     while True:
-        query = items_ref(uid).where(filter=FieldFilter('active', '==', True))
+        query = items_ref(uid, firestore_client=firestore_client).where(filter=FieldFilter('active', '==', True))
         if cursor is not None:
             query = query.start_after(cursor)
         query = query.limit(SCAN_LIMIT)
@@ -158,15 +163,20 @@ def list_items(
     uid: str,
     limit: int | None = None,
     start_after: Any | None = None,
+    *,
+    firestore_client: Any | None = None,
 ) -> list[dict[str, Any]]:
     if limit is not None and limit <= 0:
         return []
+    client = firestore_client or get_firestore_client()
     result: list[dict[str, Any]] = []
     expiry_enabled = non_retryable_expiry_enabled()
     now = now_utc()
-    for snapshot in _scan_pages(uid, start_after):
+    for snapshot in _scan_pages(uid, start_after, firestore_client=client):
         item = snapshot.to_dict() or {}
-        conv_ref = db.collection('users').document(uid).collection('conversations').document(item['conversation_id'])
+        conv_ref = (
+            client.collection('users').document(uid).collection('conversations').document(item['conversation_id'])
+        )
         conv = conv_ref.get()
         row = conv.to_dict() if conv.exists else None
         if not unresolved(row):
@@ -182,7 +192,7 @@ def list_items(
                 item['retryable'] = True  # Repair items made permanently non-retryable by the old ledger.
             item['retry'] = {'state': operation['state'], 'operation_id': operation['operation_id']}
         if expiry_enabled and expired_non_retryable(item, now):
-            if run_transactional(db, firestore.transactional(expire_in_transaction), snapshot, now):
+            if run_transactional(client, firestore.transactional(expire_in_transaction), snapshot, now):
                 continue
         item['title'] = (row or {}).get('user_title') or ((row or {}).get('structured') or {}).get('title')
         item.pop('generation', None)

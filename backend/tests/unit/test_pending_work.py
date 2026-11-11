@@ -30,6 +30,7 @@ ROW = {
 def database(monkeypatch):
     client = StrictFirestore({CONV_PATH: ROW})
     monkeypatch.setattr(store, 'db', client)
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(routes, 'db', client)
     monkeypatch.setattr(store.firestore, 'transactional', lambda fn: fn)
 
@@ -204,13 +205,12 @@ def test_list_resolves_deleted_and_summarized_and_keeps_fallback_title(monkeypat
         conversations[cid].get.return_value = conv
         conversations[cid].collection.return_value.document.return_value.get.return_value = Mock(exists=False)
     collection.stream.return_value = items
-    monkeypatch.setattr(store, 'items_ref', lambda uid: collection)
+    monkeypatch.setattr(store, 'items_ref', lambda uid, **kwargs: collection)
     client = Mock()
     client.collection.return_value.document.return_value.collection.return_value.document.side_effect = (
         conversations.get
     )
-    monkeypatch.setattr(store, 'db', client)
-    result = store.list_items(UID)
+    result = store.list_items(UID, firestore_client=client)
     assert [item['id'] for item in result] == ['failed']
     assert result[0]['title'] == 'Minimum title'
     for snapshot in items[:3]:
@@ -234,7 +234,7 @@ def attention_query(database, monkeypatch, ids):
     query.document.side_effect = (
         database.collection('users').document(UID).collection('processing_attention_items').document
     )
-    monkeypatch.setattr(store, 'items_ref', lambda uid: query)
+    monkeypatch.setattr(store, 'items_ref', lambda uid, **kwargs: query)
     monkeypatch.setattr(store, 'now_utc', lambda: NOW)
     monkeypatch.delenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', raising=False)
     return snapshots
@@ -268,7 +268,7 @@ def test_list_expires_only_old_non_retryable_items(database, monkeypatch, expiry
     attention_query(database, monkeypatch, ids)
     if not expiry_enabled:
         monkeypatch.setenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', 'false')
-    result = store.list_items(UID)
+    result = store.list_items(UID, firestore_client=database)
     assert [item['id'] for item in result] == (ids[1:] if expiry_enabled else ids)
     assert database.rows[paths[0]]['active'] is not expiry_enabled
     assert all(database.rows[path]['active'] for path in paths[1:])
@@ -277,7 +277,7 @@ def test_list_expires_only_old_non_retryable_items(database, monkeypatch, expiry
         assert database.rows[paths[0]]['expiry_reason'] == 'non_retryable_ttl'
     else:
         monkeypatch.setenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', 'true')
-        assert [item['id'] for item in store.list_items(UID)] == ids[1:]
+        assert [item['id'] for item in store.list_items(UID, firestore_client=database)] == ids[1:]
 
 
 @pytest.mark.parametrize(
@@ -293,7 +293,7 @@ def test_list_expires_only_old_non_retryable_items(database, monkeypatch, expiry
 def test_expiry_normalizes_legacy_created_at(database, monkeypatch, created_at, expires):
     item_id, path = permanent_item(database, created_at=created_at)
     attention_query(database, monkeypatch, [item_id])
-    assert bool(store.list_items(UID)) is not expires
+    assert bool(store.list_items(UID, firestore_client=database)) is not expires
     assert database.rows[path]['active'] is not expires
 
 
@@ -301,7 +301,7 @@ def test_expiry_normalizes_legacy_created_at(database, monkeypatch, created_at, 
 def test_transient_non_retryable_items_do_not_expire(database, monkeypatch, failure_code):
     item_id, path = permanent_item(database, failure_code=failure_code)
     attention_query(database, monkeypatch, [item_id])
-    assert len(store.list_items(UID)) == 1
+    assert len(store.list_items(UID, firestore_client=database)) == 1
     assert database.rows[path]['active']
 
 
@@ -317,7 +317,7 @@ def test_failed_claim_repairs_retryability_before_expiry(database, monkeypatch):
     )
     database.rows[claim_ref.path] = {'state': 'failed', 'operation_id': 'legacy'}
     attention_query(database, monkeypatch, [item_id])
-    result = store.list_items(UID)
+    result = store.list_items(UID, firestore_client=database)
     assert result[0]['retryable'] is True
     assert result[0]['retry'] == {'state': 'failed', 'operation_id': 'legacy'}
     assert database.rows[path]['active']
@@ -344,7 +344,7 @@ def test_stale_poll_cannot_expire_concurrent_retry(database, monkeypatch, claim_
         return original_run(client, fn, *args, **kwargs)
 
     monkeypatch.setattr(store, 'run_transactional', interleave)
-    result = store.list_items(UID)
+    result = store.list_items(UID, firestore_client=database)
     assert bool(result) is claim_first
     assert database.rows[path]['active'] is claim_first
     if claim_first:
@@ -364,7 +364,7 @@ def test_expiry_refuses_changed_snapshot(database, monkeypatch, change):
     else:
         # Same data written again is still a different Firestore document version.
         observed.update_time = NOW - timedelta(seconds=1)
-    assert len(store.list_items(UID)) == 1
+    assert len(store.list_items(UID, firestore_client=database)) == 1
     assert not any('expired_at' in patch for tx in database.transactions for _, patch in tx.updates)
 
 
@@ -376,7 +376,7 @@ def test_attention_limit_is_after_expiry_filter(database, http_client, monkeypat
         item_id, _ = permanent_item(database, cid, **({'retryable': True} if index >= 3 else {}))
         ids.append(item_id)
     attention_query(database, monkeypatch, ids)
-    assert [item['id'] for item in store.list_items(UID, limit=2)] == ids[3:]
+    assert [item['id'] for item in store.list_items(UID, limit=2, firestore_client=database)] == ids[3:]
     # Rebuild the query with the remaining active set for the HTTP badge.
     attention_query(database, monkeypatch, ids[3:])
     monkeypatch.setattr(store, 'LIMIT', 2)
@@ -389,8 +389,8 @@ def test_attention_limit_is_after_expiry_filter(database, http_client, monkeypat
 def test_attention_zero_limit_returns_nothing(database, monkeypatch):
     item_id, path = permanent_item(database)
     attention_query(database, monkeypatch, [item_id])
-    assert store.list_items(UID, limit=0) == []
-    assert store.list_items(UID, limit=-1) == []
+    assert store.list_items(UID, limit=0, firestore_client=database) == []
+    assert store.list_items(UID, limit=-1, firestore_client=database) == []
     assert database.rows[path]['active'] is True
     assert not any(tx.updates for tx in database.transactions)
 
@@ -398,9 +398,9 @@ def test_attention_zero_limit_returns_nothing(database, monkeypatch):
 def test_attention_scan_is_bounded_and_paginates(database, monkeypatch):
     item_id, _ = permanent_item(database)
     attention_query(database, monkeypatch, [item_id])
-    query = store.items_ref(UID)
+    query = store.items_ref(UID, firestore_client=database)
     cursor = object()
-    assert store.list_items(UID, start_after=cursor) == []
+    assert store.list_items(UID, start_after=cursor, firestore_client=database) == []
     query.limit.assert_called_once_with(store.SCAN_LIMIT)
     query.start_after.assert_called_once_with(cursor)
 
@@ -481,7 +481,7 @@ def test_attention_pages_past_scan_limit_without_skipping(database, monkeypatch)
             expected.append(item_id)
     queries = []
 
-    def _items_ref(uid):
+    def _items_ref(uid, **kwargs):
         query = _PagingQuery(database, ('users', UID, 'processing_attention_items'))
         queries.append(query)
         return query
@@ -489,7 +489,7 @@ def test_attention_pages_past_scan_limit_without_skipping(database, monkeypatch)
     monkeypatch.setattr(store, 'items_ref', _items_ref)
     monkeypatch.setattr(store, 'now_utc', lambda: NOW)
     monkeypatch.delenv('PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED', raising=False)
-    ids = [item['id'] for item in store.list_items(UID)]
+    ids = [item['id'] for item in store.list_items(UID, firestore_client=database)]
     assert len(expected) > store.SCAN_LIMIT
     assert ids == expected
     assert len(ids) == len(set(ids))
