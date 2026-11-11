@@ -36,6 +36,44 @@ def _event(uid: str, variant: str, kind: str, stage: str, outcome: str) -> None:
     )
 
 
+class RecoveryPreparation(BaseModel):
+    ready: bool
+
+
+@router.get('/v1/first-value/recovery/prepare', response_model=RecoveryPreparation)
+def prepare_recovery_prompt(
+    uid: str = Depends(auth.get_current_user_uid),
+    first_value_protocol: str | None = Header(None, alias='X-Omi-First-Value-Protocol'),
+    notification_permission: str | None = Header(None, alias='X-Omi-Notification-Permission'),
+    time_zone: str | None = Header(None, alias='X-Omi-Time-Zone'),
+) -> RecoveryPreparation:
+    """Advisory candidate lookup; never claim a prompt or charge a daily cap.
+
+    Refresh capability and value evidence as on app open, but leave
+    entitlement, preferences, dedupe and cap authority to the queue-time claim.
+    """
+
+    if not recovery_enabled() or first_value_protocol != '1':
+        return RecoveryPreparation(ready=False)
+    now = datetime.now(timezone.utc)
+    try:
+        for start in recovery.recent_starts(uid, now=now):
+            start = recovery.record_client_capability(
+                uid,
+                start['start_id'],
+                start,
+                notifications_authorized=notification_permission == 'granted',
+                time_zone=time_zone or '',
+                now=now,
+            )
+            start = recovery.probe_start(uid, start['start_id'], start, now=now)
+            if next(iter(recovery.iter_candidate_kinds(start, now=now)), None) is not None:
+                return RecoveryPreparation(ready=recovery_enabled())
+    except Exception as error:
+        logger.warning('first-value preparation failed error_type=%s', type(error).__name__)
+    return RecoveryPreparation(ready=False)
+
+
 @router.get('/v1/first-value/recovery/prompt')
 def get_recovery_prompt(
     navigation: bool = False,

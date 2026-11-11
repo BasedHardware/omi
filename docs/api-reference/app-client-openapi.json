@@ -28742,6 +28742,19 @@
         "title": "RecordingVoice",
         "type": "object"
       },
+      "RecoveryPreparation": {
+        "properties": {
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ready"
+        ],
+        "title": "RecoveryPreparation",
+        "type": "object"
+      },
       "RedeemCodeRequest": {
         "properties": {
           "code": {
@@ -59603,6 +59616,129 @@
         "tags": [
           "fair_use"
         ]
+      }
+    },
+    "/v1/first-value/recovery/prepare": {
+      "get": {
+        "description": "Advisory candidate lookup; never claim a prompt or charge a daily cap.\n\nRefresh capability and value evidence as on app open, but leave\nentitlement, preferences, dedupe and cap authority to the queue-time claim.",
+        "operationId": "prepare_recovery_prompt_v1_first_value_recovery_prepare_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omi-First-Value-Protocol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-First-Value-Protocol"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Notification-Permission",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Notification-Permission"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Time-Zone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Time-Zone"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryPreparation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Prepare Recovery Prompt"
       }
     },
     "/v1/flags": {

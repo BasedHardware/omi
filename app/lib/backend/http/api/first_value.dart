@@ -37,6 +37,20 @@ class FirstValueResponse {
   }
 }
 
+/// Advisory only: never a durable claim or permission to display a prompt.
+class FirstValuePreparation {
+  const FirstValuePreparation({required this.ready});
+  final bool ready;
+
+  static FirstValuePreparation fromResponse(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) throw const FormatException('invalid first-value readiness');
+    final ready = decoded['ready'];
+    if (ready is! bool) throw const FormatException('invalid first-value readiness');
+    return FirstValuePreparation(ready: ready);
+  }
+}
+
 class FirstValueApi {
   FirstValueApi({String? baseUrl, this.send}) : baseUrl = baseUrl ?? Env.apiBaseUrl ?? '';
 
@@ -46,6 +60,28 @@ class FirstValueApi {
 
   final String baseUrl;
   final ApiSend? send;
+
+  /// A separate route keeps old servers from accidentally claiming a prompt.
+  Future<ApiResult<FirstValuePreparation>> prepare({
+    String? notificationPermission,
+    String? timeZone,
+  }) =>
+      executeApi(
+        request: ApiRequest(
+          url: '${baseUrl}v1/first-value/recovery/prepare',
+          method: 'GET',
+          headers: {
+            protocolHeader: '1',
+            if (notificationPermission != null) permissionHeader: notificationPermission,
+            if (timeZone != null) timeZoneHeader: timeZone,
+          },
+        ),
+        decode: FirstValuePreparation.fromResponse,
+        send: send,
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+      );
 
   Future<ApiResult<FirstValueResponse>> prompt({
     bool navigation = false,

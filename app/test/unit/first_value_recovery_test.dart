@@ -52,6 +52,34 @@ void main() {
     expect(await response(200, '{}'), isA<ApiFailure<FirstValueResponse>>());
   });
 
+  test('readiness requires an explicit boolean on the distinct nonclaiming route', () async {
+    for (final fixture in [
+      (200, '{"ready":false}', false),
+      (200, '{"ready":true}', true),
+      (404, '{}', null),
+      (500, '{}', null),
+      (200, '{}', null),
+      (200, '{"ready":"true"}', null),
+      (200, 'null', null),
+      (200, '[]', null),
+    ]) {
+      final result = await FirstValueApi(
+        baseUrl: 'https://fixture.invalid/',
+        send: (request) async {
+          expect(Uri.parse(request.url).path, '/v1/first-value/recovery/prepare');
+          expect(Uri.parse(request.url).query, isEmpty);
+          expect(request.headers[FirstValueApi.protocolHeader], '1');
+          return http.Response(fixture.$2, fixture.$1);
+        },
+      ).prepare();
+      if (fixture.$3 == null) {
+        expect(result, isA<ApiFailure<FirstValuePreparation>>());
+      } else {
+        expect((result as ApiSuccess<FirstValuePreparation>).data.ready, fixture.$3);
+      }
+    }
+  });
+
   test(
     'ready navigation authenticates the prompt instead of reading an FCM object id',
     () async {

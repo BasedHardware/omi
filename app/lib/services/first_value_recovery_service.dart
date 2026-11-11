@@ -64,19 +64,35 @@ class FirstValueRecoveryService {
         'notification_permission': capability['notificationPermission'] ?? 'unknown',
         if (capability['timeZone'] != null) 'time_zone': capability['timeZone'],
       });
+      // Optional network work must never occupy the active modal queue. This
+      // endpoint cannot claim or charge caps; old/disabled/unavailable servers
+      // abstain. The consumptive endpoint remains inside the presenter below.
+      final prepared = await _api.prepare(
+        notificationPermission: capability['notificationPermission'],
+        timeZone: capability['timeZone'],
+      );
+      if (identityEpoch != AnalyticsManager.identityEpoch ||
+          !_identityReady ||
+          prepared is! ApiSuccess<FirstValuePreparation> ||
+          !prepared.data.ready) {
+        return;
+      }
       PromptQueue.instance.enqueue(
         'first-value-recovery',
         PromptPriority.normal,
-        canShowNow: () => identityEpoch == AnalyticsManager.identityEpoch && _identityReady,
         show: (context) async {
           // Do not consume the durable claim while a higher-priority prompt
           // blocks the queue, or after the authenticated identity changes.
-          if (identityEpoch != AnalyticsManager.identityEpoch || !_identityReady) return;
+          if (!context.mounted ||
+              PromptQueue.instance.blocked() ||
+              identityEpoch != AnalyticsManager.identityEpoch ||
+              !_identityReady) return;
           final result = await _api.prompt(
             notificationPermission: capability['notificationPermission'],
             timeZone: capability['timeZone'],
           );
           if (!context.mounted ||
+              PromptQueue.instance.blocked() ||
               identityEpoch != AnalyticsManager.identityEpoch ||
               result is! ApiSuccess<FirstValueResponse>) {
             return;

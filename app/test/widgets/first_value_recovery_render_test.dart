@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -52,6 +53,27 @@ Future<void> _loadFonts() async {
   }
 }
 
+Future<void> _mountHome(WidgetTester tester) async {
+  PromptQueue.instance.reset();
+  AnalyticsManager.resetForTesting();
+  AnalyticsManager().bindIdentity('synthetic-owner');
+  FirstValueRecoveryService.instance.debugNotificationPermission = () async => true;
+  FirstValueRecoveryService.instance.debugTimeZone = () async => 'UTC';
+  addTearDown(() {
+    PromptQueue.instance.reset();
+    AnalyticsManager.resetForTesting();
+    FirstValueRecoveryService.instance.debugNotificationPermission = null;
+    FirstValueRecoveryService.instance.debugTimeZone = null;
+  });
+  await tester.pumpWidget(MaterialApp(
+    navigatorKey: globalNavigatorKey,
+    theme: buildOmiTheme(brightness: Brightness.dark),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: const Scaffold(body: SizedBox.expand()),
+  ));
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
@@ -67,6 +89,7 @@ void main() {
       final capture = kind == 'capture';
       final route = capture ? '/settings/device' : '/conversation/result-1';
       var requests = 0;
+      var preparations = 0;
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
       tester.view.physicalSize = const Size(393, 852);
@@ -81,6 +104,13 @@ void main() {
       FirstValueRecoveryService.instance.debugApi = FirstValueApi(
         baseUrl: 'https://fixture.invalid/',
         send: (request) async {
+          if (request.url.endsWith('/prepare')) {
+            expect(request.headers[FirstValueApi.protocolHeader], '1');
+            expect(request.headers[FirstValueApi.permissionHeader], 'granted');
+            expect(request.headers[FirstValueApi.timeZoneHeader], 'UTC');
+            preparations++;
+            return http.Response('{"ready":true}', 200);
+          }
           requests++;
           expect(request.headers[FirstValueApi.protocolHeader], '1');
           expect(request.headers[FirstValueApi.permissionHeader], 'granted');
@@ -116,6 +146,7 @@ void main() {
       PromptQueue.instance.blocked = () => true;
       await tester.runAsync(FirstValueRecoveryService.instance.checkOnAppOpen);
       await tester.pump();
+      expect(preparations, 1);
       expect(requests, 0, reason: 'A blocked prompt must not consume a server claim');
       PromptQueue.instance.blocked = () => false;
       await tester.runAsync(() async {
@@ -162,4 +193,141 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     });
   }
+
+  for (final outcome in ['empty', '404', 'failed', 'malformed', 'timeout']) {
+    testWidgets('deferred $outcome preparation never blocks an existing prompt', (tester) async {
+      await _mountHome(tester);
+      final lookup = Completer<http.Response>();
+      final paths = <String>[];
+      FirstValueRecoveryService.instance.debugApi = FirstValueApi(
+        baseUrl: 'https://fixture.invalid/',
+        send: (request) {
+          paths.add(Uri.parse(request.url).path);
+          return lookup.future;
+        },
+      );
+      final checking = FirstValueRecoveryService.instance.checkOnAppOpen();
+      await tester.pump();
+      expect(paths, ['/v1/first-value/recovery/prepare']);
+      expect(PromptQueue.instance.pendingIds, isEmpty);
+      expect(PromptQueue.instance.showingId, isNull);
+      var existingShown = false;
+      final existing = Completer<void>();
+      PromptQueue.instance.enqueue('existing-announcement', PromptPriority.normal, show: (_) async {
+        existingShown = true;
+        await existing.future;
+      });
+      await tester.pump();
+      expect(existingShown, isTrue, reason: 'Existing prompts run while optional HTTP is unresolved');
+      expect(PromptQueue.instance.showingId, 'existing-announcement');
+      if (outcome == 'timeout') {
+        await tester.pump(const Duration(seconds: 16));
+      } else if (outcome == 'failed') {
+        lookup.completeError(const SocketException('offline fixture'));
+      } else {
+        lookup.complete(http.Response(
+          outcome == 'empty' ? '{"ready":false}' : (outcome == 'malformed' ? '[]' : '{}'),
+          outcome == '404' ? 404 : 200,
+        ));
+      }
+      await tester.pump();
+      await checking;
+      expect(paths, ['/v1/first-value/recovery/prepare'], reason: 'No fallback to the consumptive route');
+      expect(PromptQueue.instance.pendingIds, isEmpty);
+      expect(PromptQueue.instance.showingId, 'existing-announcement');
+      existing.complete();
+      if (!lookup.isCompleted) lookup.complete(http.Response('{"ready":true}', 200));
+      await tester.pumpAndSettle();
+      expect(PromptQueue.instance.showingId, isNull);
+      expect(PromptQueue.instance.pendingIds, isEmpty, reason: 'Late readiness after timeout is ignored');
+    });
+  }
+
+  for (final phase in ['preparation', 'queued', 'claim', 'unmounted']) {
+    testWidgets('identity switch during $phase cannot display or claim stale work', (tester) async {
+      await _mountHome(tester);
+      final lookup = Completer<http.Response>();
+      final claim = Completer<http.Response>();
+      var claims = 0;
+      FirstValueRecoveryService.instance.debugApi = FirstValueApi(
+        baseUrl: 'https://fixture.invalid/',
+        send: (request) {
+          if (request.url.endsWith('/prepare')) return lookup.future;
+          claims++;
+          return claim.future;
+        },
+      );
+      PromptQueue.instance.blocked = () => phase == 'queued';
+      final checking = FirstValueRecoveryService.instance.checkOnAppOpen();
+      await tester.pump();
+      if (phase == 'preparation') AnalyticsManager().bindIdentity('other-owner');
+      lookup.complete(http.Response('{"ready":true}', 200));
+      await tester.pump();
+      await checking;
+      if (phase != 'preparation' && phase != 'unmounted') AnalyticsManager().bindIdentity('other-owner');
+      if (phase == 'unmounted') await tester.pumpWidget(const SizedBox());
+      if (phase == 'queued') {
+        expect(claims, 0);
+        PromptQueue.instance.blocked = () => false;
+        PromptQueue.instance.pump();
+      }
+      if (phase == 'claim' || phase == 'unmounted') {
+        expect(claims, 1);
+        claim.complete(http.Response('{"prompt":{"kind":"capture","route":"/settings/device"}}', 200));
+      }
+      await tester.pumpAndSettle();
+      expect(claims, phase == 'claim' || phase == 'unmounted' ? 1 : 0);
+      expect(find.text('Device Not Connected'), findsNothing);
+      expect(PromptQueue.instance.pendingIds, isEmpty, reason: 'Stale queue entries drain without claiming');
+      expect(PromptQueue.instance.showingId, isNull);
+    });
+  }
+
+  testWidgets('higher priority prompt retains the queue before any first-value claim', (tester) async {
+    await _mountHome(tester);
+    var claims = 0;
+    FirstValueRecoveryService.instance.debugApi = FirstValueApi(
+      baseUrl: 'https://fixture.invalid/',
+      send: (request) async {
+        if (request.url.endsWith('/prepare')) return http.Response('{"ready":true}', 200);
+        claims++;
+        return http.Response('{"prompt":null}', 200);
+      },
+    );
+    PromptQueue.instance.blocked = () => true;
+    await FirstValueRecoveryService.instance.checkOnAppOpen();
+    final higher = Completer<void>();
+    PromptQueue.instance.enqueue('existing-safety', PromptPriority.high, show: (_) => higher.future);
+    PromptQueue.instance.blocked = () => false;
+    PromptQueue.instance.pump();
+    await tester.pump();
+    expect(PromptQueue.instance.showingId, 'existing-safety');
+    expect(claims, 0);
+    higher.complete();
+    await tester.pumpAndSettle();
+    expect(claims, 1);
+    expect(PromptQueue.instance.showingId, isNull);
+  });
+
+  testWidgets('global hold starting during claim suppresses display', (tester) async {
+    await _mountHome(tester);
+    final claim = Completer<http.Response>();
+    var claims = 0;
+    FirstValueRecoveryService.instance.debugApi = FirstValueApi(
+      baseUrl: 'https://fixture.invalid/',
+      send: (request) {
+        if (request.url.endsWith('/prepare')) return Future.value(http.Response('{"ready":true}', 200));
+        claims++;
+        return claim.future;
+      },
+    );
+    await FirstValueRecoveryService.instance.checkOnAppOpen();
+    await tester.pump();
+    expect(claims, 1);
+    PromptQueue.instance.blocked = () => true;
+    claim.complete(http.Response('{"prompt":{"kind":"capture","route":"/settings/device"}}', 200));
+    await tester.pumpAndSettle();
+    expect(find.text('Device Not Connected'), findsNothing);
+    expect(PromptQueue.instance.showingId, isNull);
+  });
 }
