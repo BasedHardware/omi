@@ -21,9 +21,9 @@ async def test_batch_unit_end_to_end_read_budget(tmp_path, monkeypatch):
     # This proof targets batch admission, not the legacy fallback now selected
     # by the default legacy_sync=on rollout mode.
     monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.DRAINING)
-    # The legacy proof's synthetic worker implements process_batch(items)
-    # without the newer paid-dispatch authorization keyword.
-    monkeypatch.setattr(pump_module, 'cap_dispatch_enabled', lambda *args: False)
+    # Production batch offline admission defaults on. Exercise the synthetic
+    # worker's post-decode, pre-ASR recheck and include its Firestore reads.
+    monkeypatch.setattr(pump_module, 'cap_dispatch_enabled', lambda *args: True)
     before = snapshot_reads()
     await existing_batch_flow(tmp_path, monkeypatch)
     delta = delta_reads(before)
