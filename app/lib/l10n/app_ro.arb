@@ -2955,6 +2955,8 @@
     "syncCardThrottlePaused": "Sincronizarea este întreruptă pentru scurt timp — va fi reluată automat",
     "syncCardBackendBusy": "Serverele Omi sunt aglomerate — înregistrările tale se vor sincroniza imediat ce se eliberează capacitate",
     "unableToDetermineFirmwareVersion": "Nu se poate determina versiunea curentă a firmware-ului",
+    "applyCodeToCurrentPlan": "Aplică planului actual",
+    "subscriptionCodeResult": "{result, select, applied{Cod aplicat planului actual.} refused{Acest cod nu poate fi aplicat. Verifică codul și planul necesar.} conflict{Codul a fost deja folosit sau planul tău are deja o reducere.} rateLimited{Prea multe încercări. Așteaptă și încearcă mai târziu.} other{Codul nu a putut fi aplicat. Încearcă din nou.}}",
     "promoCode": "Cod promoțional",
     "enterPromoCode": "Introduceți codul promoțional",
     "invalidPromotionCode": "Cod promoțional invalid.",

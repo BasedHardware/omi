@@ -2988,6 +2988,8 @@
     "syncCardThrottlePaused": "Synkronisering er kortvarigt sat på pause — den genoptages automatisk",
     "syncCardBackendBusy": "Omis servere er travle — dine optagelser synkroniseres, når der igen er kapacitet",
     "unableToDetermineFirmwareVersion": "Kan ikke fastslå den aktuelle firmware-version",
+    "applyCodeToCurrentPlan": "Anvend på nuværende abonnement",
+    "subscriptionCodeResult": "{result, select, applied{Koden er anvendt på dit nuværende abonnement.} refused{Koden kan ikke anvendes. Kontroller koden og det krævede abonnement.} conflict{Koden er allerede brugt, eller dit abonnement har allerede rabat.} rateLimited{For mange forsøg. Vent og prøv igen senere.} other{Koden kunne ikke anvendes. Prøv igen.}}",
     "promoCode": "Kampagnekode",
     "enterPromoCode": "Indtast kampagnekode",
     "invalidPromotionCode": "Ugyldig kampagnekode.",

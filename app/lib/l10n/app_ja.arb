@@ -2980,6 +2980,8 @@
     "syncCardThrottlePaused": "同期を一時停止しています — 自動的に再開します",
     "syncCardBackendBusy": "Omi のサーバーが混雑しています — 空き容量が戻り次第、録音が同期されます",
     "unableToDetermineFirmwareVersion": "現在のファームウェアバージョンを特定できません",
+    "applyCodeToCurrentPlan": "現在のプランに適用",
+    "subscriptionCodeResult": "{result, select, applied{現在のプランにコードを適用しました。} refused{このコードは適用できません。コードと対象プランを確認してください。} conflict{コードが使用済みか、プランに割引が適用されています。} rateLimited{試行回数が多すぎます。しばらく待ってからお試しください。} other{コードを適用できませんでした。もう一度お試しください。}}",
     "promoCode": "プロモコード",
     "enterPromoCode": "プロモコードを入力",
     "invalidPromotionCode": "無効なプロモコードです。",

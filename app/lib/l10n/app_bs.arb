@@ -10366,6 +10366,8 @@
     "syncCardThrottlePaused": "Sinhronizacija je nakratko pauzirana — nastavit će se automatski",
     "syncCardBackendBusy": "Omi serveri su zauzeti — vaši snimci će se sinhronizovati kada se oslobodi kapacitet",
     "unableToDetermineFirmwareVersion": "Nije moguće odrediti trenutnu verziju firmvera",
+    "applyCodeToCurrentPlan": "Primijeni na trenutni plan",
+    "subscriptionCodeResult": "{result, select, applied{Kod je primijenjen na vaš trenutni plan.} refused{Ovaj kod se ne može primijeniti. Provjerite kod i potreban plan.} conflict{Kod je već iskorišten ili vaš plan već ima popust.} rateLimited{Previše pokušaja. Pričekajte i pokušajte kasnije.} other{Kod nije moguće primijeniti. Pokušajte ponovo.}}",
     "promoCode": "Promo kod",
     "enterPromoCode": "Unesite promo kod",
     "invalidPromotionCode": "Nevažeći promo kod.",

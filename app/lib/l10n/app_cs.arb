@@ -2946,6 +2946,8 @@
     "syncCardThrottlePaused": "Synchronizace je krátce pozastavena — automaticky se obnoví",
     "syncCardBackendBusy": "Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita",
     "unableToDetermineFirmwareVersion": "Nelze určit aktuální verzi firmwaru",
+    "applyCodeToCurrentPlan": "Použít na aktuální tarif",
+    "subscriptionCodeResult": "{result, select, applied{Kód byl použit na váš aktuální tarif.} refused{Tento kód nelze použít. Zkontrolujte kód a požadovaný tarif.} conflict{Kód již byl použit nebo váš tarif již má slevu.} rateLimited{Příliš mnoho pokusů. Počkejte a zkuste to později.} other{Kód se nepodařilo použít. Zkuste to znovu.}}",
     "promoCode": "Promo kód",
     "enterPromoCode": "Zadejte promo kód",
     "invalidPromotionCode": "Neplatný promo kód.",
