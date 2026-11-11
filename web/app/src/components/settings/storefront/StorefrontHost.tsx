@@ -87,9 +87,9 @@ async function purchase(
 ): Promise<string | null> {
   const decision = storefrontCheckoutDecision(data, tier, price, livePlanId);
   if (decision === 'refuse' || price.id === null) return null;
-  trackUpgradePlanSelected(tier.planId, price.interval, source);
   const paid = data.current?.priceId != null;
   if (decision === 'checkout' && paid) {
+    trackUpgradePlanSelected(tier.planId, price.interval, source);
     const result = await upgradeSubscription(price.id);
     if (result?.status === 'success' || result?.scheduled_start) {
       trackUpgradeSucceeded(tier.planId, price.interval);
@@ -100,7 +100,14 @@ async function purchase(
   }
   const result = await createCheckoutSession(price.id);
   if (result?.url) {
-    if (!openCheckoutWindow(result.url)) return CHECKOUT_POPUP_BLOCKED;
+    if (
+      !openCheckoutWindow(result.url, {
+        plan: tier.planId,
+        billingInterval: price.interval,
+        source,
+      })
+    )
+      return CHECKOUT_POPUP_BLOCKED;
     const handleFocus = () => {
       onSubscriptionUpdate();
       window.removeEventListener('focus', handleFocus);
@@ -109,6 +116,7 @@ async function purchase(
     return null;
   }
   if (result?.status === 'reactivated') {
+    trackUpgradePlanSelected(tier.planId, price.interval, source);
     trackUpgradeSucceeded(tier.planId, price.interval);
     onSubscriptionUpdate();
     return null;

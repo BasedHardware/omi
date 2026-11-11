@@ -1,6 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const capture = vi.hoisted(() =>
+  vi.fn((_event: string, _properties?: Record<string, unknown>) => {
+    throw new Error('localStorage blocked');
+  }),
+);
+
 const createCheckoutSession = vi.fn(async (_priceId: string) => ({
   url: 'https://checkout.stripe.test/pay',
 }));
@@ -8,9 +14,7 @@ const createCheckoutSession = vi.fn(async (_priceId: string) => ({
 vi.mock('posthog-js', () => ({
   default: {
     init: vi.fn(),
-    capture: vi.fn(() => {
-      throw new Error('localStorage blocked');
-    }),
+    capture,
     identify: vi.fn(),
     reset: vi.fn(),
     setPersonProperties: vi.fn(),
@@ -32,6 +36,7 @@ import { PlansSheet } from '@/components/settings/PlansSheet';
 describe('PlansSheet checkout', () => {
   beforeEach(() => {
     createCheckoutSession.mockClear();
+    capture.mockClear();
     vi.stubGlobal(
       'open',
       vi.fn(() => ({} as Window)),
@@ -140,6 +145,19 @@ describe('PlansSheet checkout', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Continue to Payment' }));
     expect(await screen.findByText(CHECKOUT_POPUP_BLOCKED)).toBeTruthy();
+    expect(
+      capture.mock.calls.filter(([event]) => event === 'Upgrade Plan Selected'),
+    ).toEqual([
+      [
+        'Upgrade Plan Selected',
+        {
+          plan: 'unlimited_v2',
+          billing_interval: 'month',
+          source: 'web_plans',
+          launch_result: 'blocked',
+        },
+      ],
+    ]);
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
     fireEvent.focus(window);
     expect(onSubscriptionUpdate).not.toHaveBeenCalled();
@@ -150,5 +168,27 @@ describe('PlansSheet checkout', () => {
     expect(screen.queryByText(CHECKOUT_POPUP_BLOCKED)).toBeNull();
     fireEvent.focus(window);
     expect(onSubscriptionUpdate).toHaveBeenCalledTimes(1);
+    expect(
+      capture.mock.calls.filter(([event]) => event === 'Upgrade Plan Selected'),
+    ).toEqual([
+      [
+        'Upgrade Plan Selected',
+        {
+          plan: 'unlimited_v2',
+          billing_interval: 'month',
+          source: 'web_plans',
+          launch_result: 'blocked',
+        },
+      ],
+      [
+        'Upgrade Plan Selected',
+        {
+          plan: 'unlimited_v2',
+          billing_interval: 'month',
+          source: 'web_plans',
+          launch_result: 'opened',
+        },
+      ],
+    ]);
   });
 });
