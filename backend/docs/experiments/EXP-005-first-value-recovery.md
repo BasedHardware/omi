@@ -5,7 +5,7 @@
 
 ## Bound goal and evidence
 
-Target: all-paid paying-subscriber churn of 10% first (charter13), then the 10% monthly-plan follow-on; both remain published. This monthly experiment does not change either denominator. The supporting proposal's 0.65–1.15 monthly-plan-point scenario is observational, overlapping and non-causal; it is not an expected lift and is not additive with other recovery work. Source evidence: `omi-knowledge-base/projects/omi-100m-plan/evidence/2026-11-11-churn-first-value-recovery-proposal.md` and `2026-11-11-churn-low-engagement.md`.
+Target: all-paid paying-subscriber churn of 10% first (charter13), then the 10% monthly-plan follow-on; both remain published. This monthly experiment does not change either denominator. The supporting proposal's 0.65–1.15 monthly-plan-point scenario is observational, overlapping and non-causal; its churn effect is **UNMEASURED**; it is not an expected lift and is not additive with other recovery work. Source evidence: `omi-knowledge-base/projects/omi-100m-plan/evidence/2026-11-11-churn-first-value-recovery-proposal.md` and `2026-11-11-churn-low-engagement.md`.
 
 ## Cohort and assignment
 
@@ -22,9 +22,39 @@ One paid start can receive at most one capture route and one ready-result route 
 1. **Capture recovery:** at `paid_start_at + 72h`, only if no non-failed/non-hidden/non-discarded/non-deleted/unlocked saved conversation is observed at or after paid start. Next app open claims the in-app prompt. A capture push additionally requires a notification token/timezone, no opt-out, and an actual Omi/Friend Pendant connection observed in the last 24h. It uses the shipped `capture_recovery` / `repair_device` payload and `/settings/device` route.
 2. **Ready result:** at `summary_completed_at + 24h`, only when that completed result still exists and has not rendered in Conversation Detail. `summary_completed_at`, not paid start or capture end, is the capture-ready clock. The route uses the shipped `/conversation/{id}` destination. Ready FCM carries no result or user identifier; protocol-1 mobile clients resolve the exact deep link through authenticated `GET /v1/first-value/recovery/prompt?navigation=true&kind=result`. `/conversations` remains a generic safe-route fallback, not proof of exact-result support.
 3. **Supported-client fence:** only the new Flutter checkout claims with `X-Omi-First-Value-Protocol: 1`. A normal app open or resumed Home enqueues the prompt check; the durable claim is requested only when the queue presents that item, after checking authenticated identity. A crash between claim and actual display can lose that attempt; claims are not displayed-delivery receipts. It it also reports the actual notification permission and IANA timezone through the existing notification service. The per-start capability and granted-permission timestamps must be at most 24h old for push, and the claim transaction rechecks them. OS notification permission gates push only, as in the original proposal; the account notification opt-out gates both surfaces. Quiet hours require a known valid client or stored user timezone. Missing/denied permission or stale push capability prevents push; old clients, desktop and unknown protocol do not enter the in-app route. Pendant reports refresh the same fence. Consent-governed `First Value Recovery Client Capability` analytics (protocol, permission state and IANA timezone, with the existing authenticated analytics identity only) is emitted independently of delivery on supported app opens. This provides dark-client coverage for the admitted future aggregate dry run without querying or writing experiment state while disabled. The protocol header alone does not grant entitlement or fabricate a result: server billing, ownership, value and result probes remain authoritative.
-4. A `users/.../first_value_prompts/{kind}` transaction per paid start enforces 30-day dedupe, paid-start expiry, same-subscription/same-price paid coverage, cancellation, paid end, opt-out, local 08:00–22:00 quiet hours, and one first-value prompt per local day. Value/result state is reread in that transaction. Failed/undeliverable attempts do not release the claim into a duplicate send; ordinary product capture/result behavior is unchanged.
-5. Background work reads at most 50 due experiment-start rows per existing notifications-job pass, then schedules its next six-hour probe. App open reads at most 12 starts for only that account. Product probes read at most 26 post-paid-start conversations; truncation is unknown coverage and cannot send. Neither path scans the users collection. Controls use identical value probes and can never claim a prompt.
+4. A `users/.../first_value_prompts/{kind}` transaction per paid start enforces 30-day dedupe, paid-start expiry, same-subscription/same-price paid coverage, cancellation, paid end, opt-out, local 08:00–22:00 quiet hours, and one first-value prompt per local day. The persisted start value/result state is reread in that transaction; this is not atomic saved-capture absence (see below). Failed/undeliverable attempts do not release the claim into a duplicate send; ordinary product capture/result behavior is unchanged.
+5. Background work reads at most 50 due experiment-start rows per existing notifications-job pass, then schedules its next six-hour probe. App open reads at most 12 starts for only that account. Each product probe reads at most 26 post-paid-start conversations. A candidate capture claim repeats that bounded probe once immediately before its transaction (at most 52 rows including the initial probe); truncation in either probe is unknown coverage and cannot send. Neither path scans the users collection. Controls use identical value probes and can never claim a prompt.
 6. Entitlement/preference changes and killing intake cannot make an old assignment eligible. Authoritative saved-conversation state and the actual rendered Conversation Detail callback—not prompt CTA clicks—suppress further prompts in both arms. The kill stops experiment outcome queries/writes as well as new delivery. Ordinary existing ProductValue result-viewed/capture telemetry continues; a post-rollback outcome read requires the separately admitted aggregate join and must report observation gaps, never infer missing outcomes as zero. Any owned completed visible result opened after paid start counts, not only the earliest prompted result. State retention does not create a delivery queue or permit post-30-day sends.
+
+### Capture probe/claim concurrency disposition — activation blocker
+
+Capture absence is a query snapshot, never an atomic claim precondition. Before
+claiming on either surface, the server repeats the same bounded indexed product
+query. A newly observed saved capture is recorded on the start document inside
+the claim transaction, with no prompt or daily-cap charge. Once persisted, that
+positive capture fact suppresses subsequent claims, including stale callers;
+empty/stale probes cannot clear it. Truncation or query failure suppresses the
+attempt. The claim also rereads any capture fact persisted by a concurrent probe.
+
+A conversation saved after the final query snapshot, but not yet observed by an
+experiment probe, can still race the claim. Conversation writers do not update
+the start document and are outside this transaction's read set. The interval is
+bounded by one query/claim attempt, **not by a guaranteed wall-clock freshness
+limit**. A process pause can extend it. A post-claim save can also precede actual
+in-app display or FCM acceptance; a committed claim is not a delivery receipt.
+The durable 30-day dedupe and local-day cap still bound duplicate attempts; they
+do not turn absence into atomic evidence or prevent a stale recovery message.
+
+`test_first_value_recovery.py` covers both channels: save before recheck,
+positive-fence persistence, an observed save between recheck and transaction,
+truncation/failure, stale empty probe, and the explicitly permitted residual
+save-after-snapshot race. These are deterministic source interleavings using
+query snapshots and strict document transactions, not emulator contention proof.
+No production writer or data change is included. Closing the residual race
+requires a separately scoped writer-coordinated fence or a proven transactional
+query design with real Firestore contention coverage. **Keep delivery OFF and
+intake 0 pending independent review and explicit product disposition through
+goals-coord/David; this mitigation does not clear that activation gate.**
 
 Final copy is provisional and remains an activation gate. Analytics carries only experiment/variant, fixed kind/channel/outcome and timestamps. Push contains fixed routing verbs and generic routes only, never transcript, summary, titles, account identifiers, subscription identifiers or result identifiers.
 

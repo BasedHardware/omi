@@ -78,7 +78,9 @@ class FirstValueRecoveryService {
           );
           if (!context.mounted ||
               identityEpoch != AnalyticsManager.identityEpoch ||
-              result is! ApiSuccess<FirstValueResponse>) return;
+              result is! ApiSuccess<FirstValueResponse>) {
+            return;
+          }
           final prompt = result.data.prompt;
           if (prompt == null || !_identityReady) return;
           final l10n = context.l10n;

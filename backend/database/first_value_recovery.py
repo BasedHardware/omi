@@ -404,7 +404,7 @@ def probe_start(
                 'signal_coverage',
                 'last_probed_at',
             )
-            if key in result
+            if key in result and (key != 'capture_saved_at' or _aware(result[key]) is not None)
         },
         merge=True,
     )
@@ -561,7 +561,12 @@ def claim_prompt(
     now: datetime,
     firestore_client: Any = None,
 ) -> dict[str, Any] | None:
-    """Atomically enforce entitlement, opt-out, quiet hours, daily cap and 30-day dedupe."""
+    """Fence durable start/user state, daily cap and dedupe; recheck capture evidence.
+
+    Capture absence is a bounded query snapshot, NOT an atomic condition of this
+    transaction. Conversation writers do not update the start document. A save
+    after this recheck can still race the claim; see EXP-005's admission blocker.
+    """
 
     if kind not in PROMPT_KINDS or channel not in {'in_app', 'push'} or not prompt_kind(start, kind, now=now):
         return None
@@ -573,14 +578,32 @@ def claim_prompt(
     if suppression:
         return None
     day_ref = user_ref.collection(DELIVERY_DAYS).document(local_date)
+    # Reuse the same indexed, bounded probe immediately before the claim. A
+    # positive observation becomes a durable start-document suppression fence;
+    # truncation cannot authorize a claim. No query runs inside the transaction.
+    capture_saved_at = None
+    capture_truncated = False
+    paid_start_at = _aware(start.get('paid_start_at'))
+    if kind == CAPTURE:
+        if paid_start_at is None:
+            return None
+        capture_rows, capture_truncated = _probe_conversations(uid, paid_start_at, client)
+        capture_saved_at = min(
+            (
+                created
+                for row in capture_rows
+                if _visible_saved_conversation(row) and (created := _aware(row.get('created_at'))) is not None
+            ),
+            default=None,
+        )
     ready_ref = None
     if kind == RESULT:
         ready_ref = user_ref.collection('conversations').document(str(start['ready_result_conversation_id']))
 
     @firestore.transactional
-    def claim(transaction: Any) -> dict[str, Any] | None:
-        # Every read precedes every write; cancellation/paid-end/value additions
-        # racing this transaction fence the claim instead of producing a send.
+    def claim(transaction: Any) -> tuple[dict[str, Any] | None, bool]:
+        # Every read precedes every write. Changes to these documents fence
+        # claims; new conversation rows are outside this transaction read set.
         user_snapshot = user_ref.get(transaction=transaction)
         start_snapshot = start_ref.get(transaction=transaction)
         prompt_snapshot = prompt_ref.get(transaction=transaction)
@@ -589,21 +612,29 @@ def claim_prompt(
         user = user_snapshot.to_dict() or {} if user_snapshot.exists else {}
         current = start_snapshot.to_dict() or {} if start_snapshot.exists else {}
         if not current or prompt_snapshot.exists or not prompt_kind(current, kind, now=now):
-            return None
+            return None, False
+        if kind == CAPTURE:
+            if _aware(current.get('paid_start_at')) != paid_start_at:
+                return None, False
+            if capture_saved_at is not None:
+                transaction.update(start_ref, {'capture_saved_at': capture_saved_at})
+                return None, True
+            if capture_truncated:
+                return None, False
         if ready_ref is not None:
             ready = ready_snapshot.to_dict() or {} if ready_snapshot is not None and ready_snapshot.exists else {}
             if not _ready_result_available(ready, current):
-                return None
+                return None, False
         if _current_suppression(user, current, now=now) is not None:
-            return None
+            return None, False
         current_date, current_suppression = _local_date_or_suppression(user, now, current)
         if current_suppression or current_date != local_date:
-            return None
+            return None, False
         if channel == 'push' and not _client_capability_current(current, now):
-            return None
+            return None, False
         day = day_snapshot.to_dict() or {} if day_snapshot.exists else {}
         if int(day.get('prompt_count', 0)) >= LOCAL_PROMPT_CAP:
-            return None
+            return None, False
         route = route_for(kind, current)
         claimed_at = now
         transaction.create(
@@ -611,9 +642,12 @@ def claim_prompt(
             {'kind': kind, 'channel': channel, 'claimed_at': claimed_at, 'expires_at': current['expires_at']},
         )
         transaction.set(day_ref, {'prompt_count': int(day.get('prompt_count', 0)) + 1, 'local_date': local_date})
-        return {'kind': kind, 'channel': channel, 'route': route, 'claimed_at': claimed_at}
+        return {'kind': kind, 'channel': channel, 'route': route, 'claimed_at': claimed_at}, False
 
-    return claim(client.transaction())
+    prompt, capture_recorded = claim(client.transaction())
+    if capture_recorded and capture_saved_at is not None and paid_start_at is not None:
+        _emit_value(uid, str(start.get('variant')), CAPTURE, paid_start_at, capture_saved_at)
+    return prompt
 
 
 def resolve_push_navigation(

@@ -343,6 +343,140 @@ def _strict(rows=None):
     return StrictFirestore(seeded)
 
 
+@pytest.fixture(autouse=True)
+def strict_product_probe(monkeypatch):
+    # The product query is OUTSIDE the claim transaction. Evaluate its real
+    # filters on a snapshot fake; keep strict document transaction ordering.
+    # This does not model retries, phantom locks or Firestore contention.
+    original = recovery._probe_conversations
+
+    def probe(uid, paid_start_at, client):
+        if isinstance(client, StrictFirestore):
+            client = FakeFirestore({'/'.join(path): row for path, row in client.rows.items()})
+        return original(uid, paid_start_at, client)
+
+    monkeypatch.setattr(recovery, '_probe_conversations', probe)
+    monkeypatch.setattr(recovery, '_emit_value', Mock())
+
+
+@pytest.mark.parametrize('channel', ['in_app', 'push'])
+def test_capture_saved_after_initial_probe_is_rechecked_and_durably_suppresses(channel):
+    stale = _start()  # Earlier product probe observed absence.
+    client = _strict(
+        {
+            ('users', 'fixture-user', 'conversations', 'new-capture'): {
+                'created_at': NOW - timedelta(minutes=1),
+                'status': 'processing',
+            }
+        }
+    )
+    assert (
+        recovery.claim_prompt(
+            'fixture-user', START_ID, stale, recovery.CAPTURE, channel, now=NOW, firestore_client=client
+        )
+        is None
+    )
+    start_path = ('users', 'fixture-user', 'first_value_starts', START_ID)
+    assert client.rows[start_path]['capture_saved_at'] == NOW - timedelta(minutes=1)
+    assert not any('first_value_prompts' in path or 'first_value_delivery_days' in path for path in client.rows)
+    recovery._emit_value.assert_called_once()
+
+    # Even if the product row disappears and a stale caller tries again, the
+    # observed positive fact survives on the transaction's start document.
+    del client.rows[('users', 'fixture-user', 'conversations', 'new-capture')]
+    assert (
+        recovery.claim_prompt(
+            'fixture-user', START_ID, stale, recovery.CAPTURE, channel, now=NOW, firestore_client=client
+        )
+        is None
+    )
+    recovery._emit_value.assert_called_once()
+
+
+def test_truncated_claim_recheck_cannot_use_earlier_complete_absence():
+    rows = {
+        ('users', 'fixture-user', 'conversations', f'hidden-{index}'): {
+            'created_at': START_AT,
+            'status': 'hidden',
+        }
+        for index in range(recovery.MAX_PRODUCT_ROWS)
+    }
+    client = _strict(rows)
+    assert (
+        recovery.claim_prompt(
+            'fixture-user', START_ID, _start(), recovery.CAPTURE, 'in_app', now=NOW, firestore_client=client
+        )
+        is None
+    )
+    assert not any('first_value_prompts' in path for path in client.rows)
+
+
+def test_claim_recheck_failure_never_creates_claim_or_daily_charge(monkeypatch):
+    client = _strict()
+    monkeypatch.setattr(recovery, '_probe_conversations', Mock(side_effect=RuntimeError('synthetic probe failure')))
+    with pytest.raises(RuntimeError, match='synthetic probe failure'):
+        recovery.claim_prompt(
+            'fixture-user', START_ID, _start(), recovery.CAPTURE, 'in_app', now=NOW, firestore_client=client
+        )
+    assert client.transactions == []
+    assert not any('first_value_prompts' in path for path in client.rows)
+
+
+def test_observed_capture_between_recheck_and_transaction_fences_stale_absence(monkeypatch):
+    client = _strict()
+
+    def recheck_then_record(*_args):
+        client.rows[('users', 'fixture-user', 'first_value_starts', START_ID)]['capture_saved_at'] = NOW
+        return [], False
+
+    monkeypatch.setattr(recovery, '_probe_conversations', recheck_then_record)
+    assert (
+        recovery.claim_prompt(
+            'fixture-user', START_ID, _start(), recovery.CAPTURE, 'push', now=NOW, firestore_client=client
+        )
+        is None
+    )
+    assert not any('first_value_prompts' in path for path in client.rows)
+
+
+@pytest.mark.parametrize('channel', ['in_app', 'push'])
+def test_unobserved_save_after_recheck_can_still_race_claim(monkeypatch, channel):
+    # Honest boundary test: a conversation insertion does not modify the start
+    # read set. The residual interval is NOT an atomic absence guarantee.
+    client = _strict()
+    start_path = ('users', 'fixture-user', 'first_value_starts', START_ID)
+    earlier_start = dict(client.rows[start_path])
+
+    def recheck_then_save(*_args):
+        client.rows[('users', 'fixture-user', 'conversations', 'racing-capture')] = {
+            'created_at': NOW,
+            'status': 'processing',
+        }
+        return [], False  # The recheck's snapshot preceded the save.
+
+    monkeypatch.setattr(recovery, '_probe_conversations', recheck_then_save)
+    assert (
+        recovery.claim_prompt(
+            'fixture-user', START_ID, _start(), recovery.CAPTURE, channel, now=NOW, firestore_client=client
+        )
+        is not None
+    )
+    assert client.rows[start_path] == earlier_start
+
+
+def test_stale_empty_probe_cannot_erase_new_durable_capture(monkeypatch):
+    path = f'users/fixture-user/first_value_starts/{START_ID}'
+    client = FakeFirestore({path: _start()})
+
+    def stale_snapshot_after_positive_write(*_args):
+        client.docs[path]['capture_saved_at'] = NOW
+        return [], False
+
+    monkeypatch.setattr(recovery, '_probe_conversations', stale_snapshot_after_positive_write)
+    recovery.probe_start('fixture-user', START_ID, _start(capture_saved_at=None), now=NOW, firestore_client=client)
+    assert client.docs[path]['capture_saved_at'] == NOW
+
+
 def test_claim_is_durable_per_start_and_daily_cap_is_transactional():
     client = _strict()
     first = recovery.claim_prompt(

@@ -4386,6 +4386,26 @@ _add(
         neutrals={'limit': (50, 'bounded experiment probe page; fixed')},
     )
 )
+_add(
+    DriverEntry(
+        'database.first_value_recovery.claim_prompt',
+        base={
+            'uid': UID,
+            'start_id': 'a' * 32,
+            'start': {
+                'variant': 'treatment',
+                'paid_start_at': T0 - timedelta(days=4),
+                'expires_at': T1,
+                'signal_coverage': 'complete',
+                'client_time_zone': 'UTC',
+                'ready_result_at': T0 - timedelta(days=2),
+                'ready_result_conversation_id': 'result-1',
+            },
+            'now': T0.replace(hour=12),
+        },
+        domains={'kind': ['capture', 'result'], 'channel': ['in_app', 'push']},
+    )
+)
 _add(DriverEntry('database.first_value_recovery._probe_conversations', base={'uid': UID, 'paid_start_at': T0}))
 _add(
     DriverEntry(
