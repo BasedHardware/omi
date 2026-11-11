@@ -164,6 +164,10 @@ def _epoch(value: Any) -> float | None:
     return None
 
 
+# Public read helper for the C2 census; the write path keeps using ``_epoch``.
+epoch = _epoch
+
+
 def _pick(value: Any, existing: Mapping[str, Any] | None, key: str, default: Any = None) -> Any:
     return value if value is not None else (existing or {}).get(key, default)
 
