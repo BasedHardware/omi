@@ -75,6 +75,25 @@ threshold and `noDataState: Alerting`. The breach rule retains its freshness gat
 and the blind rule retains `noDataState: OK`. The separate held-backlog page adds the saturation condition
 above; its existing growth thresholds, <900 s freshness budget and 15-minute pending duration remain unchanged.
 
+Every eligible leader must have the same export coverage. Cloud Run integration uses
+`deploy/cloud_run_gmp_sync.yaml`; its GMP resource labels are
+`cluster="__run__"`, `namespace="backend-integration"` (from `K_SERVICE`) and
+`job="omi-cloud-run-application-metrics"` (the RunMonitoring name).
+GKE uses `namespace="prod-omi-backend"` and the batch worker PodMonitoring job;
+that PodMonitoring has no metric allowlist. The dev/prod sync Stackdriver exporter
+prefixes must also import the timeliness families. The Prometheus bridge scrapes
+them as `job="cloud-run-application-metrics"` and rewrites the metric names back to
+`omi_*`. Keep timeliness selectors independent of job and namespace: a production
+GKE namespace selector excludes the Cloud Run leader. Fleet queries such as
+`max by (leg) (omi_batch_timeliness_new_over_sla_units)` accept either plane and
+avoid double-counting overlapping handoffs. No alert or recording expression
+currently consumes that count directly; the breach rule uses oldest age and
+the freshness rule uses the observation timestamp, both with fleet-wide `max`.
+`test_timeliness_metrics_are_scraped.py` derives all names from the producer's
+timeliness registration section and checks both export filters. Deployment still
+needs to qualify fresh Cloud Run samples in GMP and the alert datasource during
+Cloud Run leadership; source coverage alone does not verify a live handoff.
+
 An interval reduction across a restart can wait for the previous holder's stored TTL.
 Older binaries could create a 3660 s lease under the former hourly interval contract; that stored lease
 expires normally and is neither rewritten nor revoked by a new follower. New leases are bounded at 660 s.

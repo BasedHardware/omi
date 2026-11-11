@@ -32,6 +32,12 @@ stackdriver:
     - "based-hardware-dev"
   metrics:
     prefixes:
+      # Shared timeliness leader: batch-timeliness, held-backlog and drain alerts,
+      # plus over-SLA counts and staged-input clock diagnostics.
+      - 'prometheus.googleapis.com/omi_batch_timeliness_'
+      - 'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/'
+      - 'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/'
+      - 'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/'
       - 'prometheus.googleapis.com/omi_finalization_pair_'
       - 'prometheus.googleapis.com/omi_enrichment_summary_repair_'
       # WP-C lifecycle dwell and observer health (closed labels).
