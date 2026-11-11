@@ -944,8 +944,8 @@ def _update(
             raise EpisodeConflict('conversation_hidden_or_repointed')
     if not raw or raw.get('state_version') != expected_version:
         raise EpisodeConflict('state_version_changed')
-    # A notes-derived compose must still describe the exact member snapshots it
-    # read. These reads join the episode CAS transaction, fencing a finalize on
+    # A compose must still use the member snapshots whose visibility it checked.
+    # These reads join the episode CAS transaction, fencing a finalize or hide on
     # another replica even when it has not updated the episode yet. None means
     # the member was absent; missing revision metadata on an existing row fails
     # closed rather than trusting a client-written updated_at field.

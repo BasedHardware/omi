@@ -1274,16 +1274,20 @@ def _compose(
     # The model call took seconds: re-read the evidence. A discard, a transcript upgrade or a
     # membership change since then makes this result stale; its own trigger composes again.
     fresh_episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode
-    fresh_state, fresh = _members(uid, fresh_episode, c)
+    fresh_revisions: dict[str, Optional[datetime]] = {}
+    fresh_state, fresh = _members(uid, fresh_episode, c, revisions=fresh_revisions)
     superseded = fresh_state != 'ok' or fingerprint(fresh) != print_
     removed_member = bool(set(member_ids) - set(_retained_ids(fresh_episode)))
     # Waiting members collapse _members to []; check visibility of the original
     # paid set separately so an actual removal/hidden member still cannot leak.
     for cid in member_ids:
         row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        # Fence the exact visibility read, including members omitted by a waiting
+        # result. A later hide/delete must refuse the paid notes atomically.
+        fresh_revisions[cid] = row.get('updated_at') if row else None
         if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
             removed_member = True
-    if superseded and (not keep_paid or removed_member):
+    if removed_member or (superseded and not keep_paid):
         _write(uid, episode_id, c, lambda current: _release(current, print_, lease_token))
         return 'superseded'
 
@@ -1336,7 +1340,7 @@ def _compose(
             return None if keep_paid else 'superseded'
         return None
 
-    written = _write(uid, episode_id, c, finish, guard=finish_guard)
+    written = _write(uid, episode_id, c, finish, guard=finish_guard, expected_member_revisions=fresh_revisions)
     if written == 'refused':
         # Older data can refuse a window change: keep the paid notes on the window it already has.
         written = _write(
@@ -1345,6 +1349,7 @@ def _compose(
             c,
             lambda current: {k: v for k, v in finish(current).items() if k != 'member_activity'},
             guard=finish_guard,
+            expected_member_revisions=fresh_revisions,
         )
     if written in {'conflict', 'refused'}:
         _record_failure(uid, episode_id, c, print_, lease_token=lease_token)
