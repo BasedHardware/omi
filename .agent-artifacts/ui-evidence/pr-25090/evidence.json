@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-plans-sheet-before-desktop.png",
+      "platform": "web",
+      "description": "plans-sheet: before blocked-popup checkout at 1280px (desktop); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "7af4971516324e8ed5e441867951f7f19d583d303c5642e95b7ce3aca8f4efa1"
+    },
+    {
+      "file": "002-web-plans-sheet-after-desktop.png",
+      "platform": "web",
+      "description": "plans-sheet: after blocked-popup checkout at 1280px (desktop); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "c626b9b1c1feeaeaf3889a4445e5903833994277ba4274770ced1d61a74dbc05"
+    },
+    {
+      "file": "003-web-plans-sheet-before-mobile.png",
+      "platform": "web",
+      "description": "plans-sheet: before blocked-popup checkout at 390px (mobile); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "ddb03c4c094ea45447dfc40092d523595da3b318910307dd9666660d92194232"
+    },
+    {
+      "file": "004-web-plans-sheet-after-mobile.png",
+      "platform": "web",
+      "description": "plans-sheet: after blocked-popup checkout at 390px (mobile); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "77baccbf6e3a0e0f31e6410b6c8721a1ef04476680155340bf08ce0b97cd46fe"
+    },
+    {
+      "file": "005-web-settings-page-before-desktop.png",
+      "platform": "web",
+      "description": "settings-page: before blocked-popup checkout at 1280px (desktop); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "82fd79660a3df2c217b2105a12694e1590e2101b6624bc9e0c7d8e2f2196674b"
+    },
+    {
+      "file": "006-web-settings-page-after-desktop.png",
+      "platform": "web",
+      "description": "settings-page: after blocked-popup checkout at 1280px (desktop); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "1617dffc6993aa3fca5ea5819a2ba3945d6850045d4ef79f5c9f12b40bc5efaa"
+    },
+    {
+      "file": "007-web-settings-page-before-mobile.png",
+      "platform": "web",
+      "description": "settings-page: before blocked-popup checkout at 390px (mobile); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "6833d0f4a8c17c056a62e941aa1450b890ff55d7064b2ddf25495e3e421ba91f"
+    },
+    {
+      "file": "008-web-settings-page-after-mobile.png",
+      "platform": "web",
+      "description": "settings-page: after blocked-popup checkout at 390px (mobile); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "5958ab8deeba105328e004a1121e5babc60f23a67f2fa5c32fd4b4a73b1eca52"
+    },
+    {
+      "file": "009-web-storefront-before-desktop.png",
+      "platform": "web",
+      "description": "storefront: before blocked-popup checkout at 1280px (desktop); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "0bf8aaa3aa00fa57a6d0359b32d9e833dc497896cf73dafa82d0f2336a58cc15"
+    },
+    {
+      "file": "010-web-storefront-after-desktop.png",
+      "platform": "web",
+      "description": "storefront: after blocked-popup checkout at 1280px (desktop); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "dc8d9e96c85ff1da33d62b43207f4e0631b2ccd3ea79e68e6a69367aa4e1cfff"
+    },
+    {
+      "file": "011-web-storefront-before-mobile.png",
+      "platform": "web",
+      "description": "storefront: before blocked-popup checkout at 390px (mobile); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "77345d4d744a05bf50b7132d935e0d1170c73866f5c3a01a99594e8dad017096"
+    },
+    {
+      "file": "012-web-storefront-after-mobile.png",
+      "platform": "web",
+      "description": "storefront: after blocked-popup checkout at 390px (mobile); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "14970dbfffbd1ff21dedea4869eec77b07f204c3aa3abb1f86e791f90234155a"
+    }
+  ],
+  "capture": {
+    "captured_at": "2026-11-11T03:03:30.312176+00:00",
+    "before_ref": "4e9c70405c53f8efcaced2fea369910ade355058",
+    "after_base_ref": "3ce4c9c1a6a56e836780c749f912fb66bd89b729",
+    "after_corrections": [
+      "Preserve PlansSheet centering during Framer Motion transforms",
+      "Keep storefront interval selection after a blocked launch"
+    ],
+    "renderer": "Local React component harness; Bun browser bundles; Playwright 1.65.0 Chromium; 1280x1000 and 390x1000 viewports; full-page PNGs; system sans-serif fallback (remote fonts disabled)",
+    "surfaces": {
+      "PlansSheet": "PlansSheet with controlled open state and cached fixture plans",
+      "SettingsPage": "Exported UsageSectionContent; storefront gate disabled; click See plans",
+      "StorefrontHost": "StorefrontPanel with initial fixture storefront"
+    },
+    "stubs": {
+      "checkout": "createCheckoutSession resolves to loopback checkout-stub URL; window.open records request and returns null",
+      "data": "Cached local basic subscription, Omi Pro monthly/annual offers, usage and storefront; no real account",
+      "providers": "API/auth/subscription analytics/feature gate/navigation modules replaced at bundle time; unexpected APIs throw",
+      "network": "Loopback-only HTTP server; Playwright aborts unexpected routes; CSP connect-src none; fetch throws; no external font import"
+    },
+    "source_sha256": {
+      "web/app/src/components/settings/PlansSheet.tsx": "c4b7fb17fb49c35fb67689ed1efd365bcb5ca3cd967c6793968a97adeacf7996",
+      "web/app/src/components/settings/SettingsPage.tsx": "fea5bec5ea84b181d652b7f78c5f9d2ff246c23969ca90731fb5d976bee08284",
+      "web/app/src/components/settings/storefront/StorefrontHost.tsx": "2a816861592818855c30c561e475f3a71e40ddc98a15c0b3a3bd5df20e63c0ce"
+    },
+    "behavior": "Each after state retains annual selection and allows a real pointer retry; both checkout attempts use fixture_pro_year. Before PlansSheet dismisses; SettingsPage/storefront show no popup warning. Keyboard activation used for initial launch in both versions so the uncorrected baseline dialog layout does not block the comparison."
+  }
+}
