@@ -2093,11 +2093,15 @@ FIELD_SITES = {
             (
                 'basis',
                 'capture_creates',
+                'cohort_admits',
+                'excluded_admits',
                 'ledger_admits',
                 'ledger_disabled',
                 'ledger_write_failures',
                 'ratio',
+                'settle_seconds',
                 'status',
+                'unmatched_creates',
             ),
         )
     ],
