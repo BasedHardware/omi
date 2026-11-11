@@ -14,8 +14,17 @@ STRIPE_UTILS_SOURCE = Path(__file__).resolve().parents[2] / "utils" / "stripe.py
 _MISSING = object()
 
 
+@pytest.fixture(scope="module", autouse=True)
+def warm_real_payment_dependencies():
+    # Keep immutable dependencies imported before per-test module snapshots.
+    # Deleting/re-importing the entire Stripe/payment dependency graph inside
+    # every call made otherwise hermetic tests exceed the CPU-time contract.
+    import routers.payment  # noqa: F401
+    import utils.stripe  # noqa: F401
+
+
 @pytest.fixture(autouse=True)
-def restore_module_stubs():
+def restore_module_stubs(warm_real_payment_dependencies):
     modules = dict(sys.modules)
     routers_module = modules.get("routers")
     router_payment = getattr(routers_module, "payment", _MISSING) if routers_module else _MISSING
