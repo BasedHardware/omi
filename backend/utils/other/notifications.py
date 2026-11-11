@@ -227,7 +227,7 @@ def _legacy_generate_and_store_daily_summary(
             uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
         )
         fingerprint = recap_refresh.fingerprint(conversations_data or []) if refresh_enabled else None
-        if refreshing:
+        if refreshing and existing_summary:
             if recap_refresh.FIELD not in existing_summary:
                 stale = recap_refresh.adoption_needs_repair(existing_summary, conversations_data or [])
                 adopted = recap_refresh_db.adopt(uid, date_str, existing_summary, fingerprint, stale)
@@ -1188,7 +1188,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
         daily_summary_metrics.RECIPIENTS.labels(outcome='generated_retry' if retry_attempt else 'generated').inc()
         # Durable outcome token for the daily_summary_recap_generated log metric. The
         # job's in-process counters depend on a scrape sidecar; this line does not.
-        if not summary_data.get('late_refresh_silent'):
+        if summary_data and not summary_data.get('late_refresh_silent'):
             logger.info('daily_summary_generated uid=%s retry=%s', uid, retry_attempt)
     elif summary_data:
         daily_summary_metrics.RECIPIENTS.labels(outcome='suppressed_existing').inc()
