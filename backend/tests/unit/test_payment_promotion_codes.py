@@ -5,7 +5,7 @@ import types
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -303,6 +303,12 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     subscription_events_mod = types.ModuleType("utils.observability.subscription_events")
     subscription_events_mod.record_subscription_event = MagicMock()
     sys.modules["utils.observability.subscription_events"] = subscription_events_mod
+
+    # The webhook seam imports this sibling; preload it so the parent package
+    # is not executed against the incomplete fallback stub above.
+    renewal_observations_mod = types.ModuleType("utils.observability.renewal_observations")
+    renewal_observations_mod.observe_verified_event = AsyncMock()
+    sys.modules["utils.observability.renewal_observations"] = renewal_observations_mod
 
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"
