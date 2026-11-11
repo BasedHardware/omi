@@ -154,15 +154,24 @@ export function StorefrontPanel({
     if (!data || busyPriceId !== null) return;
     setBusyPriceId(price.id);
     setError(null);
+    let checkoutBlocked = false;
     try {
-      setError(
-        await purchase(data, tier, price, source, livePlanId, onSubscriptionUpdate),
+      const purchaseError = await purchase(
+        data,
+        tier,
+        price,
+        source,
+        livePlanId,
+        onSubscriptionUpdate,
       );
+      setError(purchaseError);
+      checkoutBlocked = purchaseError === CHECKOUT_POPUP_BLOCKED;
     } catch {
       setError('Something went wrong. Try again.');
     } finally {
       setBusyPriceId(null);
-      void reload();
+      // Reloading unmounts the interval picker and would reset a blocked offer.
+      if (!checkoutBlocked) void reload();
     }
   };
 

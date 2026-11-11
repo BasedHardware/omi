@@ -297,6 +297,9 @@ export function PlansSheet({
                   initial={{ opacity: 0, scale: 0.95, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  transformTemplate={(_, transform) =>
+                    `translate(-50%, -50%) ${transform}`
+                  }
                   transition={{ duration: 0.15, ease: 'easeOut' }}
                   className={cn(
                     'fixed left-1/2 top-1/2 z-[101] -translate-x-1/2 -translate-y-1/2',

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseStorefront, type PlanStorefront } from '@/lib/planStorefront';
+import { CHECKOUT_POPUP_BLOCKED } from '@/lib/checkoutWindow';
 
 const api = vi.hoisted(() => ({
   getStorefront: vi.fn(),
@@ -116,6 +117,40 @@ describe('StorefrontPlans', () => {
 });
 
 describe('StorefrontPanel purchase routing', () => {
+  it('keeps the selected annual offer retryable after a blocked checkout tab', async () => {
+    const data = golden('free_settings');
+    api.getStorefront.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return data;
+    });
+    api.createCheckoutSession.mockResolvedValue({
+      url: 'https://checkout.stripe.test/s',
+    });
+    const onUpdate = vi.fn();
+    render(
+      <StorefrontPanel
+        source="web_plans"
+        initial={data}
+        onSubscriptionUpdate={onUpdate}
+      />,
+    );
+    fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 2 months free' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Get Plus' }));
+    expect(await screen.findByText(CHECKOUT_POPUP_BLOCKED)).toBeInTheDocument();
+    expect(
+      await screen.findByRole('radio', { name: 'Yearly · 2 months free' }),
+    ).toHaveAttribute('aria-checked', 'true');
+    fireEvent.focus(window);
+    expect(onUpdate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Get Plus' }));
+    await waitFor(() => expect(api.createCheckoutSession).toHaveBeenCalledTimes(2));
+    expect(api.createCheckoutSession.mock.calls).toEqual([
+      ['price_plus_year'],
+      ['price_plus_year'],
+    ]);
+    expect(screen.getByText(CHECKOUT_POPUP_BLOCKED)).toBeInTheDocument();
+  });
+
   it('same-tier annual requires backend confirmation before any billing call', async () => {
     api.getStorefront.mockResolvedValue(golden('plus_monthly_yearly_toggle'));
     api.upgradeSubscription.mockResolvedValue({ status: 'success' });
