@@ -26,7 +26,8 @@ def build_conversation_analytics(conversation, names: Dict[str, str]) -> Convers
     display = display_participants(segments, names=names, resolution=getattr(conversation, 'speaker_resolution', None))
     for seg in segments:
         participant = display.for_segment(seg)
-        person_id, is_user = getattr(seg, 'person_id', None), getattr(seg, 'is_user', False)
+        person_id = None if participant.is_abstention else getattr(seg, 'person_id', None)
+        is_user = False if participant.is_abstention else getattr(seg, 'is_user', False)
         key = 'user' if is_user else ('person:' + person_id if person_id else participant.key)
         label = participant.label
         start = getattr(seg, 'start', 0) or 0

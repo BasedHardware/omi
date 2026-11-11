@@ -312,3 +312,6 @@ pnpm-workspace.yaml
 !.agent-artifacts/ui-evidence/
 .agent-artifacts/ui-evidence/*
 !.agent-artifacts/ui-evidence/lane-web-batch/
+
+# Server speaker abstention acceptance evidence.
+!.agent-artifacts/ui-evidence/speaker-abstention/

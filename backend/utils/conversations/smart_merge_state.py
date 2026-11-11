@@ -124,7 +124,7 @@ def transcript_lines(segments: Sequence[Mapping[str, Any]]) -> list[str]:
     display = display_participants(segments, owner_name='You')
     for segment in segments:
         text = str(segment.get('text') or '').strip()
-        who = display.label(segment)
+        who = display.prompt_label(segment)
         lines.append(f'{who}: {text}')
     return lines
 

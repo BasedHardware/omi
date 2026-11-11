@@ -117,7 +117,7 @@ def _speaker_map(
     roles = roles if roles is not None else speaker_role_projection(segments)
     speaker_map.role_evidence_authoritative = roles is not None
     cluster_bindings: dict[tuple[Optional[str], int], set[Optional[str]]] = {}
-    tallies: dict[tuple[Optional[str], int], tuple[bool, list[str], float, int]] = {}
+    tallies: dict[tuple[Optional[str], int], tuple[bool, list[str], float, int, bool]] = {}
     prompt_keys: dict[tuple[Optional[str], int], set[str]] = {}
     for segment in segments:
         speaker_id = getattr(segment, 'speaker_id', None)
@@ -129,15 +129,16 @@ def _speaker_map(
         prompt_key = display.for_segment(segment).key
         key = (getattr(segment, 'speaker_id_scope', None), speaker_id)
         prompt_keys.setdefault(key, set()).add(prompt_key)
-        owner, names, seconds, words = tallies.get(key, (False, [], 0.0, 0))
+        owner, names, seconds, words, attributed = tallies.get(key, (False, [], 0.0, 0, False))
         tagged = (person_name or '').strip()
         if not getattr(segment, 'is_user', False) and tagged and tagged not in names:
             names.append(tagged)
         tallies[key] = (
-            owner or getattr(segment, 'is_user', False),
+            owner or (getattr(segment, 'is_user', False) and not display.for_segment(segment).is_abstention),
             names,
             seconds + _speech_seconds(segment),
             words + len((getattr(segment, 'text', '') or '').split()),
+            attributed or not display.for_segment(segment).is_abstention,
         )
         name = display.for_segment(segment).name
         if roles is not None:
@@ -153,10 +154,10 @@ def _speaker_map(
         elif roles is not None and speaker_map[prompt_key] != name:
             speaker_map[prompt_key] = None
     clusters = []
-    for (scope, speaker_id), (owner, names, seconds, words) in tallies.items():
+    for (scope, speaker_id), (owner, names, seconds, words, attributed) in tallies.items():
         if roles is not None:
             role = roles.clusters.get((scope, speaker_id), UNKNOWN_ROLE)
-            owner = role.role == 'primary_user'
+            owner = attributed and role.role == 'primary_user'
             bindings = cluster_bindings.get((scope, speaker_id), set())
             name = role.name(user_name, people_map) if role.person_id else None
             name = name if name and bindings == {name} else None
@@ -195,15 +196,12 @@ def conversation_action_item_speaker_labels(
     for segment, prompt_row in zip(segments, rendered):
         if not getattr(segment, 'id', None):
             continue
+        role = roles.for_segment(segment).role if roles is not None else 'primary_user' if segment.is_user else 'other'
         labels.append(
             {
                 'segment_id': str(segment.id),
-                'speaker_label': display.label(prompt_row),
-                'speaker_role': (
-                    roles.for_segment(segment).role
-                    if roles is not None
-                    else 'primary_user' if segment.is_user else 'other'
-                ),
+                'speaker_label': display.prompt_label(prompt_row),
+                'speaker_role': 'unknown' if display.for_segment(prompt_row).is_abstention else role,
             }
         )
     return labels
@@ -396,8 +394,9 @@ def conversation_transcript_and_speaker_map(
             segment_id = escape_spoken_wake_word_marker(segment_id)
             segment_text = escape_spoken_wake_word_marker(segment_text)
         speaker_key = display.for_segment(segment).key
-        header = f'[{segment_id}]' if speaker_key == previous_speaker else f'[{segment_id} {speaker_key}]'
-        lines.append(f'{header} {marker}{segment_text}')
+        lines.append(
+            display.prompt_turn(segment, segment_text, segment_id, marker=marker, previous_key=previous_speaker)
+        )
         previous_speaker = speaker_key
     return '\n\n'.join(lines), speaker_map
 
@@ -501,6 +500,6 @@ def render_cluster_transcript(
         if mark_wake_words:
             text = escape_spoken_wake_word_marker(text)
             segment_id = escape_spoken_wake_word_marker(segment_id)
-        turns.append(f'[{segment_id} {key}] {marker}{text}')
+        turns.append(display.prompt_turn(row, text, segment_id, marker=marker))
     metadata = '\n'.join(f'spk {key} {name or "?"}' for key, name in labels.items())
     return '\n'.join(part for part in (owner_note, metadata, '\n\n'.join(turns)) if part), labels

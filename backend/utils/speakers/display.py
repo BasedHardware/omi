@@ -15,12 +15,14 @@ import json
 import re
 from typing import Any
 
+from config.refactor_modes import default_on
 from utils.speaker_display import SpeakerLabeler
 from utils.speakers.display_metrics import record_count_guard
 from utils.speakers.policy import MIN_EVIDENCE_SECONDS
 
 MAX_UNNAMED_VOICES = 8
 MIN_VOICE_SECONDS = 3.0
+SPEAKER_ABSTENTION_UNKNOWN_LABEL_ENV = 'SPEAKER_ABSTENTION_UNKNOWN_LABEL_ENABLED'
 
 
 @dataclass(frozen=True, repr=False)
@@ -39,6 +41,42 @@ class DiarizationLabel:
 
 def field(row: Any, key: str, default: Any = None) -> Any:
     return row.get(key, default) if isinstance(row, Mapping) else getattr(row, key, default)
+
+
+def _confirmed_identity(row: Any) -> bool:
+    """Manual bindings, or carried bindings reapplied by the scoped receipt writer."""
+    if not (field(row, 'person_id') or field(row, 'is_user', False)):
+        return False
+    source = field(row, 'speaker_label_source')
+    explicitly_set = field(row, 'model_fields_set')
+    reapplied = field(row, 'speaker_match_source', 'not_reapplied') is None
+    if isinstance(explicitly_set, (set, frozenset)):
+        reapplied = reapplied and {'speaker_match_source', 'speaker_identity_status'} <= explicitly_set
+    # apply_manual_assignments clears the batch source and writes this status
+    # after choosing the current scoped/generation-ordered carried receipt.
+    return source == 'manual' or (
+        source == 'carried'
+        and reapplied
+        and field(row, 'speaker_identity_status') == ('user' if field(row, 'is_user', False) else 'not_user')
+    )
+
+
+def _batch_abstention(row: Any) -> bool:
+    """Explicit user decisions outrank abstention; raw carried flags do not."""
+    if _confirmed_identity(row):
+        return False
+    return _batch_marker(row)
+
+
+def _batch_marker(row: Any) -> bool:
+    return (
+        str(field(row, 'speaker') or '').startswith('BATCH_UNASSIGNED_')
+        or field(row, 'speaker_match_source') == 'batch_abstention'
+        # Defensive legacy/status aliases; current batch writers use the prefix
+        # and match source above, with speaker_identity_status='ambiguous'.
+        or field(row, 'speaker_identity_status') == 'batch_abstention'
+        or field(row, 'identity_status') == 'batch_abstention'
+    )
 
 
 def _seconds(row: Any) -> float:
@@ -65,6 +103,7 @@ class DisplayParticipant:
     name: str | None
     countable: bool
     speech_seconds: float
+    is_abstention: bool = False
 
 
 def _projection_key(row: Any) -> tuple:
@@ -78,6 +117,8 @@ def _projection_key(row: Any) -> tuple:
         DiarizationLabel(raw, scope),
         person if isinstance(person, str) else None,
         bool(field(row, 'is_user', False)),
+        field(row, 'speaker') if _batch_abstention(row) else None,
+        _batch_abstention(row),
     )
 
 
@@ -101,6 +142,23 @@ class DisplayParticipants:
 
     def label(self, row: Any) -> str:
         return self.for_segment(row).label
+
+    def prompt_label(self, row: Any) -> str:
+        """Unassigned speech is not a shared participant identity in model input."""
+        participant = self.for_segment(row)
+        return '[unassigned speech]' if participant.is_abstention else participant.label
+
+    def prompt_text(self, row: Any, text: str) -> str:
+        """Keep citation keys distinct in compact transcripts without naming a gap."""
+        return f'[unassigned speech] {text}' if self.for_segment(row).is_abstention else text
+
+    def prompt_turn(
+        self, row: Any, text: str, segment_id: str, *, marker: str = '', previous_key: str | None = None
+    ) -> str:
+        """Format citations and unassigned speech together at the presentation boundary."""
+        key = self.for_segment(row).key
+        header = f'[{segment_id}]' if key == previous_key else f'[{segment_id} {key}]'
+        return f'{header} {marker}{self.prompt_text(row, text)}'
 
 
 def prompt_speaker_map(transcript: str, mapping: Mapping[Any, str | None]) -> tuple[str, dict[str, str | None]]:
@@ -138,6 +196,8 @@ def display_participants(
 ) -> DisplayParticipants:
     """Resolve names, small first-appearance labels and bounded unknown voices once.
 
+    Batch abstentions keep separate keys but share an Unknown speaker UI label;
+    prompt_label/prompt_text describe unassigned speech without inventing a person.
     With defer_short_voices, unknown voices take no ordinal/ledger slot until
     five seconds of non-overlapping placed speech (or acoustic cluster evidence).
     This is display qualification, never acoustic proof that two voices are one.
@@ -147,6 +207,9 @@ def display_participants(
     never an acoustic merge or a change to stored identity/correction keys.
     """
     rows = list(segments)
+    unknown_abstentions = default_on(SPEAKER_ABSTENTION_UNKNOWN_LABEL_ENV)
+    abstentions = [unknown_abstentions and _batch_abstention(row) for row in rows]
+    abstention_keys = set()
     owner_name = _clean_name(owner_name) or 'You'
     names = names or {}
     clusters = {}
@@ -159,7 +222,10 @@ def display_participants(
     seconds: dict[Any, float] = {}
     protected = set()
     if evidence_available:
+        abstention_ids = {field(row, 'id') for row, abstention in zip(rows, abstentions) if abstention}
         for cluster in evidence.clusters:
+            if cluster.segment_ids and all(sid in abstention_ids for sid in cluster.segment_ids):
+                continue
             key = ('evidence', cluster.id)
             seconds[key] = cluster.speech_seconds
             if any(
@@ -179,7 +245,7 @@ def display_participants(
     tokens = {}
     intervals: dict[Any, list[tuple[float, float]]] = {}
     for index, row in enumerate(rows):
-        cluster = clusters.get(field(row, 'id'))
+        cluster = None if abstentions[index] else clusters.get(field(row, 'id'))
         raw = field(row, 'speaker_id')
         raw = raw if isinstance(raw, (int, str)) and not isinstance(raw, bool) else None
         scope = field(row, 'speaker_id_scope')
@@ -190,6 +256,10 @@ def display_participants(
         token = hashlib.sha256(
             json.dumps([display_scope, scope, raw, cluster.id if cluster else None], sort_keys=True).encode()
         ).hexdigest()
+        if abstentions[index]:
+            # Keep each gap addressable, even if stale evidence binds it to a person.
+            key = ('abstention', key, field(row, 'speaker'), field(row, 'id') or index)
+            abstention_keys.add(key)
         tokens[key] = token
         name = None
         if evidence_available:
@@ -220,7 +290,9 @@ def display_participants(
                 name = _clean_name(field(row, 'person_name')) if field(row, 'person_id') else None
         if not evidence_available and not allow_automatic_names:
             name = None
-        if field(row, 'speaker_label_source') == 'manual':
+        if field(row, 'speaker_label_source') == 'manual' or (
+            unknown_abstentions and _batch_marker(row) and _confirmed_identity(row)
+        ):
             name = (
                 owner_name
                 if field(row, 'is_user', False)
@@ -231,6 +303,8 @@ def display_participants(
             )
         if raw == 99:
             name = 'Omi'
+        if abstentions[index]:
+            name = None
         if name:
             protected.add(key)
         keys.append(key)
@@ -256,6 +330,9 @@ def display_participants(
         raw = field(row, 'speaker_id')
         cluster = clusters.get(field(row, 'id'))
         token = tokens[key]
+        if key in abstention_keys:
+            labels[key] = 'Unknown speaker'
+            continue
         # A segment-bound name is never the fallback for an unbound excerpt.
         # Live named rows also must not spend anonymous ledger slots.
         if name and voice_order is not None:
@@ -279,9 +356,9 @@ def display_participants(
     if evidence_available:
         for row, key in zip(rows, keys):
             cluster = clusters.get(field(row, 'id'))
-            if cluster:
+            if cluster and key not in abstention_keys:
                 seconds[key] = cluster.speech_seconds
-    unknown = [key for key in seconds if key not in protected]
+    unknown = [key for key in seconds if key not in protected and key not in abstention_keys]
     collapsed = set()
     overflow = voice_order is not None and len(order) > MAX_UNNAMED_VOICES
     if len(unknown) > MAX_UNNAMED_VOICES or overflow:
@@ -308,7 +385,8 @@ def display_participants(
             key='others' if key in collapsed and not name else prompt_keys[key],
             label=name or ('Others' if key in collapsed else labels[key]),
             name=name,
-            countable=name != 'Omi'
+            countable=key not in abstention_keys
+            and name != 'Omi'
             and (
                 bool(name)
                 or bool(
@@ -319,6 +397,7 @@ def display_participants(
                 )
             ),
             speech_seconds=seconds[key],
+            is_abstention=key in abstention_keys,
         )
         for row, key, name in zip(rows, keys, row_names)
     ]
@@ -333,9 +412,12 @@ def developer_speaker_names(segments: Sequence[Any], *, names: Mapping[str, str]
     """
     labeler = SpeakerLabeler()
     result = []
+    unknown_abstentions = default_on(SPEAKER_ABSTENTION_UNKNOWN_LABEL_ENV)
     for segment in segments:
         person_id = str(field(segment, 'person_id') or '')
-        if field(segment, 'is_user', False):
+        if unknown_abstentions and _batch_abstention(segment):
+            result.append('Unknown speaker')
+        elif field(segment, 'is_user', False):
             result.append(owner_name)
         elif person_id in names:
             result.append(names[person_id])

@@ -268,7 +268,7 @@ def _render_segment_bounded(segment: object, *, max_chars: int, display: Display
     text = data.get('text')
     if not isinstance(text, str):
         return '', False
-    speaker = display.label(segment)
+    speaker = display.prompt_label(segment)
     start = 0
     end = len(text)
     while start < end and text[start].isspace():

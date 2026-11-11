@@ -9666,3 +9666,31 @@ or action, join speakers, or override privacy/manual-selection contracts.
 Explicit `false` (also off/0/no) restores the previous reminder-only exemption.
 Affected fleet users and extra model dollars/day are unknown; this reverses
 compute savings for protected cases. Existing general floor behavior remains.
+
+## Batch abstention display
+
+`SPEAKER_ABSTENTION_UNKNOWN_LABEL_ENABLED` defaults on (`default_on` parser).
+At the server presentation boundary, the persisted `BATCH_UNASSIGNED_` prefix
+or `speaker_match_source='batch_abstention'` identifies unassigned batch speech.
+Checks for `speaker_identity_status` or legacy `identity_status` equal to
+`batch_abstention` are defensive aliases, not values written by current batch
+producers (which write `speaker_identity_status='ambiguous'`).
+
+A positive `person_id`/`is_user` binding with `speaker_label_source='manual'`
+outranks those markers. A carried binding wins only in the receipt writer's
+reapplied shape: explicit cleared match source and positive identity status;
+retained carried flags on an ambiguous batch gap stay unassigned. No receipt,
+stored key or stored identity is rewritten by the display boundary.
+
+Unassigned rows share the `Unknown speaker` UI label and allocate no new letter
+or episode voice-order slot. Pre-existing opaque episode ledgers are retained;
+this does not retroactively recover slots from older ledgers. MCP participant
+rosters omit unassigned rows; MCP transcript rows and analytics keep each gap
+separate. MCP/LLM text still uses `[unassigned speech]` per segment and preserves
+distinct citation keys and null gap identity bindings. Raw compatibility MCP
+mappings (`include_display=False`) retain their released values.
+
+Setting the switch to false restores previous display behavior, including
+developer API `speaker_name` values. The enabled developer API value for gaps
+changes from lettered speaker labels to `Unknown speaker`. This adds no client
+wire flag or client naming rule. See the [stage 1 change note](listen_pusher_pipeline/changes/2026-11-11-speaker-abstention-label.md).

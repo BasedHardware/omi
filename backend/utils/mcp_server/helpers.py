@@ -49,8 +49,16 @@ def conversation_participants(conversation: Dict[str, Any], *, include_display: 
         person_id = segment.get("person_id")
         speaker_id = speaker_id if isinstance(speaker_id, (str, int)) and not isinstance(speaker_id, bool) else None
         person_id = person_id if isinstance(person_id, str) and person_id else None
-        key = (display.for_segment(segment).key if display else speaker_id, person_id, segment.get("is_user") is True)
-        if speaker_id is None and person_id is None and not key[2]:
+        participant = display.for_segment(segment) if display else None
+        abstention = participant is not None and participant.is_abstention
+        if abstention:
+            continue  # Unassigned speech remains in transcripts, not the participant roster.
+        key = (
+            participant.key if participant else speaker_id,
+            None if abstention else person_id,
+            False if abstention else segment.get("is_user") is True,
+        )
+        if speaker_id is None and key[1] is None and not key[2]:
             continue
         if key in seen:
             continue
@@ -58,7 +66,7 @@ def conversation_participants(conversation: Dict[str, Any], *, include_display: 
         participants.append(
             {
                 "speaker_id": None if display else speaker_id,
-                **({"speaker_key": key[0], "speaker_label": display.label(segment)} if display else {}),
+                **({"speaker_key": key[0], "speaker_label": display.prompt_label(segment)} if display else {}),
                 "person_id": key[1],
                 "is_user": key[2],
             }
@@ -160,11 +168,16 @@ def bounded_transcript_segments(
                 original_text = original_text[:remaining_after_text]
                 truncated = True
             item['original_text'] = original_text
+        participant = display.for_segment(segment)
+        if participant.is_abstention:
+            item['is_user'] = False
+            if 'person_id' in item:
+                item['person_id'] = None
         item["speaker_id"] = None
         item["speaker_key"] = display.for_segment(segment).key
-        item["speaker_label"] = display.label(segment)
-        if "speaker_name" in extra_keys and not segment.get("is_user"):
-            item["speaker_name"] = display.label(segment)
+        item["speaker_label"] = display.prompt_label(segment)
+        if "speaker_name" in extra_keys and (participant.is_abstention or not segment.get("is_user")):
+            item["speaker_name"] = display.prompt_label(segment)
         item["text"] = text
         bounded.append(public_transcript_timing(item))
         used_chars += len(text) + len(item.get('original_text') or "")
