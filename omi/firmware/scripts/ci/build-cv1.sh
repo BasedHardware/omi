@@ -40,7 +40,10 @@ cd "$NCS_VERSION"
 
 if [ ! -d .west ]; then
   echo "Initialising nRF Connect SDK $NCS_VERSION workspace..."
-  west init -m https://github.com/nrfconnect/sdk-nrf --mr "$NCS_REVISION" .
+  # This west version bootstraps with git clone --branch, which cannot take a SHA.
+  # The tag only initializes the workspace; the immutable checkout below owns
+  # every manifest/module revision used by the build.
+  west init -m https://github.com/nrfconnect/sdk-nrf --mr "$NCS_VERSION" .
 fi
 
 # Cached workspaces must use the same immutable manifest as a cold build.
