@@ -418,20 +418,27 @@ def test_unknown_tools_and_excess_calls_return_bounded_errors(store, monkeypatch
 @pytest.mark.parametrize('count', [1, 5, 20, 60])
 @pytest.mark.parametrize('has_notes', [True, False])
 def test_aggregate_prompt_cap_includes_all_notes_and_transcript_fallback(count, has_notes):
-    rows = [_row(str(i), T0 + timedelta(minutes=i), 1, lines=[(0, 'speech ' * 50_000)]) for i in range(count)]
+    # Keep aggregate fixture size constant: every member count still exceeds the
+    # real cap, without making the 60-member case serialize tens of megabytes.
+    repeats = config.COMPOSER_MAX_TRANSCRIPT_CHARS // (8 * count)
+    rows = [_row(str(i), T0 + timedelta(minutes=i), 1, lines=[(0, 'speech ' * (4 * repeats))]) for i in range(count)]
     for row in rows:
         row['structured'] = {
-            'title': 'title ' * 10_000,
-            'overview': 'overview "\\\n' * 30_000 if has_notes else '',
-            'gist': 'gist ' * 10_000 if has_notes else '',
-            'sections': [{'heading': 'Section', 'body': 'body ' * 20_000}] if has_notes else [],
-            'action_items': [{'description': 'action ' * 10_000}],
+            'title': 'title ' * repeats,
+            'overview': 'overview "\\\n' * repeats if has_notes else '',
+            'gist': 'gist ' * repeats if has_notes else '',
+            'sections': [{'heading': 'Section', 'body': 'body ' * repeats}] if has_notes else [],
+            'action_items': [{'description': 'action ' * repeats}],
         }
+    assert (
+        sum(len(row['structured']['title']) + len(row['structured']['action_items'][0]['description']) for row in rows)
+        > config.COMPOSER_MAX_TRANSCRIPT_CHARS
+    )
     kwargs = dict(owner='David', tz=ZoneInfo('UTC'), language='English')
     messages = composer.build_notes_first_messages(rows, **kwargs)
     assert composer._input_chars(messages, [composer.TRANSCRIPT_EXCERPT_TOOL]) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
     assert sum(len(text) for _, text in messages) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
-    assert '[... notes truncated ...]' in messages[1][1] or 'quieter minutes left out' in messages[1][1]
+    assert '[... notes truncated ...]' in messages[1][1]
     assert messages == composer.build_notes_first_messages(rows, **kwargs)
     positions = [messages[1][1].index(f'=== Recording {i + 1} (') for i in range(count)]
     assert positions == sorted(positions)
@@ -532,3 +539,26 @@ def test_full_transcript_fallback_is_only_used_when_cheaper(full_is_cheaper):
         assert composer._input_chars(full) < composer._input_chars(notes, [composer.TRANSCRIPT_EXCERPT_TOOL])
         assert seen[0][1] is None
     assert composer._input_chars(*seen[0]) <= config.COMPOSER_MAX_TRANSCRIPT_CHARS
+
+
+@pytest.mark.parametrize('extra_chars', [-1, 0, 1])
+def test_fallback_must_be_cheaper_than_the_tool_free_notes_request(monkeypatch, extra_chars):
+    rows = [_row('c1', T0, 180, overview='notes ' * 100_000)]
+    kwargs = dict(owner='David', tz=ZoneInfo('Asia/Bangkok'), language='English')
+    notes = composer.build_notes_first_messages(rows, **kwargs)
+    assert '[... notes truncated ...]' in notes[1][1]
+    full = [('system', 'full'), ('human', '')]
+    padding = composer._input_chars(notes) + extra_chars - composer._input_chars(full)
+    full[1] = ('human', 'x' * padding)
+    assert composer._input_chars(full) == composer._input_chars(notes) + extra_chars
+    monkeypatch.setattr(composer, 'build_messages', lambda *args, **kwargs: full)
+    seen = []
+
+    def invoke(uid, messages, **options):
+        seen.append((messages, options.get('tools')))
+        return _reply()
+
+    composer._compose_notes_first(UID, rows, invoke=invoke, **kwargs)
+    assert (seen[0][0] == full) is (extra_chars < 0)
+    assert seen[0][1] is None
+    assert composer._input_chars(*seen[0]) <= composer._input_chars(notes)

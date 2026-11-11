@@ -579,9 +579,7 @@ def _compose_notes_first(
     # A full-transcript request is an optional cheaper exit, never a way around
     # the aggregate ceiling. Compare complete serialized requests, not raw speech.
     full = build_messages(members, owner=owner, tz=tz, language=language)
-    if '[... notes truncated ...]' in messages[1][1] and _input_chars(full) < _input_chars(
-        messages, [TRANSCRIPT_EXCERPT_TOOL]
-    ):
+    if '[... notes truncated ...]' in messages[1][1] and _input_chars(full) < _input_chars(messages):
         reply = invoke(uid, full)
         data = parse_reply(reply) if parse_reply is not None else parse(_content(reply))
         record_fallback(
