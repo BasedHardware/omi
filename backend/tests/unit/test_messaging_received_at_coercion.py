@@ -137,3 +137,30 @@ async def test_gateway_process_with_naive_iso_and_settlement_on_error():
             woken_msg = mock_wake.call_args[0][0]
             assert isinstance(woken_msg, ChannelMessage)
             assert woken_msg.received_at.tzinfo == timezone.utc
+
+
+@pytest.mark.asyncio
+async def test_gateway_process_with_unparseable_received_at_still_runs_claimed():
+    store = MagicMock()
+    adapter = MagicMock()
+    adapter.channel = "telegram"
+    adapter.provider = "bot"
+
+    gw = Gateway(adapter=adapter, store=store)
+
+    payload = {
+        "channel": "telegram",
+        "provider": "bot",
+        "external_user_id": "u1",
+        "external_chat_id": "c1",
+        "provider_message_id": "m1",
+        "text": "hi",
+        "received_at": "not-a-date",
+        "media": None,
+        "attachments": None,
+    }
+
+    with patch.object(gw, "_process_claimed", AsyncMock(return_value="turn-complete")) as mock_claimed:
+        res = await gw._process("inbox/path/2", payload)
+        assert res == "turn-complete"
+        mock_claimed.assert_called_once_with("inbox/path/2", payload)
