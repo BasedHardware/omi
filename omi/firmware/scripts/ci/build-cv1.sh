@@ -10,7 +10,7 @@
 #
 # Outputs (relative to /omi/firmware/v2.9.0/build):
 #   - dfu_application.zip   OTA package served by the Omi app
-#   - merged.hex            full-flash image (J-Link / nrfjprog)
+#   - merged.hex            internal merged output; not an approved wire image
 #   - merged_CPUNET.hex     network-core image
 #
 set -euo pipefail

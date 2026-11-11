@@ -62,6 +62,11 @@ Build firmware from source to customize your Omi device. To install the latest r
     `dfu_application.zip` plus `merged.hex` and `merged_CPUNET.hex`, not a UF2).
     The DevKit UF2 is built only from `omi/firmware/devkit`.
 
+    CV1 sysbuild selects Omi's custom MCUboot main, which initializes SD before
+    reading the shared NOR bus. Never flash stock MCUboot, raw `merged.hex`,
+    or all sysbuild domains to a pendant. Use validated app-only recovery
+    packaging and the [bootloader procedure](https://github.com/BasedHardware/omi/blob/main/omi/firmware/docs/cv1-bootloader.md).
+
     In nRF Connect, use the `OMI` preset in `omi/firmware/omi/CMakePresets.json`
     and turn **sysbuild** on. The preset sets the board and `CONF_FILE=omi.conf`;
     it does not enable sysbuild.
@@ -100,7 +105,10 @@ Build firmware from source to customize your Omi device. To install the latest r
   </Step>
 
   <Step title="Flash the device" icon="bolt">
-    Follow the [Flash Device](/doc/get_started/Flash_device) guide to install the compiled firmware on your device.
+    For CV1, use the OTA package or a validated app-only recovery image from
+    the packaging workflow. Preserve the qualified installed bootloader; do
+    not use the IDE's all-domain Flash command. For DevKit, use the UF2 output.
+    Follow the [Flash Device](/doc/get_started/Flash_device) guide for your device.
   </Step>
 </Steps>
 
