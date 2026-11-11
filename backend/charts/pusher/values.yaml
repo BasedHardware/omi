@@ -8,6 +8,18 @@ podMonitoring:
 podLabels:
   service_name: pusher
 env:
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: "false"
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION

@@ -35,6 +35,7 @@ import sys
 import threading
 import time
 import types
+from types import SimpleNamespace
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
@@ -50,6 +51,7 @@ from utils.batch_pipeline import live_upload as _batch_live_upload  # noqa: F401
 from routers import batch_pipeline as _batch_router  # noqa: F401
 from models import sync_job_status as _sync_job_status  # noqa: F401
 from fastapi.routing import APIRoute
+from fastapi import HTTPException
 from models.users import PlanType
 from utils.executors import run_blocking as _production_run_blocking
 
@@ -3985,6 +3987,95 @@ class TestV2EndpointExecution:
             assert scheduled_tasks == [f"sync_pipeline:{body['job_id']}"]
         finally:
             self._cleanup_modules(saved)
+
+    async def test_memoized_custody_retry_never_acquires_or_renews_a_token(self, sync_endpoint_module, monkeypatch):
+        _, _, module = sync_endpoint_module
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+        waiting = module.JSONResponse(status_code=503, content={'code': 'record_jobs_missing'})
+        monkeypatch.setattr(module, 'memoized_record_wait', AsyncMock(return_value=waiting))
+        monkeypatch.setattr(module, 'prepare_sync_uploads', lambda files, uid: files)
+        acquire = AsyncMock(side_effect=AssertionError('memoized retry acquired custody'))
+        renew = AsyncMock(side_effect=AssertionError('memoized retry renewed custody'))
+        monkeypatch.setattr(module.custody_lease, 'begin_upload', acquire)
+        monkeypatch.setattr(module, '_renew_custody_lease', renew)
+
+        async def run(executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        monkeypatch.setattr(module, 'run_blocking', run)
+        result = await module.sync_local_files_v2(
+            files=[SimpleNamespace(filename='synthetic.bin')],
+            uid='synthetic',
+            conversation_id='record',
+        )
+        assert result is waiting
+        acquire.assert_not_called()
+        renew.assert_not_called()
+
+    @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+    @pytest.mark.parametrize('percent', [0, 100])
+    async def test_custody_manifest_lease_fences_before_claim(self, sync_endpoint_module, monkeypatch, mode, percent):
+
+        _, _, module = sync_endpoint_module
+        events = []
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', str(percent))
+        module.resolve_client_device = lambda **kw: SimpleNamespace(client_device_id='synthetic-device')
+        module._capture_matches_server_conversation = lambda *a: True
+        module.claim_conversation_manifest = lambda *a: events.append('claim') or True
+        module.issue_capture_manifest = lambda *a: 'synthetic-manifest'
+        module.record_product_event = lambda *a, **kw: None
+        module.record_audio_db = SimpleNamespace(renew_record_token_lease=lambda *a, **kw: events.append('renew'))
+
+        async def run(executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        module.run_blocking = run
+        payload = SimpleNamespace(
+            conversation_id='record',
+            files=[SimpleNamespace(name='synthetic.bin', model_dump=lambda: {'name': 'synthetic.bin'})],
+        )
+        result = await module.create_sync_capture_manifest(
+            payload,
+            uid='synthetic',
+            x_app_platform=None,
+            x_device_id_hash=None,
+            x_app_version=None,
+        )
+        assert result.manifest == 'synthetic-manifest'
+        assert events == (['renew', 'claim'] if mode == 'serve' and percent == 100 else ['claim'])
+
+    async def test_custody_lease_outage_preserves_retry_before_claim(self, sync_endpoint_module, monkeypatch):
+
+        _, _, module = sync_endpoint_module
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+        module.resolve_client_device = lambda **kw: SimpleNamespace(client_device_id='synthetic-device')
+        module._capture_matches_server_conversation = lambda *a: True
+        module.claim_conversation_manifest = MagicMock()
+        module.record_audio_db = SimpleNamespace(renew_record_token_lease=MagicMock(side_effect=OSError('synthetic')))
+
+        async def run(executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        module.run_blocking = run
+        payload = SimpleNamespace(conversation_id='record', files=[SimpleNamespace(name='synthetic.bin')])
+        with pytest.raises(HTTPException) as error:
+            await module.create_sync_capture_manifest(payload, uid='synthetic')
+        assert error.value.status_code == 503
+        module.claim_conversation_manifest.assert_not_called()
+
+    @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+    async def test_manifest_non_serving_renewal_outage_has_no_io(self, sync_endpoint_module, monkeypatch, mode):
+        _, _, module = sync_endpoint_module
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '0')
+        monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', raising=False)
+        forbidden = AsyncMock(side_effect=OSError('metadata unavailable'))
+        monkeypatch.setattr(module, 'run_blocking', forbidden)
+        await module._renew_custody_lease('synthetic', 'record')
+        forbidden.assert_not_awaited()
 
     @pytest.fixture
     def sync_endpoint_module(self):

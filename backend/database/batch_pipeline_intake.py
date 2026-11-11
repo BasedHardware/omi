@@ -7,6 +7,7 @@ from typing import Callable
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline import require_record_protocol_ready
 from config.record_audio import record_identity, require_record_audio_barrier, restore_pending
+from config.record_seal_rules import token_lease_mode
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
@@ -169,6 +170,8 @@ def admit(
             if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
             job['projection_binding'] = serialized_binding
+            if binding.native_record and record_barrier is not None and token_lease_mode() != 'off':
+                job['record_input_upload_revision'] = record_barrier.get('record_upload_revision')
             if partial_metadata.get('release'):
                 # Readers (hard-3, the 2h alarm) split released backfill from fresh audio per row.
                 job['release'] = partial_metadata['release']
