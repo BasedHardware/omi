@@ -258,6 +258,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     db_mod.action_items = MagicMock()
 
     redis_mod = sys.modules["database.redis_db"]
+    redis_mod.claim_payment_recovery_notification = MagicMock()
     redis_mod.set_credits_invalidation_signal = MagicMock()
 
     locked_content_mod = sys.modules["database.locked_content"]
@@ -341,6 +342,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     models_mod.Subscription = MagicMock()
     models_mod.SubscriptionStatus = MagicMock()
     models_mod.PlanLimits = MagicMock()
+    models_mod.PaymentIssue = MagicMock()
 
     users_db_mod = sys.modules["database.users"]
     users_db_mod.get_stripe_connect_account_id = MagicMock()
