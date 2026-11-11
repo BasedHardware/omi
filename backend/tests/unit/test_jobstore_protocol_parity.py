@@ -9,6 +9,7 @@ This guard runs in the unit shards, without a database, so the next new read fai
 from __future__ import annotations
 
 import inspect
+from unittest.mock import Mock
 
 import pytest
 
@@ -49,3 +50,18 @@ def test_every_store_backend_serves_the_firestore_store_surface(backend, method)
 def test_every_transaction_backend_serves_the_firestore_transaction_surface(backend, method):
     assert hasattr(backend, method), f'{backend.__name__} lacks {method}'
     assert _parameters(getattr(backend, method)) == _parameters(getattr(firestore_store.FirestoreTransaction, method))
+
+
+@pytest.mark.parametrize('backend', [PostgresStore, SimStore, PgSimStore], ids=lambda cls: cls.__name__)
+def test_projection_page_signature_matches_firestore(backend):
+    assert inspect.signature(backend.projection_page, eval_str=True) == inspect.signature(
+        firestore_store.FirestoreStore.projection_page, eval_str=True
+    )
+
+
+def test_pg_sim_forwards_the_due_page_cursor():
+    store = object.__new__(PgSimStore)
+    store.pg = Mock()
+    store.pg.projection_page.return_value = (['a'], (10.0, 3.0, 'a'))
+    assert store.projection_page(1, after=(5.0,), states=('ready',), due_before=10.0) == (['a'], (10.0, 3.0, 'a'))
+    store.pg.projection_page.assert_called_once_with(1, after=(5.0,), states=('ready',), due_before=10.0)

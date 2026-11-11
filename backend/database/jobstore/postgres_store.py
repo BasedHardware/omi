@@ -40,6 +40,8 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_wr
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    PROJECTION_DISCOVERY_STATES,
+    PROJECTION_OBLIGATION_STATES,
     is_admissible_ready,
     is_policy_hold,
     is_queue_dispositioned,
@@ -459,26 +461,39 @@ class PostgresStore:
         return self.projection_page(limit)[0]
 
     def projection_page(
-        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES, PROJECTION_OBLIGATION_STATES
-
-        states = PROJECTION_DISCOVERY_STATES if states is None else states
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
-        size = max(1, min(limit, 100))
-        clause, params = '', [self.namespace, list(states)]
+        size = max(1, min(limit, 200))
+        columns = ['committed_at', 'key COLLATE "C"']
+        fields, clauses = 'key, committed_at', ['committed_at IS NOT NULL']
+        params: list[Any] = [self.namespace, list(states)]
+        if due_before is not None:
+            due = "(doc->>'projection_finish_due_at')::float8"
+            columns.insert(0, due)
+            fields += f', {due}'
+            clauses.append(f'{due} <= %s')
+            params.append(float(due_before))
         if after is not None:
-            clause = 'AND (committed_at, key COLLATE "C") > (%s, %s)'
-            params += [after[0], after[1]]
+            if due_before is not None and len(after) != 3 or due_before is None and after[1] == '':
+                clauses.append(f'{columns[0]} >= %s')
+                params.append(after[0])
+            else:
+                clauses.append(f'({", ".join(columns)}) > ({", ".join(["%s"] * len(columns))})')
+                params.extend(after)
         with self._read_conn() as conn:
             rows = conn.execute(
-                "SELECT key, committed_at FROM results WHERE namespace = %s "
-                f"AND projection_state = ANY(%s) {clause} "
-                'ORDER BY committed_at, key COLLATE "C" LIMIT %s',
+                f'SELECT {fields} FROM results WHERE namespace = %s AND projection_state = ANY(%s) '
+                f'AND {" AND ".join(clauses)} ORDER BY {", ".join(columns)} LIMIT %s',
                 (*params, size),
             ).fetchall()
-        cursor = (rows[-1][1], rows[-1][0]) if len(rows) == size else None
+        cursor = (*reversed(rows[-1][1:]), rows[-1][0]) if len(rows) == size else None
         return [row[0] for row in rows], cursor
 
     # -- internals ---------------------------------------------------------------------------

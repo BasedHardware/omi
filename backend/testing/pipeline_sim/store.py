@@ -42,6 +42,8 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    PROJECTION_DISCOVERY_STATES,
+    PROJECTION_OBLIGATION_STATES,
     is_admissible_ready,
     is_policy_hold,
     is_queue_dispositioned,
@@ -381,26 +383,42 @@ class SimStore:
         return matches[0] if len(matches) == 1 else None
 
     def projection_page(
-        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        """Keyset page over results awaiting projection, ordered (committed_at, key); mirrors the Firestore scan."""
-        from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES, PROJECTION_OBLIGATION_STATES
-
-        states = PROJECTION_DISCOVERY_STATES if states is None else states
+        """Mirror Firestore's legacy or due-clock keyset scan, including inclusive seed cursors."""
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
         wanted = set(states)
         ordered = sorted(
-            (row['committed_at'], key)
+            (
+                (row['committed_at'], key)
+                if due_before is None
+                else (row['projection_finish_due_at'], row['committed_at'], key)
+            )
             for (table, key), row in self.rows.items()
-            if table == 'results' and row.get('projection_state') in wanted and 'committed_at' in row
+            if table == 'results'
+            and row.get('projection_state') in wanted
+            and 'committed_at' in row
+            and (
+                due_before is None
+                or row.get('projection_finish_due_at') is not None
+                and row['projection_finish_due_at'] <= float(due_before)
+            )
         )
         if after is not None:
-            ordered = [entry for entry in ordered if entry > (after[0], after[1])]
-        size = max(1, min(limit, 100))
+            if due_before is not None and len(after) != 3 or due_before is None and after[1] == '':
+                ordered = [entry for entry in ordered if entry[0] >= after[0]]
+            else:
+                ordered = [entry for entry in ordered if entry > after]
+        size = max(1, min(limit, 200))
         page = ordered[:size]
-        cursor = (page[-1][0], page[-1][1]) if len(page) == size else None
-        return [key for _, key in page], cursor
+        cursor = page[-1] if len(page) == size else None
+        return [entry[-1] for entry in page], cursor
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # Firestore excludes rows without the ordered field, and orders ties by document name.
