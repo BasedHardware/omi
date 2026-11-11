@@ -454,3 +454,45 @@ def test_legacy_stale_adoption_persists_debt_then_repairs_with_real_storage(
     assert created and declined is None and calls == [1]
     assert repaired['id'] == 'stable-legacy'
     assert recap.get().to_dict()['headline'] == 'Repaired'
+
+
+def test_source_deleted_before_legacy_adoption_is_not_blessed_as_fresh(
+    client, auth_headers, fake_firestore, generation_seams, monkeypatch, conversation_fixture, live_user
+):
+    import utils.other.notifications as n
+    from fakes.firestore import seed_conversation
+
+    monkeypatch.delenv('DAILY_RECAP_LATE_INPUT_REFRESH_ENABLED', raising=False)
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    monkeypatch.setattr(n, 'generated_compute_allowed', lambda *a, **k: True)
+    monkeypatch.setattr(n, 'memories_learned_payload', lambda *a, **k: [])
+    removed = _seed_source_day(fake_firestore, conversation_fixture)
+    retained = deepcopy(removed.get().to_dict())
+    retained.update(
+        id='retained-before-adoption',
+        sync_content_revision=1,
+        summary_completed_at=datetime(2026, 10, 1, 12, tzinfo=timezone.utc).timestamp(),
+    )
+    seed_conversation('123', retained)
+    recap = _seed(fake_firestore, _summary('legacy', created_at=datetime(2026, 10, 1, 22, tzinfo=timezone.utc)))
+    removed.delete()
+    seen = []
+
+    def generate(_uid, conversations, *a, **k):
+        seen.extend(c.id for c in conversations)
+        return _summary('model-id', headline='Retained source only')
+
+    monkeypatch.setattr(n, 'generate_comprehensive_daily_summary', generate)
+    start, end = n.local_day_bounds_utc(datetime(2026, 10, 1).date(), 'UTC')
+    _, created, reason = n._generate_and_store_daily_summary('123', '2026-10-01', start, end)
+    assert not created and reason is None and seen == []
+    marker = (
+        fake_firestore.collection('users').document('123').collection('daily_summary_generation').document('2026-10-01')
+    )
+    assert marker.get().to_dict()['late_refresh_required'] is True
+    repaired, created, reason = n._generate_and_store_daily_summary('123', '2026-10-01', start, end)
+    assert created and reason is None
+    assert seen == [retained['id']]
+    assert repaired['id'] == 'legacy'
+    assert recap.get().to_dict()['headline'] == 'Retained source only'

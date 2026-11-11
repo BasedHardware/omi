@@ -34,7 +34,10 @@ precedence. The supplied source documents were under `/tmp/omi-homestep-push/`.
   cannot be mistaken for this narrower identity.
 - Adoption compares input creation/finish/summary completion stamps with the
   recap's generation time. Newer content, unknown completion/generation times,
-  and ordinal revisions greater than one schedule conservative durable repair.
+  ordinal revisions greater than one, and unverified original membership schedule
+  conservative durable repair. Surviving timestamps cannot prove that an input
+  was not previously deleted, discarded or moved outside the day. Only a matching
+  prior source fingerprint establishes membership for fresh adoption.
   Fresh adoption stores the fingerprint without a model call. Stale adoption
   also spends no model call until the next admitted scan.
 - Persist repair debt on `daily_summary_generation/{date}`. Preserve it when
@@ -44,7 +47,9 @@ precedence. The supplied source documents were under `/tmp/omi-homestep-push/`.
   The existing three-backfill-generation tick cap and job/user budgets still apply.
 - Re-read the window after generation; reject changed candidates and retain debt.
   CAS the recap fingerprint in the content-write transaction. Never replace the
-  recap document or patch visibility, creation time or delivery receipt.
+  recap document or patch visibility, creation time or delivery receipt. Patch
+  `read_contract_version`, `action_items_coverage` and `memories_learned_coverage`
+  with generated content so readers interpret the replacement consistently.
   Keep `late_refresh_verify_pending` through adoption and every refresh commit:
   inputs arriving between the last read and commit remain an explicit verification
   obligation, and the stored fingerprint always identifies the original model inputs.

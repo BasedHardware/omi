@@ -13,6 +13,8 @@ from database import daily_summary_refresh as storage
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_daily_summary_race_condition import notification_harness  # noqa: F401
 from utils.other import daily_summary_refresh as identity
+from utils.llm.daily_recap_fingerprint import FINGERPRINT_FIELD, input_fingerprint
+from utils.daily_summary_read_contract import summary_read_payload
 
 UID = 'synthetic-owner'
 DAY = '2026-11-10'
@@ -125,6 +127,9 @@ def test_metadata_only_write_does_not_refresh(refresh_harness):
 def test_adoption_never_blesses_existing_stale_content(refresh_harness, late):
     h = refresh_harness
     del h.store.rows[RECAP][identity.FIELD]
+    # A matching prior fingerprint proves the source membership. Timestamps
+    # alone cannot establish this for an unversioned legacy recap.
+    h.store.rows[RECAP][FINGERPRINT_FIELD] = input_fingerprint(h.rows)
     if late is True:
         h.rows[0]['summary_completed_at'] = (NOW + timedelta(seconds=1)).timestamp()
     elif late == 'unknown':
@@ -308,3 +313,41 @@ def test_backfill_stays_seven_days_silent_and_refreshes_count_against_tick_cap(r
     n._backfill_recent_daily_summaries(UID, NOW.date(), 'UTC')
     assert generate.call_count == 7
     assert generate.call_args.args[1] == '2026-11-04'
+
+
+@pytest.mark.parametrize('prior_fingerprint', [False, True])
+def test_input_removed_before_first_adoption_is_repair_debt(refresh_harness, prior_fingerprint):
+    h = refresh_harness
+    del h.store.rows[RECAP][identity.FIELD]
+    original_rows = [*h.rows, dict(h.rows[0], id='removed-before-adoption')]
+    if prior_fingerprint:
+        h.store.rows[RECAP][FINGERPRINT_FIELD] = input_fingerprint(original_rows)
+    # Only old, revision-one inputs survive, so timestamp-only adoption would
+    # bless a recap still containing the removed conversation.
+    result, created, reason = h.call()
+    assert not created and reason is None
+    assert result['headline'] == 'Before'
+    h.generate_summary.assert_not_called()
+    assert h.store.rows[MARKER]['late_refresh_required'] is True
+    assert h.call()[1]
+    assert [c.id for c in h.generate_summary.call_args.args[1]] == ['a']
+
+
+def test_refreshed_content_carries_its_read_contract_metadata(refresh_harness):
+    h = refresh_harness
+    change(h)
+    h.generate_summary.return_value = {
+        'headline': 'New format',
+        'read_contract_version': 2,
+        'action_items_coverage': 'created_in_window',
+        'memories_learned_coverage': 'bounded_review_selection_max_3_from_600_newest_updated; not all stored memories',
+        'stats': {'watching_minutes': 20, 'watching_minutes_basis': 'interval_union', 'watching_coverage': 'complete'},
+    }
+    result, created, reason = h.call()
+    assert created and reason is None
+    projected = summary_read_payload(h.store.rows[RECAP])
+    assert result['read_contract_version'] == 2
+    assert projected['action_items_coverage'] == 'created_in_window'
+    assert projected['memories_learned_coverage'] == h.generate_summary.return_value['memories_learned_coverage']
+    assert projected['stats']['watching_minutes_basis'] == 'interval_union'
+    assert projected['stats']['watching_coverage'] == 'complete'

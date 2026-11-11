@@ -4,6 +4,8 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
+from utils.llm.daily_recap_fingerprint import FINGERPRINT_FIELD, input_fingerprint
+
 FIELD = 'late_input_fingerprint_v1'
 # Generic `revision` is deliberately absent: starring also advances it.
 REVISION_FIELDS = (
@@ -63,6 +65,11 @@ def _timestamp(value):
 
 def adoption_needs_repair(existing, rows):
     """Unknown content age is repair debt, not proof that a legacy recap is fresh."""
+    # Surviving input timestamps cannot prove that an older input was not
+    # deleted, discarded or moved away. Only a prior source fingerprint can
+    # establish membership. Unknown legacy membership is bounded repair debt.
+    if existing.get(FINGERPRINT_FIELD) != input_fingerprint(rows):
+        return True
     generated = _timestamp(existing.get('generated_at') or existing.get('created_at'))
     if generated is None:
         return True
