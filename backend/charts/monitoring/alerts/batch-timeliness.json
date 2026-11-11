@@ -163,7 +163,7 @@
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
       "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
-      "threshold": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120) for 5m",
+      "threshold": "($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120) for 5m",
       "evaluated_bad": "Synthetic: a new quarantined unit age 3h with a fresh timeliness sample, or an all-epoch compute commitment age 7201s with a fresh queue sample.",
       "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page.",
       "unpause_criteria": "After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
@@ -295,7 +295,7 @@
       "verification": "Check omi_batch_timeliness_samples_total by outcome: error means Firestore reads failed, disabled means the kill switch is off.",
       "safe_next_action": "If disabled, confirm that was intended. If error, read the batch_timeliness_sample warning log on the worker.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
-      "threshold": "$A >= 900 for 5m",
+      "threshold": "$A >= 1200 for 5m",
       "evaluated_bad": "Synthetic: no sample for 20 minutes, or the series never existed.",
       "evaluated_good": "Synthetic: a sample 4 minutes old."
     },

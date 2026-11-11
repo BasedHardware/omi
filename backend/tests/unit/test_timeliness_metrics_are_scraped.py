@@ -4,7 +4,6 @@ import ast
 import json
 import os
 import io
-import shutil
 import subprocess
 import sys
 import tokenize
@@ -118,25 +117,79 @@ def consuming_expressions():
                 yield path, uid, ref, expression, used
 
 
+def assert_newest_source_join(expression, names, context):
+    assert NEWEST in expression, context
+    for name in names:
+        for selector in re.findall(rf'{name}(?:\{{[^}}]*\}})?', expression):
+            assert not re.search(r'\b(namespace|job|cluster)\s*[!=~]', selector), context
+        if name == 'omi_batch_timeliness_observed_at_seconds':
+            continue
+        # Every value occurrence must join before aggregation. Ignoring only
+        # leg preserves all labels identifying its OWN observation source.
+        occurrences = list(re.finditer(rf'\b{name}(?:\{{[^}}]*\}})?', expression))
+        joined = re.findall(
+            rf'\b{name}(?:\{{[^}}]*\}})?(?: >= 0\))? and ignoring\(leg\) {re.escape(FRESH_NEWEST)}',
+            expression,
+        )
+        assert len(joined) == len(occurrences), context
+
+
 def test_every_timeliness_consumer_joins_its_own_newest_source():
+    # Always runs in CI: this structural guard has no promtool dependency.
     expressions = list(consuming_expressions())
     assert expressions
     for path, uid, ref, expression, names in expressions:
-        context = f'{path.name}:{uid}:{ref}'
-        assert NEWEST in expression, context
-        for name in names:
-            for selector in re.findall(rf'{name}(?:\{{[^}}]*\}})?', expression):
-                assert not re.search(r'\b(namespace|job|cluster)\s*[!=~]', selector), context
-            if name == 'omi_batch_timeliness_observed_at_seconds':
-                continue
-            # Every occurrence must join before aggregation. Ignoring only the
-            # producer's extra leg label preserves every source identity label.
-            occurrences = list(re.finditer(rf'\b{name}(?:\{{[^}}]*\}})?', expression))
-            joined = re.findall(
-                rf'\b{name}(?:\{{[^}}]*\}})?(?: >= 0\))? and ignoring\(leg\) {re.escape(FRESH_NEWEST)}',
-                expression,
+        assert_newest_source_join(expression, names, f'{path.name}:{uid}:{ref}')
+
+
+def corrupted_consuming_expressions():
+    cases = []
+    for path, uid, ref, expression, names in consuming_expressions():
+        context = f'{path.stem}:{uid}:{ref}'
+        cases.append(
+            pytest.param(
+                expression.replace(NEWEST, f'({OBSERVED} >= 0)', 1),
+                names,
+                id=f'{context}:missing-newest-selector',
             )
-            assert len(joined) == len(occurrences), context
+        )
+        values = [name for name in names if name != 'omi_batch_timeliness_observed_at_seconds']
+        if values:
+            cases.append(
+                pytest.param(
+                    expression.replace('and ignoring(leg)', 'and ignoring(leg, namespace)', 1),
+                    names,
+                    id=f'{context}:wrong-source-identity',
+                )
+            )
+            cases.append(
+                pytest.param(
+                    expression + f' or {values[0]}',
+                    names,
+                    id=f'{context}:unpaired-value',
+                )
+            )
+    return cases
+
+
+@pytest.mark.parametrize('expression,names', corrupted_consuming_expressions())
+def test_ci_join_guard_rejects_broken_pairing_in_every_consumer(expression, names):
+    # Mutation coverage proves the CI-only structural guard checks each value's
+    # identity join and newest-source selector, including repeated backlog terms.
+    with pytest.raises(AssertionError):
+        assert_newest_source_join(expression, names, 'mutated consumer')
+
+
+@pytest.mark.parametrize('uid', ['omi-batch-unit-unpublished-2h', 'omi-batch-timeliness-sample-stale'])
+def test_freshness_annotations_match_executable_conditions(uid):
+    monitoring = BACKEND / 'charts/monitoring'
+    split = {rule['uid']: rule for rule in json.loads((monitoring / 'alerts/batch-timeliness.json').read_text())}
+    combined = {rule['uid']: rule for rule in json.loads((monitoring / 'alert-rules.json').read_text())}
+    rule = split[uid]
+    condition = next(query['model']['expression'] for query in rule['data'] if query['refId'] == 'D')
+    assert '1200' in condition
+    assert rule['annotations']['threshold'] == f"{condition} for {rule['for']}"
+    assert combined[uid] == rule
 
 
 @pytest.mark.parametrize(
@@ -170,9 +223,9 @@ def test_regression_surfaces_select_this_guard(tmp_path, source):
 
 
 def test_prometheus_replayed_handoffs_and_sustained_leadership(tmp_path):
-    executable = os.environ.get('PROMTOOL_BIN') or shutil.which('promtool')
+    executable = os.environ.get('PROMTOOL_BIN')
     if not executable:
-        pytest.skip('set PROMTOOL_BIN to verify real Prometheus handoff semantics')
+        pytest.skip('Local promtool check; CI does not run it. Set PROMTOOL_BIN to run Prometheus semantics locally.')
     monitoring = BACKEND / 'charts/monitoring'
     rules = {
         rule['uid']: rule for path in (monitoring / 'alerts').glob('*.json') for rule in json.loads(path.read_text())
@@ -310,3 +363,4 @@ def test_prometheus_replayed_handoffs_and_sustained_leadership(tmp_path):
         [executable, 'test', 'rules', 'test.yaml'], cwd=tmp_path, capture_output=True, text=True, timeout=45
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    print(result.stdout.rstrip())
