@@ -103,6 +103,26 @@ void main() {
     expect(find.byKey(const Key('conversation_detail_summary_retry')), findsNothing);
   });
 
+  testWidgets('failed Home projection survives a legacy detail read and offers retry without a spinner',
+      (tester) async {
+    final legacy = _conversation(summaryRetryable: false);
+    final processing = ServerConversation(
+        id: legacy.id,
+        createdAt: legacy.createdAt,
+        structured: legacy.structured,
+        status: ConversationStatus.processing);
+    final detail = ConversationDetailProvider(fetchConversation: (_) async => processing)
+      ..selectedDate = conversationLocalDayKey(processing.createdAt)
+      ..setCachedConversation(processing.withHomeStep('failed'));
+    addTearDown(detail.dispose);
+    await detail.refreshConversation();
+    expect(detail.conversation.homeStep, 'failed');
+    await tester.pumpWidget(_app(detail, _summary));
+    expect(find.byKey(const Key('conversation_detail_summary_retry')), findsOneWidget);
+    expect(find.byType(OmiLoadingState), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('an empty summary without the server marker keeps the ordinary Generate Summary prompt', (tester) async {
     final detail = _detail(_conversation(summaryRetryable: false));
     addTearDown(detail.dispose);

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-worker-path-imports-serving-stack",
+  "violated_contract": "A process that serves no HTTP must not import the web framework. The record-seal repair row is a disposable `python scripts/record_seal_repair_job.py --row` subprocess, and a module-scope `from fastapi import ...` in two shared helpers it reaches (utils/metrics.py for the /metrics Response, utils/sync/stage.py for the HTTPException in require_http_stage) put fastapi/pydantic/starlette into every row's import graph. Measured 2026-11-10, that was ~60% of a ~10.8 s import, and ~88% of the ~89 s per-row time was process startup plus client construction, so the row paid the serving stack's cost for work it never does.",
+  "canonical_prevention": "Keep the web framework at the HTTP boundary: annotate with TYPE_CHECKING and import fastapi inside the single function that builds a Response or raises an HTTPException, so a non-HTTP caller of the module never loads it. Guard the worker path by importing its entrypoint in a clean interpreter and asserting fastapi, pydantic and starlette never appear in sys.modules, so a new module-scope web import anywhere in the graph fails the test rather than silently re-inflating per-row startup.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_record_seal_row_import_graph.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/metrics.py",
+    "backend/utils/sync/stage.py",
+    "backend/scripts/record_seal_repair_job.py",
+    "backend/utils/batch_pipeline/"
+  ],
+  "status": "open"
+}

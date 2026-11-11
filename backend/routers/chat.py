@@ -677,7 +677,7 @@ async def transcribe_voice_message(
             audio_seconds=duration_ms / 1000 if encoding == 'linear16' else None,
         )
         try:
-            transcript, detected_language = await run_blocking(
+            transcription_result = await run_blocking(
                 sync_executor,
                 transcribe_pcm_bytes,
                 audio_bytes,
@@ -687,7 +687,14 @@ async def transcribe_voice_message(
                 sample_rate=sample_rate,
                 channels=channels,
                 keywords=context_keywords,
+                return_provider=True,
             )
+            # Legacy transcription adapters return (text, language). Provider
+            # metadata is optional; retain the selected provider when absent.
+            if len(transcription_result) == 4:
+                transcript, detected_language, stt_provider, stt_model = transcription_result
+            else:
+                transcript, detected_language = transcription_result
             outcome = TranscriptionOutcome.SUCCESS if transcript else TranscriptionOutcome.EXPECTED_SILENCE
             parity_capture.observe(
                 "inbound",
@@ -805,9 +812,21 @@ async def transcribe_voice_message(
             audio_seconds=measured_duration_ms / 1000,
         )
         for wav_path in wav_paths:
-            transcript, detected_language = await run_blocking(
-                sync_executor, transcribe_voice_message_segment, wav_path, uid, language=resolved_language
+            transcription_result = await run_blocking(
+                sync_executor,
+                transcribe_voice_message_segment,
+                wav_path,
+                uid,
+                language=resolved_language,
+                return_provider=True,
             )
+            if len(transcription_result) == 4:
+                transcript, detected_language, segment_provider, segment_model = transcription_result
+                # A multipart response must disclose Soniox if any segment used it.
+                if stt_provider != 'soniox':
+                    stt_provider, stt_model = segment_provider, segment_model
+            else:
+                transcript, detected_language = transcription_result
             if transcript:
                 transcripts.append(transcript)
             if is_multi and detected_language:

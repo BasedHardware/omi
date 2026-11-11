@@ -14,7 +14,7 @@ from config.recorded_time import (
 from config.server_batch import has_audio, owned
 from database import conversations
 from utils.conversations.fragment_visibility import is_relevance_discarded
-from utils.episodes import service
+from utils.episodes import service, late_member
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,8 @@ def attach_closed_batch_capture(
             service.episode_timeline.detach_recorded(
                 uid, conversation_id, episode_id=moved_from, firestore_client=c.firestore_client
             )
-        service.attach_recorded(uid, conversation_id, row, started, finished, c, pending_transcription=True)
+        owner = service.attach_recorded(uid, conversation_id, row, started, finished, c, pending_transcription=True)
+        late_member.joined(uid, conversation_id, row, owner, c)
         return 'attached'
     except Exception as error:
         logger.warning('event=episode_batch_audio_close_attach exception_type=%s', type(error).__name__)

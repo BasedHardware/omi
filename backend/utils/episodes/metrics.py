@@ -7,13 +7,16 @@
 - wrap-up latency: end of the closing conversation's speech to its finished
   notes (``omi_episode_wrapup_latency_seconds``)
 - boundary decisions, including Jev answers (``omi_episode_boundary_total``)
+- Variant F candidate privacy refusals (``omi_episode_f_gate_total``) and fallback
+  call sites (``omi_episode_f_fallback_total``)
 - client gating: moments skipped because no capable client was seen
   (``omi_episode_moments_skipped_no_client_total``), and live conversations by
   whether the user's client was seen (``omi_episode_live_sessions_total``)
 - episodes API calls by client channel and admission outcome
   (``omi_episode_client_requests_total``)
-- closed-episode composer runs by outcome and their latency
-  (``omi_episode_compose_total``, ``omi_episode_compose_seconds``)
+- closed-episode composer runs by outcome and trigger, their latency, and the
+  paid model calls inside them (``omi_episode_compose_total``,
+  ``omi_episode_compose_seconds``, ``omi_episode_compose_calls_total``)
 - Home attach-gap read observations (``omi_episode_home_attach_gap_total``)
 - Home list members shown and hidden as below the notes floor
   (``omi_episode_home_members_total``)
@@ -110,6 +113,38 @@ BOUNDARY_OUTCOMES = frozenset(
     }
 )
 
+F_GATE_REASONS = frozenset(
+    {
+        'held',
+        'client_processing',
+        'deferred',
+        'local_pending',
+        'local_only',
+        'row_consent',
+        'user_consent',
+        'locked_discarded',
+        'owner',
+        'status',
+        'hidden',
+        'other',
+    }
+)
+
+F_FALLBACK_SITES = frozenset(
+    {
+        'pending_conflict',
+        'pending_error',
+        'synced_failed',
+        'recheck_failed',
+        'previous_failed',
+        'gate_failed',
+        'unknown_previous',
+        'recheck_failed_settle',
+        'unknown_jev',
+        'other',
+    }
+)
+
 EPISODE_MOMENT_UPDATES_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moment_updates_total',
@@ -176,6 +211,18 @@ EPISODE_BOUNDARY_TOTAL = reuse_or_create(
     'Moment boundary decisions against the open episode.',
     ['outcome'],
 )
+EPISODE_F_GATE_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_f_gate_total',
+    'Variant F candidate privacy gate refusals by first failing condition. Never labeled by uid.',
+    ['reason'],
+)
+EPISODE_F_FALLBACK_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_f_fallback_total',
+    'Variant F fallbacks by bounded call site. Existing fallback reasons are unchanged.',
+    ['site'],
+)
 EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_moments_skipped_no_client_total',
@@ -192,6 +239,7 @@ COMPOSE_OUTCOMES = frozenset(
     {
         'settling',
         'composed',
+        'composed_single',
         'unchanged',
         'leased',
         'waiting',
@@ -199,6 +247,7 @@ COMPOSE_OUTCOMES = frozenset(
         'empty',
         'no_episode',
         'superseded',
+        'kept_pending',
         'stale',
         'backoff',
         'conflict',
@@ -206,20 +255,52 @@ COMPOSE_OUTCOMES = frozenset(
         'error',
     }
 )
+# What asked for the compose. Bounded, never a uid: a close, a Home/page read, a
+# member finalize, or the settle timer draining deferred work.
+COMPOSE_TRIGGERS = frozenset({'close', 'read', 'member_final', 'settle'})
+# Paid model calls inside a compose: the run's trigger, plus the one repair retry.
+COMPOSE_CALL_TRIGGERS = COMPOSE_TRIGGERS | {'repair'}
+COMPOSE_CALL_OUTCOMES = frozenset({'ok', 'parse_error', 'no_sections', 'error'})
 EPISODE_COMPOSE_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_compose_total',
-    'Closed-episode composer runs by outcome. Never labeled by uid.',
-    ['outcome'],
+    'Closed-episode composer runs by outcome and trigger. Never labeled by uid.',
+    ['outcome', 'trigger'],
 )
 EPISODE_COMPOSE_SECONDS = reuse_or_create(
     Histogram,
     'omi_episode_compose_seconds',
-    'Wall time of a composer run, including its model call.',
-    ['outcome'],
+    'Wall time of a composer run, including its model call, by outcome and trigger.',
+    ['outcome', 'trigger'],
     buckets=(0.1, 0.5, 1, 3, 5, 8, 13, 20, 30, 60, 90),
 )
-COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged'})
+EPISODE_COMPOSE_CALLS_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_calls_total',
+    'Paid composer model calls by trigger (close|read|member_final|settle|repair) and outcome. Never labeled by uid.',
+    ['trigger', 'outcome'],
+)
+COMPOSE_MODES = frozenset({'full', 'notes_first'})
+EPISODE_COMPOSE_INPUT_TOKENS_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_input_tokens_total',
+    'Input tokens spent by closed-episode composes, by prompt mode (full|notes_first). Never labeled by uid.',
+    ['mode'],
+)
+EPISODE_COMPOSE_OUTPUT_TOKENS_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_compose_output_tokens_total',
+    'Reported billed output tokens on every composer reply, including terminal parse failures.',
+    ['mode'],
+)
+EPISODE_COMPOSE_TOOL_CALLS = reuse_or_create(
+    Histogram,
+    'omi_episode_compose_tool_calls',
+    'Transcript-excerpt tool calls per closed-episode compose, by prompt mode (full|notes_first).',
+    ['mode'],
+    buckets=(0, 1, 2, 3, 4, 5),
+)
+COMPOSE_SKIP_REASONS = frozenset({'evidence_unchanged', 'late_deferred'})
 EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL = reuse_or_create(
     Counter,
     'omi_episode_compose_trigger_skipped_total',
@@ -270,6 +351,10 @@ def _prime() -> None:
             EPISODE_PROVISIONAL_ITEMS_TOTAL.labels(outcome=_label(outcome, PROVISIONAL_OUTCOMES))
         for outcome in BOUNDARY_OUTCOMES:
             EPISODE_BOUNDARY_TOTAL.labels(outcome=_label(outcome, BOUNDARY_OUTCOMES))
+        for reason in F_GATE_REASONS:
+            EPISODE_F_GATE_TOTAL.labels(reason=_label(reason, F_GATE_REASONS))
+        for site in F_FALLBACK_SITES:
+            EPISODE_F_FALLBACK_TOTAL.labels(site=_label(site, F_FALLBACK_SITES))
         for outcome in MOMENT_OUTCOMES:
             EPISODE_MOMENT_LATENCY_SECONDS.labels(outcome=_label(outcome, MOMENT_OUTCOMES))
         for reason in CLOSE_REASON_LABELS:
@@ -280,8 +365,17 @@ def _prime() -> None:
             EPISODE_CLOSED_MEMBERS.labels(arm=arm)
             EPISODE_CLOSED_SPAN_SECONDS.labels(arm=arm)
         for outcome in COMPOSE_OUTCOMES:
-            EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
-            EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
+            for trigger in COMPOSE_TRIGGERS:
+                EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES), trigger=trigger)
+                EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES), trigger=trigger)
+        for trigger in COMPOSE_CALL_TRIGGERS:
+            for outcome in COMPOSE_CALL_OUTCOMES:
+                EPISODE_COMPOSE_CALLS_TOTAL.labels(
+                    trigger=_label(trigger, COMPOSE_CALL_TRIGGERS), outcome=_label(outcome, COMPOSE_CALL_OUTCOMES)
+                )
+        for mode in COMPOSE_MODES:
+            EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode=_label(mode, COMPOSE_MODES))
+            EPISODE_COMPOSE_TOOL_CALLS.labels(mode=_label(mode, COMPOSE_MODES))
         for reason in COMPOSE_SKIP_REASONS:
             EPISODE_COMPOSE_TRIGGER_SKIPPED_TOTAL.labels(reason=_label(reason, COMPOSE_SKIP_REASONS))
         for outcome in HOME_MEMBER_OUTCOMES:
@@ -368,6 +462,20 @@ def record_boundary(outcome: str) -> None:
         pass
 
 
+def record_f_gate(reason: str) -> None:
+    try:
+        EPISODE_F_GATE_TOTAL.labels(reason=_label(reason, F_GATE_REASONS)).inc()
+    except Exception:
+        pass
+
+
+def record_f_fallback(site: str) -> None:
+    try:
+        EPISODE_F_FALLBACK_TOTAL.labels(site=_label(site, F_FALLBACK_SITES)).inc()
+    except Exception:
+        pass
+
+
 def record_moment_skipped_no_client(trigger: str) -> None:
     try:
         EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL.labels(trigger=_label(trigger, SKIP_TRIGGERS)).inc()
@@ -399,10 +507,40 @@ def record_compose_trigger_skipped(reason: str) -> None:
         pass
 
 
-def record_compose(outcome: str, seconds: float) -> None:
+def record_compose(outcome: str, seconds: float, trigger: str = 'close') -> None:
     try:
-        EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).inc()
-        EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES)).observe(max(0.0, seconds))
+        trigger_label = _label(trigger, COMPOSE_TRIGGERS)
+        EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES), trigger=trigger_label).inc()
+        EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES), trigger=trigger_label).observe(
+            max(0.0, seconds)
+        )
+    except Exception:
+        pass
+
+
+def record_compose_call(trigger: str, outcome: str) -> None:
+    """One paid composer model call, including the repair retry."""
+    try:
+        EPISODE_COMPOSE_CALLS_TOTAL.labels(
+            trigger=_label(trigger, COMPOSE_CALL_TRIGGERS), outcome=_label(outcome, COMPOSE_CALL_OUTCOMES)
+        ).inc()
+    except Exception:
+        pass
+
+
+def record_compose_reply(mode: str, input_tokens: int, output_tokens: int) -> None:
+    """Reported billed usage on every reply, even if parse/repair later fails."""
+    try:
+        label = _label(mode, COMPOSE_MODES)
+        EPISODE_COMPOSE_INPUT_TOKENS_TOTAL.labels(mode=label).inc(max(0, input_tokens))
+        EPISODE_COMPOSE_OUTPUT_TOKENS_TOTAL.labels(mode=label).inc(max(0, output_tokens))
+    except Exception:
+        pass
+
+
+def record_compose_tools(mode: str, tool_calls: int) -> None:
+    try:
+        EPISODE_COMPOSE_TOOL_CALLS.labels(mode=_label(mode, COMPOSE_MODES)).observe(max(0, int(tool_calls)))
     except Exception:
         pass
 

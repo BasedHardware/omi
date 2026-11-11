@@ -14,12 +14,22 @@ import time
 from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
-from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted, InvalidArgument
 
 from config.firestore_read_levers import lever_enabled
-from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
+from config.batch_pipeline import (
+    contention_retry_enabled,
+    control_candidate_fanout,
+    held_poll_skip_enabled,
+    MERGE_POLL_TERMINAL_STATES,
+)
+from database.batch_pipeline_projection_finish import (
+    PROJECTION_FINISH_DUE_FIELD,
+    PROJECTION_FINISH_STATES as PROJECTION_FINISH_STATES,
+)
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
+from database import record_recovery_gate
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
@@ -36,7 +46,7 @@ from utils.batch_pipeline.input_retention import held_input_leg, invalid_staged_
 PROJECTION_DISCOVERY_STATES = ('pending', 'persisted', 'ready')
 PROJECTION_OBLIGATION_STATES = (*PROJECTION_DISCOVERY_STATES, 'quarantine_held')
 PROJECTION_ASSIGNMENT_STATES = ('pending',)
-PROJECTION_FINISH_STATES = ('persisted', 'ready')
+
 
 T = TypeVar('T')
 logger = logging.getLogger(__name__)
@@ -383,9 +393,14 @@ class FirestoreStore:
         return projection_pending(self.client, self.namespace, limit)
 
     def projection_page(
-        self, limit: int = 100, *, after=None, states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        return projection_page(self.client, self.namespace, limit, after=after, states=states)
+        return projection_page(self.client, self.namespace, limit, after=after, states=states, due_before=due_before)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return projection_successor(self.client, self.namespace, owner_key, previous)
@@ -400,8 +415,9 @@ def projection_page(
     namespace: str,
     limit: int = 100,
     *,
-    after=None,
+    after: tuple | None = None,
     states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+    due_before: float | None = None,
 ) -> tuple[list[str], Any]:
     """Stable keyset page; the cursor survives removal of its source row.
 
@@ -410,20 +426,54 @@ def projection_page(
     ``states`` narrows the same ``in`` filter to a subset of the drain states.
     A seed cursor ``(committed_at, '')`` starts at that time, before every key
     (the follow-up desync offset); keys are never empty.
+
+    ``due_before`` adds the dark finish-backoff range filter: only rows whose
+    ``projection_finish_due_at`` has passed. That field leads the ordering
+    because Firestore serves a range filter on the first ordered field only, so
+    the cursor becomes ``(due_at, committed_at, key)`` and a seed
+    ``(due_at,)`` starts at that clock.
     """
     if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
     collection = client.collection(f'{namespace}_results')
-    query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
-    if after is not None and after[1] == '':
+    if due_before is None:
+        query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
+    else:
+        query = (
+            collection.where('projection_state', 'in', list(states))
+            .where(PROJECTION_FINISH_DUE_FIELD, '<=', float(due_before))
+            .order_by(PROJECTION_FINISH_DUE_FIELD)
+            .order_by('committed_at')
+            .order_by('__name__')
+        )
+    seeded = after is not None and len(after) == 2 and after[1] == ''
+    if due_before is not None:
+        if after is not None and len(after) == 3:
+            query = query.start_after(
+                {
+                    PROJECTION_FINISH_DUE_FIELD: after[0],
+                    'committed_at': after[1],
+                    '__name__': collection.document(after[2]),
+                }
+            )
+        elif after is not None:
+            query = query.start_at({PROJECTION_FINISH_DUE_FIELD: after[0]})
+    elif after is not None and seeded:
         query = query.start_at({'committed_at': after[0]})
     elif after is not None:
-        query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
+        query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[-1])})
     size = max(1, min(limit, 200))
     docs = list(query.limit(size).stream())
     # Wrap even when blocked rows remain. Rows inserted behind the cursor are
     # revisited on the next cycle; no durable obligation is skipped or mutated.
-    cursor = (docs[-1].to_dict()['committed_at'], docs[-1].id) if len(docs) == size else None
+    if len(docs) == size:
+        last = docs[-1].to_dict()
+        if due_before is None:
+            cursor = (last['committed_at'], docs[-1].id)
+        else:
+            cursor = (last[PROJECTION_FINISH_DUE_FIELD], last['committed_at'], docs[-1].id)
+    else:
+        cursor = None
     return [doc.id for doc in docs], cursor
 
 
@@ -444,16 +494,22 @@ def projection_successor(client: Any, namespace: str, owner_key: str, previous: 
     return docs[0].id if len(docs) == 1 else None
 
 
-def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
-    docs = list(
-        client.collection(f'{namespace}_jobs')
-        .where('owner_key', '==', owner_key)
-        .where('merge_pending', '==', True)
-        .order_by('capture_at')
-        .order_by('segment_id')
-        .limit(1)
-        .stream(transaction=transaction)
+def first_pending(
+    client: Any, namespace: str, owner_key: str, *, transaction: Any = None, skip_terminal: bool = True
+) -> dict | None:
+    query = (
+        client.collection(f'{namespace}_jobs').where('owner_key', '==', owner_key).where('merge_pending', '==', True)
     )
+    base = query
+    skip = skip_terminal and held_poll_skip_enabled()
+    if skip:
+        query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
+    try:
+        docs = list(query.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction))
+    except (FailedPrecondition, InvalidArgument):
+        if not skip:
+            raise
+        docs = list(base.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction))
     return docs[0].to_dict() if docs else None
 
 
@@ -505,7 +561,7 @@ def held_merge_owners(
     marks = query.limit(max(1, min(limit, 100))).stream()
     owners = []
     for mark in marks:
-        job = first_pending(client, namespace, mark.id)
+        job = first_pending(client, namespace, mark.id, skip_terminal=False)
         owners.append((mark.id, job.get('owner_id') if job else None))
     return owners
 
@@ -515,17 +571,28 @@ def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> li
 
     Non-transactional discovery hint: it takes no transactional query lock.
     """
-    docs = (
+    query = (
         client.collection(f'{namespace}_jobs')
         .where('owner_key', '==', owner_key)
         .where('merge_pending', '==', True)
         .where('fresh_capture', '==', True)
-        .order_by('capture_at')
-        .order_by('segment_id')
-        .limit(max(1, min(limit, 32)))
-        .stream()
     )
-    return [doc.to_dict() for doc in docs]
+    base = query
+    skip = held_poll_skip_enabled()
+    if skip:
+        query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
+    try:
+        return [
+            doc.to_dict()
+            for doc in query.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
+        ]
+    except (FailedPrecondition, InvalidArgument):
+        if not skip:
+            raise
+        return [
+            doc.to_dict()
+            for doc in base.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
+        ]
 
 
 def ready_predecessor(
@@ -546,15 +613,30 @@ def ready_predecessor(
     return docs[0].to_dict() if len(docs) == 1 else None
 
 
+def promote_record_recoveries(client: Any, namespace: str, now: float, limit: int = 100, *, budget: Any = None) -> int:
+    """Resume accepted bytes from the active repair path even after mode rollback."""
+    if budget is not None:
+        budget.check()
+    promoted = 0
+    for segment in due(client, namespace, record_recovery_gate.WAITING_STATE, now, limit):
+        if budget is not None:
+            budget.check()
+        promoted += record_recovery_gate.promote(client, namespace, segment, now)
+    return promoted
+
+
 def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -> list[str]:
-    if state not in {'leased', 'retry', 'result_ready', 'record_pending'}:
+    if state not in {'leased', 'retry', 'result_ready', 'record_pending', record_recovery_gate.WAITING_STATE}:
         raise ValueError('only recoverable states may be scanned')
     field = {
         'leased': 'lease_until',
         'retry': 'available_at',
         'result_ready': 'enqueued_at',
         'record_pending': 'available_at',
+        record_recovery_gate.WAITING_STATE: 'available_at',
     }[state]
+    if state == 'record_pending':
+        promote_record_recoveries(client, namespace, now, limit)
     docs = (
         client.collection(f'{namespace}_jobs')
         .where('state', '==', state)

@@ -3,6 +3,10 @@
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
 
+Pre-recorded Modulate credit/breaker failover to Soniox is declared on every
+runtime host beside `STT_PRERECORDED_MODEL`. `PRERECORDED_SONIOX_FAILOVER_ENABLED`
+defaults to `true`; rollback sets it to `false` on those same hosts and charts.
+
 Batch admission percentage is runtime-owned in `rollout_cohorts/_ramp`; these
 deploy inputs and listen charts deliberately omit `BATCH_PIPELINE_PERCENT`.
 Keep it out of deployment defaults and use the
