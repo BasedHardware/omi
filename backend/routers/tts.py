@@ -191,6 +191,10 @@ async def _stream_direct_tts(
             detail=f"unsupported output_format for available TTS providers: {req.output_format}",
         )
 
+    body: Dict[str, Any]
+    headers: Dict[str, str]
+    url: str
+    media_type: str
     if provider_name == "ElevenLabs":
         if not _is_valid_voice_id(voice_id):
             metrics.finish('invalid_voice')
@@ -201,7 +205,7 @@ async def _stream_direct_tts(
                 status_code=400,
                 detail=f"unsupported output_format; expected one of {sorted(_EL_OUTPUT_FORMATS)}",
             )
-        body: Dict[str, Any] = {
+        body = {
             "text": text,
             "model_id": req.model_id,
         }
@@ -209,6 +213,7 @@ async def _stream_direct_tts(
             body["voice_settings"] = req.voice_settings.model_dump(exclude_none=True)
         url = _el_tts_url(voice_id, req.output_format)
         media_type = _el_output_media_type(req.output_format)
+        assert eleven_key is not None
         headers = {"Content-Type": "application/json", "Accept": media_type, "xi-api-key": eleven_key}
     else:
         dg = _dg_params(req.output_format)
@@ -223,7 +228,7 @@ async def _stream_direct_tts(
         body = {"text": text}
         media_type = _el_output_media_type(req.output_format)
         assert dg_key is not None
-        headers: Dict[str, str] = {"Content-Type": "application/json", "Authorization": f"Token {dg_key}"}
+        headers = {"Content-Type": "application/json", "Authorization": f"Token {dg_key}"}
 
     client = get_tts_client()
     semaphore = get_tts_semaphore()

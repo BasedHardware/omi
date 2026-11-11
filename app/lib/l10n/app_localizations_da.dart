@@ -4636,15 +4636,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get newTag => 'NY';
 
   @override
-  String get aiInterjection => 'AI Interjection';
-
-  @override
-  String get aiListening => 'AI Listening';
-
-  @override
-  String get aiThinking => 'AI Thinking';
-
-  @override
   String get needHelpChatWithUs => 'Brug for hjælp? Chat med os';
 
   @override

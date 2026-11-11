@@ -839,16 +839,6 @@ class SharedPreferencesUtil {
 
   bool get vadGateEnabled => getBool('vadGateEnabled');
 
-  // Claude Agent — route chat through desktop agent VM (experimental)
-  set claudeAgentEnabled(bool value) => saveBool('claudeAgentEnabled', value);
-
-  bool get claudeAgentEnabled => getBool('claudeAgentEnabled');
-
-  // AI Interjection — always-listening AI that can interject during monologue
-  set aiInterjectionEnabled(bool value) => saveBool('aiInterjectionEnabled', value);
-
-  bool get aiInterjectionEnabled => getBool('aiInterjectionEnabled');
-
   // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 0 (disabled)
   set notificationFrequency(int value) => saveInt('notificationFrequency', value);
 

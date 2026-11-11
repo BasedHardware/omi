@@ -4675,15 +4675,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get newTag => 'NUOVO';
 
   @override
-  String get aiInterjection => 'AI Interjection';
-
-  @override
-  String get aiListening => 'AI Listening';
-
-  @override
-  String get aiThinking => 'AI Thinking';
-
-  @override
   String get needHelpChatWithUs => 'Hai bisogno di aiuto? Chatta con noi';
 
   @override

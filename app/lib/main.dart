@@ -68,7 +68,6 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/providers/ai_interjection_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -766,13 +765,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => AppearanceProvider()),
         ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => PhoneCallProvider()),
-        ChangeNotifierProvider(
-          create: (context) {
-            final provider = AiInterjectionProvider();
-            provider.init(context.read<CaptureProvider>());
-            return provider;
-          },
-        ),
       ],
       builder: (context, child) {
         final mode = context.watch<AppearanceProvider>().mode;

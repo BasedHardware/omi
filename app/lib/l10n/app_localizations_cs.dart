@@ -4641,15 +4641,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get newTag => 'NOVÉ';
 
   @override
-  String get aiInterjection => 'AI Interjection';
-
-  @override
-  String get aiListening => 'AI Listening';
-
-  @override
-  String get aiThinking => 'AI Thinking';
-
-  @override
   String get needHelpChatWithUs => 'Potřebujete pomoc? Napište nám';
 
   @override

@@ -4672,15 +4672,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get newTag => 'NEW';
 
   @override
-  String get aiInterjection => 'AI Interjection';
-
-  @override
-  String get aiListening => 'AI Listening';
-
-  @override
-  String get aiThinking => 'AI Thinking';
-
-  @override
   String get needHelpChatWithUs => 'సహాయం అవసరమైనా? మేతో చాట్ చేయండి';
 
   @override

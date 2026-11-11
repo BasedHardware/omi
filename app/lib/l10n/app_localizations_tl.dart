@@ -4686,15 +4686,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get newTag => 'BAGO';
 
   @override
-  String get aiInterjection => 'AI Interjection';
-
-  @override
-  String get aiListening => 'AI Listening';
-
-  @override
-  String get aiThinking => 'AI Thinking';
-
-  @override
   String get needHelpChatWithUs => 'Kailangan ng Tulong? Chat sa amin';
 
   @override

@@ -1,7 +1,7 @@
 # Omi React Native — Contributor Notes
 
 Android-first RN port of the Omi mobile app (Flutter in `../`). Talks to the same Omi
-backend as `desktop/linux` and `desktop/windows`.
+backend as `desktop/macos` and `desktop/windows` (where applicable).
 
 ## Layout
 - `src/api/omiApi.ts` — axios client + endpoint helpers (`/v3/memories`, `/v1/conversations`, …).

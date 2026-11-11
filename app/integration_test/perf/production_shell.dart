@@ -131,6 +131,7 @@ class PerfProductionShell extends StatefulWidget {
   @override
   State<PerfProductionShell> createState() => _PerfProductionShellState();
 }
+
 class _PerfProductionShellState extends State<PerfProductionShell> {
   late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
     emit: (name, properties) {
@@ -146,62 +147,62 @@ class _PerfProductionShellState extends State<PerfProductionShell> {
     super.initState();
     _performanceTelemetry.attach();
   }
+
   @override
   void dispose() {
     _performanceTelemetry.dispose();
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) => MultiProvider(
-    providers: [
-      ChangeNotifierProvider(create: (_) => AppearanceProvider()),
-      ChangeNotifierProvider(create: (_) => LocaleProvider()),
-    ],
-    builder: (context, child) {
-        final mode = context.watch<AppearanceProvider>().mode;
-        final platformBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-        final brightness = resolveAppearanceBrightness(mode, platformBrightness);
-        OmiColors.active = OmiColors.forBrightness(brightness);
-        return WithForegroundTask(
-          child: MaterialApp(
-            debugShowCheckedModeBanner: F.env == Environment.dev,
-            title: F.title,
-            navigatorKey: MyApp.navigatorKey,
-            navigatorObservers: [if (!PhysicalQualification.enabled) _performanceTelemetry],
-            locale: context.watch<LocaleProvider>().locale,
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: AppLocalizations.supportedLocales,
-            theme: buildOmiTheme(brightness: Brightness.light),
-            darkTheme: buildOmiTheme(brightness: Brightness.dark),
-            themeMode: mode,
-            builder: (context, child) {
-              syncIntlDefaultLocale(Localizations.localeOf(context));
-              ErrorWidget.builder = (errorDetails) {
-                return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
-              };
-              final content = AnnotatedRegion<SystemUiOverlayStyle>(
-                value: brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
-                child: KeyedSubtree(key: ValueKey(brightness), child: child!),
-              );
-              final guidedContent = BluetoothGuidanceListener(child: content);
-              return SessionReplayScope(
-                child: widget.iosAnalytics
-                    ? RageClickContextTracker(child: guidedContent)
-                    : guidedContent,
-              );
-            },
-            home: TalkerWrapper(
-              talker: Logger.instance.talker,
-              options: const TalkerWrapperOptions(enableErrorAlerts: false, enableExceptionAlerts: false),
-              child: widget.page,
+        providers: [
+          ChangeNotifierProvider(create: (_) => AppearanceProvider()),
+          ChangeNotifierProvider(create: (_) => LocaleProvider()),
+        ],
+        builder: (context, child) {
+          final mode = context.watch<AppearanceProvider>().mode;
+          final platformBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+          final brightness = resolveAppearanceBrightness(mode, platformBrightness);
+          OmiColors.active = OmiColors.forBrightness(brightness);
+          return WithForegroundTask(
+            child: MaterialApp(
+              debugShowCheckedModeBanner: F.env == Environment.dev,
+              title: F.title,
+              navigatorKey: MyApp.navigatorKey,
+              navigatorObservers: [if (!PhysicalQualification.enabled) _performanceTelemetry],
+              locale: context.watch<LocaleProvider>().locale,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              theme: buildOmiTheme(brightness: Brightness.light),
+              darkTheme: buildOmiTheme(brightness: Brightness.dark),
+              themeMode: mode,
+              builder: (context, child) {
+                syncIntlDefaultLocale(Localizations.localeOf(context));
+                ErrorWidget.builder = (errorDetails) {
+                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
+                };
+                final content = AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+                  child: KeyedSubtree(key: ValueKey(brightness), child: child!),
+                );
+                final guidedContent = BluetoothGuidanceListener(child: content);
+                return SessionReplayScope(
+                  child: widget.iosAnalytics ? RageClickContextTracker(child: guidedContent) : guidedContent,
+                );
+              },
+              home: TalkerWrapper(
+                talker: Logger.instance.talker,
+                options: const TalkerWrapperOptions(enableErrorAlerts: false, enableExceptionAlerts: false),
+                child: widget.page,
+              ),
             ),
-          ),
-        );
-      },
-  );
+          );
+        },
+      );
 }

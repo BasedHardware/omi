@@ -4650,15 +4650,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get newTag => 'NY';
 
   @override
-  String get aiInterjection => 'AI Interjection';
-
-  @override
-  String get aiListening => 'AI Listening';
-
-  @override
-  String get aiThinking => 'AI Thinking';
-
-  @override
   String get needHelpChatWithUs => 'Behöver du hjälp? Chatta med oss';
 
   @override

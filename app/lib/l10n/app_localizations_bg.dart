@@ -4660,15 +4660,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get newTag => 'НОВО';
 
   @override
-  String get aiInterjection => 'AI Interjection';
-
-  @override
-  String get aiListening => 'AI Listening';
-
-  @override
-  String get aiThinking => 'AI Thinking';
-
-  @override
   String get needHelpChatWithUs => 'Нуждаете се от помощ? Свържете се с нас';
 
   @override
