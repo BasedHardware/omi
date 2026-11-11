@@ -1,3 +1,6 @@
+import 'package:omi/pages/paywall/web_paywall_page.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import '../support/recording_analytics.dart';
 // Verifies native Checkout refreshes backend-owned subscription and allowance state.
 // Redirect success never grants an entitlement locally; cancellation preserves state.
 import 'package:flutter/material.dart';
@@ -87,10 +90,11 @@ class _HarnessState extends State<_Harness> with TickerProviderStateMixin {
 
 class _WebView extends WebViewPlatform {
   late _Navigation navigation;
+  late _Controller controller;
 
   @override
   PlatformWebViewController createPlatformWebViewController(PlatformWebViewControllerCreationParams params) =>
-      _Controller(params);
+      controller = _Controller(params);
 
   @override
   PlatformNavigationDelegate createPlatformNavigationDelegate(PlatformNavigationDelegateCreationParams params) =>
@@ -101,6 +105,14 @@ class _WebView extends WebViewPlatform {
 }
 
 class _Controller extends PlatformWebViewController {
+  JavaScriptChannelParams? channel;
+  @override
+  Future<void> setBackgroundColor(Color color) async {}
+  @override
+  Future<void> addJavaScriptChannel(JavaScriptChannelParams params) async {
+    channel = params;
+  }
+
   _Controller(super.params) : super.implementation();
 
   @override
@@ -124,6 +136,7 @@ class _Navigation extends PlatformNavigationDelegate {
   _Navigation(super.params) : super.implementation();
 
   late NavigationRequestCallback navigate;
+  late WebResourceErrorCallback resourceError;
 
   @override
   Future<void> setOnPageStarted(PageEventCallback callback) async {}
@@ -135,7 +148,9 @@ class _Navigation extends PlatformNavigationDelegate {
   Future<void> setOnProgress(ProgressCallback callback) async {}
 
   @override
-  Future<void> setOnWebResourceError(WebResourceErrorCallback callback) async {}
+  Future<void> setOnWebResourceError(WebResourceErrorCallback callback) async {
+    resourceError = callback;
+  }
 
   @override
   Future<void> setOnHttpError(void Function(HttpResponseError error) callback) async {}
@@ -207,15 +222,21 @@ Future<_Usage> _pumpSheet(
 }
 
 void main() {
+  late RecordingAnalytics telemetry;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     TranscriptionAllowanceCache.clear();
     Env.overrideApiBaseUrl('http://127.0.0.1:1/');
     PlatformManager.initializeForLocalHarness();
+    AnalyticsManager.resetForTesting();
+    telemetry = RecordingAnalytics();
+    AnalyticsManager.configure(telemetry.adapter);
+    await AnalyticsManager.init();
   });
 
   tearDown(() {
+    AnalyticsManager.resetForTesting();
     TranscriptionAllowanceCache.clear();
     Env.clearApiBaseUrlOverrideForTesting();
   });
@@ -230,10 +251,17 @@ void main() {
       onSubscriptionRequest: () => subscriptionRequests++,
     );
 
+    await AnalyticsManager.flushPending(force: true);
+    expect(telemetry.propertiesOf('Subscription Paywall Viewed'), hasLength(1));
+    expect(telemetry.propertiesOf('Subscription Upgrade Tapped'), hasLength(1));
+    expect(telemetry.propertiesOf('Subscription Checkout Opened'), hasLength(1));
+    expect(telemetry.propertiesOf('Subscription Checkout Completed'), isEmpty);
     webView.navigation.navigate(NavigationRequest(url: '${Env.apiBaseUrl}v1/payments/success', isMainFrame: true));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
+    await AnalyticsManager.flushPending(force: true);
+    expect(telemetry.propertiesOf('Subscription Checkout Completed'), hasLength(1));
     expect(subscriptionRequests, 1);
     expect(usage.subscription?.subscription.plan, PlanType.unlimitedV2);
     expect(TranscriptionAllowanceCache.current?.mode, TranscriptionAllowanceSnapshot.modeManaged);
@@ -255,9 +283,54 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
+    await AnalyticsManager.flushPending(force: true);
+    expect(telemetry.propertiesOf('Subscription Checkout Opened'), hasLength(1));
+    expect(telemetry.propertiesOf('Subscription Checkout Completed'), isEmpty);
     expect(subscriptionRequests, 0);
     expect(usage.subscription?.subscription.plan, PlanType.basic);
     expect(TranscriptionAllowanceCache.current?.mode, TranscriptionAllowanceSnapshot.modeOnDevice);
     expect(find.text(l10n.subscriptionSuccessfulCharged), findsNothing);
+  });
+  testWidgets('failed checkout page never completes, including a late success callback', (tester) async {
+    final webView = _WebView();
+    await _pumpSheet(tester,
+        webView: webView,
+        refreshedSubscription: _subscription(PlanType.unlimitedV2, _paidAllowance),
+        onSubscriptionRequest: () {});
+    webView.navigation
+        .resourceError(WebResourceError(errorCode: -2, description: 'fixture failure', isForMainFrame: true));
+    await tester.pump();
+    webView.navigation.navigate(NavigationRequest(url: '${Env.apiBaseUrl}v1/payments/success', isMainFrame: true));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await AnalyticsManager.flushPending(force: true);
+    expect(telemetry.propertiesOf('Subscription Checkout Opened'), hasLength(1));
+    expect(telemetry.propertiesOf('Subscription Checkout Completed'), isEmpty);
+  });
+  testWidgets('embedded web paywall views only ready content and not repeated ready messages', (tester) async {
+    final platform = _WebView();
+    WebViewPlatform.instance = platform;
+    final usage = _Usage(subscriptionRequest: () async => _subscription(PlanType.basic, _freeAllowance));
+    addTearDown(usage.dispose);
+    usage.debugSetSubscription(_subscription(PlanType.basic, _freeAllowance));
+    usage.debugSetAvailablePlans({'plans': <Map<String, Object>>[]});
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: const [Locale('en')],
+            home: WebPaywallPage(source: 'usage_page', url: Uri.parse('https://fixture.invalid/paywall')))));
+    await tester.pump();
+    await AnalyticsManager.flushPending(force: true);
+    expect(telemetry.propertiesOf('Subscription Paywall Viewed'), isEmpty);
+    platform.controller.channel!.onMessageReceived(JavaScriptMessage(message: '{"type":"ready"}'));
+    await tester.pump();
+    await AnalyticsManager.flushPending(force: true);
+    platform.controller.channel!.onMessageReceived(JavaScriptMessage(message: '{"type":"ready"}'));
+    await tester.pump();
+    await AnalyticsManager.flushPending(force: true);
+    expect(telemetry.propertiesOf('Subscription Paywall Viewed'), hasLength(1));
+    expect(telemetry.propertiesOf('Subscription Paywall Viewed').single['surface'], 'web_paywall');
+    await tester.pumpWidget(const SizedBox());
   });
 }

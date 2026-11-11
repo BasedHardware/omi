@@ -1,3 +1,4 @@
+import { purchasePayload, type PurchaseEventId } from './purchaseContract.generated';
 import { PostHogManager } from '@/lib/analytics/posthog';
 
 const PLANS = new Set([
@@ -70,6 +71,11 @@ export function trackUpgradePlanSelected(
   billingInterval: string,
   source: string,
 ): void {
+  trackPurchaseEvent('upgradeTapped', {
+    plan: subscriptionPlanWire(plan),
+    billing_interval: subscriptionIntervalWire(billingInterval),
+    source,
+  });
   PostHogManager.track('Upgrade Plan Selected', {
     plan: subscriptionPlanWire(plan),
     billing_interval: subscriptionIntervalWire(billingInterval),
@@ -88,4 +94,35 @@ export function trackUpgradeSucceeded(plan: string, billingInterval: string): vo
 
 export function trackUpgradeCancelled(): void {
   PostHogManager.track('Upgrade Cancelled');
+}
+
+export function trackPurchaseEvent(
+  id: PurchaseEventId,
+  raw: Record<string, unknown>,
+): void {
+  const { name, properties } = purchasePayload(id, raw);
+  try {
+    PostHogManager.track(name, properties);
+  } catch {
+    /* Telemetry never changes purchase behavior. */
+  }
+}
+
+/** Web has no completion return signal. Focus/refresh never means payment success. */
+export function openPurchaseCheckout(
+  url: string,
+  plan: string,
+  interval: string,
+  source: string,
+) {
+  const opened = window.open(url, '_blank');
+  if (opened)
+    trackPurchaseEvent('checkoutOpened', {
+      plan: subscriptionPlanWire(plan),
+      billing_interval: subscriptionIntervalWire(interval),
+      source,
+      stage: 'hosted_checkout',
+      result: 'opened',
+    });
+  return opened;
 }

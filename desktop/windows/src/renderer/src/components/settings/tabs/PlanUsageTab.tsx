@@ -1,3 +1,4 @@
+import { PurchaseObservation } from '../../../lib/purchaseContract.generated'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useSearchableRow } from '../searchContext'
@@ -10,6 +11,8 @@ import { TrialCard } from '../billing/TrialCard'
 import { PlanGrid } from '../billing/PlanGrid'
 import { canonicalPlanId } from '../../../lib/billingPlans'
 import {
+  trackPurchaseEvent,
+  openSubscriptionCheckout,
   trackPaywallOpened,
   trackUpgradeCancelled,
   trackUpgradePlanSelected,
@@ -66,12 +69,19 @@ export function PlanUsageTab(): React.JSX.Element {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
   const plansRef = useRef<HTMLDivElement | null>(null)
   const paywallTracked = useRef(false)
+  const exposure = useRef(new PurchaseObservation(trackPurchaseEvent))
 
   useEffect(() => {
     if (paywallTracked.current || !sub?.subscription) return
     paywallTracked.current = true
     // The plan grid lives on this settings tab. This is a settings impression,
     // not a blocked purchase gate. The usage-limit popup keeps its own source.
+    exposure.current.view({
+      source: 'windows_settings_view',
+      current_plan: canonicalPlanId(sub.subscription.plan) ?? 'unknown',
+      surface: 'settings_plans',
+      catalog_tier: 'not_applicable'
+    })
     trackPaywallOpened('windows_settings_view', canonicalPlanId(sub.subscription.plan) ?? 'unknown')
   }, [sub])
 
@@ -143,7 +153,14 @@ export function PlanUsageTab(): React.JSX.Element {
         {
           createCheckoutSession,
           upgradeSubscription,
-          openCheckout: (url) => window.omi.openCheckout(url),
+          openCheckout: (url) =>
+            openSubscriptionCheckout(
+              (address, onOpened) => window.omi.openCheckout(address, onOpened),
+              url,
+              tier,
+              priceTitle,
+              'windows_settings_view'
+            ),
           fetchSubscription,
           wait
         }

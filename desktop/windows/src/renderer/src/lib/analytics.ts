@@ -1,3 +1,4 @@
+import { purchasePayload, type PurchaseEventId } from './purchaseContract.generated'
 // Mirrors the macOS desktop app's PostHogManager: best-effort analytics sent to
 // the same PostHog project via its HTTP ingestion API (no SDK needed). The project
 // key is a publishable client key — safe to embed, exactly as the desktop app
@@ -106,6 +107,11 @@ export function trackUpgradePlanSelected(
   billingInterval: string,
   source: string
 ): void {
+  trackPurchaseEvent('upgradeTapped', {
+    plan: subscriptionPlanWire(plan),
+    billing_interval: subscriptionIntervalWire(billingInterval),
+    source
+  })
   trackEvent('Upgrade Plan Selected', {
     plan: subscriptionPlanWire(plan),
     billing_interval: subscriptionIntervalWire(billingInterval),
@@ -124,4 +130,41 @@ export function trackUpgradeSucceeded(plan: string, billingInterval: string): vo
 
 export function trackUpgradeCancelled(): void {
   trackEvent('Upgrade Cancelled')
+}
+
+export function trackPurchaseEvent(id: PurchaseEventId, raw: Record<string, unknown>): void {
+  const { name, properties } = purchasePayload(id, raw)
+  try {
+    trackEvent(name, properties)
+  } catch {
+    /* Telemetry never changes purchase behavior. */
+  }
+}
+
+/** `opened` comes from the main window ready-to-show IPC, never invocation intent. */
+export async function openSubscriptionCheckout(
+  open: (url: string, onOpened?: () => void) => Promise<'success' | 'cancel' | 'closed'>,
+  url: string,
+  plan: string,
+  interval: string,
+  source: string
+) {
+  const properties = {
+    plan: subscriptionPlanWire(plan),
+    billing_interval: subscriptionIntervalWire(interval),
+    source,
+    stage: 'in_app_checkout'
+  }
+  let reported = false
+  const outcome = await open(url, () => {
+    if (reported) return
+    reported = true
+    trackPurchaseEvent('checkoutOpened', { ...properties, result: 'opened' })
+  })
+  if (outcome === 'success')
+    trackPurchaseEvent('checkoutCompleted', {
+      ...properties,
+      result: 'client_navigation_completed'
+    })
+  return outcome
 }

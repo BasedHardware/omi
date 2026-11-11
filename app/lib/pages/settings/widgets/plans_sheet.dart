@@ -1,4 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/analytics/purchase_exposure.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -86,6 +88,25 @@ class _PlansSheetState extends State<PlansSheet> {
   bool _storefrontLoading = false;
   bool _storefrontFailed = false;
   PlanStorefront? _storefront;
+  bool _budgetCapObserved = false;
+  bool _mcpCapObserved = false;
+  bool _budgetCap(PlanStorefront? data) =>
+      data?.showSubscriptionUi == true &&
+      data?.current?.legacy == false &&
+      data?.usage?.kind == 'usage_budget' &&
+      (data?.usage?.percent ?? 0) >= 100;
+  void _observeStorefrontAllowance(PlanStorefront data) {
+    final budget = _budgetCap(data);
+    final mcp = data.showSubscriptionUi && data.usage?.mcpCapReached == true;
+    if (budget && !_budgetCapObserved)
+      PlatformManager.instance.analytics
+          .allowanceReached(kind: 'usage_budget', surface: 'storefront', reason: 'budget_exhausted');
+    if (mcp && !_mcpCapObserved)
+      PlatformManager.instance.analytics
+          .allowanceReached(kind: 'mcp_daily_cap', surface: 'storefront', reason: 'mcp_cap_reached');
+    _budgetCapObserved = budget;
+    _mcpCapObserved = mcp;
+  }
 
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'  (billing period)
   String? selectedTierId; // backend plan_id, e.g. 'unlimited_v2'
@@ -109,6 +130,7 @@ class _PlansSheetState extends State<PlansSheet> {
       _storefrontLoading = enabled && _storefront == null;
     });
     if (!enabled) return;
+    if (_storefront != null) _observeStorefrontAllowance(_storefront!);
     if (_storefront == null) await _loadStorefront();
   }
 
@@ -122,6 +144,7 @@ class _PlansSheetState extends State<PlansSheet> {
     final result = await (widget.storefrontApi ?? PlanStorefrontApi())
         .load(source: widget.analyticsSource, trigger: widget.storefrontTrigger, locale: context.l10n.localeName);
     if (!mounted) return;
+    if (result is ApiSuccess<PlanStorefront>) _observeStorefrontAllowance(result.data);
     setState(() {
       _storefrontLoading = false;
       _storefrontFailed = result is! ApiSuccess<PlanStorefront>;
@@ -601,7 +624,15 @@ class _PlansSheetState extends State<PlansSheet> {
           }
           // Otherwise, this is a new subscription requiring checkout
           else if (sessionData.containsKey('url') && sessionData['url'] != null) {
-            final checkoutResult = await routeToPage(context, PaymentWebViewPage(checkoutUrl: sessionData['url']!));
+            final checkoutResult = await routeToPage(
+                context,
+                PaymentWebViewPage(
+                  checkoutUrl: sessionData['url']!,
+                  onCheckoutOpened: () => PlatformManager.instance.analytics.checkoutOpened(
+                      plan: targetPlan, billingInterval: billingInterval, source: widget.analyticsSource, inApp: true),
+                  onCheckoutCompleted: () => PlatformManager.instance.analytics.checkoutCompleted(
+                      plan: targetPlan, billingInterval: billingInterval, source: widget.analyticsSource, inApp: true),
+                ));
 
             if (checkoutResult == true) {
               // Checkout completion is not local entitlement proof; refresh the backend-owned state.
@@ -780,7 +811,25 @@ class _PlansSheetState extends State<PlansSheet> {
             onRetry: _loadStorefront,
             onSelect: _selectStorefrontPrice,
             onManage: _openPaymentPortal,
-          );
+          )
+              .withPurchaseExposure(
+                enabled: _storefrontGateResolved,
+                source: widget.analyticsSource,
+                surface: PaywallViewedSurface.storefront,
+                currentPlan: provider.subscription?.subscription.plan.wireName ?? 'unknown',
+              )
+              .withAllowanceBlock(
+                  kind: 'usage_budget',
+                  surface: 'storefront',
+                  reason: 'budget_exhausted',
+                  shown: _budgetCap(_storefront) && widget.storefrontTrigger == 'usage_budget')
+              .withAllowanceBlock(
+                  kind: 'mcp_daily_cap',
+                  surface: 'storefront',
+                  reason: 'mcp_cap_reached',
+                  shown: _storefront?.showSubscriptionUi == true &&
+                      _storefront?.usage?.mcpCapReached == true &&
+                      widget.storefrontTrigger == 'mcp_daily_cap');
         }
 
         final l10n = context.l10n;
@@ -1053,6 +1102,11 @@ class _PlansSheetState extends State<PlansSheet> {
               ],
             ),
           ),
+        ).withPurchaseExposure(
+          enabled: _storefrontGateResolved,
+          source: widget.analyticsSource,
+          surface: PaywallViewedSurface.plansSheet,
+          currentPlan: sub?.plan.wireName ?? 'unknown',
         );
       },
     );

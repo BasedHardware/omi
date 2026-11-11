@@ -1,4 +1,5 @@
 'use client';
+import { usePurchaseExposure } from '@/lib/analytics/usePurchaseExposure';
 
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -30,6 +31,7 @@ import {
   yourPlanWillRenewOn,
 } from '@/lib/cancelPending';
 import {
+  openPurchaseCheckout,
   trackPaywallOpened,
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
@@ -69,6 +71,8 @@ export function PlansSheet({
     : 'Plan unavailable';
   const isUnknownPlan = planIdentity?.kind === 'unknown';
   const isCanceling_ = subscription?.cancel_at_period_end;
+
+  usePurchaseExposure(open, 'web_plans', subscription?.plan ?? 'unknown', 'plans_sheet');
 
   useEffect(() => {
     if (open && !paywallWasOpen.current) {
@@ -196,7 +200,7 @@ export function PlansSheet({
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
           // here. trackUpgradeCancelled exists for a client that can observe it.
-          window.open(result.url, '_blank');
+          openPurchaseCheckout(result.url, tier, interval, 'web_plans');
           onOpenChange(false);
           // Listen for window focus to refresh subscription
           const handleFocus = () => {

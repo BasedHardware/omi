@@ -10,6 +10,8 @@ const startCheckout = vi.fn()
 vi.mock('../../../lib/apiClient', () => ({ omiApi: { get: vi.fn(), post: vi.fn() } }))
 vi.mock('../../../lib/toast', () => ({ toast: vi.fn() }))
 vi.mock('../../../lib/analytics', () => ({
+  trackPurchaseEvent: vi.fn(),
+  openSubscriptionCheckout: vi.fn(),
   trackPaywallOpened: vi.fn(),
   trackUpgradeCancelled: vi.fn(),
   trackUpgradePlanSelected: vi.fn(),

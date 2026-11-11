@@ -50,7 +50,8 @@ describe('bar send — usage-limit gate', () => {
     expect(notifyUsageLimit).toHaveBeenCalledWith({
       message: expect.stringContaining("You've reached"),
       spoken: false,
-      popup: true
+      popup: true,
+      authoritative: true
     })
     // …and the bar renders the same line inline.
     expect(notice).toContain('Upgrade to keep chatting without restrictions.')
@@ -69,7 +70,8 @@ describe('bar send — usage-limit gate', () => {
     expect(notifyUsageLimit).toHaveBeenCalledWith({
       message: expect.any(String),
       spoken: true,
-      popup: false
+      popup: false,
+      authoritative: true
     })
   })
 

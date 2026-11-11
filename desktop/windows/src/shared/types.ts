@@ -479,7 +479,12 @@ export type BarShowPayload = { mode: BarMode; reveal: BarReveal; token: number }
  *  sets it false because the pre-capture PTT veto already owns the modal for
  *  voice — mirrors macOS, whose post-transcription voice path speaks without
  *  re-showing the popup. */
-export type BarUsageLimitPayload = { message: string; spoken: boolean; popup?: boolean }
+export type BarUsageLimitPayload = {
+  message: string
+  spoken: boolean
+  popup?: boolean
+  authoritative?: boolean
+}
 
 /** Low-rate orb-driving projection pushed MAIN → bar during a warm-hub PTT turn
  *  (A5 PR-6b). The main window owns the turn (capture, hub, playback); the bar is
@@ -817,7 +822,7 @@ export type OmiBridgeApi = {
   /** Open a Stripe Checkout URL in a modal in-app window; resolves when the flow
    *  completes ('success'/'cancel' at the backend redirect) or the user closes it
    *  ('closed'). Only displays Stripe's hosted page — completes no payment. */
-  openCheckout: (url: string) => Promise<CheckoutOutcome>
+  openCheckout: (url: string, onOpened?: () => void) => Promise<CheckoutOutcome>
   /** Open a web URL (e.g. the Stripe customer portal) in the system browser. */
   openExternalUrl: (url: string) => Promise<boolean>
   /** Poll an external-integration developer's setup-completed webhook from the

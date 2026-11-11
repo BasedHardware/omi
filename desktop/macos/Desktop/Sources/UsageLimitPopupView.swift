@@ -13,6 +13,18 @@ struct UsageLimitPopupView: View {
   let onDismiss: () -> Void
   let onBringYourOwnKeys: () -> Void
 
+  @State private var purchaseObservation = PurchaseObservation(sink: { event, properties in
+    AnalyticsManager.shared.purchaseEvent(event, properties)
+  })
+  private func recordBlock() {
+    let kind = reason == "trial_expired" ? "trial" : reason == "floating_bar" ? "chat" : reason
+    guard ["transcription", "trial", "chat"].contains(kind) else { return }
+    let authoritative = kind != "chat" || FloatingBarUsageLimiter.shared.serverQuota?.allowed == false
+    purchaseObservation.allowance(
+      authoritative, kind: kind, surface: kind == "transcription" ? "capture" : "chat",
+      reason: kind == "trial" ? "trial_expired" : kind == "chat" ? "chat_quota_exhausted" : "plan_allowance_exhausted",
+      block: true)
+  }
   private var headline: String {
     "You've hit your monthly limit"
   }
@@ -77,8 +89,15 @@ struct UsageLimitPopupView: View {
           VStack(spacing: OmiSpacing.sm) {
             // Stadium, not a rounded rectangle, and the label ladder inverted rather than an accent
             // fill — `InkButton` is the one action shape in this system.
-            InkButton("Upgrade", action: onUpgrade)
-              .frame(maxWidth: .infinity)
+            InkButton(
+              "Upgrade",
+              action: {
+                AnalyticsManager.shared.purchaseEvent(
+                  .upgradeTapped, ["source": "macos_usage_limit", "plan": "unknown", "billing_interval": "unknown"])
+                onUpgrade()
+              }
+            )
+            .frame(maxWidth: .infinity)
 
             InkButton("Bring your own keys", kind: .secondary, action: onBringYourOwnKeys)
               .frame(maxWidth: .infinity)
@@ -93,7 +112,10 @@ struct UsageLimitPopupView: View {
       .inkGlassPanel()
     }
     .transition(.opacity.animation(OmiMotion.gated(.easeInOut(duration: 0.2))))
+    .purchaseExposure(source: "macos_usage_limit", surface: "usage_limit_popup")
+    .onChange(of: reason) { _, _ in recordBlock() }
     .onAppear {
+      recordBlock()
       AnalyticsManager.shared.paywallOpened(
         source: "macos_usage_limit",
         currentPlan: UserDefaults.standard.string(forKey: .floatingBarCachedPlan) ?? "unknown")

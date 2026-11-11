@@ -399,6 +399,10 @@ extension SettingsContentView {
     .sheet(isPresented: $showOverageExplainer) {
       overageExplainerSheet
     }
+    .purchaseExposure(
+      source: "macos_settings_view", currentPlan: userSubscription?.subscription.plan.rawValue ?? "unknown",
+      surface: "settings_plans", enabled: !PlanStorefrontGate.sheetEnabled
+    )
     .onAppear {
       // The plan grid is part of this settings section, so this is a settings
       // impression, not a blocked purchase gate. Quota and usage-limit surfaces

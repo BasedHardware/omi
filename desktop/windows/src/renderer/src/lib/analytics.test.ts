@@ -67,7 +67,9 @@ describe('analytics capture contract', () => {
     )
     expect(bodies.map((body: { event: string }) => body.event)).toEqual([
       'Paywall Opened',
+      'Subscription Upgrade Tapped',
       'Upgrade Plan Selected',
+      'Subscription Upgrade Tapped',
       'Upgrade Plan Selected'
     ])
     expect(bodies[0].properties).toMatchObject({ source: 'unknown', current_plan: 'unknown' })
@@ -76,7 +78,7 @@ describe('analytics capture contract', () => {
       billing_interval: 'year',
       source: 'windows_billing'
     })
-    expect(bodies[2].properties).toMatchObject({
+    expect(bodies[3].properties).toMatchObject({
       plan: 'plus',
       billing_interval: 'year',
       source: 'windows_settings_view'

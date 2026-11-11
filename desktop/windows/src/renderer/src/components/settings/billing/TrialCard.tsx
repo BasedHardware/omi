@@ -1,3 +1,6 @@
+import { useEffect, useRef } from 'react'
+import { PurchaseObservation } from '../../../lib/purchaseContract.generated'
+import { trackPurchaseEvent } from '../../../lib/analytics'
 import { Clock, AlertCircle, Check } from 'lucide-react'
 import { BillingCard } from './BillingCard'
 import { cn } from '../../../lib/utils'
@@ -51,6 +54,12 @@ export function TrialCard(props: {
   onViewPlans: () => void
 }): React.JSX.Element {
   const { trial, onViewPlans } = props
+  const observation = useRef(new PurchaseObservation(trackPurchaseEvent))
+  useEffect(() => {
+    const raw = { allowance_kind: 'trial', surface: 'settings', reason: 'trial_expired' }
+    observation.current.allowance(trial.trial_expired === true, raw)
+    observation.current.allowance(trial.trial_expired === true, raw, true)
+  }, [trial.trial_expired])
 
   if (trial.trial_expired) {
     return (

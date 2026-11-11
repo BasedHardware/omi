@@ -7,6 +7,7 @@ struct BillingWebFlow: Identifiable {
   let title: String
   let url: URL
   let completionURLs: [String]
+  var purchase: PurchaseCheckoutObservation? = nil
 }
 
 enum BillingWebFlowOutcome {
@@ -29,6 +30,7 @@ struct BillingWebFlowSheet: View {
         Spacer()
 
         Button("Close") {
+          flow.purchase?.finish(success: false)
           onComplete(.dismissed)
         }
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))
@@ -41,8 +43,10 @@ struct BillingWebFlowSheet: View {
 
       BillingWebView(flow: flow, onComplete: onComplete)
         .frame(minWidth: 860, minHeight: 680)
+        .onAppear { flow.purchase?.opened() }
     }
     .background(Ink.surface)
+    .onDisappear { flow.purchase?.finish(success: false) }
   }
 }
 
@@ -72,8 +76,10 @@ struct BillingWebView: NSViewRepresentable {
     let flow: BillingWebFlow
     let onComplete: (BillingWebFlowOutcome) -> Void
     var completionHandled = false
+    let purchase: PurchaseCheckoutObservation?
 
     init(flow: BillingWebFlow, onComplete: @escaping (BillingWebFlowOutcome) -> Void) {
+      self.purchase = flow.purchase
       self.flow = flow
       self.onComplete = onComplete
     }
@@ -90,7 +96,7 @@ struct BillingWebView: NSViewRepresentable {
       }
 
       if let matchedCompletionURL = flow.completionURLs.compactMap(URL.init(string:)).first(where: {
-        Self.urlsMatchCompletion(url, completionURL: $0)
+        PurchaseCheckoutObservation.matches(url, completionURL: $0)
       }) {
         if matchedCompletionURL.pathComponents.last == "cancel" {
           finish(.cancelled)
@@ -102,16 +108,6 @@ struct BillingWebView: NSViewRepresentable {
       }
 
       decisionHandler(.allow)
-    }
-
-    private static func urlsMatchCompletion(_ url: URL, completionURL: URL) -> Bool {
-      guard url.scheme == completionURL.scheme,
-        url.host == completionURL.host,
-        url.path == completionURL.path
-      else {
-        return false
-      }
-      return url.query == completionURL.query || completionURL.query == nil
     }
 
     func webView(
@@ -126,9 +122,17 @@ struct BillingWebView: NSViewRepresentable {
       return nil
     }
 
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+      purchase?.finish(success: false)
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+      purchase?.finish(success: false)
+    }
+
     func finish(_ outcome: BillingWebFlowOutcome) {
       guard !completionHandled else { return }
       completionHandled = true
+      if case .completed = outcome { purchase?.finish(success: true) } else { purchase?.finish(success: false) }
       DispatchQueue.main.async {
         self.onComplete(outcome)
       }

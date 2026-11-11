@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react'
+import { PurchaseObservation } from '../../../lib/purchaseContract.generated'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, X } from 'lucide-react'
-import { onUsageLimit, dismissUsageLimit, type UsageLimitReason } from '../../../lib/usageLimit'
+import {
+  onUsageLimit,
+  dismissUsageLimit,
+  usageLimitIsAuthoritative,
+  type UsageLimitReason
+} from '../../../lib/usageLimit'
 import { requestSettingsTab } from '../../../lib/settingsNav'
-import { trackPaywallOpened } from '../../../lib/analytics'
+import { trackPaywallOpened, trackPurchaseEvent } from '../../../lib/analytics'
 
 // Fixed headline + per-reason body (UsageLimitPopupView parity). Mac's Upgrade
 // button is purple; Windows uses the app's neutral white primary (INV-UI-1: no
@@ -27,19 +33,48 @@ const BODY: Record<UsageLimitReason, string> = {
 export function UsageLimitPopup(): React.JSX.Element | null {
   const [reason, setReason] = useState<UsageLimitReason | null>(null)
   const navigate = useNavigate()
+  const exposure = useRef(new PurchaseObservation(trackPurchaseEvent))
 
   useEffect(() => onUsageLimit(setReason), [])
 
   useEffect(() => {
-    if (!reason) return
+    if (!reason) {
+      exposure.current = new PurchaseObservation(trackPurchaseEvent)
+      return
+    }
     // This popup does not hold the subscription document. The Plan & Usage tab
     // reports the tier when it opens.
     trackPaywallOpened('windows_usage_limit', 'unknown')
+    exposure.current.view({
+      source: 'windows_usage_limit',
+      current_plan: 'unknown',
+      catalog_tier: 'not_applicable',
+      surface: 'usage_limit_popup'
+    })
+    exposure.current.allowance(
+      usageLimitIsAuthoritative(),
+      {
+        allowance_kind: reason === 'trial_expired' ? 'trial' : reason,
+        surface: reason === 'transcription' ? 'capture' : 'chat',
+        reason:
+          reason === 'trial_expired'
+            ? 'trial_expired'
+            : reason === 'transcription'
+              ? 'plan_allowance_exhausted'
+              : 'chat_quota_exhausted'
+      },
+      true
+    )
   }, [reason])
 
   if (!reason) return null
 
   const onUpgrade = (): void => {
+    trackPurchaseEvent('upgradeTapped', {
+      plan: 'unknown',
+      billing_interval: 'unknown',
+      source: 'windows_usage_limit'
+    })
     dismissUsageLimit()
     requestSettingsTab('plan-usage')
     navigate('/settings')

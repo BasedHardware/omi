@@ -47,6 +47,10 @@ final class FloatingBarUsageLimiter: ObservableObject {
       let response = try await APIClient.shared.getUserSubscription(authorizationSnapshot: authorization)
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       ScreenCloudEntitlementService.shared.accept(response, authorization: authorization)
+      let allowance = response.transcriptionAllowance
+      observeTranscriptionAllowanceReached(
+        allowance?.reason == "plan_allowance_exhausted" || allowance?.reason == "usage_budget_exhausted",
+        sharedBudget: allowance?.reason == "usage_budget_exhausted")
       applyPlan(
         plan: response.subscription.plan,
         status: response.subscription.status,
@@ -65,7 +69,19 @@ final class FloatingBarUsageLimiter: ObservableObject {
   }
 
   /// Apply a quota snapshot directly (used by syncQuota and tests).
+  private let purchaseObservation = PurchaseObservation(sink: { event, properties in
+    AnalyticsManager.shared.purchaseEvent(event, properties)
+  })
+  func observeTranscriptionAllowanceReached(_ reached: Bool, sharedBudget: Bool = false) {
+    purchaseObservation.allowance(
+      reached && !sharedBudget, kind: "transcription", surface: "capture", reason: "plan_allowance_exhausted")
+    purchaseObservation.allowance(
+      reached && sharedBudget, kind: "usage_budget", surface: "capture", reason: "budget_exhausted")
+  }
   func applyQuota(_ quota: APIClient.ChatUsageQuota) {
+    purchaseObservation.allowance(
+      quota.allowed == false, kind: quota.usesSharedBudget ? "usage_budget" : "chat",
+      surface: "chat", reason: quota.usesSharedBudget ? "budget_exhausted" : "chat_quota_exhausted")
     serverQuota = quota
     optimisticDelta = 0
   }
@@ -112,6 +128,9 @@ final class FloatingBarUsageLimiter: ObservableObject {
 
   /// Reset all quota state on sign-out so the next user starts clean.
   func reset() {
+    observeTranscriptionAllowanceReached(false)
+    purchaseObservation.allowance(false, kind: "usage_budget", surface: "chat", reason: "budget_exhausted")
+    purchaseObservation.allowance(false, kind: "chat", surface: "chat", reason: "chat_quota_exhausted")
     serverQuota = nil
     optimisticDelta = 0
     hasPaidPlan = false

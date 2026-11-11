@@ -1624,6 +1624,10 @@ class AnalyticsManager {
       properties: SubscriptionFunnelWire.paywallProperties(source: source, currentPlan: currentPlan))
   }
 
+  func purchaseEvent(_ event: PurchaseEvent, _ raw: [String: String]) {
+    PostHogManager.shared.track(event.rawValue, properties: PurchaseContract.properties(event, raw))
+  }
+
   func upgradePlanSelected(plan: String, billingInterval: String, source: String) {
     PostHogManager.shared.track(
       "Upgrade Plan Selected",

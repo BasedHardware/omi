@@ -38,7 +38,10 @@ function outcomeForUrl(rawUrl: string): CheckoutOutcome | null {
  * Money safety: this only DISPLAYS Stripe's own hosted checkout page. No payment
  * is completed by this code — the user drives (or abandons) the Stripe form.
  */
-export function openCheckoutWindow(url: string): Promise<CheckoutOutcome> {
+export function openCheckoutWindow(
+  url: string,
+  onOpened: () => void = () => {}
+): Promise<CheckoutOutcome> {
   // Only ever load a real https Stripe/backend URL. A prompt-injected or
   // malformed URL must never be handed to a BrowserWindow.
   let parsed: URL
@@ -97,14 +100,22 @@ export function openCheckoutWindow(url: string): Promise<CheckoutOutcome> {
     // User closed the window without completing → treat as cancelled/abandoned.
     win.on('closed', () => finish('closed'))
 
-    win.once('ready-to-show', () => win.show())
+    win.once('ready-to-show', () => {
+      if (settled) return
+      win.show()
+      onOpened()
+    })
     void win.loadURL(url)
   })
 }
 
 /** Register the billing IPC surface. Call once during main setup. */
 export function registerBillingIpc(): void {
-  ipcMain.handle('billing:openCheckout', (_e, url: string) => openCheckoutWindow(String(url)))
+  ipcMain.handle('billing:openCheckout', (event, url: string) =>
+    openCheckoutWindow(String(url), () => {
+      if (!event.sender.isDestroyed()) event.sender.send('billing:checkoutOpened')
+    })
+  )
   // Customer portal opens in the system browser (Mac parity). Guard the scheme
   // the same way the main window's window-open handler does.
   ipcMain.handle('billing:openExternal', (_e, url: string) => {

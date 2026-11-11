@@ -9,6 +9,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/analytics/purchase_exposure.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -81,7 +82,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     setState(() => _busy = true);
     try {
       final usage = context.read<UsageProvider>();
-      await usage.fetchSubscription();
+      await observePurchaseRestore(usage, widget.source);
       if (!mounted || _dismissed) return;
       final l10n = context.l10n;
       if (usage.subscription?.subscription.plan.isPaid == true) {
@@ -167,7 +168,11 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       builder: (_) => OmiSheetScaffold(
         showCloseButton: false,
         padding: EdgeInsets.zero,
-        child: _MonthlyOffer(price: monthly, trialDays: TrialPaywallPage.trialDays),
+        child: PaywallViewedOnce(
+            source: widget.source,
+            surface: PaywallViewedSurface.monthlyFallback,
+            catalogTier: offer.tierId,
+            child: _MonthlyOffer(price: monthly, trialDays: TrialPaywallPage.trialDays)),
       ),
     );
     if (accepted != true) {
@@ -384,6 +389,11 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
           },
         ),
       ),
+    ).withPurchaseExposure(
+      source: widget.source,
+      surface: PaywallViewedSurface.trialPaywall,
+      currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
+      catalogTier: widget.offer?.tierId ?? 'unknown',
     );
   }
 

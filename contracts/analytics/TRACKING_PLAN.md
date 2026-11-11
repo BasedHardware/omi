@@ -194,6 +194,14 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingFirstCaptureEmptyResult | Onboarding First Capture Empty Result | none | active | mobile-instrumentation-presence |
 | onboardingFirstCaptureSkipped | Onboarding First Capture Skipped | none | active | mobile-instrumentation-presence |
 | onboardingStepCompleted | Onboarding Step Completed | step, index, elapsed_ms, skipped, platform, exit_reason | active | mobile-instrumentation-presence |
+| paywallViewed | Subscription Paywall Viewed | source, current_plan, catalog_tier, surface | active | subscription-funnel |
+| allowanceReached | Subscription Allowance Reached | allowance_kind, surface, reason | active | subscription-funnel |
+| allowanceBlockShown | Subscription Allowance Block Shown | allowance_kind, surface, reason | active | subscription-funnel |
+| upgradeTapped | Subscription Upgrade Tapped | plan, billing_interval, source | active | subscription-funnel |
+| checkoutOpened | Subscription Checkout Opened | plan, billing_interval, source, stage, result | active | subscription-funnel |
+| checkoutCompleted | Subscription Checkout Completed | plan, billing_interval, source, stage, result | active | subscription-funnel |
+| restoreAttempted | Subscription Restore Attempted | source | active | subscription-funnel |
+| restoreResult | Subscription Restore Result | source, result | active | subscription-funnel |
 | paywallVariantShown | Paywall Variant Shown | variant, source | active | mobile-instrumentation-presence |
 | paywallVariantFallback | Paywall Variant Fallback | variant, reason | active | mobile-instrumentation-presence |
 | paywallMonthlyFallbackShown | Paywall Monthly Fallback Shown | trial | active | mobile-instrumentation-presence |

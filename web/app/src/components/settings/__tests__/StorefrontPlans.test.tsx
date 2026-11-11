@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
 
 vi.mock('@/lib/api', () => api);
 vi.mock('@/lib/analytics/subscriptionFunnel', () => ({
+  trackPurchaseEvent: vi.fn(),
+  openPurchaseCheckout: vi.fn((url) => window.open(url, '_blank')),
   trackPaywallOpened: vi.fn(),
   trackUpgradePlanSelected: vi.fn(),
   trackUpgradeSucceeded: vi.fn(),
