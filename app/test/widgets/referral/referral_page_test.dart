@@ -404,12 +404,13 @@ void main() {
       await tester.tap(find.byKey(const Key('referral-copy')));
       await tester.pumpAndSettle();
       expect(copied, link);
-      // The copy confirmation sits over the pinned Share button until it clears.
-      await tester.pump(const Duration(seconds: 9));
-      await tester.pumpAndSettle();
-      await Scrollable.ensureVisible(tester.element(find.byKey(const Key('referral-share'))), alignment: 0.5);
-      await tester.pumpAndSettle();
+      // Share right away: the copy confirmation floats above the pinned Share button.
+      expect(find.text('Copied'), findsOneWidget);
       await tester.tap(find.byKey(const Key('referral-share')));
+      await tester.pumpAndSettle();
+      expect(shares, i + 1);
+      // Let the confirmation time out so the next copy shows a fresh one.
+      await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
     }
     expect(shares, 3);
@@ -445,13 +446,39 @@ void main() {
     await tester.tap(find.byKey(const Key('referral-share')));
     await tester.pumpAndSettle();
     expect(find.text('Something went wrong! Please try again later.'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 9));
-    await tester.pumpAndSettle();
+    // Retry at once, while the 8 s error toast is still up and the text is at 320 %.
     await tester.tap(find.byKey(const Key('referral-share')));
     await tester.pumpAndSettle();
     expect(attempts, 2);
+    final button = tester.getRect(find.byKey(const Key('referral-share')));
+    final label = tester.getRect(find.text('Share'));
+    expect(label.top >= button.top && label.bottom <= button.bottom, isTrue, reason: 'Share label is not clipped');
     await tester.scrollUntilVisible(find.byKey(const Key('referral-reward-5')), 200);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('QR card is one localized copy button and Share keeps its size while busy', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final pending = Completer<void>();
+    await tester.pumpWidget(host(ReferralPage(
+      accountChanges: const Stream.empty(),
+      createSession: () => ReferralLinkSession(isCurrent: () => true, load: () async => campaign()),
+      shareLink: (_, __) => pending.future,
+    )));
+    await tester.pumpAndSettle();
+    expect(tester.getSemantics(find.byKey(const Key('referral-copy'))),
+        isSemantics(label: 'Copy link', isButton: true, hasEnabledState: true, isEnabled: true, hasTapAction: true));
+    expect(find.bySemanticsLabel('qr code'), findsNothing);
+    final share = find.byKey(const Key('referral-share'));
+    final idle = tester.getSize(share);
+    await tester.tap(share);
+    await tester.pump();
+    expect(tester.getSize(share), idle);
+    expect(find.descendant(of: share, matching: find.byType(OmiSpinner)), findsOneWidget);
+    pending.complete();
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: share, matching: find.byType(OmiSpinner)), findsNothing);
+    semantics.dispose();
   });
 
   testWidgets('real synchronous auth broadcast invalidates before settled gateway reload', (tester) async {

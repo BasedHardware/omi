@@ -235,47 +235,57 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
     );
   }
 
-  Widget _qrCard() => Builder(
-        builder: (anchor) => GestureDetector(
+  // One copy button for assistive tech: the QR and avatar are decorative, and qr_flutter's own
+  // label is hardcoded English.
+  Widget _qrCard() => Builder(builder: (anchor) {
+        final copy = _busy ? null : () => _useLink(share: false, anchor: anchor);
+        return Semantics(
           key: const Key('referral-copy'),
-          onTap: _busy ? null : () => _useLink(share: false, anchor: anchor),
-          child: Container(
-            key: const Key('referral-link'),
-            padding: const EdgeInsets.all(OmiSpacing.md),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: OmiRadius.lgAll,
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 6))
-              ],
-            ),
-            child: Stack(alignment: Alignment.center, children: [
-              QrImageView(
-                key: ValueKey('referral-qr:$_link'),
-                data: _link!,
-                size: 204,
-                padding: EdgeInsets.zero,
-                backgroundColor: Colors.white,
-                errorCorrectionLevel: QrErrorCorrectLevel.M,
-                eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
-                dataModuleStyle:
-                    const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.circle, color: Colors.black),
+          button: true,
+          enabled: copy != null,
+          label: context.l10n.copyLink,
+          onTap: copy,
+          excludeSemantics: true,
+          child: GestureDetector(
+            onTap: copy,
+            child: Container(
+              key: const Key('referral-link'),
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: OmiRadius.lgAll,
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 6))
+                ],
               ),
-              Container(
-                width: 60,
-                height: 60,
-                padding: const EdgeInsets.all(5),
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: Container(
-                  // The QR card stays white in dark mode, so the badge uses the light palette.
-                  decoration: BoxDecoration(color: OmiPalette.light.surface2, shape: BoxShape.circle),
-                  child: Icon(Icons.account_circle, size: 30, color: OmiPalette.light.textSecondary),
+              child: Stack(alignment: Alignment.center, children: [
+                QrImageView(
+                  key: ValueKey('referral-qr:$_link'),
+                  data: _link!,
+                  size: 204,
+                  padding: EdgeInsets.zero,
+                  backgroundColor: Colors.white,
+                  errorCorrectionLevel: QrErrorCorrectLevel.M,
+                  eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                  dataModuleStyle:
+                      const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.circle, color: Colors.black),
                 ),
-              ),
-            ]),
+                Container(
+                  width: 60,
+                  height: 60,
+                  padding: const EdgeInsets.all(5),
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: Container(
+                    // The QR card stays white in dark mode, so the badge uses the light palette.
+                    decoration: BoxDecoration(color: OmiPalette.light.surface2, shape: BoxShape.circle),
+                    child: Icon(Icons.account_circle, size: 30, color: OmiPalette.light.textSecondary),
+                  ),
+                ),
+              ]),
+            ),
           ),
-        ),
-      );
+        );
+      });
 
   @override
   void dispose() {
@@ -305,7 +315,29 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
     final campaign = _campaign!;
     return Scaffold(
       backgroundColor: OmiColors.surface1,
+      // Share sits in the bottom bar slot, so the Scaffold floats every toast above it at any text
+      // size (UX contract §6); a copy confirmation or error never covers it.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.md),
+          child: Builder(
+            builder: (anchor) => OmiButton(
+              key: const Key('referral-share'),
+              label: l10n.share,
+              icon: Icons.ios_share,
+              expand: true,
+              pill: true,
+              height: 56,
+              maxLines: null,
+              isLoading: _busy,
+              onPressed: _busy ? null : () => _useLink(share: true, anchor: anchor),
+            ),
+          ),
+        ),
+      ),
       body: SafeArea(
+        bottom: false,
         child: Column(children: [
           Align(
             alignment: Alignment.centerRight,
@@ -364,27 +396,6 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
                       textAlign: TextAlign.center, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                 ],
               ]),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.md),
-            child: Builder(
-              builder: (anchor) => SizedBox(
-                width: double.infinity,
-                height: 58,
-                child: FilledButton.icon(
-                  key: const Key('referral-share'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: OmiColors.accent,
-                    foregroundColor: OmiColors.onAccent,
-                    shape: const StadiumBorder(),
-                    textStyle: OmiType.headline,
-                  ),
-                  icon: const Icon(Icons.ios_share, size: 22),
-                  label: Text(l10n.share),
-                  onPressed: _busy ? null : () => _useLink(share: true, anchor: anchor),
-                ),
-              ),
             ),
           ),
         ]),
