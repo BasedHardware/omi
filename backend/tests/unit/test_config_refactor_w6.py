@@ -82,7 +82,6 @@ DEFAULT_ON_READERS = [
     ('sync_lineage', 'sync_lineage_resolve_enabled', 'SYNC_LINEAGE_RESOLVE_ENABLED'),
     ('sync_live_dedupe', 'sync_live_dedupe_enabled', 'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
     ('sync_audio_coverage', 'sync_wal_audio_coverage_enabled', 'SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-    ('sync_bridge_containment', 'contained_donor_merge_enabled', 'SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED'),
     ('sync_finalize', 'sync_finalize_target_recovery_enabled', 'SYNC_FINALIZE_TARGET_RECOVERY_ENABLED'),
     ('episodes', 'episodes_enabled', 'EPISODES_ENABLED'),
     ('conversation_smart_merge', 'smart_merge_audit_enabled', 'CONVERSATION_SMART_MERGE_AUDIT_ENABLED'),

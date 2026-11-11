@@ -7,11 +7,12 @@ week) where the donor's recorded span is fully inside the live target's and the
 only blocker is that fence.
 
 `SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED` (default on) lets the bridge absorb
-such a donor. Containment is by recorded/segment spans (`conversation_span`),
-never by the wall-clock envelope, with a 0.5 s jitter tolerance. Every other
-fence is unchanged: user curation, an open target, `choose_live_overlap` (live
-provenance plus recorded overlap), privacy and size. Partial overlap keeps the
-standalone row.
+such a donor. Containment is proven by placed transcript-segment spans on both
+sides (`segment_span`) with a 0.5 s jitter tolerance; a row whose only span is
+the `finished_at` wall-clock envelope never authorizes it, and that donor stays
+standalone. Every other fence is unchanged: user curation, an open target,
+`choose_live_overlap` (live provenance plus recorded overlap), privacy and size.
+Partial overlap keeps the standalone row.
 
 The assignment transaction re-proves containment on the rows it will merge. If
 the donor grew past the target between the bridge read and the transaction, the
@@ -23,11 +24,16 @@ and regenerates notes from the merged transcript.
 Risk: the donor's notes are rewritten from the merged transcript. Containment
 bounds this to the same minutes and audio is copied rather than deleted, so the
 loss is a note rewrite, not data loss. Rollback: set the flag to `false`, which
-restores the pre-change refusal exactly. Deployment belongs to the lead's
-backend image train and the sync/enrichment hosts after review and merge.
+restores the pre-change refusal exactly. Any set value that is not an on-word
+(`true`, `on`, `yes`, `enabled`) also disables the merge in every mode, so a typo
+while disabling fails closed; only an absent variable keeps the default on.
+Deployment belongs to the lead's backend image train and the sync/enrichment
+hosts after review and merge.
 
 Regression coverage: `tests/unit/test_sync_pending_live_bridge.py` covers a
-contained donor merging, partial overlap refused, an open target refused, and
-the switch off restoring today's refusal. `tests/unit/test_sync_live_overlap.py`
-and `tests/unit/test_sync_cross_job_assignment.py` retain the ordinary
-assignment and overlap contracts.
+contained donor merging, a legacy donor whose only span is the `finished_at`
+envelope refused, partial overlap refused, an open target refused, the
+fail-closed kill switch, and the switch off restoring today's refusal.
+`tests/unit/test_sync_live_overlap.py` and
+`tests/unit/test_sync_cross_job_assignment.py` retain the ordinary assignment
+and overlap contracts.

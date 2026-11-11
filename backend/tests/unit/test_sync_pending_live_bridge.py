@@ -273,6 +273,57 @@ def test_contained_donor_switch_off_restores_refusal(monkeypatch, pending):
     assert not source.get('sync_merged_into')
 
 
+@pytest.mark.parametrize('recorded_segments', [True, False])
+def test_contained_donor_requires_a_segment_span_on_both_sides(pending, recorded_segments):
+    from utils.conversations.recorded_time import conversation_span, segment_span
+    from utils.sync.live_overlap import span_contained
+
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    target = _finish_target(store, end_seconds=20.0)
+    if recorded_segments:
+        assert span_contained(source, target, tolerance_seconds=0.5)
+        assert bridge.finish_sync_bridges('u', 'wal') == 'live'
+        donor = store.rows[('users', 'u', 'conversations', 'wal')]
+        assert donor['deleted'] and donor['sync_merged_into'] == 'live'
+        return
+    # Legacy donor: its only span is the finished_at envelope 1002..1011.5,
+    # fully inside the target's 1000..1020, but no placed segment proves it.
+    source['transcript_segments'] = []
+    for field in ('recorded_start', 'recorded_end', 'sync_live_target', 'audio_timeline'):
+        source.pop(field, None)
+    if (source.get('capture_evidence') or {}).get('origin') == 'live':
+        source.pop('capture_evidence')
+    envelope = conversation_span(source)
+    assert envelope is not None and envelope.recorded_end == source['finished_at']
+    assert segment_span(source) is None
+    assert not span_contained(source, target, tolerance_seconds=0.5)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    donor = store.rows[('users', 'u', 'conversations', 'wal')]
+    assert not donor.get('deleted') and not donor.get('sync_merged_into')
+    assert not store.rows[('users', 'u', 'conversations', 'live')].get('sync_merged_from')
+
+
+@pytest.mark.parametrize('mode', ['default', 'serve'])
+def test_contained_donor_kill_switch_fails_closed_in_every_mode(monkeypatch, mode):
+    from config.sync_bridge_containment import contained_donor_merge_enabled
+
+    monkeypatch.delenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', raising=False)
+    if mode == 'serve':
+        monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    else:
+        monkeypatch.delenv('CAPTURE_COVERAGE_MODE', raising=False)
+    # Only an absent variable keeps the default on.
+    assert contained_donor_merge_enabled() is True
+    for raw in ('ture', '1', ''):
+        monkeypatch.setenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', raw)
+        assert contained_donor_merge_enabled() is False
+    monkeypatch.setenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', 'false')
+    assert contained_donor_merge_enabled() is False
+    monkeypatch.setenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', 'true')
+    assert contained_donor_merge_enabled() is True
+
+
 def test_sync_enrichment_yields_to_a_bound_processing_finalizer(monkeypatch, pending):
     from utils.enrichment import callback
     from utils.conversations.summary_delivery import PROCESS_CONTEXT

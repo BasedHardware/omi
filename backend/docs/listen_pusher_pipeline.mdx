@@ -9240,14 +9240,18 @@ merge; the standalone recording remains recoverable.
 
 A donor summarized before its live target closed is otherwise refused forever by
 the `already_processed` fence. `SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED`
-(default on) lets the bridge absorb it only when the donor's recorded span is
-fully inside the target's, by `conversation_span` with a 0.5 s jitter tolerance;
-the wall-clock envelope never authorizes it. User curation, an open target,
-`choose_live_overlap`, privacy and size fences are unchanged, and partial overlap
-keeps the standalone row. The assignment transaction re-proves containment on
-the rows it merges and refuses the whole assignment with
-`contained_donor_not_contained` when the donor grew past the target. Explicit off
-restores the pre-change refusal exactly.
+(default on) lets the bridge absorb it only when both the donor's and the
+target's placed transcript-segment spans exist and the donor's is fully inside
+the target's, with a 0.5 s jitter tolerance. A row whose only span is the
+`finished_at` wall-clock envelope never authorizes the merge; that donor stays
+standalone. User curation, an open target, `choose_live_overlap`, privacy and
+size fences are unchanged, and partial overlap keeps the standalone row. The
+assignment transaction re-proves containment on the rows it merges and refuses
+the whole assignment with `contained_donor_not_contained` when the donor grew
+past the target. Explicit off restores the pre-change refusal exactly, and any
+set value that is not an on-word (`true`, `on`, `yes`, `enabled`) also disables
+the merge in every mode, so a typo while disabling fails closed; only an absent
+variable keeps the default on.
 
 Committed donor absorption and published-row counters are documented in [Sync bridge absorption](sync-bridge-absorption.md).
 
