@@ -1384,6 +1384,9 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.subscription'].resolve_transcription_allowance = MagicMock(
         return_value=types.SimpleNamespace(managed=True, reason='plan_within_allowance')
     )
+    sys.modules['utils.subscription'].TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset(
+        {'allowance_unavailable', 'usage_invalid'}
+    )
     sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
     sys.modules['utils.sync.files'].get_timestamp_from_path = MagicMock(return_value=time.time())
     saved_modules['utils.sync'] = prior_utils_sync
@@ -2782,11 +2785,13 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
+@pytest.mark.parametrize('single_resolve_percentage', [0, 100])
+async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch(monkeypatch, single_resolve_percentage):
     """A fresh V2 upload over the hard ceiling must leave its WAL audio untouched."""
     from starlette.datastructures import UploadFile
 
     module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', f'{{"sync_allowance_single_resolve": {single_resolve_percentage}}}')
     module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
     module._fair_use_restriction_response = AsyncMock(
         return_value=module.JSONResponse(status_code=429, content={'code': 'fair_use_restricted'})
@@ -2819,6 +2824,7 @@ async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
         module.enqueue_sync_job.assert_not_called()
         module.start_background_task.assert_not_called()
         module.resolve_transcription_allowance.assert_not_called()
+        module.has_transcription_credits.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

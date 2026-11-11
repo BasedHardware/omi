@@ -924,6 +924,9 @@ class TestProcessSegmentReal:
         sys.modules['utils.subscription'].resolve_transcription_allowance = MagicMock(
             return_value=MagicMock(managed=True, reason='plan_within_allowance')
         )
+        sys.modules['utils.subscription'].TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset(
+            {'allowance_unavailable', 'usage_invalid'}
+        )
         sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
 
         class _ConversationSource:

@@ -1650,6 +1650,9 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.subscription'].resolve_transcription_allowance = MagicMock(
             return_value=types.SimpleNamespace(managed=True, reason='plan_within_allowance')
         )
+        sys.modules['utils.subscription'].TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset(
+            {'allowance_unavailable', 'usage_invalid'}
+        )
 
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -3697,6 +3700,9 @@ class TestV2EndpointExecution:
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
         sys.modules['utils.subscription'].resolve_transcription_allowance = MagicMock(
             return_value=types.SimpleNamespace(managed=True, reason='plan_within_allowance')
+        )
+        sys.modules['utils.subscription'].TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset(
+            {'allowance_unavailable', 'usage_invalid'}
         )
         sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
         sync_pkg = types.ModuleType('utils.sync')

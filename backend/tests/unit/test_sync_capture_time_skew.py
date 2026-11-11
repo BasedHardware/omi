@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import hashlib
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 from prometheus_client import REGISTRY
 
 import pytest
@@ -25,6 +25,8 @@ from fastapi.responses import JSONResponse
 from routers import sync as router
 from utils.observability.reasons import SyncCaptureTimeReason
 from utils.request_validation import parse_sync_filename_timestamp
+from utils.transcription_allowance import TranscriptionAllowance
+import utils.subscription as subscription
 from utils.sync import capture_clock, lanes, pipeline
 from utils.sync.capture_clock import CaptureTimeWindowError, SyncCaptureTimeRejected, capture_time_rejection
 from utils.sync.clock_run import clock_run_from_path
@@ -210,26 +212,16 @@ def test_v2_route_accepts_capture_time_ahead_of_server_within_tolerance(client):
     assert response.json()['status'] == 'completed'
 
 
-@pytest.mark.parametrize('dispatch', ['cloud_tasks', 'inline'])
-@pytest.mark.parametrize(
-    'managed,reason,expected_lock',
-    [
-        (True, 'plan_within_allowance', False),
-        (False, 'plan_allowance_exhausted', True),
-        (False, 'subscription_inactive', True),
-        (False, 'usage_budget_exhausted', False),
-        *((False, reason, False) for reason in sorted(router.TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS)),
-    ],
-)
-def test_v2_one_allowance_drives_lock_and_both_dispatch_paths(
-    client, monkeypatch, dispatch, managed, reason, expected_lock
-):
-    """The admission answer and lock predicate share one resolver result and one Firestore lookup path."""
+def _set_single_resolve_lever(monkeypatch, percentage):
+    if percentage is None:
+        monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    else:
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', f'{{"sync_allowance_single_resolve": {percentage}}}')
+
+
+def _capture_allowance_dispatch(monkeypatch, dispatch):
     from config.policy import BatchUnitPolicy
 
-    allowance = Mock(managed=managed, reason=reason)
-    resolver = Mock(return_value=allowance)
-    monkeypatch.setattr(router, 'resolve_transcription_allowance', resolver)
     monkeypatch.setattr(router.legacy_dark, 'current_mode', lambda *_: router.legacy_dark.LegacySyncMode.ON)
     monkeypatch.setattr(router, 'ramp_admission_policy', lambda *_a, **_kw: BatchUnitPolicy())
     monkeypatch.setattr(router, 'claim_sync_content', lambda *_a: {'outcome': 'owned'})
@@ -265,9 +257,10 @@ def test_v2_one_allowance_drives_lock_and_both_dispatch_paths(
         monkeypatch.setattr(router, 'bind_or_converge_sync_ledger_completion', lambda **_kwargs: None)
         monkeypatch.setattr(router, 'run_full_pipeline_background_async', pipeline)
         monkeypatch.setattr(router, 'start_background_task', Mock())
+    return dispatched
 
-    response = _post_sync(client, _filename(0))
 
+def _assert_queued_response(response):
     assert response.status_code == 202, response.text
     assert {key: value for key, value in response.json().items() if key != 'job_id'} == {
         'status': 'queued',
@@ -276,8 +269,210 @@ def test_v2_one_allowance_drives_lock_and_both_dispatch_paths(
         'poll_after_ms': 3000,
         'lane': 'fresh',
     }
-    resolver.assert_called_once_with('synthetic-uid')
+
+
+@pytest.mark.parametrize('single_resolve_percentage', [None, 100, 0], ids=['default', 'explicit-on', 'rollback'])
+@pytest.mark.parametrize('dispatch', ['cloud_tasks', 'inline'])
+@pytest.mark.parametrize(
+    'allowance,expected_lock',
+    [
+        pytest.param(
+            TranscriptionAllowance('managed', 600, 'plan_within_allowance', 18_000), False, id='free-available'
+        ),
+        pytest.param(
+            TranscriptionAllowance('managed', 600, 'plan_within_allowance', 90_000), False, id='paid-available'
+        ),
+        pytest.param(
+            TranscriptionAllowance('on_device', 0, 'plan_allowance_exhausted', 18_000), True, id='free-exhausted'
+        ),
+        pytest.param(
+            TranscriptionAllowance('on_device', 0, 'plan_allowance_exhausted', 90_000), True, id='paid-exhausted'
+        ),
+        pytest.param(TranscriptionAllowance('on_device', 0, 'subscription_inactive'), True, id='inactive'),
+        pytest.param(
+            TranscriptionAllowance('on_device', 0, 'usage_budget_exhausted', None), False, id='budget-exhausted'
+        ),
+        *(
+            pytest.param(TranscriptionAllowance('managed', None, reason, None), False, id=reason)
+            for reason in ('plan_unlimited', 'byok', 'marketplace_reviewer', 'release_probe', 'usage_budget_available')
+        ),
+        *(
+            pytest.param(TranscriptionAllowance('on_device', 0, reason), False, id=reason)
+            for reason in sorted(subscription.TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS)
+        ),
+    ],
+)
+def test_v2_one_allowance_drives_lock_and_both_dispatch_paths(
+    client, monkeypatch, dispatch, allowance, expected_lock, single_resolve_percentage
+):
+    """Stable free/paid answers preserve the response and lock; rollback uses the real legacy wrapper."""
+    _set_single_resolve_lever(monkeypatch, single_resolve_percentage)
+    resolver = Mock(return_value=allowance)
+    credits = Mock(wraps=subscription.has_transcription_credits)
+    monkeypatch.setattr(subscription, 'resolve_transcription_allowance', resolver)
+    monkeypatch.setattr(router, 'resolve_transcription_allowance', resolver)
+    monkeypatch.setattr(router, 'has_transcription_credits', credits)
+    dispatched = _capture_allowance_dispatch(monkeypatch, dispatch)
+    fallback = Mock()
+    monkeypatch.setattr(router, 'record_fallback', fallback)
+    attempts_before = (
+        REGISTRY.get_sample_value('omi_sync_dispatch_attempts_total', {'mode': 'inline', 'app_build': 'unknown'}) or 0.0
+    )
+
+    response = _post_sync(client, _filename(0))
+
+    _assert_queued_response(response)
     assert dispatched['should_lock'] is expected_lock
+    if single_resolve_percentage == 0:
+        credits.assert_called_once_with('synthetic-uid')
+        expected_calls = [call('synthetic-uid', None)]
+        if not allowance.managed:
+            expected_calls.append(call('synthetic-uid'))
+        assert resolver.call_args_list == expected_calls
+    else:
+        credits.assert_not_called()
+        resolver.assert_called_once_with('synthetic-uid')
+    if dispatch == 'inline':
+        fallback.assert_called_once_with(
+            component='sync_dispatch',
+            from_mode='cloud_tasks',
+            to_mode='inline',
+            reason='dispatch_disabled',
+            outcome='recovered',
+        )
+        attempts_after = REGISTRY.get_sample_value(
+            'omi_sync_dispatch_attempts_total', {'mode': 'inline', 'app_build': 'unknown'}
+        )
+        assert attempts_after == attempts_before + 1
+    else:
+        fallback.assert_not_called()
+
+
+def _allowance(managed, reason):
+    return TranscriptionAllowance(
+        mode='managed' if managed else 'on_device',
+        remaining_seconds=60 if managed else 0,
+        reason=reason,
+        limit_seconds=60,
+    )
+
+
+@pytest.mark.parametrize('single_resolve_percentage', [None, 0], ids=['default', 'rollback'])
+@pytest.mark.parametrize('dispatch', ['cloud_tasks', 'inline'])
+@pytest.mark.parametrize(
+    'first,second,default_lock,rollback_lock',
+    [
+        (
+            _allowance(False, 'plan_allowance_exhausted'),
+            _allowance(False, 'allowance_unavailable'),
+            True,
+            False,
+        ),
+        (
+            _allowance(False, 'allowance_unavailable'),
+            _allowance(False, 'plan_allowance_exhausted'),
+            False,
+            True,
+        ),
+        (
+            _allowance(False, 'allowance_unavailable'),
+            _allowance(True, 'plan_within_allowance'),
+            False,
+            True,
+        ),
+    ],
+    ids=['persistent-then-transient', 'transient-then-persistent', 'nonmanaged-then-managed'],
+)
+def test_v2_allowance_sequence_races_and_rollback(
+    client, monkeypatch, dispatch, first, second, default_lock, rollback_lock, single_resolve_percentage
+):
+    """Real allowance objects distinguish the deliberate single-answer behavior from the legacy race."""
+    _set_single_resolve_lever(monkeypatch, single_resolve_percentage)
+    resolver = Mock(side_effect=[first, second])
+    credits = Mock(wraps=subscription.has_transcription_credits)
+    monkeypatch.setattr(subscription, 'resolve_transcription_allowance', resolver)
+    monkeypatch.setattr(router, 'resolve_transcription_allowance', resolver)
+    monkeypatch.setattr(router, 'has_transcription_credits', credits)
+    dispatched = _capture_allowance_dispatch(monkeypatch, dispatch)
+
+    response = _post_sync(client, _filename(0))
+
+    _assert_queued_response(response)
+    expected_lock = rollback_lock if single_resolve_percentage == 0 else default_lock
+    assert dispatched['should_lock'] is expected_lock
+    if single_resolve_percentage == 0:
+        credits.assert_called_once_with('synthetic-uid')
+        assert resolver.call_args_list == [call('synthetic-uid', None), call('synthetic-uid')]
+    else:
+        credits.assert_not_called()
+        resolver.assert_called_once_with('synthetic-uid')
+
+
+@pytest.mark.parametrize('single_resolve_percentage', [None, 0], ids=['default', 'rollback'])
+def test_v2_resolver_exception_never_durably_locks(client, monkeypatch, single_resolve_percentage):
+    _set_single_resolve_lever(monkeypatch, single_resolve_percentage)
+    answers = []
+    real_resolve = subscription.resolve_transcription_allowance
+
+    def resolve(uid, source=None):
+        answer = real_resolve(uid, source)
+        answers.append(answer)
+        return answer
+
+    resolver = Mock(side_effect=resolve)
+    credits = Mock(wraps=subscription.has_transcription_credits)
+    monkeypatch.setattr(subscription, 'resolve_transcription_allowance', resolver)
+    monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
+    monkeypatch.setattr(
+        subscription.users_db, 'is_byok_active', Mock(side_effect=RuntimeError('synthetic lookup failure'))
+    )
+    monkeypatch.setattr(router, 'resolve_transcription_allowance', resolver)
+    monkeypatch.setattr(router, 'has_transcription_credits', credits)
+    dispatched = _capture_allowance_dispatch(monkeypatch, 'cloud_tasks')
+
+    response = _post_sync(client, _filename(0))
+
+    _assert_queued_response(response)
+    assert dispatched['should_lock'] is False
+    assert [answer.reason for answer in answers] == ['allowance_unavailable'] * (
+        2 if single_resolve_percentage == 0 else 1
+    )
+    assert all(isinstance(answer, TranscriptionAllowance) for answer in answers)
+
+
+@pytest.mark.parametrize('single_resolve_percentage', [0, 100])
+@pytest.mark.parametrize('execution_managed', [False, True])
+async def test_capture_hold_resolves_independently_of_admission_lever(
+    tmp_path, monkeypatch, single_resolve_percentage, execution_managed
+):
+    from models.conversation_enums import ConversationSource
+    from unittest.mock import AsyncMock
+    from utils.sync import cap_hold
+
+    _set_single_resolve_lever(monkeypatch, single_resolve_percentage)
+    admission_resolver = Mock(side_effect=AssertionError('hold reused admission resolver'))
+    monkeypatch.setattr(router, 'resolve_transcription_allowance', admission_resolver)
+    monkeypatch.setattr(cap_hold, 'enabled', lambda *_: True)
+    reason = 'plan_within_allowance' if execution_managed else 'plan_allowance_exhausted'
+    execution_resolver = Mock(return_value=_allowance(execution_managed, reason))
+    monkeypatch.setattr(cap_hold, 'funded_allowance', execution_resolver)
+    hold = AsyncMock()
+    monkeypatch.setattr(cap_hold, '_hold_capture', hold)
+    admission = {}
+
+    held = await cap_hold.hold_capture_if_exhausted(
+        'synthetic-uid', [str(tmp_path / '1792152000.wav')], ConversationSource.omi, admission=admission
+    )
+
+    assert held is (not execution_managed)
+    execution_resolver.assert_called_once_with('synthetic-uid', lane='sync')
+    admission_resolver.assert_not_called()
+    if execution_managed:
+        hold.assert_not_awaited()
+        assert admission == {}
+    else:
+        hold.assert_awaited_once()
+        assert admission == {'reason': reason}
 
 
 def test_v2_route_rejects_five_year_future_stamp_with_typed_400(client):
