@@ -11,6 +11,10 @@ from prometheus_client import REGISTRY, generate_latest
 
 from routers import pusher
 from utils import metrics
+from database import record_audio, record_token_lease_metrics
+from utils import pusher_record_barrier
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.test_record_token_lease import PATH, ROW, NOW, POD
 
 PCM = b'\x01\x00' * 32
 
@@ -140,3 +144,67 @@ async def test_empty_window_does_not_observe_or_submit(monkeypatch):
     gauge.inc.assert_not_called()
     gauge.dec.assert_not_called()
     storage.assert_not_awaited()
+
+
+@pytest.mark.parametrize('writer', ['begin', 'renew'])
+@pytest.mark.parametrize('outcome', ['success', 'exception', 'refused'])
+@pytest.mark.parametrize('closed', [False, True])
+async def test_late_append_counts_only_after_durable_commit(monkeypatch, writer, outcome, closed):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setattr(record_audio.time, 'time', lambda: NOW)
+    client = StrictFirestore(
+        {
+            PATH: {**ROW, 'record_audio_closed': closed},
+            ('users', 'synthetic'): {'private_cloud_sync_enabled': True},
+        }
+    )
+    monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(pusher_record_barrier, 'producer_identity', lambda: POD)
+    barrier = pusher_record_barrier.PusherRecordBarrier('synthetic')
+    baseline = record_token_lease_metrics.LATE_APPEND._value.get()
+    if writer == 'begin':
+        await barrier.begin_recording('record')
+    else:
+        barrier.upload_sessions['record'] = 's'
+        barrier.registered_sessions.add('record')  # This fixture models a committed registration.
+        await barrier.renew_recording('record')
+    assert 'record' in barrier.late_appends
+    assert record_token_lease_metrics.LATE_APPEND._value.get() == baseline
+    # An older in-flight window that began before this observation cannot
+    # consume it just because its unrelated storage call settles later.
+    barrier.append_committed('record', observed=False)
+    assert record_token_lease_metrics.LATE_APPEND._value.get() == baseline
+    args = commit_args()
+    args.update(conversation_id='record', on_committed=lambda: barrier.append_committed('record'))
+    args['durable_queue'].full.return_value = False
+    args['durable_queue'].deliver_pending = AsyncMock()
+    committed = SimpleNamespace(conversation_id='record', samples=32, to_dict=lambda: {'committed': True})
+    storage = (
+        AsyncMock(side_effect=OSError('synthetic object failure'))
+        if outcome == 'exception'
+        else AsyncMock(return_value=committed)
+    )
+    monkeypatch.setattr(pusher, 'run_blocking', storage)
+    monkeypatch.setattr(
+        pusher,
+        'storage_pcm_budget',
+        SimpleNamespace(limit=1 if outcome == 'refused' else 0, admit=lambda *a, **kw: False),
+    )
+    try:
+        if outcome == 'exception':
+            with pytest.raises(OSError):
+                await pusher._commit_durable_audio_window(**args)
+        else:
+            result = await pusher._commit_durable_audio_window(**args)
+            assert result is (committed if outcome == 'success' else None)
+        assert record_token_lease_metrics.LATE_APPEND._value.get() == baseline + (outcome == 'success')
+        if outcome == 'success':
+            barrier.append_committed('record')
+            assert record_token_lease_metrics.LATE_APPEND._value.get() == baseline + 1
+        else:
+            args['on_committed'] = MagicMock()
+            assert 'record' in barrier.late_appends
+    finally:
+        barrier._forget_lease('record')

@@ -50,7 +50,8 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  service_name: backend-listen
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -100,6 +101,18 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -823,6 +836,9 @@ env:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_CLIENTS_JSON
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
+  # Quiet-check empty exit; evaluated on backend-sync (Cloud Tasks handler), pinned here for consistency (lead2 9b4ffd).
+  - name: QUIET_EMPTY_EXIT_ENABLED
     value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"

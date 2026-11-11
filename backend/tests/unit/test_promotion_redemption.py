@@ -55,6 +55,16 @@ def _promo(**extra):
 
 COUPON = {'id': 'coupon_full', 'valid': True, 'percent_off': 100.0, 'applies_to': {'products': ['prod_unlimited']}}
 
+ISSUANCE = {
+    'attribution_schema': '1',
+    'attribution_source': 'shopify_bundle_code',
+    'shopify_shop': 'fixture-shop.myshopify.com',
+    'shopify_order_id': 'gid://shopify/Order/12345',
+    'bundle_order_line_item_id': 'gid://shopify/LineItem/67890',
+    'bundle_redemption_role': 'gift',
+}
+ATTRIBUTION = {**ISSUANCE, 'bundle_promotion_code_id': 'promo_1'}
+
 
 class _Env:
     def __init__(self, subscription=None, promos=None, coupon=None, claim=True):
@@ -103,7 +113,9 @@ def test_trial_subscription_gets_the_coupon_and_the_code_is_used_up():
     assert result['status'] == 'applied'
     assert result['percent_off'] == 100.0
     assert result['applies_at'] == 1_900_000_000
-    env.claim.assert_called_once_with('promo_1', uid='uid_1', subscription_id='sub_1', coupon_id='coupon_full')
+    env.claim.assert_called_once_with(
+        'promo_1', uid='uid_1', subscription_id='sub_1', coupon_id='coupon_full', attribution={}
+    )
     assert env.promo_modify.call_args.kwargs['active'] is False
     assert env.sub_modify.call_args.kwargs['discounts'] == [{'coupon': 'coupon_full'}]
 
@@ -174,6 +186,83 @@ def test_failed_stripe_update_gives_the_code_back():
     env.release.assert_called_once_with('promo_1')
 
 
+def test_redemption_retains_issuance_provenance_without_coupling_it_to_code_benefit():
+    subscription = _subscription(metadata={'uid': 'uid_1', 'sub_type': 'unlimited', 'unrelated': 'kept'})
+    with _Env(subscription=subscription, promos=[_promo(metadata=ISSUANCE)]) as env:
+        result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+
+    assert result['status'] == 'applied'
+    assert env.claim.call_args.kwargs['attribution'] == ATTRIBUTION
+    promo_params = env.promo_modify.call_args.kwargs
+    assert promo_params['active'] is False
+    assert promo_params['metadata'] == {
+        'redeemed_by_uid': 'uid_1',
+        'redeemed_subscription_id': 'sub_1',
+    }
+    assert env.sub_modify.call_args_list[0].kwargs == {
+        'discounts': [{'coupon': 'coupon_full'}],
+        'metadata': {'redeemed_promotion_code_id': 'promo_1'},
+    }
+    # Stripe merges this optional allowlist without rewriting unrelated fields or uid.
+    assert env.sub_modify.call_args_list[1].kwargs == {'metadata': ATTRIBUTION}
+    assert set(promo_params) == {'active', 'metadata'}
+
+
+@pytest.mark.parametrize('role', ['self', 'gift', 'unknown'])
+def test_redemption_preserves_verified_redemption_role(role):
+    with _Env(promos=[_promo(metadata={**ISSUANCE, 'bundle_redemption_role': role})]) as env:
+        redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+    assert env.claim.call_args.kwargs['attribution']['bundle_redemption_role'] == role
+    assert env.sub_modify.call_args.kwargs['metadata']['bundle_redemption_role'] == role
+
+
+def test_redemption_preserves_conflicting_existing_order_provenance():
+    original = {
+        **ISSUANCE,
+        'shopify_order_id': 'gid://shopify/Order/99999',
+        'bundle_redemption_role': 'unknown',
+        'bundle_promotion_code_id': 'promo_original',
+    }
+    subscription = _subscription(metadata={'uid': 'uid_1', 'sub_type': 'unlimited', **original})
+    with _Env(subscription=subscription, promos=[_promo(metadata=ISSUANCE)]) as env:
+        result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+
+    assert result['status'] == 'applied'
+    metadata = env.sub_modify.call_args.kwargs['metadata']
+    assert metadata['shopify_order_id'] == original['shopify_order_id']
+    assert metadata['bundle_promotion_code_id'] == 'promo_original'
+    assert metadata['bundle_redemption_role'] == 'unknown'
+    assert 'uid' not in metadata
+    assert 'sub_type' not in metadata
+    assert env.sub_modify.call_args_list[0].kwargs['metadata']['redeemed_promotion_code_id'] == 'promo_1'
+
+
+@pytest.mark.parametrize(
+    'metadata,coupon',
+    [
+        ({**ISSUANCE, 'shopify_order_id': 'malformed'}, None),
+        (ISSUANCE, {'id': 'coupon_full', 'metadata': {**ISSUANCE, 'shopify_shop': 'other'}}),
+    ],
+)
+def test_invalid_or_conflicting_provenance_does_not_change_redemption_result(metadata, coupon):
+    promo = _promo(metadata=metadata)
+    if coupon is not None:
+        promo['coupon'] = coupon
+    with _Env(promos=[promo]) as env:
+        result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+
+    assert result == {
+        'status': 'applied',
+        'percent_off': 100.0,
+        'amount_off': None,
+        'currency': None,
+        'applies_at': 1_900_000_000,
+    }
+    assert env.claim.call_args.kwargs['attribution'] == {}
+    subscription_metadata = env.sub_modify.call_args.kwargs['metadata']
+    assert subscription_metadata == {'redeemed_promotion_code_id': 'promo_1'}
+
+
 def test_endpoint_returns_the_refusal_as_a_client_error():
     from fastapi import HTTPException
 
@@ -183,3 +272,28 @@ def test_endpoint_returns_the_refusal_as_a_client_error():
         with pytest.raises(HTTPException) as excinfo:
             payment.redeem_code_endpoint(payment.RedeemCodeRequest(code='OMI-AAAA-BBBB'), uid='uid_1')
     assert (excinfo.value.status_code, excinfo.value.detail) == (409, 'used')
+
+
+@pytest.mark.parametrize(
+    'failure', [RuntimeError('optional metadata unavailable'), redemption.stripe.StripeError('metadata')]
+)
+def test_optional_attribution_write_failure_does_not_undo_code_benefit(failure):
+    with _Env(promos=[_promo(metadata=ISSUANCE)]) as env:
+
+        def apply_or_fail_metadata(subscription_id, **kwargs):
+            if kwargs.get('metadata', {}).get('attribution_schema'):
+                raise failure
+            return _obj({**env.subscription, **kwargs})
+
+        env.sub_modify.side_effect = apply_or_fail_metadata
+        result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+
+    assert result['status'] == 'applied'
+    assert env.sub_modify.call_args_list[0].kwargs == {
+        'discounts': [{'coupon': 'coupon_full'}],
+        'metadata': {'redeemed_promotion_code_id': 'promo_1'},
+    }
+    assert env.sub_modify.call_count == 2
+    env.release.assert_not_called()
+    assert env.promo_modify.call_count == 1
+    assert env.promo_modify.call_args.kwargs['active'] is False

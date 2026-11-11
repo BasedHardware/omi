@@ -450,7 +450,7 @@ def _close(
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
         f_join.record_closed_size(closed)
-        composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
+        composer.schedule_after_close(uid, str(episode['id']), episode=closed, collaborators=c, trigger='close')
     return closed
 
 
@@ -1201,7 +1201,7 @@ def _record_moment_once(
             updates=updates,
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
-            **({'recovery_conversation_id': moment.conversation_id} if walk is not None else {}),
+            recovery_conversation_id=moment.conversation_id if walk is not None else None,
         )
     else:
         stored = episodes_db.commit_moment(
@@ -2168,6 +2168,7 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'title': clean_text(episode.get('title'), 240),
         'bullets': [clean_text(line, composer.COMPOSER_MAX_PARAGRAPH_CHARS) for line in episode.get('bullets') or []],
         'lede': clean_text(episode.get('lede'), composer.COMPOSER_MAX_PARAGRAPH_CHARS),
+        'compose_deferred': composer.episode_late_compose_enabled() and composer.is_deferred(episode),
         'follow_ups': [clean_text(line, 400) for line in episode.get('follow_ups') or [] if clean_text(line, 400)],
         'people': [clean_text(name, 60) for name in episode.get('people') or [] if clean_text(name, 60) != 'a speaker'],
         'provisional_items': [

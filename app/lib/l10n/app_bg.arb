@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Записите са спрени",
     "activityAttentionUploadStalledTitle": "Качването е спряно",
     "activityAttentionUploadRecordings": "{count, plural, =1{Чака 1 запис} other{Чакат {count} записа}}",
+    "attentionRerunNotes": "Повторно генериране на бележки",
     "attentionSummaryFailed": "Този разговор не можа да бъде обобщен",
     "activityAttentionSemantics": "Активност, изисква внимание",
     "connectAgentHeadline": "Използвайте паметта на Omi в ChatGPT и вашите AI агенти",

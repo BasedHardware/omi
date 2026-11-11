@@ -13655,6 +13655,9 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Generer notater på nytt';
+
+  @override
   String get attentionSummaryFailed => 'Kunne ikke oppsummere denne samtalen';
 
   @override

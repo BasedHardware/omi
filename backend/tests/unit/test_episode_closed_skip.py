@@ -32,6 +32,8 @@ from utils.episodes import composer, service
 @pytest.fixture
 def composer_on(monkeypatch):
     monkeypatch.delenv(config.EPISODE_COMPOSER_ENV, raising=False)
+    # This fixture's capture is old enough to be "late"; keep today's finalize compose.
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
     scheduled = []
     monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **_: scheduled.append(eid) or True)
     return scheduled

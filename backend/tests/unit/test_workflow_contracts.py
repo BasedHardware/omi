@@ -1534,6 +1534,7 @@ def test_firestore_gate_policy_rejects_orphaned_readiness_dependency():
 
 _LANE_SOURCE_BINDINGS = {
     'gcp_backend.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
+    'gcp_diarizer.yml': '${{ steps.vars.outputs.source_sha }}',
     'gcp_backend_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'desktop_backend_prod.yml': '${{ steps.admitted-source.outputs.source_sha }}',
     'desktop_backend_auto_dev.yml': '${{ steps.candidate-identity.outputs.source_sha }}',

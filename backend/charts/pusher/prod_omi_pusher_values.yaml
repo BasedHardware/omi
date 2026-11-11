@@ -53,7 +53,8 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  service_name: pusher
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -114,6 +115,18 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
   # Default off. 512 MiB is a proposed canary size, not enabled here.
@@ -141,6 +154,9 @@ env:
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
+  # Quiet-check empty exit; mirrors backend-listen (co-host env parity, lead2 9b4ffd).
+  - name: QUIET_EMPTY_EXIT_ENABLED
     value: 'true'
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"

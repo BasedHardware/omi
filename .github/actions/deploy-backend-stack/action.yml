@@ -4,6 +4,22 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  record_token_lease_mode:
+    description: 'Caller-supplied record token lease mode'
+    required: false
+    default: 'off'
+  record_token_lease_mode_serve_percent:
+    description: 'Caller-supplied record token lease serve percentage'
+    required: false
+    default: '0'
+  record_token_lease_seconds:
+    description: 'Caller-supplied record token lease duration in seconds'
+    required: false
+    default: '3600'
+  record_token_lease_deployed_at:
+    description: 'Caller-supplied pinned record token lease release epoch'
+    required: false
+    default: '0'
   backend_sync_memory:
     description: 'backend-sync memory: 6Gi prod right-size (2026-10-24 costcut), 4Gi/5Gi/8Gi trial values; dev callers keep 8Gi'
     required: false
@@ -112,6 +128,31 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Bind shared record token lease rollout inputs
+      shell: bash
+      env:
+        RECORD_TOKEN_LEASE_MODE: ${{ inputs.record_token_lease_mode }}
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ inputs.record_token_lease_mode_serve_percent }}
+        RECORD_TOKEN_LEASE_SECONDS: ${{ inputs.record_token_lease_seconds }}
+        RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ inputs.record_token_lease_deployed_at }}
+      run: |
+        python3 - <<'PYTHON'
+        import math, os
+        mode = os.environ['RECORD_TOKEN_LEASE_MODE']
+        percent = int(os.environ['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'])
+        seconds = int(os.environ['RECORD_TOKEN_LEASE_SECONDS'])
+        epoch = float(os.environ['RECORD_TOKEN_LEASE_DEPLOYED_AT'])
+        if mode not in {'off', 'shadow', 'serve'} or not 0 <= percent <= 100 or not 1800 <= seconds <= 7200:
+            raise ValueError('invalid record token lease rollout vector')
+        if not math.isfinite(epoch) or epoch < 0 or (mode != 'off' and epoch <= 0):
+            raise ValueError('enabled record token leases require a pinned release epoch')
+        epoch_value = str(int(epoch)) if epoch.is_integer() else repr(epoch)
+        with open(os.environ['GITHUB_ENV'], 'a') as output:
+            for key, value in {'RECORD_TOKEN_LEASE_MODE': mode, 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': percent,
+                               'RECORD_TOKEN_LEASE_SECONDS': seconds, 'RECORD_TOKEN_LEASE_DEPLOYED_AT': epoch_value}.items():
+                output.write(f'{key}={value}\n')
+        PYTHON
+
     - name: Validate deploy profile boundary
       shell: bash
       env:
@@ -826,6 +867,7 @@ runs:
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_sync_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_sync_flags }}
           ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
           --cpu=2
           --max-instances=${{ steps.live-max-scale.outputs.max_scale }}

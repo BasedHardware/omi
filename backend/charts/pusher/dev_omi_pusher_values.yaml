@@ -54,6 +54,7 @@ podAnnotations:
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels:
   env: dev
+  service_name: pusher
   # The development Prometheus job keeps this target in the development
   # evidence plane as a second boundary alongside its namespace selector.
 
@@ -116,6 +117,18 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
   # Dev-only canary (lead2 2afa3e, 2026-11-08): 512 MiB byte-budgeted custody admission.

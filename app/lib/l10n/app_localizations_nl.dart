@@ -13689,6 +13689,9 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Notities opnieuw genereren';
+
+  @override
   String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
 
   @override

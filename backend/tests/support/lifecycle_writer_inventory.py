@@ -1900,6 +1900,48 @@ FIELD_SITES = {
             ('dispatch_generation', 'due_at', 'reconcile_after_at', 'status', 'updated_at'),
         ),
     ],
+    'database/record_custody_append.py': [
+        ('begin.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
+        ('finish.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
+        (
+            'recover_committed.commit',
+            'record_upload_sessions',
+            'sessions',
+            ('record_upload_revision', 'record_upload_sessions'),
+        ),
+    ],
+    'database/batch_pipeline_record_lease_recovery.py': [
+        ('prepare_recovery', 'record_audio_closed', 'False', ('record_audio_closed',)),
+        ('prepare_recovery', 'record_audio_closed', 'False', ('record_audio_closed', 'record_audio_partial')),
+        ('prepare_recovery', 'record_audio_partial', 'mark', ('record_audio_closed', 'record_audio_partial')),
+        (
+            'prepare_recovery',
+            'state',
+            "'record_pending' if ready else WAITING_STATE",
+            (
+                'available_at',
+                'conversation_id',
+                'enqueued_at',
+                'lease_recovery',
+                'merge_pending',
+                'owner_id',
+                'owner_key',
+                'partial_coordinator',
+                'partial_reason',
+                'policy',
+                'policy_source',
+                'priority',
+                'privacy_generation',
+                'record_content_id',
+                'record_snapshot',
+                'segment_id',
+                'state',
+            ),
+        ),
+    ],
+    'utils/batch_pipeline/record_lease_append.py': [
+        ('wake_partial.commit', 'state', "'record_pending'", ('available_at', 'state')),
+    ],
     'database/record_audio.py': [
         ('abandon_record_upload_session.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         (
@@ -1914,6 +1956,8 @@ FIELD_SITES = {
             'True',
             ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
         ),
+        ('renew_record_token_lease.commit', 'record_audio_closed', 'False', ('record_audio_closed',)),
+        ('renew_record_token_lease.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         ('seal_record_audio.commit', 'record_audio_closed', 'True', ('record_audio_closed',)),
         ('seal_record_audio.commit', 'record_seal_refused_at', 'None', ('record_seal_refused_at',)),
         ('seal_record_audio.commit', 'record_seal_refused_at', 'time.time()', ('record_seal_refused_at',)),
@@ -2693,7 +2737,7 @@ FIELD_SITES = {
         ('apply_backfill.commit', 'record_audio_closed', 'True', ('record_audio_closed', 'record_upload_sessions')),
         ('apply_backfill.commit', 'record_upload_failed', 'False', ('record_upload_failed',)),
         ('apply_backfill.commit', 'record_upload_sessions', '{}', ('record_audio_closed', 'record_upload_sessions')),
-        ('refusal', 'state', "'record_pending'", ('record_content_id', 'state')),
+        ('refusal', 'state', "'record_pending'", ('owner_id', 'record_content_id', 'state')),
     ],
     'utils/batch_pipeline/record_seal_repair.py': [
         ('apply_seals.commit', 'record_audio_closed', 'True', ('record_audio_closed',)),
@@ -2891,6 +2935,8 @@ FIELD_SITES = {
             'current + deadline_seconds()',
             ('summary_blocked_reason', 'summary_due_at', 'summary_empty_failures', 'summary_empty_rearms'),
         ),
+        ('stamp_projection_debt', 'summary_due_at', 'current + deadline_seconds()', ('summary_due_at',)),
+        ('stamp_projection_debt', 'summary_first_pending_at', 'current', ('summary_first_pending_at',)),
     ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))
@@ -3127,6 +3173,7 @@ FIELD_SITES = {
             'composed_fingerprint',
             'fingerprint(members)',
             (
+                'compose_deferred_at',
                 'composed_fingerprint',
                 'composed_member_ids',
                 'composed_notes',
@@ -3139,6 +3186,7 @@ FIELD_SITES = {
             'composed_fingerprint',
             'print_',
             (
+                'compose_deferred_at',
                 'compose_failures',
                 'composed_at',
                 'composed_fingerprint',
@@ -3149,10 +3197,30 @@ FIELD_SITES = {
                 'usage',
             ),
         ),
+        (
+            '_write_single_member.finish',
+            'composed_fingerprint',
+            'print_',
+            (
+                'compose_deferred_at',
+                'compose_failures',
+                'composed_at',
+                'composed_fingerprint',
+                'composed_member_ids',
+                'composed_notes',
+                'composer_version',
+                'summary_needs_regeneration',
+            ),
+        ),
     ],
     'utils/episodes/home_read.py': [
         ('project_episode', 'status', "'completed'", ('status',)),
-        ('project_episode', 'status', 'status', ('emoji', 'finished_at', 'id', 'started_at', 'status', 'title')),
+        (
+            'project_episode',
+            'status',
+            'status',
+            ('emoji', 'finished_at', 'gist', 'id', 'started_at', 'status', 'title'),
+        ),
     ],
     'utils/episodes/service.py': [
         ('_close', 'status', "'dropped'", ('status',)),
@@ -3228,6 +3296,7 @@ FIELD_SITES = {
                 'bullets',
                 'close_reason',
                 'closed_at',
+                'compose_deferred',
                 'conversation_ids',
                 'follow_ups',
                 'id',
@@ -3859,6 +3928,13 @@ FIELD_SITES = {
             "loop.get('status')",
             ('age_days', 'due', 'history', 'kind', 'loop_id', 'opened_on', 'status', 'times_surfaced', 'what', 'who'),
         ),
+    ],
+    # Account-wipe results, not conversation lifecycle writes. The conservative
+    # inventory also tracks response maps containing a status key.
+    'utils/other/lake_wipe.py': [
+        ('destroy_owner_lake_keys', 'status', "'destroyed'", ('status', 'versions_destroyed')),
+        ('purge_owner_lake_content', 'status', "'noop'", ('status',)),
+        ('purge_owner_lake_content', 'status', "'purged'", ('candidates_deleted', 'objects_deleted', 'status')),
     ],
     'utils/other/daily_recap.py': [
         ('_state', 'status', 'status', ('created_at', 'date', 'generated_at', 'status')),

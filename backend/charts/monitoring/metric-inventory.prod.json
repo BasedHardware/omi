@@ -2407,7 +2407,10 @@
     "omi_transcription_final_pass_owner_delta_ratio_sum",
     "omi_transcription_final_pass_retry_terminal_observed_at_seconds",
     "omi_transcription_final_pass_retry_terminal_total",
-    "omi_transcription_final_pass_unit_skips_total"
+    "omi_transcription_final_pass_unit_skips_total",
+    "omi_record_seal_oldest_age_seconds",
+    "omi_record_token_late_append_total",
+    "omi_record_token_lease_expired_sealed_total"
   ],
   "legacy_debt": {
     "bfobs1syncenq01": {

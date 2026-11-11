@@ -13444,6 +13444,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => '重新生成笔记';
+
+  @override
   String get attentionSummaryFailed => '无法总结这段对话';
 
   @override

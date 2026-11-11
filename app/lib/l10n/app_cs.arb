@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Nahrávky pozastaveny",
     "activityAttentionUploadStalledTitle": "Odesílání pozastaveno",
     "activityAttentionUploadRecordings": "{count, plural, =1{Čeká 1 nahrávka} other{Čeká {count} nahrávek}}",
+    "attentionRerunNotes": "Znovu vytvořit poznámky",
     "attentionSummaryFailed": "Tuto konverzaci se nepodařilo shrnout",
     "activityAttentionSemantics": "Aktivita, vyžaduje pozornost",
     "connectAgentHeadline": "Používejte svou paměť Omi v ChatGPT a svých AI agentech",

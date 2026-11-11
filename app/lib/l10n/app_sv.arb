@@ -4183,6 +4183,7 @@
     "activityAttentionStorageSubtitle": "Inspelningar pausade",
     "activityAttentionUploadStalledTitle": "Uppladdningen har stannat",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 inspelning väntar} other{{count} inspelningar väntar}}",
+    "attentionRerunNotes": "Skapa anteckningar igen",
     "attentionSummaryFailed": "Det gick inte att sammanfatta samtalet",
     "activityAttentionSemantics": "Aktivitet, kräver uppmärksamhet",
     "connectAgentHeadline": "Använd ditt Omi-minne i ChatGPT och dina AI-agenter",

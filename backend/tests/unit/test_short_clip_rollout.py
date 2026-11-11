@@ -27,6 +27,7 @@ START = datetime(2026, 10, 31, 6, 0, tzinfo=timezone.utc)
 
 @pytest.fixture(autouse=True)
 def flags(monkeypatch):
+    monkeypatch.delenv('EXPLICIT_CALENDAR_REQUEST_KEEP', raising=False)
     monkeypatch.delenv('NOTES_SHORT_CLIP_FLOOR', raising=False)
     monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', raising=False)
@@ -140,6 +141,10 @@ def test_real_structure_boundary_serves_floor_before_any_notes_or_relevance_call
         ('reminder', 'SERVER_RECOVERY'),
         ('reminder_curly', 'CAPTURE_END'),
         ('reminder_curly', 'SERVER_RECOVERY'),
+        ('calendar_put', 'CAPTURE_END'),
+        ('calendar_put', 'SERVER_RECOVERY'),
+        ('calendar_add', 'CAPTURE_END'),
+        ('calendar_add', 'SERVER_RECOVERY'),
         ('user_kept', 'CAPTURE_END'),
         ('user_kept', 'SERVER_RECOVERY'),
         ('switch_off', 'CAPTURE_END'),
@@ -156,11 +161,13 @@ def test_real_structure_boundary_reaches_real_notes_admission_when_exempt(pc, mo
     monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *_a, **_k: False)
     if reason == 'switch_off':
         monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
-    row = capture(
-        'don’t forget milk'
-        if reason == 'reminder_curly'
-        else 'remind me to call mom' if reason == 'reminder' else 'A tiny recording'
-    )
+    text = {
+        'reminder_curly': 'don’t forget milk',
+        'reminder': 'remind me to call mom',
+        'calendar_put': 'Put my bike service on the calendar.',
+        'calendar_add': 'Add the annual inspection to my calendar.',
+    }.get(reason, 'A tiny recording')
+    row = capture(text)
     with pytest.raises(RuntimeError, match='notes boundary reached'):
         pc._get_structured(
             'synthetic-account',
@@ -177,7 +184,20 @@ def test_memory_boundary_skips_all_l1_l2_work_only_for_persisted_minimum(pc, mon
     row = SimpleNamespace(
         id='synthetic-conversation',
         structured=Structured(title='Recording', title_provenance='server_minimum' if minimum else None),
-        transcript_segments=[],
+        # A non-minimum row carries real owner speech so the separate noise/short-speech
+        # admission gate is not what this test measures.
+        transcript_segments=(
+            []
+            if minimum
+            else [
+                SimpleNamespace(
+                    text=' '.join(['word'] * 40),
+                    start=0.0,
+                    end=5.0,
+                    speaker='SPEAKER_00',
+                )
+            ]
+        ),
         source='omi',
     )
     service = MagicMock()

@@ -415,6 +415,7 @@ AREA_TESTS = (
         (
             'tests/unit/test_monitoring_*.py',
             'tests/unit/test_serving_podmonitoring_chart.py',
+            'tests/unit/test_firestore_attribution_charts.py',
             'tests/unit/test_backend_secrets_chart.py',
             'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_journey_observability.py',

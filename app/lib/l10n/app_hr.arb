@@ -11603,6 +11603,7 @@
     "activityAttentionStorageSubtitle": "Snimke su pauzirane",
     "activityAttentionUploadStalledTitle": "Prijenos je zastao",
     "activityAttentionUploadRecordings": "{count, plural, =1{Čeka 1 snimka} other{Čeka {count} snimki}}",
+    "attentionRerunNotes": "Ponovno izradi bilješke",
     "attentionSummaryFailed": "Ovaj razgovor nije bilo moguće sažeti",
     "activityAttentionSemantics": "Aktivnost, zahtijeva pažnju",
     "connectAgentHeadline": "Koristite svoju Omi memoriju u ChatGPT-u i svojim AI agentima",
