@@ -1228,6 +1228,31 @@ page by default (its kill switch restores the mixed page). All three pages
 use the same `in` filter on the declared results composite index
 (`projection_state, committed_at, __name__`), so no index changes are needed.
 
+### Finish backoff (dark, default off)
+
+`BATCH_PROJECTION_FINISH_BACKOFF_ENABLED` (default `false`, `true` is the only
+enable) bounds the replay the finish page does for already-projected work. Off,
+the page is exactly the one above and no result field is written.
+
+On, a finish walk that changed nothing writes `projection_finish_due_at` and
+`projection_finish_backoff_step` on the row. The page then asks for
+`projection_state in (persisted, ready)` **and** `projection_finish_due_at <=
+now`: a no-change row is retried after 60 s, then 300 s, then 900 s (capped),
+instead of being re-read and re-fenced on every tick. A row that moved state is
+a changed row and is not deferred. The `pending` assignment page is untouched,
+so new work is never delayed.
+
+The range filter must lead the ordering, so that page uses the second declared
+results index `(projection_state, projection_finish_due_at, committed_at,
+__name__)` and its cursor becomes `(due_at, committed_at, key)`. Rows written
+before the lever have no clock and are outside every range filter: the first
+pass after enablement is the unfiltered legacy page, which stamps them, and
+only then does the page filter. Every `projection_state` write (session
+receipts and part summaries, quarantine hold and restore, release, sibling
+wake, completion) clears both fields in the same transaction, so no obligation
+waits on a stale clock. Rollback is the one switch; the fields are additive and
+unread when off, so no backfill is needed.
+
 ### Per-owner projection drain (Phase 1)
 
 The sweep-shared 30 s walk budget gave each heavy owner a shrinking share of

@@ -35,6 +35,7 @@ from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_finish_backoff import FinishBackoff
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
 from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusals
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
@@ -431,6 +432,7 @@ class Projector:
         # position cannot strand them and other owners are not starved.
         self.chain_followups: list[str] = []
         self.discovery = ProjectionDiscovery(store)
+        self.finish_backoff = FinishBackoff(self)
         # Pending-page mode: assignment never spends page slots on rows it can
         # only replay, and persisted/ready rows advance on their own cursor.
         self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES)
@@ -1694,11 +1696,13 @@ class Projector:
         Async rows belong to the follow-up drain; seeing one keeps it scheduled.
         Synchronous-policy rows replay assignment and finish exactly as the
         mixed page did, so no persisted or ready obligation loses its retry.
+        The dark finish backoff owns page selection and deferral; see
+        utils/batch_pipeline/projection_finish_backoff.py.
         """
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         contention = False
-        for segment_id in self.finish_discovery.next(limit=size):
+        for segment_id in self.finish_backoff.page(size):
             if segment_id in touched:
                 continue
             try:
@@ -1710,6 +1714,7 @@ class Projector:
                     continue
                 result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
+                self.finish_backoff.settled(segment_id, entry, result)
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1
             except Exception as error:
