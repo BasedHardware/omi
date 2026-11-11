@@ -33,6 +33,11 @@ MIN_END_TYPE_SAMPLE = 20
 STUCK_STAGES = ('capturing', 'sealed', 'transcribed', 'noted')
 END_TYPES = ('user_initiated', 'jev_initiated', 'silence_backstop', 'unknown')
 NEW_STUCK_WINDOW_SECONDS = 3600
+# A conversation created this close to the window end may not have been admitted
+# yet. The coverage cohort stops here so the numerator and the denominator
+# describe the same settled set of conversations instead of two different
+# ``admitted_at``/``created_at`` cohorts.
+COVERAGE_SETTLE_SECONDS = 300
 # The conversation fields the Home predicate reads. Content (title/overview) is
 # needed by the product classifier; the transcript is reduced to a boolean
 # immediately and never leaves this module.
@@ -105,7 +110,7 @@ def _conversation(client: Any, uid: str | None, conversation_id: str) -> dict[st
     return row
 
 
-def _capture_creates(client: Any, start_epoch: float, end_epoch: float) -> int | None:
+def _capture_creates(client: Any, start_epoch: float | None, end_epoch: float | None) -> int | None:
     """Exact count of conversations created in the window (the coverage denominator)."""
     start = pipeline_ledger.epoch(start_epoch)
     end = pipeline_ledger.epoch(end_epoch)
@@ -207,9 +212,14 @@ def census(
         end_type: [] for end_type in END_TYPES
     }
     real_speech = speech_unknown = visible_real = home_unknown = clock_unknown = terminal_rows = 0
+    clock_fallback = cohort_admits = excluded_admits = 0
+    end_type_clock_fallback: Counter[str] = Counter()
     observations: list[tuple[float | None, float | None, bool]] = []
     latest_updated: float | None = None
     earliest_admitted: float | None = None
+    window_start = pipeline_ledger.epoch(start)
+    window_end = pipeline_ledger.epoch(end)
+    coverage_end = None if window_end is None else window_end - COVERAGE_SETTLE_SECONDS
     for row in rows:
         if row.get('schema_version') != SCHEMA_VERSION:
             raise CensusSchemaMismatch('ledger schema_version mismatch')
@@ -246,11 +256,30 @@ def census(
         visible, step = _home_visible(conversation, current)
         home_unknown += int(conversation is None or step is None)
         visible_real += int(real and visible)
-        clock_start = pipeline_ledger.epoch(row.get('end_at')) or pipeline_ledger.epoch(row.get('admitted_at'))
+        # Coverage counts the same cohort on both sides: conversations created
+        # in the settled window. A row admitted here but created outside it is
+        # reported separately instead of inflating the numerator.
+        created = pipeline_ledger.epoch((conversation or {}).get('created_at'))
+        if (
+            created is not None
+            and window_start is not None
+            and coverage_end is not None
+            and window_start <= created < coverage_end
+        ):
+            cohort_admits += 1
+        else:
+            excluded_admits += 1
+        # The end-to-Home clock starts at ``end_at``. A row without it has no
+        # end-to-Home duration; it is counted on its own basis and kept out of
+        # the quantiles rather than silently borrowing ``admitted_at``.
+        clock_start = pipeline_ledger.epoch(row.get('end_at'))
         event_at = pipeline_ledger.epoch(row.get('home_ready_at'))
         observation: tuple[float | None, float | None, bool]
         if clock_start is None:
-            clock_unknown += 1
+            if pipeline_ledger.epoch(row.get('admitted_at')) is not None:
+                clock_fallback += 1
+            else:
+                clock_unknown += 1
             observation = (None, None, False)
         elif event_at is not None and event_at >= clock_start:
             observation = (event_at - clock_start, None, True)
@@ -268,6 +297,8 @@ def census(
             end_type_visible[end_type] += int(real and visible)
             if clock_start is not None:
                 end_type_observations[end_type].append(observation)
+            else:
+                end_type_clock_fallback[end_type] += 1
     denominator = real_speech + speech_unknown
     km = _km_quantiles(observations)
     total_rows = len(rows)
@@ -288,12 +319,13 @@ def census(
             'p90_seconds': type_km.get(0.9),
             'p50_status': 'measured' if type_km.get(0.5) is not None else 'not_reached',
             'p90_status': 'measured' if type_km.get(0.9) is not None else 'not_reached',
+            'clock_fallback': end_type_clock_fallback.get(end_type, 0),
             'sample_status': 'sufficient' if count >= MIN_END_TYPE_SAMPLE else 'insufficient_sample',
         }
     end_types['terminal_rows'] = terminal_rows
     end_types['unknown_share'] = end_type_rows.get('unknown', 0) / terminal_rows if terminal_rows else 0.0
-    capture_creates = _capture_creates(client, start, end)
-    coverage_ratio = total_rows / capture_creates if capture_creates else None
+    capture_creates = _capture_creates(client, start, coverage_end)
+    coverage_ratio = cohort_admits / capture_creates if capture_creates else None
     return {
         'schema_version': SCHEMA_VERSION,
         'generated_at': current,
@@ -311,9 +343,13 @@ def census(
         },
         'coverage': {
             'ledger_admits': total_rows,
+            'cohort_admits': cohort_admits,
+            'excluded_admits': excluded_admits,
             'capture_creates': capture_creates,
+            'unmatched_creates': (capture_creates - cohort_admits) if capture_creates is not None else None,
             'ratio': coverage_ratio,
-            'basis': 'all_conversations',
+            'settle_seconds': COVERAGE_SETTLE_SECONDS,
+            'basis': 'conversations_created_in_window',
             'ledger_write_failures': None,
             'ledger_disabled': None,
             'status': 'pass' if coverage_ratio is not None and coverage_ratio >= 0.995 else 'unknown',
@@ -332,6 +368,7 @@ def census(
         },
         'latency': {
             'clock_start': 'end_at',
+            'clock_basis': 'end_at_only',
             'event': 'noted',
             'p50_seconds': km.get(0.5),
             'p90_seconds': km.get(0.9),
@@ -339,6 +376,7 @@ def census(
             'p90_status': 'measured' if km.get(0.9) is not None else 'not_reached',
             'event_count': sum(1 for _, _, is_event in observations if is_event),
             'censored_count': sum(1 for _, _, is_event in observations if not is_event),
+            'clock_fallback_count': clock_fallback,
             'clock_unknown_count': clock_unknown,
             'basis': 'kaplan_meier',
         },

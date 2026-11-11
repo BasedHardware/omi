@@ -64,6 +64,7 @@ def wire(monkeypatch):
         return state['conversations'].get(conversation_id)
 
     def fake_capture_creates(client, start, end):
+        state['capture_window'] = (start, end)
         return state['capture_creates']
 
     def fake_retention(*, firestore_client=None):
@@ -219,14 +220,64 @@ def test_per_end_type_latency_is_reported(wire):
 
 def test_retention_and_coverage_are_reported(wire):
     wire['rows'] = [_row(capture_id='a', terminal=True)]
-    wire['conversations'] = {'a': _conversation()}
+    wire['conversations'] = {'a': _conversation(created_at=datetime.fromtimestamp(NOW - 500, tz=timezone.utc))}
     wire['capture_creates'] = 1
     result = _census(wire)
     assert result['retention'] == {'earliest_admitted_at': NOW - 10_000, 'basis': 'collection_group_min'}
     assert result['coverage']['ledger_admits'] == 1
+    assert result['coverage']['cohort_admits'] == 1
+    assert result['coverage']['excluded_admits'] == 0
     assert result['coverage']['capture_creates'] == 1
+    assert result['coverage']['unmatched_creates'] == 0
     assert result['coverage']['ratio'] == 1.0
-    assert result['coverage']['basis'] == 'all_conversations'
+    assert result['coverage']['basis'] == 'conversations_created_in_window'
+    # The denominator is read over the settled cohort, not the raw window end.
+    assert wire['capture_window'][1] == NOW + 1 - census.COVERAGE_SETTLE_SECONDS
+
+
+def test_coverage_compares_the_same_created_at_cohort(wire):
+    # A row admitted in the window but created before it must not inflate the
+    # numerator, and a conversation created too close to the window end has not
+    # had time to be admitted, so it is excluded from both sides.
+    wire['rows'] = [
+        _row(capture_id='in-cohort', admitted_at=NOW - 500),
+        _row(capture_id='created-before', admitted_at=NOW - 500),
+        _row(capture_id='created-at-the-edge', admitted_at=NOW - 100),
+    ]
+    wire['conversations'] = {
+        'in-cohort': _conversation(created_at=datetime.fromtimestamp(NOW - 500, tz=timezone.utc)),
+        'created-before': _conversation(created_at=datetime.fromtimestamp(NOW - 2_000, tz=timezone.utc)),
+        'created-at-the-edge': _conversation(created_at=datetime.fromtimestamp(NOW - 100, tz=timezone.utc)),
+    }
+    wire['capture_creates'] = 2
+    result = census.census(NOW - 1_000, NOW + 1, now=NOW, firestore_client=object())
+    coverage = result['coverage']
+    assert coverage['ledger_admits'] == 3
+    assert coverage['cohort_admits'] == 1
+    assert coverage['excluded_admits'] == 2
+    assert coverage['capture_creates'] == 2
+    assert coverage['unmatched_creates'] == 1
+    assert coverage['ratio'] == 0.5
+    assert coverage['settle_seconds'] == census.COVERAGE_SETTLE_SECONDS
+
+
+def test_latency_excludes_rows_without_end_at_and_counts_them(wire):
+    wire['rows'] = [
+        _row(capture_id='ended', terminal=True, end_at=NOW - 100, home_ready_at=NOW - 10),
+        _row(capture_id='terminal-no-end', terminal=True, end_at=None, admitted_at=NOW - 200),
+        _row(capture_id='in-flight', terminal=False, end_at=None, admitted_at=NOW - 200),
+        _row(capture_id='no-clock', terminal=False, end_at=None, admitted_at=None),
+    ]
+    wire['conversations'] = {row['capture_id']: _conversation() for row in wire['rows']}
+    result = _census(wire)
+    latency = result['latency']
+    assert latency['clock_start'] == 'end_at'
+    assert latency['clock_basis'] == 'end_at_only'
+    assert latency['clock_fallback_count'] == 2
+    assert latency['clock_unknown_count'] == 1
+    assert latency['event_count'] == 1
+    assert latency['p50_seconds'] == 90.0
+    assert result['end_types']['user_initiated']['clock_fallback'] == 1
 
 
 def test_conversation_read_is_field_projected_and_transcript_is_a_boolean(monkeypatch):
