@@ -596,3 +596,43 @@ def test_speaker_map_preserves_attributed_role_owner_without_raw_owner_flag():
     )
     mapping = llm._speaker_map(rows, 'You', {}, roles=roles)
     assert mapping.clusters[0].owner
+
+
+@pytest.mark.parametrize('gap', [True, False])
+def test_carried_name_override_is_limited_to_enabled_gap_presentation(monkeypatch, gap):
+    row = dict(
+        id='bound',
+        speaker='BATCH_UNASSIGNED_bound' if gap else 'SPEAKER_00',
+        speaker_id=0,
+        is_user=False,
+        person_id='ada',
+        speaker_label_source='carried',
+        speaker_match_source=None,
+        speaker_identity_status='not_user',
+        start=0,
+        end=6,
+    )
+    evidence = SpeakerEvidence(
+        status='resolved',
+        policy_version='test',
+        clusters=[
+            VoiceCluster(
+                id='old',
+                segment_ids=['bound'],
+                speech_seconds=6,
+                candidates=[
+                    SpeakerCandidate(
+                        person_id='rhea',
+                        name='Rhea',
+                        probability=0.99,
+                        band='confident',
+                        source='voice',
+                        label_eligible=True,
+                    )
+                ],
+            )
+        ],
+    )
+    assert display_participants([row], names={'ada': 'Ada'}, evidence=evidence).label(row) == ('Ada' if gap else 'Rhea')
+    monkeypatch.setenv(FLAG, 'false')
+    assert display_participants([row], names={'ada': 'Ada'}, evidence=evidence).label(row) == 'Rhea'

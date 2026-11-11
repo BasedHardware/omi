@@ -65,6 +65,10 @@ def _batch_abstention(row: Any) -> bool:
     """Explicit user decisions outrank abstention; raw carried flags do not."""
     if _confirmed_identity(row):
         return False
+    return _batch_marker(row)
+
+
+def _batch_marker(row: Any) -> bool:
     return (
         str(field(row, 'speaker') or '').startswith('BATCH_UNASSIGNED_')
         or field(row, 'speaker_match_source') == 'batch_abstention'
@@ -286,7 +290,9 @@ def display_participants(
                 name = _clean_name(field(row, 'person_name')) if field(row, 'person_id') else None
         if not evidence_available and not allow_automatic_names:
             name = None
-        if field(row, 'speaker_label_source') == 'manual' or _confirmed_identity(row):
+        if field(row, 'speaker_label_source') == 'manual' or (
+            unknown_abstentions and _batch_marker(row) and _confirmed_identity(row)
+        ):
             name = (
                 owner_name
                 if field(row, 'is_user', False)
