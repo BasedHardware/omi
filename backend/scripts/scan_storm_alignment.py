@@ -23,10 +23,27 @@ constructs or raises one by name, (c) classifies a loss as contention (a
 call to ``publication_loss_is_contention``), (d) compares an error-type
 string against a contention exhaustion name, or (e) passes the stamped
 ``retry_after=`` into a deferral contract. A wait is any ``sleep``-named
-call (``asyncio.sleep``, ``time.sleep``, ``self._publication_sleep``, ...).
-A finding is a surface + wait with no alignment reference anywhere in the
-function body (nested helpers included, so moving the bare ladder behind a
-closure is not an escape, mirroring the async-gate rule).
+call (``asyncio.sleep``, ``time.sleep``, ``self._publication_sleep``, ...)
+or a state-armed backoff: an assignment (``=``, ``+=``, ``:=``-style
+annotated or augmented) to a ``*_backoff_until`` name holding a value that
+is not a literal zero — the scheduler's shard pull lane parks its next
+re-entry in ``_contention_backoff_until`` and sleeps on it at the entry
+gate, so the arm IS the wait even though no ``sleep`` call sits in the
+function. A finding is a surface + wait with no alignment reference
+anywhere in the function body (nested helpers included, so moving the bare
+ladder behind a closure is not an escape, mirroring the async-gate rule).
+
+This property covers the shard pull lane directly: its contention handler
+used to arm ``_contention_backoff_until`` from a bare ``2 ** failures``
+ladder and discard the stamped window, so a shard that lost a chain
+re-entered the armed window's interior, burned the next five-attempt chain
+against a collision the damper had already measured, and re-armed the storm
+it had just paid to leave — the lockstep burn behind the
+``firestore_transaction_contention operation=... outcome=exhausted`` ERROR
+family and the scheduler's ``event=batch_pull outcome=backoff`` lines.
+``Scheduler.pull`` now consumes ``pull_contention_storm_after`` (the
+stamped window raised to a floor under the lane's documented horizon), and
+this scanner fails on any future arm that drops the measured window.
 
 Ablation (--ablate, or ``ablate_source``): every alignment helper name is
 rewritten to a dead ``__dealigned`` suffix and the source rescanned. The
@@ -42,6 +59,7 @@ Usage:
 Exit codes: 0 = clean; 1 = findings present; 2 = usage error.
 
 Failure-Class: FC-publication-restrike-collides-inside-the-armed-storm-window
+Failure-Class: FC-pull-backoff-collides-inside-the-armed-storm-window
 """
 
 import argparse
@@ -81,7 +99,14 @@ CONTENTION_CLASSIFIERS = frozenset({"publication_loss_is_contention"})
 SURFACE_REFERENCE_NAMES = CONTENTION_EXHAUSTIONS | CONTENTION_CLASSIFIERS
 
 # Alignment helpers: calls to these consume the measured storm window.
-ALIGNMENT_CALLS = frozenset({"contention_retry_after", "publication_restrike_storm_after", "_contention_storm_after"})
+ALIGNMENT_CALLS = frozenset(
+    {
+        "contention_retry_after",
+        "publication_restrike_storm_after",
+        "_contention_storm_after",
+        "pull_contention_storm_after",
+    }
+)
 
 # Ablation target: the helper names above, renamed to a dead suffix.
 DEALIGNED_SUFFIX = "__dealigned"
@@ -113,6 +138,37 @@ def _handler_names(node) -> set:
         for element in node.elts:
             names |= _handler_names(element)
     return names
+
+
+def _backoff_target_names(targets: list) -> set:
+    """The ``*_backoff_until`` deadline names among assignment targets (tuples flattened)."""
+    names: set = set()
+    for target in targets:
+        if isinstance(target, ast.Name):
+            if target.id.endswith('_backoff_until'):
+                names.add(target.id)
+        elif isinstance(target, ast.Attribute):
+            if target.attr.endswith('_backoff_until'):
+                names.add(target.attr)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            names |= _backoff_target_names(target.elts)
+    return names
+
+
+def _backoff_arm(targets: list, value) -> bool:
+    """True when an assignment arms a ``*_backoff_until`` re-entry deadline.
+
+    The scheduler's pull lane parks its next re-entry in
+    ``_contention_backoff_until`` and sleeps on it at the entry gate, so the
+    arm is the wait even though no ``sleep`` call sits in the arming
+    function. Assigning a literal zero (int or float) is the clear, not an
+    arm: the init and the clean-pull reset both store ``0.0`` and never park
+    anything. Subscript and starred targets are not recognized deadline
+    stores and count nothing. Never raises.
+    """
+    if isinstance(value, ast.Constant) and isinstance(value.value, (int, float)) and not value.value:
+        return False
+    return bool(_backoff_target_names(targets))
 
 
 def _call_name(call: ast.Call) -> str:
@@ -202,6 +258,15 @@ def catalog_source(source: str, module: str) -> dict:
             if isinstance(inner, ast.ExceptHandler):
                 if _handler_names(inner.type) & CONTENTION_EXHAUSTIONS:
                     verdict.surface = True
+            elif isinstance(inner, ast.Assign):
+                if _backoff_arm(inner.targets, inner.value):
+                    verdict.waits += 1
+            elif isinstance(inner, ast.AugAssign):
+                if _backoff_arm([inner.target], inner.value):
+                    verdict.waits += 1
+            elif isinstance(inner, ast.AnnAssign):
+                if inner.value is not None and _backoff_arm([inner.target], inner.value):
+                    verdict.waits += 1
             elif isinstance(inner, ast.Call):
                 name = _call_name(inner)
                 if name in CONTENTION_CLASSIFIERS:

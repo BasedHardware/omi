@@ -10886,8 +10886,12 @@ def test_scheduler_Scheduler_pull_fixed_is_clean() -> None:
 
 
 def test_scheduler_Scheduler_pull_ablated_verdict() -> None:
-    """scheduler.py Scheduler.pull: dealigned helpers change nothing here."""
-    assert fixture.finding_for(fixture.ABLATED, 'utils/batch_pipeline/scheduler.py', 'Scheduler.pull') is None
+    """scheduler.py Scheduler.pull: dealigned helpers flag the bare-ladder arm."""
+    assert (
+        fixture.finding_for(fixture.ABLATED, 'utils/batch_pipeline/scheduler.py', 'Scheduler.pull')
+        == 'bare contention re-offer: Scheduler.pull catches/classifies a contention '
+        'loss and waits 1x without consuming the measured storm window'
+    )
 
 
 def test_scheduler_Scheduler_recover_fixed_is_clean() -> None:

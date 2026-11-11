@@ -72,6 +72,74 @@ PULL_CLAIM_SECONDS = 30.0
 logger = logging.getLogger(__name__)
 
 
+def pull_contention_storm_after(error: BaseException | None) -> float:
+    """The measured storm window a shard's pull backoff must land after.
+
+    ``FirestoreStore.run`` stamps the window its storm damper actually armed
+    for the exhausted ``batch_pull shard=scheduler_NN`` / ``batch_claim
+    shard=scheduler_NN`` label onto the raised chain's ``retry_after``. On
+    that measured signal the shard's backoff lands its next pull after the
+    armed window instead of colliding inside it: a bare-ladder re-entry
+    against documents the damper just spaced waits the window's residual out
+    inside the store's entry consult and burns a full five-attempt chain —
+    the lockstep burn behind the production ``firestore_transaction_contention
+    outcome=exhausted`` family — once per ladder rung until the shard's
+    budget dies. Only a positive finite number counts; a foreign exception,
+    an exhaustion raised with no damper in scope (the damper stamps nothing),
+    and hostile or malformed input all return ``0.0`` (the caller keeps the
+    documented blind ladder). Never raises for plain attribute values. The
+    clamp is the lane's own documented horizon
+    (``CONTENTION_BACKOFF_CAP_SECONDS``): the store's damper caps an armed
+    window at 4.0s, so every real window fits and the clamp only fences a
+    hostile stamp. A storm shifts WHEN the next pull lands, never the
+    attempt budget or its ceiling.
+
+    Failure-Class: FC-pull-backoff-collides-inside-the-armed-storm-window
+    """
+    value = getattr(error, 'retry_after', None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    value = float(value)
+    if not math.isfinite(value) or value <= 0.0:
+        return 0.0
+    return min(value, CONTENTION_BACKOFF_CAP_SECONDS)
+
+
+def pull_backoff_delay(failures: object, storm_seconds: float, jitter: object) -> float:
+    """The shard's next-pull delay: the documented ladder raised to the measured storm.
+
+    The ladder rung stays byte-for-byte the historical schedule —
+    ``min(CONTENTION_BACKOFF_CAP_SECONDS, 2.0 ** min(failures - 1, 5))``
+    scaled by a jitter factor in ``[0.5, 1.0]`` — so with no measured window
+    (``storm_seconds == 0.0``, the damper disabled or a foreign store) the
+    returned delay is exactly the old draw. A positive measured storm raises
+    the floor to ``min(storm_seconds, CONTENTION_BACKOFF_CAP_SECONDS)``: the
+    backoff lands after the window the damper armed instead of re-entering
+    its interior, while never shortening the ladder rung and never extending
+    the lane past its documented horizon. Production callers pass
+    ``(int, reader float, jitter float)``; hostile ``failures``/``jitter``
+    shapes (the ``object`` annotations, same convention as
+    ``_admission_retry_delay``) collapse instead of raising: a non-int,
+    bool or below-1 ``failures`` takes the first rung and a non-finite or
+    out-of-range ``jitter`` collapses to the jitter-free 1.0 factor. Never
+    raises.
+
+    Failure-Class: FC-pull-backoff-collides-inside-the-armed-storm-window
+    """
+    if not isinstance(failures, int) or isinstance(failures, bool) or failures < 1:
+        failures = 1
+    if not isinstance(jitter, (int, float)) or isinstance(jitter, bool):
+        jitter = 1.0
+    jitter = float(jitter)
+    if not math.isfinite(jitter):
+        jitter = 1.0
+    jitter = min(1.0, max(0.5, jitter))
+    ladder = min(CONTENTION_BACKOFF_CAP_SECONDS, 2.0 ** min(failures - 1, 5)) * jitter
+    if storm_seconds > ladder:
+        return min(storm_seconds, CONTENTION_BACKOFF_CAP_SECONDS)
+    return ladder
+
+
 def _admission_retry_delay(value: object, streak: int) -> float:
     minimum = min(300, 30 * 2 ** (streak - 1))
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -552,11 +620,8 @@ class Scheduler:
                 if isinstance(error, FirestoreContentionExhausted):
                     with self._contention_lock:
                         self._contention_failures += 1
-                        maximum = min(
-                            CONTENTION_BACKOFF_CAP_SECONDS,
-                            2.0 ** min(self._contention_failures - 1, 5),
-                        )
-                        delay = maximum * (0.5 + 0.5 * random.random())
+                        storm = pull_contention_storm_after(error)
+                        delay = pull_backoff_delay(self._contention_failures, storm, 0.5 + 0.5 * random.random())
                         failed_at = monotonic()
                         self._contention_backoff_until = max(
                             self._contention_backoff_until,

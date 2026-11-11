@@ -11,9 +11,13 @@ lookup -- no per-cell I/O or parsing:
 - ABLATED: every alignment helper name rewritten to a dead
   ``__dealigned`` form. Functions whose alignment rides those helper names
   flip to a bare-ladder finding -- the blackout regression surface. The
-  pinned flip set is exactly the publication re-strike lane.
+  pinned flip set is exactly the publication re-strike lane plus the
+  scheduler's shard pull lane (``Scheduler.pull``, whose state-armed
+  ``_contention_backoff_until`` re-entry consumes the stamped window
+  through ``pull_contention_storm_after``).
 
 Failure-Class: FC-publication-restrike-collides-inside-the-armed-storm-window
+Failure-Class: FC-pull-backoff-collides-inside-the-armed-storm-window
 """
 
 from scripts.scan_storm_alignment import (
@@ -49,7 +53,12 @@ _ABLATED_CATALOG = _catalog(ABLATED)
 # The functions whose alignment the helper names carry: the only verdicts
 # allowed to flip under ablation. Anything else flipping means a hidden
 # alignment dependence the contract below fails on.
-EXPECTED_ABLATED_FLIPS = frozenset({"utils/batch_pipeline/pump.py::Pump._restrike_publication"})
+EXPECTED_ABLATED_FLIPS = frozenset(
+    {
+        "utils/batch_pipeline/pump.py::Pump._restrike_publication",
+        "utils/batch_pipeline/scheduler.py::Scheduler.pull",
+    }
+)
 
 
 def ablated_findings() -> dict:
