@@ -4,7 +4,6 @@ from utils.generated_compute import generated_compute_allowed, generated_compute
 from config.vertex_reservations import PROBE_SECONDS, PROBE_TIMEOUT_SECONDS
 
 import asyncio
-import json
 import time
 import logging
 import uuid
@@ -22,7 +21,6 @@ from config.dream_agent import (
     concurrency,
     enabled,
     may_be_eligible,
-    number,
     on_demand_enabled,
     PASS_TIMEOUT_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
@@ -68,34 +66,12 @@ TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 VERIFY_ALLOWANCE_FACTOR = 2
 logger = logging.getLogger(__name__)
 
-# Lever B3 (no-progress stop): this many consecutive tool batches without a new
-# staged proposal, after the pass spent this share of its token budget.
-NO_PROGRESS_BATCHES_DEFAULT = 8
-NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT = 0.25
 # Lever B4 (history compaction): once the main prompt reaches this size, older
 # large tool results are replaced by a stub. Only tool results are elided; the
 # system prompt, seed, assistant tool calls and the latest results stay intact.
-COMPACT_TRIGGER_PROMPT_TOKENS_DEFAULT = 64000
-COMPACT_KEEP_RECENT_TOOL_RESULTS_DEFAULT = 6
-COMPACT_MIN_CHARS = 2000
-ELIDED_TOOL_RESULT = 'UNTRUSTED TOOL DATA\n' + json.dumps(
-    {
-        'status': 'elided',
-        'note': 'Older tool result removed to save budget. Records already read stay available to '
-        'propose_edit and the verifiers; read a ref again if you need its details.',
-    }
-)
 # Lever B5 (material budget): new-material thresholds for the medium and heavy token ceilings.
 MATERIAL_MEDIUM = 5
 MATERIAL_HEAVY = 16
-
-
-def _tunable(key, default):
-    # A malformed tuning value keeps the default; tuning never fails a pass.
-    try:
-        return number(key, default)
-    except (TypeError, ValueError):
-        return default
 
 
 def cap_tail(staged, capped, outcomes):
@@ -453,10 +429,7 @@ async def run_session(
     except Exception:
         pass
 
-    stop_arm = arms.get('no_progress_stop', 'off')
-    stop_batches = int(_tunable('DREAM_NO_PROGRESS_BATCHES', NO_PROGRESS_BATCHES_DEFAULT))
-    stop_share = _tunable('DREAM_NO_PROGRESS_MIN_TOKEN_SHARE', NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT)
-    progress: dict[str, Any] = {'batches': 0, 'idle': 0, 'staged': 0, 'fired': None, 'capped': None}
+    progress: dict[str, Any] = {'capped': None}
 
     async def after_execute(current):
         try:
@@ -466,32 +439,9 @@ async def run_session(
                 progress['capped'] = set(current.staged)
         except Exception as error:
             logger.warning('event=dream_lever_error lever=material_budget exc=%s', type(error).__name__)
-        if stop_arm == 'off':
-            return False
-        try:
-            progress['batches'] += 1
-            staged_now = len(current.staged)
-            if staged_now > progress['staged']:
-                progress['staged'] = staged_now
-                progress['idle'] = 0
-            else:
-                progress['idle'] += 1
-            if (
-                progress['fired'] is None
-                and progress['idle'] >= stop_batches
-                and report['price_weighted_tokens'] >= limits.tokens * stop_share
-            ):
-                progress['fired'] = {
-                    'batch': progress['batches'],
-                    'keys': set(current.staged),
-                    'tokens': report['price_weighted_tokens'],
-                }
-                return stop_arm == 'serve'
-        except Exception as error:
-            logger.warning('event=dream_lever_error lever=no_progress_stop exc=%s', type(error).__name__)
         return False
 
-    if stop_arm != 'off' or budget_probe:
+    if budget_probe:
         session.after_execute = after_execute
 
     async def usage(result):
@@ -561,15 +511,10 @@ async def run_session(
         report.setdefault('first_prompt_tokens', result.prompt_tokens)
         report['last_prompt_tokens'] = result.prompt_tokens
 
-    compact_arm = arms.get('history_compact', 'off')
     hold_arm = arms.get('verify_hold', 'off')
     hold_row = {'arm': hold_arm, 'held': 0}
     if hold_arm != 'off':
         levers['verify_hold'] = hold_row
-    liberal_arm = arms.get('liberal_verifier', 'off')
-    liberal_row = {'arm': liberal_arm, 'would_apply': 0, 'applied': 0}
-    if liberal_arm != 'off':
-        levers['liberal_verifier'] = liberal_row
     # Scheduled owner passes only; never canary, dry-run or manual runs.
     judge_mode = dream_judge.mode() if judge else 'off'
     judging = False
@@ -618,46 +563,6 @@ async def run_session(
             'harmful': sum(1 for judgment in judged.values() if judgment.verdict == 'harmful'),
         }
 
-    compact_trigger = _tunable('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', COMPACT_TRIGGER_PROMPT_TOKENS_DEFAULT)
-    compact_keep = int(_tunable('DREAM_HISTORY_COMPACT_KEEP_RESULTS', COMPACT_KEEP_RECENT_TOOL_RESULTS_DEFAULT))
-    compaction = {'arm': compact_arm, 'fired': False, 'compactions': 0, 'elided_chars': 0, 'would_elide_chars': 0}
-
-    def compact(messages):
-        # Fail open: compaction trouble leaves the conversation exactly as it was.
-        try:
-            prior = main_history['prompt_tokens']
-            if not prior or prior < compact_trigger:
-                return
-            tools = [
-                index
-                for index, message in enumerate(messages)
-                if isinstance(message, dict) and message.get('role') == 'tool'
-            ]
-            older = tools[: max(0, len(tools) - max(1, compact_keep))]
-            elide = [
-                index
-                for index in older
-                if isinstance(messages[index].get('content'), str)
-                and len(messages[index]['content']) >= COMPACT_MIN_CHARS
-                and messages[index]['content'] != ELIDED_TOOL_RESULT
-            ]
-            chars = sum(len(messages[index]['content']) for index in elide)
-            if not elide:
-                return
-            compaction['fired'] = True
-            compaction['would_elide_chars'] = max(compaction['would_elide_chars'], chars)
-            if compact_arm != 'serve':
-                return
-            for index in elide:
-                messages[index] = {**messages[index], 'content': ELIDED_TOOL_RESULT}
-            compaction['compactions'] += 1
-            compaction['elided_chars'] += chars
-            # The next size estimate must be recomputed from the shortened history.
-            main_history.update(prompt_tokens=None, messages=0, cached_tokens=None)
-        except Exception as error:
-            compaction['errors'] = compaction.get('errors', 0) + 1
-            logger.warning('event=dream_lever_error lever=history_compact exc=%s', type(error).__name__)
-
     async def invoke(lane, mount, messages):
         for attempt in range(CAPACITY_CALL_RETRIES + 1):
             try:
@@ -689,8 +594,6 @@ async def run_session(
     async def invoke_once(lane, mount, messages):
         nonlocal budget_notice_sent, stage
         await active()
-        if lane == dream_harness_transport.MAIN_LANE and compact_arm != 'off' and not state_running:
-            compact(messages)
         stage = 'request_sizing'
         remaining = (
             limits.tokens
@@ -1047,36 +950,17 @@ async def run_session(
                         }
                     )
                     default_policy = verifiers.is_default_policy(verifiers.policy_for(verifiers.item_kind(item)))
-                    liberal = (
-                        liberal_arm != 'off'
-                        and decision == 'unverified'
-                        and default_policy
-                        and auto_allowed
-                        and item.kind in dream_levers.LIBERAL_VERIFIER_KINDS
-                        and unverified_reasons.get(item.id) in dream_levers.LIBERAL_VERIFIER_REASONS
-                        # Apply unless a verifier disagreed, but only after one actually agreed.
-                        and any(vote is True for vote in support[item.id])
-                        and not any(vote is False for vote in support[item.id])
-                        and not isinstance(item.operation, HarnessQuestion)
-                    )
-                    if liberal:
-                        liberal_row['would_apply'] += 1
-                    liberal_apply = liberal and liberal_arm == 'serve'
                     # The default two-verifier path records unverified and does not
                     # enqueue it. A non-default chain's unverified result uses the
                     # same offer path as a split. Disagreement is never offered.
                     if item.kind == 'resolve_required_memory' and (decision != 'agree' or not auto_allowed):
                         # A split never spills hidden submissions into Review.
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': 'intake_deferred'})
-                    elif decision == 'disagree' or (decision == 'unverified' and default_policy and not liberal_apply):
+                    elif decision == 'disagree' or (decision == 'unverified' and default_policy):
                         report['outcomes'].append(
                             {'key': item.key, 'kind': item.kind, 'status': 'verifier_' + decision}
                         )
-                    elif (
-                        (decision == 'agree' or liberal_apply)
-                        and auto_allowed
-                        and not isinstance(item.operation, HarnessQuestion)
-                    ):
+                    elif decision == 'agree' and auto_allowed and not isinstance(item.operation, HarnessQuestion):
                         try:
                             if isinstance(item.operation, HarnessEdit):
                                 status = await effect_with_gate_retry(
@@ -1101,8 +985,6 @@ async def run_session(
                                 raise
                             status = 'invalid_evidence'
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
-                        if liberal_apply and status == 'applied':
-                            liberal_row['applied'] += 1
                     elif item.value > 2:
                         offered.append((item, sum(vote is True for vote in support[item.id])))
                     elif decision == 'unverified':
@@ -1171,23 +1053,8 @@ async def run_session(
     report['accounted_tokens'] += session.counters['search_embedding_token_upper_bound']
     report['price_weighted_tokens'] += session.counters['search_embedding_token_upper_bound']
     try:
-        if stop_arm != 'off':
-            fired = progress['fired']
-            levers['no_progress_stop'] = {'arm': stop_arm, 'fired': fired is not None}
-            if fired is not None:
-                late = {key for key in session.staged if key not in fired['keys']}
-                levers['no_progress_stop'].update(
-                    batch=fired['batch'],
-                    staged_after=len(late),
-                    applied_after=sum(
-                        1 for row in report['outcomes'] if row.get('key') in late and row.get('status') == 'applied'
-                    ),
-                    tokens_after=max(0, report['price_weighted_tokens'] - fired['tokens']),
-                )
         if budget_probe:
             levers['material_budget'] = cap_tail(session.staged, progress['capped'], report['outcomes'])
-        if compact_arm != 'off':
-            levers['history_compact'] = dict(compaction)
     except Exception as error:
         logger.warning('event=dream_lever_error lever=report exc=%s', type(error).__name__)
     report.update(timing=timing, levers=levers, defect_reports=dict(defects))

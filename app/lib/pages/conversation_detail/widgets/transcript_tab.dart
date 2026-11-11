@@ -495,6 +495,31 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         // Review's "Who said this?" for this conversation sits above the lines it asks about.
         final reviewQuestion = context.watch<ReviewProvider?>()?.speakerQuestionIn(conversation.id);
         playback?.updateSegments(segments);
+        // Each leading row carries its own id so the two lists TranscriptWidget needs can't drift apart.
+        final leading = <(String, Widget)>[
+          if (provider.isReprocessingOpenConversation || provider.loadingRecordingTranscript)
+            (
+              'speaker-summary-updating',
+              const Padding(
+                  padding: EdgeInsets.only(bottom: OmiSpacing.sm), child: OmiSpinner(size: OmiSpinnerSize.small)),
+            ),
+          if (segments.isNotEmpty)
+            (
+              'transcript-heading',
+              _TranscriptHeading(
+                conversation: conversation,
+                segments: segments,
+                onSelect: provider.speakerLabelingSessionActive || _selection != null
+                    ? null
+                    : () => _beginSelection(provider),
+              ),
+            ),
+          if (segments.isNotEmpty && reviewQuestion != null)
+            (
+              'review-question-${reviewQuestion.itemId}',
+              ReviewQuestionCard(item: reviewQuestion, margin: const EdgeInsets.only(bottom: OmiSpacing.md)),
+            ),
+        ];
         return getTranscriptWidget(
           false,
           segments,
@@ -526,26 +551,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
           onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
           startedAt: conversation.startedAt ?? conversation.createdAt,
-          leadingItems: [
-            if (provider.isReprocessingOpenConversation || provider.loadingRecordingTranscript)
-              const Padding(
-                  padding: EdgeInsets.only(bottom: OmiSpacing.sm), child: OmiSpinner(size: OmiSpinnerSize.small)),
-            if (segments.isNotEmpty)
-              _TranscriptHeading(
-                conversation: conversation,
-                segments: segments,
-                onSelect: provider.speakerLabelingSessionActive || _selection != null
-                    ? null
-                    : () => _beginSelection(provider),
-              ),
-            if (segments.isNotEmpty && reviewQuestion != null)
-              ReviewQuestionCard(item: reviewQuestion, margin: const EdgeInsets.only(bottom: OmiSpacing.md)),
-          ],
-          leadingItemIds: [
-            if (provider.isReprocessingOpenConversation) 'speaker-summary-updating',
-            if (segments.isNotEmpty) 'transcript-heading',
-            if (segments.isNotEmpty && reviewQuestion != null) 'review-question-${reviewQuestion.itemId}',
-          ],
+          leadingItems: [for (final item in leading) item.$2],
+          leadingItemIds: [for (final item in leading) item.$1],
           currentSegmentId: playback?.currentSegmentId,
           highlightedSegment: playback?.highlightedSegment,
           followTargetSegmentId: playback?.followTargetSegmentId,

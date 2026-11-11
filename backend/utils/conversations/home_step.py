@@ -7,26 +7,40 @@ list wire as ``home_step`` so clients stop inferring it from titles.
 
 - ``ready``: finished; may show as its own row.
 - ``transcribing`` / ``writing_notes``: still being processed, at that step.
-- ``failed``: processing gave up; the client folds these into one row.
+- ``failed``: processing gave up or exceeded the Home wait; default Home hides it.
 - ``noise``: finished with nothing worth a Home row: no speech, below floor,
-  or a stand-in title (first sentence / "Recording · time") that no summary
-  will ever replace.
+  a stand-in title (first sentence / "Recording · time") that no summary will
+  ever replace, or a terminal empty-output block (``empty_output_exhausted`` /
+  ``empty_output_lifetime_exhausted``) with no overview or section body and no
+  banked receipt or open debt. ``HOME_EMPTY_OUTPUT_NOISE=false`` restores the
+  legacy stand-in-title-only rule.
 
 Presentation only: nothing is stored, search and direct links are unaffected,
-and a curated row (user title, star, folder, photos) is always ``ready``.
+and a completed curated row (user title, star, folder, photos) is always ``ready``.
+Processing rows, including curated ones, have a bounded presentation wait.
+The step is independent of the viewer's day: clients show processing on Home
+only on the current local day and place older work in Activity instead.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from enum import StrEnum
 from typing import Any
 
-from config.episodes import home_step_projection_enabled
+from prometheus_client import Counter
+
+from config.episodes import (
+    DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS,
+    home_empty_output_noise_enabled,
+    home_processing_max_age_seconds,
+    home_step_projection_enabled,
+)
 from utils.conversations import transcribing_hold
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
 from utils.conversations.home_titles import summary_owed
-from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
+from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 
 READY = 'ready'
 TRANSCRIBING = 'transcribing'
@@ -36,6 +50,20 @@ NOISE = 'noise'
 
 # Matches the stamped HOME_TRANSCRIPTION_DEADLINE_SECONDS default and the batch SLA.
 LEGACY_TRANSCRIPTION_SECONDS = 2 * 60 * 60
+
+
+class HomeProcessingAgeReason(StrEnum):
+    UNKNOWN = 'unknown'
+    INVALID_CONFIG = 'invalid_config'
+    MISSING_TIMESTAMP = 'missing_timestamp'
+    EXPIRED = 'expired'
+
+
+PROCESSING_AGE_TOTAL = Counter(
+    'omi_home_processing_age_total',
+    'Home processing age decisions per classification, not unique conversations',
+    ['reason'],
+)
 
 
 def _value(value: Any) -> Any:
@@ -54,6 +82,20 @@ def classify(row: Mapping[str, Any]) -> str | None:
     structured = row.get('structured') or {}
     title = str(structured.get('title') or '').strip()
     if status in ('processing', 'merging'):
+        seconds = home_processing_max_age_seconds()
+        if seconds is None:
+            PROCESSING_AGE_TOTAL.labels(reason=HomeProcessingAgeReason.INVALID_CONFIG).inc()
+            seconds = DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS
+        # processing_admitted_at is a renewable lease, not an entry clock.
+        # There is no stored processing_started. Capture end is the best stable
+        # fallback; created_at covers legacy rows. Never use updated_at or the
+        # recording start (started_at) to measure a processing wait.
+        anchor = next((row[key] for key in ('finished_at', 'created_at') if isinstance(row.get(key), datetime)), None)
+        if anchor is None:
+            PROCESSING_AGE_TOTAL.labels(reason=HomeProcessingAgeReason.MISSING_TIMESTAMP).inc()
+        elif _older_than(anchor, seconds):
+            PROCESSING_AGE_TOTAL.labels(reason=HomeProcessingAgeReason.EXPIRED).inc()
+            return FAILED
         return TRANSCRIBING if not title else WRITING_NOTES
     if status == 'failed':
         return FAILED
@@ -73,8 +115,24 @@ def classify(row: Mapping[str, Any]) -> str | None:
         or row.get('record_upload_failed')
     ):
         return FAILED
-    provisional = structured.get('title_provenance') == 'server_minimum'
-    if is_completed_below_floor(row) or (provisional and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS):
+    # The projection stamp records provenance on the row, not in structured, so
+    # it does not suppress derived effects through is_server_minimum. Home still
+    # needs to see the same provisional row the repair sees.
+    provisional = (
+        structured.get('title_provenance') == 'server_minimum'
+        or row.get('summary_title_provenance') == 'server_minimum'
+    )
+    empty_output = (
+        home_empty_output_noise_enabled()
+        and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS
+        and not present(structured)
+        # A banked receipt or live debt outranks a stale terminal reason: the
+        # row recovered, or a late revision re-opened it.
+        and not row.get('summary_output_present')
+        and not row.get('summary_completed_at')
+        and not summary_owed(row)
+    )
+    if is_completed_below_floor(row) or empty_output:
         return NOISE
     if provisional:
         if summary_owed(row):

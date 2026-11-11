@@ -42,7 +42,6 @@ def snapshot(matcher):
 
 @pytest.mark.parametrize('fragmented', [False, True])
 def test_clean_65_second_single_owner_is_compared_and_diagnostics_are_attributable(monkeypatch, caplog, fragmented):
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'true')
     owner = np.array([[1.0, 0.0]], dtype=np.float32)
     matcher, host, _ = live(monkeypatch, [owner] * 12)
     matcher.person_embeddings.pop('p1')
@@ -387,15 +386,6 @@ def test_contract_huge_numeric_input_remains_bounded():
     assert contract.summary({'elapsed_seconds': 10**1000})['elapsed_seconds'] == 1e9
 
 
-def test_scores_off_observation_does_not_change_accepted_identity(monkeypatch):
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'false')
-    matcher, _, _ = live(monkeypatch, [np.array([[1.0, 0.0]], dtype=np.float32)])
-    matcher.person_embeddings.pop('p1')
-    asyncio.run(matcher.match(1, _segment('s', 0, 65)))
-    assert matcher.speaker_to_person[1][0] == 'user' and not matcher.match_scores
-    assert snapshot(matcher)['reasons']['scores_disabled'] >= 1
-
-
 def test_score_size_guard_deletion_is_not_reported_as_stored_scores():
     current = {contract.FIELD: {'first_resolver': {'reason': 'resolved'}}, 'speaker_match_scores': b'encoded'}
     patch = {
@@ -406,14 +396,12 @@ def test_score_size_guard_deletion_is_not_reported_as_stored_scores():
     assert patch[contract.FIELD]['live'][0]['scores'] == 'absent'
 
 
-@pytest.mark.parametrize('fault', ['flag', 'codec'])
-def test_optional_score_fault_does_not_interrupt_identity_publication(monkeypatch, fault):
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'true')
+def test_optional_score_fault_does_not_interrupt_identity_publication(monkeypatch):
 
     def fail(*args, **kwargs):
         raise ValueError('SENSITIVE_OPTIONAL_SCORE_FAILURE')
 
-    monkeypatch.setattr(speakers.match_scores, 'enabled' if fault == 'flag' else 'summarize', fail)
+    monkeypatch.setattr(speakers.match_scores, 'summarize', fail)
     matcher, _, _ = live(monkeypatch, [np.array([[1.0, 0.0]], dtype=np.float32)])
     matcher.person_embeddings.pop('p1')
     asyncio.run(matcher.match(1, _segment('s', 0, 65)))

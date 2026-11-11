@@ -161,8 +161,8 @@ def test_observed_metric_from_another_datasource_cannot_admit_a_local_prometheus
     [
         (7201, 0, 8000, 0, 1),
         (0, 0, 7201, 0, 1),
-        (7201, 900, 7201, 120, 0),
-        (7201, 900, 7201, 0, 1),
+        (7201, 1200, 7201, 120, 0),
+        (7201, 1200, 7201, 0, 1),
         (7201, 0, 7201, 120, 1),
         (7200, 0, 7200, 0, 0),
     ],
@@ -270,3 +270,20 @@ def test_declared_gmp_log_metrics_are_not_admitted_as_observed_or_local():
     r['data'][0]['model']['datasource'] = {'type': 'prometheus', 'uid': 'gmp-cloud-run'}
     assert not b.lint({'fixture': r}, inventory)['failures']
     assert 'metrics' not in inventory['datasource_metrics']['gmp-cloud-run']
+
+
+def test_record_lease_invariant_pages_on_first_event_without_pending():
+    actual = b.rules()['omi-record-token-lease-late-append']
+    assert actual['for'] == '0s'
+    # A positive five-minute counter increase has the same >0 trigger as its
+    # rate, and represents an invariant event rather than a noisy rate level.
+    assert actual['data'][0]['model']['expr'] == (
+        'sum(increase(omi_record_token_late_append_total[5m])) > 0 or vector(0)'
+    )
+    quiet = b.evaluate(actual, {'A': {(): [0]}})
+    event = b.evaluate(actual, {'A': {(): [1]}})
+    assert quiet == {(): 0}
+    assert event == {(): 1}
+    result = b.episodes(actual, [(0, quiet), (60, event), (120, quiet)], 0, 120, 60)
+    assert result['episodes'] == 1
+    assert result['total_duration_seconds'] == 60

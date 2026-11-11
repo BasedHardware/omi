@@ -38,7 +38,7 @@ def quarantine_job(tx, job: dict, now: float, reason: str) -> None:
 
 def expire_lease(tx, job, now, *, stage_policy, candidates, observations, defer):
     # Off preserves even the legacy policy-read behavior.
-    decision = retry_cap(job['owner_id'], 0, 1)
+    decision = retry_cap(job['owner_id'], 0, 1, enforce=True)
     if decision is not None:
         if decision.serving:
             policy = stage_policy(tx, job, 'scheduler', candidates=candidates, observations=observations)
@@ -46,7 +46,7 @@ def expire_lease(tx, job, now, *, stage_policy, candidates, observations, defer)
             # A legacy unpinned lease must remain unpinned in shadow.
             raw = (job.get('policy_parts') or {}).get('scheduler')
             policy = SchedulerPolicy.from_dict(raw or {})
-        decision = retry_cap(job['owner_id'], job['attempt'], policy.max_attempts)
+        decision = retry_cap(job['owner_id'], job['attempt'], policy.max_attempts, enforce=True)
     if decision is not None and decision.reached and decision.serving:
         quarantine_job(tx, job, now, 'worker_failed')
         event = 'quarantined'

@@ -432,7 +432,6 @@ GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     # 10-18: creation at percent zero must not acquire a 120s obligation after a ramp.
     'policy_window': lambda: _config(
         'policy_window',
-        flags={'FIRST_SUMMARY_DEADLINE_PERCENT': '0'},
         summary_seconds=300.0,
         summary_sigma=0.0,
     ),

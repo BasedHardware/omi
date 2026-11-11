@@ -1342,12 +1342,18 @@ def _load_sync_router_for_fast_path():
         ctx = contextvars.copy_context()
         return executor.submit(ctx.run, fn, *args, **kwargs)
 
+    async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
     mock_executors = MagicMock()
     mock_executors.critical_executor = MagicMock()
     mock_executors.sync_executor = MagicMock()
     mock_executors.postprocess_executor = MagicMock()
     mock_executors.storage_executor = MagicMock()
     mock_executors.submit_with_context = _submit_with_context
+    # Imported helpers also await this API. Installing the async contract before
+    # router import keeps their executor seam identical to the router's seam.
+    mock_executors.run_blocking = _passthrough_run_blocking
     saved_modules['utils.executors'] = sys.modules.get('utils.executors')
     sys.modules['utils.executors'] = mock_executors
 
@@ -1381,7 +1387,18 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
     sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
     sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
-    sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+    sys.modules['utils.subscription'].resolve_transcription_allowance = MagicMock(
+        return_value=types.SimpleNamespace(managed=True, reason='plan_within_allowance')
+    )
+    subscription_stub = sys.modules['utils.subscription']
+
+    def has_transcription_credits(uid, source=None):
+        return subscription_stub.resolve_transcription_allowance(uid, source).managed
+
+    subscription_stub.has_transcription_credits = MagicMock(side_effect=has_transcription_credits)
+    sys.modules['utils.subscription'].TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset(
+        {'allowance_unavailable', 'usage_invalid'}
+    )
     sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
     sys.modules['utils.sync.files'].get_timestamp_from_path = MagicMock(return_value=time.time())
     saved_modules['utils.sync'] = prior_utils_sync
@@ -1415,7 +1432,6 @@ def _load_sync_router_for_fast_path():
     sys.modules['database.sync_ledger'].release_sync_content_claim_after_job_retired = MagicMock()
     sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
     sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
-    sys.modules['utils.sync.backfill'].try_acquire_backfill_slot = MagicMock(return_value=True)
     sys.modules['utils.sync.backfill'].release_backfill_slot = MagicMock()
     sys.modules['database.sync_backfill_sequencer'].enabled = MagicMock(return_value=False)
     sys.modules['database'].sync_backfill_sequencer = sys.modules['database.sync_backfill_sequencer']
@@ -1554,9 +1570,6 @@ def _load_sync_router_for_fast_path():
         and isinstance(payload, dict)
         and (payload.get('sequencer_epoch') is not None or payload.get('lane') == 'backfill')
     )
-
-    async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
 
     module.run_blocking = _passthrough_run_blocking
     module._retrieve_file_paths_v2 = MagicMock(return_value=['syncing/test-uid/job-1/file.bin'])
@@ -2781,11 +2794,13 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
+@pytest.mark.parametrize('single_resolve_percentage', [0, 100])
+async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch(monkeypatch, single_resolve_percentage):
     """A fresh V2 upload over the hard ceiling must leave its WAL audio untouched."""
     from starlette.datastructures import UploadFile
 
     module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', f'{{"sync_allowance_single_resolve": {single_resolve_percentage}}}')
     module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
     module._fair_use_restriction_response = AsyncMock(
         return_value=module.JSONResponse(status_code=429, content={'code': 'fair_use_restricted'})
@@ -2817,6 +2832,7 @@ async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
         module.claim_sync_content.assert_not_called()
         module.enqueue_sync_job.assert_not_called()
         module.start_background_task.assert_not_called()
+        module.resolve_transcription_allowance.assert_not_called()
         module.has_transcription_credits.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
@@ -2836,7 +2852,6 @@ async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
 
     module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
     module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
-    module.try_acquire_backfill_slot = MagicMock(side_effect=ConnectionError('retired slot unavailable'))
     module.start_background_task = MagicMock()
     module.classify_sync_lane = MagicMock(
         return_value=types.SimpleNamespace(
@@ -2854,7 +2869,6 @@ async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
 
         assert response.status_code == 202
         module.is_daily_audio_ceiling_exceeded.assert_not_called()
-        module.try_acquire_backfill_slot.assert_not_called()
         mock_sync_jobs.create_sync_job.assert_called_once()
     finally:
         sys.modules.pop('routers.sync', None)
@@ -3401,7 +3415,6 @@ async def test_backfill_uid_sequencer_accepts_202_without_redis_slot():
     module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
     module.sync_backfill_sequencer.register_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
-    module.try_acquire_backfill_slot = MagicMock(side_effect=AssertionError('old admission slot used'))
     module.classify_sync_lane = MagicMock(
         return_value=types.SimpleNamespace(
             lane=module.SyncLane.BACKFILL,
@@ -3421,7 +3434,6 @@ async def test_backfill_uid_sequencer_accepts_202_without_redis_slot():
         module.sync_backfill_sequencer.register_job.assert_called_once()
         module.uid_sequencer.kick.assert_called_once_with('test-uid')
         module.enqueue_sync_job.assert_not_called()
-        module.try_acquire_backfill_slot.assert_not_called()
         assert module.create_sync_job.call_args.kwargs['dispatch_mode'] == 'sequenced'
     finally:
         sys.modules.pop('routers.sync', None)
@@ -5991,23 +6003,42 @@ async def test_sync_task_budget_deferral_timeout_during_enqueue_keeps_deferred_m
         },
     )
 
-    async def _pipeline_that_never_finishes(*args, **kwargs):
-        await asyncio.sleep(30)
+    pipeline = _pipeline_expiring_the_handler_budget(module)
+    passthrough = module.run_blocking
+    captured = []
+    parent_asyncio = module.asyncio
+
+    class EnqueueBudgetAsyncio:
+        def __getattr__(self, name):
+            return getattr(parent_asyncio, name)
+
+        def timeout_at(self, deadline):
+            context = asyncio.timeout_at(deadline)
+            captured.append(context)
+            return context
+
+    async def enqueue(*args, **kwargs):
+        # Expire the real shared context only after marker completion and
+        # entry into enqueue. Host scheduling cannot move expiry to setup.
+        captured[-1].reschedule(asyncio.get_running_loop().time())
+        await asyncio.Event().wait()
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        result = await passthrough(executor, fn, *args, **kwargs)
+        return await result if asyncio.iscoroutine(result) else result
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
-        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
-        module.run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.asyncio = EnqueueBudgetAsyncio()
+        module.run_full_pipeline_background_async = pipeline
+        module.run_blocking = run_blocking
         module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
-        # The shared post-budget deadline firing mid-enqueue surfaces as
-        # TimeoutError from the timeout_at context: the handler stopped
-        # waiting while the underlying create may still have landed.
-        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=TimeoutError('post-budget deadline'))
+        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=enqueue)
 
         response = await module.run_sync_job(request, task_retry_count=0)
 
         assert response.status_code == 409
         assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
         assert module.update_sync_job.call_count == 1
         assert [call['reason'] for call in fallback_calls] == ['enqueue_uncertain']
     finally:

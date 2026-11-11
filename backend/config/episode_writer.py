@@ -1,7 +1,5 @@
 """Pure episode writer settings; read mutable configuration at the call boundary."""
 
-from config.refactor_switches import default_off as rollout_default_off
-
 import os
 from dataclasses import dataclass
 
@@ -32,24 +30,9 @@ def episode_writer_settings() -> EpisodeWriterSettings:
     return EpisodeWriterSettings(
         effort=effort if effort in EFFORTS else 'default',
         thinking_max_input_bytes=thinking_max_input_bytes,
-        tiered=rollout_default_off(
-            'MEETING_NOTES_EPISODE_TIERED_ENABLED',
-            os.getenv('MEETING_NOTES_EPISODE_TIERED_ENABLED', 'true').strip().lower() in {'true', '1', 'yes'},
-        ),
-        tier_min_words=int(_number('MEETING_NOTES_EPISODE_TIER_MIN_WORDS', 1500, 1, 100000)),
-        tier_min_source_kinds=int(_number('MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS', 2, 1, 12)),
-        writer_timeout=_number('MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS', 120, 15, 120),
-        c6_timeout=_number('MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS', 180, 15, 300),
-        claims=rollout_default_off(
-            'MEETING_NOTES_EPISODE_CLAIMS_ENABLED',
-            os.getenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'false').strip().lower() in {'true', '1', 'yes'},
-        ),
+        tiered=True,
+        tier_min_words=1500,
+        tier_min_source_kinds=2,
+        writer_timeout=120,
+        c6_timeout=180,
     )
-
-
-def _number(name, default, minimum, maximum):
-    try:
-        value = float(os.getenv(name, str(default)))
-        return value if minimum <= value <= maximum else default
-    except ValueError:
-        return default

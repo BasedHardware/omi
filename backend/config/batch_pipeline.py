@@ -8,6 +8,7 @@ import hashlib
 import logging
 import math
 import os
+import re
 import secrets
 import threading
 
@@ -31,12 +32,25 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
+# Terminal exclusion keeps future nonterminal strings visible; the census gates missing/null state.
+MERGE_POLL_TERMINAL_STATES = tuple(
+    'committed dead quarantined privacy_blocked partial_retired provider_superseded'.split()
+)
+
+
+def held_poll_skip_enabled() -> bool:
+    from config.refactor_modes import default_off
+
+    return default_off('BATCH_HELD_POLL_SKIP_ENABLED')
+
+
 # A full grace window is also given to pre-field rows on first observation.
 HELD_DEAD_LETTER_SECONDS = 7 * 86400
+RECORD_DEAD_LETTER_SECONDS = 14 * 86400
 
 
 def batch_held_dead_letter_enabled() -> bool:
-    """Ship-on held deadlines/expiry; manual requeue remains available when off."""
+    """Ship-on record/held deadlines and expiry; manual requeue remains available when off."""
     from config.policy.kill_switches import kill_switch
 
     return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
@@ -53,6 +67,18 @@ def projection_source_deleted_enabled() -> bool:
 def projection_ghost_settle_enabled() -> bool:
     """Default OFF: normalize aged ghost hints; production enable needs David."""
     return kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED')
+
+
+def projection_restorable_cap_expiry_enabled() -> bool:
+    """Default OFF: allow the existing one-time expiry CAS for restorable capped holds."""
+    return kill_switch('BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED')
+
+
+def projection_ghost_settle_cohort() -> tuple[str, bool]:
+    """Inert measurement label; return whether invalid config used the fallback."""
+    label = os.getenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', 'g1')
+    valid = re.fullmatch(r'[A-Za-z0-9_-]{1,16}', label) is not None
+    return (label, False) if valid else ('g1', True)
 
 
 def projection_hold_recovery_enabled() -> bool:
@@ -704,6 +730,11 @@ def projection_drain_privacy_backoff_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
+
+
+def projection_drain_live_target_backoff_enabled() -> bool:
+    """Default on; only off disables bounded awaiting-live-target owner backoff."""
+    return kill_switch('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF')
 
 
 def projection_privacy_refusal_resume_enabled() -> bool:

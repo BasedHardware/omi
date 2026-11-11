@@ -55,6 +55,17 @@ run_proof() {
   echo "::endgroup::"
 }
 
+# These require real transaction retries and the lifecycle network guard;
+# ordinary unit shards intentionally do not stand up emulator services.
+run_proof "record custody append (committed reply loss, retries, privacy)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
+run_proof "record nojob seal (synthetic cleanup ownership)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
+run_proof "lifecycle properties (real Firestore, named producer exits)" \
+  "$PYTHON" -m testing.lifecycle_sim.run \
+  --extra-test-module testing/lifecycle_properties/test_properties.py
+
+
 run_proof "sync/live overlap admission race (coarse hint, contention retry, no twin)" \
   "$PYTHON" scripts/sync_live_overlap_contention_emulator_test.py
 run_proof "canonical apply-control read retry (transient / exhausted / wipe race)" \
@@ -101,6 +112,19 @@ run_proof "enrichment recovery conformance (PL-342/397/398)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_recovery_emulator_test.py
 
+# Real delivery/settlement on old and replacement stores, with virtual budget
+# and heartbeat schedules. CI requires sim + emulator; local/staging qualification
+# must set OMI_REQUIRE_STORE_BACKENDS=all so Postgres is required too.
+run_proof "enrichment budget and hold-cap conformance (PL-420/421)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_budget_emulator_test.py
+
+# PL-439: a derived-refresh race keeps the same retryable delivery. CI requires
+# sim + emulator; complete local/staging qualification requires all three stores.
+run_proof "enrichment revision-race conformance (PL-439)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_revision_emulator_test.py
+
 # Daily architecture parity: require both local CI backends rather than letting
 # a missing emulator look green. Local/staging runs require all three stores.
 run_proof "recovery/admission parity PL-057/072/086 (sim + emulator)" \
@@ -135,6 +159,7 @@ run_proof "pull batch parity (PL-321/322/323, sim + emulator required)" \
 run_proof "pending deletion and restore conformance (sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pending_deletion_conformance.py
+
 
 if (( ${#failures[@]} )); then
   echo

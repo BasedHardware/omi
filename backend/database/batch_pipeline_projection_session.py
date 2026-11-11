@@ -27,7 +27,8 @@ from database.batch_pipeline_projection_protocol import (
     normalized_binding,
 )
 
-from database.sync_ledger import sync_content_ledger_ref, batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
+from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
+from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
@@ -84,27 +85,31 @@ class ProjectionSession:
         receipt = self.entry.get('projection') or {}
         return {} if receipt.get('privacy_control_only') else receipt
 
-    def write_receipt(self, transaction, receipt):
-        """Ready acknowledgment and summary share one result-keyed receipt."""
+    def write_receipt(self, transaction, receipt) -> bool:
+        """Write the receipt and return a sibling hold transition for post-commit logging."""
         if self.entry.get('projection_privacy_refusal') or self._privacy_refusal_transaction is transaction:
             raise ProjectionBlocked('privacy hold cannot acknowledge content')
         parts = dict(self.entry.get('projection_parts') or {})
         if self.part_index is None or not parts:
             transaction.update(self.result_ref, {'projection': receipt, 'projection_state': receipt['state']})
-            return
+            return False
         parts[str(self.part_index)] = receipt
         changes: dict[str, Any] = {'projection_parts': parts}
         summary = dict(self.entry.get('projection') or {})
         if summary and all(part.get('state') in {'ready', 'quarantined'} for part in parts.values()):
             if any(part.get('state') == 'quarantined' for part in parts.values()):
                 # A successful sibling's follow-up cannot acknowledge held text.
+                sibling_hold_changed = (
+                    summary.get('state') != 'quarantined' or self.entry.get('projection_state') != 'quarantine_held'
+                )
                 summary['state'] = 'quarantined'
                 changes.update(projection=summary, projection_state='quarantine_held')
                 transaction.update(self.result_ref, changes)
-                return
+                return sibling_hold_changed
             summary['state'] = 'ready'
             changes.update(projection=summary, projection_state='ready')
         transaction.update(self.result_ref, changes)
+        return False
 
     def guard(self, transaction, conversation_ids=()):
         snapshots: dict[str, Any] = {}

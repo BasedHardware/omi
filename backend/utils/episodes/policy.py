@@ -34,6 +34,14 @@ ASK = 'ask'
 NEW = 'new'
 
 
+def owned_member_ids(episode: Mapping[str, Any] | None) -> list[str]:
+    """Stored member ids count only as a list of strings. Any other shape owns nothing (fail open)."""
+    members = (episode or {}).get('conversation_ids')
+    if not isinstance(members, list):
+        return []
+    return [cid for cid in members if isinstance(cid, str)]
+
+
 def utc(value: Any) -> Optional[datetime]:
     if isinstance(value, str):
         try:

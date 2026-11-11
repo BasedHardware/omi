@@ -59,10 +59,8 @@ void main() {
             conversationIds: const ['a', 'b', 'c'],
             members: [a, b, c],
             title: 'Dinner and plans',
-            moments: [
-              EpisodeMoment(
-                  id: 'm', conversationId: 'a', startedAt: now, endedAt: now, points: const [EpisodePoint('Point')])
-            ],
+            // Not composed yet: members still processing hold the row. A composed episode keeps
+            // its notes row instead (home_rows_test).
           );
       final provider = ConversationProvider(isSignedIn: () => false)
         ..isLoadingConversations = false
@@ -74,7 +72,6 @@ void main() {
         fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [episode(live)])),
       );
       addTearDown(provider.dispose);
-      addTearDown(episodes.dispose);
       final screen = await buildTypedConversationScreen(provider, episodes: episodes);
       episodes
         ..debugSetLive(null)
@@ -98,6 +95,8 @@ void main() {
       expect(find.text('Dinner and plans'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
+      // Dispose before the test ends: a processing hold re-reads on a timer that must not outlive the page.
+      episodes.dispose();
     });
   }
 

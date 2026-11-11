@@ -4,6 +4,46 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: batch-pipeline-tuning-disclosure
+    command: ["python3", ".github/scripts/check_batch_tuning_disclosure.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}", "--run-tests"]
+    triggers: ["backend/config/batch_pipeline.py", "backend/utils/batch_pipeline/**", "backend/charts/batch-pipeline-worker/**", "backend/charts/pusher/**", "backend/utils/pusher_*.py", ".github/scripts/*check_batch_tuning_disclosure.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    requires_pr_body: true
+    reason: "Retro P6 / #24481 retune: numeric capacity changes disclose before/after values and new pipeline states name an exit; explicit reasoned waivers keep this a disclosure ratchet"
+  - id: cv1-battery-soc
+    command: ["bash", "omi/firmware/omi/tests/battery/run.sh"]
+    triggers: ["omi/firmware/omi/src/battery.c", "omi/firmware/omi/src/lib/core/lib/battery/battery.h", "omi/firmware/omi/src/lib/core/battery_guard*", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/battery/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#20483: charger voltage must not inflate the last off-charger SOC; reject edge-spanning samples and keep disconnected BAS current"
+
+  - id: cv1-device-name
+    command: ["python3", "omi/firmware/omi/tests/test_device_name.py"]
+    triggers: ["omi/firmware/omi/src/settings.c", "omi/firmware/omi/src/lib/core/settings.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/features.h", "omi/firmware/omi/tests/test_device_name*", "omi/firmware/omi/tests/settings_stubs/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#23743: reject partial NVS names without publishing them and keep advertising bytes immutable across BLE RX updates"
+  - id: firmware-ota-slot-geometry
+    command: ["python3", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]
+    triggers: ["omi/firmware/boards/omi/pm_static.yml", "omi/firmware/tools/cv1/pinned-partitions.yml", "omi/firmware/omi/tests/check_ota_slot_geometry.py"]
+    lanes: ["local", "ci"]
+    reason: "#13855: moved OTA slots away from the installed bootloader's compiled addresses, which would stop later OTAs from applying"
+  - id: firmware-capture-mute-durability
+    command: ["bash", "omi/firmware/omi/tests/run_capture_mute_test.sh"]
+    triggers: ["omi/firmware/omi/src/settings.c", "omi/firmware/omi/src/lib/core/capture_mute*", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/tests/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14293: a failed NVS write must not receive a successful mute ACK or change the confirmed runtime mute"
+  - id: cv1-power-control
+    command: ["bash", "omi/firmware/omi/tests/run_power_control_test.sh"]
+    triggers: ["omi/firmware/omi/src/lib/core/power_control_gatt.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/features.h", "omi/firmware/omi/src/lib/core/capture_mute*", "omi/firmware/omi/src/settings.c", "omi/firmware/omi/tests/test_power*", "omi/firmware/omi/tests/test_capture_mute_settings.c", "omi/firmware/omi/tests/run_power_control_test.sh", "omi/firmware/omi/tests/settings_stubs/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#23735: share the persistent mute owner instead of resuming on disconnect; queue orderly shutdown outside the system workqueue"
+  - id: cv1-bootloader-region-tests
+    command: ["python3", "omi/firmware/scripts/ci/test_cv1_bootloader.py"]
+    triggers: ["omi/firmware/scripts/ci/**", "omi/firmware/bootloader/cv1-bootloader-policy.json", "omi/firmware/omi/sysbuild*", "omi/firmware/omi/sysbuild/**", "omi/firmware/omi/src/mcuboot_boot_zephyr.c", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-11-07 CV1 jig: stock MCUboot in 3.0.21/.23/.24 wire-flash assets reads corrupted SPI NOR while SD drives MISO; reject every unapproved boot region"
   - id: cv1-tested-release-contract-tests
     command: ["python3", "omi/firmware/scripts/ci/test_cv1_release.py"]
     triggers: ["omi/firmware/scripts/ci/**", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
@@ -34,6 +74,12 @@ checks:
     triggers: ["backend/**/*.py", "config/feature-flags.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-10-18 policy-window incident: obligations admitted at first-summary percent zero were graded under another revision's policy; fail reads of snapshot-owned batch keys outside the immutable resolver; keep live switches behind their helper and warn on unowned E1b worker/process keys"
+  - id: record-token-lease-promql
+    command: ["bash", "scripts/dev-harness/run-python.sh", "backend/scripts/check_record_token_lease_promql.py"]
+    triggers: ["backend/charts/monitoring/**", "backend/tests/promql/record_token_lease.py", "backend/scripts/check_record_token_lease_promql.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "#25018 pre-review: prove the actual lease backlog warning across CronJob replacement, invalid clocks and release gaps with real PromQL instead of uncaught manual-only backtests"
   - id: monitoring-alert-backtest-lint
     command: ["python3", "backend/scripts/alert_backtest.py", "--lint"]
     triggers: ["backend/charts/monitoring/alerts/**", "backend/charts/monitoring/metric-inventory.prod.json", "backend/scripts/alert_backtest.py", "backend/tests/unit/test_monitoring_alert_backtest.py", ".github/checks-manifest.yaml"]
@@ -298,7 +344,7 @@ checks:
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
   - id: firmware-safe-mode-host
     command: ["make", "-C", "omi/firmware/tests", "test"]
-    triggers: ["omi/firmware/omi/**", "omi/firmware/boards/omi/**", "omi/firmware/tests/**"]
+    triggers: ["omi/firmware/omi/**", "omi/firmware/boards/omi/**", "omi/firmware/tests/**", "omi/firmware/tools/cv1/jig_gestures*", "omi/firmware/tools/cv1/test_jig_gestures.py"]
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "CV1 safe-mode recovery must count failed boots without NVS wear, survive same-version DFU, and preserve the fielded OTA slot geometry"
@@ -1608,6 +1654,11 @@ checks:
     triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
+  - id: hume-ai-route-auth-tests
+    command: ["python3", "plugins/hume-ai/test_hume_tools_auth.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hume-ai's /audio, /save-emotion-memory and /force-send-notification routes take uid from the query string with no caller authentication and write emotion memories into any user's Omi account with the app's integration key or push notifications to any user; the shared-secret guard must fail closed when unconfigured and reject missing/wrong tokens"
   - id: dead-code-ratchet
     command: ["python3", ".github/scripts/check_dead_code.py"]
     triggers: ["app/lib/**", "app/pubspec.yaml", "backend/**/*.py", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]

@@ -27,6 +27,7 @@ from config.prerecorded_language import language_guard_enabled, language_class
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.sync_ledger import (
@@ -229,7 +230,10 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
 def durable_status(store, uid: str, job_id: str) -> dict | None:
     from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
 
+    spent_redrives: list[str] = []
+
     def read(tx):
+        spent_redrives.clear()  # a retried transaction reports only its own commit
         intake = tx.get('intakes', job_id)
         if not intake:
             return None
@@ -259,6 +263,27 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             logger.info('event=batch_intake_status outcome=conversation_deleted_terminal')
             return terminal
         result = ledger.get('result')
+        from utils.batch_pipeline.input_retention import input_expiring
+
+        expiring = sum(input_expiring(job) for job in jobs)
+        if expiring:
+            # Existing failed-upload UI keeps local custody and offers retry.
+            # This precedes completion/partial receipts and the legacy polling redrive.
+            projected = sum(job.get('state') == 'committed' for job in jobs)
+            return {
+                'job_id': job_id,
+                'status': 'failed',
+                'reason_code': REASON_CODE,
+                'lane': intake['lane'],
+                'total_files': intake['total_files'],
+                'total_segments': len(jobs),
+                'processed_segments': projected,
+                'successful_segments': projected,
+                'failed_segments': expiring,
+                'errors': ['batch_worker_quarantined'],
+                'result': result if is_valid_partial_sync_content_result(result) else None,
+                'poll_after_ms': 0,
+            }
         missing = sum(artifact_missing(job) for job in jobs)
         if missing:
             # Must precede both all-success and held-partial completion. Phones
@@ -280,8 +305,16 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             }
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
-            for job in jobs:
-                Scheduler.redrive_in_transaction(tx, job, time.time())
+            # FirestoreTransaction buffers every put until this callback returns;
+            # later units may still read their fences before the shared flush.
+            for index, job in enumerate(jobs):
+                outcome = Scheduler.redrive_in_transaction(tx, job, time.time(), checked=RecoveryFence(store).checked)
+                if outcome is not None:
+                    # The fence requeues a checked copy. Use that written value
+                    # without another transactional read after staging writes.
+                    jobs[index] = outcome.job
+                    if outcome.spent:
+                        spent_redrives.append(job['segment_id'])
         if ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result):
             # Siblings are already visible independently. A partial ledger must
             # never ACK custody of unresolved units, including after 30 minutes.
@@ -368,7 +401,13 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             'poll_after_ms': 0 if completed or failed else 3000,
         }
 
-    return store.run(read)
+    status = store.run(read)
+    if spent_redrives:
+        # Class 6 counter: same signal as the nightly scan, once per committed poll re-drive.
+        from utils.backlog_metrics import record_transition
+
+        record_transition('held_redrive_budget_spent', len(spent_redrives))
+    return status
 
 
 def start_response(status: dict) -> JSONResponse:

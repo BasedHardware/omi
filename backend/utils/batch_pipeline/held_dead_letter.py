@@ -9,6 +9,8 @@ import math
 import time
 
 from config.batch_pipeline import batch_held_dead_letter_enabled
+from config.refactor_modes import batch_input_expiring_enabled
+from database.batch_pipeline_record_dead_letter import record_dead_letter_stock
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import (
@@ -16,9 +18,11 @@ from database.batch_pipeline_quarantine_recovery import (
     held_candidates,
     dead_held_candidates,
     held_expired_stock,
+    input_expiring_candidates,
 )
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_release import ProjectionReleaseStore, expired_page_ids
+from utils.batch_pipeline.input_retention import held_input_leg, invalid_staged_clock
 
 PAGE_SIZE = 32
 INTERVAL_SECONDS = 300
@@ -39,18 +43,67 @@ class HeldDeadLetter:
             elif event == 'requeued':
                 self.metrics.record('requeued')
 
+    def _observe_clock(self, job):
+        # Name pages also see absent clock fields, excluded by ordered queries.
+        if self.metrics is not None and held_input_leg(job) and invalid_staged_clock(job):
+            self.metrics.staged_input_clock_invalid.inc()
+
     def tick(self, now):
         # Off has no queries, cursor writes, deadline stamps or expirations.
         # The separate RecoveryStore.requeue_quarantined tool remains usable.
         if not batch_held_dead_letter_enabled():
             return {'expired': 0, 'requeued': 0}
         state = self.store.run(lambda tx: tx.get('leases', CURSOR_KEY))
-        if state.get('next_at', 0) > now:
-            return {'expired': 0, 'requeued': 0}
         counts = {'expired': 0, 'requeued': 0}
-        page = held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=state.get('held_after'))
-        for sid, _ in page:
+        updated = dict(state)
+        input_enabled = batch_input_expiring_enabled()
+        urgency_after = state.get('input_after')
+        urgent = []
+        if input_enabled:
+            urgent, urgency_after = input_expiring_candidates(
+                self.store.client, self.store.namespace, now, after=urgency_after
+            )
+            updated['input_after'] = urgency_after
+        # Urgency runs on EVERY maintenance tick, before the next_at sleep.
+        # At 128 rows/stream, 22,583 rows need 177 pages plus one tick of wait:
+        # serving_tick_seconds() defaults to 20s (59m20s), capped at 60s (2h58m).
+        # These cadence bounds exclude RPC/work latency. A conservative 300s
+        # completed-tick budget gives 178 * 300 = 53,400s (14h50m), not 14h45m.
+        # Urgency discovery is independent of held_after. Its
+        # age cursors advance over refusals; the transaction still owns every
+        # current-object, privacy, content and active-intent check.
+        for sid, job in urgent:
             try:
+                self._observe_clock(job)
+                if self.recovery.expire_held(sid, now) == 'expired':
+                    counts['expired'] += 1
+                    self._record('expired')
+            except (BatchPrivacyBlocked, ProjectionBlocked):
+                continue
+            except Exception as error:
+                logger.warning(
+                    'event=batch_held_dead_letter action=input_expire outcome=retry exception_type=%s',
+                    type(error).__name__,
+                )
+
+        def checkpoint(tx):
+            if tx.get('leases', CURSOR_KEY) == state:
+                tx.put('leases', CURSOR_KEY, updated)
+
+        # Only the ordinary name page and nightly redrive honor next_at.
+        # Persist urgency progress alone, preserving every ordinary-pass field.
+        # With the input kill off this sleeping path has no queries or writes.
+        if state.get('next_at', 0) > now:
+            if input_enabled:
+                self.store.run(checkpoint)
+                logger.info(
+                    'event=batch_held_dead_letter expired=%d requeued=%d', counts['expired'], counts['requeued']
+                )
+            return counts
+        page = held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=state.get('held_after'))
+        for sid, job in page:
+            try:
+                self._observe_clock(job)
                 outcome = self.recovery.expire_held(sid, now)
             except (BatchPrivacyBlocked, ProjectionBlocked):
                 continue  # Revocation/content-owner loss never authorizes a transition.
@@ -62,10 +115,10 @@ class HeldDeadLetter:
             if outcome == 'expired':
                 counts['expired'] += 1
                 self._record('expired')
-        updated = {**state, 'held_after': page[-1][0] if len(page) == PAGE_SIZE else None}
+        updated['held_after'] = page[-1][0] if len(page) == PAGE_SIZE else None
         day = int(now // 86400)
         # First tick after UTC midnight starts a pass. Full pages continue on
-        # later maintenance ticks; a finished pass sleeps until the next day.
+        # later ordinary passes; only a finished redrive waits for the next day.
         if state.get('redrive_day') != day or not state.get('redrive_done'):
             after = state.get('dead_after') if state.get('redrive_day') == day else None
             dead = dead_held_candidates(self.store.client, self.store.namespace, PAGE_SIZE, after_id=after)
@@ -97,10 +150,6 @@ class HeldDeadLetter:
                 redrive_day=day, redrive_done=len(dead) < PAGE_SIZE, dead_after=dead[-1][0] if dead else None
             )
         updated['next_at'] = now + INTERVAL_SECONDS
-
-        def checkpoint(tx):
-            if tx.get('leases', CURSOR_KEY) == state:
-                tx.put('leases', CURSOR_KEY, updated)
 
         # Checkpoint after work: a crash replays an idempotent page. A competing
         # leader cannot overwrite a newer cursor with this older snapshot.
@@ -167,4 +216,8 @@ class ProjectionHeldDeadLetter:
             stock = held_expired_stock(self.store.client, self.store.namespace)
             self.metrics.held_expired_stock.set(stock)
             self.metrics.held_expired_observed_at.set(now)
+            if batch_held_dead_letter_enabled():
+                stock = record_dead_letter_stock(self.store.client, self.store.namespace)
+                self.metrics.record_dead_letter_stock.set(stock)
+                self.metrics.record_dead_letter_observed_at.set(now)
         return released

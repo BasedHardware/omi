@@ -3,8 +3,10 @@
 from copy import deepcopy
 import math
 
+from config.record_audio import restore_pending
 from utils.conversations.final_pass_remap import remap_final_record
 from utils.conversations.fragment_visibility import is_automatic_discard
+from utils.conversations.summary_delivery import stamp_projection_debt
 from utils.manual_speaker_assignments import (
     apply_manual_assignments,
     manual_assignment_decision,
@@ -16,7 +18,9 @@ from utils.sync.assignment_errors import SyncAssignmentConflict
 from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
 
 
-def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, list[dict]]:
+def replace_record(
+    current: dict, incoming: dict, span: dict, *, obligations: tuple[dict, ...] = ()
+) -> tuple[dict, list[dict]]:
     if current.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
         raise SyncAssignmentConflict('record route owner changed', subtype=Reason.RECORD_ROUTE_OWNER_CHANGED)
     if current.get('deleted'):
@@ -130,15 +134,19 @@ def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, lis
         has_content=bool(segments),
         sync_live_target=True,
     )
-    if new and is_automatic_discard(current):
-        # The pipeline judged the provisional text, often empty before batch
-        # lands; enrichment reassesses the record with this text, as sync intake
-        # does for appended speech. A no-op pass keeps the verdict.
+    if new and is_automatic_discard(current) and not restore_pending(current, *obligations):
+        # Later speech supersedes an ordinary automatic verdict. A pending
+        # explicit restore keeps its discard until the metadata commit wins.
         result['discarded'] = False
         result['relevance_decision'] = None
     finish = incoming.get('finished_at')
     if finish is not None and (result.get('finished_at') is None or finish > result['finished_at']):
         result['finished_at'] = finish
+    if new:
+        # A batch row that completes with no title never passes through the
+        # server-minimum intake path, so the projection is the only write that
+        # can stamp the first-summary debt Home and the repair read.
+        stamp_projection_debt(result)
     return result, new
 
 

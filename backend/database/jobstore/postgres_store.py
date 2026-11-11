@@ -26,7 +26,7 @@ moving them is the A4 outbox + receipt-fence seam, not this PR.
 
 from __future__ import annotations
 
-from config.batch_pipeline import control_candidate_fanout
+from config.batch_pipeline import control_candidate_fanout, held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
 
 import re
 import hashlib
@@ -47,7 +47,7 @@ from database.batch_pipeline_store import (
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 
 import database.jobstore.codec as codec
-from database.jobstore.connection import Pool
+from database.jobstore.connection import Pool, sql
 
 # Mirrors the recovery protocol's state names without binding to its enum.
 # Shared queue predicates above already load Firestore types, but create no client.
@@ -257,9 +257,13 @@ class PostgresStore:
             raise ValueError('only recoverable states may be scanned')
         field = _DUE_FIELDS[state]  # a fixed column name, never caller text
         with self._read_conn() as conn:
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL(
+                'SELECT key FROM jobs WHERE namespace = %s AND state = %s AND {} <= %s '
+                'ORDER BY {}, key COLLATE "C" LIMIT %s'
+            ).format(psycopg_sql.Identifier(field), psycopg_sql.Identifier(field))
             rows = conn.execute(
-                f'SELECT key FROM jobs WHERE namespace = %s AND state = %s AND {field} <= %s '
-                f'ORDER BY {field}, key COLLATE "C" LIMIT %s',
+                query,
                 (self.namespace, state, now, max(1, min(limit, 100))),
             ).fetchall()
         return [row[0] for row in rows]
@@ -317,11 +321,15 @@ class PostgresStore:
 
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         # A hint read outside any transaction; the fresh-first transaction re-verifies it.
+        state = 'AND state <> ALL(%s) ' if held_poll_skip_enabled() else ''
+        params: tuple[Any, ...] = (self.namespace, owner_key)
+        if state:
+            params += (list(MERGE_POLL_TERMINAL_STATES),)
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
-                "AND doc->'fresh_capture' = 'true'::jsonb ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
-                (self.namespace, owner_key, max(1, min(limit, 32))),
+                f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
+                (*params, max(1, min(limit, 32))),
             ).fetchall()
         return [row[0] for row in rows]
 
@@ -336,7 +344,7 @@ class PostgresStore:
             ).fetchall()
             owners = []
             for (key,) in marks:
-                job = self.first_pending_in(conn, key)
+                job = self.first_pending_in(conn, key, skip_terminal=False)
                 owners.append((key, job[1].get('owner_id') if job else None))
         return owners
 
@@ -390,9 +398,15 @@ class PostgresStore:
             raise ValueError('bounded priority and pool required')
         p, at = f'p{priority}', f'p{priority}_{pool}_at'
         with self._read_conn() as conn:
+            psycopg_sql = sql()
+            service, active = psycopg_sql.Identifier(f'{p}_service'), psycopg_sql.Identifier(f'{p}_active')
+            available_at = psycopg_sql.Identifier(at)
+            query = psycopg_sql.SQL(
+                'SELECT key, {} FROM control WHERE namespace = %s AND {} AND {} >= 0 '
+                'AND {} <= %s ORDER BY {}, {}, key COLLATE "C" LIMIT %s'
+            ).format(service, active, service, available_at, service, available_at)
             rows = conn.execute(
-                f'SELECT key, {p}_service FROM control WHERE namespace = %s AND {p}_active AND {p}_service >= 0 '
-                f'AND {at} <= %s ORDER BY {p}_service, {at}, key COLLATE "C" LIMIT %s',
+                query,
                 (self.namespace, now, control_candidate_fanout(fanout) if worker_id else 1),
             ).fetchall()
         if worker_id:
@@ -428,6 +442,28 @@ class PostgresStore:
             return False
 
         return self.run(revoke)
+
+    def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
+        """Same fence recheck and available_at-only change as the Firestore privacy defer."""
+        from database.batch_pipeline_recovery import privacy_defer_update
+
+        def defer(tx: PostgresTransaction) -> bool:
+            job = tx.get('jobs', segment_id)
+            if not job or job.get('state') != 'record_pending' or job.get('available_at', 0) > now:
+                return False
+            try:
+                tx.check_privacy(
+                    job['owner_id'],
+                    (job['conversation_id'],) if job.get('conversation_id') else (),
+                    job.get('privacy_generation'),
+                )
+            except BatchPrivacyBlocked:
+                # A shallow field update, not a put: flush must not re-run the (failing) fence.
+                tx.store.write_doc(tx.conn, 'jobs', segment_id, {**job, **privacy_defer_update(until)})
+                return True
+            return False
+
+        return self.run(defer)
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
@@ -468,9 +504,11 @@ class PostgresStore:
     def read_doc(self, conn: Any, table: str, key: str, *, lock: bool = False) -> dict:
         suffix = ' FOR UPDATE' if lock else ''
         if table in _TYPED:
-            row = conn.execute(
-                f'SELECT doc FROM {table} WHERE namespace = %s AND key = %s{suffix}', (self.namespace, key)
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL('SELECT doc FROM {} WHERE namespace = %s AND key = %s{}').format(
+                psycopg_sql.Identifier(table), psycopg_sql.SQL(suffix)
             )
+            row = conn.execute(query, (self.namespace, key))
         else:
             row = conn.execute(
                 f'SELECT doc FROM docs WHERE namespace = %s AND tbl = %s AND key = %s{suffix}',
@@ -483,21 +521,28 @@ class PostgresStore:
         """Hold one document's advisory lock until the transaction ends (the key may not exist yet)."""
         conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (lock_key(self.namespace, table, key),))
 
-    def first_pending_in(self, conn: Any, owner_key: str, *, result_ready: bool = False) -> tuple[str, dict] | None:
+    def first_pending_in(
+        self, conn: Any, owner_key: str, *, result_ready: bool = False, skip_terminal: bool = True
+    ) -> tuple[str, dict] | None:
         state = "AND state = 'result_ready' " if result_ready else ''
+        params: tuple[Any, ...] = (self.namespace, owner_key)
+        if not result_ready and skip_terminal and held_poll_skip_enabled():
+            state = 'AND state <> ALL(%s) '
+            params += (list(MERGE_POLL_TERMINAL_STATES),)
         return conn.execute(
             f'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending {state}'
             'ORDER BY capture_at, key COLLATE "C" LIMIT 1',
-            (self.namespace, owner_key),
+            params,
         ).fetchone()
 
     def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
         if table in _TYPED:
-            conn.execute(
-                f'INSERT INTO {table} (namespace, key, doc) VALUES (%s, %s, %s) '
-                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc',
-                (self.namespace, key, jsonb(value)),
-            )
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL(
+                'INSERT INTO {} (namespace, key, doc) VALUES (%s, %s, %s) '
+                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc'
+            ).format(psycopg_sql.Identifier(table))
+            conn.execute(query, (self.namespace, key, jsonb(value)))
         else:
             conn.execute(
                 'INSERT INTO docs (namespace, tbl, key, doc) VALUES (%s, %s, %s, %s) '
@@ -507,7 +552,11 @@ class PostgresStore:
 
     def delete_doc(self, conn: Any, table: str, key: str) -> None:
         if table in _TYPED:
-            conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL('DELETE FROM {} WHERE namespace = %s AND key = %s').format(
+                psycopg_sql.Identifier(table)
+            )
+            conn.execute(query, (self.namespace, key))
         else:
             conn.execute(
                 'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
@@ -516,9 +565,11 @@ class PostgresStore:
     def service_frontier_in(self, conn: Any, priority: int) -> float:
         if priority not in (0, 1, 2):
             raise ValueError('bounded priority required')
-        row = conn.execute(
-            f'SELECT max(p{priority}_service) FROM control WHERE namespace = %s', (self.namespace,)
-        ).fetchone()
+        psycopg_sql = sql()
+        query = psycopg_sql.SQL('SELECT max({}) FROM control WHERE namespace = %s').format(
+            psycopg_sql.Identifier(f'p{priority}_service')
+        )
+        row = conn.execute(query, (self.namespace,)).fetchone()
         return row[0] if row[0] is not None else 0.0
 
     def check_privacy_for(self, uid: str, conversation_ids, expected_generation: int | None) -> int:
@@ -537,5 +588,7 @@ class PostgresStore:
         if not self.namespace.startswith('batch_pipeline_test_'):
             raise RuntimeError('only test namespaces may be purged')
         with self._read_conn() as conn:
+            psycopg_sql = sql()
             for table in ('jobs', 'results', 'control', 'docs', 'outbox'):
-                conn.execute(f'DELETE FROM {table} WHERE namespace = %s', (self.namespace,))
+                query = psycopg_sql.SQL('DELETE FROM {} WHERE namespace = %s').format(psycopg_sql.Identifier(table))
+                conn.execute(query, (self.namespace,))

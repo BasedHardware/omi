@@ -83,9 +83,11 @@ def update_conversation(
     if title is not None:
         structured['title'] = title.strip()
         patch['user_title'] = title.strip()
+        patch['summary_due_at'] = None
     if overview is not None:
         structured['overview'] = overview.strip()
         patch['user_overview'] = overview.strip()
+        patch['summary_due_at'] = None
     patch['structured'] = structured
     after = conversations.update_conversation_chat(uid, conversation_id, before, patch)
     summary = 'Title → ' + title.strip() if title is not None else 'Overview updated'

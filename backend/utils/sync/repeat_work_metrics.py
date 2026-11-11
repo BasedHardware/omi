@@ -12,8 +12,6 @@ from typing import Any, Callable, ParamSpec, TypeVar
 
 from prometheus_client import Counter, Histogram
 
-from config.repeat_work import revision_reuse
-
 P = ParamSpec('P')
 R = TypeVar('R')
 
@@ -55,6 +53,7 @@ LLM_FEATURES = frozenset(
         'jev_conversation_relevance',
         'jev_conversation_smart_merge',
         'jev_episode_boundary',
+        'jev_episode_boundary_f',
         'knowledge_graph',
         'memories',
         'notifications',
@@ -161,15 +160,11 @@ def _join(uid: str, conversation: object, event: str, feature: str = 'none', out
 
 
 def record_feature(uid: str, conversation: object, feature: str, outcome: str) -> None:
-    if revision_reuse():
-        FEATURES.labels(feature, outcome).inc()
-        _join(uid, conversation, 'feature', feature, outcome)
+    pass
 
 
 def record_final(uid: str, conversation: object) -> None:
-    if revision_reuse():
-        FINALS.inc()
-        _join(uid, conversation, 'durable_final')
+    pass
 
 
 def record_llm_call(outcome: str, feature: str = 'other', *, direct: bool = False) -> None:
@@ -179,8 +174,6 @@ def record_llm_call(outcome: str, feature: str = 'other', *, direct: bool = Fals
         bounded_outcome = outcome if outcome in {'completed', 'failed'} else 'other'
         PHASE_A_CALLS.labels(bounded_feature, bounded_outcome).inc()
         _join(*current, 'llm_call', feature=bounded_feature, outcome=bounded_outcome)
-        if revision_reuse() and not direct:
-            CALLS.labels(outcome).inc()
 
 
 def record_survivor_refresh(uid: str, conversation_id: str, episode_id: str | None) -> None:

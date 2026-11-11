@@ -23,6 +23,7 @@ from utils.conversations.capture_group_meeting_context import (
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.process_conversation import process_conversation
+from utils.episodes import member_notes
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.screen_frame_evidence import (
     MAX_GROUP_MEMBER_FRAME_READS,
@@ -226,7 +227,10 @@ def refresh_primary_notes(uid: str, conversation_id: str) -> bool:
     except attention_db.ClaimRejected:
         return False
     except Exception as exc:  # noqa: BLE001 - this step may never fail finalization
-        logger.warning('event=capture_group_notes_refresh outcome=error exception_type=%s', type(exc).__name__)
+        if isinstance(exc, member_notes.LiveMemberNotesDeferred):
+            logger.info('event=capture_group_notes_refresh outcome=deferred')
+        else:
+            logger.warning('event=capture_group_notes_refresh outcome=error exception_type=%s', type(exc).__name__)
         if reservation is not None:
             try:
                 refresh_state_db.release_refresh(uid, reservation.get('group_id', ''), reservation['id'])

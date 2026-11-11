@@ -60,9 +60,13 @@ DEPLOY_LOG="${OMI_STAGING_DEPLOY_LOG:-$HOME/workspace/omi/data/run-2026-10-19-le
 # follows the 2026-10-24 costcut to 6Gi, backend/backfill the margin-20 2026-11-04 cut to 4Gi/2Gi). Replica counts are staging-sized
 # by the overlay; these mirror concurrency, CPU, memory and timeout.
 shape_flags() {
+  local sync_timeout
   case "$1" in
     backend) echo "--concurrency=20 --cpu=2 --memory=4Gi --timeout=3600 --ingress=all" ;;
-    backend-sync) echo "--concurrency=20 --cpu=2 --memory=6Gi --timeout=3600 --ingress=all" ;;
+    backend-sync)
+      sync_timeout="$("$PY" -c 'import json, sys; print(json.load(open(sys.argv[1]))["backend-sync"])' "$REPO_ROOT/backend/config/cloud_run_request_timeouts.json")" || return 1
+      echo "--concurrency=20 --cpu=2 --memory=6Gi --timeout=$sync_timeout --ingress=all"
+      ;;
     backend-sync-backfill) echo "--concurrency=6 --cpu=2 --memory=2Gi --timeout=1500 --ingress=all" ;;
     backend-integration) echo "--concurrency=80 --cpu=2 --memory=4Gi --ingress=all" ;;
     *) return 1 ;;

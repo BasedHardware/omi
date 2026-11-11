@@ -1,6 +1,7 @@
 """Fenced, duration-fair pull scheduling over durable transactional documents."""
 
 import hashlib
+from dataclasses import dataclass
 import math
 import logging
 import random
@@ -10,6 +11,7 @@ from time import monotonic
 
 from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
@@ -28,9 +30,10 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
-from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
+from utils.batch_pipeline.control import activate, consume_frontier_hint, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
+from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -44,6 +47,14 @@ HEAD_OWNER_BUDGET = 64
 CONTENTION_BACKOFF_CAP_SECONDS = 30.0
 PULL_CLAIM_SECONDS = 30.0
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RedriveResult:
+    """Updated job staged by a successful re-drive and its post-commit signal."""
+
+    job: dict
+    spent: bool = False
 
 
 def _admission_retry_delay(value: object, streak: int) -> float:
@@ -63,6 +74,7 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     queue_key = f"{job['priority']}_{job['owner_key']}"
     queue = tx.get('queues', queue_key) or {'head': '', 'tail': '', 'deficit': 0.0, 'continuing': False}
     ring = control['rings'][str(job['priority'])]
+    tail = None
     if not queue['head']:
         if len(ring) >= MAX_ACTIVE_OWNERS:
             raise RuntimeError('active owner capacity exceeded; admission must retry')
@@ -74,15 +86,18 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     else:
         tail = tx.get('jobs', queue['tail'])
         tail['next'] = job['segment_id']
-        tx.put('jobs', tail['segment_id'], tail)
     queue['tail'] = job['segment_id']
     job['next'] = ''
-    tx.put('queues', queue_key, queue)
-    activate(tx, control, job['priority'], job['available_at'])
     control_key = scheduler_control_key(job['owner_key'])
+    activate(tx, control, job['priority'], job['available_at'], control_key)
     # An owner already in the ring, on an active shard with no pull backoff to clear, leaves
     # the shard identical; rewriting it only conflicts with every pull and admission on it.
-    if not skip_unchanged_control_write_enabled() or control != tx.get('control', control_key):
+    write_control = not skip_unchanged_control_write_enabled() or control != tx.get('control', control_key)
+    # Finish queue/frontier/control reads before staging the first write.
+    if tail is not None:
+        tx.put('jobs', tail['segment_id'], tail)
+    tx.put('queues', queue_key, queue)
+    if write_control:
         tx.put('control', control_key, control)
 
 
@@ -513,6 +528,7 @@ class Scheduler:
             if gpu.get('token'):
                 return None, 'reserved', observations
             control = read_control(tx, shard)
+            consume_frontier_hint(tx, control, int(priority), current_time())
             ring = control['rings'][str(int(priority))]
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))
@@ -939,7 +955,11 @@ class Scheduler:
     @staticmethod
     def held_requeue_eligible(tx: Transaction, job: dict, now: float, *, allow_dead=True) -> bool:
         """Dormant worker holds only; never reopen an active paid/operator intent."""
-        held_dead = allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+        held_dead = (
+            allow_dead
+            and job.get('state') == 'dead'
+            and job.get('dead_letter_reason') in {'held_expired', 'input_expiring'}
+        )
         state_ok = job.get('state') == 'quarantined' or held_dead
         lease_until = job.get('lease_until', 0)
         if (
@@ -971,27 +991,43 @@ class Scheduler:
         return not tx.get('results', job['segment_id'])
 
     @staticmethod
-    def requeue_quarantined_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+    def requeue_quarantined_in_transaction(
+        tx: Transaction, job: dict, now: float, *, account=True
+    ) -> RedriveResult | None:
         """CAS requeue without deleting audio, results, intent or attempt history.
 
         RecoveryStore owns content/ledger/privacy checks, as the missing-input
         store does for restore_audio_in_transaction. The commit fence still runs.
         """
         if not Scheduler.held_requeue_eligible(tx, job, now):
-            return False
+            return None
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         owner = tx.get('owners', job['owner_key'])
         owner['revision'] = owner.get('revision', 0) + 1
         job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0, held_requeued_at=now)
+        spent = account_held_redrive(job, now) if account else False
         _append(tx, control, job)
         tx.put('owners', job['owner_key'], owner)
         tx.put('jobs', job['segment_id'], job)
-        return True
+        return RedriveResult(job, spent)
 
     @staticmethod
-    def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+    def redrive_in_transaction(
+        tx: Transaction, job: dict, now: float, *, operator=False, checked=None
+    ) -> RedriveResult | None:
+        """Return the staged job and spent signal; refuse without a result."""
+        # Status polling must not silently undo an input-expiring terminal.
+        if job.get('dead_letter_reason') == 'input_expiring' and not operator:
+            return None
         if job.get('state') != 'dead' or not job.get('merge_pending'):
-            return False
+            return None
+        if job.get('dead_letter_reason') == 'held_expired':
+            # A fresh budget and its telemetry require the same content-owner,
+            # privacy, result and active-intent CAS as an operator requeue.
+            if checked is None:
+                return None
+            job, _ = checked(tx, job['segment_id'])
+            return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         job.update(
             state='ready',
@@ -1003,11 +1039,20 @@ class Scheduler:
         )
         _append(tx, control, job)
         tx.put('jobs', job['segment_id'], job)
-        return True
+        return RedriveResult(job)
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
-        return self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
+        outcome = self.store.run(
+            lambda tx: self.redrive_in_transaction(
+                tx, tx.get('jobs', segment_id), now, operator=True, checked=RecoveryFence(self.store).checked
+            )
+        )
+        if outcome is not None and outcome.spent:
+            from utils.backlog_metrics import record_transition
+
+            record_transition('held_redrive_budget_spent')
+        return bool(outcome)
 
     def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
         """Only the hardware admission owner may call this after GPU quiescence.
@@ -1030,3 +1075,51 @@ class Scheduler:
             return True
 
         return self.store.run(commit)
+
+
+def held_redrives(job: dict) -> int:
+    """Nonnegative integer metadata; integral Firestore doubles are valid.
+
+    Invalid legacy metadata is repaired from zero on the next committed re-drive.
+    Log only the static signal, never the malformed value or content.
+    """
+    count = job.get('held_redrives', 0)
+    if type(count) is int and count >= 0:
+        return count
+    if type(count) is float and math.isfinite(count) and count >= 0 and count.is_integer():
+        return int(count)
+    logger.warning('event=batch_held_redrives_malformed action=restart_budget')
+    return 0
+
+
+def account_held_redrive(job: dict, now: float) -> bool:
+    """Account a verified held re-drive; return its once-per-unit spent event.
+
+    Durable accounting bounds class 3 independently of the telemetry switch.
+    The caller emits the returned signal only after the transaction commits.
+    Input-expiring repairs consume no held grant.
+    """
+    if job.get('dead_letter_reason') == 'input_expiring':
+        return False
+    prior = held_redrives(job)
+    spent = prior >= MAX_HELD_REDRIVES and 'held_redrive_budget_spent_at' not in job
+    job['held_redrives'] = prior + 1
+    if spent:
+        job['held_redrive_budget_spent_at'] = now
+    if held_redrive_budget_enabled() and prior < MAX_HELD_REDRIVES and retry_cap_enforced_for(job.get('owner_id', '')):
+        job['held_redrive_last_attempt'] = job.get('attempt', 0)
+        job['attempt'] = 0
+    return spent and held_redrive_counter_enabled()
+
+
+def retry_cap_enforced_for(owner_id: str) -> bool:
+    """Whether the batch lease-expiry retry cap quarantines at the cap for this owner."""
+    # Rollback: switching class 1 OFF stops new cap enforcement; existing grants
+    # persist until they finish; no clawback. Each grant is capped at
+    # MAX_ATTEMPTS only while the retry cap enforces for the owner (class 1 on,
+    # or the owner in the served cohort). With class 1 off, lease expiries
+    # defer, as on main.
+    from utils.capture.retry_cap import retry_cap
+
+    decision = retry_cap(owner_id, 0, 1, enforce=True)
+    return decision is not None and decision.serving

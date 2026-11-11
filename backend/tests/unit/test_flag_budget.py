@@ -49,6 +49,7 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
     'PROJECTION_DRAIN_CLAIM_AWARE',
     'PROJECTION_DRAIN_PRIVACY_BACKOFF',
     'PROJECTION_PRIVACY_REFUSAL_RESUME',
@@ -62,6 +63,10 @@ HELPER_KILL_SWITCHES = {
     'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
     'HOME_HIDE_BELOW_FLOOR_ROWS',
+    'EPISODE_COMPOSER_THRIFT',
+    'SUMMARY_PROJECTION_DEBT_ENABLED',
+    'EPISODE_COMPOSER_REUSE',
+    'HOME_EMPTY_OUTPUT_NOISE',
 }
 
 SCOPE = (
@@ -189,7 +194,7 @@ def test_budget_file_declares_scope_and_count():
     assert isinstance(data['retired'], dict)
 
 
-def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
+def test_helper_kill_switch_budget_entries_match_the_live_registry():
     data = _load()
     names = data['names']
     helper_names = {name for name, entry in names.items() if entry.get('registry')}
@@ -197,13 +202,18 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     # outside the pipeline scanner's scope. Keep helper kill switches separate.
     rollout_name = 'SERVER_BATCH_ONLY_WEB_PERCENT'
     assert helper_names == HELPER_KILL_SWITCHES | {
+        'PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED',
         'CONVERSATION_TERMINAL_FAMILY_MODE',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'BATCH_HELD_POLL_SKIP_ENABLED',
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
         'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED',
+        'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED',
     }
 
     # Keep this inventory check inside the fast-unit CPU budget; the C safe
@@ -212,12 +222,18 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         FEATURE_FLAGS_PATH.read_text(encoding='utf-8'), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
     )
     flags = {flag['key']: flag for flag in registry['flags']}
+    # Registry lanes are assigned independently of the budget exception owners.
+    # The ad1268 sweep replaces account ownership; don't freeze the former account
+    # or require a test edit whenever a lane takes ownership of a registry row.
+    for name in helper_names:
+        assert isinstance(flags[name]['owner'], str) and flags[name]['owner'].strip()
+        assert flags[name]['owner'].strip().casefold() != 'dazheng'
     pump_name = 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'
     assert names[pump_name]['owner'] == 'omi-pipeline / lead2'
     assert names[pump_name]['review_by'] == '2026-12-05'
-    assert flags[pump_name]['owner'] == 'lead2'
     assert flags[pump_name]['kind'] == 'env'
-    assert flags[pump_name]['lifecycle'] == 'ops_kill'
+    assert flags[pump_name]['lifecycle'] == 'rollout'
+    assert flags[pump_name]['review_by'] == '2026-11-22'
     assert flags[pump_name]['fail'] == 'closed'
     sweep_name = 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP'
     assert names[sweep_name]['owner'] == 'omi-pipeline / lead2'
@@ -229,8 +245,8 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     unsupported = names['SERVER_BATCH_UNSUPPORTED_LANGUAGES']
     assert unsupported['owner'] == 'planscost'
     assert unsupported['review_by'] == '2026-11-30'
-    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['lifecycle'] == 'ops_kill'
-    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['owner'] == 'planscost'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['lifecycle'] == 'rollout'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['review_by'] == '2026-11-22'
     assert 'SERVER_BATCH_UNSUPPORTED_LANGUAGES' in set(env_reads((BACKEND_DIR / 'config/server_batch.py').read_text()))
     rollout = flags[rollout_name]
     assert names[rollout_name]['owner'] == rollout['owner'] == 'planscost'
@@ -255,11 +271,24 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         elif name == 'PROJECTION_DRAIN_CLAIM_AWARE':
             assert entry['owner'] == 'two-lane lead'
             assert entry['review_by'] == '2026-12-05'
+        elif name == 'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF':
+            assert entry['replaces'] == 'SYNC_BACKFILL_INFLIGHT_LIMIT'
+            assert 'SYNC_BACKFILL_INFLIGHT_LIMIT' not in names
+            assert data['retired']['SYNC_BACKFILL_INFLIGHT_LIMIT']['replaced_by'] == name
+            assert entry['owner'] == 'omi-pipeline'
+            assert entry['review_by'] == '2026-12-08'
+        elif name in {
+            'EPISODE_COMPOSER_THRIFT',
+            'SUMMARY_PROJECTION_DEBT_ENABLED',
+            'HOME_EMPTY_OUTPUT_NOISE',
+            'EPISODE_COMPOSER_REUSE',
+        }:
+            assert entry['owner'] == 'refactor-lead'
+            assert entry['review_by'] == '2026-12-10'
         else:
             striped = name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED'
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')
             assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
-        assert flag['owner'] == ('omi-pipeline' if name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED' else 'dazheng')
         assert flag['kind'] == 'env'
         assert flag['lifecycle'] == 'ops_kill'
         assert 'backend' in flag['surfaces']

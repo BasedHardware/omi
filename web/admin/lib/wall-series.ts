@@ -591,17 +591,23 @@ export function growthFrames(
     for (const r of rows)
       if (Number(r[0]) === p && String(r[1]).startsWith(DAYS_ROW_PREFIX))
         lcurve[p][String(r[1]).slice(DAYS_ROW_PREFIX.length)] = Number(r[2]);
+    // Growth accounting compares against the prior period. When that period
+    // starts before full telemetry, its users are undercounted: "lost" shrinks
+    // and "back after a break" swells (the 2026-05-14 quick ratio read 3.9).
+    const accounted =
+      isoDay(shiftDay(end, -7 * (p + 2))) >= QUALIFIED_TELEMETRY_START;
     points.set(isoDay(shiftDay(end, -7 * p - 1)), {
       total,
       macos: a.split.macos,
       mobile: a.split.mobile,
       other: a.split.other,
       mcp: a.split.mcp ?? null,
-      new: fresh,
-      resurrected,
-      retained,
-      churned: -churned,
-      quickRatio: churned ? round((fresh + resurrected) / churned) : null,
+      new: accounted ? fresh : null,
+      resurrected: accounted ? resurrected : null,
+      retained: accounted ? retained : null,
+      churned: accounted ? -churned : null,
+      quickRatio:
+        accounted && churned ? round((fresh + resurrected) / churned) : null,
       stickiness: total ? round((100 * sum(3)) / (7 * total), 1) : null,
     });
   }
@@ -690,12 +696,12 @@ export function funnelFrames(legs: Legs, now: Date) {
   const funnel: Row[] = people
     ? [
         {
-          step: "Share of new users",
+          step: "New users",
           Device: percent(count(device(latest), PEOPLE), people),
           Organic: percent(count(organic(latest), PEOPLE), people),
         },
         split(
-          "Onboarded (phone and Mac)",
+          "Onboarded",
           latest.filter((r) => ONBOARDING_PLATFORMS.includes(r[1])),
           ONBOARDED
         ),
@@ -704,7 +710,7 @@ export function funnelFrames(legs: Legs, now: Date) {
     : [];
   const older = week(FUNNEL_KEPT_PERIOD);
   if (people && count(older, PEOPLE))
-    funnel.push(split("Kept, weeks 2–5 (older cohort)", older, KEPT));
+    funnel.push(split("Kept, weeks 2–5", older, KEPT));
 
   // Users ride in the label, largest platform first, as on Activation by capture.
   const funnelPlatforms: Row[] = Object.entries(FUNNEL_PLATFORMS)
@@ -1248,7 +1254,11 @@ export function marginFrames(legs: Legs, allInDays: CostDay[], now: Date) {
   const allIn = new Map(allInDays.map((d) => [d.date, d.total]));
   const known = new Set<string>(MARGIN_PLANS);
   const rows: Row[] = [];
-  for (let k = MARGIN_DAYS; k >= 1; k--) {
+  // The panel window is now − MARGIN_DAYS (`timeFrom` 35d), so the day
+  // MARGIN_DAYS back starts at 00:00Z before it and can never render. When
+  // that was the only row, Grafana said "Data outside time range" instead of
+  // the board's empty-state message (2026-11-10).
+  for (let k = MARGIN_DAYS - 1; k >= 1; k--) {
     const day = isoDay(shiftDay(utcDay(now), -k));
     const plans = legs.planCost?.plans[day];
     const book = legs.finops?.mrr[day];

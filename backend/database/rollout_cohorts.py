@@ -77,7 +77,14 @@ RAMP_HISTORY_COLLECTION = 'history'
 RAMP_SCHEMA_VERSION = 1
 # A reader older than a name rejects the whole document (it serves last-known-good), so a new
 # name is written only after every `_ramp` reader runs a build that knows it.
-RAMP_NAMES = ('batch-pipeline', 'first-summary', 'batch-live-stt-retire', 'legacy-sync', 'batch-vendor-routing')
+RAMP_NAMES = (
+    'batch-pipeline',
+    'first-summary',
+    'batch-live-stt-retire',
+    'legacy-sync',
+    'batch-vendor-routing',
+    'new-owner-cell1',
+)
 # Names whose percent is a subset of the batch-pipeline bucket (same empty salt).
 BATCH_NESTED_RAMP_NAMES = ('batch-live-stt-retire', 'batch-vendor-routing')
 LEGACY_SYNC_MODES = ('on', 'draining', 'dark')
@@ -120,6 +127,19 @@ def _optional_str(value: Any, field: str, limit: int = 128) -> str | None:
     if not isinstance(value, str) or not value or len(value) > limit:
         raise RampDocumentError(f'ramp {field} malformed')
     return value
+
+
+def _audit_reason_base(reason: object) -> str:
+    # Full override evidence belongs to history. Keep the serving reason token
+    # readable by already deployed readers with the original 40-character schema.
+    if not isinstance(reason, str):
+        raise RampDocumentError('ramp reason malformed')
+    base_reason, sep, override = reason.partition(' accept_not_live:')
+    if not _is_token(base_reason, _TOKEN_RE) or (
+        sep and (len(override.strip()) < 15 or any(ord(c) < 32 for c in override))
+    ):
+        raise RampDocumentError('ramp reason malformed')
+    return base_reason
 
 
 def normalize_ramp_env(raw: Any) -> dict[str, Any]:
@@ -258,8 +278,7 @@ def write_ramp(
         raise RampDocumentError('ramp env unsupported')
     if not _is_token(actor, _ACTOR_RE):
         raise RampDocumentError('ramp actor malformed')
-    if not _is_token(reason, _TOKEN_RE):
-        raise RampDocumentError('ramp reason malformed')
+    base_reason = _audit_reason_base(reason)
     if not _is_revision(expected_revision):
         raise RampDocumentError('ramp expected_revision malformed')
     client = firestore_client or get_data_plane_firestore_client()
@@ -277,7 +296,7 @@ def write_ramp(
             raise RampRevisionConflict(expected_revision, current_revision)
         before: dict[str, Any] = current_envs.get(env) or empty_ramp_env()
         after = apply_ramp_change(before, change)
-        after.update(updated_at=at, updated_by=actor, reason=reason)
+        after.update(updated_at=at, updated_by=actor, reason=base_reason)
         revision = expected_revision + 1
         envs = {**current_envs, env: after}
         transaction.set(ref, {'schema_version': RAMP_SCHEMA_VERSION, 'revision': revision, 'envs': envs})

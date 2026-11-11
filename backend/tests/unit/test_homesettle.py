@@ -348,10 +348,22 @@ def test_member_kill_switch_restores_version_and_cache_with_header(monkeypatch, 
     from types import SimpleNamespace
 
     routes = conversation_routes
-    # Both independent time-dependent Home projections must be off for writer-version caching.
+    # All independent time-dependent Home projections must be off for writer-version caching.
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'off')
     monkeypatch.setenv('HOME_HIDE_EPISODE_MEMBERS', 'off')
-    request = Request({'type': 'http', 'headers': [(b'x-omi-home-episode-ids', b'e:a')]})
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'false')
+    request = Request(
+        {
+            'type': 'http',
+            'headers': [
+                (b'x-omi-home-episode-ids', b'e:a'),
+                (b'x-omi-home-ownership', b'1'),
+                (b'x-omi-app-channel', b'beta'),
+            ],
+            'query_string': b'',
+        }
+    )
     cached = Response(status_code=304) if not_modified else None
     finish = Mock()
     start = Mock(return_value=SimpleNamespace(not_modified=cached, finish=finish))
@@ -537,3 +549,99 @@ def test_batch_placeholders_coexist_with_neutral_titles_and_floor_holding(deadli
     assert (by_id['pending']['title'], by_id['pending']['status']) == (title, status)
     assert 'floor' not in by_id
     assert members == before
+
+
+@pytest.mark.parametrize(
+    'channel,bound,hidden',
+    [
+        (None, None, False),
+        ('store', None, False),
+        ('beta', 'start_date', False),
+        ('beta', 'end_date', False),
+        ('beta', None, True),
+    ],
+)
+def test_live_home_suppression_requires_this_clients_unfiltered_capability(monkeypatch, channel, bound, hidden):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    monkeypatch.setattr(home_membership, 'suppress_held_members', lambda uid, rows, held: rows)
+    read = Mock(return_value={'id': 'e', 'conversation_ids': ['a']})
+    monkeypatch.setattr(home_membership, 'live_owner', read)
+    headers = {
+        'X-Omi-Home-Ownership': '1',
+        home_membership.HELD_EPISODES_HEADER: 'e:a',
+        **({'X-Omi-App-Channel': channel} if channel else {}),
+    }
+    request = SimpleNamespace(headers=headers, query_params={bound: NOW.isoformat()} if bound else {})
+    response = SimpleNamespace(headers={})
+    rows = [floor(id='a', episode_id='e')]
+    assert home_membership.project_list('u', rows, request, response, filtered=False) == ([] if hidden else rows)
+    assert read.call_count == int(hidden)
+    assert response.headers.get(home_membership.SUPPRESSED_HEADER, '') == ('a' if hidden else '')
+    assert home_membership.live_suppression_for('u', request) == hidden  # Version cache must be bypassed when dynamic.
+
+
+def test_old_beta_client_does_not_opt_into_live_home_suppression(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    request = SimpleNamespace(headers={'X-Omi-App-Channel': 'beta'}, query_params={})
+    assert not home_membership.live_suppression_for('u', request)
+
+
+@pytest.mark.parametrize('echo', ['', 'other:a', 'e:a', 'malformed'])
+@pytest.mark.parametrize('held_switch', ['on', 'off'])
+def test_live_snapshot_failure_or_disagreement_keeps_recordings_visible(monkeypatch, echo, held_switch):
+    from types import SimpleNamespace
+
+    configure_membership(monkeypatch)
+    monkeypatch.setenv('HOME_HIDE_EPISODE_MEMBERS', held_switch)
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    monkeypatch.setattr(home_membership, 'live_owner', lambda uid: episode(status='live'))
+    monkeypatch.setattr(home_membership.episodes, 'get_home_episode_snapshots', lambda *a: {})
+    request = SimpleNamespace(
+        headers={
+            'X-Omi-Home-Ownership': '1',
+            'X-Omi-App-Channel': 'beta',
+            home_membership.HELD_EPISODES_HEADER: echo,
+        },
+        query_params={},
+    )
+    rows = [floor(episode_id='e'), floor(id='outside', episode_id='closed')]
+    # Snapshot-fetch failure sends no echo; stale or missing echoes fail visible.
+    assert home_membership.project_list('u', rows, request, None, filtered=False) == (
+        rows[1:] if echo == 'e:a' else rows
+    )
+
+
+@pytest.mark.parametrize('linked', [False, True])
+def test_stale_live_snapshot_keeps_unacknowledged_new_member_visible(monkeypatch, linked):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    owner = episode(status='live', conversation_ids=['a', 'b'] if linked else ['a'])
+    monkeypatch.setattr(home_membership, 'live_owner', lambda uid: owner)
+    monkeypatch.setattr(home_membership, 'suppress_held_members', lambda uid, rows, held: rows)
+    request = SimpleNamespace(
+        headers={
+            'X-Omi-Home-Ownership': '1',
+            'X-Omi-App-Channel': 'beta',
+            home_membership.HELD_EPISODES_HEADER: 'e:a',
+        },
+        query_params={},
+    )
+    # b is either newly attached or only overlaps the server's live window.
+    rows = [
+        floor(episode_id='e'),
+        floor(
+            id='b',
+            episode_id='e' if linked else None,
+            started_at=owner['started_at'] + timedelta(minutes=1),
+            finished_at=owner['started_at'] + timedelta(minutes=2),
+        ),
+    ]
+    response = SimpleNamespace(headers={})
+    assert home_membership.project_list('u', rows, request, response, filtered=False) == rows[1:]
+    assert response.headers[home_membership.SUPPRESSED_HEADER] == 'a'
+    assert response.headers[home_membership.PAGE_SIZE_HEADER] == '2'

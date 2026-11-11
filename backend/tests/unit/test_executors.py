@@ -2,6 +2,7 @@
 
 import asyncio
 import contextvars
+import importlib
 import logging
 import threading
 import time
@@ -25,6 +26,16 @@ from utils.executors import (
 
 _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="test")
 _test_ctxvar = contextvars.ContextVar("test_key", default=None)
+
+
+@pytest.fixture(scope='module', autouse=True)
+def exception_reporting_dependencies():
+    # These tests time task execution and exception logging, not cold imports.
+    # Both dependencies are deliberately lazy in production. Initialize them
+    # during setup, retaining the existing two-second Future deadlines and all
+    # real classification/logging assertions below.
+    importlib.import_module('utils.llm.gateway_error_contract')
+    _openrouter_credit_exhausted_error()
 
 
 @pytest.mark.asyncio
@@ -211,6 +222,7 @@ def test_get_executor_metrics_returns_all_pools():
         'quiet_replay',
         'critical',
         'db',
+        'read_cache_shadow',
         'record_barrier',
         'llm',
         'stripe',

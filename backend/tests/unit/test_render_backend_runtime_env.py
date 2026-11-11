@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from datetime import datetime, timezone
+from config.firestore_read_levers import lever_percent
 from config.plan_catalog import (
     LADDER_V1_PRICE_BINDINGS,
     RECOGNIZED_STRIPE_PRICE_PLAN_TYPES,
@@ -1325,7 +1326,7 @@ def test_full_render_refuses_to_emit_when_a_service_key_would_be_removed(monkeyp
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(environment):
+def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(environment, monkeypatch):
     """A base edit must neither enable unqualified readers nor miss CR overrides."""
     config = _MANIFEST['environments'][environment]
     cloud_run = config['cloud_run']['services']
@@ -1376,7 +1377,16 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
                 'usage_month_cache',
                 'usage_month_total',
             }
+        # Ruling ec191a row 3: pin the live Cloud Run literals without widening other hosts.
+        if enabled:
+            wanted.update(
+                privacy_negative_lookup_cache=100,
+                privacy_checks_shadow=100 if name == 'cloud_run/backend-sync-backfill' else 10,
+                batch_timeliness_leader=0,
+            )
         assert json.loads(literal['value']) == wanted, name
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal['value'])
+        assert lever_percent('episode_members_cache') == 0, name
         epoch = 'c2fs_20261026_r1' if enabled else 'v1'
         assert env['FSR_USAGE_MONTH_TOTAL_EPOCH']['value'] == epoch, name
         if name.startswith('cloud_run/'):
@@ -1386,6 +1396,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
                     {key: env[key] for key in ('FIRESTORE_READ_LEVERS', 'FSR_USAGE_MONTH_TOTAL_EPOCH')}
                 )
             }
+            assert rendered['FIRESTORE_READ_LEVERS'] == literal['value'], name
             assert json.loads(rendered['FIRESTORE_READ_LEVERS']) == wanted, name
             assert rendered['FSR_USAGE_MONTH_TOTAL_EPOCH'] == epoch, name
     for chart in ('backend-listen', 'pusher'):
@@ -1393,4 +1404,6 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         values = yaml.safe_load(values_path.read_text())
         chart_env = {entry['name']: entry.get('value') for entry in values['env']}
         assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == expected
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', chart_env['FIRESTORE_READ_LEVERS'])
+        assert lever_percent('episode_members_cache') == 0, chart
         assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == 'v1'

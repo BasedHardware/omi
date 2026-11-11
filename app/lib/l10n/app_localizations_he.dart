@@ -9104,6 +9104,24 @@ class AppLocalizationsHe extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'לא ניתן לקבוע את גרסת הקושחה הנוכחית';
 
   @override
+  String get applyCodeToCurrentPlan => 'החל על התוכנית הנוכחית';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'הקוד הוחל על התוכנית הנוכחית שלך.',
+        'refused': 'לא ניתן להחיל קוד זה. בדוק את הקוד ואת התוכנית הנדרשת.',
+        'conflict': 'הקוד כבר נוצל או שכבר יש הנחה בתוכנית שלך.',
+        'rateLimited': 'יותר מדי ניסיונות. המתן ונסה שוב מאוחר יותר.',
+        'other': 'לא ניתן היה להחיל את הקוד. נסה שוב.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'קוד קידום';
 
   @override
@@ -13554,6 +13572,9 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'יצירת הערות מחדש';
 
   @override
   String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';

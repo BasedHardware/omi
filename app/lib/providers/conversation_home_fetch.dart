@@ -2,6 +2,20 @@ part of 'conversation_provider.dart';
 
 /// Home fetch projection keeps its held replacements and storage cursor in one boundary.
 extension _ConversationHomeFetch on ConversationProvider {
+  int _recordServerPageIds(List<ServerConversation> rows, int storageCount) {
+    final prefs = SharedPreferencesUtil();
+    var retained = storageCount;
+    for (final row in rows) {
+      if (prefs.isConversationDeleteConfirmed(row.id)) {
+        // This response still counted a row that is gone from the next page's storage cursor.
+        retained--;
+      } else {
+        _conversationServerLoadedIds.add(row.id);
+      }
+    }
+    return retained < 0 ? 0 : retained;
+  }
+
   /// A newest-page refresh proves nothing about cached pages older than its boundary.
   Iterable<ServerConversation> _cachedRowsBeforePage(
       List<ServerConversation> page, Iterable<ServerConversation> cached) sync* {
@@ -9,12 +23,42 @@ extension _ConversationHomeFetch on ConversationProvider {
     // GET /v1/conversations orders storage pages by created_at, not recorded start.
     final boundary = page.map((c) => c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b);
     for (final row in _filterPendingDeletes(cached.toList())) {
-      if (row.status == ConversationStatus.completed &&
-          !row.createdAt.isAfter(boundary) &&
-          _matchesActiveConversationFilters(row)) {
+      if (_isHomeListRow(row) && !row.createdAt.isAfter(boundary) && _matchesActiveConversationFilters(row)) {
         yield row;
       }
     }
+  }
+
+  Future<bool> _restoreCacheForFetch(int generation, int fetchRevision) async {
+    final ownerUid = SharedPreferencesUtil().uid;
+    final cached = await _conversationCacheLoader();
+    if (generation != _sessionGeneration ||
+        fetchRevision != _conversationFetchRevision ||
+        !_isSignedIn() ||
+        SharedPreferencesUtil().uid != ownerUid) {
+      return false;
+    }
+    final activeProcessingIds = processingConversations
+        .where((conversation) => _isActiveProcessingStatus(conversation.status))
+        .map((conversation) => conversation.id)
+        .toSet();
+    bool visible(ServerConversation conversation) =>
+        !activeProcessingIds.contains(conversation.id) &&
+        !_isHiddenByDelete(conversation.id) &&
+        _matchesActiveConversationFilters(conversation);
+    // The fallback starts with an empty list. Rows delivered during decode
+    // (including local phone rows) win over older cached objects with that ID.
+    final restored = <String, ServerConversation>{
+      for (final conversation in cached)
+        if (visible(conversation)) conversation.id: conversation,
+      for (final conversation in conversations)
+        if (visible(conversation)) conversation.id: conversation,
+      for (final conversation in _phoneOnlyConversations.values)
+        if (visible(conversation)) conversation.id: conversation,
+    };
+    conversations = restored.values.map(_restoreHomeProcessingProjection).toList()
+      ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    return true;
   }
 
   Map<String, List<ServerConversation>> get _homeEpisodeAcknowledgements => !hasActiveSearch &&

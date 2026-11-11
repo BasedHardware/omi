@@ -57,6 +57,9 @@ from models.sync_job_status import (
 )
 from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
+from database import record_audio as record_audio_db
+from config import record_seal_rules as record_lease
+from utils.sync import record_token_lease as custody_lease
 from database import fair_use as fair_use_db
 from database import sync_dead_letters, sync_backfill_sequencer
 from database import users as users_db
@@ -174,6 +177,7 @@ from utils.sync.repeat_work_metrics import (
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
+from config.firestore_read_levers import lever_enabled
 from utils.subscription import (
     TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS,
     has_transcription_credits,
@@ -235,9 +239,8 @@ from utils.sync.backfill import (
     release_backfill_slot,
     reserve_backfill_speech,
     retry_after_next_utc_day,
-    try_acquire_backfill_slot,
 )
-from utils.batch_pipeline.live_upload import RecordUploadRoute, registered_record_response
+from utils.batch_pipeline.live_upload import RecordUploadRoute, memoized_record_wait, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
 from utils.sync.failure_reason import stamped_failure_kwargs
 from utils.sync.capture_manifest import (
@@ -303,6 +306,22 @@ router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(
 router.include_router(coverage_router)
 
 
+async def _renew_custody_lease(uid, conversation_id):
+    if not record_lease.token_lease_serving(uid):
+        return
+    try:
+        await run_blocking(
+            db_executor,
+            record_audio_db.renew_record_token_lease,
+            uid,
+            conversation_id,
+            source='custody_append',
+        )
+    except Exception as error:
+        logger.warning('event=record_token_lease_renewal outcome=unavailable exception_type=%s', type(error).__name__)
+        raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission') from error
+
+
 @router.post('/v2/sync-capture-manifest', response_model=SyncCaptureManifestResponse)
 async def create_sync_capture_manifest(
     payload: SyncCaptureManifestRequest,
@@ -327,6 +346,7 @@ async def create_sync_capture_manifest(
     )
     if not trusted:
         raise HTTPException(status_code=403, detail='Fresh capture provenance could not be verified')
+    await _renew_custody_lease(uid, payload.conversation_id)
     claims = [item.model_dump() for item in payload.files]
     try:
         claimed = await run_blocking(
@@ -601,6 +621,7 @@ def sync_local_files(uid: str = Depends(auth.get_current_user_uid)):
     responses=SYNC_LOCAL_FILES_V2_RESPONSES,
 )
 @max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
+@custody_lease.custody_upload
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
@@ -651,6 +672,10 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    if repair_identity is None and (recent_wait := await memoized_record_wait(uid, conversation_id)) is not None:
+        # The same conversation-level custody wait answered moments ago: repeat
+        # it before saving, archiving or decoding these bytes (audio retained).
+        return recent_wait
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
     else:
@@ -789,10 +814,18 @@ async def sync_local_files_v2(
 
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
-    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+    # Reuse the first answer. At 0, preserve the old wrapper + conditional second lookup,
+    # including its different lock decision if allowance state changes between calls.
+    if lever_enabled('sync_allowance_single_resolve', uid):
+        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        has_credits = allowance.managed
+    else:
+        has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+        allowance = None
     should_lock = False
     if not has_credits:
-        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        if allowance is None:
+            allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
         should_lock = (
             allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
             and allowance.reason != 'usage_budget_exhausted'
@@ -818,6 +851,7 @@ async def sync_local_files_v2(
     sequencer_registration_started = False
 
     try:
+        await custody_lease.begin_upload(uid, conversation_id, job_id, recording_session_id=recording_session_id)
         # --- Fast path: save raw files only (< 2s typical) ---
         # Use sync_executor, NOT storage_executor — storage is saturated with
         # background pipeline cleanup/GCS work and would queue the 202 response.
@@ -897,8 +931,7 @@ async def sync_local_files_v2(
 
         # Keep original bytes before any 202, content-cache hit, decode or VAD.
         # An archive failure leaves the client responsible for retrying its WAL.
-        archive_paths = await run_blocking(
-            sync_executor,
+        archive_paths = await custody_lease.archive(
             archive_mobile_batch_raw_files,
             uid,
             paths,
@@ -911,6 +944,7 @@ async def sync_local_files_v2(
             },
         )
 
+        custody_lease.stored(paths, archive_paths)
         candidate_policy = resolve_batch_policy(uid)
         intake_evidence = IntakeRouteEvidence()
         batch_policy = await run_blocking(
@@ -1055,6 +1089,10 @@ async def sync_local_files_v2(
             total_files=len(files),
             total_segments=0,
             job_id=job_id,
+            # Live WAL uploads already supply their target and recording session.
+            # Session-only uploads keep an unknown target; do not infer membership.
+            recording_ids=[recording_session_id] if recording_session_id else [],
+            target_conversation_id=conversation_id if isinstance(conversation_id, str) else None,
             lane=lane_decision.lane.value,
             capture_time_trust=lane_decision.trust.value,
             recording_age_seconds=lane_decision.maximum_age_seconds,
@@ -1823,10 +1861,12 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
                 summary = await run_blocking(db_executor, summary_debt_repair.tick)
             except Exception as error:
                 logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
-                summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
+                summary = {'scanned': 0, 'admitted': 0, 'near_expiry_admitted': 0, 'errors': 1, 'expired_seen': 0}
             outcomes['summary_debt_scanned'] = summary['scanned']
             outcomes['summary_debt_admitted'] = summary['admitted']
+            outcomes['summary_debt_near_expiry_admitted'] = summary.get('near_expiry_admitted', 0)
             outcomes['summary_debt_errors'] = summary['errors']
+            outcomes['summary_debt_expired_seen'] = summary['expired_seen']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 

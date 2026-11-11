@@ -40,6 +40,18 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    FirestoreIndexRequirement(
+        'conversations_summary_repair_window',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('summary_first_pending_at'), _asc('summary_due_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_summary_repair_newest',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_desc('summary_first_pending_at'), _asc('summary_due_at'), _asc('__name__')),
+    ),
     *LIFECYCLE_METRICS_INDEX_REQUIREMENTS,
     *BATCH_PIPELINE_INDEX_REQUIREMENTS,
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,
@@ -2224,6 +2236,7 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
+    FieldIndexRequirement('record_custody_receipt_expiry', 'record_custody_recoveries', 'recorded_at', ('ASCENDING',)),
     FieldIndexRequirement('lifecycle_pair_finalization_status', 'conversations', 'finalization_status', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_processing_state', 'processing_backlog', 'state', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_hold_state', 'stt_cap_holds', 'state', ('ASCENDING',)),
@@ -2231,6 +2244,7 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
     FieldIndexRequirement(
         'conversations_summary_due_group_ascending', 'conversations', 'summary_due_at', ('ASCENDING',)
     ),
+    FieldIndexRequirement('pipeline_ledger_admitted_group_ascending', 'pipeline_ledger', 'admitted_at', ('ASCENDING',)),
     FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
     FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
     FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),

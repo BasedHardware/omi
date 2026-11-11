@@ -134,6 +134,17 @@
         "title": "AccountCutoverClientAction",
         "type": "string"
       },
+      "AccountCutoverClientState": {
+        "description": "Cutover state as released clients decode it.\n\n``migrated`` (a cell cutover) is server-internal: routing is invisible to\nclients, so the control projection reports it as ``legacy``.",
+        "enum": [
+          "legacy",
+          "migrating",
+          "new",
+          "rolled_back_stranded"
+        ],
+        "title": "AccountCutoverClientState",
+        "type": "string"
+      },
       "AccountCutoverControl": {
         "additionalProperties": false,
         "description": "Authenticated bootstrap/control projection for bridge clients.",
@@ -191,7 +202,7 @@
             "type": "integer"
           },
           "state": {
-            "$ref": "#/components/schemas/AccountCutoverState",
+            "$ref": "#/components/schemas/AccountCutoverClientState",
             "default": "legacy"
           },
           "stranded_new_data": {
@@ -262,17 +273,6 @@
         },
         "title": "AccountCutoverManifestSummary",
         "type": "object"
-      },
-      "AccountCutoverState": {
-        "description": "Legal whole-account cutover states.\n\n``rolled_back_stranded`` records that the account returned to the legacy\ndata plane after ``new`` while acknowledging that new-backend writes may\nremain stranded and are not automatically reconciled.",
-        "enum": [
-          "legacy",
-          "migrating",
-          "new",
-          "rolled_back_stranded"
-        ],
-        "title": "AccountCutoverState",
-        "type": "string"
       },
       "AccountDeletionActionResponse": {
         "properties": {
@@ -9226,6 +9226,38 @@
         "title": "ColdStartSequenceTerminalReceipt",
         "type": "object"
       },
+      "ConnectorAccess": {
+        "properties": {
+          "client_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Client Ids",
+            "type": "array"
+          },
+          "default_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Scopes",
+            "type": "array"
+          },
+          "required_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "client_ids",
+          "required_scopes",
+          "default_scopes"
+        ],
+        "title": "ConnectorAccess",
+        "type": "object"
+      },
       "ConnectorSynthesisRequest": {
         "additionalProperties": false,
         "properties": {
@@ -16286,6 +16318,11 @@
             ],
             "title": "Closed At"
           },
+          "compose_deferred": {
+            "default": false,
+            "title": "Compose Deferred",
+            "type": "boolean"
+          },
           "conversation_ids": {
             "items": {
               "type": "string"
@@ -16513,6 +16550,22 @@
               }
             ],
             "title": "Finished At"
+          },
+          "gist": {
+            "default": "",
+            "title": "Gist",
+            "type": "string"
+          },
+          "home_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Step"
           },
           "id": {
             "title": "Id",
@@ -21724,6 +21777,9 @@
             ],
             "title": "App Id"
           },
+          "connector_access": {
+            "$ref": "#/components/schemas/ConnectorAccess"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -21827,6 +21883,14 @@
       },
       "McpOauthGrantsResponse": {
         "properties": {
+          "connector_access": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ConnectorAccess"
+            },
+            "default": {},
+            "title": "Connector Access",
+            "type": "object"
+          },
           "grants": {
             "default": [],
             "items": {
@@ -25639,6 +25703,17 @@
             "title": "Duration Seconds",
             "type": "number"
           },
+          "home_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Step"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -25650,6 +25725,11 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "recording_count": {
+            "default": 1,
+            "title": "Recording Count",
+            "type": "integer"
           },
           "started_at": {
             "anyOf": [
@@ -25705,6 +25785,11 @@
           },
           "enabled": {
             "title": "Enabled",
+            "type": "boolean"
+          },
+          "home_processing_today": {
+            "default": false,
+            "title": "Home Processing Today",
             "type": "boolean"
           },
           "items": {
@@ -30246,6 +30331,19 @@
             "title": "Fcm Token",
             "type": "string"
           },
+          "registration_order": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Order"
+          },
           "time_zone": {
             "title": "Time Zone",
             "type": "string"
@@ -34546,6 +34644,12 @@
             },
             "title": "Events",
             "type": "array"
+          },
+          "gist": {
+            "default": "",
+            "description": "One line of at most 12 words saying what this conversation was about",
+            "title": "Gist",
+            "type": "string"
           },
           "insights": {
             "description": "Insights connecting supplied background context to this conversation; empty without background",
@@ -66410,6 +66514,35 @@
         ]
       }
     },
+    "/v1/mcp/keys/scopes": {
+      "get": {
+        "operationId": "get_mcp_key_scope_contract",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Key Scope Contract",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
     "/v1/mcp/keys/{key_id}": {
       "delete": {
         "operationId": "delete_key_v1_mcp_keys__key_id__delete",
@@ -69449,6 +69582,38 @@
       "get": {
         "operationId": "pending_work_v1_pending_work_get",
         "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Home-Ownership",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Home-Ownership"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -85565,7 +85730,7 @@
     },
     "/v2/firmware/latest": {
       "get": {
-        "description": "Return the newest eligible update using stable device rollout cohorts.\n\ndevice_id is the hex SHA-256 of the device's normalized DIS serial, never the\nraw serial. Omit it when no serial is available; unidentified clients cannot\nreceive partial rollouts. Blocked releases are never offered.",
+        "description": "Return the newest eligible update using stable device rollout cohorts.\n\ndevice_id is the hex SHA-256 of the device's normalized DIS serial, never the\nraw serial. Omit it when no serial is available; unidentified clients cannot\nreceive partial rollouts. Blocked releases are never offered. Releases with an\naudience (allow_uid_sha256, channels) also read the caller's token and app channel.",
         "operationId": "get_latest_version_v2_firmware_latest_get",
         "parameters": [
           {

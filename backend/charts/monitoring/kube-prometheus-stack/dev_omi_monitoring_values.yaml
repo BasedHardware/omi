@@ -134,6 +134,8 @@ prometheus:
             names:
               - dev-omi-backend
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
           # Scope the development Prometheus instance to development targets
           # even if a future discovery change widens its Kubernetes RBAC.
           - source_labels: [__meta_kubernetes_namespace]
@@ -176,6 +178,8 @@ prometheus:
             names:
               - dev-omi-backend
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
           # The development job must never discover a production Pusher pod.
           # Namespace and immutable dev workload-label checks are deliberately
           # both retained as independent isolation boundaries.

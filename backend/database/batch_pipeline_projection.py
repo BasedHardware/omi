@@ -22,15 +22,16 @@ from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_privacy import HOLD_REASONS
 from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE as ARTIFACT_MISSING_REASON
+from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
-    batch_projection_ledger_owner_matches,
     complete_batch_partial_in_transaction,
     sync_content_ledger_ref,
     is_valid_completed_sync_content_result,
 )
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.projection_hold_observability import log_projection_hold
 from utils.batch_pipeline.scheduler import owner_key
 from database.batch_pipeline_projection_protocol import (
     ProjectionBlocked as ProjectionBlocked,
@@ -141,10 +142,12 @@ class ProjectionStore:
             if not receipt:
                 raise ProjectionBlocked('projection must persist before enrichment acknowledgment')
             receipt['state'] = 'ready'
-            session.write_receipt(transaction, receipt)
-            return receipt
+            sibling_held = session.write_receipt(transaction, receipt)
+            return receipt, sibling_held
 
-        receipt = self.run(commit, policy=policy)
+        receipt, sibling_held = self.run(commit, policy=policy)
+        if sibling_held:
+            log_projection_hold('sibling')
         self._mirror(binding)
         return receipt
 
@@ -183,7 +186,7 @@ class ProjectionStore:
             session.prepare(transaction, replay=False)
             current = session.receipt()
             if current.get('conversation_id') != output:
-                return current
+                return current, False
             try:
                 session.guard(transaction, [output])
             except BatchPrivacyBlocked as error:
@@ -197,7 +200,7 @@ class ProjectionStore:
                 ):
                     raise
             else:
-                return current
+                return current, False
             settled = {
                 **current,
                 'state': 'ready',
@@ -206,10 +209,12 @@ class ProjectionStore:
                 'enrichment_required': False,
                 'disposition': 'output_deleted',
             }
-            session.write_receipt(transaction, settled)
-            return settled
+            sibling_held = session.write_receipt(transaction, settled)
+            return settled, sibling_held
 
-        settled = self.run(commit, policy=policy)
+        settled, sibling_held = self.run(commit, policy=policy)
+        if sibling_held:
+            log_projection_hold('sibling')
         receipt.update(settled)
         self._mirror(binding)
 
@@ -293,14 +298,16 @@ class ProjectionStore:
             if len(output_ids) > 1:
                 receipt['size_rollover_enriched'] = completed
             receipt.update(state='ready' if finished else 'persisted', conversation_id=canonical)
-            session.write_receipt(transaction, receipt)
-            return result, finished
+            sibling_held = session.write_receipt(transaction, receipt)
+            return result, finished, sibling_held
 
         while True:
             committed = self.run(firestore.transactional(commit), policy=policy)
             if committed is None:
                 break
-            result, finished = committed
+            result, finished, sibling_held = committed
+            if sibling_held:
+                log_projection_hold('sibling')
             if result.wake_token:
                 outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
             if finished:
@@ -519,7 +526,9 @@ class ProjectionStore:
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
-                if artifact_missing(job):
+                from utils.batch_pipeline.input_retention import input_expiring
+
+                if artifact_missing(job) or input_expiring(job):
                     return None, False, 0
                 if entry.get('projection_state') == 'erased':
                     if entry.get('owner_key') != owner_key(binding.owner_id) or entry.get('segment_id') != sibling:
@@ -882,7 +891,7 @@ def held_without_recovery(job: dict) -> bool:
     """
     from config.policy import RecoveryPolicy
 
-    retained_dead = job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+    retained_dead = job.get('state') == 'dead' and job.get('dead_letter_reason') in {'held_expired', 'input_expiring'}
     if (job.get('state') != 'quarantined' and not retained_dead) or job.get('result'):
         return False
     if any(

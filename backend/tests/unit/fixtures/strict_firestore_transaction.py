@@ -116,6 +116,8 @@ class StrictFirestoreDocument:
                 ["is_locked"],
                 ["folder_id"],
                 ["language"],
+                ["private_cloud_sync_enabled"],
+                ['uses_custom_stt', 'private_cloud_sync_enabled', 'data_protection_level'],
                 ['discarded', 'deleted', 'sync_merged_into'],
                 [
                     'discarded',

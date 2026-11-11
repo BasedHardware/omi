@@ -1,10 +1,10 @@
 {
   "caps": {
     "internal_time_to_signal_minutes": 49,
-    "pr_linux_minutes_per_day": 14380,
+    "pr_linux_minutes_per_day": 14400,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660. 2026-10-29 ghguards (named by David) runs both hermetic contract gauntlets on every backend PR instead of per-suite path filters (#23919 skipped the sync gauntlet on a sync-processing PR): listen 19->62 runs/day at p50 11 (+473) and sync 13->62 at p50 5 (+245), +718 Linux minutes/day (14367.4 forecast); Linux cap 14380. 2026-11-03 ciflake: backend unit fanout 6->8 with proportional p50 forecast 8->6 minutes/runner leaves aggregate forecast (48 runner-minutes/run) and all caps unchanged; measured full-suite walls motivate capacity, not a relaxed 720s test gate.",
+  "caps_rationale": "2026-11-08 cap raise 14380 to 14400: PR linux budget is 14382.4 on main, already above the old cap, so the cap moves to 14400 for that existing overage. The funnel dashboard trigger row in #24942 runs on push to main only and is not counted in this PR cap. #21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660. 2026-10-29 ghguards (named by David) runs both hermetic contract gauntlets on every backend PR instead of per-suite path filters (#23919 skipped the sync gauntlet on a sync-processing PR): listen 19->62 runs/day at p50 11 (+473) and sync 13->62 at p50 5 (+245), +718 Linux minutes/day (14367.4 forecast); Linux cap 14380. 2026-11-03 ciflake: backend unit fanout 6->8 with proportional p50 forecast 8->6 minutes/runner leaves aggregate forecast (48 runner-minutes/run) and all caps unchanged; measured full-suite walls motivate capacity, not a relaxed 720s test gate.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -68,13 +68,13 @@
       "display_name": "Backend emulator proofs",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day-plus-provisional-replay-path-forecast",
-      "expected_runs_per_day": 20,
+      "expected_runs_per_day": 21,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). WP1 replay forecasts one additional PR run/day for widened replay/batch-owner paths (19 to 20 total, including the unchanged one nightly call), adding 4 Linux runner-minutes/day within existing caps. This incremental frequency is provisional, not a production measurement. Pushes to main matching the new replay paths provisionally add at most one run per merged PR touching those paths, at the same 4-minute p50 on the same standard Linux runner and within the existing caps; this push forecast is unmeasured. Retain the existing 4-minute p50 target and standard runner; the new five-test emulator proof took 50.40 seconds locally (28.27 seconds in the scoped native-contention case). The job timeout and global caps are unchanged; terminal CI durations/frequency remain unmeasured for this new path coverage.",
+      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). WP1 replay forecasts one additional PR run/day for widened replay/batch-owner paths (19 to 20 total, including the unchanged one nightly call), adding 4 Linux runner-minutes/day within existing caps. This incremental frequency is provisional, not a production measurement. Pushes to main matching the new replay paths provisionally add at most one run per merged PR touching those paths, at the same 4-minute p50 on the same standard Linux runner and within the existing caps; this push forecast is unmeasured. Retain the existing 4-minute p50 target and standard runner; the new five-test emulator proof took 50.40 seconds locally (28.27 seconds in the scoped native-contention case). The job timeout and global caps are unchanged; terminal CI durations/frequency remain unmeasured for this new path coverage. L1 custody/nojob and lifecycle path coverage provisionally adds one PR run/day (20 to 21 total, with the existing one nightly call unchanged), or 4 Linux runner-minutes/day within existing caps. The existing lifecycle-services install step supports these proofs; retain the 4-minute p50 target and standard runner pending terminal CI measurements.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -971,7 +971,7 @@
       "runs_on": "ubuntu-latest"
     },
     "firmware_release.yml/build-cv1": {
-      "budget_p50_minutes": 30,
+      "budget_p50_minutes": 55,
       "display_name": "Omi CV1 (nRF5340)",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -980,7 +980,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Conservative cold QA allowance for the documented 20-30 minute SDK/build path replaces the unobserved 5-minute placeholder; publish skips compilation. Manual-only frequency forecast remains zero; no added jobs or automatic runs.",
+      "rationale": "Conservative cold QA allowance for the documented 20-30 minute SDK/build path replaces the unobserved 5-minute placeholder; publish skips compilation. Build-only runs now also run the CV1 simulator gate (full scenario suite plus 40 fuzz seeds in the same pinned image; not yet measured on a hosted runner), so the p50 allowance rises from 30 to 55 until the first QA run re-seeds it. Manual-only frequency forecast remains zero; no added jobs or automatic runs. CV1 custom MCUboot qualification adds one clean bootloader-only rebuild (parallelism capped at two) and a small public evidence upload inside the same manual job; retain the 55-minute allowance and zero automatic/PR run forecast. No new trigger, runner or job. Compile/proof now precedes the unchanged simulator gate so SDK or bootloader failures surface before consuming simulation time; QA staging still requires both gates.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1310,13 +1310,13 @@
       "budget_p50_minutes": 16,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "github.ref == 'refs/heads/main'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased from 15 to 16 minutes: the trigger now also spans verify_pusher_live_alert_route.py and mute-timings.json so import-path fixes re-provision alerts on main; pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes unchanged; main/dev or explicit prod only, not a measured p50.",
+      "rationale": "Planning budget increased from 15 to 16 minutes: the trigger now also spans verify_pusher_live_alert_route.py and mute-timings.json so import-path fixes re-provision alerts on main; pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes unchanged; main/dev or explicit prod only, not a measured p50. Expected runs set to 1 per day: one prod dispatch per monitoring release (lead2 ruling bf9efb, option a, no waiver).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1328,13 +1328,13 @@
       "budget_p50_minutes": 8,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 0,
-      "if": "github.ref == 'refs/heads/main'",
+      "expected_runs_per_day": 1,
+      "if": "github.ref == 'refs/heads/main' && github.event.inputs.import_grafana != 'false'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased from 7 to 8 minutes: the import now ensures referenced mute timings exist before any rule write (dev Grafana froze qualification on 2026-10-25 without it) and the trigger spans verify_pusher_live_alert_route.py and mute-timings.json; canary-first import/readback and live-STT coverage unchanged; no PR execution and no new runner.",
+      "rationale": "Planning budget increased from 7 to 8 minutes: the import now ensures referenced mute timings exist before any rule write (dev Grafana froze qualification on 2026-10-25 without it) and the trigger spans verify_pusher_live_alert_route.py and mute-timings.json; canary-first import/readback and live-STT coverage unchanged; no PR execution and no new runner. Expected runs set to 1 per day: one import per prod dispatch that leaves import_grafana at its default (lead2 ruling bf9efb, option a, no waiver).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1778,7 +1778,7 @@
       "budget_p50_minutes": 6,
       "display_name": "provision",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "github.ref == 'refs/heads/main'",
       "matrix": {
         "environment": [
@@ -1788,7 +1788,25 @@
       "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Planning budget raised to 6 minutes for exclusive dashboard/alert backups with complete readback plus the prod-only Business board and ACL step; matrix narrows to one selected environment, main auto-dev and explicit protected prod only.",
+      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 is a conservative daily ceiling and the runs are not PR runs. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated).",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "grafana_dashboard_provisioning.yml/provision-prod-ops-dashboards": {
+      "budget_p50_minutes": 5,
+      "display_name": "provision-prod-ops-dashboards",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 3,
+      "if": "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "validate",
+      "owner": "CI maintainers",
+      "rationale": "Prod Ops dashboard apply on every push to main that matches the workflow trigger paths (approved by David 2026-11-09). The apply is idempotent and has no change-detection skip, so a superseded push run cannot drop a dashboard change. Uses the production MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment, which has no required reviewers (the repo-level token is dev-only). expected_runs_per_day 3 is a conservative daily ceiling for merges plus alert and script pushes. The 5-minute p50 is a reviewed estimate for one Grafana API apply; re-measure with --reseed after the first runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1800,13 +1818,13 @@
       "budget_p50_minutes": 6,
       "display_name": "validate",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased to 6 minutes for dashboard JSON plus combined/split alert lint; triggers now also cover the Business board JSON and both dashboard provisioners; no PR execution or new runner.",
+      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 is a conservative daily ceiling and the runs are not PR runs. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2166,12 +2184,13 @@
         "role_images",
         "runtime_image_contracts",
         "sdk-cpp",
+        "sdk-dart",
         "sdk-rust",
         "web-checks",
         "windows-preflight-portability"
       ],
       "owner": "CI maintainers",
-      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu. Report also waits on sdk-dart so the Dart device SDK suite is reported nightly.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2230,6 +2249,24 @@
       "owner": "CI maintainers",
       "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
       "reusable": "./.github/workflows/sdk-cpp.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/sdk-dart": {
+      "budget_p50_minutes": 5,
+      "display_name": "sdk-dart",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 nightly call of sdk-dart.yml against the pinned main SHA; sdk-dart.yml/dart keeps its own ubuntu-latest runner and 15-minute cap, adding one daily invocation of a ~5-minute Flutter test job",
+      "reusable": "./.github/workflows/sdk-dart.yml",
       "runner": "reusable",
       "runner_counts": {
         "reusable": 1
@@ -3084,6 +3121,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "sdk-dart.yml/dart": {
+      "budget_p50_minutes": 5,
+      "display_name": "dart",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-10-19 new path-scoped job: two PRs touched sdks/device/dart since 2026-07-30; 5 minutes covers cached Flutter 3.44.5 setup, pub get and the package tests",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "sdk-rust.yml/rust": {
       "budget_p50_minutes": 5,
       "display_name": "rust",
@@ -3349,7 +3404,7 @@
     "backend-emulator-proofs.yml": {
       "name": "Backend Emulator Proofs",
       "owner": "CI maintainers",
-      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. WP1 replay adds the admission harness, its emulator tests and production input owners to the existing path filters so record-lane changes run the same offline proof; no new workflow, runner or matrix is added.",
+      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. WP1 replay adds the admission harness, its emulator tests and production input owners to the existing path filters so record-lane changes run the same offline proof; no new workflow, runner or matrix is added. L1 adds the custody-append/nojob emulator tests and lifecycle simulation/property paths to PR and main-push filters, with the existing lifecycle-services install step supplying redis-server, ffmpeg and libopus0; the job forecast explicitly includes one additional daily PR run.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3360,6 +3415,10 @@
             "backend/utils/llm/memories.py",
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
+            "backend/tests/integration/test_record_custody_append_emulator.py",
+            "backend/tests/unit/test_record_seal_nojob_emulator.py",
+            "backend/testing/lifecycle_properties/**",
+            "backend/testing/lifecycle_sim/**",
             "backend/scripts/run-emulator-proofs.sh",
             "backend/tests/integration/test_summary_task_promotion_emulator.py",
             "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
@@ -3400,6 +3459,10 @@
             "backend/utils/llm/memories.py",
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
+            "backend/tests/integration/test_record_custody_append_emulator.py",
+            "backend/tests/unit/test_record_seal_nojob_emulator.py",
+            "backend/testing/lifecycle_properties/**",
+            "backend/testing/lifecycle_sim/**",
             "backend/scripts/run-emulator-proofs.sh",
             "backend/tests/integration/test_summary_task_promotion_emulator.py",
             "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
@@ -4737,7 +4800,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now also span verify_pusher_live_alert_route.py and mute-timings.json so alert-import fixes re-provision Grafana on main; render/query-path gates add work without adding runners or PR events.",
+      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now also span verify_pusher_live_alert_route.py and mute-timings.json so alert-import fixes re-provision Grafana on main; render/query-path gates add work without adding runners or PR events. import_grafana (default true) lets an operator deploy the Helm and exporter changes with the Grafana import skipped; the provision-live-alerts row is gated on it.",
       "triggers": {
         "push": {
           "branches": [
@@ -4766,6 +4829,12 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "import_grafana": {
+              "default": "true",
+              "description": "Import the live-STT Grafana alert rules into the selected environment. Default true keeps the existing behavior; set false to deploy the Helm and exporter changes without touching Grafana.",
+              "required": "false",
+              "type": "boolean"
             }
           }
         }
@@ -5457,7 +5526,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch; the prod-only Business API step reuses the existing job, no new workflow or PR matrix.",
+      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch for alerts and the Ops boards; every push to main that matches the trigger paths applies prod Ops dashboards through provision-prod-ops-dashboards (prod MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment with no required reviewers, approved by David 2026-11-09); the Business TV boards stay on the gated prod path until a repo-level business token exists; the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
       "triggers": {
         "push": {
           "branches": [
@@ -5472,7 +5541,8 @@
             ".github/workflows/grafana_dashboard_provisioning.yml",
             ".github/scripts/provision_grafana_dashboards.py",
             ".github/scripts/grafana_business.py",
-            "web/admin/grafana/dashboards/omi-tv-v2.json"
+            "web/admin/grafana/dashboards/omi-tv-v2.json",
+            "web/admin/grafana/dashboards/omi-tv-funnel.json"
           ]
         },
         "workflow_dispatch": {
@@ -6076,6 +6146,38 @@
           "paths": [
             "sdks/device/cpp/**",
             ".github/workflows/sdk-cpp.yml"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "sdk-dart.yml": {
+      "name": "Dart Device SDK",
+      "owner": "CI maintainers",
+      "rationale": "2026-10-19: path-scoped like sdk-cpp.yml; no workflow or manifest lane ran the Dart device SDK tests, and the Hygiene runner has no Flutter toolchain",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "sdks/device/dart/**",
+            ".github/workflows/sdk-dart.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "sdks/device/dart/**",
+            ".github/workflows/sdk-dart.yml"
           ]
         },
         "workflow_call": {

@@ -11,6 +11,7 @@ from services import conversation_finalization as service
 from models.account_cutover import AccountCutoverRecord, AccountCutoverState
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import lifecycle, typesense_index
+from utils.conversations.relevance_rules import RULES_VERSION
 
 NOW = datetime(2026, 10, 31, tzinfo=timezone.utc)
 JOB_PATH = (jobs.FINALIZATION_JOBS_COLLECTION, 'synthetic-job')
@@ -95,7 +96,7 @@ def test_stale_replay_terminalizes_only_exhausted_budget(store, status, attempts
             'decided_by': 'policy',
             'reason': 'dead_letter_default',
             'trigger': 'dead_letter',
-            'rules_version': 4,
+            'rules_version': RULES_VERSION,
         },
     }
     jobs.stop_quiet_checks_for_job.assert_called_once()

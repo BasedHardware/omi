@@ -738,7 +738,7 @@ def test_transaction_attempt_retry_replans_from_committed_receipt(world, monkeyp
         call(client.transaction())
         return call(client.transaction())
 
-    monkeypatch.setattr(db, 'run_transactional', twice)
+    monkeypatch.setattr(db, 'run_preloaded_transactional', twice)
     db.update_conversation_segments('u', 'c', [], live_segments=fresh)
     stored = read(world)['transcript_segments']
     assert ' '.join(s['text'] for s in stored) == 'I have to', stored

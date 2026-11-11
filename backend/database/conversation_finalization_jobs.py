@@ -42,6 +42,7 @@ from database.conversation_terminal_title import (
     user_time_zone,
 )
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database import transcript_pointer
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     FINALIZATION_DEAD_LETTER_STOCK_QUERY,
@@ -835,7 +836,8 @@ def create_or_get_finalization_intent(
             require_expired_recording_lease=require_expired_recording_lease,
         )
 
-    intent = run_with_transaction_contention_retry(
+    intent = transcript_pointer.run_preloaded_operation(
+        run_with_transaction_contention_retry,
         client.transaction,
         create_intent_in_transaction,
         operation_name='conversation_finalization_intent',
@@ -1372,6 +1374,7 @@ def _claim_finalization_fanout_txn(
     now: datetime,
     conversation_ref_for_job: Callable[[str, str], Any],
     projection_collection: Any | None = None,
+    expected_discarded: bool = False,
 ) -> FinalizationFanoutClaim:
     """Claim fanout only if this job still owns the completed conversation.
 
@@ -1405,6 +1408,11 @@ def _claim_finalization_fanout_txn(
         _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
         return _fanout_claim('fenced', fanout_key)
 
+    # Only an otherwise current, restored generation needs registration replay.
+    # Missing/discarded/superseded rows retain the terminal stale outcome above.
+    if expected_discarded:
+        return _fanout_claim('lease_conflict', fanout_key)
+
     transaction.update(
         job_ref,
         {
@@ -1423,6 +1431,7 @@ def claim_finalization_fanout(
     dispatch_generation: int,
     lease_epoch: int,
     *,
+    expected_discarded: bool = False,
     firestore_client: Any = None,
 ) -> FinalizationFanoutClaim:
     client = _client(firestore_client)
@@ -1436,6 +1445,7 @@ def claim_finalization_fanout(
         _now(),
         lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
+        expected_discarded=expected_discarded,
     )
 
 
@@ -1458,6 +1468,7 @@ def _mark_finalization_fanout_completed_txn(
         job_ref,
         {
             'fanout_status': 'completed',
+            'fanout_lease_epoch': lease_epoch,
             'fanout_completed_at': now,
             'updated_at': now,
         },
@@ -1484,6 +1495,76 @@ def mark_finalization_fanout_completed(
     )
 
 
+def _complete_discarded_server_batch_fanout_txn(
+    transaction: Any,
+    job_ref: Any,
+    conversation_ref: Any,
+    dispatch_generation: int,
+    lease_epoch: int,
+    now: datetime,
+) -> bool:
+    """Close a discarded zero-preview fanout and advance its still-bound parent.
+
+    The parent is still `processing` from the raw capture. Without this write a
+    restore's batch admission fails require_record_audio_barrier until stale
+    orphan reconciliation. Both writes commit together. All reads precede writes.
+    """
+    job_snapshot = job_ref.get(transaction=transaction)
+    conversation_snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(job_snapshot, 'exists', False):
+        return False
+    job = job_snapshot.to_dict() or {}
+    current = conversation_snapshot.to_dict() or {}
+    if job.get('fanout_status') == 'completed':
+        return int(job.get('fanout_lease_epoch') or 0) == lease_epoch
+    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+        return False
+    bound = current.get('finalization_job_id') == job_ref.id and current.get('finalization_revision') == job.get(
+        'finalization_revision'
+    )
+    if bound and current.get('status') == 'processing':
+        # The owner decides the terminal patch; a discard verdict is preserved.
+        claimed = conversations_db.claim_conversation_status_in_txn(
+            current,
+            expected_status='processing',
+            claimed_status='completed',
+            allow_discarded=True,
+        )
+        if claimed is not None:
+            transaction.update(conversation_ref, claimed)
+    transaction.update(
+        job_ref,
+        {
+            'fanout_status': 'completed',
+            'fanout_lease_epoch': lease_epoch,
+            'fanout_completed_at': now,
+            'updated_at': now,
+        },
+    )
+    return True
+
+
+def mark_discarded_server_batch_fanout_completed(
+    uid: str,
+    conversation_id: str,
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    client = _client(firestore_client)
+    transactional = firestore.transactional(_complete_discarded_server_batch_fanout_txn)
+    return transactional(
+        client.transaction(),
+        _job_ref(client, job_id),
+        _conversation_ref(client, uid, conversation_id),
+        dispatch_generation,
+        lease_epoch,
+        _now(),
+    )
+
+
 def _mark_finalization_retryable_txn(
     transaction: Any,
     job_ref: Any,
@@ -1494,8 +1575,8 @@ def _mark_finalization_retryable_txn(
     projection_collection: Any | None = None,
     count_attempt: bool = True,
 ) -> bool:
-    if not count_attempt and failure_code != 'record_owner_contention':
-        raise ValueError('only route contention may defer without a processing attempt')
+    if not count_attempt and failure_code not in {'record_owner_contention', 'live_episode_notes'}:
+        raise ValueError('only route contention or live episode settlement may defer without a processing attempt')
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
@@ -1553,7 +1634,7 @@ def mark_finalization_retryable(
 # a deliberate immediate-terminal policy ("a retry gives the same answer",
 # database/conversation_terminal_title.py SUMMARY_RETRYABLE_FAILURE_CODES), and
 # an unidentifiable job must not re-run a budget on garbage.
-NEVER_REQUEUE_CAUSES = frozenset({'recovery_structure_unavailable', 'invalid_job'})
+NEVER_REQUEUE_CAUSES = frozenset({'recovery_structure_unavailable', 'invalid_job', 'deterministic_processing_failed'})
 
 
 def _grant_finalization_budget_requeue_txn(

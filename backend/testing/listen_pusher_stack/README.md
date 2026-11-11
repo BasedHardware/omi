@@ -37,6 +37,8 @@ The child-process environment is allowlisted: it has a private empty
 `HOME`/cloud config directory and receives no provider credentials, developer
 proxies, ADC configuration, or production project settings. The harness also
 rejects a non-loopback Firestore endpoint.
+Numerical library pools are limited to one thread in each owned child,
+including pusher restarts.
 
 The test deliberately exercises the production listen runtime (`main:app`),
 real pusher router, binary frames 101/102/103/104/201, Firestore finalization
