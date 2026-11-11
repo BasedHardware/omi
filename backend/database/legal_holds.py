@@ -132,6 +132,13 @@ def _gate_blocks(gate: dict[str, Any] | None, now: datetime, *, kind: str | None
     return (now - gate["started_at"]).total_seconds() < GATE_STALE_AFTER_SECONDS
 
 
+def _gate_owned_by_this_context(gate: dict[str, Any] | None, uid: str) -> bool:
+    """The running gate is the one this request acquired: its own cleanup is not a rival writer."""
+
+    active = _ACTIVE_GATE.get()
+    return gate is not None and gate["uid"] == uid and active == (uid, gate["kind"], gate["token"])
+
+
 def _assert_hold_inactive(snapshot: Any) -> None:
     hold = _validated_hold(snapshot)
     if hold is not None and hold["active"] is True:
@@ -519,10 +526,11 @@ def external_write_fence(
                 'external', _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}"), uid=uid, **kwargs
             )
         )
-        if _gate_blocks(gate, datetime.now(timezone.utc)):
+        if _gate_blocks(gate, datetime.now(timezone.utc)) and not _gate_owned_by_this_context(gate, uid):
             raise DestructiveOperationInProgress("external data write blocked by destructive operation")
         # A backwards clock adjustment can change a stale-running verdict
-        # without changing the writer token. Only timeless clears are reusable.
+        # without changing the writer token. Only timeless clears are reusable;
+        # a gate-owner pass is running, so it is never cached for other writers.
         reusable = gate is None or gate['state'] != 'running'
         return True
 
