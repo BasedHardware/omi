@@ -1,0 +1,15 @@
+{
+ "schema_version": 1,
+ "id": "FC-ambiguous-write-replayed-on-lost-response",
+ "violated_contract": "A non-idempotent write must not be replayed when the failure leaves its application unknown. The CLI's retry predicate guarded POST and PATCH but omitted DELETE, so a DELETE that lost its response (ReadTimeout) or returned a 5xx was retried up to the attempt budget. The server may already have removed the resource, so the replay is unsafe, and the exhausted retry surfaced a plain 'Server error (500)' instead of the 'outcome unknown' contract the caller relies on to decide whether to re-check the resource.",
+ "canonical_prevention": "Keep one shared set of ambiguous write methods and consult it in every replay decision and every outcome-unknown guard, so a newly added non-idempotent verb cannot be retried by omission. Replay a write only when the failure proves it was not applied (connection never established); otherwise raise the outcome-unknown error. Cover each member of the set with a regression test that asserts a single attempt on a lost response and on a 5xx.",
+ "evidence_prs": [],
+ "scope_hints": [
+  "sdks/python-cli/omi_cli/client.py",
+  "sdks/python-cli/tests/test_write_retry_safety.py"
+ ],
+ "canonical_prevention_artifact": [
+  "sdks/python-cli/tests/test_delete_retry_safety.py"
+ ],
+ "status": "open"
+}

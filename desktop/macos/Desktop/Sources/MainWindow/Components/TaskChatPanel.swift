@@ -8,6 +8,7 @@ struct TaskChatPanel: View {
   @ObservedObject var coordinator: TaskChatCoordinator
   let task: TaskActionItem?
   let onClose: () -> Void
+  let onOpenRewindEvidence: ((Int64) -> Void)?
   @State private var showsThreadContext = true
   @ObservedObject private var runtimeStatusStore = AgentRuntimeStatusStore.shared
 
@@ -17,7 +18,7 @@ struct TaskChatPanel: View {
       panelHeader
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFillHover)
 
       if coordinator.activeTaskId == nil {
         // No task selected — prompt user to pick one
@@ -28,9 +29,9 @@ struct TaskChatPanel: View {
           Spacer()
           ProgressView()
             .scaleEffect(0.8)
-          Text("Setting up chat...")
+          Text("Setting up chat…")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -41,9 +42,10 @@ struct TaskChatPanel: View {
             runtimeProjection: runtimeStatusStore.projection(
               for: .workstream(workstreamId: projection.workstreamID)
             ),
-            isExpanded: $showsThreadContext
+            isExpanded: $showsThreadContext,
+            onOpenRewindEvidence: onOpenRewindEvidence
           )
-          Divider().background(OmiColors.backgroundTertiary)
+          Divider().background(Ink.rowFillHover)
         }
         // Messages area fills all remaining space.
         // ChatInputView lives in .safeAreaInset so its height changes (editorHeight,
@@ -53,14 +55,27 @@ struct TaskChatPanel: View {
         // input field changed height.
         ChatMessagesView(
           messages: taskState.messages,
+          conversationIdentity: coordinator.activeTaskId ?? "task-chat-none",
           isSending: taskState.isSending,
           hasMoreMessages: false,
           isLoadingMoreMessages: false,
           isLoadingInitial: false,
           app: nil,
           onLoadMore: {},
-          onRate: { _, _ in },
+          onRate: { _, _, _ in },
           localSendToken: taskState.localSendToken,
+          // The task panel renders the same interactable content blocks as the
+          // main window; taps route the one shell (`ChatFirstRichBlockContext.auxiliary`).
+          chatFirstRichBlockContext: .auxiliary(chatProvider: coordinator.chatProvider),
+          // The compact window, like the main chat's host: without it this panel
+          // mounts the 500-row default eagerly, which measured 910 ms and 607
+          // native views for 400 messages against 114 ms and 84 compact (see the
+          // comment on QueryAnswerThread's host). "Show older messages" is the
+          // way back to the rest of a long thread.
+          transcriptWindowPolicy: .compactHome,
+          enablesPromptTimeline: false,
+          // This thread is about one task; the day's summary belongs in the main chat.
+          showsDailySummary: false,
           welcomeContent: { taskWelcome }
         )
         .frame(maxHeight: .infinity)
@@ -68,36 +83,46 @@ struct TaskChatPanel: View {
           VStack(spacing: 0) {
             // Error banner
             if let error = taskState.errorMessage {
-              HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                  .foregroundColor(OmiColors.warning)
-                  .scaledFont(size: OmiType.body)
-                Text(error)
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textSecondary)
-                Spacer()
-                Button {
-                  taskState.errorMessage = nil
-                } label: {
-                  Image(systemName: "xmark")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textTertiary)
+              VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+                HStack(spacing: OmiSpacing.sm) {
+                  Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(PageGlass.warning)
+                    .scaledFont(size: OmiType.body)
+                  Text(error)
+                    .scaledFont(size: OmiType.body)
+                    .foregroundColor(Ink.secondary)
+                  Spacer()
+                  DismissButton(
+                    action: { taskState.errorMessage = nil }, showBackground: false,
+                    accessibilityLabel: "Dismiss Error", size: .compact)
                 }
-                .buttonStyle(.plain)
+                if taskState.canUseOmiAI {
+                  Button("Use Omi AI for This Thread") {
+                    Task { await taskState.useOmiAI() }
+                  }
+                  .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                  .disabled(taskState.isSending || taskState.isSwitchingProvider)
+                  .help(
+                    "Switch this thread to Omi AI and keep its messages. Your request will not be resent automatically."
+                  )
+                }
               }
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
-              .background(OmiColors.backgroundSecondary)
+              .background(Ink.rowFill)
             }
 
             // Input area
             ChatInputView(
               onSend: { text in
-                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
                 Task {
                   await taskState.sendMessage(
                     text,
-                    taskContext: coordinator.activeContextPacket
+                    taskContext: coordinator.activeContextPacket,
+                    onAcceptedWithAttemptID: { attemptID in
+                      AnalyticsManager.shared.chatMessageSent(
+                        messageLength: text.count, source: "task_chat", attemptID: attemptID)
+                    }
                   )
                   await coordinator.refreshActiveThread()
                 }
@@ -107,18 +132,22 @@ struct TaskChatPanel: View {
               },
               isSending: taskState.isSending,
               isStopping: taskState.isStopping,
-              placeholder: "Continue this work...",
+              placeholder: "Continue this work…",
               mode: $taskState.chatMode,
               pendingText: $coordinator.pendingInputText,
-              inputText: $taskState.draftText
+              inputText: $taskState.draftText,
+              // Task-thread voice routing is not wired yet; keep the shared
+              // composer from exposing the global push-to-talk route here.
+              showsPushToTalk: false
             )
+            .disabled(taskState.isSwitchingProvider)
             .padding(OmiSpacing.md)
           }
-          .background(OmiColors.backgroundPrimary)
+          .background(Ink.rowFill)
         }
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
   }
 
   // MARK: - Header
@@ -138,24 +167,18 @@ struct TaskChatPanel: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "bubble.left.and.bubble.right")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Text(task?.description ?? coordinator.activeThreadProjection?.title ?? "Omi thread")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .lineLimit(1)
           .truncationMode(.tail)
+          .help(task?.description ?? coordinator.activeThreadProjection?.title ?? "Omi thread")
 
         Spacer()
 
-        Button(action: onClose) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
-            .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help("Close chat panel")
+        DismissButton(action: onClose, accessibilityLabel: "Close Chat Panel")
       }
 
       // Workspace path indicator (only when a task is active)
@@ -167,15 +190,16 @@ struct TaskChatPanel: View {
             .scaledFont(size: OmiType.micro)
             .lineLimit(1)
             .truncationMode(.middle)
+            .help(coordinator.workspacePath)
           Spacer()
         }
-        .foregroundColor(OmiColors.textTertiary.opacity(0.7))
+        .foregroundColor(Ink.secondary)
         .padding(.top, OmiSpacing.xxs)
       }
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
-    .background(OmiColors.backgroundTertiary.opacity(0.5))
+    .background(Ink.rowFillHover.opacity(0.5))
   }
 
   // MARK: - Empty State
@@ -186,15 +210,15 @@ struct TaskChatPanel: View {
 
       Image(systemName: "text.bubble")
         .scaledFont(size: 36)
-        .foregroundColor(OmiColors.textTertiary.opacity(0.4))
+        .foregroundColor(Ink.secondary)
 
       Text("Open a task thread")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Text("Choose Work on this with Omi on a task, or open one that already has a thread.")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
         .padding(.horizontal, OmiSpacing.xxl)
 
@@ -209,15 +233,15 @@ struct TaskChatPanel: View {
     VStack(spacing: OmiSpacing.md) {
       Image(systemName: "bubble.left.and.bubble.right")
         .scaledFont(size: 32)
-        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+        .foregroundColor(Ink.secondary)
 
       Text("Work on this with Omi")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
-      Text("Continue the same work as context changes, without starting over.")
+      Text("Keep chatting about this task. Omi remembers what you've already discussed here.")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
         .padding(.horizontal, OmiSpacing.xl)
     }
@@ -231,6 +255,7 @@ private struct TaskThreadOverview: View {
   let projection: TaskThreadProjection
   let runtimeProjection: AgentRunProjection?
   @Binding var isExpanded: Bool
+  let onOpenRewindEvidence: ((Int64) -> Void)?
 
   var body: some View {
     DisclosureGroup(isExpanded: $isExpanded) {
@@ -268,7 +293,7 @@ private struct TaskThreadOverview: View {
                 HStack(alignment: .top, spacing: OmiSpacing.xs) {
                   Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
                     .foregroundColor(
-                      item.id == projection.activeTaskID ? OmiColors.textPrimary : OmiColors.textTertiary)
+                      item.id == projection.activeTaskID ? Ink.primary : Ink.secondary)
                   Text(item.description_)
                     .fontWeight(item.id == projection.activeTaskID ? .semibold : .regular)
                 }
@@ -289,16 +314,16 @@ private struct TaskThreadOverview: View {
                     )
                     .fontWeight(.medium)
                     Text("v\(artifact.version)")
-                      .foregroundColor(OmiColors.textTertiary)
+                      .foregroundColor(Ink.secondary)
                     if artifact.supersedesArtifactId == nil {
                       Text("Original")
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(Ink.secondary)
                     }
                   }
                   evidenceRow(artifact.evidenceRefs ?? [])
                   if let url = URL(string: artifact.uri), !artifact.uri.isEmpty {
                     Link("Open artifact", destination: url)
-                      .foregroundColor(OmiColors.textPrimary)
+                      .foregroundColor(Ink.primary)
                   }
                 }
               }
@@ -316,13 +341,13 @@ private struct TaskThreadOverview: View {
         Spacer()
         Text("\(projection.scopedTasks.count) tasks · \(projection.artifactVersions.count) artifacts")
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
-    .foregroundColor(OmiColors.textSecondary)
-    .background(OmiColors.backgroundSecondary.opacity(0.5))
+    .foregroundColor(Ink.secondary)
+    .background(Ink.rowFill.opacity(0.5))
   }
 
   private func contextSection<Content: View>(
@@ -332,10 +357,10 @@ private struct TaskThreadOverview: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
       Text(title.uppercased())
         .scaledFont(size: OmiType.micro, weight: .semibold)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
       content()
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -343,14 +368,30 @@ private struct TaskThreadOverview: View {
   @ViewBuilder
   private func evidenceRow(_ refs: [OmiAPI.EvidenceRef]) -> some View {
     if !refs.isEmpty {
-      HStack(spacing: OmiSpacing.xxs) {
-        Image(systemName: "link")
-        Text(refs.prefix(3).map { "\($0.kind.userFacingLabel):\($0.id)" }.joined(separator: " · "))
-          .lineLimit(1)
-          .truncationMode(.middle)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        let visibleRefs = Array(refs.prefix(3))
+        let currentDeviceID = ClientDeviceService.shared.clientDeviceId
+        ForEach(Array(visibleRefs.enumerated()), id: \.offset) { _, ref in
+          if let card = RewindEvidenceCardPolicy.card(for: ref, currentDeviceID: currentDeviceID) {
+            RewindEvidenceCardView(
+              card: card,
+              onOpen: RewindEvidenceCardPolicy.openHandler(
+                for: card.screenshotID,
+                onOpen: onOpenRewindEvidence
+              )
+            )
+          } else {
+            HStack(spacing: OmiSpacing.xxs) {
+              Image(systemName: "link")
+              Text("\(ref.kind.userFacingLabel):\(ref.id)")
+                .lineLimit(1)
+                .truncationMode(.middle)
+            }
+          }
+        }
       }
       .scaledFont(size: OmiType.micro)
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
     }
   }
 }
@@ -366,46 +407,39 @@ struct TaskChatPanelPlaceholder: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "bubble.left.and.bubble.right")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         Text("Task Chat")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
-        Button(action: onClose) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
-            .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help("Close chat panel")
+        DismissButton(action: onClose, accessibilityLabel: "Close Chat Panel")
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundTertiary.opacity(0.5))
+      .background(Ink.rowFillHover.opacity(0.5))
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFillHover)
 
       // Empty state
       VStack(spacing: OmiSpacing.lg) {
         Spacer()
         Image(systemName: coordinator.errorMessage == nil ? "text.bubble" : "exclamationmark.triangle")
           .scaledFont(size: 36)
-          .foregroundColor(OmiColors.textTertiary.opacity(0.4))
+          .foregroundColor(Ink.secondary)
         Text(coordinator.errorMessage == nil ? "Select a task to continue" : "Couldn’t open this work")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         Text(coordinator.errorMessage ?? "Choose Work on this with Omi when a task deserves ongoing context.")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
           .padding(.horizontal, OmiSpacing.xxl)
         Spacer()
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
   }
 }
 

@@ -8,8 +8,11 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
+from llm_gateway.gateway.schemas import ProviderRef, Surface
 from llm_gateway.main import app
 from llm_gateway.routers import anthropic_messages
+from llm_gateway.routers.dependencies import get_gateway_config
 from utils.llm.gateway_client import feature_auto_lane_id
 
 CHAT_AGENT_LANE = feature_auto_lane_id('chat_agent')
@@ -60,6 +63,7 @@ class _FakeAsyncClient:
         self.stream_calls: list[dict[str, Any]] = []
         self._post_response: httpx.Response | None = None
         self._stream_context: _FakeAsyncStreamContext | None = None
+        self._stream_context_factory = None
 
     async def post(self, url: str, *, json: dict[str, Any], headers: dict[str, str], **kwargs):
         self.post_calls.append({'url': url, 'json': json, 'headers': headers, **kwargs})
@@ -67,7 +71,10 @@ class _FakeAsyncClient:
         return self._post_response
 
     def stream(self, method: str, url: str, *, json: dict[str, Any], headers: dict[str, str], **kwargs):
-        self.stream_calls.append({'method': method, 'url': url, 'json': json, 'headers': headers, **kwargs})
+        call = {'method': method, 'url': url, 'json': json, 'headers': headers, **kwargs}
+        self.stream_calls.append(call)
+        if self._stream_context_factory is not None:
+            return self._stream_context_factory(call)
         assert self._stream_context is not None
         return self._stream_context
 
@@ -92,10 +99,28 @@ def _agentic_request(**overrides: Any) -> dict[str, Any]:
         ],
         'messages': [{'role': 'user', 'content': 'hello'}],
         'tools': [{'name': 'get_memories_tool', 'description': 'Get memories', 'input_schema': {'type': 'object'}}],
+        'cache_control': {'type': 'ephemeral', 'ttl': '1h'},
         'stream': False,
     }
     body.update(overrides)
     return body
+
+
+def _anthropic_test_config() -> GatewayConfig:
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes[CHAT_AGENT_LANE]
+    route = config.route_artifacts[lane.active_route].model_copy(
+        update={
+            'primary': ProviderRef(provider='anthropic', model='claude-test'),
+            'provider_options': {},
+            'surface': Surface.ANTHROPIC_MESSAGES,
+        }
+    )
+    lanes = dict(config.lanes)
+    lanes[CHAT_AGENT_LANE] = lane.model_copy(update={'surface': Surface.ANTHROPIC_MESSAGES})
+    route_artifacts = dict(config.route_artifacts)
+    route_artifacts[route.route_artifact_id] = route
+    return GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=config.feature_bundles)
 
 
 @pytest.fixture(autouse=True)
@@ -105,7 +130,9 @@ def _reset_anthropic_client(monkeypatch):
     anthropic_messages._anthropic_http_client = None
     fake = _FakeAsyncClient()
     monkeypatch.setattr(anthropic_messages, '_get_anthropic_http_client', lambda: fake)
+    app.dependency_overrides[get_gateway_config] = _anthropic_test_config
     yield fake
+    app.dependency_overrides.pop(get_gateway_config, None)
     anthropic_messages._anthropic_http_client = None
 
 
@@ -146,11 +173,20 @@ def test_anthropic_messages_rejects_openai_compatible_lane():
     assert 'not an anthropic messages lane' in response.json()['detail']
 
 
+def test_anthropic_messages_rejects_chat_agent_lane_after_luna_migration():
+    app.dependency_overrides.pop(get_gateway_config, None)
+
+    response = TestClient(app).post('/v1/messages', json=_agentic_request(), headers=_auth_headers())
+
+    assert response.status_code == 400
+    assert 'not an anthropic messages lane' in response.json()['detail']
+
+
 def test_anthropic_messages_passthrough_preserves_cache_control(_reset_anthropic_client):
     fake: _FakeAsyncClient = _reset_anthropic_client
     fake._post_response = httpx.Response(
         200,
-        json={'id': 'msg_1', 'type': 'message', 'role': 'assistant', 'content': [], 'model': 'claude-sonnet-5'},
+        json={'id': 'msg_1', 'type': 'message', 'role': 'assistant', 'content': [], 'model': 'claude-test'},
     )
 
     response = TestClient(app).post('/v1/messages', json=_agentic_request(), headers=_auth_headers())
@@ -158,9 +194,10 @@ def test_anthropic_messages_passthrough_preserves_cache_control(_reset_anthropic
     assert response.status_code == 200
     assert len(fake.post_calls) == 1
     forwarded = fake.post_calls[0]['json']
-    assert forwarded['model'] == 'claude-sonnet-5'
-    assert forwarded['effort'] == 'medium'
+    assert forwarded['model'] == 'claude-test'
+    assert 'effort' not in forwarded
     assert forwarded['system'][0]['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
+    assert forwarded['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
     assert forwarded['tools'][0]['name'] == 'get_memories_tool'
     assert fake.post_calls[0]['headers']['x-api-key'] == 'anthropic-test-key'
 
@@ -180,7 +217,7 @@ def test_anthropic_messages_records_cache_read_and_write_usage(_reset_anthropic_
             'type': 'message',
             'role': 'assistant',
             'content': [],
-            'model': 'claude-sonnet-5',
+            'model': 'claude-test',
             'usage': {
                 'input_tokens': 100,
                 'cache_read_input_tokens': 900,
@@ -246,6 +283,33 @@ def test_anthropic_messages_stream_passthrough_preserves_server_tool_sse(_reset_
     assert recorded[0]['outcome'] == 'success'
     assert recorded[0]['phase'] == 'terminal_marker'
     assert recorded[0]['context'].credential_source == 'omi_managed'
+
+
+def test_chat_agent_stream_omits_unsupported_effort_option(_reset_anthropic_client):
+    """The production chat-agent streaming shape must not trigger Anthropic capability rejection."""
+    fake: _FakeAsyncClient = _reset_anthropic_client
+
+    def provider_response(call: dict[str, Any]) -> _FakeAsyncStreamContext:
+        if 'effort' in call['json']:
+            return _FakeAsyncStreamContext(
+                status_code=400,
+                chunks=[b'{"error":{"type":"invalid_request_error","message":"effort is not supported"}}'],
+            )
+        return _FakeAsyncStreamContext(
+            status_code=200,
+            chunks=[b'event: message_stop\n', b'data: {"type":"message_stop"}\n\n'],
+        )
+
+    fake._stream_context_factory = provider_response
+
+    response = TestClient(app).post(
+        '/v1/messages',
+        json=_agentic_request(stream=True),
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert 'effort' not in fake.stream_calls[0]['json']
 
 
 def test_anthropic_messages_stream_returns_upstream_error_status(_reset_anthropic_client, monkeypatch):
@@ -316,7 +380,7 @@ async def test_anthropic_stream_open_cancellation_records_cancelled(monkeypatch,
         lane_id=CHAT_AGENT_LANE,
         route_artifact_id='route.chat_agent.model_config.001',
         provider='anthropic',
-        model='claude-sonnet-5',
+        model='claude-test',
         credential_source='omi_managed',
         request_id='9dc9d507-51a9-45b4-9f36-689521da3669',
     )
@@ -450,7 +514,7 @@ async def test_anthropic_stream_cleanup_failure_still_observes_one_terminal(monk
         lane_id=CHAT_AGENT_LANE,
         route_artifact_id='route.chat_agent.model_config.001',
         provider='anthropic',
-        model='claude-sonnet-5',
+        model='claude-test',
         credential_source='omi_managed',
         request_id='ef7217b8-9c75-4467-bdf5-bf3c818a37ac',
     )
@@ -468,3 +532,23 @@ async def test_anthropic_stream_cleanup_failure_still_observes_one_terminal(monk
     assert len(recorded) == 1
     assert recorded[0]['outcome'] == 'error'
     assert recorded[0]['error_class'] == 'eof_before_terminal_marker'
+
+
+@pytest.mark.parametrize('streaming', [False, True])
+@pytest.mark.parametrize('status_code', [400, 422, 429, 529])
+def test_anthropic_error_observation_passes_upstream_status(
+    _reset_anthropic_client, monkeypatch, streaming, status_code
+):
+    fake = _reset_anthropic_client
+    observations = []
+    monkeypatch.setattr(anthropic_messages, 'observe_route_result', lambda *args, **kwargs: observations.append(kwargs))
+    fake._post_response = httpx.Response(status_code, json={'error': {'type': 'test_error'}})
+    fake._stream_context = _FakeAsyncStreamContext(status_code=status_code, chunks=[b'{"error":{"type":"test_error"}}'])
+
+    response = TestClient(app).post('/v1/messages', json=_agentic_request(stream=streaming), headers=_auth_headers())
+
+    assert response.status_code == status_code
+    assert len(observations) == 1
+    assert observations[0]['upstream_http_status'] == status_code
+    assert observations[0]['streaming'] is streaming
+    assert observations[0]['error_class'] == anthropic_messages._provider_status_error_class(status_code)

@@ -5,6 +5,9 @@ description: Transcription language settings navigation via automation bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  # set_transcription_language calls updateUserLanguage and the following
+  # snapshot asserts the persisted normalized value.
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift
 preconditions:
   - automation_bridge_ready
 

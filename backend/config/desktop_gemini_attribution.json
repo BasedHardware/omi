@@ -1,0 +1,19 @@
+{
+  "lanes": {
+    "taskExtraction": "task_extraction",
+    "focus": "focus",
+    "dictation": "dictation",
+    "suggestions": "suggestions",
+    "liveNotes": "live_notes",
+    "screenSynthesis": "screen_synthesis",
+    "memory": "memory",
+    "insight": "insight",
+    "goals": "goals",
+    "taskDedup": "task_dedup",
+    "taskPrioritization": "task_prioritization",
+    "homeSuggestions": "home_suggestions",
+    "embedding": "embedding"
+  },
+  "workloads": ["interactive", "extraction", "maintenance"],
+  "platforms": ["macos", "windows", "other", "unknown"]
+}

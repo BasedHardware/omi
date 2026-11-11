@@ -1,0 +1,43 @@
+{
+  "uptimeCheck": {
+    "displayName": "Prod Grafana external health",
+    "monitoredResource": {
+      "type": "uptime_url",
+      "labels": {"project_id": "based-hardware", "host": "monitor.omi.me"}
+    },
+    "httpCheck": {
+      "requestMethod": "GET",
+      "useSsl": true,
+      "path": "/api/health",
+      "port": 443,
+      "validateSsl": true,
+      "acceptedResponseStatusCodes": [{"statusValue": 200}]
+    },
+    "period": "60s",
+    "timeout": "10s",
+    "selectedRegions": ["USA", "EUROPE", "ASIA_PACIFIC"],
+    "checkerType": "STATIC_IP_CHECKERS",
+    "disabled": false
+  },
+  "alertPolicy": {
+    "displayName": "Prod Grafana dead-man: health failing for 5 minutes",
+    "enabled": true,
+    "combiner": "OR",
+    "notificationChannels": [],
+    "documentation": {
+      "mimeType": "text/markdown",
+      "content": "External Grafana /api/health has failed from more than one checker location for at least two minutes. Grafana evaluation and notifications may be unavailable; this synthetic infrastructure signal does not prove a user outage. Check GKE Grafana readiness, SQLite lock logs, PVC health and ingress before intervention. See backend/charts/monitoring/README.md. This policy runs in Cloud Monitoring, independently of Grafana."
+    },
+    "conditions": [{
+      "displayName": "Grafana health check failing for 2 minutes",
+      "conditionThreshold": {
+        "filter": "resource.type=\"uptime_url\" AND metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id=\"${CHECK_ID}\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 1,
+        "duration": "120s",
+        "aggregations": [{"alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_NEXT_OLDER", "crossSeriesReducer": "REDUCE_COUNT_FALSE", "groupByFields": ["metric.label.check_id"]}],
+        "trigger": {"count": 1}
+      }
+    }]
+  }
+}

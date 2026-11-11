@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-permanent-write-rejection-retried-forever",
+  "violated_contract": "A storage rejection that no retry of the same write can ever satisfy (a Firestore document at its 1 MiB ceiling) must move its row to a path the storage still accepts; replaying the same growing write on every sweep strands the row in a non-terminal state for good.",
+  "canonical_prevention": "Classify the permanent rejection at the storage boundary (database._client.is_document_size_limit_error, beside is_expired_transaction_error) and give the recovery sweep a terminal that does not grow the document, fenced on the snapshot's server-owned update_time instead of the fence the document cannot carry.",
+  "evidence_prs": [
+    10730
+  ],
+  "scope_hints": [
+    "backend/database/**",
+    "backend/services/conversation_finalization.py"
+  ],
+  "canonical_prevention_artifact": [
+    "backend/database/_client.py"
+  ],
+  "status": "open"
+}

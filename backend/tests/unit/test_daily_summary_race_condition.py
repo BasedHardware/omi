@@ -28,6 +28,25 @@ def _module(name: str, **attributes: Any) -> ModuleType:
     return module
 
 
+def _only_current_day_is_missing(daily_db):
+    """Give every day *except* the first one asked about a stored record.
+
+    `_send_summary_notification` walks back up to `_DAILY_SUMMARY_BACKFILL_GENERATE_CAP`
+    further days after the current one, and the current day is always the first by-date
+    lookup. Short-circuiting the backfill days on the durable guard is what lets the
+    assertions below stay `assert_called_once()`: relaxing them to `assert_called()` to
+    absorb the backfill is what let a double-generate regression pass unnoticed.
+    """
+    seen = []
+
+    def _by_date(_uid, date_str):
+        seen.append(date_str)
+        return None if len(seen) == 1 else {'id': f'existing-{date_str}'}
+
+    daily_db.get_daily_summary_by_date = MagicMock(side_effect=_by_date)
+    return daily_db.get_daily_summary_by_date
+
+
 class _PytzFixedTimezone(tzinfo):
     def __init__(self, offset: timedelta, name: str):
         self._offset = offset
@@ -121,10 +140,16 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         'database.daily_summaries',
         get_daily_summary_by_date=MagicMock(return_value=None),
         create_daily_summary=MagicMock(return_value='summary-123'),
+        mark_daily_summary_delivery_completed=MagicMock(),
     )
     redis_db = _module(
         'database.redis_db',
         try_acquire_daily_summary_lock=try_acquire_daily_summary_lock,
+        # A guard that declines before the LLM call hands the day back rather than sitting on a
+        # 2h key; the harness has to carry it or the module under test cannot import.
+        release_daily_summary_lock=MagicMock(),
+        try_acquire_notifications_job_run_lock=lambda *_args, **_kwargs: True,
+        release_notifications_job_run_lock=lambda *_args, **_kwargs: None,
     )
 
     mock_conversation = MagicMock()
@@ -133,6 +158,7 @@ def notification_harness() -> Iterator[SimpleNamespace]:
     conversation_factory = _module(
         'utils.conversations.factory',
         deserialize_conversation=MagicMock(return_value=mock_conversation),
+        deserialize_conversations=MagicMock(return_value=[mock_conversation]),
     )
     generate_summary = MagicMock()
     external_integrations = _module(
@@ -144,6 +170,7 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         'utils.notifications',
         send_bulk_notification=MagicMock(),
         send_notification=send_notification,
+        send_notification_result=send_notification,
     )
     notification_message = MagicMock()
     notification_message.get_message_as_dict = MagicMock(return_value={})
@@ -151,6 +178,7 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         'utils.executors',
         db_executor=MagicMock(),
         postprocess_executor=MagicMock(),
+        open_loops_executor=MagicMock(),
         run_blocking=MagicMock(),
     )
 
@@ -164,13 +192,35 @@ def notification_harness() -> Iterator[SimpleNamespace]:
             'models.notification_message',
             NotificationMessage=notification_message,
         ),
+        # Without this stub the scheduled path reaches the real MemoryService and
+        # issues a live Firestore query from a unit test, which hangs under
+        # api_core's retry (the empty-overview suite documents the same trap).
+        'utils.memory.learned_today': _module(
+            'utils.memory.learned_today',
+            memories_learned_payload=MagicMock(return_value=[]),
+            memory_review_card_block=MagicMock(return_value=None),
+        ),
         'utils.conversations.factory': conversation_factory,
         'utils.llm.external_integrations': external_integrations,
         'utils.notifications': notifications,
         'utils.webhooks': _module('utils.webhooks', day_summary_webhook=MagicMock()),
         'utils.executors': executors,
+        'database.durable_queue': _module(
+            'database.durable_queue',
+            ProcessOutcome=SimpleNamespace(ack=lambda: SimpleNamespace(kind='ack')),
+            drain_isolated_async=MagicMock(),
+        ),
+        'utils.durable_queue_metrics': _module(
+            'utils.durable_queue_metrics',
+            observe_oldest_ready_age=lambda *_args, **_kwargs: None,
+        ),
     }
 
+    # Keep the native timezone module outside the isolation snapshot. Repeated
+    # eviction/re-import of _zoneinfo can corrupt its process-global references.
+    from zoneinfo import ZoneInfo
+
+    ZoneInfo('UTC')
     with stub_modules(stubs):
         module = load_module_fresh(
             'utils.other.notifications',
@@ -286,7 +336,7 @@ class TestSendSummaryNotificationLockIntegration:
         ) as mock_lock:
             notification_harness.send_summary(user_data)
 
-        mock_lock.assert_called_once()
+        mock_lock.assert_called()
         convos_db.get_conversations.assert_not_called()
         gen_mock.assert_not_called()
         send_mock.assert_not_called()
@@ -299,7 +349,7 @@ class TestSendSummaryNotificationLockIntegration:
         gen_mock.return_value = {'day_emoji': '!', 'headline': 'Test', 'overview': 'Summary'}
 
         daily_db = notification_harness.daily_summaries_db
-        daily_db.get_daily_summary_by_date = MagicMock(return_value=None)
+        _only_current_day_is_missing(daily_db)
         daily_db.create_daily_summary = MagicMock(return_value='summary-123')
 
         send_mock = notification_harness.send_notification
@@ -311,9 +361,12 @@ class TestSendSummaryNotificationLockIntegration:
         ) as mock_lock:
             notification_harness.send_summary(user_data)
 
-        mock_lock.assert_called_once()
+        mock_lock.assert_called()
+        # Exactly one generation for the current day: the backfill days all short-circuit on the
+        # durable by-date guard, so any extra call here is a regression, not the walk-back.
         convos_db.get_conversations.assert_called_once()
         gen_mock.assert_called_once()
+        daily_db.create_daily_summary.assert_called_once()
         send_mock.assert_called_once()
 
     def test_skips_when_summary_already_exists(self, notification_harness):
@@ -339,8 +392,8 @@ class TestSendSummaryNotificationLockIntegration:
         ) as mock_lock:
             notification_harness.send_summary(user_data)
 
-        mock_lock.assert_called_once()
-        daily_db.get_daily_summary_by_date.assert_called_once()
+        mock_lock.assert_called()
+        daily_db.get_daily_summary_by_date.assert_called()
         # An existing summary short-circuits everything: no fetch, no LLM, no create, no send.
         convos_db.get_conversations.assert_not_called()
         gen_mock.assert_not_called()
@@ -393,8 +446,8 @@ class TestSendSummaryNotificationLockIntegration:
         ) as mock_lock:
             notification_harness.send_summary(user_data)
 
-        mock_lock.assert_called_once()
-        convos_db.get_conversations.assert_called_once()
+        mock_lock.assert_called()
+        convos_db.get_conversations.assert_called()
         gen_mock.assert_not_called()
         send_mock.assert_not_called()
 
@@ -414,7 +467,7 @@ class TestSendSummaryNotificationLockIntegration:
         ) as mock_lock:
             notification_harness.send_summary(user_data)
 
-        mock_lock.assert_called_once()
+        mock_lock.assert_called()
         # Lock denied, so no downstream work
         convos_db.get_conversations.assert_not_called()
         gen_mock.assert_not_called()
@@ -450,7 +503,7 @@ class TestDailyRecapNotDesktopPaywalled:
         gen_mock.return_value = {'day_emoji': '!', 'headline': 'Test', 'overview': 'Summary'}
 
         daily_db = notification_harness.daily_summaries_db
-        daily_db.get_daily_summary_by_date = MagicMock(return_value=None)
+        _only_current_day_is_missing(daily_db)
         daily_db.create_daily_summary = MagicMock(return_value='summary-123')
 
         send_mock = notification_harness.send_notification
@@ -464,3 +517,39 @@ class TestDailyRecapNotDesktopPaywalled:
         gen_mock.assert_called_once()
         daily_db.create_daily_summary.assert_called_once()
         send_mock.assert_called_once()
+
+
+def test_v2_recap_regenerates_in_place_on_revision_and_reuses_unchanged_inputs(notification_harness, monkeypatch):
+    from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
+
+    harness, module = notification_harness, notification_harness.module
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'serve')
+    monkeypatch.setattr(module, 'generated_compute_allowed', lambda *_args: True)
+    monkeypatch.setattr(module, 'try_acquire_daily_summary_lock', lambda *_args: True)
+    monkeypatch.setattr(module, 'release_daily_summary_lock', MagicMock())
+    monkeypatch.setattr(module, '_conversation_has_summary_content', lambda *_args: True)
+    monkeypatch.setattr(module, 'bound_daily_summary_conversations', lambda _uid, _date, rows: rows)
+    conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='synthetic speech')], discarded=False)
+    monkeypatch.setattr(module, 'deserialize_conversations', lambda *_args: [conversation])
+    data = [{'id': 'synthetic-a', 'sync_content_revision': 1}]
+    harness.conversations_db.get_conversations.return_value = data
+    existing = {'id': 'same-recap', FINGERPRINT_FIELD: input_fingerprint(data), 'notification_delivery_completed': True}
+    harness.daily_summaries_db.get_daily_summary_by_date.return_value = existing
+    harness.daily_summaries_db.update_daily_summary = MagicMock()
+    harness.generate_summary.return_value = {'id': 'new-generator-id', 'headline': 'Updated synthetic recap'}
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    result, created, declined = module._generate_and_store_daily_summary(
+        'synthetic-account', '2026-01-01', start, start
+    )
+    assert result == existing and not created and declined is None
+    harness.generate_summary.assert_not_called()
+    data[0]['sync_content_revision'] = 2
+    result, created, declined = module._generate_and_store_daily_summary(
+        'synthetic-account', '2026-01-01', start, start
+    )
+    assert created and declined is None
+    assert result['id'] == 'same-recap' and result['notification_delivery_completed'] is True
+    harness.daily_summaries_db.create_daily_summary.assert_not_called()
+    args = harness.daily_summaries_db.update_daily_summary.call_args.args
+    assert args[1] == 'same-recap' and args[2][FINGERPRINT_FIELD] == input_fingerprint(data)
+    harness.generate_summary.assert_called_once()

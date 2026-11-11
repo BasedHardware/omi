@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -13,9 +13,14 @@ import {
 } from "../src/runtime/agent-spawn-journal.js";
 import { handleAgentControlToolCall } from "../src/runtime/control-tools.js";
 import { recordJournalTurn, terminalizeJournalTurn, updateJournalTurn } from "../src/runtime/conversation-journal.js";
-import { routeExternalSurfaceTool } from "../src/runtime/external-surface-tool-policy.js";
+import {
+  hasExplicitMemorySaveIntent,
+  hasMemoryContentGroundedInUserRequest,
+  routeExternalSurfaceTool,
+} from "../src/runtime/external-surface-tool-policy.js";
 import { AgentRuntimeKernel, ExternalSurfaceAuthorityError } from "../src/runtime/kernel.js";
 import type { AuthorizedRunToolInvocation } from "../src/runtime/run-tool-capability.js";
+import { finalizeRelayToolResult } from "../src/runtime/relay-tool-result.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
 import { readToolInvocation } from "../src/runtime/tool-invocation-ledger.js";
@@ -26,6 +31,9 @@ import {
 import { createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
 const roots: string[] = [];
+const memorySaveIntentCorpus = JSON.parse(
+  readFileSync(new URL("./fixtures/memory-save-intent-corpus.json", import.meta.url), "utf8"),
+) as { authorized: string[]; unauthorized: string[] };
 
 afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
@@ -60,6 +68,27 @@ describe("external realtime surface authority", () => {
     });
     expectCode(() => fixture.kernel.beginExternalSurfaceRun(beginInput(mainSession.sessionId)), "invalid_external_surface");
     fixture.store.close();
+  });
+
+  it("returns the persisted floating-chat surface for a shared realtime session", () => {
+    const store = new SqliteAgentStore({ stateDir: newRoot(), reconcileOnOpen: false });
+    const floating = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "floating_chat", externalRefKind: "chat", externalRefId: "shared" },
+      defaultAdapterId: "acp",
+    }, () => 1);
+    const realtime = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "shared" },
+      defaultAdapterId: "acp",
+    }, () => 2);
+    expect(realtime.agentSessionId).toBe(floating.agentSessionId);
+    const kernel = new AgentRuntimeKernel({ store, registry: new AdapterRegistry() });
+
+    const result = kernel.beginExternalSurfaceRun(beginInput(realtime.agentSessionId));
+
+    expect(result.surfaceKind).toBe("floating_chat");
+    store.close();
   });
 
   it("owner revocation terminalizes externally-owned realtime runs and their pending tools", () => {
@@ -369,6 +398,11 @@ describe("external realtime surface authority", () => {
       toolInput: { type: "microphone" },
       originatingPrompt: "Check Slack's microphone permission",
     })).toMatchObject({ action: "reject", code: "permission_target_rejected" });
+    expect(routeExternalSurfaceTool({
+      toolName: "check_permission_status",
+      toolInput: { type: "contacts" },
+      originatingPrompt: "Check Slack's contacts access",
+    })).toMatchObject({ action: "reject", code: "permission_target_rejected" });
   });
 
   it("canonicalizes screen-share vocabulary to Omi's Screen Recording permission", () => {
@@ -422,6 +456,97 @@ describe("external realtime surface authority", () => {
       toolInput: { subjectKind: "run", subjectId: "run-1", dismissed: true },
       originatingPrompt: "Dismiss that background agent pill",
     })).toMatchObject({ action: "execute", toolName: "set_desktop_attention_override" });
+  });
+
+  it("requires an affirmative remember/save command before relaying create_memory", () => {
+    for (const prompt of memorySaveIntentCorpus.unauthorized) {
+      expect(hasExplicitMemorySaveIntent(prompt), prompt).toBe(false);
+      expect(routeExternalSurfaceTool({
+        toolName: "create_memory",
+        toolInput: { content: "I prefer tea." },
+        originatingPrompt: prompt,
+      })).toMatchObject({ action: "reject", code: "memory_save_not_authorized" });
+    }
+
+    for (const prompt of memorySaveIntentCorpus.authorized) {
+      expect(hasExplicitMemorySaveIntent(prompt), prompt).toBe(true);
+      const groundedContent = prompt.toLowerCase().includes("proactivity")
+        ? "David is currently testing proactivity in Omi"
+        : "I prefer tea.";
+      expect(routeExternalSurfaceTool({
+        toolName: "create_memory",
+        toolInput: { content: groundedContent },
+        originatingPrompt: prompt,
+      })).toMatchObject({
+        action: "execute",
+        toolName: "create_memory",
+        toolInput: { content: groundedContent },
+        recoveredFromDelegation: false,
+      });
+    }
+  });
+
+  it("authorizes create_memory when the runtime clock preamble precedes the typed command", () => {
+    const preamble = "# Current Time\n2026-09-16T17:58:58+07:00 (Asia/Ho_Chi_Minh)\n\n";
+    const reproPrompt = `${preamble}remember that my favorite color is red`;
+
+    expect(hasExplicitMemorySaveIntent("remember that my favorite color is red")).toBe(true);
+    expect(hasExplicitMemorySaveIntent(reproPrompt)).toBe(true);
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "The user's favorite color is red." },
+      originatingPrompt: reproPrompt,
+    })).toMatchObject({
+      action: "execute",
+      toolName: "create_memory",
+      toolInput: { content: "The user's favorite color is red." },
+    });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "The user's favorite color is red." },
+      originatingPrompt: `${preamble}my favorite color is red`,
+    })).toMatchObject({ action: "reject", code: "memory_save_not_authorized" });
+    expect(hasExplicitMemorySaveIntent(preamble)).toBe(false);
+  });
+
+  it("lets create_memory persist a clean standalone fact when save intent is present", () => {
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "I prefer tea." },
+      originatingPrompt: "Remember this",
+    })).toEqual({
+      action: "execute",
+      toolName: "create_memory",
+      toolInput: { content: "I prefer tea." },
+      recoveredFromDelegation: false,
+    });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "I enjoy tea." },
+      originatingPrompt: "Remember that I prefer tea.",
+    })).toMatchObject({ action: "execute", toolName: "create_memory" });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "David is currently testing proactivity in Omi" },
+      originatingPrompt: "Please remember that I am currently testing proactivity in Omi",
+    })).toMatchObject({ action: "execute", toolName: "create_memory" });
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "Please save this: I prefer tea." },
+      originatingPrompt: "Please save this: I prefer tea.",
+    })).toMatchObject({ action: "execute", toolName: "create_memory" });
+  });
+
+  it("rejects create_memory content that is not grounded in the current request", () => {
+    expect(hasMemoryContentGroundedInUserRequest(
+      { content: "David loves coffee." },
+      "Please remember that I prefer tea.",
+    )).toBe(false);
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "David loves coffee." },
+      originatingPrompt: "Please remember that I prefer tea.",
+    })).toMatchObject({ action: "reject", code: "memory_content_not_in_user_request" });
   });
 
   it("defaults external spawns to Omi unless the current user selects one provider", () => {
@@ -770,16 +895,24 @@ describe("external realtime surface authority", () => {
     expect((prepared.toolInput.metadata as any).producerJournal.forged).toBeUndefined();
 
     kernel.markRunToolInvocationDispatched(authorized);
-    const raw = await handleAgentControlToolCall({
-      kernel,
-      callerSessionId: authorized.sessionId,
-      executionRole: "coordinator",
-      providerBoundary: "local_user:acp",
-      defaultAdapterId: "acp",
-      authorizedProducerJournal: prepared.producerJournal,
-      authorizedCallerRunId: prepared.parentRunId,
-      getOwnerId: () => "owner",
-    }, authorized.canonicalToolName, prepared.toolInput);
+    const previousArtifactRoot = process.env.OMI_AGENT_ARTIFACTS_DIR;
+    process.env.OMI_AGENT_ARTIFACTS_DIR = newRoot();
+    let raw: string;
+    try {
+      raw = await handleAgentControlToolCall({
+        kernel,
+        callerSessionId: authorized.sessionId,
+        executionRole: "coordinator",
+        providerBoundary: "local_user:acp",
+        defaultAdapterId: "acp",
+        authorizedProducerJournal: prepared.producerJournal,
+        authorizedCallerRunId: prepared.parentRunId,
+        getOwnerId: () => "owner",
+      }, authorized.canonicalToolName, prepared.toolInput);
+    } finally {
+      if (previousArtifactRoot === undefined) delete process.env.OMI_AGENT_ARTIFACTS_DIR;
+      else process.env.OMI_AGENT_ARTIFACTS_DIR = previousArtifactRoot;
+    }
     kernel.completeRunToolInvocation({
       ...invocationIdentity(authorized),
       capabilityRef: authorized.capabilityRef,
@@ -1036,18 +1169,27 @@ describe("external realtime surface authority", () => {
       toolInput: { objective: "Research safely", originSurfaceKind: "main_chat" },
     }).toolInput).toMatchObject({ originSurfaceKind: "realtime" });
 
-    const result = JSON.parse(await handleAgentControlToolCall({
-      kernel,
-      callerSessionId: session.agentSessionId,
-      executionRole: "coordinator",
-      providerBoundary: "managed_cloud",
-      defaultAdapterId: "pi-mono",
-      authorizedProducerJournal: parseAgentSpawnProducerJournalDescriptor(
-        ((routed.toolInput.metadata as any) ?? {}).producerJournal,
-      ),
-      authorizedCallerRunId: run.runId,
-      getOwnerId: () => "owner",
-    }, "spawn_agent", routed.toolInput)) as Record<string, unknown>;
+    const previousArtifactRoot = process.env.OMI_AGENT_ARTIFACTS_DIR;
+    process.env.OMI_AGENT_ARTIFACTS_DIR = newRoot();
+    let resultText: string;
+    try {
+      resultText = await handleAgentControlToolCall({
+        kernel,
+        callerSessionId: session.agentSessionId,
+        executionRole: "coordinator",
+        providerBoundary: "managed_cloud",
+        defaultAdapterId: "pi-mono",
+        authorizedProducerJournal: parseAgentSpawnProducerJournalDescriptor(
+          ((routed.toolInput.metadata as any) ?? {}).producerJournal,
+        ),
+        authorizedCallerRunId: run.runId,
+        getOwnerId: () => "owner",
+      }, "spawn_agent", routed.toolInput);
+    } finally {
+      if (previousArtifactRoot === undefined) delete process.env.OMI_AGENT_ARTIFACTS_DIR;
+      else process.env.OMI_AGENT_ARTIFACTS_DIR = previousArtifactRoot;
+    }
+    const result = JSON.parse(resultText) as Record<string, unknown>;
     expect(result).toMatchObject({
       ok: true,
       requestedAgentCount: 1,
@@ -1182,6 +1324,25 @@ describe("external realtime surface authority", () => {
       producingAttemptId: run.attemptId,
       createdAtMs: 2,
     });
+    // Production realtime turns can carry the bounded recent-context window
+    // back through the accepted spawn result. Keep this fixture deliberately
+    // large so the regression proves compaction happens *after* child receipt
+    // extraction rather than silently projecting away `agents[0]` first.
+    for (let index = 0; index < 24; index += 1) {
+      recordJournalTurn(store, {
+        ownerId: "owner",
+        conversationId: session.conversationId,
+        turnId: `realtime-context-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        surfaceKind: "realtime_voice",
+        origin: "realtime_voice",
+        status: "completed",
+        content: `Large retained context ${index}: ${"x".repeat(12_000)}`,
+        contentBlocks: [],
+        resources: [],
+        createdAtMs: 10 + index,
+      });
+    }
     const parentInput = JSON.parse(String(store.getRow(
       "SELECT input_json FROM runs WHERE run_id = ?",
       [run.runId],
@@ -1211,22 +1372,89 @@ describe("external realtime surface authority", () => {
     expect(producerJournal.producerTurnId).toBe(producerTurnId);
     expect(producerJournal.producerRunId).toBe(run.runId);
 
-    const started = JSON.parse(await handleAgentControlToolCall({
-      kernel,
-      callerSessionId: session.agentSessionId,
-      executionRole: "coordinator",
-      providerBoundary: "managed_cloud",
-      defaultAdapterId: "pi-mono",
-      authorizedProducerJournal: producerJournal,
-      authorizedCallerRunId: run.runId,
-      authorizedToolInvocation: {
+    const previousArtifactRoot = process.env.OMI_AGENT_ARTIFACTS_DIR;
+    process.env.OMI_AGENT_ARTIFACTS_DIR = newRoot();
+    let startedText: string;
+    try {
+      startedText = await handleAgentControlToolCall({
+        kernel,
+        callerSessionId: session.agentSessionId,
+        executionRole: "coordinator",
+        providerBoundary: "managed_cloud",
+        defaultAdapterId: "pi-mono",
+        authorizedProducerJournal: producerJournal,
+        authorizedCallerRunId: run.runId,
+        authorizedToolInvocation: {
+          invocationId: "realtime-openclaw-spawn",
+          runId: run.runId,
+          attemptId: run.attemptId,
+          toolName: "spawn_agent",
+        },
+        getOwnerId: () => "owner",
+      }, "spawn_agent", routed.toolInput);
+    } finally {
+      if (previousArtifactRoot === undefined) delete process.env.OMI_AGENT_ARTIFACTS_DIR;
+      else process.env.OMI_AGENT_ARTIFACTS_DIR = previousArtifactRoot;
+    }
+    const started = JSON.parse(startedText) as Record<string, any>;
+
+    expect(Buffer.byteLength(startedText, "utf8")).toBeGreaterThan(8 * 1024);
+    expect(started.toolResultEnvelope).toMatchObject({
+      version: 1,
+      truncated: true,
+      fullOutputRef: expect.stringMatching(/^artifact:/),
+    });
+    const compact = JSON.parse(compactRealtimeSpawnToolResult(startedText, producerJournal)) as Record<string, any>;
+    expect(compact).toMatchObject({
+      ok: true,
+      child: {
+        sessionId: expect.any(String),
+        runId: expect.any(String),
+        attemptId: expect.any(String),
+        pillId: producerJournal.pillId,
+      },
+      providerResult: {
+        ok: true,
+        child: {
+          sessionId: expect.any(String),
+          runId: expect.any(String),
+          attemptId: expect.any(String),
+        },
+      },
+    });
+    expect(compact.toolResultEnvelope.fullOutputRef).toBe(started.toolResultEnvelope.fullOutputRef);
+
+    const finalizedText = finalizeRelayToolResult({
+      identity: {
         invocationId: "realtime-openclaw-spawn",
+        ownerId: "owner",
+        sessionId: session.agentSessionId,
         runId: run.runId,
         attemptId: run.attemptId,
         toolName: "spawn_agent",
       },
-      getOwnerId: () => "owner",
-    }, "spawn_agent", routed.toolInput)) as Record<string, any>;
+      result: JSON.stringify(compact),
+      outcome: "succeeded",
+      kernel,
+      artifactRoot: newRoot(),
+    });
+    const finalized = JSON.parse(finalizedText) as Record<string, any>;
+    expect(Buffer.byteLength(finalizedText, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(finalized).toMatchObject({
+      ok: true,
+      child: {
+        sessionId: compact.child.sessionId,
+        runId: compact.child.runId,
+        attemptId: compact.child.attemptId,
+        pillId: producerJournal.pillId,
+      },
+      toolResultEnvelope: {
+        version: 1,
+        status: "succeeded",
+        truncated: true,
+        fullOutputRef: started.toolResultEnvelope.fullOutputRef,
+      },
+    });
 
     expect(started).toMatchObject({
       ok: true,
@@ -1342,6 +1570,575 @@ describe("external realtime surface authority", () => {
     });
     expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(1);
     store.close();
+  });
+
+  // #12731: the kernel never observes an external surface's stream, so unless the
+  // text comes back at terminalization `runs.final_text` stays null and every
+  // consumer of a run's answer — the completion lane, spawn-receipt journaling —
+  // is structurally content-free.
+  it("persists the text an external surface streamed into runs.final_text", () => {
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "The hopper recipe is three parts sand to one part clay.",
+    });
+
+    expect(fixture.store.getRow(
+      "SELECT final_text FROM runs WHERE run_id = ?",
+      [run.runId],
+    ).final_text).toBe("The hopper recipe is three parts sand to one part clay.");
+    fixture.store.close();
+  });
+
+  it("materializes a missing completed external exchange into the canonical journal", () => {
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    const completion = fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "I saved the corrected hopper ratio.",
+    });
+
+    expect(completion.journalMaterialized).toBe(true);
+    expect(completion.journalChanges).toHaveLength(2);
+    const rows = fixture.store.allRows(
+      `SELECT turn_id, role, content, status, producing_run_id, producing_attempt_id
+       FROM conversation_turns ORDER BY created_at_ms, turn_seq`,
+    );
+    const continuityKey = "voice:voice-turn-1";
+    expect(rows).toEqual([
+      {
+        turn_id: stableAgentSpawnTurnId(continuityKey, "user"),
+        role: "user",
+        content: "Remember my latest request",
+        status: "completed",
+        producing_run_id: null,
+        producing_attempt_id: null,
+      },
+      {
+        turn_id: stableAgentSpawnTurnId(continuityKey, "assistant"),
+        role: "assistant",
+        content: "I saved the corrected hopper ratio.",
+        status: "completed",
+        producing_run_id: run.runId,
+        producing_attempt_id: run.attemptId,
+      },
+    ]);
+    expect(fixture.store.getRow(
+      "SELECT COUNT(*) AS count FROM backend_turn_outbox",
+    ).count).toBe(2);
+    fixture.store.close();
+  });
+
+  it("defers to an already completed canonical voice exchange", () => {
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    const conversationId = String(fixture.store.getRow(
+      "SELECT conversation_id FROM surface_conversations WHERE agent_session_id = ? LIMIT 1",
+      [fixture.sessionId],
+    ).conversation_id);
+    const continuityKey = "voice:voice-turn-1";
+    recordJournalTurn(fixture.store, {
+      ownerId: "owner",
+      conversationId,
+      turnId: stableAgentSpawnTurnId(continuityKey, "assistant"),
+      role: "assistant",
+      surfaceKind: "realtime_voice",
+      origin: "agent_runtime",
+      status: "completed",
+      content: "The accepted spawn receipt owns this turn.",
+      contentBlocks: [],
+      resources: [],
+      metadataJson: JSON.stringify({ continuityKey }),
+    });
+
+    const completion = fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "Provider narration must not replace the receipt.",
+    });
+
+    expect(completion.journalMaterialized).toBe(true);
+    expect(completion.journalChanges).toHaveLength(0);
+    expect(fixture.store.getRow(
+      "SELECT content FROM conversation_turns WHERE turn_id = ?",
+      [stableAgentSpawnTurnId(continuityKey, "assistant")],
+    ).content).toBe("The accepted spawn receipt owns this turn.");
+    fixture.store.close();
+  });
+
+  it("preserves a corrected canonical user transcript while repairing its missing answer", () => {
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    const conversationId = String(fixture.store.getRow(
+      "SELECT conversation_id FROM surface_conversations WHERE agent_session_id = ? LIMIT 1",
+      [fixture.sessionId],
+    ).conversation_id);
+    const continuityKey = "voice:voice-turn-1";
+    recordJournalTurn(fixture.store, {
+      ownerId: "owner",
+      conversationId,
+      turnId: stableAgentSpawnTurnId(continuityKey, "user"),
+      role: "user",
+      surfaceKind: "realtime_voice",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "Actually, remember the corrected request.",
+      contentBlocks: [],
+      resources: [],
+      metadataJson: JSON.stringify({ continuityKey, transcriptSource: "local_lid" }),
+    });
+
+    const completion = fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "I kept the corrected request.",
+    });
+
+    expect(completion.journalMaterialized).toBe(true);
+    expect(fixture.store.allRows(
+      "SELECT role, content FROM conversation_turns ORDER BY created_at_ms, turn_seq",
+    )).toEqual([
+      { role: "user", content: "Actually, remember the corrected request." },
+      { role: "assistant", content: "I kept the corrected request." },
+    ]);
+    fixture.store.close();
+  });
+
+  it("reports a conflicting failed canonical answer as unmaterialized", () => {
+    // A failed canonical row is not ownership, it is a conflict: the successful answer
+    // is nowhere in history and this path will not overwrite a failure to put it there.
+    // Reporting materialized here told Swift the answer had landed when it had not --
+    // the silent loss this whole change exists to close.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    const conversationId = String(fixture.store.getRow(
+      "SELECT conversation_id FROM surface_conversations WHERE agent_session_id = ? LIMIT 1",
+      [fixture.sessionId],
+    ).conversation_id);
+    const continuityKey = "voice:voice-turn-1";
+    recordJournalTurn(fixture.store, {
+      ownerId: "owner",
+      conversationId,
+      turnId: stableAgentSpawnTurnId(continuityKey, "assistant"),
+      role: "assistant",
+      surfaceKind: "realtime_voice",
+      origin: "agent_runtime",
+      status: "failed",
+      content: "",
+      contentBlocks: [],
+      resources: [],
+      metadataJson: JSON.stringify({ continuityKey }),
+    });
+
+    const completion = fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "The answer that must not be reported as landed.",
+    });
+
+    expect(completion.journalMaterialized).toBe(false);
+    expect(completion.journalChanges).toHaveLength(0);
+    fixture.store.close();
+  });
+
+  it("restores a missing user turn when repairing an in-progress assistant row", () => {
+    // A crash between the two journal writes leaves the assistant row without its
+    // question. Repairing only the answer left an exchange that reads as an assistant
+    // talking to nobody.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    const conversationId = String(fixture.store.getRow(
+      "SELECT conversation_id FROM surface_conversations WHERE agent_session_id = ? LIMIT 1",
+      [fixture.sessionId],
+    ).conversation_id);
+    const continuityKey = "voice:voice-turn-1";
+    recordJournalTurn(fixture.store, {
+      ownerId: "owner",
+      conversationId,
+      turnId: stableAgentSpawnTurnId(continuityKey, "assistant"),
+      role: "assistant",
+      surfaceKind: "realtime_voice",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "",
+      contentBlocks: [],
+      resources: [],
+      metadataJson: JSON.stringify({ continuityKey }),
+    });
+
+    const completion = fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "The repaired answer.",
+    });
+
+    expect(completion.journalMaterialized).toBe(true);
+    expect(fixture.store.allRows(
+      "SELECT role, content FROM conversation_turns ORDER BY created_at_ms, turn_seq",
+    )).toEqual([
+      { role: "user", content: "Remember my latest request" },
+      { role: "assistant", content: "The repaired answer." },
+    ]);
+    fixture.store.close();
+  });
+
+  it("repairs onto the realtime surface even when a main-chat alias exists", () => {
+    // Ordering main_chat first labelled the repaired voice turns main_chat and emitted
+    // the change on that surface, so the voice projection never saw its own turn.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    const realtime = fixture.store.getRow(
+      "SELECT conversation_id FROM surface_conversations WHERE agent_session_id = ? LIMIT 1",
+      [fixture.sessionId],
+    );
+    fixture.store.execute(
+      `INSERT INTO surface_conversations
+         (owner_id, agent_session_id, conversation_id, surface_kind, external_ref_kind, external_ref_id, created_at_ms, last_active_at_ms)
+       VALUES (?, ?, ?, 'main_chat', 'chat', 'main-chat-alias', ?, ?)`,
+      ["owner", fixture.sessionId, String(realtime.conversation_id), Date.now(), Date.now() + 1000],
+    );
+
+    const completion = fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "Answered on the surface that asked.",
+    });
+
+    expect(completion.journalMaterialized).toBe(true);
+    for (const change of completion.journalChanges ?? []) {
+      expect(["realtime_voice", "realtime"]).toContain(change.surfaceKind);
+    }
+    fixture.store.close();
+  });
+
+  it("does not attribute a synthetic external authorization prompt to the user", () => {
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun({
+      ...beginInput(fixture.sessionId),
+      prompt: "Authorize the provider tool call without a final transcript",
+      promptIsSynthetic: true,
+    });
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "The tool call completed.",
+    });
+
+    expect(fixture.store.allRows(
+      "SELECT role, content FROM conversation_turns ORDER BY turn_seq",
+    )).toEqual([{ role: "assistant", content: "The tool call completed." }]);
+    fixture.store.close();
+  });
+
+  it("puts the streamed text on the message.completed event, not an empty payload", () => {
+    // The trace in #12731 shows these events carrying literally {"text":""}. The
+    // event is emitted from finishAttemptAndRun off the same finalText the run row
+    // stores, so both the completion lane and the journal starve together.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "Three parts sand to one part clay.",
+    });
+
+    const completed = fixture.store.allRows(
+      "SELECT payload_json FROM events WHERE run_id = ? AND type = 'message.completed'",
+      [run.runId],
+    );
+    expect(completed).toHaveLength(1);
+    expect(JSON.parse(String(completed[0].payload_json))).toEqual({ text: "Three parts sand to one part clay." });
+    fixture.store.close();
+  });
+
+  it("leaves final_text null when the surface reports no text", () => {
+    const fixture = createFixture();
+    const omitted = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: omitted.runId,
+      attemptId: omitted.attemptId,
+      terminalStatus: "completed",
+    });
+
+    // An empty string means the same thing as an absent field, so both land as
+    // null and no consumer has to special-case "" separately.
+    const empty = fixture.kernel.beginExternalSurfaceRun({
+      ...beginInput(fixture.sessionId),
+      turnId: "voice-turn-2",
+      requestId: "begin-2",
+    });
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: empty.runId,
+      attemptId: empty.attemptId,
+      terminalStatus: "completed",
+      finalText: "",
+    });
+
+    // Whitespace-only is "produced no text" too, collapsed the same way.
+    const blank = fixture.kernel.beginExternalSurfaceRun({
+      ...beginInput(fixture.sessionId),
+      turnId: "voice-turn-3",
+      requestId: "begin-3",
+    });
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: blank.runId,
+      attemptId: blank.attemptId,
+      terminalStatus: "completed",
+      finalText: "   ",
+    });
+
+    for (const runId of [omitted.runId, empty.runId, blank.runId]) {
+      expect(fixture.store.getRow("SELECT final_text FROM runs WHERE run_id = ?", [runId]).final_text).toBeNull();
+    }
+    fixture.store.close();
+  });
+
+  it("keeps text produced before a failed terminalization", () => {
+    // Matches the internal adapter path, which stores whatever text was produced
+    // and signals failure through errorCode rather than by discarding the answer.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "failed",
+      finalText: "Partial answer before the surface gave up.",
+      errorCode: "external_surface_failed",
+    });
+
+    const row = fixture.store.getRow(
+      "SELECT final_text, status, error_code FROM runs WHERE run_id = ?",
+      [run.runId],
+    );
+    expect(row.final_text).toBe("Partial answer before the surface gave up.");
+    expect(row.status).toBe("failed");
+    expect(row.error_code).toBe("external_surface_failed");
+    fixture.store.close();
+  });
+
+  it("rejects a non-string finalText", () => {
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    expectCode(() => fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: { text: "not a string" } as unknown as string,
+    }), "invalid_external_request");
+
+    // A rejected call must leave the run terminalizable rather than half-sealed,
+    // which only a valid retry landing on a terminal status actually proves.
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "Recovered after the rejected call.",
+    });
+
+    expect(fixture.store.getRow(
+      "SELECT status, final_text FROM runs WHERE run_id = ?",
+      [run.runId],
+    )).toEqual({ status: "succeeded", final_text: "Recovered after the rejected call." });
+    fixture.store.close();
+  });
+
+  it("reports whether the answer was actually stored", () => {
+    // A surface cannot otherwise tell a successful write from an older kernel
+    // that ignored the field entirely.
+    const fixture = createFixture();
+    const withText = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    expect(fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: withText.runId,
+      attemptId: withText.attemptId,
+      terminalStatus: "completed",
+      finalText: "Three parts sand to one part clay.",
+    }).finalTextPersisted).toBe(true);
+
+    const withoutText = fixture.kernel.beginExternalSurfaceRun({
+      ...beginInput(fixture.sessionId),
+      turnId: "voice-turn-2",
+      requestId: "begin-2",
+    });
+    expect(fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: withoutText.runId,
+      attemptId: withoutText.attemptId,
+      terminalStatus: "completed",
+    }).finalTextPersisted).toBe(false);
+    fixture.store.close();
+  });
+
+  it("clears a superseded answer when an orphaned turn is re-begun", () => {
+    // The requeue branch recycles the run row. Until this PR final_text was
+    // always null on external runs, so nothing could survive the reset; now a
+    // stale answer would sit in an active run and reach the context snapshot.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "Three parts sand to one part clay.",
+    });
+    fixture.store.execute("UPDATE runs SET status = 'orphaned' WHERE run_id = ?", [run.runId]);
+
+    fixture.kernel.beginExternalSurfaceRun({ ...beginInput(fixture.sessionId), requestId: "begin-requeue" });
+
+    expect(fixture.store.getRow(
+      "SELECT status, final_text, result_json FROM runs WHERE run_id = ?",
+      [run.runId],
+    )).toEqual({ status: "running", final_text: null, result_json: null });
+    fixture.store.close();
+  });
+
+  it("keeps the first answer when the surface replays the same terminal status", () => {
+    // Swift retries this RPC on timeout, so a late replay must not rewrite an
+    // answer the kernel already sealed.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    const complete = (finalText: string) => fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText,
+    });
+
+    complete("Three parts sand to one part clay.");
+    const replay = complete("A different answer from a retried frame.");
+
+    expect(replay.duplicate).toBe(true);
+    // The replay's text was dropped by design, and the result says so.
+    expect(replay.finalTextPersisted).toBe(false);
+    expect(fixture.store.getRow(
+      "SELECT final_text FROM runs WHERE run_id = ?",
+      [run.runId],
+    ).final_text).toBe("Three parts sand to one part clay.");
+    fixture.store.close();
+  });
+
+  it("repairs a missing journal from the first persisted answer on a completion replay", () => {
+    // A crash can commit the terminal run before the canonical journal exchange
+    // is visible. The idempotent Swift retry must repair from persisted truth,
+    // never from a different payload carried by the replayed frame.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "The first answer is canonical.",
+    });
+    fixture.store.execute("DELETE FROM backend_turn_outbox");
+    fixture.store.execute("DELETE FROM conversation_turn_revisions");
+    fixture.store.execute("DELETE FROM conversation_turns");
+
+    const replay = fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "completed",
+      finalText: "A later replay must not replace it.",
+    });
+
+    expect(replay).toMatchObject({
+      duplicate: true,
+      finalTextPersisted: false,
+      journalMaterialized: true,
+    });
+    expect(replay.journalChanges).toHaveLength(2);
+    expect(fixture.store.allRows(
+      "SELECT role, content FROM conversation_turns ORDER BY created_at_ms, turn_seq",
+    )).toEqual([
+      { role: "user", content: "Remember my latest request" },
+      { role: "assistant", content: "The first answer is canonical." },
+    ]);
+    fixture.store.close();
+  });
+
+  it("keeps text produced before a cancelled terminalization", () => {
+    // cancelled is a distinct persisted status from failed, and the failed-only
+    // errorCode default must not fire for it.
+    const fixture = createFixture();
+    const run = fixture.kernel.beginExternalSurfaceRun(beginInput(fixture.sessionId));
+
+    fixture.kernel.completeExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      terminalStatus: "cancelled",
+      finalText: "Half an answer before the user cut in.",
+    });
+
+    expect(fixture.store.getRow(
+      "SELECT final_text, status, error_code FROM runs WHERE run_id = ?",
+      [run.runId],
+    )).toEqual({
+      final_text: "Half an answer before the user cut in.",
+      status: "cancelled",
+      error_code: null,
+    });
+    fixture.store.close();
   });
 });
 

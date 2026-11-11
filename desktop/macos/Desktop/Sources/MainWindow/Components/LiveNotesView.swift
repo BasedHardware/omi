@@ -1,6 +1,12 @@
 import OmiTheme
 import SwiftUI
 
+enum LiveNotesEscapeHandling {
+  static func shouldCancelEdit(editingNoteId: Int64?) -> Bool {
+    editingNoteId != nil
+  }
+}
+
 /// Live notes view showing AI-generated and manual notes during recording
 struct LiveNotesView: View {
   @ObservedObject var monitor: LiveNotesMonitor = .shared
@@ -17,13 +23,19 @@ struct LiveNotesView: View {
   /// Focus state for manual input
   @FocusState private var isInputFocused: Bool
 
+  /// The note the delete confirmation is about. A note is deleted from storage outright (no undo),
+  /// so it asks first.
+  @State private var noteToDelete: LiveNote?
+  @State private var isConfirmingDelete = false
+
   var body: some View {
     VStack(spacing: 0) {
       // Header with AI toggle
       headerView
 
-      Divider()
-        .background(OmiColors.border)
+      // `GlassSeparator`, not `Divider().background(_:)`: a `Divider` resolves against the host
+      // window's appearance rather than the panel's pinned light one.
+      GlassSeparator()
 
       // Notes list
       if monitor.notes.isEmpty {
@@ -35,7 +47,22 @@ struct LiveNotesView: View {
       // Manual note input
       manualInputView
     }
-    .background(OmiColors.backgroundSecondary)
+    // No background: the glass owns the ground. This used to paint `backgroundSecondary` over it.
+    .glassContent()
+    .onEscapeKey(priority: .editing) {
+      guard LiveNotesEscapeHandling.shouldCancelEdit(editingNoteId: editingNoteId) else { return false }
+      cancelEdit()
+      return true
+    }
+    .shellConfirmation(
+      isPresented: $isConfirmingDelete,
+      title: "Delete Note?",
+      message: "This permanently deletes the note. It can't be undone.",
+      confirmTitle: "Delete"
+    ) {
+      if let noteToDelete { deleteNote(noteToDelete) }
+      noteToDelete = nil
+    }
   }
 
   // MARK: - Header
@@ -44,7 +71,7 @@ struct LiveNotesView: View {
     HStack {
       Text("Notes")
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Spacer()
 
@@ -52,7 +79,7 @@ struct LiveNotesView: View {
       HStack(spacing: OmiSpacing.xs) {
         Image(systemName: "sparkles")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(monitor.isAiEnabled ? OmiColors.accent : OmiColors.textQuaternary)
+          .foregroundColor(monitor.isAiEnabled ? Ink.primary : Ink.secondary)
 
         Toggle("", isOn: $monitor.isAiEnabled)
           .toggleStyle(OmiToggleStyle())
@@ -74,26 +101,13 @@ struct LiveNotesView: View {
   // MARK: - Empty State
 
   private var emptyStateView: some View {
-    VStack(spacing: OmiSpacing.md) {
-      Spacer()
-
-      Image(systemName: "note.text")
-        .scaledFont(size: 32)
-        .foregroundColor(OmiColors.textQuaternary)
-
-      Text("Notes will appear here")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
-
-      if monitor.isAiEnabled {
-        Text("AI generates notes as you speak")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textQuaternary)
-      }
-
-      Spacer()
-    }
-    .frame(maxWidth: .infinity)
+    // The shared empty state rather than a fourth hand-built one — it already carries the glyph
+    // size and the two rungs glass allows.
+    GlassEmptyState(
+      systemImage: "note.text",
+      title: "Notes will appear here",
+      message: monitor.isAiEnabled ? "AI generates notes as you speak" : nil
+    )
   }
 
   // MARK: - Notes List
@@ -110,7 +124,10 @@ struct LiveNotesView: View {
               onStartEdit: { startEditing(note) },
               onSaveEdit: { saveEdit(note) },
               onCancelEdit: { cancelEdit() },
-              onDelete: { deleteNote(note) }
+              onDelete: {
+                noteToDelete = note
+                isConfirmingDelete = true
+              }
             )
             .id(note.id)
           }
@@ -132,14 +149,13 @@ struct LiveNotesView: View {
 
   private var manualInputView: some View {
     VStack(spacing: 0) {
-      Divider()
-        .background(OmiColors.border)
+      GlassSeparator()
 
       HStack(spacing: OmiSpacing.sm) {
-        TextField("Add a note...", text: $manualNoteText)
+        TextField("Add a note…", text: $manualNoteText)
           .textFieldStyle(.plain)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .focused($isInputFocused)
           .onSubmit {
             addManualNote()
@@ -148,14 +164,15 @@ struct LiveNotesView: View {
         Button(action: addManualNote) {
           Image(systemName: "plus.circle.fill")
             .scaledFont(size: OmiType.heading)
-            .foregroundColor(manualNoteText.isEmpty ? OmiColors.textQuaternary : OmiColors.accent)
+            .foregroundColor(manualNoteText.isEmpty ? Ink.secondary : Ink.primary)
         }
         .buttonStyle(.plain)
         .disabled(manualNoteText.isEmpty)
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundTertiary)
+      // A wash, not a fill: the composer strip reads as a shade of the glass it sits on.
+      .background(Ink.rowFill)
     }
   }
 
@@ -225,12 +242,12 @@ private struct NoteRowView: View {
       if note.isAiGenerated {
         Image(systemName: "sparkles")
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(OmiColors.accent)
+          .foregroundColor(Ink.primary)
           .frame(width: 14)
       } else {
         Image(systemName: "pencil")
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 14)
       }
 
@@ -240,7 +257,7 @@ private struct NoteRowView: View {
           TextField("", text: $editText)
             .textFieldStyle(.plain)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .focused($isEditFocused)
             .onSubmit { onSaveEdit() }
             .onAppear { isEditFocused = true }
@@ -249,7 +266,7 @@ private struct NoteRowView: View {
           // Display mode
           Text(note.text)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(nil)
             .onTapGesture(count: 2) {
               onStartEdit()
@@ -259,7 +276,7 @@ private struct NoteRowView: View {
         // Timestamp
         Text(formattedTime)
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
       }
 
       Spacer()
@@ -268,43 +285,20 @@ private struct NoteRowView: View {
       if isHovering || isEditing {
         HStack(spacing: OmiSpacing.xxs) {
           if isEditing {
-            Button(action: onSaveEdit) {
-              Image(systemName: "checkmark")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.success)
-            }
-            .buttonStyle(.plain)
-
-            Button(action: onCancelEdit) {
-              Image(systemName: "xmark")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            .buttonStyle(.plain)
+            OmiIconButton("checkmark", help: "Save Note", size: .compact, action: onSaveEdit)
+            OmiIconButton("arrow.uturn.backward", help: "Cancel Editing", size: .compact, action: onCancelEdit)
           } else {
-            Button(action: onStartEdit) {
-              Image(systemName: "pencil")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            .buttonStyle(.plain)
-
-            Button(action: onDelete) {
-              Image(systemName: "trash")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.error)
-            }
-            .buttonStyle(.plain)
+            OmiIconButton("pencil", help: "Edit Note", size: .compact, action: onStartEdit)
+            OmiIconButton("trash", help: "Delete Note…", size: .compact, isDestructive: true, action: onDelete)
           }
         }
       }
     }
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.sm)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(isHovering || isEditing ? OmiColors.backgroundTertiary : Color.clear)
-    )
+    // The shared row, which already resolves rest/hover to the glass washes and animates colour
+    // only. Editing outranks hover so an edited row under the pointer does not dim back a step.
+    .glassRow(isEditing ? .selected : (isHovering ? .hover : .rest))
     .onHover { hovering in
       isHovering = hovering
     }
@@ -317,6 +311,6 @@ private struct NoteRowView: View {
   #Preview {
     LiveNotesView()
       .frame(width: 300, height: 500)
-      .background(OmiColors.backgroundPrimary)
+      .inkGlassPanel()
   }
 #endif

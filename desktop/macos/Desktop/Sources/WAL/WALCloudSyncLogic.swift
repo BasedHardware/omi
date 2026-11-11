@@ -77,7 +77,11 @@ enum WALCloudSyncLogic {
     case .transient:
       return false
 
-    case .notFound, .forbidden:
+    case .notFound, .forbidden, .unauthorized:
+      // `.unauthorized` = the status poll could not be authenticated (token mint
+      // failed, or a stale 401). Revert to `.miss` like the other durable
+      // failures so the authenticated upload path re-uploads and refreshes auth;
+      // the poll itself must not invalidate the session (INV-AUTH-1).
       var changed = false
       for walId in memberWalIds {
         guard let index = wals.firstIndex(where: { $0.id == walId }) else { continue }
@@ -123,5 +127,14 @@ enum WALCloudSyncLogic {
       }
       return changed
     }
+  }
+
+  /// Synced WALs whose recording start predates the retention cutoff — safe to
+  /// delete. Gated on `.synced` (a confirmed backend ack; never `.miss`/
+  /// `.uploaded`/`.corrupted`, which still need upload) AND older than the
+  /// cutoff, so local audio is only reclaimed after the cloud has it and a
+  /// retention buffer has elapsed. Pure so the delete/keep boundary is testable.
+  static func cleanupCandidates(wals: [WALEntry], cutoffTimestamp: Int) -> [WALEntry] {
+    wals.filter { $0.status == .synced && $0.timerStart < cutoffTimestamp }
   }
 }

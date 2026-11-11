@@ -18,6 +18,9 @@ final class RayBanMetaAudioCapture {
     private let engine = AVAudioEngine()
     private var converter: AVAudioConverter?
     private var isRunning = false
+    private var tappedInput: AVAudioInputNode?
+    private var sessionActivationAttempted = false
+    private var targetInputUid: String?
 
     /// PCM16 little-endian mono frames at targetSampleRate.
     var onFrame: ((Data, Double) -> Void)?
@@ -55,30 +58,57 @@ final class RayBanMetaAudioCapture {
         NotificationCenter.default.removeObserver(self)
     }
 
-    /// Bluetooth HFP input port names currently available.
-    static func availableHfpInputNames() -> [String] {
+    /// Bluetooth HFP input ports currently available. AVAudioSession's UID is
+    /// stable when the user renames the device; portName is not.
+    static func availableHfpInputs() -> [(uid: String, name: String)] {
         let session = AVAudioSession.sharedInstance()
         return (session.availableInputs ?? [])
             .filter { $0.portType == .bluetoothHFP }
-            .map { $0.portName }
+            .map { (uid: $0.uid, name: $0.portName) }
     }
 
     /// True when the active input route is a Bluetooth HFP port.
-    static func isHfpRouteActive() -> Bool {
-        return AVAudioSession.sharedInstance().currentRoute.inputs.contains { $0.portType == .bluetoothHFP }
+    static func isHfpRouteActive(inputUid: String? = nil) -> Bool {
+        return AVAudioSession.sharedInstance().currentRoute.inputs.contains {
+            $0.portType == .bluetoothHFP && (inputUid == nil || $0.uid == inputUid)
+        }
     }
 
-    func start() throws {
+    var isSelectedRouteActive: Bool { Self.isHfpRouteActive(inputUid: targetInputUid) }
+
+    func start(targetUid: String?) throws {
         guard !isRunning else { return }
+        // Setup can fail after acquiring the session or installing the tap.
+        // Release those resources before returning the original error to Dart.
+        defer {
+            if !isRunning { stop() }
+        }
 
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothHFP])
 
-        // Prefer the glasses' HFP mic over the built-in one.
-        if let hfpInput = (session.availableInputs ?? []).first(where: { $0.portType == .bluetoothHFP }) {
-            try session.setPreferredInput(hfpInput)
+        let hfpInputs = (session.availableInputs ?? []).filter { $0.portType == .bluetoothHFP }
+        let selectedInput: AVAudioSessionPortDescription?
+        if let targetUid {
+            selectedInput = hfpInputs.first { $0.uid == targetUid }
+            guard selectedInput != nil else {
+                throw NSError(
+                    domain: "RayBanMetaAudioCapture", code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "Selected Bluetooth microphone is unavailable"]
+                )
+            }
+        } else {
+            // DAT mode does not expose a mapping from its device ID to the HFP
+            // port UID, so preserve its existing first-HFP behavior.
+            selectedInput = hfpInputs.first
         }
 
+        if let hfpInput = selectedInput {
+            try session.setPreferredInput(hfpInput)
+        }
+        targetInputUid = targetUid
+
+        sessionActivationAttempted = true
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 
         let input = engine.inputNode
@@ -109,6 +139,7 @@ final class RayBanMetaAudioCapture {
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             self?.convertAndEmit(buffer: buffer, outputFormat: outputFormat)
         }
+        tappedInput = input
 
         engine.prepare()
         try engine.start()
@@ -117,21 +148,29 @@ final class RayBanMetaAudioCapture {
         // Give the Bluetooth route a moment to settle, then report it. Meta's
         // guidance: the HFP route can take ~2s to stabilize after engine start.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.onRouteChanged?(Self.isHfpRouteActive())
+            guard let self else { return }
+            self.onRouteChanged?(self.isSelectedRouteActive)
         }
     }
 
     func stop() {
-        guard isRunning else { return }
-        engine.inputNode.removeTap(onBus: 0)
+        guard isRunning || tappedInput != nil || sessionActivationAttempted else { return }
+        if let input = tappedInput {
+            tappedInput = nil
+            input.removeTap(onBus: 0)
+        }
         engine.stop()
         converter = nil
         isRunning = false
+        targetInputUid = nil
 
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            // Deactivation failure is non-fatal; another component may hold the session.
+        if sessionActivationAttempted {
+            sessionActivationAttempted = false
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            } catch {
+                // Deactivation failure is non-fatal; another component may hold the session.
+            }
         }
     }
 
@@ -167,14 +206,14 @@ final class RayBanMetaAudioCapture {
     }
 
     @objc private func handleRouteChange(_ notification: Notification) {
-        let hfpActive = Self.isHfpRouteActive()
+        let hfpActive = isSelectedRouteActive
         onRouteChanged?(hfpActive)
         // Losing the glasses' HFP input mid-capture means the tap is now fed by
         // whatever input took over (usually the phone mic) at a stale format.
         // Stop and surface it instead of silently recording the wrong source.
         if isRunning && !hfpActive {
             DispatchQueue.main.async { [weak self] in
-                guard let self = self, self.isRunning, !Self.isHfpRouteActive() else { return }
+                guard let self = self, self.isRunning, !self.isSelectedRouteActive else { return }
                 self.stop()
                 self.onError?("audio_route_lost", "Glasses microphone route was lost during capture")
             }

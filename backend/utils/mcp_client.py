@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
 
+from database import redis_db
 from models.app import ChatTool
 from utils.log_sanitizer import sanitize
 import logging
@@ -246,7 +247,7 @@ async def _mcp_post(
         headers["Mcp-Session-Id"] = session_id
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-        resp = await client.post(server_url, json=payload, headers=headers, follow_redirects=True)
+        resp = await client.post(server_url, json=payload, headers=headers, follow_redirects=False)
 
         if resp.status_code == 401:
             raise PermissionError("MCP server returned 401 Unauthorized")
@@ -330,10 +331,10 @@ async def _sse_send_and_receive_inner(
     post_endpoint: Optional[str] = None
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-        async with client.stream("GET", sse_url, headers=headers, follow_redirects=True) as stream:
+        async with client.stream("GET", sse_url, headers=headers, follow_redirects=False) as stream:
             if stream.status_code == 401:
                 raise PermissionError("MCP server returned 401 Unauthorized")
-            if stream.status_code >= 400:
+            if stream.status_code >= 400 or 300 <= stream.status_code < 400:
                 await stream.aread()
                 raise httpx.HTTPStatusError(
                     f"SSE connection failed with {stream.status_code}",
@@ -374,12 +375,18 @@ async def _sse_send_and_receive_inner(
                             if access_token:
                                 post_headers["Authorization"] = f"Bearer {access_token}"
                             for payload in payloads:
-                                await client.post(
+                                post_response = await client.post(
                                     post_endpoint,
                                     json=payload,
                                     headers=post_headers,
-                                    follow_redirects=True,
+                                    follow_redirects=False,
                                 )
+                                if 300 <= post_response.status_code < 400:
+                                    raise httpx.HTTPStatusError(
+                                        f'SSE endpoint redirected with {post_response.status_code}',
+                                        request=post_response.request,
+                                        response=post_response,
+                                    )
 
                         elif event_type == "message" and data_str:
                             try:
@@ -650,6 +657,11 @@ async def _call_mcp_tool_http(
                 break
             else:
                 return "Error: MCP server returned 401 Unauthorized and no refresh token available."
+        except httpx.HTTPStatusError as e:
+            if 300 <= e.response.status_code < 400:
+                raise
+            last_error = e
+            continue
         except Exception as e:
             last_error = e
             continue
@@ -688,6 +700,10 @@ async def _call_mcp_tool_sse(
             resp = await _call_tool_via_sse(server_url, tool_name, arguments, new_tokens["access_token"])
         else:
             return "Error: MCP server returned 401 Unauthorized and no refresh token available."
+    except httpx.HTTPStatusError as e:
+        if 300 <= e.response.status_code < 400:
+            raise
+        return f"Error calling MCP tool via SSE: {e}"
     except Exception as e:
         return f"Error calling MCP tool via SSE: {e}"
 
@@ -753,15 +769,45 @@ async def fetch_brandfetch_logo(domain: str) -> Optional[str]:
     return f"https://cdn.brandfetch.io/domain/{root_domain}?c=1idiDEee8WtzJbSEuuW"
 
 
-def generate_state_token(app_id: str, uid: str) -> str:
-    """Generate a state parameter for OAuth that encodes app_id and uid."""
-    nonce = secrets.token_urlsafe(16)
-    return f"{app_id}:{uid}:{nonce}"
+MCP_OAUTH_STATE_EXPIRY_SECONDS = 600  # 10 minutes, same as the integration OAuth flows
 
 
-def parse_state_token(state: str) -> tuple[str, str]:
-    """Parse app_id and uid from an OAuth state parameter."""
-    parts = state.split(":", 2)
-    if len(parts) < 2:
-        raise ValueError("Invalid state token")
-    return parts[0], parts[1]
+def create_mcp_oauth_state(app_id: str, uid: str) -> str:
+    """Create a single-use OAuth state for an MCP app connection.
+
+    The state is an opaque random token; the app_id/uid pair it stands for lives
+    server-side in Redis. The callback trusts only a state this server issued, so a
+    caller cannot forge a state that binds an app connection to another account.
+    """
+    state_token = secrets.token_urlsafe(32)
+    redis_db.r.setex(
+        f"mcp_oauth_state:{state_token}",
+        MCP_OAUTH_STATE_EXPIRY_SECONDS,
+        json.dumps({'app_id': app_id, 'uid': uid}),
+    )
+    return state_token
+
+
+def consume_mcp_oauth_state(state_token: str) -> Optional[tuple[str, str]]:
+    """Atomically consume an MCP OAuth state and return its (app_id, uid) pair.
+
+    Returns None for a missing, expired, already-used, or malformed state. GETDEL
+    keeps consumption single-use: a separate GET then DELETE would let two concurrent
+    callbacks carrying the same state both read it before either delete runs.
+    """
+    if not state_token:
+        return None
+    raw = redis_db.r.getdel(f"mcp_oauth_state:{state_token}")
+    if not raw:
+        return None
+    try:
+        loaded: object = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    app_id = loaded.get('app_id')
+    uid = loaded.get('uid')
+    if not isinstance(app_id, str) or not isinstance(uid, str) or not app_id or not uid:
+        return None
+    return app_id, uid

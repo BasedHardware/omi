@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
-import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Called with the conversation ids surfaced by a reconcile pass so the
@@ -44,6 +43,7 @@ class SyncReconciler {
   /// because a previous pass is in flight.
   Future<void> poke() async {
     final phone = _phone;
+    final onConversations = _onConversations;
     if (phone == null) return;
     if (_running) {
       throw StateError('SyncReconciler invoked outside RecordingTransferCoordinator');
@@ -55,7 +55,7 @@ class SyncReconciler {
       if (madeProgress) {
         _idleStreak = 0;
         try {
-          await _onConversations?.call(resp);
+          await onConversations?.call(resp);
         } catch (e) {
           Logger.debug('SyncReconciler: surface callback failed: $e');
         }
@@ -65,16 +65,18 @@ class SyncReconciler {
       rethrow;
     } finally {
       _running = false;
+      // Re-arm on every outcome. Leaving the timer disarmed after a failed pass
+      // stranded uploaded WALs until something else happened to wake the
+      // coordinator.
+      try {
+        await _reschedule();
+      } catch (e) {
+        Logger.debug('SyncReconciler: reschedule failed: $e');
+      }
     }
-    await _reschedule();
   }
 
-  Future<bool> _hasUploaded() async {
-    final phone = _phone;
-    if (phone == null) return false;
-    final wals = await phone.getAllWals();
-    return wals.any((w) => w.status == WalStatus.uploaded);
-  }
+  Future<bool> _hasUploaded() async => _phone?.hasUploadedWals ?? false;
 
   Future<void> _reschedule() async {
     _timer?.cancel();
@@ -99,8 +101,9 @@ class SyncReconciler {
     unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.foregrounded));
   }
 
-  /// App backgrounded — stop the timer. State is persisted; a later
-  /// foreground/startup poke resumes. (No OS background execution by design.)
+  /// App backgrounded — stop the reconcile timer. An in-flight Android
+  /// transfer keeps its own FGS/wake lock until that pass completes or cancels
+  /// (#5221); this timer must not start a new drain from screen-off.
   void onBackground() {
     _foreground = false;
     _timer?.cancel();

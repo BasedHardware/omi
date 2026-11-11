@@ -6,6 +6,8 @@ on:
     paths:
       - 'web/admin/**'
       - 'config/public-build-*.json'
+      - '.github/workflows/gcp_admin.yml'
+      - '.github/scripts/check_admin_deploy_scope.py'
       - '.github/actions/deploy-public-build/**'
       - '.github/actions/prepare-public-build/**'
       - '.github/actions/public-build-candidate-promotion/**'
@@ -13,19 +15,65 @@ on:
       - '.github/scripts/preflight_public_build_runtime.py'
       - '.github/scripts/smoke_public_build_browser.py'
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'prod'
+        type: choice
+        options: [development, prod]
 
 concurrency:
-  group: deploy-cloud-run-omi-admin-dashboard-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
+  group: deploy-cloud-run-omi-admin-dashboard-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
+  scope:
+    name: Decide admin deployment scope
+    # Unprivileged decision before the prod GitHub Environment, GCP creds,
+    # image build, or Cloud Run mutate. Generated OpenAPI clients under
+    # web/admin/ can match the path filter without changing admin runtime.
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      applies: ${{ steps.scope.outputs.applies }}
+    steps:
+      - name: Checkout triggering commit for scope decision
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Decide whether the triggering commit can affect the admin deployment
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ADMIN_SCOPE_SHA: ${{ github.sha }}
+          ADMIN_SCOPE_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          before="${ADMIN_SCOPE_BEFORE:-}"
+          if [ -n "$before" ] && ! [[ "$before" =~ ^0+$ ]] && ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$before" || true
+          fi
+          python3 .github/scripts/check_admin_deploy_scope.py --github-output
+
   deploy:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
-    environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
+    needs: scope
+    if: needs.scope.outputs.applies == 'true'
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     permissions:
       actions: read
       contents: read
       id-token: write
+    env:
+      DEPLOY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -35,6 +83,24 @@ jobs:
         uses: ./.github/actions/deploy-public-build
         with:
           target: admin
-          environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
+          environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
-          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod: GitHub WIF (omi-gha-deploy-prod, pinned to this file on main +
+          # the prod environment); development uses the dev deployer through
+          # omi-gha-deploy-dev (credential hygiene WS-D). No JSON key either way.
+          workload_identity_provider: ${{ env.DEPLOY_ENVIRONMENT == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          workload_identity_service_account: ${{ env.DEPLOY_ENVIRONMENT == 'prod' && 'omi-ci-web-prod@based-hardware.iam.gserviceaccount.com' || 'omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com' }}
+          # Keyless runtime identity: Firestore via roles/datastore.user, Auth
+          # reads via roles/firebaseauth.viewer, per-secret secretAccessor. The
+          # Admin SDK uses it through ADC; no service-account key is mounted.
+          service_account: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod') == 'prod' && 'omi-admin-dashboard-runtime@based-hardware.iam.gserviceaccount.com' || '' }}
+          network: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          subnet: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          runtime_env_vars: |
+            OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+            ADMIN_STATS_READER_SAS=${{ vars.ADMIN_STATS_READER_SAS }}
+            ADMIN_STATS_READER_AUDIENCE=${{ vars.ADMIN_STATS_READER_AUDIENCE }}
+            GRAFANA_EMBED_ENABLED=${{ vars.GRAFANA_EMBED_ENABLED }}
+            GRAFANA_EMBED_SIGNING_SECRET=${{ vars.GRAFANA_EMBED_SIGNING_SECRET }}
+            GRAFANA_BUSINESS_TOKEN_SECRET=${{ vars.GRAFANA_BUSINESS_TOKEN_SECRET }}
+          require_gateway_url: true

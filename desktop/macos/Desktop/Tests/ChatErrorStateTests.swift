@@ -55,6 +55,18 @@ final class ChatErrorStateMappingTests: XCTestCase {
 
 final class ChatErrorStateTests: XCTestCase {
 
+  @MainActor
+  func testRuntimeOwnerChangeClearsStaleAuthRecoveryCard() {
+    let provider = ChatProvider()
+    provider.currentError = .authRequired
+    provider.errorMessage = "Previous account error"
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertNil(provider.currentError, "the next account must not inherit a sign-in CTA")
+    XCTAssertNil(provider.errorMessage, "the next account must not inherit an error banner")
+  }
+
   // MARK: - Exhaustive recovery coverage
 
   /// Every `ChatErrorState` case must have a `primaryRecovery`. Implemented
@@ -238,6 +250,41 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertFalse(BridgeError.agentError("Anthropic provider unauthorized").isSessionAuthenticationFailure)
   }
 
+  // T4: provider auth_required must not present the Pro upgrade sheet.
+  func testAuthRequiredHandlerDoesNotWireProSheet() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    guard let range = source.range(of: "func handleClaudeAuthRequired") else {
+      return XCTFail("missing handleClaudeAuthRequired")
+    }
+    let snippet = String(source[range.lowerBound...]).prefix(900)
+    XCTAssertFalse(snippet.contains("isClaudeAuthRequired = true"))
+    XCTAssertFalse(snippet.contains("startClaudeAuth()"))
+  }
+
+  func testStartClaudeAuthKeepsUserClaudeGuard() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    guard let range = source.range(of: "func startClaudeAuth()") else {
+      return XCTFail("missing startClaudeAuth")
+    }
+    let snippet = String(source[range.lowerBound...]).prefix(300)
+    XCTAssertTrue(snippet.contains("guard isUserClaudeMode else { return }"))
+  }
+
+  func testClaudeOAuthSuccessKeepsKeychainBackedConnectionState() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let start = try XCTUnwrap(source.range(of: "func handleClaudeAuthSuccess()"))
+    let tail = source[start.lowerBound...]
+    let end = try XCTUnwrap(tail.range(of: "\n  }\n"))
+    let snippet = String(tail[..<end.lowerBound])
+
+    XCTAssertTrue(snippet.contains("markClaudeAuthSucceeded()"))
+    XCTAssertFalse(snippet.contains("checkClaudeConnectionStatus()"))
+
+    let marker = try XCTUnwrap(source.range(of: "func markClaudeAuthSucceeded()"))
+    let stateUpdate = String(source[marker.lowerBound...]).prefix(260)
+    XCTAssertTrue(stateUpdate.contains("isClaudeConnected = true"))
+  }
+
   func testEnsureBridgeStartedMapsAuthMissingToAuthRequired() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(source.contains("ChatErrorState.from(bridgeError)"))
@@ -252,7 +299,10 @@ final class ChatErrorStateTests: XCTestCase {
     let source = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(source.contains("onAccepted: (@MainActor () -> Void)? = nil"))
     XCTAssertTrue(source.contains("onAccepted?()"))
-    XCTAssertTrue(source.contains("self.draftRevision == submittedRevision"))
+    // Static tripwire. The revision now lives on `composerDraft` (the draft is no
+    // longer published on the provider); the guard it pins is unchanged, and
+    // `ChatComposerDraftTests` covers the revision semantics behaviorally.
+    XCTAssertTrue(source.contains("self.composerDraft.revision == submittedRevision"))
     XCTAssertTrue(source.contains("self.draftText == text\n        else { return }"))
     XCTAssertFalse(source.contains("draftText = trimmedText"))
   }
@@ -286,32 +336,27 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertTrue(snippet.contains("await sendMessage(prompt)"))
   }
 
-  func testDashboardShowsChatErrorCard() throws {
-    let source = try sourceFile("MainWindow/Pages/DashboardPage.swift")
-    XCTAssertTrue(source.contains("dashboardChatErrorCard"))
+  func testHomeShowsChatErrorCard() throws {
+    let source = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
     XCTAssertTrue(source.contains("ChatErrorCard("))
   }
 
-  /// Static tripwire for the Home chat layout. The shared ChatErrorCard belongs to
-  /// homePanelStage, below the composer; placing it inside homeChatPanel as well
-  /// visibly duplicates the sign-in recovery CTA for the same ChatProvider state.
-  func testDashboardHomeChatHasOneSharedErrorCardRenderSite() throws {
-    let source = try sourceFile("MainWindow/Pages/DashboardPage.swift")
-    let panelStart = try XCTUnwrap(source.range(of: "private func homePanelStage"))
-    let chatStart = try XCTUnwrap(source.range(of: "private func homeChatPanel"))
-    let connectStart = try XCTUnwrap(source.range(of: "private func homeConnectPanel"))
-
-    let panelSource = String(source[panelStart.lowerBound..<chatStart.lowerBound])
-    let chatSource = String(source[chatStart.lowerBound..<connectStart.lowerBound])
-
+  /// Static tripwire for the Home chat layout. The shared `ChatErrorCard` has one
+  /// render site: the answer thread, below the transcript. `DashboardPage` used to
+  /// carry a second copy inside its embedded chat panel, which duplicated the
+  /// sign-in recovery CTA for the same `ChatProvider` state; the page is gone and
+  /// this pins the surviving surface to exactly one site.
+  func testHomeChatHasOneSharedErrorCardRenderSite() throws {
+    let source = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
     XCTAssertEqual(
-      panelSource.components(separatedBy: "dashboardChatErrorCard").count - 1,
+      source.components(separatedBy: "ChatErrorCard(").count - 1,
       1,
-      "Home must have one canonical error-card owner outside the chat panel."
+      "Home must have exactly one error-card render site."
     )
+    let home = try sourceFile("MainWindow/QueryShell/QueryShellHome.swift")
     XCTAssertFalse(
-      chatSource.contains("dashboardChatErrorCard"),
-      "The embedded chat panel must not render a second copy of the shared auth gate."
+      home.contains("ChatErrorCard("),
+      "The host must not render a second copy of the shared auth gate above the thread."
     )
   }
 

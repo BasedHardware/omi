@@ -4,20 +4,32 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+// The row icons here were bare SF Symbols in `Ink.accent`, and both halves of that were wrong on
+// this pane.
+//
+// *Bare* is a layout bug you can see: `rectangle.dashed.badge.record`, `mic.fill`, `bell.fill`,
+// `speaker.wave.2.fill` and `textformat.size` have wildly different optical widths, so the column of
+// titles beside them stepped left and right down the page instead of lining up. That is the exact
+// failure `SettingsIconTile` exists to fix — a fixed 26 pt ground is what makes a column of symbols
+// stop shimmering — and Notifications & Privacy already used it, so General and its neighbour were
+// two different designs.
+//
+// *Accent* spends the one accent on decoration. `Ink.accent` is reserved for the one actionable link
+// on a surface; selection and on-state are neutral ink (`SettingsSelection`). The tile's default
+// tint is `Ink.primary`, which is what the rest of the pane is set in.
 extension SettingsContentView {
   var generalSection: some View {
-    VStack(spacing: OmiSpacing.xl) {
+    VStack(spacing: OmiSpacing.sm) {
+      storefrontFeatureEntry(.screenContext)
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
         HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "rectangle.dashed.badge.record")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.info)
+          SettingsIconTile(symbol: "rectangle.dashed.badge.record")
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Screen Capture")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(
               permissionError
@@ -27,7 +39,7 @@ extension SettingsContentView {
             .foregroundColor(
               permissionError != nil || screenCaptureHealth == .temporarilyUnavailable
                 || screenCaptureHealth == .recovering
-                ? OmiColors.warning : OmiColors.textTertiary
+                ? SettingsInk.notice : Ink.secondary
             )
           }
 
@@ -36,6 +48,7 @@ extension SettingsContentView {
           if isToggling {
             ProgressView()
               .scaleEffect(0.8)
+              .frame(width: 36, height: 20)
           } else {
             Toggle(
               "",
@@ -49,72 +62,79 @@ extension SettingsContentView {
             )
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
+            .frame(width: 36, height: 20)
           }
         }
       }
 
-      // Audio Recording toggle
+      // One recording policy; no independent enable switch or system-audio mode.
       settingsCard(settingId: "general.audiorecording") {
-        HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "mic.fill")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.info)
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          HStack(spacing: OmiSpacing.lg) {
+            SettingsIconTile(symbol: "mic.fill")
 
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Audio Recording")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Audio Recording")
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
 
-            Text(
-              transcriptionError
-                ?? (isTranscribing
-                  ? (appState.isAwaitingMeeting
-                    ? "Waiting for a meeting…" : "Recording and transcribing audio")
-                  : "Audio recording is paused")
-            )
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+              Text(audioRecordingStatusText)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(audioRecordingNeedsAttention ? SettingsInk.notice : Ink.secondary)
+            }
+
+            Spacer()
+
+            AudioRecordingModeSwitcher(selection: audioRecordingModeBinding)
           }
 
-          Spacer()
+        }
+      }
 
-          if isTogglingTranscription {
-            ProgressView()
-              .scaleEffect(0.8)
-          } else {
+      // Wake word trigger (opt-in; needs ambient listening active to hear it)
+      settingsCard(settingId: "general.wakeword") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
+            SettingsIconTile(symbol: "waveform.and.mic")
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Wake Word")
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
+
+              Text(wakeWordSubtitle)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
+            }
+
+            Spacer()
+
             Toggle(
               "",
-              isOn: Binding(
-                get: { isTranscribing },
-                set: { newValue in
-                  isTranscribing = newValue
-                  toggleTranscription(enabled: newValue)
-                }
-              )
+              isOn: wakeWordEnabledBinding
             )
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
+            .frame(width: 36, height: 20)
           }
         }
       }
 
       // Notifications toggle
       settingsCard(settingId: "general.notifications") {
-        VStack(spacing: OmiSpacing.md) {
+        VStack(spacing: OmiSpacing.xs) {
           HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "bell.fill")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.info)
+            SettingsIconTile(symbol: "bell.fill")
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Notifications")
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text(notificationStatusText)
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(
-                  appState.isNotificationBannerDisabled ? OmiColors.warning : OmiColors.textTertiary
+                  appState.isNotificationBannerDisabled ? SettingsInk.notice : Ink.secondary
                 )
             }
 
@@ -136,13 +156,14 @@ extension SettingsContentView {
                       // Banners off — user needs to change style in System Settings
                       appState.openNotificationPreferences()
                     } else {
-                      // Auth not granted — try lsregister repair first
+                      // Request the native prompt when possible; a prior denial opens
+                      // System Settings immediately without restarting notification services.
                       AnalyticsManager.shared.notificationRepairTriggered(
                         reason: "settings_fix_button",
                         previousStatus: "not_authorized",
                         currentStatus: "not_authorized"
                       )
-                      appState.repairNotificationAndFallback()
+                      appState.requestNotificationPermission()
                     }
                   } else {
                     appState.openNotificationPreferences()
@@ -159,91 +180,44 @@ extension SettingsContentView {
             HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "exclamationmark.triangle.fill")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.warning)
+                .foregroundColor(SettingsInk.notice)
 
               Text(
                 "Banners disabled - you won't see visual alerts. Set style to \"Banners\" in System Settings."
               )
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.warning)
+              .foregroundColor(SettingsInk.notice)
 
               Spacer()
             }
             .padding(OmiSpacing.sm)
             .background(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .fill(OmiColors.warning.opacity(0.1))
+              RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+                .fill(SettingsInk.notice.opacity(0.1))
             )
           }
         }
       }
 
-      // System Audio capture mode (macOS 14.4+ — system audio capture requires Core Audio taps)
-      if #available(macOS 14.4, *) {
-        settingsCard(settingId: "general.systemaudio") {
-          VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            HStack(spacing: OmiSpacing.lg) {
-              Image(systemName: "speaker.wave.2.fill")
-                .scaledFont(size: OmiType.subheading)
-                .foregroundColor(OmiColors.info)
-
-              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text("System Audio")
-                  .scaledFont(size: OmiType.subheading, weight: .semibold)
-                  .foregroundColor(OmiColors.textPrimary)
-
-                Text("Choose when Omi records audio from other apps (calls, videos, music).")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
-              }
-
-              Spacer()
-
-              SettingsMenuPicker(
-                selection: Binding(
-                  get: { systemAudioCaptureMode },
-                  set: { newValue in
-                    systemAudioCaptureMode = newValue
-                    setSystemAudioCaptureMode(newValue)
-                  }
-                )
-              ) {
-                Text("Always").tag(AssistantSettings.SystemAudioCaptureMode.always)
-                Text("Only during meetings").tag(
-                  AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings)
-                Text("Never").tag(AssistantSettings.SystemAudioCaptureMode.never)
-              }
-            }
-
-            if systemAudioCaptureMode == .onlyDuringMeetings {
-              Text(
-                "Omi captures other apps' audio only while you're in a call (e.g. Zoom, Teams, FaceTime). Detecting browser-based calls like Google Meet requires Screen Recording permission."
-              )
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
-              .fixedSize(horizontal: false, vertical: true)
-            }
-          }
-        }
+      // Interface Sounds
+      settingsCard(settingId: "general.interfacesounds") {
+        InterfaceSoundsRow()
       }
 
       // Font Size
       settingsCard(settingId: "general.fontsize") {
-        VStack(spacing: OmiSpacing.md) {
+        VStack(spacing: OmiSpacing.sm) {
           HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "textformat.size")
-              .scaledFont(size: 16, weight: .medium)
-              .foregroundColor(OmiColors.info)
-              .frame(width: 12)
+            SettingsIconTile(symbol: "textformat.size")
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Font Size")
                 .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text("Scale: \(Int(fontScaleSettings.scale * 100))%")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -252,7 +226,7 @@ extension SettingsContentView {
               Button("Reset") {
                 fontScaleSettings.resetToDefault()
               }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
             }
           }
 
@@ -261,40 +235,295 @@ extension SettingsContentView {
             // original 12/18 ratio rather than the type registers.
             Text("A")
               .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
 
             Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
-              .tint(OmiColors.info)
+              .tint(SettingsSelection.valueFill)
               .onChange(of: fontScaleSettings.scale) { _, _ in
                 performStepHaptic()
               }
 
             Text("A")
               .scaledFont(size: 18, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           Text("The quick brown fox jumps over the lazy dog")
             .scaledFont(size: 14)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, OmiSpacing.xxs)
-
-          HStack {
-            Spacer()
-            Button(action: {
-              resetWindowToDefaultSize()
-            }) {
-              HStack(spacing: OmiSpacing.xs) {
-                Image(systemName: "arrow.uturn.backward")
-                Text("Reset Window Size")
-              }
-            }
-            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-          }
         }
       }
 
+      // Transparency
+      settingsCard(settingId: "general.transparency") {
+        transparencyCard
+      }
+
+      // Window
+      settingsCard(settingId: "general.window") {
+        windowSizeCard
+      }
+
+    }
+  }
+
+  /// Restores the default window size. A rarely used repair, so it is a quiet secondary button on
+  /// its own row rather than a primary button inside the Font Size card, which it has nothing to do
+  /// with.
+  private var windowSizeCard: some View {
+    HStack(spacing: OmiSpacing.lg) {
+      SettingsIconTile(symbol: "macwindow")
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Window Size")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+
+        Text("Return the main window to its default dimensions")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+      }
+
+      Spacer()
+
+      Button("Reset") {
+        resetWindowToDefaultSize()
+      }
+      .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+      .accessibilityLabel("Reset Window Size")
+      .accessibilityIdentifier("settings-reset-window-size")
+    }
+  }
+
+  /// How much of the desktop the glass lets through.
+  ///
+  /// The slider binds straight to the published value, so every glass surface — this pane's own
+  /// panel included — follows the thumb while it is still down. Under the system's Reduce
+  /// Transparency setting the ground is opaque no matter what the slider says, so the control is
+  /// dimmed and says why rather than moving a value that changes nothing.
+  private var transparencyCard: some View {
+    let reduced = reduceTransparencyObserver.isEnabled
+    return VStack(spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.lg) {
+        SettingsIconTile(symbol: "circle.lefthalf.filled")
+
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Transparency")
+            .scaledFont(size: 16, weight: .semibold)
+            .foregroundColor(Ink.primary)
+
+          Text(
+            reduced
+              ? "Off while Reduce Transparency is on in System Settings"
+              : "Glass: \(Int((glassTransparencySettings.transparency * 100).rounded()))%"
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+        }
+
+        Spacer()
+
+        // Reset rewrites the same value the slider does, which changes just as little under Reduce
+        // Transparency, so it wears the slider's disabled state rather than contradicting the caption.
+        if !glassTransparencySettings.isDefault {
+          Button("Reset") {
+            glassTransparencySettings.resetToDefault()
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .disabled(reduced)
+          .opacity(reduced ? 0.45 : 1)
+        }
+      }
+
+      HStack(spacing: OmiSpacing.md) {
+        Image(systemName: "square.fill")
+          .scaledFont(size: 12)
+          .foregroundColor(Ink.secondary)
+          .help("Solid")
+
+        Slider(
+          value: $glassTransparencySettings.transparency,
+          in: InkGlassTransparencySettings.range
+        )
+        .tint(SettingsSelection.valueFill)
+        // The side icons' tooltips do not attach to the control, so without this VoiceOver reads a
+        // bare percentage with no word for what it is.
+        .accessibilityLabel("Transparency")
+
+        Image(systemName: "square.dotted")
+          .scaledFont(size: 12)
+          .foregroundColor(Ink.secondary)
+          .help("Clear")
+      }
+      .disabled(reduced)
+      .opacity(reduced ? 0.45 : 1)
+    }
+  }
+
+  private var audioRecordingMode: AssistantSettings.AudioRecordingMode {
+    AssistantSettings.AudioRecordingMode(rawValue: audioRecordingModeRaw) ?? .onlyMeetings
+  }
+
+  private var audioRecordingModeBinding: Binding<AssistantSettings.AudioRecordingMode> {
+    Binding(
+      get: { audioRecordingMode },
+      set: { mode in
+        let previousMode = audioRecordingMode
+        audioRecordingModeRaw = mode.rawValue
+        AnalyticsManager.shared.settingToggled(
+          setting: "audio_recording_mode_\(mode.rawValue)", enabled: mode != .off)
+        AssistantSettings.shared.audioRecordingMode = mode
+        // The mode-change observer restores capture automatically, and automatic
+        // starts never raise the TCC sheet. Enabling listening here IS an explicit
+        // user action, so it owns the one-shot permission request itself (same
+        // contract as the top bar's `selectListeningMode`).
+        if AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
+          currentMode: previousMode,
+          requestedMode: mode,
+          permissionGranted: appState.hasMicrophonePermission)
+        {
+          appState.requestMicrophonePermission()
+        }
+      }
+    )
+  }
+
+  private var audioRecordingNeedsAttention: Bool {
+    audioRecordingMode != .off && !appState.hasMicrophonePermission
+  }
+
+  private var wakeWordEnabledBinding: Binding<Bool> {
+    Binding(
+      get: { AssistantSettings.shared.wakeWordEnabled },
+      set: { AssistantSettings.shared.wakeWordEnabled = $0 }
+    )
+  }
+
+  private var wakeWordSubtitle: String {
+    let requiresListeningText: String
+    switch audioRecordingMode {
+    case .off: requiresListeningText = "Requires Audio Recording to be on"
+    case .onlyMeetings: requiresListeningText = "Listens during meetings and calls"
+    case .always: requiresListeningText = "Listens in the background"
+    }
+    return "Say \"\(AssistantSettings.shared.wakeWordPhrase)\" then a command, hands-free. \(requiresListeningText)."
+  }
+
+  private var audioRecordingStatusText: String {
+    if audioRecordingNeedsAttention { return "Microphone permission required" }
+    switch audioRecordingMode {
+    case .off:
+      return "Off — no ambient audio is recorded"
+    case .always:
+      return appState.isTranscribing ? "Always on — recording audio" : "Always on — ready to record"
+    case .onlyMeetings:
+      if appState.isAwaitingMeeting { return "Only Meetings — waiting for a call" }
+      return appState.isTranscribing ? "Only Meetings — recording a call" : "Only Meetings — ready"
+    }
+  }
+}
+
+/// The recording policy is a mode, so keep all three choices visible and one click away.
+/// This intentionally uses the same raised-segment treatment as the chat mode switcher instead of
+/// a menu: users should be able to compare the policies without opening another surface.
+private struct AudioRecordingModeSwitcher: View {
+  @Binding var selection: AssistantSettings.AudioRecordingMode
+
+  var body: some View {
+    HStack(spacing: 2) {
+      // The same names the top bar's audio control uses (`CaptureListeningLogic.audioRecordingModeTitle`).
+      segment(.off, label: CaptureListeningLogic.audioRecordingModeTitle(.off))
+      segment(.always, label: CaptureListeningLogic.audioRecordingModeTitle(.always))
+      segment(.onlyMeetings, label: CaptureListeningLogic.audioRecordingModeTitle(.onlyMeetings))
+    }
+    .padding(3)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+        .fill(Ink.rowFill)
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+        .strokeBorder(Ink.hairline, lineWidth: 1)
+    )
+    // Wide enough for "Only Meetings" in equal segments at the default text size.
+    .frame(width: 300)
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("Audio Recording")
+  }
+
+  private func segment(
+    _ mode: AssistantSettings.AudioRecordingMode,
+    label: String
+  ) -> some View {
+    let isSelected = selection == mode
+    return Button {
+      guard !isSelected else { return }
+      OmiMotion.withGated(.easeOut(duration: InkMotion.checkbox)) {
+        selection = mode
+      }
+    } label: {
+      Text(label)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
+        .lineLimit(1)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, OmiSpacing.xs)
+        .padding(.vertical, OmiSpacing.sm)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .fill(isSelected ? Ink.surface : Color.clear)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+    .accessibilityLabel(label)
+  }
+}
+
+/// The app's mute for its own interface sounds.
+///
+/// Its own view, and not another `@State` on `SettingsContentView`, because the value it edits does
+/// not live in this pane: `OmiUISound.isEnabled` is persisted by the sound controller, so the row
+/// only needs somewhere local to hold the last read for SwiftUI to diff against.
+///
+/// Deliberately separate from macOS's "Play user interface sound effects": that switch governs the
+/// swooshes, and this one governs everything Omi plays, including the completion chimes the system
+/// switch has no say over.
+private struct InterfaceSoundsRow: View {
+  @State private var isEnabled = OmiUISound.isEnabled
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.lg) {
+      SettingsIconTile(symbol: "speaker.wave.2")
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Interface Sounds")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+
+        Text("Play a short sound when a chat answer finishes, a permission is granted, or a new card appears.")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+      }
+
+      Spacer()
+
+      Toggle(
+        "",
+        isOn: Binding(
+          get: { isEnabled },
+          set: { newValue in
+            isEnabled = newValue
+            OmiUISound.isEnabled = newValue
+          }
+        )
+      )
+      .toggleStyle(OmiToggleStyle())
+      .labelsHidden()
+      .frame(width: 36, height: 20)
     }
   }
 

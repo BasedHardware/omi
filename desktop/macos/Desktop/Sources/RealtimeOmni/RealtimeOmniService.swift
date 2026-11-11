@@ -47,7 +47,17 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
   private weak var delegate: RealtimeOmniServiceDelegate?
 
   private var task: URLSessionWebSocketTask?
-  private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+  // A URLSession created with a delegate retains that delegate (self) until it
+  // is invalidated. Held as an optional so stop()/deinit can invalidate it and
+  // drop the retain — a lazy `let` would leak one service + session per turn.
+  private var session: URLSession?
+
+  private func ensureSession() -> URLSession {
+    if let session { return session }
+    let created = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+    session = created
+    return created
+  }
   private var isOpen = false
   private var terminated = false  // fire omniDidError at most once per turn
   private var pendingAudio: [Data] = []
@@ -112,7 +122,7 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
       startNW(url: url)
       return
     }
-    let t = session.webSocketTask(with: request)
+    let t = ensureSession().webSocketTask(with: request)
     task = t
     t.resume()
     // Receive loop + session setup start from didOpenWithProtocol — touching
@@ -124,10 +134,18 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     task = nil
     nw?.cancel()
     nw = nil
+    // Break the URLSession→delegate(self) retain cycle so the service and its
+    // session don't leak once the turn ends.
+    session?.finishTasksAndInvalidate()
+    session = nil
     isOpen = false
     pendingAudio.removeAll()
     pendingAudioBytes = 0
     pendingCommit = false
+  }
+
+  deinit {
+    session?.invalidateAndCancel()
   }
 
   // MARK: - Network.framework transport (Gemini, HTTP/1.1 WebSocket)
@@ -322,7 +340,7 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     r.setValue(authHeader, forHTTPHeaderField: "Authorization")
     // Forward BYOK keys so BYOK users connect with their own provider key
     // (the backend validates them and uses them upstream — same as /v4/listen).
-    for (provider, entry) in APIKeyService.byokSnapshot {
+    for (provider, entry) in APIKeyService.activeBYOKSnapshot {
       r.setValue(entry.key, forHTTPHeaderField: provider.headerName)
     }
     return r

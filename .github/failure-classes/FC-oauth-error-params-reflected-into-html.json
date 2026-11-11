@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-oauth-error-params-reflected-into-html",
+  "violated_contract": "An OAuth callback page that renders the error/error_description query parameters must HTML-escape them before interpolation: the values traverse the provider redirect but ultimately originate from the crafted request, so a raw interpolation is a reflected-XSS vector on an unauthenticated route. The error branches of omi-dropbox-app, omi-ms365-app, and omi-notion-app interpolated them raw (class sibling of the uid reflections fixed in #14350 and PR #13658).",
+  "canonical_prevention": "Escape every reflected error field with html.escape(..., quote=True) at the interpolation site, and pin the three callback handlers with a manifest-registered hermetic suite that drives them through a hostile error value asserting the escaped form and no raw script tag.",
+  "canonical_prevention_artifact": [
+    "plugins/test_oauth_error_params_escaped.py",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/**"
+  ],
+  "status": "open"
+}

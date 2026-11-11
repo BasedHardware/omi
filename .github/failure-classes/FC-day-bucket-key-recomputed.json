@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-day-bucket-key-recomputed",
+  "violated_contract": "A derived day-bucket key has exactly one authority. A consumer that re-derives the bucket from a timestamp's raw UTC year/month/day disagrees with the authority for every viewer whose local day differs from the UTC day, so a record present in a bucket reads as absent.",
+  "canonical_prevention": "Call the shared key function (app: conversationLocalDayKey) on both sides of any day-bucket comparison instead of comparing raw calendar fields, and cover the invariant with a test that sweeps the whole day so a single pinned hour cannot keep it green at the runner's UTC offset.",
+  "evidence_prs": [10398],
+  "scope_hints": ["app/lib/providers/**", "app/lib/pages/conversation_detail/**"],
+  "status": "open",
+  "canonical_prevention_artifact": ["app/test/providers/conversation_detail_provider_selection_test.dart"]
+}

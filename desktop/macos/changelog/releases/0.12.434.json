@@ -1,0 +1,7 @@
+{
+  "version": "0.12.434",
+  "date": "2026-10-02",
+  "changes": [
+    "Web Search on the floating typed chat uses the same public-web lookup as the main chat window."
+  ]
+}

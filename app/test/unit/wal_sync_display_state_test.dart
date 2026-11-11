@@ -1,18 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/wals/wal.dart';
 
 /// Pure mapping that the entire sync UI + provider classification depends on.
 /// A not-yet-synced recording must never be visually identical to a failed
 /// one, and an `uploaded` (processing) recording must read distinctly.
 void main() {
-  Wal makeWal({
-    required WalStatus status,
-    bool isSyncing = false,
-    int retryCount = 0,
-    String? jobId,
-  }) {
+  Wal makeWal({required WalStatus status, bool isSyncing = false, int retryCount = 0, String? jobId}) {
     return Wal(
       timerStart: 1700000000,
       codec: BleAudioCodec.opus,
@@ -24,11 +20,67 @@ void main() {
   }
 
   group('Wal.syncDisplayState', () {
-    test('isSyncing wins over every status', () {
-      for (final s in WalStatus.values) {
+    const terminalStatuses = {
+      WalStatus.corrupted,
+      WalStatus.outsideRecoveryWindow,
+      WalStatus.unsupportedAudio,
+      // B5 terminal-upload spec: a definitive endpoint refusal cannot resume automatically.
+      WalStatus.uploadRejected,
+    };
+
+    test('isSyncing wins over every non-terminal status', () {
+      for (final s in WalStatus.values.where((status) => !terminalStatuses.contains(status))) {
         final w = makeWal(status: s, isSyncing: true);
         expect(w.syncDisplayState, WalSyncDisplayState.syncing, reason: 'status=$s');
       }
+    });
+
+    test('corrupted wins over a stale syncing flag', () {
+      expect(makeWal(status: WalStatus.corrupted, isSyncing: true).syncDisplayState, WalSyncDisplayState.corrupted);
+    });
+
+    test('outsideRecoveryWindow wins over a stale syncing flag', () {
+      expect(
+        makeWal(status: WalStatus.outsideRecoveryWindow, isSyncing: true).syncDisplayState,
+        WalSyncDisplayState.outsideRecoveryWindow,
+        reason: 'a recording the server refused for good must never render as an active upload',
+      );
+    });
+
+    test('outsideRecoveryWindow -> outsideRecoveryWindow regardless of retry count', () {
+      for (final r in [0, 1, walMaxAutoRetries]) {
+        expect(
+          makeWal(status: WalStatus.outsideRecoveryWindow, retryCount: r).syncDisplayState,
+          WalSyncDisplayState.outsideRecoveryWindow,
+          reason: 'retryCount=$r must not downgrade it to waiting/retrying/failed',
+        );
+      }
+    });
+
+    test('unsupportedAudio wins over a stale syncing flag', () {
+      expect(
+        makeWal(status: WalStatus.unsupportedAudio, isSyncing: true).syncDisplayState,
+        WalSyncDisplayState.unsupportedAudio,
+        reason: 'audio the server cannot read must never render as an active upload',
+      );
+    });
+
+    test('unsupportedAudio -> unsupportedAudio regardless of retry count', () {
+      for (final r in [0, 1, walMaxAutoRetries]) {
+        expect(
+          makeWal(status: WalStatus.unsupportedAudio, retryCount: r).syncDisplayState,
+          WalSyncDisplayState.unsupportedAudio,
+          reason: 'retryCount=$r must not downgrade it back to the failed/tap-Retry loop',
+        );
+      }
+    });
+
+    test('uploadRejected wins over a stale syncing flag', () {
+      expect(
+        makeWal(status: WalStatus.uploadRejected, isSyncing: true).syncDisplayState,
+        WalSyncDisplayState.uploadRejected,
+        reason: 'audio the server definitively refused must never render as an active upload',
+      );
     });
 
     test('uploaded -> uploaded (processing on server)', () {
@@ -50,20 +102,88 @@ void main() {
 
     test('miss with 1..(max-1) retries -> retrying', () {
       for (var r = 1; r < walMaxAutoRetries; r++) {
-        expect(makeWal(status: WalStatus.miss, retryCount: r).syncDisplayState, WalSyncDisplayState.retrying,
-            reason: 'retryCount=$r');
+        expect(
+          makeWal(status: WalStatus.miss, retryCount: r).syncDisplayState,
+          WalSyncDisplayState.retrying,
+          reason: 'retryCount=$r',
+        );
       }
     });
 
     test('miss at/over max retries -> failed (needs manual retry)', () {
       expect(
-          makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries).syncDisplayState, WalSyncDisplayState.failed);
-      expect(makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries + 5).syncDisplayState,
-          WalSyncDisplayState.failed);
+        makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries).syncDisplayState,
+        WalSyncDisplayState.failed,
+      );
+      expect(
+        makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries + 5).syncDisplayState,
+        WalSyncDisplayState.failed,
+      );
     });
 
     test('inProgress -> waiting', () {
       expect(makeWal(status: WalStatus.inProgress).syncDisplayState, WalSyncDisplayState.waiting);
+    });
+  });
+
+  group('worstSessionSyncState', () {
+    test('empty session -> null (nothing to report)', () {
+      expect(worstSessionSyncState(const []), isNull);
+    });
+
+    test('a single healthy WAL reports its own state', () {
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.miss)]),
+        WalSyncDisplayState.waiting,
+      );
+    });
+
+    test('failed outranks retrying, syncing and waiting', () {
+      expect(
+        worstSessionSyncState([
+          makeWal(status: WalStatus.miss, retryCount: 1),
+          makeWal(status: WalStatus.miss, isSyncing: true),
+          makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries),
+          makeWal(status: WalStatus.miss),
+        ]),
+        WalSyncDisplayState.failed,
+        reason: 'the indicator must name the WAL that needs the user, not the busiest one',
+      );
+    });
+
+    test('retrying outranks syncing and waiting', () {
+      expect(
+        worstSessionSyncState([
+          makeWal(status: WalStatus.miss, isSyncing: true),
+          makeWal(status: WalStatus.miss, retryCount: 1),
+        ]),
+        WalSyncDisplayState.retrying,
+      );
+    });
+
+    test('corrupted and outsideRecoveryWindow are terminal like failed', () {
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.corrupted)]),
+        WalSyncDisplayState.corrupted,
+      );
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.outsideRecoveryWindow)]),
+        WalSyncDisplayState.outsideRecoveryWindow,
+      );
+      expect(
+        worstSessionSyncState([makeWal(status: WalStatus.unsupportedAudio)]),
+        WalSyncDisplayState.unsupportedAudio,
+      );
+    });
+
+    test('only spent transient budgets allow explicit retry', () {
+      for (final state in WalSyncDisplayState.values) {
+        expect(
+          isRetryableSyncState(state),
+          state == WalSyncDisplayState.failed,
+          reason: '$state must distinguish a request refusal from a permanent audio verdict',
+        );
+      }
     });
   });
 
@@ -76,6 +196,19 @@ void main() {
       expect(back.uploadedAt, 1700000123);
     });
 
+    test('outsideRecoveryWindow survives a restart', () {
+      final w = makeWal(status: WalStatus.outsideRecoveryWindow);
+      expect(Wal.fromJson(w.toJson()).status, WalStatus.outsideRecoveryWindow);
+    });
+
+    test('unsupportedAudio survives a restart', () {
+      final w = makeWal(status: WalStatus.unsupportedAudio, jobId: 'job-resolved');
+      w.markUnsupportedAudio();
+      final back = Wal.fromJson(w.toJson());
+      expect(back.status, WalStatus.unsupportedAudio);
+      expect(back.jobId, isNull, reason: 'the job reached a verdict; keeping its id would re-poll it');
+    });
+
     test('legacy json without job fields defaults safely', () {
       final json = makeWal(status: WalStatus.miss).toJson()
         ..remove('job_id')
@@ -85,5 +218,25 @@ void main() {
       expect(back.uploadedAt, 0);
       expect(back.status, WalStatus.miss);
     });
+  });
+
+  test('recording location round-trips for delayed sync', () {
+    final capturedAt = DateTime.utc(2026, 8, 1, 12, 30);
+    final wal = makeWal(status: WalStatus.miss)
+      ..geolocation = Geolocation(
+        latitude: 40.7128,
+        longitude: -74.0060,
+        accuracy: 8.5,
+        time: capturedAt,
+        captureSource: 'current_position',
+      );
+
+    final restored = Wal.fromJson(wal.toJson());
+
+    expect(restored.geolocation?.latitude, 40.7128);
+    expect(restored.geolocation?.longitude, -74.0060);
+    expect(restored.geolocation?.accuracy, 8.5);
+    expect(restored.geolocation?.time, capturedAt);
+    expect(restored.geolocation?.captureSource, 'current_position');
   });
 }

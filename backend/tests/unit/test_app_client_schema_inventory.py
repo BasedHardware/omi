@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from scripts import inventory_app_client_schemas
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
+
+
+def test_repo_relative_path_uses_forward_slashes_on_windows(monkeypatch):
+    windows_root = PureWindowsPath('C:/repo')
+    monkeypatch.setattr(inventory_app_client_schemas, 'ROOT_DIR', windows_root)
+
+    assert inventory_app_client_schemas.repo_relative_path(windows_root / 'app/lib/model.dart') == 'app/lib/model.dart'
 
 
 def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
@@ -27,12 +35,16 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert 'app/lib/backend/schema/conversation.dart' in generated_backed_paths
     # action_item.dart was fully migrated to typedefs (no fromJson/toJson), so it's
     # correctly absent from manual_files entirely — neither generated_backed nor remaining.
+    assert 'app/lib/backend/schema/dream_report.dart' in generated_backed_paths
+    assert 'app/lib/backend/schema/dream_report.dart' not in remaining_manual_paths
     assert 'app/lib/backend/schema/folder.dart' in generated_backed_paths
+    assert 'app/lib/backend/schema/dream_report.dart' in generated_backed_paths
     assert 'app/lib/backend/http/api/apps.dart' in generated_backed_paths
     assert 'app/lib/backend/http/api/users.dart' in generated_backed_paths
     assert 'app/lib/backend/schema/action_item.dart' not in remaining_manual_paths
     assert 'app/lib/backend/schema/folder.dart' not in remaining_manual_paths
     assert 'app/lib/backend/schema/bt_device/bt_device.dart' in local_non_rest_paths
+    assert 'app/lib/backend/schema/capture_committed_event.dart' in local_non_rest_paths
     assert (
         'POST',
         '/v1/conversations/search',
@@ -127,6 +139,24 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     ) not in unmodeled_operations
     assert ('GET', '/v1/users/language', 'get_user_language_v1_users_language_get') not in unmodeled_operations
     assert ('GET', '/v1/users/export', 'export_all_user_data_v1_users_export_get') not in unmodeled_operations
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
+    export_properties = spec['components']['schemas']['UserDataExportResponse']['properties']
+    assert {
+        'profile',
+        'conversations',
+        'conversation_photo_manifest',
+        'frame_requests',
+        'frame_vision_receipts',
+        'conversation_keyframe_jobs',
+        'memories',
+        'memory_review_data',
+        'memory_ledger_data',
+        'jit_data',
+        'people',
+        'action_items',
+        'task_data',
+        'chat_messages',
+    } <= set(export_properties)
     assert ('POST', '/v2/sync-local-files', 'sync_local_files_v2_v2_sync_local_files_post') not in unmodeled_operations
     assert (
         'POST',
@@ -172,6 +202,22 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert any(item['function_name'] == 'parseMessageChunk' for item in message_send_route['called_function_ranges'])
     assert message_send_route['raw_decode_site_count'] == 0
     assert message_send_route['generated_backed_decode_site_count'] > 0
+    memory_revert_route = message_routes[
+        ('app/lib/backend/http/api/memories.dart', 'POST', '/v3/memories/{param}/revert')
+    ]
+    assert memory_revert_route['function_name'] == 'revertMemoryServer'
+    assert memory_revert_route['operations'] == [
+        {
+            'method': 'POST',
+            'normalized_path': '/v3/memories/{param}/revert',
+            'operation_id': 'revert_memory_v3_memories__memory_id__revert_post',
+            'path': '/v3/memories/{memory_id}/revert',
+            'request_schema': 'MemoryRevertRequest',
+            'response_schema': 'MemoryEditResponse',
+            'unmodeled_success_response': False,
+        }
+    ]
+    assert memory_revert_route['raw_response_decode_site_count'] == 0
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
     )
@@ -260,6 +306,88 @@ final onlyBase = _baseUrl;
     )
 
 
+def test_inventory_classifies_bounded_error_discriminator_as_non_rest_decode(tmp_path, monkeypatch):
+    api_dir = tmp_path / 'api'
+    schema_dir = tmp_path / 'schema'
+    api_dir.mkdir()
+    schema_dir.mkdir()
+    (api_dir / 'conversations.dart').write_text(
+        """
+bool isSyncRecoveryWindowExceededResponse(Response response) {
+  final body = jsonDecode(response.body);
+  return body is Map && body['code'] == 'backfill_lookback_exceeded';
+}
+""",
+        encoding='utf-8',
+    )
+
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'MODEL_REST_DTO_FILES', ())
+    monkeypatch.setattr(inventory_app_client_schemas, 'LOCAL_NON_REST_SCHEMA_FILES', frozenset())
+    monkeypatch.setattr(
+        inventory_app_client_schemas,
+        'NON_REST_RESPONSE_DECODER_FUNCTIONS',
+        frozenset({(api_dir / 'conversations.dart', 'isSyncRecoveryWindowExceededResponse')}),
+    )
+
+    sites = inventory_app_client_schemas.scan_dart_decode_sites()
+
+    assert [(site.kind, site.context) for site in sites] == [
+        ('jsonDecode', 'error_discriminator'),
+        ('field_access', 'error_discriminator'),
+    ]
+
+
+def test_sync_error_reason_classification_is_exact_to_helper_and_file(tmp_path, monkeypatch):
+    api_dir = tmp_path / 'api'
+    schema_dir = tmp_path / 'schema'
+    api_dir.mkdir()
+    schema_dir.mkdir()
+    (api_dir / 'conversations.dart').write_text(
+        """
+String? syncUploadErrorReason(Response response) {
+  final decoded = jsonDecode(response.body);
+  final value = decoded['detail'];
+  if (value is String) return value.length > 200 ? value.substring(0, 200) : value;
+  return null;
+}
+dynamic decodeOrdinaryResponse(Response response) {
+  return jsonDecode(response.body);
+}
+""",
+        encoding='utf-8',
+    )
+    (api_dir / 'other.dart').write_text(
+        """
+dynamic syncUploadErrorReason(Response response) {
+  return jsonDecode(response.body);
+}
+""",
+        encoding='utf-8',
+    )
+    # Translate the real production registrations into the fixture directory;
+    # do not inject a test-only exemption that would pass without the fix.
+    registered = frozenset(
+        (api_dir / path.name, function)
+        for path, function in inventory_app_client_schemas.NON_REST_RESPONSE_DECODER_FUNCTIONS
+    )
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'MODEL_REST_DTO_FILES', ())
+    monkeypatch.setattr(inventory_app_client_schemas, 'LOCAL_NON_REST_SCHEMA_FILES', frozenset())
+    monkeypatch.setattr(inventory_app_client_schemas, 'NON_REST_RESPONSE_DECODER_FUNCTIONS', registered)
+
+    sites = inventory_app_client_schemas.scan_dart_decode_sites()
+
+    assert [(site.path.name, site.kind, site.context) for site in sites] == [
+        ('conversations.dart', 'jsonDecode', 'error_discriminator'),
+        ('conversations.dart', 'field_access', 'error_discriminator'),
+        ('conversations.dart', 'jsonDecode', 'response_decode'),
+        ('other.dart', 'jsonDecode', 'response_decode'),
+    ]
+
+
 def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
     result = subprocess.run(
         [
@@ -288,8 +416,20 @@ def test_inventory_openapi_route_response_decode_migration_complete():
     )
 
     assert voice_operation['raw_response_decode_site_count'] == 0
-    assert voice_operation['stream_protocol_decode_site_count'] == 2
+    assert voice_operation['stream_protocol_decode_site_count'] == 3
     assert {site['context'] for site in voice_operation['stream_protocol_decode_sites']} == {'stream_protocol'}
+
+
+def test_sync_upload_422_schema_preserves_fastapi_validation_and_terminal_recovery_shapes():
+    specification = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
+    schema = specification['paths']['/v2/sync-local-files']['post']['responses']['422']['content']['application/json'][
+        'schema'
+    ]
+    refs = {item['$ref'] for item in schema['anyOf']}
+    assert refs == {
+        '#/components/schemas/SyncRecoveryWindowExceededResponse',
+        '#/components/schemas/SyncRequestValidationErrorResponse',
+    }
 
 
 def test_inventory_route_raw_decode_gate_checks_total_decode_sites_for_targeted_routes():
@@ -361,3 +501,41 @@ def test_inventory_route_raw_decode_gate_can_target_operation_ids():
     assert formerly_dirty_result.returncode == 0
     assert 'getApps' not in clean_result.stdout
     assert 'OpenAPI route functions with raw Dart decode sites:' not in formerly_dirty_result.stdout
+
+
+def test_display_adapter_requires_generated_values_at_every_rest_consumer(tmp_path, monkeypatch):
+    schema_dir, api_dir = tmp_path / 'schema', tmp_path / 'api'
+    schema_dir.mkdir()
+    api_dir.mkdir()
+    model = schema_dir / 'report.dart'
+    model.write_text('class Report { static Report fromJson(Map json) => Report(); }', encoding='utf-8')
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
+    consumer = api_dir / 'reports.dart'
+    prefix = "import 'package:omi/backend/schema/report.dart';\n"
+    consumer.write_text(
+        prefix + 'Report read(body) => Report.fromJson(wire.GeneratedReport.fromJson(body).toJson());', encoding='utf-8'
+    )
+    assert inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    consumer.write_text(
+        prefix + 'Report read(body) { final decoded = wire.GeneratedReport.fromJson(body).toJson(); '
+        'return Report.fromJson(decoded); }',
+        encoding='utf-8',
+    )
+    assert inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    raw = api_dir / 'raw.dart'
+    raw.write_text(prefix + 'Report read(body) => Report.fromJson(jsonDecode(body));', encoding='utf-8')
+    assert not inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    raw.unlink()
+    consumer.write_text(
+        prefix + 'Report read(body) { final decoded = wire.GeneratedReport.fromJson(body).toJson(); '
+        'decoded = jsonDecode(body); return Report.fromJson(decoded); }',
+        encoding='utf-8',
+    )
+    assert not inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed
+    consumer.write_text(
+        prefix + 'void earlier(body) { final decoded = wire.GeneratedReport.fromJson(body).toJson(); } '
+        'Report read(decoded) => Report.fromJson(decoded);',
+        encoding='utf-8',
+    )
+    assert not inventory_app_client_schemas.scan_dart_schema_file(model).generated_backed

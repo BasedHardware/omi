@@ -1,0 +1,3 @@
+{
+  "change": "Pressing both Command keys works: the app now asks for the Accessibility permission that shortcut needs instead of silently doing nothing"
+}

@@ -53,7 +53,11 @@ describe('deriveFolderNodes', () => {
 describe('slugify / nodeId', () => {
   it('lowercases and hyphenates', () => {
     expect(slugify('Visual Studio Code')).toBe('visual-studio-code')
-    expect(slugify('C++')).toBe('c')
+  })
+  it('keeps C, C++ and C# distinct', () => {
+    expect(slugify('C')).toBe('c')
+    expect(slugify('C++')).toBe('cpp')
+    expect(slugify('C#')).toBe('csharp')
   })
   it('builds a stable id from label + type', () => {
     expect(nodeId('TypeScript', 'technology')).toBe('typescript:technology')
@@ -91,6 +95,15 @@ describe('deriveTechNodes', () => {
   it('ignores unknown extensions and a leading dot', () => {
     const nodes = deriveTechNodes({ '.py': 5, xyz: 100 }, now)
     expect(nodes.map((n) => n.label)).toEqual(['Python'])
+  })
+
+  it('keeps C, C++ and C# as separate technology nodes', () => {
+    const nodes = deriveTechNodes({ c: 5, cpp: 5, cs: 5 }, now)
+    expect(nodes.map((n) => n.id).sort()).toEqual([
+      'c:technology',
+      'cpp:technology',
+      'csharp:technology'
+    ])
   })
 })
 

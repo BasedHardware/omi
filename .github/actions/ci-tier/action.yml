@@ -1,0 +1,18 @@
+name: Resolve CI tier
+description: Read the current maintainer labels once so a rerun can enable full fork CI.
+outputs:
+  full_ci:
+    description: Whether full CI is authorized for this event.
+    value: ${{ steps.resolve.outputs.full_ci }}
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        REPO: ${{ github.repository }}
+        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        GH_TOKEN: ${{ github.token }}
+      run: bash "$GITHUB_ACTION_PATH/resolve.sh"

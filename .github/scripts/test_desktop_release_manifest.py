@@ -12,7 +12,6 @@ import sys
 import tempfile
 import unittest
 
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 MODULE_PATH = SCRIPT_DIR / "desktop_release_manifest.py"
 FIXTURES = SCRIPT_DIR / "fixtures" / "desktop_release_manifest" / "v1"
@@ -91,7 +90,16 @@ class ManifestValidationTests(unittest.TestCase):
             with self.subTest(key=key):
                 manifest = fixture("app-only.json")
                 manifest[key] = value
-                with self.assertRaisesRegex(manifest_contract.ManifestError, "passed at tier T2"):
+                with self.assertRaisesRegex(manifest_contract.ManifestError, "T2, signed-smoke, or emergency"):
+                    manifest_contract.validate_manifest(manifest)
+
+    def test_rejects_numeric_qualification_passed_truthiness(self) -> None:
+        # ``0 == False`` in Python set membership; guard must reject non-boolean values.
+        for value in (0, 1):
+            with self.subTest(value=value):
+                manifest = fixture("app-only.json")
+                manifest["qualification_passed"] = value
+                with self.assertRaisesRegex(manifest_contract.ManifestError, "T2, signed-smoke, or emergency"):
                     manifest_contract.validate_manifest(manifest)
 
     def test_rejects_unknown_fields(self) -> None:
@@ -123,15 +131,9 @@ class ManifestValidationTests(unittest.TestCase):
     def test_artifact_urls_are_bound_to_repository_release_and_asset(self) -> None:
         invalid_urls = {
             "arbitrary host": "https://example.com/Omi.zip",
-            "other release": (
-                "https://github.com/BasedHardware/omi/releases/download/v0.12.70%2B12070-macos/Omi.zip"
-            ),
-            "other repository": (
-                "https://github.com/attacker/omi/releases/download/v0.12.71%2B12071-macos/Omi.zip"
-            ),
-            "wrong asset": (
-                "https://github.com/BasedHardware/omi/releases/download/v0.12.71%2B12071-macos/other.zip"
-            ),
+            "other release": ("https://github.com/BasedHardware/omi/releases/download/v0.12.70%2B12070-macos/Omi.zip"),
+            "other repository": ("https://github.com/attacker/omi/releases/download/v0.12.71%2B12071-macos/Omi.zip"),
+            "wrong asset": ("https://github.com/BasedHardware/omi/releases/download/v0.12.71%2B12071-macos/other.zip"),
         }
         for label, value in invalid_urls.items():
             with self.subTest(label=label):

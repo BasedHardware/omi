@@ -32,7 +32,7 @@ from llm_gateway.gateway.metrics import (
     time_request,
 )
 from llm_gateway.gateway.request_context import request_id_for
-from llm_gateway.gateway.schemas import RouteArtifact, Surface
+from llm_gateway.gateway.schemas import RouteArtifact, RouteServingClass, Surface
 from llm_gateway.gateway.sse import SSEEventDecoder
 from llm_gateway.routers.dependencies import get_gateway_config
 
@@ -89,6 +89,7 @@ async def create_anthropic_message(
         feature=_accounting_feature(caller, fallback=route.lane_id),
         api_surface='anthropic_messages',
         payer='byok' if _anthropic_credential_source(request) == 'service_forwarded_byok' else 'omi',
+        app_platform=caller.app_platform,
     )
     attempt_trace = AttemptTrace()
     body['model'] = route.primary.model
@@ -198,6 +199,7 @@ async def create_anthropic_message(
             metric_context,
             outcome='error',
             error_class=_provider_status_error_class(response.status_code),
+            upstream_http_status=response.status_code,
             phase='before_output',
         )
         return JSONResponse(status_code=response.status_code, content=_response_json_or_error(response))
@@ -436,6 +438,7 @@ async def _streaming_anthropic_messages_response(
                     metric_context,
                     outcome='error',
                     error_class=_provider_status_error_class(response.status_code),
+                    upstream_http_status=response.status_code,
                     phase='before_output',
                     streaming=True,
                 )
@@ -607,6 +610,7 @@ def _observe_message_terminal(
     phase: str,
     streaming: bool = False,
     ttfb_seconds: float | None = None,
+    upstream_http_status: int | None = None,
 ) -> None:
     try:
         observe_route_result(
@@ -616,6 +620,7 @@ def _observe_message_terminal(
             provider=context.provider,
             model=context.model,
             credential_source=context.credential_source,
+            route_serving_class=RouteServingClass.ACTIVE,
             used_lkg=False,
             fallback_used=False,
             fallback_reason=None,
@@ -626,6 +631,7 @@ def _observe_message_terminal(
             streaming=streaming,
             phase=phase,
             ttfb_seconds=ttfb_seconds,
+            upstream_http_status=upstream_http_status,
         )
     except Exception:
         report_observation_failure(api_surface='anthropic_messages', request_id=context.request_id)

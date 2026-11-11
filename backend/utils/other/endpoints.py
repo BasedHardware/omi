@@ -1,3 +1,4 @@
+import hmac
 import json
 import os
 import time
@@ -9,20 +10,130 @@ from starlette.websockets import WebSocket
 from firebase_admin import auth
 from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
+
+from database.directory import router as directory_router
+from config import directory_routing
+from config.rollout_cohorts import load_rollout_cohorts
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
+from database import users as users_db
+from database.firestore_tier_context import bind_request_owner
+from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS, account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
+from utils.account_cutover.access import (
+    cutover_enforcement_enabled,
+    enforce_account_cutover_http_access,
+    enforce_account_cutover_ws_access,
+    is_cutover_control_path,
+)
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
-from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
-from utils.executors import critical_executor, run_blocking
+from utils.byok import (
+    extract_byok_from_websocket,
+    set_validated_byok_keys,
+    validate_byok_request,
+    validate_byok_websocket_keys,
+)
+from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
+from database.fsr_read_cache import request_read_scope
 
 logger = logging.getLogger(__name__)
 
 WS_AUTH_CODE_TOKEN_REFRESH = 4001
 WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
+WS_AUTH_CODE_ACCOUNT_DELETION = 4005
+WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
+
+
+def _resolve_request_plane_or_503(uid, *, request=None, signup_platform=None, signup_os=None) -> None:
+    if is_cutover_control_path(getattr(getattr(request, 'url', None), 'path', '')):
+        return
+    try:
+        if not directory_router.routing_active():
+            return
+        directory_router.resolve(uid, signup_platform=signup_platform, signup_os=signup_os)
+    except (directory_router.DirectoryRoutingUnavailable, ValueError) as exc:
+        raise HTTPException(
+            status_code=503, detail={'code': 'directory_routing_unavailable', 'retryable': True}
+        ) from exc
+
+
+def _resolve_request_plane_ws(uid: str) -> None:
+    try:
+        _resolve_request_plane_or_503(uid)
+    except HTTPException as exc:
+        raise WebSocketException(code=1013, reason='directory_routing_unavailable') from exc
+
+
+def _executor_saturated_http_exception(error: ExecutorSaturatedError) -> HTTPException:
+    """Return the retryable HTTP response for bounded critical-work overload."""
+    return HTTPException(
+        status_code=503,
+        detail='Service temporarily unavailable. Try again shortly.',
+        headers={'Retry-After': '1'},
+    )
+
+
+async def run_critical_ws(fn: Callable[..., Any], *args: Any) -> Any:
+    """Run critical WebSocket work and turn overload into a retryable close frame."""
+    try:
+        return await run_blocking(critical_executor, fn, *args)
+    except ExecutorSaturatedError as error:
+        raise WebSocketException(code=1013, reason='Service temporarily unavailable; retry shortly.') from error
+
+
+def get_user_deletion_wipe_status(uid: str) -> str | None:
+    """Read deletion state; Redis faults always fall back to the durable authority."""
+    return cast(Callable[[str], str | None], users_db.get_user_deletion_wipe_status)(uid)
+
+
+def _account_deletion_status(uid: str) -> str | None:
+    """Read deletion state, failing closed if the durable authority is unavailable."""
+    try:
+        return get_user_deletion_wipe_status(uid)
+    except Exception as error:
+        logger.error(
+            'Account-deletion auth fence unavailable error_type=%s',
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={'code': 'account_deletion_state_unavailable', 'retryable': True},
+        ) from error
+
+
+def enforce_account_deletion_http_access(uid: str, *, allow_grace_erase_now: bool = False) -> None:
+    bind_request_owner(uid)
+    status = _account_deletion_status(uid)
+    if allow_grace_erase_now and status == ACCOUNT_DELETION_GRACE_STATUS:
+        return
+    if account_deletion_blocks_access(status):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'code': 'account_pending_deletion' if status == 'pending_deletion' else 'account_deletion_in_progress',
+                'status': status,
+                'retryable': False,
+            },
+        )
+
+
+def enforce_account_deletion_ws_access(uid: str) -> None:
+    bind_request_owner(uid)
+    try:
+        status = _account_deletion_status(uid)
+    except HTTPException as error:
+        raise WebSocketException(
+            code=1013,
+            reason='Account deletion state unavailable; retry later',
+        ) from error
+    if account_deletion_blocks_access(status):
+        raise WebSocketException(
+            code=WS_AUTH_CODE_ACCOUNT_DELETION,
+            reason='Account deletion in progress',
+        )
 
 
 def get_user(uid: str) -> Any:
@@ -42,19 +153,119 @@ def verify_token(token: str) -> str:
     Raises:
         InvalidIdTokenError: If the token is invalid
     """
-    # Check for ADMIN_KEY format
+    # ADMIN_KEY impersonation: token format is "<ADMIN_KEY><uid>" (kept as-is —
+    # this exact concatenation is depended on by this repo's own integration
+    # tests, the listen/sync test stacks, and the production
+    # memory-continuity-gauntlet smoke test, so changing the format would
+    # break first-party tooling, not just close a hole). What actually
+    # changes: the prefix compare is constant-time instead of `startswith`
+    # (closes a timing side-channel on ADMIN_KEY itself), every successful
+    # use is logged so impersonation is auditable instead of silent, and
+    # ADMIN_KEY_AUTH_ENABLED lets an operator who doesn't need this feature
+    # turn it off entirely — default stays "true" so existing deployments
+    # and CI that already rely on it keep working unchanged.
     admin_key = os.getenv('ADMIN_KEY')
-    if admin_key and token.startswith(admin_key):
-        return token[len(admin_key) :]
+    if admin_key and os.getenv('ADMIN_KEY_AUTH_ENABLED', 'true').lower() == 'true':
+        if len(admin_key) < 16:
+            logger.warning('ADMIN_KEY is under 16 chars — trivially guessable if this deployment is internet-facing')
+        candidate = token[: len(admin_key)].encode()
+        if hmac.compare_digest(candidate, admin_key.encode()) and len(token) > len(admin_key):
+            impersonated_uid = token[len(admin_key) :]
+            logger.warning('ADMIN_KEY auth used to impersonate uid=%s', impersonated_uid)
+            return impersonated_uid
 
     # Verify Firebase token
     try:
         decoded_token = cast(Any, auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
         return decoded_token['uid']
     except InvalidIdTokenError:
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
+        # Only honored when no real Firebase credential is configured — every
+        # legitimate LOCAL_DEVELOPMENT=true path (hermetic e2e harness, the
+        # auth-emulator dev harness) already unsets or never sets these, and
+        # every real deployment sets one to talk to the real project (see
+        # main.py's firebase_admin.initialize_app branches). This keeps the
+        # bypass inert the moment real credentials are present, without
+        # requiring test paths to change what they already do.
+        # A keyless deployment has no credential variable at all; its
+        # customer-data project pin marks it as real just the same.
+        no_real_credential = not (
+            os.getenv('SERVICE_ACCOUNT_JSON')
+            or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
+            or os.getenv('OMI_CUSTOMER_DATA_PROJECT')
+        )
+        if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
         raise
+
+
+def get_current_user_uid_for_deletion_status(
+    authorization: str = Header(None),
+    _x_app_platform: str = Header(None, alias='X-App-Platform'),
+    _x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
+    _x_app_version: str = Header(None, alias='X-App-Version'),
+    _read_scope: Any = Depends(request_read_scope),
+) -> str:
+    """Authenticate the owner without opening ordinary account access.
+
+    Used by the account-deletion status, restore, and erase-now endpoints,
+    which must remain reachable while the normal auth fence blocks a
+    pending-deletion account. The optional client headers preserve the
+    released delete-account contract without running registration, device,
+    BYOK, or content-recovery side effects.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail='Authorization header not found')
+    if len(str(authorization).split(' ')) != 2:
+        raise HTTPException(status_code=401, detail='Invalid authorization token')
+    token = authorization.split(' ')[1]
+    key_family_mismatch = wrong_key_family_detail(token, FIREBASE_FAMILY)
+    if key_family_mismatch:
+        raise HTTPException(status_code=401, detail=key_family_mismatch)
+    try:
+        return verify_token(token)
+    except InvalidIdTokenError as error:
+        logger.error(error)
+        raise HTTPException(status_code=401, detail='Invalid authorization token') from error
+
+
+def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
+    """Apply cutover fencing only when FastAPI injected a Request.
+
+    Direct unit-test / helper callers keep the established
+    ``get_current_user_uid(authorization=...)`` API. Request-aware enforcement
+    runs for real HTTP dependency injection without rewriting those callers.
+    """
+
+    if request is None or not cutover_enforcement_enabled():
+        return
+    enforce_account_cutover_http_access(
+        uid,
+        method=request.method,
+        path=request.url.path,
+        headers=request.headers,
+    )
+
+
+def _recover_locked_content_if_request(uid: str, request: Request | None) -> None:
+    if request is not None and request.method in {'GET', 'POST', 'PATCH', 'PUT'}:
+        from utils.locked_content_recovery import recover_locked_content
+
+        recover_locked_content(uid)
+
+
+def get_current_user_uid_readonly(
+    authorization: str = Header(None),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request
+    _read_scope: Any = Depends(request_read_scope),
+) -> str:
+    """Verify owner and security fences without device/platform/recovery writes."""
+    uid = get_current_user_uid_for_deletion_status(authorization=authorization, _read_scope=_read_scope)
+    enforce_account_deletion_http_access(uid)
+    _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request)
+    validate_byok_request(uid)
+    return uid
 
 
 def get_current_user_uid(
@@ -62,16 +273,10 @@ def get_current_user_uid(
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+    _read_scope: Any = Depends(request_read_scope),
 ) -> str:
-    """FastAPI dependency for HTTP endpoints with Authorization header.
-
-    Side-effect: records the signup/last-active platform for the user via
-    `record_user_platform`, which is throttled via Redis to one Firestore
-    write per (uid, platform) every 10 minutes. Failures here never fail the
-    request — it's telemetry, not auth.
-
-    Also validates BYOK headers against Firestore enrollment (if applicable).
-    """
+    """Authenticate, enforce account fences and BYOK, then optional registration/recovery."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
     elif len(str(authorization).split(' ')) != 2:
@@ -87,6 +292,15 @@ def get_current_user_uid(
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+    enforce_account_deletion_http_access(uid)
+    _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
+
+    # Content-free telemetry and surface intent avoid customer-store
+    # registration/recovery writes; security fences above and BYOK still apply.
+    if getattr(getattr(request, 'url', None), 'path', None) in {'/v1/telemetry/fleet', '/v1/users/client-state'}:
+        validate_byok_request(uid)
+        return uid
 
     try:
         record_user_platform(uid, x_app_platform)
@@ -108,12 +322,12 @@ def get_current_user_uid(
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
 
-    # Validate BYOK keys against Firestore enrollment for ALL authenticated
-    # HTTP endpoints.  Runs after auth so we have the uid.  Lightweight: uses
-    # a 30-second TTL cache for Firestore state, and is a no-op when no BYOK
-    # headers are present.
+    # BYOK enrollment is cached; requests without BYOK headers do no work.
     validate_byok_request(uid)
 
+    _recover_locked_content_if_request(uid, request)
+
+    load_rollout_cohorts(uid)
     return uid
 
 
@@ -122,6 +336,8 @@ def get_current_user_uid_no_byok_validation(
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+    _read_scope: Any = Depends(request_read_scope),
 ) -> str:
     """Auth dependency that skips BYOK fingerprint validation.
 
@@ -144,6 +360,9 @@ def get_current_user_uid_no_byok_validation(
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+    enforce_account_deletion_http_access(uid)
+    _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
 
     try:
         record_user_platform(uid, x_app_platform)
@@ -183,14 +402,45 @@ def _verify_ws_auth(authorization: str) -> str:
 
     try:
         token = authorization.split(' ')[1]
-        return verify_token(token)
+        uid = verify_token(token)
+        return uid
     except (InvalidIdTokenError, CertificateFetchError) as e:
         close_code, reason = _get_ws_auth_close(e)
-        logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
+        _log_ws_auth_rejection(close_code, e)
         raise WebSocketException(code=close_code, reason=reason)
+    except WebSocketException:
+        raise
     except Exception as e:
         logger.error(f"WebSocket auth error: {e}")
         raise WebSocketException(code=1008, reason="Auth error")
+
+
+def _log_ws_auth_rejection(close_code: int, error: Exception) -> None:
+    """Log a token rejection at the severity its fault origin deserves.
+
+    InvalidIdTokenError means Firebase *evaluated* the client-supplied token
+    and rejected it for a client-side reason — expired, signed by a key Google
+    retired, wrong audience, malformed. The close frame (4001/4004/1008)
+    already tells that client what to do; the rejection is the protocol
+    working, not a server failure. Logging each attempt at ERROR turned the
+    stale-client reconnect population into a top-3 production error
+    signature (backend-listen, GCP 2026-08-30/31: ``Token expired`` up to
+    ×47/30m and ``Certificate for key id … not found`` ×34/30m for a single
+    retired key id), burying real serving faults in the same feed.
+
+    CertificateFetchError is the other fault domain: the server could not
+    fetch Google's public certificates, so it could not even evaluate the
+    token. That is a server fault and stays at ERROR.
+
+    Failure-Class: FC-request-input-rejection-escapes-as-server-fault — a
+    route owns the classification of its own request input; a client-caused
+    token rejection must not be indistinguishable from a serving outage in
+    error metrics. Close codes are unchanged; only severity is classified.
+    """
+    if isinstance(error, CertificateFetchError):
+        logger.error("WebSocket auth failed: code=%s error=%s", close_code, error)
+    else:
+        logger.warning("WebSocket auth rejected: code=%s error=%s", close_code, error)
 
 
 def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
@@ -230,26 +480,54 @@ async def get_current_user_uid_ws_listen(
     the mutation in the handler's context; the blocking Firebase and
     Firestore calls are offloaded via ``run_blocking``.
     """
-    uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
+    if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # Direct callers may omit WebSocket.
+        from utils.product_telemetry import bind_websocket_telemetry_context
+
+        bind_websocket_telemetry_context(websocket.headers)
+    uid = await run_critical_ws(_verify_ws_auth, authorization)
+    await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
+    if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
+        await run_blocking(
+            db_executor,
+            enforce_account_cutover_ws_access,
+            uid,
+            path=websocket.url.path,
+            headers=websocket.headers,
+        )
+
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
 
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
-        byok_keys = extract_byok_from_websocket(websocket)
-        if byok_keys:
-            set_byok_keys(byok_keys)
-        error = await run_blocking(critical_executor, validate_byok_websocket, uid)
+        validated_byok_keys, error = await run_critical_ws(
+            validate_byok_websocket_keys, uid, extract_byok_from_websocket(websocket)
+        )
         if error:
             raise WebSocketException(code=4003, reason=error)
+        set_validated_byok_keys(validated_byok_keys, uid)
 
     return uid
 
 
-def get_current_user_uid_ws(authorization: str = Header(None)):
+def get_current_user_uid_ws(
+    websocket: WebSocket = None,  # pyright: ignore[reportArgumentType]  # FastAPI needs bare WebSocket type for WS injection
+    authorization: str = Header(None),
+):
     """WebSocket auth WITH per-UID rate limiting (7s window).
 
     Use for WebSocket endpoints that need retry-storm protection.
     """
     uid = _verify_ws_auth(authorization)
+    enforce_account_deletion_ws_access(uid)
+    if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
+        enforce_account_cutover_ws_access(
+            uid,
+            path=websocket.url.path,
+            headers=websocket.headers,
+        )
+
+    _resolve_request_plane_ws(uid)
 
     # Fail-open on Redis errors to avoid reintroducing handshake crashes
     try:
@@ -264,7 +542,7 @@ def get_current_user_uid_ws(authorization: str = Header(None)):
     return uid
 
 
-def get_current_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
+def _verify_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
     """
     Get user uid from WebSocket first-message auth.
 
@@ -298,7 +576,33 @@ def get_current_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
     if not token:
         raise ValueError("Missing token")
 
-    return verify_token(token)
+    uid = verify_token(token)
+    return uid
+
+
+async def get_current_user_uid_from_ws_message(
+    message: Dict[str, Any],
+    *,
+    websocket: WebSocket | None = None,
+) -> str:
+    """Authenticate first-message WebSocket clients without blocking the ASGI loop.
+
+    Pass ``websocket`` so account-cutover enforcement can fence product surfaces
+    such as ``/v4/web/listen`` the same way header-auth listen does.
+    """
+    uid = await run_critical_ws(_verify_user_uid_from_ws_message, message)
+    await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
+    if cutover_enforcement_enabled() and websocket is not None:
+        await run_blocking(
+            db_executor,
+            enforce_account_cutover_ws_access,
+            uid,
+            path=websocket.url.path,
+            headers=websocket.headers,
+        )
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
+    return uid
 
 
 cached: Dict[str, Any] = {}
@@ -338,7 +642,10 @@ def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int,
 
         # Check if the time window has expired
         if current_time - timestamp >= window_seconds:
-            remaining = requests_per_window - 1  # Reset the counter for the new window
+            # A new window starts with the full quota; the shared decrement below charges
+            # this request, matching the first-request branch. Subtracting here too spent
+            # one slot twice and left every window after the first one request short.
+            remaining = requests_per_window
             timestamp = current_time
         elif remaining == 0:
             raise HTTPException(status_code=429, detail="Too Many Requests")
@@ -423,7 +730,9 @@ def check_api_key_rate_limit(
     _enforce_rate_limit(key, policy_name, fail_closed=True)
 
 
-def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Callable[..., Any]:
+def with_rate_limit(
+    auth_dependency: Callable[..., Any], policy_name: str, *, fail_closed: bool = False
+) -> Callable[..., Any]:
     """Wrap an auth dependency with per-UID rate limiting.
 
     After auth succeeds, checks the rate limit for that UID.
@@ -432,12 +741,16 @@ def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Ca
     Args:
         auth_dependency: FastAPI dependency that returns a UID string.
         policy_name: Key in RATE_POLICIES (utils/rate_limit_config.py).
+        fail_closed: Reject requests when Redis is unavailable (default: False).
     """
     if policy_name not in RATE_POLICIES:
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
-        await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
+        try:
+            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name, fail_closed=fail_closed)
+        except ExecutorSaturatedError as error:
+            raise _executor_saturated_http_exception(error) from error
         return uid
 
     return dependency
@@ -460,7 +773,10 @@ def with_rate_limit_context(auth_context_dependency: Callable[..., Any], policy_
 
     async def dependency(auth_context: Any = Depends(auth_context_dependency)) -> Any:
         key = rate_limit_key_for_context(auth_context)
-        await run_blocking(critical_executor, _enforce_rate_limit, key, policy_name, fail_closed=True)
+        try:
+            await run_blocking(critical_executor, _enforce_rate_limit, key, policy_name, fail_closed=True)
+        except ExecutorSaturatedError as error:
+            raise _executor_saturated_http_exception(error) from error
         return auth_context
 
     return dependency

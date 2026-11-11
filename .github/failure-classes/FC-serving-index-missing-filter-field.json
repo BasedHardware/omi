@@ -1,0 +1,16 @@
+{
+    "schema_version": 1,
+    "id": "FC-serving-index-missing-filter-field",
+    "violated_contract": "A serving search query may only filter on fields its serving index actually carries. A search engine rejects the whole query when filter_by names an unknown field, so one predicate on an unindexed field does not degrade its own filter, it fails the entire feature closed in production for every request that supplies it.",
+    "canonical_prevention": "Bind the query builder's filter fields to the serving index's real schema: either declare and index the field, or drop the predicate from the engine query and apply it at the layer that owns the data (post-hydration from the authoritative store). Guard it with a test that pins the serving schema's filterable field set and asserts every argument combination builds a filter_by referencing only those fields, plus a behavioral test of the predicate at its new layer.",
+    "canonical_prevention_artifact": [
+        "backend/tests/unit/test_conversation_search_speaker_filter.py"
+    ],
+    "evidence_prs": [
+        10850
+    ],
+    "scope_hints": [
+        "backend/utils/conversations/search.py"
+    ],
+    "status": "open"
+}

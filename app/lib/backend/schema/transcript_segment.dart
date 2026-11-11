@@ -1,4 +1,7 @@
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/format/speaker_names.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 
 // Phase 4.1 — pure 1:1 thin wrapper: both fields (String lang, String text) match
@@ -12,6 +15,7 @@ class TranscriptSegment {
   late int idx;
 
   String text;
+  String? originalText;
   String? speaker;
   late int speakerId;
   bool isUser;
@@ -21,10 +25,29 @@ class TranscriptSegment {
   List<Translation> translations = [];
   bool speechProfileProcessed;
   String? sttProvider;
+  String? speakerIdScope;
+
+  static final _streamSpeakerNumber = RegExp(r'^SPEAKER_(\d+)$');
+
+  (String, String)? get recordingVoice {
+    final scope = speakerIdScope;
+    final label = speaker;
+    if (scope == null || scope.isEmpty || label == null || label.isEmpty) return null;
+    final match = _streamSpeakerNumber.firstMatch(label);
+    return (scope, match == null ? label : 'SPEAKER_${int.parse(match[1]!)}');
+  }
+
+  bool sameRecordingVoice(TranscriptSegment other) => recordingVoice == null
+      ? other.recordingVoice == null && speakerId == other.speakerId
+      : recordingVoice == other.recordingVoice;
+
+  /// How this label was made: `manual`, `auto`, `carried`, or null for an unnamed speaker.
+  String? speakerLabelSource;
 
   TranscriptSegment({
     required this.id,
     required this.text,
+    this.originalText,
     required this.speaker,
     required this.isUser,
     required this.personId,
@@ -33,9 +56,12 @@ class TranscriptSegment {
     required this.translations,
     this.speechProfileProcessed = true,
     this.sttProvider,
+    this.speakerIdScope,
+    this.speakerLabelSource,
+    int? speakerId,
   }) {
     final parts = speaker?.split('_') ?? [];
-    speakerId = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+    this.speakerId = speakerId ?? (parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0);
   }
 
   @override
@@ -59,6 +85,8 @@ class TranscriptSegment {
     return TranscriptSegment(
       id: generated.id ?? '',
       text: generated.text,
+      originalText: generated.originalText,
+      speakerId: generated.speakerId,
       speaker: generated.speaker ?? 'SPEAKER_00',
       isUser: generated.isUser,
       personId: generated.personId,
@@ -67,6 +95,8 @@ class TranscriptSegment {
       translations: generated.translations ?? const [],
       speechProfileProcessed: generated.speechProfileProcessed,
       sttProvider: generated.sttProvider,
+      speakerIdScope: generated.speakerIdScope,
+      speakerLabelSource: generated.speakerLabelSource,
     );
   }
 
@@ -74,6 +104,7 @@ class TranscriptSegment {
     return wire.GeneratedTranscriptSegment(
       id: id,
       text: text,
+      originalText: originalText,
       speaker: speaker,
       speakerId: speakerId,
       isUser: isUser,
@@ -83,6 +114,8 @@ class TranscriptSegment {
       translations: translations,
       speechProfileProcessed: speechProfileProcessed,
       sttProvider: sttProvider,
+      speakerIdScope: speakerIdScope,
+      speakerLabelSource: speakerLabelSource,
     );
   }
 
@@ -164,72 +197,64 @@ class TranscriptSegment {
     segments.addAll(joinedSimilarSegments);
   }
 
+  /// Plain-text transcript for copy, share and export, one "[time] Name: text" block per segment.
+  ///
+  /// Names come from [SpeakerNames] so they match the screen: the owner is [ownerName] (default:
+  /// the user's given name, else the localized "You"), assigned people by name ([people], default
+  /// the cached list), Omi as "Omi", everyone else "Speaker N" in the conversation's dense
+  /// numbering, localized with [l10n] (default: the app locale via [SpeakerNames.contextFreeL10n]).
+  /// Pass [numberingSegments] (the whole conversation) when [segments] is only a slice of it.
   static String segmentsAsString(
     List<TranscriptSegment> segments, {
     bool includeTimestamps = false,
-    String Function(String speakerId)? speakerLabelBuilder,
+    AppLocalizations? l10n,
+    List<Person>? people,
+    String? ownerName,
+    List<TranscriptSegment>? numberingSegments,
+    bool unresolved = false,
   }) {
-    String transcript = '';
-    var userName = SharedPreferencesUtil().givenName;
-    var people = SharedPreferencesUtil().cachedPeople;
-    var peopleMap = {for (var p in people) p.id: p.name};
-
+    final names = SpeakerNames.forSegments(
+      numberingSegments ?? segments,
+      people: people ?? SharedPreferencesUtil().cachedPeople,
+      ownerName: ownerName ?? SharedPreferencesUtil().givenName,
+      l10n: l10n ?? SpeakerNames.contextFreeL10n(),
+      unresolved: unresolved,
+    );
+    final buffer = StringBuffer();
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
-    for (var segment in segments) {
-      var segmentText = segment.text.trim();
-      var timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
-      if (segment.isUser) {
-        transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: $segmentText ';
-      } else {
-        String speakerName;
-        if (segment.personId != null && peopleMap.containsKey(segment.personId)) {
-          speakerName = peopleMap[segment.personId]!;
-        } else {
-          var displayId = '${getDisplaySpeakerId(segment.speakerId, segments)}';
-          speakerName = speakerLabelBuilder != null ? speakerLabelBuilder(displayId) : 'Speaker $displayId';
-        }
-        transcript += '$timestampStr $speakerName: $segmentText ';
-      }
-      transcript += '\n\n';
+    for (final segment in segments) {
+      final timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
+      final name = names.forSegment(segment);
+      final label = name.isEmpty ? '' : '$name: ';
+      buffer.write('$timestampStr $label${segment.text.trim()} ');
+      buffer.write('\n\n');
     }
-    return transcript.trim();
+    return buffer.toString().trim();
   }
 
+  /// Whether no segment starts or ends after a later one: the pairwise check
+  /// `a.start > b.end || a.end > b.start` for every earlier `a`, in one pass
+  /// against the largest earlier start and end (opening a 1,200-line
+  /// conversation used to cost 720k pair comparisons on the UI isolate).
   static bool canDisplaySeconds(List<TranscriptSegment> segments) {
-    for (var i = 0; i < segments.length; i++) {
-      for (var j = i + 1; j < segments.length; j++) {
-        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
-          return false;
-        }
-      }
+    var maxStart = double.negativeInfinity;
+    var maxEnd = double.negativeInfinity;
+    for (final segment in segments) {
+      if (maxStart > segment.end || maxEnd > segment.start) return false;
+      if (segment.start > maxStart) maxStart = segment.start;
+      if (segment.end > maxEnd) maxEnd = segment.end;
     }
     return true;
   }
 
-  /// Gets the display speaker ID (1-indexed) for a segment.
-  /// Normalizes based on the minimum speaker ID in the conversation.
+  /// The "Speaker N" number shown for [speakerId] in the conversation made of [segments].
   ///
-  /// Examples:
-  /// - If conversation has speakers [0, 1, 2] -> displays as [1, 2, 3]
-  /// - If conversation has speakers [1, 2, 3] -> displays as [1, 2, 3]
-  /// - If conversation has speakers [5, 6] -> displays as [1, 2]
+  /// Dense and 1-based in order of first appearance, skipping the owner and Omi (see
+  /// [SpeakerNames]): canonical ids keep their gaps (provider restarts allocate new identities),
+  /// the display does not. Assigning a person keeps everyone's number; tagging a speaker as the
+  /// owner removes them from the count.
   static int getDisplaySpeakerId(int speakerId, List<TranscriptSegment> segments) {
-    if (segments.isEmpty) return speakerId + 1;
-
-    // Find minimum speaker ID among non-user segments
-    int? minSpeakerId;
-    for (var segment in segments) {
-      if (!segment.isUser) {
-        if (minSpeakerId == null || segment.speakerId < minSpeakerId) {
-          minSpeakerId = segment.speakerId;
-        }
-      }
-    }
-
-    // If no non-user segments found, default to simple +1
-    if (minSpeakerId == null) return speakerId + 1;
-
-    // Normalize: subtract minimum and add 1 to make it 1-indexed
-    return speakerId - minSpeakerId + 1;
+    final ordinals = SpeakerNames.denseOrdinals(segments);
+    return ordinals[speakerId] ?? ordinals.length + 1;
   }
 }

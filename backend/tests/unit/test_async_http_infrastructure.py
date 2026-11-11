@@ -68,6 +68,7 @@ from utils.http_client import (
     _webhook_circuit_breakers,
     _latest_wins_versions,
     _semaphores,
+    _SEMAPHORE_CACHE_MAX,
     _CIRCUIT_BREAKER_FAILURE_THRESHOLD,
     _CIRCUIT_BREAKER_RECOVERY_TIMEOUT,
 )
@@ -285,6 +286,44 @@ class TestSemaphoreGetters:
         sem2 = get_webhook_semaphore()
         assert sem1 is sem2
 
+    @pytest.mark.asyncio
+    async def test_pruning_keeps_the_running_loops_semaphore(self):
+        """Crossing the cache cap must not swap the live loop's existing semaphore.
+
+        The prune used _semaphores.clear(), which dropped the running loop's entries too.
+        A caller already holding permits on the old Semaphore kept them while the next
+        caller received a brand-new one, so the effective concurrency briefly doubled —
+        the opposite of what the cap exists for. The docstring already promised the main
+        loop's semaphores "are stable" and that only short-lived asyncio.run() entries
+        are pruned.
+        """
+        _semaphores.clear()
+        webhook_before = get_webhook_semaphore()
+        live_loop_id = id(asyncio.get_running_loop())
+
+        # Fill the cache past the cap with entries from other (destroyed) loops.
+        for i in range(_SEMAPHORE_CACHE_MAX + 5):
+            _semaphores[(live_loop_id + 1 + i, 'webhook')] = asyncio.Semaphore(1)
+
+        # A new name for this loop is what triggers the prune.
+        get_maps_semaphore()
+
+        assert get_webhook_semaphore() is webhook_before, 'the running loop lost its semaphore to the prune'
+
+    @pytest.mark.asyncio
+    async def test_pruning_still_bounds_the_cache(self):
+        """The prune must drop the foreign-loop entries it was added for."""
+        _semaphores.clear()
+        get_webhook_semaphore()
+        live_loop_id = id(asyncio.get_running_loop())
+        for i in range(_SEMAPHORE_CACHE_MAX + 5):
+            _semaphores[(live_loop_id + 1 + i, 'webhook')] = asyncio.Semaphore(1)
+
+        get_maps_semaphore()  # crosses the cap, triggering the prune
+
+        assert all(key[0] == live_loop_id for key in _semaphores), 'foreign-loop entries survived'
+        assert len(_semaphores) == 2  # webhook + maps, both for this loop
+
     def test_different_loops_return_different_instances(self):
         """Different asyncio.run() calls get isolated semaphores."""
         sems = []
@@ -390,35 +429,79 @@ class TestWebhookClientConfig:
 
     def test_webhook_client_read_timeout_is_30s(self):
         """Webhook client must use 30s read timeout to match previous per-call behavior."""
-        from utils.http_client import get_webhook_client, _webhook_client
 
-        # Force fresh client creation
-        import utils.http_client as hc
+        async def _read_timeout():
+            from utils.http_client import close_all_clients, get_webhook_client
 
-        old_client = hc._webhook_client
-        hc._webhook_client = None
-        try:
-            client = get_webhook_client()
-            assert client.timeout.read == 30.0
-        finally:
-            if hc._webhook_client is not None and hc._webhook_client is not old_client:
-                asyncio.run(hc._webhook_client.aclose())
-            hc._webhook_client = old_client
+            try:
+                return get_webhook_client().timeout.read
+            finally:
+                await close_all_clients()
+
+        assert asyncio.run(_read_timeout()) == 30.0
 
     def test_webhook_client_connect_timeout_is_2s(self):
         """Webhook client must use aggressive 2s connect timeout."""
-        from utils.http_client import get_webhook_client as gwc
+
+        async def _connect_timeout():
+            from utils.http_client import close_all_clients, get_webhook_client
+
+            try:
+                return get_webhook_client().timeout.connect
+            finally:
+                await close_all_clients()
+
+        assert asyncio.run(_connect_timeout()) == 2.0
+
+
+class TestClientEventLoopOwnership:
+    """A shared client belongs to the event loop that opened its connections.
+
+    Regression for the prod failure where one process-wide client outlived the
+    `asyncio.run()` loop that pooled its keep-alive connections: the next live
+    loop made the pool discard one, uvloop raised `RuntimeError: ... the
+    handler is closed` from `write_eof()` on the freed handle, and httpcore
+    re-raised it at the caller — intermittent HTTP 500s on `/v1/apps/enable`
+    and dropped app-integration webhook deliveries.
+    """
+
+    def test_each_event_loop_gets_its_own_client(self):
+        """The surviving client of a finished loop is never handed to the next one."""
         import utils.http_client as hc
 
-        old_client = hc._webhook_client
-        hc._webhook_client = None
+        async def _client_id():
+            return id(hc.get_webhook_client())
+
+        # No close in between: this is the prod shape, where the process-wide
+        # client outlived the asyncio.run() loop that pooled its connections.
+        first = asyncio.run(_client_id())
+        second = asyncio.run(_client_id())
         try:
-            client = gwc()
-            assert client.timeout.connect == 2.0
+            assert first != second
         finally:
-            if hc._webhook_client is not None and hc._webhook_client is not old_client:
-                asyncio.run(hc._webhook_client.aclose())
-            hc._webhook_client = old_client
+            asyncio.run(hc.close_all_clients())
+
+    def test_one_loop_reuses_a_single_pooled_client(self):
+        import utils.http_client as hc
+
+        async def _same_client():
+            try:
+                return hc.get_webhook_client() is hc.get_webhook_client()
+            finally:
+                await hc.close_all_clients()
+
+        assert asyncio.run(_same_client()) is True
+
+    def test_finished_loops_do_not_accumulate_clients(self):
+        import utils.http_client as hc
+
+        async def _touch():
+            hc.get_webhook_client()
+
+        for _ in range(5):
+            asyncio.run(_touch())
+
+        assert len(hc._clients) == 1  # only the most recent loop's entry survives
 
 
 class TestExecutorConfiguration:
@@ -434,21 +517,39 @@ class TestExecutorConfiguration:
 
 
 class TestNotificationWebhookWiring:
-    """Verify async webhook is correctly wired through storage_executor."""
+    """Pin how the daily-summary webhook is owned: run inline, never submitted to a pool.
 
-    def test_send_summary_calls_storage_executor_with_asyncio_run(self):
-        """_send_summary_notification must submit asyncio.run(day_summary_webhook(...)) to storage_executor."""
+    The name predates two rewirings. It was storage_executor, then postprocess_executor
+    (#7387), and is now an inline awaited call bounded by its own budget (#12530) --
+    because the coordinator was already running on postprocess_executor, so submitting
+    back into it made the function its own child and left the coroutine unowned at exit.
+    """
+
+    def test_day_summary_webhook_is_awaited_inline_not_submitted(self):
+        """The daily-summary webhook must run inline, never be submitted to a pool.
+
+        This pin used to require the opposite — ``postprocess_executor.submit(asyncio.run,
+        day_summary_webhook(...))`` (#7387). That wiring turned out to be wrong in both
+        directions (#12530): ``_send_summary_notification`` already runs *on*
+        postprocess_executor, so the submit made it its own child, and the Cloud Run Job
+        exits without joining the pool, so a queued webhook was dropped outright.
+
+        The behavioral coverage lives in test_daily_summary_generation.py; this stays a
+        source pin because the defect is a wiring shape, and it is the negative half —
+        "not submitted anywhere" — that a behavioral test cannot express.
+        """
         import os
-        import sys
-        from unittest.mock import MagicMock, patch
 
         # Read source to verify pattern without triggering Firestore imports
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py'), encoding='utf-8') as f:
             src = f.read()
 
-        # Verify the exact wiring pattern (postprocess_executor, not storage_executor, #7387)
-        assert 'postprocess_executor.submit(asyncio.run, day_summary_webhook(' in src
+        assert '.submit(asyncio.run, day_summary_webhook(' not in src
+        assert 'asyncio.run(' in src and 'day_summary_webhook(' in src
+        # Bounded inside the per-user budget it now shares: a slow receiver must not be
+        # able to spend someone else's recap. See DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS.
+        assert 'timeout=DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS' in src
         assert 'critical_executor' not in src
         assert 'storage_executor' not in src
 
@@ -474,7 +575,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
+        with open(os.path.join(backend_dir, 'utils', 'pusher_protocol.py'), encoding='utf-8') as f:
             src = f.read()
 
         tree = ast.parse(src)
@@ -488,16 +589,135 @@ class TestPrivateCloudQueueCap:
         pytest.fail("PRIVATE_CLOUD_QUEUE_MAX_SIZE constant not found")
 
     def test_overflow_warning_at_all_enqueue_points(self):
-        """All 3 enqueue points must log overflow warning before deque drops oldest."""
+        """Every enqueue into private_cloud_queue must be preceded by an overflow warning.
+
+        The three inline enqueue sites were consolidated into one shared
+        helper (``_queue_private_cloud_chunk``), so a raw string count of
+        three no longer describes the code. The invariant this test protects
+        is stronger as a structural check: every call that appends into
+        ``private_cloud_queue`` must sit inside a function that logs the
+        'private_cloud_queue full' warning, and inline appends outside that
+        helper are rejected (they would drop the oldest chunk silently).
+        The warning must also *guard* each enqueue — a call that appends on a
+        path the fullness check never runs on (before it, or in an early
+        return above it) drops the oldest chunk silently even though the
+        function warns elsewhere.
+        """
+        import ast
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
-            src = f.read()
+            tree = ast.parse(f.read())
 
-        # Count occurrences of the overflow warning pattern
-        warning_count = src.count('private_cloud_queue full')
-        assert warning_count == 3, f"Expected 3 overflow warnings, found {warning_count}"
+        def enqueue_targets(node: ast.AST) -> set:
+            """Queues a call appends/bounds into, by name."""
+            targets = set()
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in ('append', 'appendleft', 'extend', 'extendleft'):
+                    value = node.func.value
+                    if isinstance(value, ast.Name):
+                        targets.add(value.id)
+                    elif isinstance(value, ast.Attribute):
+                        targets.add(value.attr)
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == 'append_bounded'
+                and node.args
+                and isinstance(node.args[0], ast.Name)
+            ):
+                targets.add(node.args[0].id)
+            return targets
+
+        def unguarded_private_cloud_enqueues(source_tree: ast.AST) -> list[str]:
+            """Enqueues into private_cloud_queue no fullness check precedes on their path.
+
+            A guard is an `if` whose test compares the queue's length and whose
+            branch logs the 'private_cloud_queue full' warning. An enqueue is
+            guarded when such a guard encloses it or precedes it in one of the
+            statement lists on its way up to the function body — the textual
+            approximation of the check dominating the enqueue.
+            """
+            parents: dict[ast.AST, ast.AST] = {
+                child: parent for parent in ast.walk(source_tree) for child in ast.iter_child_nodes(parent)
+            }
+            findings: list[str] = []
+            for function in ast.walk(source_tree):
+                if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                guards = [
+                    node
+                    for node in ast.walk(function)
+                    if isinstance(node, ast.If)
+                    and isinstance(node.test, ast.Compare)
+                    and any(
+                        isinstance(item, ast.Name) and item.id == 'private_cloud_queue' for item in ast.walk(node.test)
+                    )
+                    and any(
+                        isinstance(item, ast.Constant)
+                        and isinstance(item.value, str)
+                        and 'private_cloud_queue full' in item.value
+                        for item in ast.walk(node)
+                    )
+                ]
+                for call in (node for node in ast.walk(function) if 'private_cloud_queue' in enqueue_targets(node)):
+                    guarded = False
+                    child: ast.AST = call
+                    while not guarded:
+                        parent = parents.get(child)
+                        if parent is None:
+                            break
+                        for field in ('body', 'orelse', 'finalbody'):
+                            stmts = getattr(parent, field, None)
+                            if isinstance(stmts, list) and child in stmts:
+                                if any(guard in stmts[: stmts.index(child)] for guard in guards):
+                                    guarded = True
+                                break
+                        if parent is function:
+                            break
+                        child = parent
+                    if not guarded:
+                        findings.append(f'{function.name}:{call.lineno}')
+            return findings
+
+        enqueue_functions = []
+        offending_enqueues = []
+
+        for function in ast.walk(tree):
+            if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            function_warns = any(
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and 'private_cloud_queue full' in node.value
+                for node in ast.walk(function)
+            )
+            calls = [call for call in ast.walk(function) if enqueue_targets(call)]
+            if function_warns:
+                enqueue_functions.append(function.name)
+            for call in calls:
+                if 'private_cloud_queue' in enqueue_targets(call) and not function_warns:
+                    offending_enqueues.append(f'{function.name}:{call.lineno}')
+
+        assert enqueue_functions, 'no function both enqueues into private_cloud_queue and warns on overflow'
+        assert not offending_enqueues, f'private_cloud_queue enqueues without an overflow warning: {offending_enqueues}'
+        unguarded = unguarded_private_cloud_enqueues(tree)
+        assert not unguarded, f'private_cloud_queue enqueues no fullness check precedes: {unguarded}'
+
+        # The structural check has teeth: an enqueue above the fullness check
+        # (or on an early-return path that skips it) is flagged even though
+        # the same function warns.
+        sneaky = ast.parse(
+            'def helper(chunk):\n'
+            '    if fast_path:\n'
+            '        private_cloud_queue.append(chunk)\n'
+            '        return\n'
+            '    if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:\n'
+            "        logger.warning('private_cloud_queue full, dropping oldest')\n"
+            '    append_bounded(private_cloud_queue, chunk)\n'
+        )
+        assert unguarded_private_cloud_enqueues(sneaky) == ['helper:3']
 
     def test_deque_maxlen_drops_oldest(self):
         """Verify deque(maxlen=N) drops oldest item when full."""

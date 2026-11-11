@@ -2,40 +2,70 @@ import Foundation
 
 // MARK: - Memory Category
 
-enum ExtractedMemoryCategory: String, Codable {
+enum ExtractedMemoryCategory: String, Codable, Sendable {
   case system
   case interesting
 }
 
 // MARK: - Extracted Memory
 
-struct ExtractedMemory: Codable {
+struct ExtractedMemory: Codable, Sendable {
   let content: String
   let category: ExtractedMemoryCategory
   let sourceApp: String
   let confidence: Double
+  let subjectScope: MemorySubjectScope?
+  let subjectEvidence: MemorySubjectEvidence?
+  let containsCredentialOrIdentifier: Bool?
 
   enum CodingKeys: String, CodingKey {
     case content
     case category
     case sourceApp = "source_app"
     case confidence
+    case subjectScope = "subject_scope"
+    case subjectEvidence = "subject_evidence"
+    case containsCredentialOrIdentifier = "contains_credential_or_identifier"
+  }
+
+  init(
+    content: String,
+    category: ExtractedMemoryCategory,
+    sourceApp: String,
+    confidence: Double,
+    subjectScope: MemorySubjectScope? = nil,
+    subjectEvidence: MemorySubjectEvidence? = nil,
+    containsCredentialOrIdentifier: Bool? = nil
+  ) {
+    self.content = content
+    self.category = category
+    self.sourceApp = sourceApp
+    self.confidence = confidence
+    self.subjectScope = subjectScope
+    self.subjectEvidence = subjectEvidence
+    self.containsCredentialOrIdentifier = containsCredentialOrIdentifier
   }
 
   /// Convert to dictionary for Flutter
   func toDictionary() -> [String: Any] {
-    return [
+    var payload: [String: Any] = [
       "content": content,
       "category": category.rawValue,
       "sourceApp": sourceApp,
       "confidence": confidence,
     ]
+    if let subjectScope { payload["subjectScope"] = subjectScope.rawValue }
+    if let subjectEvidence { payload["subjectEvidence"] = subjectEvidence.rawValue }
+    if let containsCredentialOrIdentifier {
+      payload["containsCredentialOrIdentifier"] = containsCredentialOrIdentifier
+    }
+    return payload
   }
 }
 
 // MARK: - Memory Extraction Result
 
-struct MemoryExtractionResult: Codable, AssistantResult {
+struct MemoryExtractionResult: Codable, AssistantResult, Sendable {
   let hasNewMemory: Bool
   let memories: [ExtractedMemory]
   let contextSummary: String

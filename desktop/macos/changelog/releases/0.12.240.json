@@ -1,0 +1,7 @@
+{
+  "version": "0.12.240",
+  "date": "2026-08-29",
+  "changes": [
+    "Fixed just-in-time proactive triggers never activating for admitted accounts because the app ignored the server's rollout verdict and blocked its snapshot download on an unrelated sync step"
+  ]
+}

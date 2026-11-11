@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/sync_upload_refusal.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
@@ -13,7 +16,77 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    limiter.clockForTesting = null;
     limiter.clear();
+  });
+
+  test('dispatch holds double Retry-After to one hour and clear resets the backoff', () {
+    for (final seconds in [60, 120, 240, 480, 960, 1920, 3600, 3600]) {
+      limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+      expect(limiter.activeRetryAfterSeconds, inInclusiveRange(seconds - 1, seconds));
+    }
+
+    // Successful uploads call clear() on the account limiter.
+    limiter.clear();
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, inInclusiveRange(59, 60));
+  });
+
+  test('a hold right after the cooldown expires keeps growing the backoff', () {
+    // Real flow: the next upload only runs once the cooldown has expired, so a
+    // fence that is still held answers just after expiry.
+    var now = DateTime(2026, 10, 26);
+    limiter.clockForTesting = () => now;
+    for (final seconds in [60, 120, 240, 480]) {
+      limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+      expect(limiter.activeRetryAfterSeconds, seconds);
+      now = now.add(Duration(seconds: seconds + 1));
+    }
+  });
+
+  test('dispatch hold backoff resets after a quiet gap of twice the last cooldown', () {
+    var now = DateTime(2026, 10, 26);
+    limiter.clockForTesting = () => now;
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    now = now.add(const Duration(seconds: 61));
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, 120);
+
+    now = now.add(const Duration(seconds: 120 + 241));
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, 60);
+  });
+
+  test('successful upload resets the dispatch hold backoff', () async {
+    var now = DateTime(2026, 10, 26);
+    limiter.clockForTesting = () => now;
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.dispatchHoldBackoffLevelForTesting, 2);
+    now = now.add(const Duration(seconds: 121));
+
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (
+        files, {
+        onUploadProgress,
+        conversationId,
+        captureEvidence,
+        recordingSessionId,
+        audioStartSeconds,
+        audioEndSeconds,
+        claimLiveCapture = false,
+        geolocation,
+      }) async =>
+          UploadFilesResult.queued('job-after-hold'),
+    );
+
+    await gate.upload([]);
+
+    expect(limiter.dispatchHoldBackoffLevelForTesting, 0);
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, 60);
   });
 
   test('stale persisted fair-use cooldown self-heals before upload', () async {
@@ -23,7 +96,15 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('job-1');
       },
@@ -43,7 +124,15 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'throttle'},
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('job-after-expiry');
       },
@@ -63,7 +152,15 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('unexpected');
       },
@@ -82,7 +179,15 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'future_stage'},
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('unexpected');
       },
@@ -95,8 +200,10 @@ void main() {
   });
 
   test('legacy unclassified rateLimit state never blocks admission or becomes fair use offline', () async {
-    SharedPreferencesUtil()
-        .saveInt('syncRateLimitedUntilMs', DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch);
+    SharedPreferencesUtil().saveInt(
+      'syncRateLimitedUntilMs',
+      DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    );
     SharedPreferencesUtil().saveString('syncRateLimitedReason', 'rateLimit');
     var statusCalls = 0;
     var uploads = 0;
@@ -106,7 +213,15 @@ void main() {
         statusCalls++;
         throw Exception('offline');
       },
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('legacy-cleared');
       },
@@ -129,7 +244,15 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'restrict'},
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('unexpected');
       },
@@ -144,6 +267,41 @@ void main() {
     expect(limiter.isFairUseLimited, isTrue);
   });
 
+  test('forwards recording identity and complete audio interval', () async {
+    String? capturedSessionId;
+    double? capturedStart;
+    double? capturedEnd;
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        capturedSessionId = recordingSessionId;
+        capturedStart = audioStartSeconds;
+        capturedEnd = audioEndSeconds;
+        return UploadFilesResult.queued('job-range');
+      },
+    );
+
+    await gate.upload(
+      [],
+      recordingSessionId: 'recording-1',
+      audioStartSeconds: 1000,
+      audioEndSeconds: 1030,
+    );
+
+    expect(capturedSessionId, 'recording-1');
+    expect(capturedStart, 1000);
+    expect(capturedEnd, 1030);
+  });
+
   test('fair-use reconciliation is single-flight', () async {
     limiter.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.fairUse);
     final response = Completer<Map<String, dynamic>?>();
@@ -154,7 +312,15 @@ void main() {
         statusCalls++;
         return response.future;
       },
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async =>
+      uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async =>
           UploadFilesResult.queued('job'),
     );
 
@@ -174,7 +340,15 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async =>
+      uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async =>
           UploadFilesResult.queued('job'),
     );
 
@@ -184,17 +358,73 @@ void main() {
     expect(limiter.reason, RateLimitReason.backendBusy);
   });
 
+  SyncUploadGate failingGate(SyncUploadHttpException error) => SyncUploadGate(
+        limiter: limiter,
+        fairUseStatusLoader: () async => null,
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          throw error;
+        },
+      );
+
+  test('a recording-scoped 503 wait never pauses the account drain', () async {
+    final gate = failingGate(const SyncUploadHttpException(
+      503,
+      'Server is temporarily unavailable',
+      retryAfterSeconds: 30,
+      reasonCode: 'record_capture_pending',
+    ));
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+
+    expect(limiter.isLimited, isFalse);
+  });
+
+  test('an unscoped 503 with Retry-After still pauses the account', () async {
+    final gate = failingGate(const SyncUploadHttpException(
+      503,
+      'Server is temporarily unavailable',
+      retryAfterSeconds: 30,
+    ));
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+
+    expect(limiter.isLimited, isTrue);
+    expect(limiter.reason, RateLimitReason.backendBusy);
+  });
+
+  test('only the closed record_capture_pending body code is read from a 5xx', () {
+    expect(
+      syncUploadServerWaitReasonCode(http.Response('{"code":"record_capture_pending","detail":"x"}', 503)),
+      'record_capture_pending',
+    );
+    expect(syncUploadServerWaitReasonCode(http.Response('{"code":"sync_dispatch_unavailable"}', 503)), isNull);
+    expect(syncUploadServerWaitReasonCode(http.Response('Service Unavailable', 503)), isNull);
+  });
+
   test('one generic 429 closes admission and caps capacity backoff at 24 hours', () async {
     var uploads = 0;
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         uploads++;
-        throw SyncRateLimitedException(
-          kind: SyncRateLimitKind.backendCapacity,
-          retryAfterSeconds: 40 * 24 * 60 * 60,
-        );
+        throw SyncRateLimitedException(kind: SyncRateLimitKind.backendCapacity, retryAfterSeconds: 40 * 24 * 60 * 60);
       },
     );
 
@@ -219,7 +449,15 @@ void main() {
         statusCalls++;
         return {'stage': 'none'};
       },
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         uploads++;
         throw SyncRateLimitedException(kind: SyncRateLimitKind.fairUse, retryAfterSeconds: 30 * 24 * 60 * 60);
       },
@@ -238,48 +476,213 @@ void main() {
     expect(limiter.activeRetryAfterSeconds, inInclusiveRange(30 * 24 * 60 * 60 - 2, 30 * 24 * 60 * 60));
   });
 
-  test('backfill pacing persists without blocking a fresh upload', () async {
-    final uploadedLanes = <SyncUploadLane>[];
-    final gate = SyncUploadGate(
-      limiter: limiter,
-      fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
-        uploadedLanes.add(syncLane);
-        return UploadFilesResult.queued('fresh-job');
-      },
-    );
-    limiter.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backfillPaced);
-
-    await expectLater(
-      gate.upload([], lane: SyncUploadLane.backfill),
-      throwsA(
-        isA<SyncRateLimitedException>().having(
-          (error) => error.kind,
-          'kind',
-          SyncRateLimitKind.backfillPaced,
-        ),
-      ),
-    );
-    final fresh = await gate.upload([], lane: SyncUploadLane.fresh);
-
-    expect(fresh.jobId, 'fresh-job');
-    expect(uploadedLanes, [SyncUploadLane.fresh]);
-    expect(limiter.isBackfillLimited, isTrue);
-  });
-
-  test('backfill responses are passed to the uploader as a lane hint', () async {
-    SyncUploadLane? seenLane;
+  test('the caller decides whether the batch claims a live capture', () async {
+    final claims = <bool>[];
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
-        seenLane = syncLane;
-        return UploadFilesResult.queued('backfill-job');
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        claims.add(claimLiveCapture);
+        return UploadFilesResult.queued('job');
       },
     );
 
-    await gate.upload([], lane: SyncUploadLane.backfill);
+    await gate.upload([], claimLiveCapture: true);
+    await gate.upload([]);
 
-    expect(seenLane, SyncUploadLane.backfill);
+    expect(claims, [true, false]);
+  });
+
+  test('successful upload emits one joinable start and terminal outcome', () async {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    var now = DateTime.utc(2026, 8, 13, 12);
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        now = now.add(const Duration(milliseconds: 1250));
+        return UploadFilesResult.queued('job-telemetry');
+      },
+      attemptIdFactory: () => 'attempt-1',
+      clock: () => now,
+      telemetryEmitter: (name, properties) => events.add((name: name, properties: properties)),
+    );
+
+    await gate.upload([], conversationId: 'recording-1', claimLiveCapture: true);
+
+    expect(events.map((event) => event.name), [
+      RecordingUploadTelemetry.startedEvent,
+      RecordingUploadTelemetry.completedEvent,
+    ]);
+    expect(events[0].properties, {
+      'upload_attempt_id': 'attempt-1',
+      'recording_id': 'recording-1',
+      'file_count': 0,
+      'total_bytes': 0,
+      'claims_live_capture': true,
+      'upload_source': 'offline_audio_queue',
+    });
+    expect(events[1].properties, {...events[0].properties, 'duration_seconds': 1.25, 'result': 'accepted'});
+  });
+
+  test('failed upload emits one bounded terminal failure without raw error data', () async {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    var now = DateTime.utc(2026, 8, 13, 12);
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        now = now.add(const Duration(milliseconds: 500));
+        throw const SocketException('secret host and path');
+      },
+      attemptIdFactory: () => 'attempt-failed',
+      clock: () => now,
+      telemetryEmitter: (name, properties) => events.add((name: name, properties: properties)),
+    );
+
+    await expectLater(gate.upload([], conversationId: 'recording-2'), throwsA(isA<SocketException>()));
+
+    expect(events.map((event) => event.name), [
+      RecordingUploadTelemetry.startedEvent,
+      RecordingUploadTelemetry.failedEvent,
+    ]);
+    expect(events[1].properties, {
+      'upload_attempt_id': 'attempt-failed',
+      'recording_id': 'recording-2',
+      'file_count': 0,
+      'total_bytes': 0,
+      'claims_live_capture': false,
+      'upload_source': 'offline_audio_queue',
+      'duration_seconds': 0.5,
+      'failure_class': 'network',
+    });
+    expect(events[1].properties.toString(), isNot(contains('secret host')));
+    expect(events[1].properties.keys, isNot(contains('error')));
+  });
+
+  test('classifies HTTP upload failures without reducing them to unknown', () {
+    expect(RecordingUploadTelemetry.failureClass(const SyncUploadHttpException(401, 'auth')), 'authentication');
+    expect(RecordingUploadTelemetry.failureClass(const SyncUploadHttpException(503, 'server')), 'server');
+  });
+
+  test('a connection dropped by a network switch is a network failure, not unknown', () {
+    final uri = Uri.parse('https://api.omi.me/v2/sync-local-files');
+    expect(
+        RecordingUploadTelemetry.failureClass(http.ClientException("Can't assign requested address", uri)), 'network');
+    expect(RecordingUploadTelemetry.failureClass(http.ClientException('Broken pipe', uri)), 'network');
+    expect(RecordingUploadTelemetry.failureClass(const SyncUploadHttpException(400, 'refused')), 'unknown');
+  });
+
+  test('telemetry failure never changes an accepted upload', () async {
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async =>
+          UploadFilesResult.queued('job-after-telemetry-failure'),
+      telemetryEmitter: (_, __) => throw StateError('analytics unavailable'),
+    );
+
+    final result = await gate.upload([]);
+
+    expect(result.jobId, 'job-after-telemetry-failure');
+  });
+
+  test('a capacity cooldown does not persist across a restart', () async {
+    // #10948: the retired backfill cooldown persisted, so a 30s server pause
+    // outlived every relaunch the user tried.
+    limiter.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backendBusy);
+    expect(limiter.isLimited, isTrue);
+    expect(limiter.reason, RateLimitReason.backendBusy);
+
+    expect(SharedPreferencesUtil().getInt('syncRateLimitedUntilMs'), 0);
+    expect(SharedPreferencesUtil().getInt('syncBackfillLimitedUntilMs'), 0);
+  });
+
+  test('a 5xx with Retry-After installs the account cooldown instead of failing every batch', () async {
+    // Sync dispatch unavailable behind an account gate: the server scopes the
+    // pause via Retry-After on an otherwise-unscoped 503. The next upload must
+    // be refused client-side rather than re-sending the same doomed batch.
+    var uploads = 0;
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        uploads++;
+        throw const SyncUploadHttpException(503, 'Server is temporarily unavailable', retryAfterSeconds: 30);
+      },
+    );
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+    expect(uploads, 1);
+    expect(limiter.isLimited, isTrue);
+    expect(limiter.reason, RateLimitReason.backendBusy);
+    expect(limiter.activeRetryAfterSeconds, lessThanOrEqualTo(30));
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncRateLimitedException>()));
+    expect(uploads, 1, reason: 'the cooldown stops the drain before another body upload');
+  });
+
+  test('a 5xx without Retry-After does not install a cooldown', () async {
+    // Platform-generated 503s carry no pacing; the drain's own inter-batch
+    // pause covers them, and the limiter must stay clear so the next batch
+    // still gets a chance.
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async =>
+          throw const SyncUploadHttpException(503, 'Server is temporarily unavailable'),
+    );
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+
+    expect(limiter.isLimited, isFalse);
   });
 }

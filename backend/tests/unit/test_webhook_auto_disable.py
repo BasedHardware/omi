@@ -8,7 +8,9 @@ Verifies:
 - Circuit breaker + health tracking in chat tool endpoints
 """
 
+import json
 import os
+import socket
 from types import ModuleType
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -17,6 +19,7 @@ import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
 from utils.apps import validate_app_endpoints_for_reenable
+from utils import webhooks as webhooks_module
 
 _BACKEND = os.path.join(os.path.dirname(__file__), '..', '..')
 
@@ -126,6 +129,22 @@ class TestAppWebhookSuccessReset:
         mock_script = MagicMock(side_effect=Exception("Redis down"))
         with patch("database.webhook_health._get_success_script", return_value=mock_script):
             record_app_webhook_success("app-1")
+
+    def test_success_clears_redirect_state(self):
+        from database.webhook_health import record_app_webhook_success
+
+        mock_script = MagicMock(return_value=1)
+        mock_r = MagicMock()
+        with (
+            patch("database.webhook_health._get_success_script", return_value=mock_script),
+            patch("database.webhook_health.r", mock_r),
+        ):
+            record_app_webhook_success("app-1")
+
+        mock_r.hdel.assert_called_once_with(
+            'app_webhook_health:app-1:realtime', 'last_redirect_at', 'last_redirect_status'
+        )
+        mock_r.delete.assert_called_once_with('app_webhook_redirect_notice:app-1:realtime')
 
 
 class TestIsAppWebhookDisabled:
@@ -244,6 +263,8 @@ class TestDevWebhookAutoDisable:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        monkeypatch.setattr(socket, "getaddrinfo", lambda *_: [(2, 1, 6, "", ("8.8.8.8", 0))])
+        monkeypatch.setattr(webhooks_module, "enqueue_dev_webhook_dlq", MagicMock())
 
     def test_append_query_params_preserves_existing_query(self):
         from utils.webhooks import _append_query_params
@@ -280,7 +301,7 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
         ):
@@ -299,6 +320,145 @@ class TestDevWebhookAutoDisable:
         assert idempotency_keys[0]
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("status_code", [400, 401, 404, 410, 422])
+    async def test_post_dev_webhook_does_not_retry_deterministic_4xx(self, status_code):
+        # Deterministic 4xx retains the final-response DLQ path without retries.
+        from utils.webhooks import _post_dev_webhook, db_executor, enqueue_dev_webhook_dlq
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=MagicMock(status_code=status_code))
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        sleep_calls = []
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+
+        with (
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
+            patch.object(webhooks_module, "run_blocking", wraps=webhooks_module.run_blocking) as mock_run_blocking,
+        ):
+            response = await _post_dev_webhook(
+                "test_webhook",
+                "https://example.com/webhook",
+                json={"hello": "world"},
+                retry_delays=(0.1, 0.2),
+                idempotency_key="event-4xx",
+                dlq_uid="uid-1",
+            )
+
+        assert response.status_code == status_code
+        assert mock_client.post.await_count == 1, "deterministic 4xx must not be retried"
+        assert sleep_calls == []
+        # The exhausted-delivery terminal path is intact: DLQ gets the final response.
+        assert mock_run_blocking.await_count == 2
+        assert mock_run_blocking.await_args.args[1] is enqueue_dev_webhook_dlq
+        assert mock_run_blocking.await_args.kwargs["status_code"] == status_code
+        idempotency_keys = [call.kwargs["headers"]["Idempotency-Key"] for call in mock_client.post.await_args_list]
+        assert idempotency_keys == ["event-4xx"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("transient_status", [408, 429])
+    async def test_post_dev_webhook_still_retries_transient_4xx(self, transient_status):
+        from utils.webhooks import _post_dev_webhook
+
+        responses = [MagicMock(status_code=transient_status), MagicMock(status_code=200)]
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=responses)
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        sleep_calls = []
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+
+        with (
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
+        ):
+            response = await _post_dev_webhook(
+                "test_webhook",
+                "https://example.com/webhook",
+                json={"hello": "world"},
+                retry_delays=(0.1, 0.2),
+            )
+
+        assert response.status_code == 200
+        assert mock_client.post.await_count == 2
+        assert sleep_calls == [0.1]
+
+    @pytest.mark.asyncio
+    async def test_post_dev_webhook_enqueues_exhausted_delivery_without_blocking_event_loop(self):
+        from utils.webhooks import _post_dev_webhook, db_executor, enqueue_dev_webhook_dlq
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=MagicMock(status_code=503))
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        with (
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch.object(webhooks_module, "run_blocking", wraps=webhooks_module.run_blocking) as mock_run_blocking,
+        ):
+            response = await _post_dev_webhook(
+                "test_webhook",
+                "https://example.com/webhook",
+                retry_delays=(),
+                idempotency_key="event-123",
+                dlq_uid="uid-1",
+                json={"hello": "world"},
+            )
+
+        assert response.status_code == 503
+        assert mock_run_blocking.await_count == 2
+        mock_run_blocking.assert_awaited_with(
+            db_executor,
+            enqueue_dev_webhook_dlq,
+            webhook_name="test_webhook",
+            webhook_url="https://example.com/webhook",
+            status_code=503,
+            error="HTTP 503",
+            idempotency_key="event-123",
+            uid="uid-1",
+            payload={"hello": "world"},
+        )
+
+    def test_enqueue_dev_webhook_dlq_caps_entries_and_sets_ttl(self, monkeypatch):
+        from database import webhook_health
+
+        mock_redis = MagicMock()
+        monkeypatch.setattr(webhook_health, "r", mock_redis)
+
+        webhook_health.enqueue_dev_webhook_dlq(
+            webhook_name="memory_created_webhook",
+            webhook_url="https://example.com/webhook",
+            status_code=502,
+            error="HTTP 502",
+            idempotency_key="event-123",
+            uid="uid-1",
+            payload={"conversation_id": "conversation-1"},
+        )
+
+        key, raw_entry = mock_redis.lpush.call_args.args
+        entry = json.loads(raw_entry)
+        assert key == "dev_webhook_dlq:uid-1"
+        assert entry["webhook_name"] == "memory_created_webhook"
+        assert entry["idempotency_key"] == "event-123"
+        assert entry["status_code"] == 502
+        assert entry["payload"] == {"conversation_id": "conversation-1"}
+        mock_redis.ltrim.assert_called_once_with(key, 0, webhook_health._DLQ_MAX - 1)
+        mock_redis.expire.assert_called_once_with(key, webhook_health._DLQ_TTL)
+
+    @pytest.mark.asyncio
     async def test_dev_webhook_disabled_on_threshold(self):
         """When failure threshold exceeded, disable_user_webhook_db should be called."""
         from utils.webhooks import realtime_transcript_webhook
@@ -313,7 +473,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
@@ -345,7 +505,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
         ):
@@ -364,7 +524,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
@@ -401,7 +561,7 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
@@ -590,7 +750,9 @@ class TestChatToolCircuitBreaker:
 
             result = await mod._call_tool_endpoint({}, config, tool, "app-1")
 
-        assert result == "ok"
+        assert result.startswith('<untrusted source="test_tool_app_result">')
+        assert "ok" in result
+        assert "never instructions" in result
         mock_cb.record_success.assert_called_once()
         mock_success.assert_called_once_with("app-1", "chat_tool")
 
@@ -1184,6 +1346,19 @@ class TestMarketplaceIntegrationHealthPaths:
             _app_tools._handle_app_webhook_disable('app-1', 0, 'error')
         mock_notify.assert_not_called()
 
+    def test_action_4_notifies_owner_without_disabling(self):
+        _app_tools = _load_app_tools_module()
+
+        with (
+            patch.object(_app_tools, '_notify_app_owner') as mock_notify,
+            patch.object(_app_tools, 'disable_app_in_firestore') as mock_disable,
+        ):
+            _app_tools._handle_app_webhook_disable('app-1', 4, 'HTTP 307')
+
+        mock_notify.assert_called_once()
+        mock_disable.assert_not_called()
+        assert 'redirect' in mock_notify.call_args[0][1].lower()
+
     @pytest.mark.asyncio
     async def test_http_connect_error_records_failure(self):
         """HTTP connection error on chat tool should record failure."""
@@ -1311,7 +1486,9 @@ class TestMCPToolHealthTracking:
             patch.object(mod, "record_app_webhook_success") as mock_success,
         ):
             result = await structured_tool.coroutine()
-        assert result == "result ok"
+        assert result.startswith('<untrusted source="testmcpapp_mcp_test_mcp_result">')
+        assert "result ok" in result
+        assert "never instructions" in result
         mock_success.assert_called_once_with("app-mcp-1", "mcp_tool")
 
     @pytest.mark.asyncio
@@ -1935,6 +2112,8 @@ class TestDevWebhookIntegrationPaths:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        monkeypatch.setattr(socket, "getaddrinfo", lambda *_: [(2, 1, 6, "", ("8.8.8.8", 0))])
+        monkeypatch.setattr(webhooks_module, "enqueue_dev_webhook_dlq", MagicMock())
 
     @pytest.mark.asyncio
     async def test_conversation_created_records_success(self):
@@ -1954,7 +2133,7 @@ class TestDevWebhookIntegrationPaths:
 
         with (
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=AsyncMock()),
         ):
@@ -1991,7 +2170,7 @@ class TestDevWebhookIntegrationPaths:
 
         with (
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
@@ -2028,7 +2207,7 @@ class TestDevWebhookIntegrationPaths:
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
             patch("utils.webhooks.send_notification") as mock_notify,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_delivery_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),

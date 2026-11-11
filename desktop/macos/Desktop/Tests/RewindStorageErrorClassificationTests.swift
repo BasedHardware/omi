@@ -5,8 +5,8 @@ import XCTest
 
 /// Regression coverage for #9193: environmental disk/storage failures (the Rewind
 /// ffmpeg "The file couldn't be saved" clusters, OMI-DESKTOP-28/29) must be
-/// classified as non-actionable so they collapse into breadcrumbs instead of
-/// flooding Sentry with unactionable error groups.
+/// classified as non-actionable so they stay local diagnostics instead of
+/// flooding the error log with unactionable groups.
 final class RewindStorageErrorClassificationTests: XCTestCase {
   func testDiskFullCocoaErrorIsNonActionable() {
     let err = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError)
@@ -84,8 +84,11 @@ final class RewindStorageErrorClassificationTests: XCTestCase {
         #"VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))"#
       ))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process frame", error: error)"#))
-    XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process CGImage frame", error: error)"#))
-    XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process frame with metadata", error: error)"#))
+    // CGImage frame path carries structured StorageFailureDiagnostics context (multi-line call).
+    XCTAssertTrue(indexer.contains(#""RewindIndexer: Failed to process CGImage frame""#))
+    XCTAssertTrue(indexer.contains(#"error: error,"#))
+    // The metadata-carrying processFrame overload was the focus_sessions writer and is deleted (SCA-335).
+    // DeadProactivePathTests now guards the inverse: that RewindIndexer never regains a focusStatus writer.
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to flush video chunk", error: error)"#))
     XCTAssertTrue(
       encoder.contains(#"logError("VideoChunkEncoder: Failed to finalize stale video chunk", error: error)"#))

@@ -23,23 +23,26 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.41.9
-      xcode: 26.0.1
+      flutter: 3.44.5
+      xcode: 27.0
       cocoapods: 1.16.2
     cache:
       cache_paths:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
     when:
       changeset:
         includes:
           - 'app/**'
     working_directory: app
     scripts:
+      - name: Verify dispatcher source pin
+        script: |
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
+
       - name: Installing Opus
         script: |
           brew install opus
@@ -47,40 +50,16 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up App .env
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -88,7 +67,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -112,56 +90,37 @@ workflows:
 
       - name: Resolve next version from TestFlight + App Store
         script: |
-          set -e
+          set -euo pipefail
 
-          EMPTY='{"version":"0.0.0","buildNumber":"0"}'
-          TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null) || TF_RAW=""
-          AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null) || AS_RAW=""
-          [ -z "$TF_RAW" ] && TF_RAW="$EMPTY"
-          [ -z "$AS_RAW" ] && AS_RAW="$EMPTY"
-
-          TF_V=$(echo "$TF_RAW" | jq -r '.version // "0.0.0"')
-          TF_B=$(echo "$TF_RAW" | jq -r '.buildNumber // "0"')
-          AS_V=$(echo "$AS_RAW" | jq -r '.version // "0.0.0"')
-          AS_B=$(echo "$AS_RAW" | jq -r '.buildNumber // "0"')
-
-          echo "TestFlight latest: ${TF_V}+${TF_B}"
-          echo "App Store latest:  ${AS_V}+${AS_B}"
-
-          if [ "$TF_V" = "0.0.0" ] && [ "$AS_V" = "0.0.0" ]; then
-            echo "WARNING: No TestFlight or App Store history. Seeding from pubspec.yaml."
-            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
-            BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)
-          else
-            semver_gt() {
-              IFS='.' read -r a1 a2 a3 <<< "$1"
-              IFS='.' read -r b1 b2 b3 <<< "$2"
-              [ "$a1" -gt "$b1" ] && return 0
-              [ "$a1" -lt "$b1" ] && return 1
-              [ "$a2" -gt "$b2" ] && return 0
-              [ "$a2" -lt "$b2" ] && return 1
-              [ "$a3" -gt "$b3" ] && return 0
-              return 1
-            }
-
-            if semver_gt "$TF_V" "$AS_V"; then
-              BUILD_NAME="$TF_V"
-              echo "TF ahead of App Store -> reusing TF version $BUILD_NAME"
-            else
-              IFS='.' read -r MAJ MIN PATCH <<< "$AS_V"
-              BUILD_NAME="${MAJ}.${MIN}.$((PATCH + 1))"
-              if [ "$TF_V" = "0.0.0" ]; then
-                echo "No TestFlight history -> bumping App Store patch to $BUILD_NAME"
-              else
-                echo "TF (${TF_V}) <= AS (${AS_V}) -> bumping patch to $BUILD_NAME"
-              fi
-            fi
-
-            MAX_B=$TF_B
-            [ "$AS_B" -gt "$MAX_B" ] && MAX_B=$AS_B
-            BUILD_NUMBER=$((MAX_B + 1))
+          if ! TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null); then
+            echo "TestFlight version lookup failed; refusing to guess a release version." >&2
+            exit 1
           fi
+          if ! AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null); then
+            echo "App Store version lookup failed; refusing to guess a release version." >&2
+            exit 1
+          fi
+          STORE_INPUT="$(mktemp)"
+          trap 'rm -f "$STORE_INPUT"' EXIT
+          export TF_RAW AS_RAW
+          python3 - "$STORE_INPUT" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          Path(sys.argv[1]).write_text(json.dumps({
+              "testflight": {"stdout": os.environ["TF_RAW"], "exit_code": 0},
+              "app_store": {"stdout": os.environ["AS_RAW"], "exit_code": 0},
+          }), encoding="utf-8")
+          PY
+          PUBSPEC_VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')"
+          RELEASE_PLAN="$(python3 scripts/mobile_store_version.py \
+            --platform ios \
+            --pubspec-version "$PUBSPEC_VERSION" \
+            --input "$STORE_INPUT")"
+          BUILD_NAME="$(jq -er '.version' <<<"$RELEASE_PLAN")"
+          BUILD_NUMBER="$(jq -er '.build_number' <<<"$RELEASE_PLAN")"
 
           echo "Resolved next version: ${BUILD_NAME}+${BUILD_NUMBER}"
           echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
@@ -173,12 +132,17 @@ workflows:
 
           echo "Building iOS with version $BUILD_NAME ($BUILD_NUMBER)"
 
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to build." >&2
+            exit 1
+          fi
           flutter build ipa \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $PROVENANCE_ARGS
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -219,8 +183,6 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        beta_groups:
-          - Internal
         submit_to_app_store: false
 
   android-internal-auto:
@@ -241,8 +203,7 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -251,14 +212,18 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
     when:
       changeset:
         includes:
           - 'app/**'
     working_directory: app
     scripts:
+      - name: Verify dispatcher source pin
+        script: |
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
+
       - name: Installing Android SDK
         script: |
           export ANDROID_HOME="$HOME/opt/android-sdk"
@@ -291,33 +256,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up local.properties
         script: |
@@ -329,7 +270,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -337,7 +278,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -349,61 +289,66 @@ workflows:
 
       - name: Resolve next version from TestFlight + App Store + Play Store
         script: |
-          set -e
+          set -euo pipefail
 
-          EMPTY='{"version":"0.0.0","buildNumber":"0"}'
-          TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null) || TF_RAW=""
-          AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null) || AS_RAW=""
-          [ -z "$TF_RAW" ] && TF_RAW="$EMPTY"
-          [ -z "$AS_RAW" ] && AS_RAW="$EMPTY"
-
-          TF_V=$(echo "$TF_RAW" | jq -r '.version // "0.0.0"')
-          TF_B=$(echo "$TF_RAW" | jq -r '.buildNumber // "0"')
-          AS_V=$(echo "$AS_RAW" | jq -r '.version // "0.0.0"')
-          AS_B=$(echo "$AS_RAW" | jq -r '.buildNumber // "0"')
-          PLAY_B=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal 2>/dev/null || echo "0")
-          PLAY_B="${PLAY_B:-0}"
-
-          echo "TestFlight latest: ${TF_V}+${TF_B}"
-          echo "App Store latest:  ${AS_V}+${AS_B}"
-          echo "Play Store latest: ${PLAY_B}"
-
-          if [ "$TF_V" = "0.0.0" ] && [ "$AS_V" = "0.0.0" ]; then
-            echo "WARNING: No TestFlight or App Store history. Seeding from pubspec.yaml."
-            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
-            BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)
-            [ "$PLAY_B" -ge "$BUILD_NUMBER" ] && BUILD_NUMBER=$((PLAY_B + 1))
-          else
-            semver_gt() {
-              IFS='.' read -r a1 a2 a3 <<< "$1"
-              IFS='.' read -r b1 b2 b3 <<< "$2"
-              [ "$a1" -gt "$b1" ] && return 0
-              [ "$a1" -lt "$b1" ] && return 1
-              [ "$a2" -gt "$b2" ] && return 0
-              [ "$a2" -lt "$b2" ] && return 1
-              [ "$a3" -gt "$b3" ] && return 0
-              return 1
-            }
-
-            if semver_gt "$TF_V" "$AS_V"; then
-              BUILD_NAME="$TF_V"
-              echo "TF ahead of App Store -> reusing TF version $BUILD_NAME"
-            else
-              IFS='.' read -r MAJ MIN PATCH <<< "$AS_V"
-              BUILD_NAME="${MAJ}.${MIN}.$((PATCH + 1))"
-              if [ "$TF_V" = "0.0.0" ]; then
-                echo "No TestFlight history -> bumping App Store patch to $BUILD_NAME"
-              else
-                echo "TF (${TF_V}) <= AS (${AS_V}) -> bumping patch to $BUILD_NAME"
-              fi
-            fi
-
-            MAX_B=$TF_B
-            [ "$AS_B" -gt "$MAX_B" ] && MAX_B=$AS_B
-            [ "$PLAY_B" -gt "$MAX_B" ] && MAX_B=$PLAY_B
-            BUILD_NUMBER=$((MAX_B + 1))
+          if ! TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null); then
+            echo "TestFlight version lookup failed; refusing to guess a release version." >&2
+            exit 1
           fi
+          if ! AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null); then
+            echo "App Store version lookup failed; refusing to guess a release version." >&2
+            exit 1
+          fi
+          # google-play bundles list needs codemagic-cli-tools >= 0.57.0 and
+          # the build image's preinstalled CLI is unknown: upgrade in place
+          # only when the subcommand is missing, so a newer image CLI that
+          # other steps depend on is never downgraded.
+          if ! google-play bundles list --help >/dev/null 2>&1; then
+            echo "google-play bundles list unavailable; upgrading codemagic-cli-tools to >=0.57.0" >&2
+            if ! pip3 install --upgrade 'codemagic-cli-tools>=0.57.0,<1'; then
+              echo "codemagic-cli-tools upgrade failed; refusing to guess a release version." >&2
+              exit 1
+            fi
+            if ! google-play bundles list --help >/dev/null 2>&1; then
+              echo "google-play bundles list unavailable after upgrading codemagic-cli-tools; refusing to guess a release version." >&2
+              exit 1
+            fi
+          fi
+          # No --tracks: the highest build number across every Play track.
+          if ! PLAY_RAW=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" 2>/dev/null); then
+            echo "Play version lookup failed; refusing to guess a release version." >&2
+            exit 1
+          fi
+          # A rejected release leaves its uploaded bundle on no track, where
+          # the track lookup above cannot see it, but its version code is
+          # burned forever; the bundle list covers every uploaded code.
+          if ! PLAY_BUNDLES_RAW=$(google-play bundles list --package-name "$PACKAGE_NAME" --json 2>/dev/null); then
+            echo "Play bundle list lookup failed; refusing to guess a release version." >&2
+            exit 1
+          fi
+          STORE_INPUT="$(mktemp)"
+          trap 'rm -f "$STORE_INPUT"' EXIT
+          export TF_RAW AS_RAW PLAY_RAW PLAY_BUNDLES_RAW
+          python3 - "$STORE_INPUT" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          Path(sys.argv[1]).write_text(json.dumps({
+              "testflight": {"stdout": os.environ["TF_RAW"], "exit_code": 0},
+              "app_store": {"stdout": os.environ["AS_RAW"], "exit_code": 0},
+              "play": {"stdout": os.environ["PLAY_RAW"], "exit_code": 0},
+              "play_bundles": {"stdout": os.environ["PLAY_BUNDLES_RAW"], "exit_code": 0},
+          }), encoding="utf-8")
+          PY
+          PUBSPEC_VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')"
+          RELEASE_PLAN="$(python3 scripts/mobile_store_version.py \
+            --platform android \
+            --pubspec-version "$PUBSPEC_VERSION" \
+            --input "$STORE_INPUT")"
+          BUILD_NAME="$(jq -er '.version' <<<"$RELEASE_PLAN")"
+          BUILD_NUMBER="$(jq -er '.build_number' <<<"$RELEASE_PLAN")"
 
           echo "Resolved next version: ${BUILD_NAME}+${BUILD_NUMBER}"
           echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
@@ -413,11 +358,16 @@ workflows:
         script: |
           echo "Building Android with version $BUILD_NAME ($BUILD_NUMBER)"
 
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to build." >&2
+            exit 1
+          fi
           flutter build appbundle \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
+            $PROVENANCE_ARGS
 
     artifacts:
       - build/**/outputs/**/*.aab
@@ -437,6 +387,12 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
+        # Codemagic android-internal-auto builds on 2026-10-28 at 03:18Z,
+        # 05:55Z and 06:24Z uploaded bundles but failed at Publishing:
+        # "Changes cannot be sent for review automatically. Please set the
+        # query parameter changesNotSentForReview to true." Hold for the
+        # required Play Console Send changes for review press.
+        changes_not_sent_for_review: true
 
   # ============================================
   # PRODUCTION RELEASE WORKFLOWS (Triggered by tags)
@@ -460,11 +416,11 @@ workflows:
         - app_env
         - firebase
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.41.9
-      xcode: 26.0.1
+      flutter: 3.44.5
+      xcode: 27.0
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -488,42 +444,16 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up App .env
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -531,7 +461,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -556,19 +485,54 @@ workflows:
 
       - name: Flutter build ipa
         script: |
+          set -euo pipefail
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
 
-          # Build
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          # The tag is the release identity. Validate its platform, source
+          # commit, version, and build number before invoking Flutter.
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          TAG_SOURCE_SHA="$(git rev-parse "${CM_TAG:?CM_TAG is required}^{commit}")"
+          if ! IDENTITY_OUTPUT="$(python3 scripts/mobile_release_identity.py \
+            --tag "${CM_TAG}" \
+            --platform ios \
+            --source-sha "${CHECKED_OUT_SHA}" \
+            --tag-source-sha "${TAG_SOURCE_SHA}" \
+            --format shell)"; then
+            echo "Mobile release identity validation failed; refusing to build." >&2
+            exit 1
+          fi
+          eval "$IDENTITY_OUTPUT"
+          export OMI_RELEASE_SOURCE_SHA="$CHECKED_OUT_SHA"
+          export OMI_RELEASE_PLATFORM=ios
+          echo "OMI_RELEASE_SOURCE_SHA=$OMI_RELEASE_SOURCE_SHA" >> "$CM_ENV"
+          echo "OMI_RELEASE_PLATFORM=$OMI_RELEASE_PLATFORM" >> "$CM_ENV"
+
+          ADMISSION_PROOF="$(mktemp)"
+          trap 'rm -f "$ADMISSION_PROOF"' EXIT
+          python3 ../.github/scripts/collect_mobile_release_admission.py \
+            --sha "$CHECKED_OUT_SHA" \
+            --repository "${GITHUB_REPOSITORY:-BasedHardware/omi}" \
+            --token "${GITHUB_TOKEN:-}" \
+            --output "$ADMISSION_PROOF"
+          python3 ../.github/scripts/verify_mobile_release_admission.py \
+            --sha "$CHECKED_OUT_SHA" \
+            --repository "${GITHUB_REPOSITORY:-BasedHardware/omi}" \
+            --proof "$ADMISSION_PROOF"
+
+          echo "Building iOS with version $BUILD_NAME ($BUILD_NUMBER)"
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to build." >&2
+            exit 1
+          fi
           flutter build ipa \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $PROVENANCE_ARGS
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -630,14 +594,16 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+        # Internal-type TestFlight groups auto-receive every processed build;
+        # Apple rejects explicit assignment ("Cannot add internal group to a
+        # build"). Only external groups (Discord Folks) are named here.
         beta_groups:
-          - Internal
           - Discord Folks
         submit_to_app_store: false
 
   macos-prod-appstore:
     name: Release macOS to App Store
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v4
@@ -649,7 +615,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -666,31 +632,10 @@ workflows:
     scripts:
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_prod.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
-            --macos-out=macos/Config/Prod \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --macos-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_dev.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --macos-out=macos/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --macos-target="Runner" \
-            --yes
+          # The Flutter macOS Xcode project (app/macos/Runner.xcodeproj) was removed; this legacy workflow cannot build.
+          # It no longer generates Firebase config from a service-account key.
+          echo "legacy Flutter macOS workflow: app/macos/Runner.xcodeproj no longer exists" >&2
+          exit 1
 
       - name: Set up Google Service Info
         script: |
@@ -702,7 +647,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -710,7 +655,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -820,8 +764,10 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+        # Internal-type TestFlight groups auto-receive every processed build;
+        # Apple rejects explicit assignment ("Cannot add internal group to a
+        # build"). Only external groups (Discord Folks) are named here.
         beta_groups:
-          - Internal
           - Discord Folks
         submit_to_app_store: false
 
@@ -837,11 +783,11 @@ workflows:
         - firebase
         - google_play
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -862,6 +808,8 @@ workflows:
     scripts:
       - name: Installing Android SDK
         script: |
+          set -euo pipefail
+          rm -f "$HOME/.omi-android-prod-internal-build-identity"
           export ANDROID_HOME="$HOME/opt/android-sdk"
           if [ ! -d "$ANDROID_HOME" ]; then
             echo "$ANDROID_HOME does not exist. Installing..."
@@ -901,35 +849,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up local.properties
         script: |
@@ -941,7 +863,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -949,7 +871,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -959,18 +880,71 @@ workflows:
           dart run build_runner build --delete-conflicting-outputs
       - name: Build AAB with Flutter
         script: |
+          set -euo pipefail
           # TODO: Don't tricky
           # Tricky Opus > build.gradle, force use NDK 28 to deal with "ERROR: Unknown host CPU architecture: arm64 and 16kb memory page size support"
           # echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
 
-          # Should use bump version automatically by CI
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          # The tag is the release identity. Validate its platform, source
+          # commit, version, and build number before invoking Flutter.
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          TAG_SOURCE_SHA="$(git rev-parse "${CM_TAG:?CM_TAG is required}^{commit}")"
+          if ! IDENTITY_OUTPUT="$(python3 scripts/mobile_release_identity.py \
+            --tag "${CM_TAG}" \
+            --platform android \
+            --source-sha "${CHECKED_OUT_SHA}" \
+            --tag-source-sha "${TAG_SOURCE_SHA}" \
+            --format shell)"; then
+            echo "Mobile release identity validation failed; refusing to build." >&2
+            exit 1
+          fi
+          eval "$IDENTITY_OUTPUT"
+          export OMI_RELEASE_SOURCE_SHA="$CHECKED_OUT_SHA"
+          export OMI_RELEASE_PLATFORM=android
+          echo "OMI_RELEASE_SOURCE_SHA=$OMI_RELEASE_SOURCE_SHA" >> "$CM_ENV"
+          echo "OMI_RELEASE_PLATFORM=$OMI_RELEASE_PLATFORM" >> "$CM_ENV"
+
+          # Google Play version codes are global and immutable, and the
+          # internal-auto lane keeps allocating them after a release tag
+          # pins its build number. Keep the tag number when it is above the
+          # live floor; otherwise allocate floor + 1 so publishing cannot
+          # collide with an already-used code.
+          PLAY_LOOKUP="$(mktemp)"
+          if ! google-play get-latest-build-number \
+              --package-name "$PACKAGE_NAME" --tracks internal \
+              > "$PLAY_LOOKUP" 2>/dev/null; then
+            echo "Google Play version lookup failed; refusing to guess a build number." >&2
+            exit 1
+          fi
+          PLAY_PLAN="$(python3 scripts/mobile_play_build_number.py \
+            --tag-number "$BUILD_NUMBER" \
+            --play-output "$PLAY_LOOKUP")"
+          rm -f "$PLAY_LOOKUP"
+          TAG_BUILD_NUMBER="$BUILD_NUMBER"
+          BUILD_NUMBER="$(jq -er '.build_number' <<<"$PLAY_PLAN")"
+          echo "Android build number $BUILD_NUMBER (tag $TAG_BUILD_NUMBER, source: $(jq -r '.source' <<<"$PLAY_PLAN"))"
+          echo "BUILD_NAME=$BUILD_NAME" >> "$CM_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$CM_ENV"
+
+          bash scripts/admit_android_source.sh "$CHECKED_OUT_SHA"
+
+          echo "Building Android with version $BUILD_NAME ($BUILD_NUMBER)"
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to build." >&2
+            exit 1
+          fi
           flutter build appbundle \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
+            $PROVENANCE_ARGS
+
+          # Post-publish scripts also run after a failed build. Persist the exact
+          # identity only after Flutter has completed successfully.
+          printf '%s\n%s\n%s\n%s\n' "$BUILD_NAME" "$BUILD_NUMBER" "${CM_TAG:?CM_TAG is required}" \
+            "${CM_BUILD_ID:?CM_BUILD_ID is required}" \
+            > "$HOME/.omi-android-prod-internal-build-identity"
 
 
     artifacts:
@@ -990,9 +964,36 @@ workflows:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
+        # Publishing-block variables are evaluated before build scripts run.
+        # These built-in values bind the release to its tag and Codemagic run.
+        release_name: "$CM_TAG [$CM_BUILD_ID]"
         submit_as_draft: false
-        release_promotion:
-          track: "alpha"
+        # Keep tag releases held too: on 2026-10-28 Play said "Changes cannot
+        # be sent for review automatically" and required
+        # changesNotSentForReview=true. Submit these changes from Play Console.
+        changes_not_sent_for_review: true
+      scripts:
+        - name: Promote the exact internal build to alpha
+          script: |
+            set -euo pipefail
+            IDENTITY="$HOME/.omi-android-prod-internal-build-identity"
+            if [[ ! -f "$IDENTITY" ]]; then
+              echo "Android internal build did not complete; skipping alpha promotion."
+              exit 0
+            fi
+            {
+              read -r PROMOTE_BUILD_NAME
+              read -r PROMOTE_BUILD_NUMBER
+              read -r PROMOTE_BUILD_TAG
+              read -r PROMOTE_BUILD_ID
+            } < "$IDENTITY"
+            python3 scripts/mobile_store_promote.py \
+              --confirm promote-internal-to-alpha \
+              --platform android \
+              --version "${PROMOTE_BUILD_NAME:?missing Android build name}" \
+              --android-build "${PROMOTE_BUILD_NUMBER:?missing Android build number}" \
+              --build-tag "${PROMOTE_BUILD_TAG:?missing Android release tag}" \
+              --build-id "${PROMOTE_BUILD_ID:?missing Codemagic build ID}"
 
   ios-prod-patch:
     name: Patch iOS to Production
@@ -1014,9 +1015,8 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.41.9
-      xcode: 26.0.1
+      flutter: 3.44.5
+      xcode: 27.0
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -1047,42 +1047,16 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up App .env
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1090,7 +1064,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -1116,9 +1089,14 @@ workflows:
           xcode-project use-profiles
 
           # Build
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to patch." >&2
+            exit 1
+          fi
           shorebird patch ios \
             --flavor prod -- \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $PROVENANCE_ARGS
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -1134,7 +1112,10 @@ workflows:
         notify:
           success: true
           failure: false
-    instance_type: mac_mini_m2
+
+  # Retained only for local artifact diagnostics; it has no trigger or publisher.
+  macos-prod-legacy-no-publish:
+    instance_type: mac_mini_m4
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v4
@@ -1147,7 +1128,7 @@ workflows:
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
         DMGBUILD_VERSION: "1.6.7"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1159,31 +1140,10 @@ workflows:
     scripts:
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_prod.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
-            --macos-out=macos/Config/Prod \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --macos-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_dev.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --macos-out=macos/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --macos-target="Runner" \
-            --yes
+          # The Flutter macOS Xcode project (app/macos/Runner.xcodeproj) was removed; this legacy workflow cannot build.
+          # It no longer generates Firebase config from a service-account key.
+          echo "legacy Flutter macOS workflow: app/macos/Runner.xcodeproj no longer exists" >&2
+          exit 1
 
       - name: Set up Google Service Info
         script: |
@@ -1195,7 +1155,6 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1203,7 +1162,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
           echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
 
       - name: Extract version (from tag or auto-increment)
@@ -1567,7 +1525,7 @@ workflows:
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
-          DMG_PATH="build/macos/dmg/Omi.dmg"
+          DMG_PATH="build/macos/dmg/omi.dmg"
 
           # Use dmgbuild instead of create-dmg — writes .DS_Store directly
           # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
@@ -1586,7 +1544,7 @@ workflows:
         script: |
           set -e
 
-          DMG_PATH=$(find build/macos/dmg -name "Omi.dmg" | head -1)
+          DMG_PATH=$(find build/macos/dmg -name "omi.dmg" | head -1)
 
           # Check if private key is a file or content
           if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
@@ -1652,79 +1610,6 @@ workflows:
 
           echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
 
-      - name: Create GitHub Release
-        script: |
-          # Get the recent commits for changelog
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${TAG_NAME}^ 2>/dev/null || echo "")
-
-          if [ -n "$PREVIOUS_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"* %s" $PREVIOUS_TAG..$TAG_NAME | grep -v "Merge" | head -20)
-          else
-            CHANGELOG=$(git log --pretty=format:"* %s" -10 | grep -v "Merge")
-          fi
-
-          # Read the EdDSA signature for Sparkle
-          SIGNATURE=$(cat "dist/${VERSION}-${PLATFORM}/signature.txt" 2>/dev/null || echo "")
-
-          # Create release notes
-          cat > /tmp/release_notes.md <<EOF
-          ## What's Changed
-
-          $CHANGELOG
-
-          **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${TAG_NAME}
-
-          <!-- KEY_VALUE_START
-          changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
-          mandatory: false
-          minimum_app_version: 1.0.70
-          isLive: true
-          edSignature: $SIGNATURE
-          KEY_VALUE_END -->
-          EOF
-
-          # Find the DMG file
-          DMG_FILE=$(find build/macos/dmg -name "Omi.dmg" | head -1)
-
-          # Find the Sparkle ZIP and signature files
-          SPARKLE_ZIP="dist/${VERSION}-${PLATFORM}/Omi.zip"
-          SIGNATURE_FILE="dist/${VERSION}-${PLATFORM}/signature.txt"
-
-          # Create GitHub release with DMG, Sparkle ZIP, and signature attachments
-          if [ -f "$DMG_FILE" ]; then
-            # Create the release with the DMG first
-            gh release create "$TAG_NAME" \
-              --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
-              --notes-file /tmp/release_notes.md \
-              --repo BasedHardware/omi \
-              "$DMG_FILE"
-
-            # Upload Sparkle ZIP if it exists
-            if [ -f "$SPARKLE_ZIP" ]; then
-              echo "Uploading Sparkle ZIP: $SPARKLE_ZIP"
-              gh release upload "$TAG_NAME" \
-                "$SPARKLE_ZIP" \
-                --repo BasedHardware/omi \
-                --clobber
-            else
-              echo "WARNING: Sparkle ZIP not found at $SPARKLE_ZIP"
-            fi
-
-            # Upload signature file if it exists
-            if [ -f "$SIGNATURE_FILE" ]; then
-              echo "Uploading signature file: $SIGNATURE_FILE"
-              gh release upload "$TAG_NAME" \
-                "$SIGNATURE_FILE" \
-                --repo BasedHardware/omi \
-                --clobber
-            else
-              echo "WARNING: Signature file not found at $SIGNATURE_FILE"
-            fi
-          else
-            echo "ERROR: DMG file not found"
-            exit 1
-          fi
-
     artifacts:
       - dist/**/*
       - build/macos/**/*.app
@@ -1752,10 +1637,10 @@ workflows:
         - app_env
         - firebase
         - shorebird
+        - mobile_release_admission  # Read-only GitHub source and emulator proof
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -1822,35 +1707,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up local.properties
         script: |
@@ -1862,7 +1721,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1870,7 +1729,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -1880,13 +1738,27 @@ workflows:
           dart run build_runner build --delete-conflicting-outputs
       - name: Patch Android app with Shorebird
         script: |
+          set -euo pipefail
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          TAG_SOURCE_SHA="$(git rev-parse "${CM_TAG:?CM_TAG is required}^{commit}")"
+          if [[ "$CHECKED_OUT_SHA" != "$TAG_SOURCE_SHA" ]]; then
+            echo "Patch tag must identify the checked-out source." >&2
+            exit 1
+          fi
+          bash scripts/admit_android_source.sh "$CHECKED_OUT_SHA"
+
           # TODO: Don't tricky
           # Tricky Opus > build.gradle, force use NDK 27 to deal with "ERROR: Unknown host CPU architecture: arm64"
           # echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
 
           # Should use bump version automatically by CI
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to patch." >&2
+            exit 1
+          fi
           shorebird patch android \
-            --flavor prod
+            --flavor prod -- \
+            $PROVENANCE_ARGS
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
@@ -1905,8 +1777,8 @@ workflows:
 
   # ============================================
   # OMI DESKTOP SWIFT RELEASE
-  # Builds, signs, notarizes, and publishes the Swift macOS app from omi/desktop/macos/.
-  # Source code lives directly in omi/desktop/macos/ (monorepo).
+  # Builds, signs, notarizes, and publishes the Swift macOS app from desktop/macos/.
+  # Source code lives directly in desktop/macos/ (monorepo).
   #
   # Trigger: push a tag like v0.0.10+10-macos to BasedHardware/omi
   #   git tag v0.0.10+10-macos && git push origin v0.0.10+10-macos
@@ -1914,8 +1786,6 @@ workflows:
   # Required CodeMagic secret group "desktop_secrets":
   #   SPARKLE_PRIVATE_KEY             — EdDSA private key for Sparkle auto-update signing
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
-  #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
-  #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
   #   OMI_DESKTOP_APP_ENV_V3          — base64-encoded .env bundled into .app at build time
   #                                     Contains only secrets (not URLs):
   #                                       FIREBASE_API_KEY=<prod firebase web api key>
@@ -1928,9 +1798,9 @@ workflows:
   #   FIREBASE_PROJECT_ID, FIREBASE_API_KEY
   #   APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
   #   RESEND_API_KEY
-  #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
-  #   DESKTOP_AUTO_BETA_ENABLED       — optional emergency pause; set to false to leave candidates non-live
+  #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and signed Beta promotion
+  #   GITHUB_TOKEN                     — repo-scoped token used for immutable candidate-release publishing
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
   # Cloud Run secrets (GCP Secret Manager, DESKTOP_ prefix to avoid conflicts with Python backend):
@@ -1946,7 +1816,7 @@ workflows:
   # ============================================
   omi-desktop-swift-release:
     name: Release OMI Desktop (Swift)
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     environment:
       groups:
@@ -1956,7 +1826,7 @@ workflows:
         - desktop_secrets
       vars:
         BINARY_NAME: "Omi Computer"
-        APP_NAME: "omi"
+        APP_NAME: "Omi"
         BUNDLE_ID: "com.omi.computer-macos"
         BUILD_DIR: "build"
         GITHUB_REPO: "BasedHardware/omi"
@@ -1968,17 +1838,22 @@ workflows:
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
         DMGBUILD_VERSION: "1.6.7"
-      xcode: 16.4
-    triggering:
-      events:
-        - tag
-      tag_patterns:
-        - pattern: "v*-macos"
-          include: true
+      # Siri release toolchain. Required GitHub CI intentionally pins 26.6;
+      # this signed release must use Xcode 27 to embed App Intents metadata.
+      # The desktop-swift-ci-contract check enforces this split.
+      xcode: 27.0
+    # API-dispatched by desktop_auto_release.yml after its exact tag is pushed.
+    # Keeping this workflow manual prevents a webhook/API race from creating
+    # duplicate builds for one immutable candidate.
     working_directory: desktop/macos
     cache:
       cache_paths:
         - ~/Library/Caches/org.swift.swiftpm
+        # SwiftPM build products for both release triples. Without this every
+        # candidate cold-compiles the full dependency graph twice (~the largest
+        # single cost in the release wall-clock); SwiftPM's own fingerprinting
+        # invalidates stale objects, so reuse is safe.
+        - $CM_BUILD_DIR/desktop/macos/Desktop/.build
     scripts: &desktop_signed_artifact_steps
       - name: Resolve trusted source and build identity
         script: |
@@ -2054,8 +1929,14 @@ workflows:
               exit 1
             fi
             URL_SCHEME="omi-computer"
-            DMG_PATH="$BUILD_DIR/$APP_NAME.dmg"
+            DMG_PATH="$BUILD_DIR/omi.dmg"
             SPARKLE_ZIP_PATH="$BUILD_DIR/Omi.zip"
+            # Separately-installable beta identity, packaged from the same build
+            # so stable and Omi Beta can run side-by-side.
+            BETA_APP_NAME="Omi Beta"
+            BETA_BUNDLE_ID="com.omi.computer-macos.beta"
+            BETA_SPARKLE_ZIP_PATH="$BUILD_DIR/Omi.Beta.zip"
+            BETA_DMG_PATH="$BUILD_DIR/omi-beta.dmg"
           fi
           echo "VERSION=$VERSION" >> $CM_ENV
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $CM_ENV
@@ -2065,6 +1946,10 @@ workflows:
           echo "APP_BUNDLE=$BUILD_DIR/$APP_NAME.app" >> $CM_ENV
           echo "DMG_PATH=$DMG_PATH" >> $CM_ENV
           echo "SPARKLE_ZIP_PATH=$SPARKLE_ZIP_PATH" >> $CM_ENV
+          echo "BETA_APP_NAME=${BETA_APP_NAME:-}" >> $CM_ENV
+          echo "BETA_BUNDLE_ID=${BETA_BUNDLE_ID:-}" >> $CM_ENV
+          echo "BETA_SPARKLE_ZIP_PATH=${BETA_SPARKLE_ZIP_PATH:-}" >> $CM_ENV
+          echo "BETA_DMG_PATH=${BETA_DMG_PATH:-}" >> $CM_ENV
           echo "Building OMI Desktop v$VERSION (build $BUILD_NUMBER)"
 
       - name: Set up keychain and import Developer ID certificate
@@ -2103,24 +1988,6 @@ workflows:
       - name: Prepare agent runtime
         script: |
           scripts/prepare-agent-runtime.sh --universal-node
-
-      - name: Test desktop tool surfaces
-        script: |
-          cd agent
-          NODE_BIN=""
-          for candidate in ../Desktop/Sources/Resources/node "$(brew --prefix node@22 2>/dev/null)/bin/node" "$(command -v node)"; do
-            if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
-              NODE_BIN="$candidate"
-              break
-            fi
-          done
-          if [[ -z "$NODE_BIN" ]]; then
-            echo "ERROR: Node.js 22.6+ with --experimental-strip-types required" >&2
-            exit 1
-          fi
-          "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs --check
-          cd ..
-          scripts/test-tool-surfaces.sh
 
       - name: Prepare universal ffmpeg (arm64 + x86_64)
         script: |
@@ -2241,55 +2108,55 @@ workflows:
         script: |
           # Unset TOOLCHAINS to use Xcode's default toolchain
           unset TOOLCHAINS
+          # brew install is only for pkg-config/headers. Keep it off the
+          # compile step; overlap it with SPM resolve. The earlier
+          # "Prepare universal libwebp" step already built universal dylibs.
+          echo "Installing webp headers/pkg-config in parallel with SPM resolve..."
+          brew install webp &
+          brew_pid=$!
           echo "Resolving SPM packages (downloads ~673MB of binary artifacts on first run)..."
+          resolve_ok=0
           for attempt in 1 2 3; do
             if xcrun swift package resolve --package-path Desktop; then
               echo "  Packages resolved on attempt $attempt"
               echo "  Artifacts: $(ls Desktop/.build/artifacts/ 2>/dev/null | wc -l | tr -d ' ') cached items"
+              resolve_ok=1
               break
             fi
             echo "  Resolution failed on attempt $attempt"
             if [ $attempt -lt 3 ]; then
               echo "  Retrying in 15 seconds..."
               sleep 15
-            else
-              echo "ERROR: Package resolution failed after 3 attempts"
-              exit 1
             fi
           done
+          if [[ "$resolve_ok" -ne 1 ]]; then
+            echo "ERROR: Package resolution failed after 3 attempts"
+            if ! wait "$brew_pid"; then
+              echo "ERROR: brew install webp also failed"
+            fi
+            exit 1
+          fi
+          if ! wait "$brew_pid"; then
+            echo "ERROR: brew install webp failed"
+            exit 1
+          fi
 
-      - name: Build Swift app (arm64 + x86_64)
-        script: |
-          # Install libwebp (required for screenshot encoding)
-          brew install webp
-
-          # Homebrew's libwebp on Codemagic's Mac mini m2 is arm64-only as of
-          # 2026-05-10, which breaks Swift's x86_64 cross-compile link step:
-          #   ld: ignoring '/opt/homebrew/opt/webp/lib/libwebp.dylib': arm64 only
-          #   Undefined symbols for x86_64: _WebPEncodeRGBA, _WebPFree
-          # The earlier "Prepare universal libwebp" step builds universal dylibs
-          # at /tmp/libwebp-universal/. Overwrite Homebrew's arm64-only copies
-          # with those universal versions so pkg-config (used by Package.swift's
-          # CWebP system-lib target) resolves to a linker-compatible dylib for
-          # both archs.
+          # Homebrew's libwebp on Codemagic's Mac mini is arm64-only, which
+          # breaks Swift's x86_64 cross-compile link step. Overwrite those
+          # copies with the universal dylibs prepared earlier so pkg-config
+          # (used by Package.swift's CWebP system-lib target) is linker-safe.
           WEBP_LIB_DIR="$(brew --prefix webp)/lib"
           for dylib in libwebp.7.dylib libsharpyuv.0.dylib; do
             src="/tmp/libwebp-universal/$dylib"
             dst="$WEBP_LIB_DIR/$dylib"
             if [ ! -f "$src" ]; then
-              echo "WARN: universal $dylib missing at $src — skipping patch"
-              continue
+              echo "ERROR: universal $dylib missing at $src"
+              exit 1
             fi
             if [ ! -e "$dst" ]; then
-              echo "WARN: Homebrew $dylib not at $dst — skipping patch"
-              continue
+              echo "ERROR: Homebrew $dylib not at $dst"
+              exit 1
             fi
-            # Replace the symlink at this well-known path with the universal
-            # file. The underlying Cellar file (libwebp.7.x.y.dylib) is read-only
-            # so we can't overwrite it directly. pkg-config's `-L<dir> -lwebp`
-            # resolves to libwebp.dylib → libwebp.7.dylib → our universal file
-            # via the now-broken chain, which is fine: dyld only cares about the
-            # last hop being readable.
             rm -f "$dst"
             cp "$src" "$dst"
             file "$dst" | grep -q "universal binary" \
@@ -2297,30 +2164,36 @@ workflows:
               || { echo "ERROR: $dst is not universal after patch"; exit 1; }
           done
 
+      - name: Build Swift app (arm64 + x86_64)
+        script: |
+          set -euo pipefail
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
 
-          # Build arm64. Use --triple (not --arch) so binary always lands in
-          # arm64-apple-macosx/release/ regardless of the machine's native arch.
+          # Xcode 27 puts both --triple products in Products/Release. Resolve
+          # that directory from SwiftPM and stage each architecture before the
+          # next build replaces the executable in the shared products directory.
           echo "Building arm64..."
-          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values
 
-          ARM64_PATH="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
+          ARM64_PRODUCTS_DIR="$(xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx --show-bin-path)"
+          ARM64_PATH="$ARM64_PRODUCTS_DIR/$BINARY_NAME"
           if [ ! -f "$ARM64_PATH" ]; then
             echo "ERROR: arm64 binary not found at $ARM64_PATH"
-            ls "Desktop/.build/" 2>/dev/null
-            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | head -20 || true
+            ls "$ARM64_PRODUCTS_DIR" 2>/dev/null | head -20 || true
             exit 1
           fi
+          lipo -verify_arch arm64 "$ARM64_PATH"
           cp "$ARM64_PATH" "/tmp/OmiComputer-arm64"
           echo "arm64 binary: $(file "/tmp/OmiComputer-arm64" | grep -oE 'arm64|x86_64')"
 
           # Build x86_64 (cross-compile). Use --triple for explicit arch directory.
           echo "Building x86_64..."
-          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx -Xswiftc -emit-const-values
 
-          X86_64_PATH="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+          X86_64_PRODUCTS_DIR="$(xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx --show-bin-path)"
+          X86_64_PATH="$X86_64_PRODUCTS_DIR/$BINARY_NAME"
           # Symmetric existence check — without this, a silent x86_64 build failure
           # (exit 0 but no output) bubbles up later as "missing binary" in the
           # universal-bundle step with no traceback. Burned a build in May 2026.
@@ -2328,26 +2201,24 @@ workflows:
             echo "ERROR: x86_64 binary not found at $X86_64_PATH"
             echo "Listing $(dirname "$X86_64_PATH"):"
             ls -la "$(dirname "$X86_64_PATH")" 2>&1 | head -30 || true
-            echo "Listing Desktop/.build/:"
-            ls -la "Desktop/.build/" 2>&1 || true
             exit 1
           fi
+          lipo -verify_arch x86_64 "$X86_64_PATH"
+          cp "$X86_64_PATH" "/tmp/OmiComputer-x86_64"
+          echo "SWIFT_RELEASE_PRODUCTS_DIR=$X86_64_PRODUCTS_DIR" >> "$CM_ENV"
           echo "x86_64 binary: $(file "$X86_64_PATH" | grep -oE 'arm64|x86_64' | head -1)"
 
       - name: Create universal app bundle
         script: |
+          set -euo pipefail
           # arm64 binary was saved to /tmp in the Build Swift step
           ARM64_BINARY="/tmp/OmiComputer-arm64"
-          # x86_64 binary is in the explicit arch-specific dir
-          X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+          X86_64_BINARY="/tmp/OmiComputer-x86_64"
 
           if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
             echo "ERROR: Missing built binaries"
             echo "  arm64 ($ARM64_BINARY): $([ -f "$ARM64_BINARY" ] && echo EXISTS || echo MISSING)"
             echo "  x86_64 ($X86_64_BINARY): $([ -f "$X86_64_BINARY" ] && echo EXISTS || echo MISSING)"
-            echo ".build/ contents:" && ls "Desktop/.build/" 2>/dev/null
-            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | grep -E "^Omi" | head -5 || true
-            ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | grep -E "^Omi" | head -5 || true
             exit 1
           fi
           echo "arm64 arch: $(file "$ARM64_BINARY" | grep -oE 'arm64|x86_64')"
@@ -2365,14 +2236,14 @@ workflows:
           }
 
           cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
+          # SwiftPM emits constant values but does not embed App Intents
+          # metadata in a bundle assembled from its executable.
+          ./scripts/embed-app-intents-metadata.sh Desktop "$APP_BUNDLE" Release arm64
 
-          # Sparkle: use x86_64 arch path; fallback to arm64
-          SPARKLE_FW="Desktop/.build/x86_64-apple-macosx/release/Sparkle.framework"
+          SWIFT_BUILD_DIR="${SWIFT_RELEASE_PRODUCTS_DIR:?SwiftPM release products directory is missing}"
+          SPARKLE_FW="$SWIFT_BUILD_DIR/Sparkle.framework"
           if [ ! -d "$SPARKLE_FW" ]; then
-            SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
-          fi
-          if [ ! -d "$SPARKLE_FW" ]; then
-            echo "ERROR: Sparkle.framework not found in either arch dir"
+            echo "ERROR: Sparkle.framework not found in $SWIFT_BUILD_DIR"
             exit 1
           fi
           cp -R "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/"
@@ -2412,14 +2283,15 @@ workflows:
           cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
 
           # Copy SPM resource bundle (app assets: permissions.gif, herologo.png, etc.)
-          # Use x86_64 arch path; fallback to arm64
-          SWIFT_BUILD_DIR="Desktop/.build/x86_64-apple-macosx/release"
-          if [ ! -d "$SWIFT_BUILD_DIR" ]; then
-            SWIFT_BUILD_DIR="Desktop/.build/arm64-apple-macosx/release"
-          fi
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+            # SwiftPM emits Resources/node at the resource-bundle root. Keep
+            # Codemagic aligned with run.sh and the signed-artifact contract by
+            # moving it to the app-style nested resource path before signing.
+            source scripts/launcher-bootstrap.sh
+            omi_normalize_packaged_resource_bundle \
+              "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
           else
             echo "WARNING: SPM resource bundle not found (non-fatal)"
           fi
@@ -2434,10 +2306,6 @@ workflows:
               exit 1
             fi
             cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"
-            mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-            cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-            cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-            cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
           else
             echo "ERROR: agent/dist not found"
             exit 1
@@ -2505,26 +2373,50 @@ workflows:
           echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
+          # Generate symbols from the final universal executable after lipo and
+          # install_name_tool mutations. The helper fails closed unless the dSYM
+          # UUID set exactly matches both executable slices.
+          DSYM_PATH="$BUILD_DIR/Omi Computer.app.dSYM"
+          DSYM_ARCHIVE="$BUILD_DIR/Omi.dSYM.zip"
+          scripts/publish-desktop-debug-symbols.sh generate \
+            --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
+            --dsym "$DSYM_PATH" \
+            --archive "$DSYM_ARCHIVE"
+          echo "DSYM_PATH=$DSYM_PATH" >> "$CM_ENV"
+          echo "DSYM_ARCHIVE=$DSYM_ARCHIVE" >> "$CM_ENV"
+
       - name: Sign app
         script: |
           scripts/prepare-desktop-bundle-native-deps.sh "$APP_BUNDLE"
 
           xattr -cr "$APP_BUNDLE"
 
-          # Sign ffmpeg (inside SPM resource bundle)
-          FFMPEG_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/ffmpeg"
-          if [ -f "$FFMPEG_PATH" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$SIGN_IDENTITY" "$FFMPEG_PATH"
+          # SwiftPM can place resources at the bundle root or under
+          # Contents/Resources. Sign every native payload in either layout.
+          RESOURCE_BUNDLE="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle"
+          if [ ! -d "$RESOURCE_BUNDLE" ]; then
+            echo "ERROR: SwiftPM resource bundle is missing: $RESOURCE_BUNDLE" >&2
+            exit 1
           fi
 
           # Sign node with JIT entitlements (V8 requires MAP_JIT under Hardened Runtime)
-          NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
-          if [ -f "$NODE_BUNDLE_PATH" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$SIGN_IDENTITY" \
-              --entitlements Desktop/Node.entitlements \
-              "$NODE_BUNDLE_PATH"
+          NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+          while IFS= read -r -d '' native_bin; do
+            if file "$native_bin" | grep -q 'Mach-O'; then
+              if [ "$native_bin" = "$NODE_BUNDLE_PATH" ]; then
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" \
+                  --entitlements Desktop/Node.entitlements \
+                  "$native_bin"
+              else
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$native_bin"
+              fi
+            fi
+          done < <(find "$RESOURCE_BUNDLE" -type f -print0)
+          if [ ! -f "$NODE_BUNDLE_PATH" ]; then
+            echo "ERROR: bundled node is missing: $NODE_BUNDLE_PATH" >&2
+            exit 1
           fi
 
           # Sign agent native binaries
@@ -2615,128 +2507,93 @@ workflows:
         script: |
           scripts/audit-desktop-bundle-deps.sh "$APP_BUNDLE"
 
-      - name: Notarize app
+      - name: Prepare Omi Beta identity
         script: |
-          set -e
-          TEMP_ZIP="$BUILD_DIR/notarize-temp.zip"
-          ditto -c -k --keepParent "$APP_BUNDLE" "$TEMP_ZIP"
-
-          mkdir -p ~/private_keys
-          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
-          echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
-
-          RESULT=$(xcrun notarytool submit "$TEMP_ZIP" \
-            --key "$PRIVATE_KEY_PATH" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-            --wait \
-            --output-format json)
-
-          STATUS=$(echo "$RESULT" | python3 -c \
-            "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
-          SUBMISSION_ID=$(echo "$RESULT" | python3 -c \
-            "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
-
-          if [ "$STATUS" != "Accepted" ]; then
-            echo "Notarization failed: $STATUS"
-            [ -n "$SUBMISSION_ID" ] && xcrun notarytool log "$SUBMISSION_ID" \
-              --key "$PRIVATE_KEY_PATH" \
-              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
-            exit 1
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            echo "External previews do not ship an Omi Beta variant."
+            exit 0
           fi
-          rm -f "$TEMP_ZIP"
-          echo "App notarized"
+          set -euo pipefail
+          scripts/create-omi-beta-variant.sh \
+            --phase prepare \
+            --source-app "$APP_BUNDLE" \
+            --build-dir "$BUILD_DIR" \
+            --beta-app-name "$BETA_APP_NAME" \
+            --beta-bundle-id "$BETA_BUNDLE_ID"
 
-      - name: Staple app
+      - name: Notarize stable and Beta apps concurrently
         script: |
-          xcrun stapler staple "$APP_BUNDLE"
-          echo "App stapled"
+          set -euo pipefail
+          scripts/check-desktop-bundle-signatures.sh "$APP_BUNDLE"
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            scripts/check-desktop-bundle-signatures.sh "$BUILD_DIR/$BETA_APP_NAME.app"
+          fi
+          NOTARIZE_ARGS=(
+            --kind app
+            --work-dir "$BUILD_DIR/notarization"
+            --artifact stable "$APP_BUNDLE"
+          )
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            NOTARIZE_ARGS+=(--artifact beta "$BUILD_DIR/$BETA_APP_NAME.app")
+          fi
+          scripts/notarize-desktop-artifacts.sh "${NOTARIZE_ARGS[@]}"
 
-      - name: Create DMG installer
+      - name: Create stable and Beta DMGs concurrently
         script: |
-          set -e
+          set -euo pipefail
           pip3 install --break-system-packages "dmgbuild==$DMGBUILD_VERSION"
-
-          STAGING_DIR="/tmp/omi-dmg-staging-$$"
-          mkdir -p "$STAGING_DIR"
-          # Use ditto to preserve the notarization staple ticket (cp -R drops it)
-          ditto "$APP_BUNDLE" "$STAGING_DIR/$APP_NAME.app"
-          # Re-staple in staging dir if needed
-          xcrun stapler validate "$STAGING_DIR/$APP_NAME.app" 2>/dev/null || \
-            xcrun stapler staple "$STAGING_DIR/$APP_NAME.app"
-
-          # Use dmgbuild instead of create-dmg — writes .DS_Store directly
-          # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
-          dmgbuild -s dmg-assets/dmgbuild_settings.py \
-            -D app_path="$STAGING_DIR/$APP_NAME.app" \
-            -D app_name="$APP_NAME" \
-            -D assets_dir="$(pwd)/dmg-assets" \
-            "$APP_NAME" \
-            "$DMG_PATH"
-
-          rm -rf "$STAGING_DIR"
-          echo "DMG created"
-
-      - name: Sign, notarize, and staple DMG
-        script: |
-          set -e
-          codesign --force --sign "$SIGN_IDENTITY" "$DMG_PATH"
-
-          mkdir -p ~/private_keys
-          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
-          echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
-
-          RESULT=$(xcrun notarytool submit "$DMG_PATH" \
-            --key "$PRIVATE_KEY_PATH" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-            --wait \
-            --output-format json)
-
-          STATUS=$(echo "$RESULT" | python3 -c \
-            "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
-          SUBMISSION_ID=$(echo "$RESULT" | python3 -c \
-            "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
-
-          if [ "$STATUS" != "Accepted" ]; then
-            echo "DMG notarization failed: $STATUS"
-            [ -n "$SUBMISSION_ID" ] && xcrun notarytool log "$SUBMISSION_ID" \
-              --key "$PRIVATE_KEY_PATH" \
-              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
-            exit 1
+          DMG_ARGS=(
+            --work-dir "$BUILD_DIR/dmg-packaging"
+            --dmg stable "$APP_BUNDLE" "$APP_NAME" "$DMG_PATH"
+          )
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            DMG_ARGS+=(--dmg beta "$BUILD_DIR/$BETA_APP_NAME.app" "$BETA_APP_NAME" "$BETA_DMG_PATH")
           fi
+          scripts/create-desktop-dmgs.sh "${DMG_ARGS[@]}"
 
-          xcrun stapler staple "$DMG_PATH"
-          echo "DMG signed, notarized, and stapled"
+      - name: Notarize stable and Beta DMGs concurrently
+        script: |
+          set -euo pipefail
+          NOTARIZE_ARGS=(
+            --kind dmg
+            --work-dir "$BUILD_DIR/notarization"
+            --artifact stable "$DMG_PATH"
+          )
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            NOTARIZE_ARGS+=(--artifact beta "$BETA_DMG_PATH")
+          fi
+          scripts/notarize-desktop-artifacts.sh "${NOTARIZE_ARGS[@]}"
 
-      - name: Create Sparkle ZIP and sign
+      - name: Create stable and Beta Sparkle archives
         script: |
           if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
             echo "External previews do not participate in the shared Sparkle feed."
             exit 0
           fi
-          # Sparkle expects a ZIP of .app — not a DMG
+          set -euo pipefail
+          # Sparkle expects a ZIP of .app — not a DMG.
           ditto -c -k --keepParent "$APP_BUNDLE" "$SPARKLE_ZIP_PATH"
 
           SPARKLE_BIN="Desktop/.build/artifacts/sparkle/Sparkle/bin"
           ED_SIGNATURE=""
-          if [ -d "$SPARKLE_BIN" ] && [ -f "$SPARKLE_BIN/sign_update" ]; then
-            if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
-              ED_SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | \
-                "$SPARKLE_BIN/sign_update" "$SPARKLE_ZIP_PATH" --ed-key-file - 2>/dev/null | \
-                grep "sparkle:edSignature" | \
-                sed 's/.*edSignature="\([^"]*\)".*/\1/')
-            fi
+          if [[ -f "$SPARKLE_BIN/sign_update" && -n "$SPARKLE_PRIVATE_KEY" ]]; then
+            ED_SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | \
+              "$SPARKLE_BIN/sign_update" "$SPARKLE_ZIP_PATH" --ed-key-file - 2>/dev/null | \
+              grep "sparkle:edSignature" | \
+              sed 's/.*edSignature="\([^"]*\)".*/\1/')
           fi
-
           if [ -z "$ED_SIGNATURE" ]; then
-            echo "ERROR: Could not generate EdDSA signature — Sparkle auto-update will not work"
+            echo "ERROR: Could not generate EdDSA signature — Sparkle auto-update will not work" >&2
             exit 1
           fi
-          echo "EdDSA signature: $ED_SIGNATURE"
-          echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
+          echo "ED_SIGNATURE=$ED_SIGNATURE" >> "$CM_ENV"
+
+          scripts/create-omi-beta-variant.sh \
+            --phase sparkle \
+            --build-dir "$BUILD_DIR" \
+            --beta-app-name "$BETA_APP_NAME" \
+            --sparkle-zip-out "$BETA_SPARKLE_ZIP_PATH" \
+            --cm-env "$CM_ENV"
 
       - name: Smoke signed desktop artifact
         script: |
@@ -2752,21 +2609,48 @@ workflows:
               --preview \
               --result-json "$BUILD_DIR/desktop-smoke-result.json"
           else
-            OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
             scripts/smoke-signed-desktop-artifact.sh \
               --app "$APP_BUNDLE" \
               --zip "$SPARKLE_ZIP_PATH" \
               --dmg "$DMG_PATH" \
               --tag "$CM_TAG" \
+              --source-sha "$(git rev-parse HEAD)" \
               --expected-channel beta \
-              --auth-storage-canary \
               --result-json "$BUILD_DIR/desktop-smoke-result.json"
           fi
+
+      # Keep the installable Beta identity in a distinct provider step. A failed
+      # build must reveal which signed identity failed even when the operator can
+      # see only the mirrored GitHub check summary, not private Codemagic logs.
+      - name: Smoke signed desktop beta artifact
+        script: |
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            echo "External previews do not produce the Omi Beta identity."
+            exit 0
+          fi
+          set -euo pipefail
+          OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
+          scripts/smoke-signed-desktop-artifact.sh \
+            --app "$BUILD_DIR/$BETA_APP_NAME.app" \
+            --zip "$BETA_SPARKLE_ZIP_PATH" \
+            --dmg "$BETA_DMG_PATH" \
+            --tag "$CM_TAG" \
+            --source-sha "$(git rev-parse HEAD)" \
+            --expected-channel beta \
+            --expected-bundle-id "$BETA_BUNDLE_ID" \
+            --expected-feed-url "https://api.omi.me/v2/desktop/appcast.xml?identity=beta" \
+            --expected-python-api-url "https://api.omiapi.com/" \
+            --expected-desktop-api-url "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/" \
+            --launch \
+            --auth-storage-canary \
+            --notification-callback-canary \
+            --timeout 90 \
+            --result-json "$BUILD_DIR/desktop-smoke-result-beta.json"
 
       - name: Publish immutable external preview
         script: |
           if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
-            echo "Normal releases publish through the beta/stable qualification lane."
+            echo "Normal releases publish through the beta/stable signed-smoke lane."
             exit 0
           fi
           set -euo pipefail
@@ -2840,6 +2724,8 @@ workflows:
             echo "External previews do not create GitHub releases."
             exit 0
           fi
+          set -euo pipefail
+
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
@@ -2858,41 +2744,79 @@ workflows:
           isLive: false
           channel: candidate
           edSignature: ${ED_SIGNATURE}
+          betaEdSignature: ${BETA_ED_SIGNATURE}
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
 
-          # Safe re-run: delete existing release if it exists
-          gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
-            gh release delete "$CM_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null || true
+          # A candidate is the immutable evidence container. Once published,
+          # preserve its signed artifacts; retries resume Beta promotion below.
+          if gh release view "$CM_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
+            echo "GitHub release candidate already exists; preserving immutable evidence for $CM_TAG"
+          else
+            # The backend reservation is the authoritative Beta fence. It runs
+            # only after package, signature, notarization, and signed smoke pass,
+            # immediately before this workflow creates the immutable candidate.
+            set -euo pipefail
+            test -n "${BETA_PROMOTION_TOKEN:-}" || {
+              echo "ERROR: BETA_PROMOTION_TOKEN is required to reserve a canonical candidate" >&2
+              exit 1
+            }
+            curl --fail-with-body --silent --show-error \
+              --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/candidates/reserve" \
+              --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data "{\"tag\":\"${CM_TAG}\"}"
+            gh release create "$CM_TAG" \
+              --repo "$GITHUB_REPO" \
+              --title "Omi Desktop v${VERSION} (candidate)" \
+              --notes "$RELEASE_NOTES" \
+              "$SPARKLE_ZIP_PATH" \
+              "$DMG_PATH" \
+              "$BETA_SPARKLE_ZIP_PATH" \
+              "$BETA_DMG_PATH" \
+              "$DSYM_ARCHIVE" \
+              "$BUILD_DIR/desktop-smoke-result.json" \
+              "$BUILD_DIR/desktop-smoke-result-beta.json"
+            echo "GitHub release candidate created: $CM_TAG"
+          fi
 
-          gh release create "$CM_TAG" \
-            --repo "$GITHUB_REPO" \
-            --title "Omi Desktop v${VERSION} (candidate)" \
-            --notes "$RELEASE_NOTES" \
-            "$SPARKLE_ZIP_PATH" \
-            "$DMG_PATH" \
-            "$BUILD_DIR/desktop-smoke-result.json"
-
-          echo "GitHub release candidate created: $CM_TAG"
-
-      - name: Dispatch trusted macOS beta qualification
+      - name: Promote signed candidate to Omi Beta
         script: |
           if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
-            echo "External previews do not enter beta or stable qualification."
+            echo "External previews do not enter the shared Beta channel."
             exit 0
           fi
-          if [[ "${DESKTOP_AUTO_BETA_ENABLED:-true}" == "false" ]]; then
-            echo "Automatic desktop beta qualification paused by DESKTOP_AUTO_BETA_ENABLED=false; candidate remains non-live."
-            exit 0
-          fi
-          gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
-            -f release_tag="$CM_TAG"
+          set -euo pipefail
+          test -n "${BETA_PROMOTION_TOKEN:-}" || {
+            echo "ERROR: BETA_PROMOTION_TOKEN is required to promote the signed candidate" >&2
+            exit 1
+          }
+          # The endpoint independently reads the immutable release, tag, GitHub
+          # digests, and exact Beta signed-smoke asset. Retries are idempotent.
+          for attempt in 1 2 3; do
+            if curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/promote-candidate" \
+              --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data "{\"tag\":\"${CM_TAG}\"}"; then
+              echo "Omi Beta now points to $CM_TAG."
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep "$((attempt * 2))"
+            fi
+          done
+          echo "ERROR: Beta promotion was not confirmed after bounded retry; candidate remains non-live." >&2
+          exit 1
 
     artifacts:
       - build/*.app
       - build/*.dmg
       - build/*.zip
+      - build/*.dSYM
       - build/desktop-smoke-result.json
+      - build/desktop-smoke-result-beta.json
     publishing:
       email:
         recipients:
@@ -2908,14 +2832,18 @@ workflows:
   # after this trusted configuration has loaded.
   omi-desktop-swift-preview:
     name: Publish OMI Desktop Preview (Swift)
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     environment:
-      # Do not reuse desktop_secrets or the normal release groups. This group
-      # contains the preview-only signing/notarization credentials, the
-      # DESKTOP_PREVIEW_PUBLISH_KEY, and a GCS identity restricted to previews/.
+      # TEMPORARY — tracked by #10221. The dedicated Preview group was not
+      # provisioned with the signing/notarization inputs required by the shared
+      # signed-artifact steps. Reuse the existing groups only to unblock an
+      # immutable Preview publication; restore a signing-only group and remove
+      # these broad imports in the follow-up.
       groups:
         - desktop_preview_secrets
+        - appstore_credentials
+        - desktop_secrets
       vars:
         PREVIEW_MODE: "true"
         BINARY_NAME: "Omi Computer"
@@ -2925,7 +2853,10 @@ workflows:
         # This registry remains on the production control plane even when the
         # preview artifact itself is configured to use a preview backend.
         DESKTOP_PREVIEW_REGISTRY_URL: "https://api.omi.me"
-      xcode: 16.4
+      # Siri release toolchain. Required GitHub CI intentionally pins 26.6;
+      # this signed release must use Xcode 27 to embed App Intents metadata.
+      # The desktop-swift-ci-contract check enforces this split.
+      xcode: 27.0
     working_directory: desktop/macos
     cache:
       cache_paths:
@@ -2935,3 +2866,231 @@ workflows:
       - build/*.app
       - build/*.dmg
       - build/desktop-smoke-result.json
+
+  # ============================================
+  # CONTEXT FOR CLAUDE RELEASE
+  # A separately-installable micro-app release. The package/release helpers own
+  # product identity and artifact naming; only Apple signing/notarization inputs
+  # are shared with the Omi Desktop workflow.
+  #
+  # Trigger: context-for-claude-v1.1.0
+  # Required group: context_for_claude_release
+  #   CONTEXT_SPARKLE_PUBLIC_KEY   — Context-only Sparkle Ed25519 public key
+  #   CONTEXT_SPARKLE_PRIVATE_KEY  — Context-only private ZIP-signing key
+  #   CONTEXT_GITHUB_TOKEN         — repo Contents-write token for release upload
+  # Reused appstore_credentials inputs:
+  #   MACOS_DEVELOPER_ID_P12, MACOS_DEVELOPER_ID_P12_PASSWORD,
+  #   APP_STORE_CONNECT_PRIVATE_KEY, APP_STORE_CONNECT_KEY_IDENTIFIER,
+  #   APP_STORE_CONNECT_ISSUER_ID
+  # ============================================
+  context-for-claude-release:
+    name: Release Context for Claude
+    instance_type: mac_mini_m4
+    max_build_duration: 120
+    environment:
+      groups:
+        - appstore_credentials
+        - context_for_claude_release
+      vars:
+        CONTEXT_RELEASE_REPO: "BasedHardware/omi"
+      xcode: 16.4
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "context-for-claude-v*"
+          include: true
+    working_directory: desktop/context-for-claude
+    cache:
+      cache_paths:
+        - ~/Library/Caches/org.swift.swiftpm
+    scripts:
+      - name: Validate Context release tag
+        script: |
+          set -euo pipefail
+          ./scripts/release-context.sh --tag "${CM_TAG:?CM_TAG is required}" --dry-run
+
+      - name: Import Developer ID certificate
+        script: |
+          set -euo pipefail
+          keychain initialize
+          printf '%s' "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/context-developer-id.p12
+          KEYCHAIN_PATH="$(keychain get-default)"
+          security import /tmp/context-developer-id.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" 2>/dev/null || true
+          rm -f /tmp/context-developer-id.p12
+          SIGN_IDENTITY="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | awk -F'"' '{print $2}')"
+          [[ -n "$SIGN_IDENTITY" ]] || {
+            echo "ERROR: Developer ID Application certificate not found" >&2
+            exit 1
+          }
+          printf 'CFC_SIGN_IDENTITY=%s\n' "$SIGN_IDENTITY" >> "$CM_ENV"
+
+      - name: Resolve Context Swift packages
+        script: |
+          set -euo pipefail
+          # --disable-keychain: the Developer ID import above initializes a build keychain, after
+          # which SwiftPM's credential search fails with errSecInteractionNotAllowed (-25308) and
+          # aborts the resolve while fetching Sparkle's binary artifact. That artifact is a public
+          # release asset and none of this package's dependencies are private, so there is no
+          # credential to find.
+          xcrun swift package resolve --disable-keychain
+
+      - name: Build, notarize, sign, and publish Context
+        script: |
+          set -euo pipefail
+          # These are existing Apple notarization inputs from appstore_credentials.
+          # They are mapped to Context-specific helper variables and never printed.
+          export CFC_ASC_PRIVATE_KEY="$APP_STORE_CONNECT_PRIVATE_KEY"
+          export CFC_ASC_KEY_ID="$APP_STORE_CONNECT_KEY_IDENTIFIER"
+          export CFC_ASC_ISSUER_ID="$APP_STORE_CONNECT_ISSUER_ID"
+          ./scripts/release-context.sh --tag "${CM_TAG:?CM_TAG is required}" --publish
+
+    artifacts:
+      - dist/*.dmg
+      - dist/*.zip
+
+  # Manual/API only. No build, upload, iOS action, or rollout advancement.
+  android-rollout-brake:
+    name: Android Production Rollout Brake
+    instance_type: mac_mini_m2
+    max_build_duration: 10
+    environment:
+      groups:
+        - google_play
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for the writer quiescence check
+      vars:
+        BRAKE_ACTION: "unset"
+        BRAKE_VERSION_CODE: "0"
+        BRAKE_USER_FRACTION: "unset"
+        BRAKE_SUPERSEDES_VERSION_CODE: "0"
+        CONFIRM: "not-confirmed"
+    working_directory: app
+    scripts:
+      - name: Read or brake the explicitly selected production rollout
+        script: |
+          set -euo pipefail
+          python3 scripts/mobile_rollout_brake.py
+
+  mobile-store-promote:
+    name: Promote Existing Mobile Builds to Store Review
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - google_play
+      # Per-run inputs, overridden by the API trigger's environment.variables (Codemagic only injects
+      # overrides for declared variables). The placeholders are rejected by mobile_store_promote.py,
+      # so a run without explicit inputs fails closed; empty-string defaults fail yaml validation.
+      vars:
+        CONFIRM: "not-confirmed"
+        PROMOTE_PLATFORM: "unset"
+        PROMOTE_VERSION: "unset"
+        PROMOTE_IOS_BUILD: "0"
+        PROMOTE_ANDROID_BUILD: "0"
+    working_directory: app
+    scripts:
+      - name: Submit explicitly selected existing builds
+        script: |
+          set -euo pipefail
+          # Inputs come from the API trigger's environment.variables when Codemagic injects them;
+          # when the declared placeholders are still in place, the committed request file
+          # scripts/store_promotion_request.json is the reviewed source of truth for this run.
+          REQ="scripts/store_promotion_request.json"
+          if [ "${CONFIRM:-not-confirmed}" = "not-confirmed" ] && [ -f "$REQ" ]; then
+            CONFIRM="$(jq -r '.confirm // ""' "$REQ")"
+            PROMOTE_PLATFORM="$(jq -r '.platform // ""' "$REQ")"
+            PROMOTE_VERSION="$(jq -r '.version // ""' "$REQ")"
+            PROMOTE_IOS_BUILD="$(jq -r '.ios_build // ""' "$REQ")"
+            PROMOTE_ANDROID_BUILD="$(jq -r '.android_build // ""' "$REQ")"
+          fi
+          # The declared "0" placeholders mean "not supplied".
+          [ "${PROMOTE_IOS_BUILD:-}" = "0" ] && PROMOTE_IOS_BUILD=""
+          [ "${PROMOTE_ANDROID_BUILD:-}" = "0" ] && PROMOTE_ANDROID_BUILD=""
+          echo "promotion inputs: platform=${PROMOTE_PLATFORM:-} version=${PROMOTE_VERSION:-} ios=${PROMOTE_IOS_BUILD:-} android=${PROMOTE_ANDROID_BUILD:-} confirm_set=$([ "${CONFIRM:-}" = "submit-for-review" ] && echo yes || echo no)"
+          python3 scripts/mobile_store_promote.py \
+            --confirm "${CONFIRM:-}" \
+            --platform "${PROMOTE_PLATFORM:-}" \
+            --version "${PROMOTE_VERSION:-}" \
+            --ios-build "${PROMOTE_IOS_BUILD:-}" \
+            --android-build "${PROMOTE_ANDROID_BUILD:-}"
+
+  mobile-daily-train:
+    name: Daily Mobile Store Train (self-driving store release)
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - google_play
+      vars:
+        # "true" reads store state and prints the plan without submitting or drafting anything.
+        TRAIN_DRY_RUN: "false"
+    working_directory: app
+    scripts:
+      - name: Release the newest internal builds through the stores
+        script: |
+          set -euo pipefail
+          # Dispatched daily by the operator release gate (.github/workflows/mobile_daily_train.yml)
+          # and advanced every 4 hours by .github/workflows/mobile_rollout_watch.yml.
+          # iOS: submit the newest processed TestFlight build for review with release type
+          # AFTER_APPROVAL and the phased rollout enabled (pausable in App Store Connect); one
+          # submission in flight at a time; an approved-but-unreleased version is released via
+          # appStoreVersionReleaseRequests with the phased rollout attached (never rejected);
+          # the live phased rollout jumps to 100% after its 12-hour observation window.
+          # Android: start a staged production rollout at 1% from the newest internal/alpha build
+          # (haltable in Play Console) and hop the ladder (1% -> 10% -> 50% -> 100%) one step per
+          # 4-hour observation window. Nothing here bypasses store approval or the operator brakes.
+          # TRAIN_PIN_IOS / TRAIN_PIN_ANDROID (X.Y.Z/build, or none = audited
+          # no-candidate; optional): the gate's audited verdicts; when set, the
+          # train fails closed if the store moved on after the audit.
+          DRY_RUN_FLAG=""
+          if [ "${TRAIN_DRY_RUN:-false}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python3 scripts/mobile_daily_train.py --platform both $DRY_RUN_FLAG
+
+  mobile-rollout-advance:
+    name: Mobile Rollout Advance (intraday exposure ladder)
+    instance_type: mac_mini_m2
+    max_build_duration: 20
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - google_play
+      vars:
+        # Never submits or stages a candidate: advances only already-released
+        # rollouts (iOS phased jump at 12h, Android ladder hop at 4h).
+        TRAIN_ADVANCE_ROLLOUTS: "true"
+        TRAIN_DRY_RUN: "false"
+    working_directory: app
+    scripts:
+      - name: Advance the live rollouts along the exposure ladder
+        script: |
+          set -euo pipefail
+          # Dispatched daily by the operator release gate (.github/workflows/mobile_daily_train.yml)
+          # and advanced every 4 hours by .github/workflows/mobile_rollout_watch.yml.
+          # iOS: submit the newest processed TestFlight build for review with release type
+          # AFTER_APPROVAL and the phased rollout enabled (pausable in App Store Connect); one
+          # submission in flight at a time; an approved-but-unreleased version is released via
+          # appStoreVersionReleaseRequests with the phased rollout attached (never rejected);
+          # the live phased rollout jumps to 100% after its 12-hour observation window.
+          # Android: start a staged production rollout at 1% from the newest internal/alpha build
+          # (haltable in Play Console) and hop the ladder (1% -> 10% -> 50% -> 100%) one step per
+          # 4-hour observation window. Nothing here bypasses store approval or the operator brakes.
+          # TRAIN_PIN_IOS / TRAIN_PIN_ANDROID (X.Y.Z/build, or none = audited
+          # no-candidate; optional): the gate's audited verdicts; when set, the
+          # train fails closed if the store moved on after the audit.
+          DRY_RUN_FLAG=""
+          if [ "${TRAIN_DRY_RUN:-false}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python3 scripts/mobile_daily_train.py --platform both $DRY_RUN_FLAG

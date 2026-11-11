@@ -1,3 +1,9 @@
+// Root observable app state: onboarding, permissions (including system audio),
+// capture mode, and the long-lived services the SwiftUI tree observes.
+//
+// Permission status is modeled explicitly (unknown/granted/denied/unsupported)
+// rather than as booleans -- the unsupported case must hide a feature cleanly
+// instead of merely disabling it, on every macOS version from the 14.0 floor.
 @preconcurrency import AVFoundation
 import Combine
 @preconcurrency import ObjectiveC
@@ -56,6 +62,10 @@ struct SpeakerSegment: Identifiable {
 enum FinishConversationResult {
   case saved
   case discarded
+  /// Another rotation already holds `conversationRotationInFlight`; this caller's
+  /// finalize intent is covered by the in-flight rotation, so the result is not
+  /// an error and must not tear down the session.
+  case busy
   case error(String)
 }
 
@@ -112,6 +122,27 @@ enum DesktopConversationMatchPolicy {
     return true
   }
 
+  /// Remember a newly observed rollover without allowing duplicate stale
+  /// callbacks to evict a different guard entry.
+  static func rememberingRotatedBackendId(
+    _ backendId: String,
+    activeBackendId: String?,
+    ignoredRotatedBackendIds: Set<String>,
+    maxCount: Int
+  ) -> Set<String> {
+    guard let activeBackendId,
+      activeBackendId != backendId,
+      !ignoredRotatedBackendIds.contains(backendId)
+    else { return ignoredRotatedBackendIds }
+
+    var updated = ignoredRotatedBackendIds
+    if updated.count >= maxCount, let evicted = updated.first {
+      updated.remove(evicted)
+    }
+    updated.insert(backendId)
+    return updated
+  }
+
   /// Identified listen sessions may only consume lifecycle events produced by
   /// their own recording. Older backend versions omit `recording_session_id`,
   /// so the matching conversation id remains the compatibility proof.
@@ -123,6 +154,53 @@ enum DesktopConversationMatchPolicy {
     guard let expectedBackendId, !expectedBackendId.isEmpty else { return true }
     guard memoryId == expectedBackendId else { return false }
     return recordingSessionId == nil || recordingSessionId == expectedBackendId
+  }
+
+  /// A completed backend event is telemetry-eligible only when it can be
+  /// attributed to the local recording that just ended. Durable SQLite
+  /// binding is intentionally not required: an exact client conversation id
+  /// or the legacy source/timestamp proof is sufficient.
+  static func acceptsCompletedLocalRecording(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    expectedBackendId: String?,
+    finishedRecordingStartTime: Date?
+  ) -> Bool {
+    guard !memoryId.isEmpty, memoryId != "?" else { return false }
+    guard
+      lifecycleEventBelongsToRecording(
+        memoryId: memoryId,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: expectedBackendId
+      )
+    else {
+      return false
+    }
+
+    if let expectedBackendId, !expectedBackendId.isEmpty {
+      return memoryId == expectedBackendId
+    }
+
+    guard let finishedRecordingStartTime else { return false }
+    return memoryEventMatchesFinishedSession(memory, sessionStartedAt: finishedRecordingStartTime)
+  }
+
+  static func matchingFinishedRecordingIndex(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    pending: [FinishedRecordingEnvelope]
+  ) -> Int? {
+    pending.firstIndex { envelope in
+      acceptsCompletedLocalRecording(
+        memoryId: memoryId,
+        memory: memory,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: envelope.clientConversationId,
+        finishedRecordingStartTime: envelope.startedAt
+      )
+    }
   }
 
   /// Versioned lifecycle envelopes are an ordered protocol. A client only
@@ -200,6 +278,34 @@ enum DesktopConversationMatchPolicy {
   }
 }
 
+struct FinishedRecordingEnvelope: Equatable, Sendable {
+  let sessionId: Int64?
+  let clientConversationId: String?
+  let startedAt: Date
+  let source: ConversationSource
+}
+
+@MainActor
+protocol DesktopAlertPresenting: AnyObject {
+  func present(title: String, message: String, completion: (@MainActor () -> Void)?)
+  /// Stop draining the alert queue until Omi is the active app again.
+  ///
+  /// Completions that hand the foreground to another app (System Settings)
+  /// must call this *before* that hand-off. `NSWorkspace.open` can return
+  /// while Omi is still active, so inferring a pause from the current shell
+  /// window would drain the next alert and hide it behind Settings.
+  func pauseQueueUntilAppActive()
+}
+
+@MainActor
+extension DesktopAlertPresenting {
+  func present(title: String, message: String) {
+    present(title: title, message: message, completion: nil)
+  }
+
+  func pauseQueueUntilAppActive() {}
+}
+
 @MainActor
 class AppState: ObservableObject {
   /// Weak reference to the current AppState instance, set on init.
@@ -209,15 +315,40 @@ class AppState: ObservableObject {
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
   // Transcription state
-  @Published var isTranscribing = false
+  @Published var isTranscribing = false {
+    didSet {
+      // Preferred-mic reconnect must track live Listening even when Settings is closed (#10921).
+      if isTranscribing {
+        preferredMicrophoneReconnectMonitor.start(observing: self)
+      } else {
+        preferredMicrophoneReconnectMonitor.stop()
+      }
+      publishMeetingCaptureActivity()
+    }
+  }
   /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
   /// continue into the WAL while the transport reconnects, so this stays
   /// visible until the backend is ready or the active session is reset.
   @Published var transcriptionServiceError: String?
-  /// Monotonically increasing counter — incremented each time a new recording starts.
-  /// Used to detect if a new recording began during the post-stop force-process delay.
+  /// Assigned in `init()` rather than here: the pinned Xcode 16.4 toolchain
+  /// segfaults (signal 11 in `silgen emitStoredPropertyInitialization`) when
+  /// lowering this existential-erasure default initializer, introduced with
+  /// the presenter itself in d49f978512. Every desktop CI lane was red from
+  /// that commit until this dodge; behavior is identical on both toolchains.
+  var alertPresenter: any DesktopAlertPresenting
+  /// Monotonically increasing counter — incremented for each recording start or stop request.
+  /// Used to prevent asynchronous work from mutating a newer recording decision.
   var recordingGeneration: UInt64 = 0
   @Published var isSavingConversation = false
+  /// True from the moment a capture stops until its conversation has been
+  /// loaded into the list. Keeps the Live card's slot occupied so the meeting
+  /// visibly lands as a row instead of vanishing and reappearing.
+  @Published var isFinalizingCapture = false
+  /// Follows visible processing rows to a terminal state (see the type).
+  lazy var processingWatcher = ProcessingConversationWatcher.live(
+    fetch: ProcessingConversationWatcher.fetchDetail,
+    onResolved: { [weak self] refreshed in self?.conversationRepository.replace(refreshed) }
+  )
   // currentTranscript is internal-only (not observed by views), so no @Published needed
   var currentTranscript: String = ""
   @Published var hasMicrophonePermission = false
@@ -244,7 +375,7 @@ class AppState: ObservableObject {
   var recordingDuration: TimeInterval { RecordingTimer.shared.duration }
 
   var hasActiveConversationFilters: Bool {
-    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil
+    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil || showDiscardedConversations
   }
 
   // Live speaker segments moved to LiveTranscriptMonitor to avoid triggering global re-renders
@@ -258,9 +389,11 @@ class AppState: ObservableObject {
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
   let conversationRepository = ConversationRepository()
+  let conversationRestored = PassthroughSubject<ServerConversation, Never>()
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
+  @Published var showDiscardedConversations: Bool = false
   @Published var selectedDateFilter: Date? = nil
   @Published var selectedFolderId: String? = nil
 
@@ -277,11 +410,17 @@ class AppState: ObservableObject {
 
   /// Maps live speaker IDs to person IDs during recording (cleared on finalize)
   @Published var liveSpeakerPersonMap: [Int: String] = [:]
+  var liveManualSpeakerPersonMap: [Int: String] = [:]
 
   // Permission states for onboarding
   @Published var hasNotificationPermission = false
+  @Published var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
   @Published var notificationAlertStyle: UNAlertStyle = .none  // .none, .banner, or .alert
   @Published var hasScreenRecordingPermission = false
+  /// TCC state captured once at process launch. A grant that arrives while the
+  /// app is running doesn't apply to this process until relaunch
+  /// (see ScreenRecordingPermissionPolicy.needsRelaunchToApply).
+  let screenRecordingGrantedAtLaunch = ScreenCaptureService.checkPermission()
   @Published var hasBluetoothPermission = false
 
   // Track last notification settings for change detection (avoid duplicate analytics)
@@ -289,14 +428,28 @@ class AppState: ObservableObject {
   var lastNotificationAlertStyle: String?
   var lastNotificationSoundEnabled: Bool?
   var lastNotificationBadgeEnabled: Bool?
+  var notificationPermissionRefreshGeneration = 0
   @Published var isScreenCaptureKitBroken = false  // Capture engine issue; not the source of permission truth
   @Published var isScreenRecordingStale = false  // Deprecated: no longer inferred from capture failures
   var screenRecordingGrantAttempts = 0  // Track how many times user clicked Grant without success
   @Published var hasAutomationPermission = false
-  @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
-  var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
+  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound).
+  @Published var automationPermissionError: OSStatus = 0
+  // Prevent concurrent checks (retry path has a 1s sleep).
+  var isCheckingAutomationPermission = false
+  /// In-flight guard for the accessibility probe, mirroring the automation one above.
+  /// The probe is several `AXUIElementCopyAttributeValue` round trips against OTHER
+  /// processes, and AX messaging to a hung app blocks for the full AX timeout (seconds).
+  /// Without this, a repeating caller (onboarding polls once a second) stacks a fresh
+  /// detached probe on every tick against an app that is not answering.
+  var isCheckingAccessibilityPermission = false
   @Published var hasAccessibilityPermission = false
-  @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
+  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs).
+  @Published var isAccessibilityBroken = false
+
+  /// Token for the `com.apple.accessibility.api` observer, so the live permission refresh is
+  /// installed exactly once. See `startAccessibilityChangeObserver()`.
+  var accessibilityChangeObserver: NSObjectProtocol?
   @Published var hasFullDiskAccess = false
 
   /// Usage-limit popup state. Set by `triggerUsageLimitPopup(reason:)` when the
@@ -347,15 +500,92 @@ class AppState: ObservableObject {
     get { servicesCoordinator.meetingDetector }
     set { servicesCoordinator.meetingDetector = newValue }
   }
+  /// Mutes the ambient mic contribution while a dictation app holds the microphone. Lives for
+  /// one transcription session, alongside `meetingDetector`.
+  var dictationMicSuppressionMonitor: DictationMicSuppressionMonitor? {
+    get { servicesCoordinator.dictationMicSuppressionMonitor }
+    set { servicesCoordinator.dictationMicSuppressionMonitor = newValue }
+  }
   var captureGateInFlight = false
   var captureReconcilePending = false
-  var pendingCoreAudioCaptureRecoveryReason: String?
-  var meetingEndFinalizationInProgress = false
-  @Published var isAwaitingMeeting = false
+  var pendingCoreAudioCaptureRecovery: CoreAudioCaptureRecoveryRequest?
+  /// While ambient transcription is live, reapply a preferred mic when it reconnects (#10921).
+  let preferredMicrophoneReconnectMonitor = PreferredMicrophoneReconnectMonitor()
+  /// Session-owned recovery budget survives microphone driver replacement.
+  var silentMicRecoveryAttempts = 0
+  /// No microphone signal after bounded recovery; system audio can still be live.
+  @Published var isMicrophoneSignalMissing = false
+  var armedMicrophoneTransitionInFlight = false
+  @Published var isWaitingForMicrophone = false
+  let armedMicrophoneRecovery = ArmedMicrophoneRecoveryCoordinator()
+  var silentMicDiagnosticLimit = SilentMicDiagnosticRateLimit()
+  var lastCaptureWakeAt: Date?
+  var lastCaptureUnlockAt: Date?
+  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient {
+    didSet { publishMeetingCaptureActivity() }
+  }
+  /// A relaunch mid-meeting splits the call into two conversations; the updater defers on this.
+  func publishMeetingCaptureActivity() {
+    UpdateInstallActivity.setMeetingCaptureActive(
+      isTranscribing && currentConversationRole == .meeting
+        && (isLiveCapturing || meetingDetector?.resumeOffAt != nil))
+  }
+  var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
+  var (meetingBoundaryInProgress, meetingBoundaryEvidence) = (false, MeetingBoundaryEvidence())
+  var pendingMeetingState: Bool?
+  var pendingMeetingEndedAt: Date?
+  var meetingRelaunchChecked = false
+  var meetingRelaunchCheckGeneration: UInt64?
+  var meetingRelaunchCheckMode: AssistantSettings.AudioRecordingMode?
+  /// True while `finishConversation` is rotating the logical conversation.
+  /// Serializes ALL rotation callers — `handleMeetingObservation`'s boundary
+  /// flag only covers detector edges; the deferred `.meetingEnded` finalizer,
+  /// the BLE double-tap, and the Rewind "finish" action each bump
+  /// `recordingGeneration`, and two overlapping rotations abort one another into
+  /// `handleMeetingObservation`'s error path, which used to hard-stop the whole
+  /// session (SCA-526).
+  var conversationRotationInFlight = false
+  /// Deferred preferred-mic reapply requested while the capture gate was
+  /// mid-flight; consumed by the `reconcileCapture` tail.
+  var pendingPreferredMicReapplyDeviceID: AudioDeviceID?
+  var pendingPreferredMicReapplyDeviceName: String?
+  /// Last in-place preferred-mic swap, for the reapply cooldown.
+  var lastPreferredMicSwapAt: Date?
+  /// Last `freemium_threshold_reached` admission stop. The 60s trial-metadata
+  /// refresh must not clear a paywall flag an admission event just set — a
+  /// disagreement between the two backend verdicts would otherwise loop
+  /// capture stop/re-arm on every refresh tick (SCA-526).
+  var lastPaywallAdmissionStopAt: Date?
 
-  var effectiveSystemAudioMode: AssistantSettings.SystemAudioCaptureMode {
-    if UserDefaults.standard.bool(forKey: "disableSystemAudioCapture") { return .never }
-    return AssistantSettings.shared.systemAudioCaptureMode
+  /// The input device a silent-mic fallback healed onto, held for the rest of the session.
+  ///
+  /// Without this the heal is undone by its own recovery: `handleSilentMicFallback` pins
+  /// capture to the built-in mic, then the next watchdog trip rebuilds the CoreAudio stack
+  /// with a plain `AudioCaptureService()`, which re-resolves the *system default* input —
+  /// still the silent Bluetooth device. The two fight until the attempt cap is hit and the
+  /// user gets an alert, then it starts over.
+  var silentMicHealedDeviceID: AudioDeviceID?
+  var meetingEndFinalizationInProgress = false
+  @Published var isAwaitingMeeting = false {
+    didSet { publishMeetingCaptureActivity() }
+  }
+
+  /// Audio is actually reaching STT — not merely that a transcription session is armed.
+  ///
+  /// Only Meetings keeps `isTranscribing` true while waiting for a call so capture can start
+  /// instantly, and sets `isAwaitingMeeting` while the mic is paused. Live UI (the Conversations
+  /// card, the expanded transcript, the top-bar mic dot) must follow this, not `isTranscribing`.
+  var isLiveCapturing: Bool { isTranscribing && !isAwaitingMeeting && !isWaitingForMicrophone }
+
+  var audioRecordingMode: AssistantSettings.AudioRecordingMode {
+    AssistantSettings.shared.audioRecordingMode
+  }
+
+  /// A hidden developer override may suppress the system tap, but it cannot change the user's
+  /// recording policy or whether the microphone/meeting gate runs.
+  var shouldCaptureSystemAudio: Bool {
+    !UserDefaults.standard.bool(forKey: .disableSystemAudioCapture)
+      && !UserDefaults.standard.bool(forKey: .onboardingSystemAudioSkipped)
   }
   var vadGateService: VADGateService? {
     get { servicesCoordinator.vadGateService }
@@ -386,7 +616,11 @@ class AppState: ObservableObject {
   var totalWordCount = 0
 
   var recordingStartTime: Date?
-  var recordingInputDeviceName: String?
+  /// Published: the capture-source label renders this, and the preferred-mic
+  /// resolution assigns it after `isTranscribing` has already published — a
+  /// plain var would leave the UI showing the default device until unrelated
+  /// state churned.
+  @Published var recordingInputDeviceName: String?
   var maxRecordingTimer: Timer? {
     get { servicesCoordinator.maxRecordingTimer }
     set { servicesCoordinator.maxRecordingTimer = newValue }
@@ -398,6 +632,13 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// Privacy-bounded state of the armed ambient-capture attempt in flight
+  /// (`CaptureAttemptOutcomeState`). Non-nil exactly between arming in
+  /// `startTranscription` and terminalization in `clearTranscriptionState`.
+  var captureAttempt: CaptureAttemptOutcomeState?
+  /// Serializes segment persistence so a local duplicate replacement cannot race
+  /// the original mic segment's upsert in SQLite.
+  var transcriptPersistenceTail: Task<Void, Never>?
   /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
   var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
@@ -408,10 +649,11 @@ class AppState: ObservableObject {
   /// Last accepted server event sequence per durable recording session. This
   /// is display state only; Firestore remains the authoritative sequence owner.
   var lifecycleSequenceByRecordingSession: [String: Int] = [:]
+  static let maxLifecycleRecordingSessions = 32
   var ignoredRotatedBackendConversationIds: Set<String> = []
-  var finishedSessionId: Int64?
-  var finishedClientConversationId: String?
-  var finishedRecordingStartTime: Date?
+  static let maxIgnoredRotatedBackendConversationIds = 16
+  var pendingFinishedRecordings: [FinishedRecordingEnvelope] = []
+  static let maxPendingFinishedRecordings = 16
 
   var willTerminateObserver: NSObjectProtocol? {
     get { servicesCoordinator.willTerminateObserver }
@@ -441,9 +683,9 @@ class AppState: ObservableObject {
     get { servicesCoordinator.screenCaptureKitBrokenObserver }
     set { servicesCoordinator.screenCaptureKitBrokenObserver = newValue }
   }
-  var systemAudioCaptureModeObserver: NSObjectProtocol? {
-    get { servicesCoordinator.systemAudioCaptureModeObserver }
-    set { servicesCoordinator.systemAudioCaptureModeObserver = newValue }
+  var audioRecordingModeObserver: NSObjectProtocol? {
+    get { servicesCoordinator.audioRecordingModeObserver }
+    set { servicesCoordinator.audioRecordingModeObserver = newValue }
   }
   var coreAudioCaptureRecoveryObserver: NSObjectProtocol? {
     get { servicesCoordinator.coreAudioCaptureRecoveryObserver }
@@ -451,6 +693,8 @@ class AppState: ObservableObject {
   }
 
   var wasTranscribingBeforeSleep = false
+  var darkWakeRearmTask: Task<Void, Never>?
+  var conversationRoleBeforeSleep: MeetingConversationBoundaryPolicy.Role = .ambient
   var lastScreenLockTime: Date?
   var lastScreenUnlockTime: Date?
   var buttonStreamTask: Task<Void, Never>? {
@@ -476,11 +720,12 @@ class AppState: ObservableObject {
   /// switch posts only .runtimeOwnerDidChange, so without this the previous
   /// account's folders, filters, counts, and people kept rendering.
   func resetOwnerScopedContent() {
-    ownerScopeGeneration &+= 1
+    (ownerScopeGeneration, meetingBoundaryEvidence) = (ownerScopeGeneration &+ 1, MeetingBoundaryEvidence())
     folders = []
     selectedFolderId = nil
     selectedDateFilter = nil
     showStarredOnly = false
+    showDiscardedConversations = false
     totalConversationsCount = nil
     filteredConversationsCount = nil
     conversationsError = nil
@@ -490,6 +735,12 @@ class AppState: ObservableObject {
   }
 
   init() {
+    alertPresenter = AppKitSheetAlertPresenter()
+    // Fold any legacy PTT-only microphone choice into the shared preference before
+    // anything reads it. Running this only from PTT routing meant a user who had picked a
+    // PTT microphone saw "System Default" in Transcription — and was recorded by it —
+    // until they happened to take a push-to-talk turn.
+    ShortcutSettings.migratePTTMicrophoneChoiceIfNeeded()
     // Register as the current instance so background services can check recording state
     AppState.current = self
     ownerChangeObserver = NotificationCenter.default.addObserver(
@@ -502,6 +753,7 @@ class AppState: ObservableObject {
     conversationRepository.onSnapshot = { [weak self] snapshot in
       guard let self else { return }
       self.conversations = snapshot.conversations
+      self.processingWatcher.sync(with: snapshot.conversations)
       self.isLoadingConversations = snapshot.isLoading
       self.conversationsError = snapshot.error
       if self.hasActiveConversationFilters {
@@ -524,7 +776,7 @@ class AppState: ObservableObject {
     // didSet writes the new value. Only basic-tier users have a legitimate
     // pre-fetch paywalled state to preserve.
     // Freemium: the desktop trial paywall is disabled by default
-    // (backend TRIAL_PAYWALL_ENABLED off), so a stale cached
+    // (backend paywall permanently off), so a stale cached
     // `desktop_isPaywalled=true` from a pre-freemium session must not gate
     // anything on launch. Previously basic-tier users trusted that cache and
     // flashed the "monthly limit" popup until fetchTrialMetadata refreshed
@@ -537,9 +789,6 @@ class AppState: ObservableObject {
     // didSet doesn't fire from init, so flush UserDefaults explicitly for
     // singletons that read the key directly.
     UserDefaults.standard.set(false, forKey: "desktop_isPaywalled")
-
-    // Resolve beta/stable before loading backend URLs so beta releases use dev services.
-    AppBuild.prepareUpdateChannelForBackendRouting()
 
     // Load API key from environment or .env file
     loadEnvironment()
@@ -594,8 +843,13 @@ class AppState: ObservableObject {
     // Note: Bluetooth subscription is initialized lazily via initializeBluetoothIfNeeded()
     // to avoid triggering the permission dialog before the user reaches the Bluetooth step
 
-    // Start periodic notification health check (every 30 min)
-    // Detects when macOS silently revokes notification authorization and auto-repairs
+    // Start periodic notification health check (every 30 min).
+    // Detects when macOS silently revokes notification authorization. NOTE: this only
+    // *observes* — it reads `UNUserNotificationCenter.notificationSettings` and updates
+    // published state. It does NOT auto-repair (the repair path this comment used to
+    // describe, `NotificationRegistrationRepair`, has no live caller), and it must not
+    // be wired to one: the repair unregisters the app from LaunchServices and
+    // re-requests authorization, which is not something to do on a timer.
     notificationHealthTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) {
       [weak self] _ in
       MainActor.assumeIsolated {
@@ -639,12 +893,14 @@ class AppState: ObservableObject {
 
   /// Setup observers for app quit and system sleep to finalize conversations
   private func setupLifecycleObservers() {
+    ClientTelemetryFlags.installProductionRefresh()
     // App is about to quit
     willTerminateObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.willTerminateNotification,
       object: nil,
       queue: .main
     ) { [weak self] _ in
+      ClientTelemetryTransport.scheduleBestEffortFlush()
       guard let self = self else { return }
       Task { @MainActor in
         if self.isTranscribing {
@@ -652,10 +908,10 @@ class AppState: ObservableObject {
           let sessionId = self.currentSessionId
           self.stopAudioCapture()
           if let sessionId {
-            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .appTerminated)
           }
           self.clearTranscriptionState(
-            finalizationReason: .userStop,
+            finalizationReason: .appTerminated,
             runFinalizer: false,
             allowCloudForceProcess: false,
             finishSession: false
@@ -670,18 +926,20 @@ class AppState: ObservableObject {
       object: nil,
       queue: .main
     ) { [weak self] _ in
+      ClientTelemetryTransport.scheduleBestEffortFlush()
       guard let self = self else { return }
       Task { @MainActor in
         self.wasTranscribingBeforeSleep = self.isTranscribing
         if self.isTranscribing {
           log("Computer sleeping - stopping transcription (backend handles conversation)")
+          self.conversationRoleBeforeSleep = self.currentConversationRole
           let sessionId = self.currentSessionId
           self.stopAudioCapture()
           if let sessionId {
-            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .systemSleep)
           }
           self.clearTranscriptionState(
-            finalizationReason: .userStop,
+            finalizationReason: .systemSleep,
             runFinalizer: false,
             allowCloudForceProcess: false,
             finishSession: false
@@ -689,6 +947,7 @@ class AppState: ObservableObject {
         }
         // Flush final sync changes before sleep
         await AgentSyncService.shared.stop()
+        self.armDarkWakeCaptureRearm()
       }
     }
 
@@ -704,15 +963,20 @@ class AppState: ObservableObject {
       // Restart transcription if it was active before sleep
       Task { @MainActor in
         guard let self = self else { return }
-        if self.wasTranscribingBeforeSleep && AssistantSettings.shared.transcriptionEnabled {
+        self.cancelDarkWakeCaptureRearm()
+        self.lastCaptureWakeAt = Date()
+        if self.wasTranscribingBeforeSleep && AssistantSettings.shared.audioRecordingMode != .off {
           log("System wake: Restarting transcription (was active before sleep)")
           // Brief delay to let audio subsystem settle after wake
-          try? await Task.sleep(for: .seconds(2))
-          if !self.isTranscribing {
-            self.startTranscription()
+          try? await Task.sleep(for: SleepCaptureRearmPolicy.audioSettleDelay)
+          if self.claimSleepRestart(signal: .didWake) {
+            self.startTranscription(
+              conversationRole: self.conversationRoleBeforeSleep, userInitiated: false,
+              launchContext: .wake)
           }
+        } else {
+          self.wasTranscribingBeforeSleep = false
         }
-        self.wasTranscribingBeforeSleep = false
       }
     }
 
@@ -745,19 +1009,31 @@ class AppState: ObservableObject {
           return  // Ignore duplicate within 1 second
         }
         self?.lastScreenUnlockTime = now
+        self?.lastCaptureUnlockAt = now
         log("Screen unlocked")
         NotificationCenter.default.post(name: .screenDidUnlock, object: nil)
       }
     }
 
-    // System Audio capture mode changed — re-apply the capture gate live if a recording is armed.
-    systemAudioCaptureModeObserver = NotificationCenter.default.addObserver(
-      forName: .systemAudioCaptureModeDidChange,
+    // One preference owns both intent and meeting gating. Apply every change live so no stale
+    // boolean or secondary picker can disagree with the selected mode.
+    audioRecordingModeObserver = NotificationCenter.default.addObserver(
+      forName: .audioRecordingModeDidChange,
       object: nil,
       queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        await self?.reconcileCapture()
+        guard let self else { return }
+        switch AssistantSettings.shared.audioRecordingMode {
+        case .off:
+          self.stopTranscription(finalizationReason: .recordingDisabled)
+        case .always, .onlyMeetings:
+          if self.isTranscribing {
+            await self.reconcileCapture()
+          } else {
+            self.startTranscription(userInitiated: false)
+          }
+        }
       }
     }
 
@@ -783,6 +1059,17 @@ class AppState: ObservableObject {
 
 extension Notification.Name {
   static let resetOnboardingRequested = Notification.Name("resetOnboardingRequested")
+  /// Posted by the onboarding arrow-key monitor with a "targetStep" Int in
+  /// userInfo. The mounted OnboardingView applies it to its live @AppStorage —
+  /// the monitor closure must not mutate its own captured copy (writes there
+  /// never reach UserDefaults or the UI on all macOS versions).
+  static let onboardingStepNavigationRequested = Notification.Name(
+    "onboardingStepNavigationRequested")
+  /// Automation bridge → onboarding screen-demo step: open the three-doors page (same code path as
+  /// the step's "Open the doors" button), so agents can exercise the demo without the cursor.
+  static let onboardingOpenDoorsRequested = Notification.Name("onboardingOpenDoorsRequested")
+  /// The three-doors page finished and handed the user back to Omi via the app URL scheme.
+  static let onboardingDoorsCompleted = Notification.Name("onboardingDoorsCompleted")
   /// Posted when the system wakes from sleep
   static let systemDidWake = Notification.Name("systemDidWake")
   /// Posted when the screen is locked
@@ -795,6 +1082,10 @@ extension Notification.Name {
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
   /// Posted to show the "Try asking" popup centered over the full window
   static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
+  /// Posted (automation bridge) to select a case in the first-use popup. userInfo["id"] = FirstUseCase id.
+  static let firstUsePopupSelect = Notification.Name("firstUsePopupSelect")
+  /// Posted (automation bridge) to press "Try it now" in the first-use popup.
+  static let firstUsePopupTry = Notification.Name("firstUsePopupTry")
   /// Posted (automation bridge) to open the inline chat on the redesigned Home
   static let homeStageOpenChat = Notification.Name("homeStageOpenChat")
   /// Posted (automation bridge) to toggle the Connect tray on the redesigned Home
@@ -823,6 +1114,7 @@ extension Notification.Name {
   static let navigateToFloatingBarSettings = Notification.Name("navigateToFloatingBarSettings")
   /// Posted to navigate to AI Chat settings
   static let navigateToAIChatSettings = Notification.Name("navigateToAIChatSettings")
+  static let navigateToPlanSettings = Notification.Name("navigateToPlanSettings")
   /// Posted when a new Rewind frame is captured (for live frame count updates)
   static let rewindFrameCaptured = Notification.Name("rewindFrameCaptured")
   /// Posted when Rewind page finishes loading initial data
@@ -831,10 +1123,6 @@ extension Notification.Name {
   static let conversationsPageDidLoad = Notification.Name("conversationsPageDidLoad")
   /// Posted when Tasks page finishes loading initial data
   static let tasksPageDidLoad = Notification.Name("tasksPageDidLoad")
-  /// Posted when Focus page finishes loading initial data
-  static let focusPageDidLoad = Notification.Name("focusPageDidLoad")
-  /// Posted when Advice page finishes loading initial data
-  static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
   static let appsPageDidLoad = Notification.Name("appsPageDidLoad")
   /// Posted when a goal is auto-created by GoalGenerationService
@@ -843,6 +1131,8 @@ extension Notification.Name {
   static let goalCompleted = Notification.Name("goalCompleted")
   /// Posted to navigate to AI Chat page
   static let navigateToChat = Notification.Name("navigateToChat")
+  /// Posted to open the refer-a-friend sheet (top bar owns its presentation)
+  static let openReferralSheet = Notification.Name("openReferralSheet")
   static let navigateToTasks = Notification.Name("navigateToTasks")
   /// Posted by keyboard shortcuts to navigate sidebar. userInfo: ["rawValue": Int]
   static let navigateToSidebarItem = Notification.Name("navigateToSidebarItem")
@@ -854,6 +1144,15 @@ extension Notification.Name {
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")
   /// Posted by the local desktop automation bridge to open a specific conversation detail.
+  /// Submits the meeting-summary card's Share field with the address in the
+  /// notification object, driving the same handler the Send button calls.
+  static let meetingSummaryShareSubmit = Notification.Name("meetingSummaryShareSubmit")
+
+  /// Opens the meeting-summary card's Share address field. Posted by the
+  /// automation bridge so the field can be exercised without a cursor.
+  static let meetingSummaryShareBeginAddressing = Notification.Name(
+    "meetingSummaryShareBeginAddressing")
+
   static let desktopAutomationOpenConversationRequested = Notification.Name(
     "desktopAutomationOpenConversationRequested")
   static let desktopAutomationSetConversationsSearchRequested = Notification.Name(
@@ -863,8 +1162,5 @@ extension Notification.Name {
     "desktopAutomationShowConversationTranscriptRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
-  /// Posted from Settings to trigger the file indexing sheet
-  static let triggerFileIndexing = Notification.Name("triggerFileIndexing")
   /// Posted from menu bar to toggle transcription (userInfo: ["enabled": Bool])
-  static let toggleTranscriptionRequested = Notification.Name("toggleTranscriptionRequested")
 }

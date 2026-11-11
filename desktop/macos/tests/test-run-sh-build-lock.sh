@@ -112,7 +112,10 @@ bash -c '
 ' _ "$MACOS_DIR/scripts/run-sh-build-lock.sh"
 stale_lock="$(omi_run_sh_build_lock_dir)"
 [ -d "$stale_lock" ] || fail "interrupted holder did not leave its lock"
-omi_run_sh_acquire_build_lock "stale lock recovery" 4
+# Recovery should be immediate; the budget is only an upper bound. Keep it
+# generous: at 4s this timed out on saturated hosted runners where the launcher
+# tests share the machine with the Swift suite (seen twice on CI).
+omi_run_sh_acquire_build_lock "stale lock recovery" 15
 [ -d "$RUN_SH_LOCK_DIR" ] || fail "stale lock recovery did not acquire lock"
 omi_run_sh_release_build_lock
 [ ! -d "$stale_lock" ] || fail "stale lock remained after recovery release"
@@ -123,7 +126,7 @@ OMI_DEV_DIR="$TMP_ROOT/wt-ownerless/.dev"
 ownerless_lock="$(omi_run_sh_build_lock_dir)"
 mkdir -p "$ownerless_lock"
 touch -t 202001010000 "$ownerless_lock"
-omi_run_sh_acquire_build_lock "ownerless stale lock recovery" 4
+omi_run_sh_acquire_build_lock "ownerless stale lock recovery" 15
 [ -d "$RUN_SH_LOCK_DIR" ] || fail "ownerless stale lock recovery did not acquire lock"
 omi_run_sh_release_build_lock
 [ ! -d "$ownerless_lock" ] || fail "ownerless stale lock remained after recovery release"

@@ -19,6 +19,30 @@ uvicorn main:app --reload --port 8080
 
 Open `http://localhost:8080/.well-known/omi-tools.json` to inspect the Omi tools manifest.
 
+## Tests
+
+From the repository root, run the hermetic discussion regressions:
+
+```bash
+python3 plugins/omi-hacker-news-app/test_main.py
+```
+
+The tests import the production module with framework-only stubs and exercise the
+real text cleaner and discussion handler without network access. They cover
+escaped literal angle brackets, real provider markup, code formatting, and text
+preservation in both post and comment output.
+
+With the plugin runtime dependencies installed, also run the HTTP contract suite:
+
+```bash
+python3 plugins/omi-hacker-news-app/test_http.py
+```
+
+This suite uses real FastAPI routing, Pydantic response models, and HTTPX. Only
+the outbound Algolia transport is mocked. It verifies the documented unembedded
+JSON POST bodies, optional-body defaults, limits, error envelopes, and OpenAPI.
+Direct handler calls alone cannot detect a body/query binding regression.
+
 ## Deployment
 
 Deploy this folder as a standalone FastAPI service. No environment variables are required.

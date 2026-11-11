@@ -68,6 +68,53 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertNil(projection?.completedAt)
   }
 
+  func testConfirmedExternalRunLifecycleProjectsKernelReceiptOnRunScopedSurface() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.externalRun(
+      surfaceKind: "floating_chat", runId: "run-external")
+
+    store.recordAcceptedRun(
+      surface: surface,
+      sessionId: "session-shared-chat",
+      runId: "run-external",
+      attemptId: "attempt-external",
+      statusText: "Running")
+    XCTAssertEqual(store.projection(for: surface)?.status, .running)
+
+    store.recordConfirmedTerminalRun(
+      surface: surface,
+      sessionId: "session-shared-chat",
+      runId: "run-external",
+      attemptId: "attempt-external",
+      status: .succeeded,
+      statusText: "Verified answer")
+
+    let projection = store.projection(for: surface)
+    XCTAssertEqual(projection?.surface.surfaceKind, "floating_chat")
+    XCTAssertEqual(projection?.surface.externalRefKind, "run")
+    XCTAssertEqual(projection?.status, .succeeded)
+    XCTAssertEqual(projection?.statusText, "Verified answer")
+    XCTAssertEqual(projection?.sessionId, "session-shared-chat")
+    XCTAssertEqual(projection?.runId, "run-external")
+    XCTAssertEqual(projection?.attemptId, "attempt-external")
+    XCTAssertNotNil(projection?.completedAt)
+  }
+
+  func testConfirmedTerminalProjectionRejectsNonterminalStatus() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.externalRun(
+      surfaceKind: "floating_chat", runId: "run-external")
+
+    store.recordConfirmedTerminalRun(
+      surface: surface,
+      sessionId: "session-shared-chat",
+      runId: "run-external",
+      attemptId: "attempt-external",
+      status: .running)
+
+    XCTAssertNil(store.projection(for: surface))
+  }
+
   func testRestoresActiveWorkstreamRunFromKernelSnapshot() {
     let store = AgentRuntimeStatusStore()
     let surface = AgentSurfaceReference.workstream(workstreamId: "workstream-1")

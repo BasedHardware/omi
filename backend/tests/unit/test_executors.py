@@ -2,6 +2,7 @@
 
 import asyncio
 import contextvars
+import importlib
 import logging
 import threading
 import time
@@ -25,6 +26,47 @@ from utils.executors import (
 
 _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="test")
 _test_ctxvar = contextvars.ContextVar("test_key", default=None)
+
+
+@pytest.fixture(scope='module', autouse=True)
+def exception_reporting_dependencies():
+    # These tests time task execution and exception logging, not cold imports.
+    # Both dependencies are deliberately lazy in production. Initialize them
+    # during setup, retaining the existing two-second Future deadlines and all
+    # real classification/logging assertions below.
+    importlib.import_module('utils.llm.gateway_error_contract')
+    _openrouter_credit_exhausted_error()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_db_call_never_starts_late_post_commit_io(monkeypatch):
+    from utils import executors
+
+    started = asyncio.Event()
+    release = threading.Event()
+    called = []
+    loop = asyncio.get_running_loop()
+
+    async def provider():
+        called.append('provider')
+
+    def late_commit():
+        loop.call_soon_threadsafe(started.set)
+        assert release.wait(10)
+        assert executors.after_db_call(provider)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(executors, 'db_executor', pool)
+        task = asyncio.create_task(run_blocking(pool, late_commit))
+        try:
+            await asyncio.wait_for(started.wait(), 5)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            release.set()
+        await run_blocking(pool, lambda: None)
+    assert not called
 
 
 @pytest.mark.asyncio
@@ -176,7 +218,24 @@ def test_get_executor_metrics_returns_all_pools():
     metrics = get_executor_metrics()
     assert len(metrics) == len(_ALL_EXECUTORS)
     names = {m['name'] for m in metrics}
-    expected = {'critical', 'db', 'llm', 'stripe', 'sync', 'postprocess', 'cleanup', 'storage'}
+    expected = {
+        'quiet_replay',
+        'critical',
+        'db',
+        'read_cache_shadow',
+        'record_barrier',
+        'llm',
+        'stripe',
+        'admission',
+        'sync',
+        'record_language',
+        'postprocess',
+        'cleanup',
+        'storage',
+        'speaker_tag_verify',
+        'cimd',
+        'open_loops',
+    }
     assert names == expected
 
 
@@ -248,6 +307,91 @@ async def test_start_background_task_tracks_and_removes():
     await task
     await asyncio.sleep(0)  # let done callback fire
     assert task not in _background_tasks
+
+
+@pytest.fixture
+def destructive_operation_error():
+    # Dependency initialization is setup, outside the fast-unit call budget.
+    from database.legal_holds import DestructiveOperationInProgress
+
+    return DestructiveOperationInProgress
+
+
+def test_submit_with_context_defers_destructive_operation_fence_without_traceback(caplog, destructive_operation_error):
+    """A live account gate refuses the write. That is not a background crash."""
+
+    def blocked():
+        raise destructive_operation_error('external data write blocked by destructive operation')
+
+    with caplog.at_level(logging.INFO, logger='utils.executors'):
+        future = submit_with_context(_test_executor, blocked)
+        with pytest.raises(destructive_operation_error):
+            future.result(timeout=2)
+        time.sleep(0.05)
+
+    assert any('deferred reason=destructive_operation' in record.message for record in caplog.records)
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert not any(record.exc_info not in (None, (None, None, None)) for record in caplog.records)
+
+
+def test_submit_with_context_still_logs_unexpected_background_failures(caplog):
+    def boom():
+        raise RuntimeError('bg-boom')
+
+    with caplog.at_level(logging.ERROR, logger='utils.executors'):
+        future = submit_with_context(_test_executor, boom)
+        with pytest.raises(RuntimeError):
+            future.result(timeout=2)
+        time.sleep(0.05)
+
+    assert any(record.levelno >= logging.ERROR and 'bg-boom' in record.message for record in caplog.records)
+
+
+def _openrouter_credit_exhausted_error():
+    # Direct BYOK OpenRouter lane's live 402 spelling (see
+    # test_conversation_structure_byok_quota.py for the prod signature).
+    import httpx
+    import openai
+
+    body = {
+        'error': {
+            'message': 'This request requires more credits, or fewer max_tokens. To increase, visit '
+            'https://openrouter.ai/settings/credits and upgrade to a paid account',
+            'code': 402,
+            'metadata': {'limit_source': 'openrouter_credits'},
+        }
+    }
+    request = httpx.Request('POST', 'https://openrouter.ai/api/v1/chat/completions')
+    response = httpx.Response(402, request=request, json=body)
+    return openai.APIStatusError(f'Error code: 402 - {body}', response=response, body=body)
+
+
+def test_submit_with_context_logs_byok_quota_halt_without_traceback(caplog):
+    """A spent BYOK provider account halts the task; that is not a background crash."""
+    from utils.byok import set_byok_uid, set_validated_byok_keys
+
+    # Direct-lane provider errors only classify on the user's validated key;
+    # submit_with_context propagates that BYOK context into the task.
+    set_validated_byok_keys({'openrouter': 'sk-or-byok-unit'}, 'uid_byok_executors')
+    try:
+
+        def spent():
+            raise _openrouter_credit_exhausted_error()
+
+        with caplog.at_level(logging.INFO, logger='utils.executors'):
+            future = submit_with_context(_test_executor, spent)
+            with pytest.raises(Exception, match='requires more credits'):
+                future.result(timeout=2)
+            time.sleep(0.05)
+    finally:
+        set_validated_byok_keys({}, 'uid_byok_executors')
+        set_byok_uid(None)
+
+    assert any('halted reason=byok_quota' in record.message for record in caplog.records)
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    # The provider's error body and the SDK traceback must not reach the log.
+    assert not any(record.exc_info not in (None, (None, None, None)) for record in caplog.records)
+    assert not any('openrouter.ai/settings/credits' in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -398,3 +542,179 @@ async def test_log_executor_health_swallows_exceptions(caplog):
             except asyncio.CancelledError:
                 pass
     assert call_count == 2, f"Expected 2 calls before cancel, got {call_count}"
+
+
+def test_task_gauges_include_queued_cancelled_and_failed_work():
+    from utils.executors import EXECUTOR_ACTIVE, EXECUTOR_QUEUED
+
+    pool = MonitoredThreadPoolExecutor('test-task-gauges', max_workers=1, max_queue_size=1)
+    started, release = threading.Event(), threading.Event()
+
+    def record_moment():
+        started.set()
+        release.wait(5)
+        raise ValueError('fixture failure')
+
+    active = EXECUTOR_ACTIVE.labels(executor=pool.name, task='record_moment')
+    queued = EXECUTOR_QUEUED.labels(executor=pool.name, task='record_moment')
+    try:
+        first = pool.submit(record_moment)
+        assert started.wait(2)
+        second = pool.submit(record_moment)
+        assert active._value.get() == 1
+        assert queued._value.get() == 1
+        assert second.cancel()
+        assert queued._value.get() == 0
+        release.set()
+        with pytest.raises(ValueError):
+            first.result(2)
+        assert active._value.get() == 0
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_backpressure_waits_for_capacity_and_preserves_work():
+    pool = MonitoredThreadPoolExecutor('test-backpressure', max_workers=1, max_queue_size=0, wait_on_saturation=True)
+    release, started = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    try:
+        first = pool.submit(hold)
+        assert started.wait(2)
+        waiting = asyncio.create_task(run_blocking(pool, lambda: 42))
+        await asyncio.sleep(0.06)
+        assert not waiting.done()
+        assert pool._work_queue.qsize() == 0
+        release.set()
+        assert await asyncio.wait_for(waiting, 2) == 42
+        first.result(2)
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+def test_lifecycle_pool_isolation_and_shadow_rollback(monkeypatch):
+    from utils.executors import lifecycle_executor, postprocess_executor
+
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'off')
+    assert lifecycle_executor('test-account', episode=True) is postprocess_executor
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'shadow')
+    assert lifecycle_executor('test-account', episode=True) is postprocess_executor
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    episode = lifecycle_executor('test-account', episode=True)
+    postprocess = lifecycle_executor('test-account')
+    assert episode is not postprocess
+    assert (episode._max_workers, episode.max_queue_size) == (2, 8)
+    assert (postprocess._max_workers, postprocess.max_queue_size) == (24, 96)
+
+
+def test_cancelled_queue_payloads_do_not_escape_the_bound():
+    pool = MonitoredThreadPoolExecutor('test-cancel-bound', max_workers=1, max_queue_size=1)
+    release, started = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    try:
+        running = pool.submit(hold)
+        assert started.wait(2)
+        for _ in range(100):
+            queued = pool.submit(lambda: None)
+            assert queued.cancel()
+            assert pool._work_queue.qsize() == 0
+        release.set()
+        running.result(2)
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+def test_deferred_submission_preserves_context_and_surfaces_failure():
+    from utils import executors
+    import contextvars
+
+    value = contextvars.ContextVar('deferred-test', default='missing')
+    pool = MonitoredThreadPoolExecutor('test-deferred', max_workers=1, max_queue_size=0, wait_on_saturation=True)
+    release = threading.Event()
+    first = pool.submit(release.wait, 5)
+    token = value.set('caller')
+    try:
+        result = executors.submit_with_context_retry(pool, value.get)
+        failed = executors.submit_with_context_retry(pool, lambda: 1 / 0)
+        cancelled = executors.submit_with_context_retry(pool, lambda: pytest.fail('cancelled call ran'))
+        assert cancelled.cancel()
+        value.reset(token)
+        release.set()
+        first.result(5)
+        assert result.result(5) == 'caller'
+        with pytest.raises(ZeroDivisionError):
+            failed.result(5)
+        assert cancelled.cancelled()
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+def test_shutdown_cancels_deferred_payloads_without_retrying_on_a_closed_pool():
+    pool = MonitoredThreadPoolExecutor(
+        'test-deferred-shutdown', max_workers=1, max_queue_size=0, wait_on_saturation=True
+    )
+    release = threading.Event()
+    first = pool.submit(release.wait, 5)
+    pending = pool.submit_when_available(lambda: pytest.fail('shutdown call ran'))
+    try:
+        pool.shutdown(wait=False, cancel_futures=True)
+        assert pending.cancelled() and not pool._deferred
+        release.set()
+        first.result(5)
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_tracked_storage_queue_survives_caller_cancellation_until_settlement():
+    """Abandon proof includes queued shared-storage work, not just running leaves."""
+    from utils.executors import ExecutorFutureTracker
+
+    entered = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    writes = []
+
+    def held_write():
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(10)
+        writes.append('running')
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='storage-test') as pool:
+        tracker = ExecutorFutureTracker(pool)
+        with tracker.scope():
+            running = asyncio.create_task(run_blocking(pool, held_write))
+            queued = asyncio.create_task(run_blocking(pool, lambda: writes.append('queued')))
+        waiter = None
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            await asyncio.sleep(0)
+            assert len(tracker.pending) == 2
+            running.cancel()
+            queued.cancel()
+            await asyncio.gather(running, queued, return_exceptions=True)
+            waiter = asyncio.create_task(tracker.wait())
+            await asyncio.sleep(0)
+            assert not waiter.done() and writes == []
+            release.set()
+            await asyncio.wait_for(waiter, 5)
+            assert writes == ['running', 'queued']
+            assert not tracker.pending
+        finally:
+            release.set()
+            await asyncio.gather(running, queued, return_exceptions=True)
+            if waiter is not None:
+                await asyncio.wait_for(waiter, 5)

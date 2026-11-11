@@ -43,6 +43,190 @@ struct RealtimeTurnPersistenceReceipt: Equatable {
   let accepted: Bool
 }
 
+/// The two stable journal IDs for an in-flight realtime turn. This is deliberately
+/// only an in-memory write coordinator: the kernel journal remains the transcript
+/// authority, including after process restart.
+struct RealtimeStreamingJournalProjection: Equatable {
+  let ownerID: String
+  let continuityKey: String
+  let userTurnID: String
+  let assistantTurnID: String
+  /// Pinned at admission so a mid-stream chat switch cannot redirect deltas
+  /// or finalization to a different conversation surface.
+  let admissionSurface: AgentSurfaceReference
+  /// Concrete model id of the realtime session answering this turn (e.g.
+  /// "gemini-3.1-flash-live-preview"), pinned at admission for the journaled
+  /// exchange's Response Context attribution.
+  let modelsUsed: [String]
+  /// Accepted screen observation for this turn, journaled on the user row (see MessageMetadata).
+  let screenContext: String?
+  /// Native OCR evidence is journaled beside (and independently from) the
+  /// model's optional screen report. It is frozen into the existing streaming
+  /// persistence obligation so late OCR cannot drift to another turn.
+  let evidence: [ConversationEvidence]
+
+  init(
+    ownerID: String, continuityKey: String, admissionSurface: AgentSurfaceReference,
+    modelsUsed: [String] = [], screenContext: String? = nil,
+    evidence: [ConversationEvidence] = []
+  ) {
+    self.ownerID = ownerID
+    self.continuityKey = continuityKey
+    self.admissionSurface = admissionSurface
+    self.modelsUsed = modelsUsed
+    self.screenContext = screenContext
+    self.evidence = evidence
+    userTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
+    assistantTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant")
+  }
+
+  func userMessage(text: String) -> ChatMessage {
+    var message = ChatMessage(
+      id: userTurnID,
+      clientTurnId: continuityKey,
+      text: text,
+      sender: .user
+    )
+    if !evidence.isEmpty || !(screenContext?.isEmpty ?? true) {
+      message.metadata = MessageMetadata(screenContext: screenContext, evidence: evidence)
+    }
+    return message
+  }
+
+  func assistantMessage(text: String, isStreaming: Bool) -> ChatMessage {
+    var message = ChatMessage(
+      id: assistantTurnID,
+      clientTurnId: continuityKey,
+      text: text,
+      sender: .ai,
+      isStreaming: isStreaming
+    )
+    if !modelsUsed.isEmpty {
+      message.metadata = MessageMetadata(adapterId: "realtime", modelsUsed: modelsUsed)
+    }
+    return message
+  }
+}
+
+/// Serializes journal writes for one or more realtime turns without retaining
+/// transcript content locally. A barge-in can finalize turn A while turn B is
+/// already recording, so each continuity key owns an independent write tail.
+@MainActor
+final class RealtimeStreamingJournalWriteLedger {
+  enum FinalizationResult: Equatable {
+    case absent
+    case recordRejected
+    case completed(Bool)
+  }
+
+  private struct Entry {
+    let id: UUID
+    let projection: RealtimeStreamingJournalProjection
+    let recordTask: Task<Bool, Never>
+    var tail: Task<Bool, Never>
+  }
+
+  private var entries: [String: Entry] = [:]
+  private(set) var generation: UInt64 = 0
+
+  var hasActiveProjections: Bool {
+    !entries.isEmpty
+  }
+
+  func contains(continuityKey: String) -> Bool {
+    entries[continuityKey] != nil
+  }
+
+  func projection(for continuityKey: String) -> RealtimeStreamingJournalProjection? {
+    entries[continuityKey]?.projection
+  }
+
+  @discardableResult
+  func begin(
+    projection: RealtimeStreamingJournalProjection,
+    record: @escaping @MainActor (RealtimeStreamingJournalProjection) async -> Bool
+  ) -> Bool {
+    guard entries[projection.continuityKey] == nil else { return false }
+    generation &+= 1
+    let recordTask = Task { @MainActor in
+      await record(projection)
+    }
+    entries[projection.continuityKey] = Entry(
+      id: UUID(),
+      projection: projection,
+      recordTask: recordTask,
+      tail: recordTask
+    )
+    return true
+  }
+
+  func enqueueUpdate(
+    continuityKey: String,
+    update: @escaping @MainActor (RealtimeStreamingJournalProjection) async -> Bool
+  ) {
+    guard var entry = entries[continuityKey] else { return }
+    let previous = entry.tail
+    let recordTask = entry.recordTask
+    let projection = entry.projection
+    let task = Task { @MainActor in
+      guard await recordTask.value else { return false }
+      _ = await previous.value
+      return await update(projection)
+    }
+    entry.tail = task
+    entries[continuityKey] = entry
+  }
+
+  func finalize(
+    continuityKey: String,
+    complete: @escaping @MainActor (RealtimeStreamingJournalProjection) async -> Bool
+  ) async -> FinalizationResult {
+    guard var entry = entries[continuityKey] else { return .absent }
+    let recordTask = entry.recordTask
+    let previous = entry.tail
+    let projection = entry.projection
+    let entryID = entry.id
+    let task = Task { @MainActor in
+      guard await recordTask.value else { return false }
+      _ = await previous.value
+      return await complete(projection)
+    }
+    entry.tail = task
+    entries[continuityKey] = entry
+
+    let recorded = await recordTask.value
+    let completed = await task.value
+    if entries[continuityKey]?.id == entryID {
+      entries.removeValue(forKey: continuityKey)
+    }
+    generation &+= 1
+    return recorded ? .completed(completed) : .recordRejected
+  }
+
+  func awaitPendingWrites() async {
+    let tails = entries.values.map(\.tail)
+    for task in tails {
+      _ = await task.value
+    }
+  }
+
+  func cancelAll() {
+    let tasks = entries.values.flatMap { [$0.recordTask, $0.tail] }
+    entries.removeAll()
+    generation &+= 1
+    for task in tasks { task.cancel() }
+  }
+
+  /// Cancels a single continuity key's projection so a later canonical receipt
+  /// (e.g. an accepted spawn_agent) can take over without competing writes.
+  func cancel(continuityKey: String) {
+    guard let entry = entries.removeValue(forKey: continuityKey) else { return }
+    generation &+= 1
+    entry.recordTask.cancel()
+    entry.tail.cancel()
+  }
+}
+
 @MainActor
 final class RealtimeTurnPersistenceLedger {
   private struct Obligation {
@@ -152,6 +336,67 @@ final class RealtimeTurnPersistenceLedger {
     }
   }
 
+  /// Chains one follow-up write after the in-flight obligation for the same
+  /// continuity key, taking over that key's obligation slot so
+  /// `awaitPendingObligations` — the next voice turn's context fence — still
+  /// observes the follow-up before the journal settles. The follow-up runs
+  /// only after the original write's kernel result is known; a plain `enqueue`
+  /// would drop it entirely while the original is still in flight.
+  ///
+  /// When the original obligation already completed before this call, its
+  /// retained receipt (if any) is final and must survive the follow-up: a
+  /// later `consumeReceipt` still reports the original write's acceptance.
+  /// The follow-up therefore runs as a fresh non-retaining obligation that
+  /// never touches the receipt slot — unlike `enqueue`, which clears a key's
+  /// receipt when it starts a superseding write.
+  @discardableResult
+  func enqueueFollowUp(
+    continuityKey: String,
+    _ followUp: @escaping @MainActor () async -> Bool
+  ) -> Task<Bool, Never> {
+    guard let existing = obligations[continuityKey] else {
+      generation &+= 1
+      let followUpID = UUID()
+      let task = Task { @MainActor [weak self] in
+        let accepted = await followUp()
+        guard let self, self.obligations[continuityKey]?.id == followUpID else {
+          return accepted
+        }
+        self.obligations.removeValue(forKey: continuityKey)
+        return accepted
+      }
+      obligations[continuityKey] = Obligation(
+        id: followUpID, task: task, retainingReceipt: false)
+      return task
+    }
+    let previous = existing.task
+    let retention = existing.retainingReceipt
+    let followUpID = UUID()
+    generation &+= 1
+    let task = Task { @MainActor [weak self] in
+      let originalAccepted = await previous.value
+      guard let self, self.obligations[continuityKey]?.id == followUpID else {
+        return originalAccepted
+      }
+      // The original write's epilogue no longer owns this slot, so its receipt
+      // semantics survive here: retention still reflects the original write's
+      // kernel result, never the follow-up's revision of an accepted row.
+      if retention, self.receipts[continuityKey] == nil {
+        self.receipts[continuityKey] = RealtimeTurnPersistenceReceipt(
+          continuityKey: continuityKey,
+          accepted: originalAccepted)
+      }
+      let accepted = await followUp()
+      if self.obligations[continuityKey]?.id == followUpID {
+        self.obligations.removeValue(forKey: continuityKey)
+      }
+      return accepted
+    }
+    obligations[continuityKey] = Obligation(
+      id: followUpID, task: task, retainingReceipt: retention)
+    return task
+  }
+
   /// Owner replacement revokes every local waiter.  An ignored cancellation can
   /// still complete its kernel RPC, but its old obligation is forbidden from
   /// removing or writing over any newer key's state.
@@ -172,25 +417,51 @@ struct InterruptedTurnPayload: Equatable {
   /// A successful `spawn_agent` call has already committed this turn's exchange
   /// to the kernel. Capture that authority before a barge-in clears transport state.
   let acceptedSpawnOwnerID: String?
+  /// Whether the turn's full-answer playback had drained by capture time. A
+  /// barge-in after a fully spoken reply must journal that reply as delivered,
+  /// not as a cut-off failure the model later tries to re-deliver.
+  let answerDelivered: Bool
+  /// Whether the provider's full answer text had finished when the turn was
+  /// interrupted. A barge-in after response finish cut only spoken delivery:
+  /// the journaled reply is complete, and later turns must not re-answer that
+  /// thread as though the model never gave it.
+  let answerTextCompleted: Bool
 
   init(
     ownerID: String,
     userText: String,
     assistantText: String,
     idempotencyKey: String,
-    acceptedSpawnOwnerID: String? = nil
+    acceptedSpawnOwnerID: String? = nil,
+    answerDelivered: Bool = false,
+    answerTextCompleted: Bool = false
   ) {
     self.ownerID = ownerID
     self.userText = userText
     self.assistantText = assistantText
     self.idempotencyKey = idempotencyKey
     self.acceptedSpawnOwnerID = acceptedSpawnOwnerID
+    self.answerDelivered = answerDelivered
+    self.answerTextCompleted = answerTextCompleted
   }
 
   /// User-visible chat text for a PTT-barged reply: keep streamed partial text only.
   static func visibleAssistantText(partialAssistantText: String) -> String {
     partialAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
+}
+
+/// The assistant row a voice turn's funnel sealed `.completed` at
+/// provider-response-finish, before the reducer's playback fence resolved.
+/// Consumed by the reducer's terminal: when the answer never reached the user,
+/// the sealed row is revised through the payload-free terminal-revision update
+/// (`VoiceJournalSealedRowRevisionPolicy`) — its content and canonical
+/// metadata stay exactly as sealed. Journal-write bookkeeping only — the
+/// reducer remains the lifecycle owner (INV-VOICE-1), and the kernel journal
+/// stays the one transcript authority (INV-CHAT-1).
+struct SealedCompletedVoiceJournalRow {
+  let ownerID: String
+  let surface: AgentSurfaceReference
 }
 
 /// Resolves and records the visible portion of a provider-failed turn before

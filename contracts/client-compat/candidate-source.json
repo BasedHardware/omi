@@ -1,0 +1,153 @@
+{
+  "notice": "These are NOT released-client fixtures or evidence of store distribution. Builder must establish the two latest distributed builds per platform.",
+  "candidates": [
+    {
+      "tag": "v1.0.543+992-mobile-cm",
+      "commit": "820379296f5a7ad98c8ab873f18aba9b522785ac",
+      "distribution": "unverified-build-candidate",
+      "source_sha256": {
+        "app/pubspec.yaml": "a9ee3c2a2a7471f3f4854f1d4cb5717fe4b12212e23a221277f7e73095732af4",
+        "app/lib/backend/http/api/conversations.dart": "e5efe6a1f0b297b126b36b8ae5aec5b57e3349fc3c431eddc1c5975438021953",
+        "app/lib/backend/http/api/memories.dart": "149ce8ded4bd6ecfc7885fd439b55de6d20e5863c4a801a7583dd5e326876904",
+        "app/lib/backend/http/api/messages.dart": "cad8cd5d7b54ae8a728114eb19e4f89fced471fccb4694cc3853c54f8690ee50",
+        "app/lib/backend/http/api/action_items.dart": "ef9cbd323a715b2c55726e4789221155c36676de0020e63250b0f7dee53c6740",
+        "app/lib/backend/schema/gen/conversation_wire.g.dart": "adaccc3a2555317dd70c3cd3dfabda73361fae2971555f2365aab920a6a1591c",
+        "app/lib/backend/schema/gen/messages_wire.g.dart": "ff296e9ee99d33ecff0e7b55327c42d46d836edbaa74435f59b55b96c68bd07c",
+        "app/lib/backend/schema/gen/memories_wire.g.dart": "296dba398bc052c5b1870d57b1d31f5e6be520e351082b57ea9c5ca8bfc9a1b7",
+        "app/lib/backend/schema/gen/action_items_folders_wire.g.dart": "1c6fe023fbbe28291c06653acfa6a4c33dfa56de7b7ce05d02c5c3702d3766fe",
+        "app/lib/backend/schema/conversation.dart": "da1dd63d94cb334b5be1351f940a300aa83ca2e4b0bd9fffdd52c367894e1dbf",
+        "app/lib/backend/schema/memory.dart": "8d3f4c8a425f8363db777f51ac9c5e220d653e52f7e60244f1b0388a866fb359",
+        "app/lib/backend/schema/message.dart": "9dcbe10f43892f586f2bb77b90d08537e3a7643f56a2af6b5ed6495720acbd0e",
+        "app/lib/backend/schema/action_item.dart": "0979522b750f8c45987813586f76782b0acb2c32a3dd43d35a68fe90d6bda419",
+        "app/lib/backend/schema/structured.dart": "dfc381e1584e345751e57f18aa3259c522f246a9da4d912821d10e77c2effb9d",
+        "app/lib/backend/schema/transcript_segment.dart": "641b088a12d57ee8f2f8b5f5b84564fdb0c7ab4e98e7411d8b0b11470b0febe6",
+        "app/lib/backend/schema/geolocation.dart": "bfd1a2a9c7fe5bd399d2724472f89965955e3bb976c0a42a3e2be1137ec92679",
+        "docs/api-reference/app-client-openapi.json": "ba96a115dae8c9c91ba07424d1a6c45d633b3cc0fe8f4653301a0c2eece1a473"
+      },
+      "default_queries": {
+        "/v1/conversations": [
+          [
+            "include_discarded",
+            "true"
+          ],
+          [
+            "limit",
+            "50"
+          ],
+          [
+            "offset",
+            "0"
+          ],
+          [
+            "statuses",
+            ""
+          ]
+        ],
+        "/v3/memories": [
+          [
+            "limit",
+            "100"
+          ],
+          [
+            "offset",
+            "0"
+          ]
+        ],
+        "/v2/messages": [
+          [
+            "app_id",
+            ""
+          ],
+          [
+            "dropdown_selected",
+            "false"
+          ]
+        ],
+        "/v1/action-items": [
+          [
+            "limit",
+            "50"
+          ],
+          [
+            "offset",
+            "0"
+          ]
+        ]
+      }
+    },
+    {
+      "tag": "v1.0.543+990-mobile-cm",
+      "commit": "09d9cae314f39fbd9e0f972a2465af754148b052",
+      "distribution": "unverified-build-candidate",
+      "source_sha256": {
+        "app/pubspec.yaml": "be955f396692160c254184796b785148959231587748097a3b62ea8ed1bcc506",
+        "app/lib/backend/http/api/conversations.dart": "e5efe6a1f0b297b126b36b8ae5aec5b57e3349fc3c431eddc1c5975438021953",
+        "app/lib/backend/http/api/memories.dart": "149ce8ded4bd6ecfc7885fd439b55de6d20e5863c4a801a7583dd5e326876904",
+        "app/lib/backend/http/api/messages.dart": "cad8cd5d7b54ae8a728114eb19e4f89fced471fccb4694cc3853c54f8690ee50",
+        "app/lib/backend/http/api/action_items.dart": "ef9cbd323a715b2c55726e4789221155c36676de0020e63250b0f7dee53c6740",
+        "app/lib/backend/schema/gen/conversation_wire.g.dart": "adaccc3a2555317dd70c3cd3dfabda73361fae2971555f2365aab920a6a1591c",
+        "app/lib/backend/schema/gen/messages_wire.g.dart": "ff296e9ee99d33ecff0e7b55327c42d46d836edbaa74435f59b55b96c68bd07c",
+        "app/lib/backend/schema/gen/memories_wire.g.dart": "296dba398bc052c5b1870d57b1d31f5e6be520e351082b57ea9c5ca8bfc9a1b7",
+        "app/lib/backend/schema/gen/action_items_folders_wire.g.dart": "1c6fe023fbbe28291c06653acfa6a4c33dfa56de7b7ce05d02c5c3702d3766fe",
+        "app/lib/backend/schema/conversation.dart": "da1dd63d94cb334b5be1351f940a300aa83ca2e4b0bd9fffdd52c367894e1dbf",
+        "app/lib/backend/schema/memory.dart": "8d3f4c8a425f8363db777f51ac9c5e220d653e52f7e60244f1b0388a866fb359",
+        "app/lib/backend/schema/message.dart": "9dcbe10f43892f586f2bb77b90d08537e3a7643f56a2af6b5ed6495720acbd0e",
+        "app/lib/backend/schema/action_item.dart": "0979522b750f8c45987813586f76782b0acb2c32a3dd43d35a68fe90d6bda419",
+        "app/lib/backend/schema/structured.dart": "dfc381e1584e345751e57f18aa3259c522f246a9da4d912821d10e77c2effb9d",
+        "app/lib/backend/schema/transcript_segment.dart": "641b088a12d57ee8f2f8b5f5b84564fdb0c7ab4e98e7411d8b0b11470b0febe6",
+        "app/lib/backend/schema/geolocation.dart": "bfd1a2a9c7fe5bd399d2724472f89965955e3bb976c0a42a3e2be1137ec92679",
+        "docs/api-reference/app-client-openapi.json": "ba96a115dae8c9c91ba07424d1a6c45d633b3cc0fe8f4653301a0c2eece1a473"
+      },
+      "default_queries": {
+        "/v1/conversations": [
+          [
+            "include_discarded",
+            "true"
+          ],
+          [
+            "limit",
+            "50"
+          ],
+          [
+            "offset",
+            "0"
+          ],
+          [
+            "statuses",
+            ""
+          ]
+        ],
+        "/v3/memories": [
+          [
+            "limit",
+            "100"
+          ],
+          [
+            "offset",
+            "0"
+          ]
+        ],
+        "/v2/messages": [
+          [
+            "app_id",
+            ""
+          ],
+          [
+            "dropdown_selected",
+            "false"
+          ]
+        ],
+        "/v1/action-items": [
+          [
+            "limit",
+            "50"
+          ],
+          [
+            "offset",
+            "0"
+          ]
+        ]
+      }
+    }
+  ]
+}

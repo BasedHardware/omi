@@ -293,9 +293,7 @@ void main() {
       if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
     });
 
-    test('drains all frames including tail buffer when losses exceed threshold', () async {
-      // Need > 10 * framesPerSecond (1000) unsynced frames to trigger storage.
-      // Add 1100 frames (11 seconds at 100fps), all unsynced.
+    test('drains all frames including an unsynced tail buffer', () async {
       for (int i = 0; i < 1100; i++) {
         sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: FrameSyncKey([i & 0xFF])));
       }
@@ -305,7 +303,7 @@ void main() {
 
       // All frames should be drained
       expect(sync.testFrames, isEmpty);
-      // A WAL should have been created (losses >= threshold)
+      // A WAL should have been created because delivery was not confirmed.
       expect(sync.testWals.length, 1);
       expect(sync.testWals[0].status, WalStatus.miss);
       expect(sync.testWals[0].seconds, 11);
@@ -331,31 +329,31 @@ void main() {
       expect(sync.testWals, isEmpty);
     });
 
-    test('exactly 10*fps unsynced frames triggers storage (>= boundary)', () async {
-      // Exactly 1000 unsynced frames = 10 * 100fps. shouldStored uses >= threshold.
-      for (int i = 0; i < 1000; i++) {
+    test('a single unconfirmed frame triggers durable storage', () async {
+      for (int i = 0; i < 1; i++) {
         sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: FrameSyncKey([i & 0xFF])));
       }
 
       await sync.finalizeCurrentSession();
 
       expect(sync.testFrames, isEmpty);
-      // 1000 losses >= 1000 threshold, so WAL IS stored
       expect(sync.testWals.length, 1);
       expect(sync.testWals[0].status, WalStatus.miss);
-      expect(sync.testWals[0].seconds, 10);
+      expect(sync.testWals[0].totalFrames, 1);
     });
 
-    test('just below threshold does NOT trigger storage', () async {
-      // 999 unsynced frames < 1000 threshold
-      for (int i = 0; i < 999; i++) {
-        sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: FrameSyncKey([i & 0xFF])));
-      }
+    test('one unconfirmed frame among confirmed frames keeps the complete session', () async {
+      final first = FrameSyncKey([1]);
+      sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: first));
+      sync.markFrameSynced(first);
+      sync.onFrameCaptured(WalFrame(payload: [3, 4, 5], syncKey: FrameSyncKey([2])));
 
       await sync.finalizeCurrentSession();
 
       expect(sync.testFrames, isEmpty);
-      expect(sync.testWals, isEmpty);
+      expect(sync.testWals, hasLength(1));
+      expect(sync.testWals.single.totalFrames, 2);
+      expect(sync.testWals.single.syncedFrameOffset, 1);
     });
 
     test('marks WAL synced when all frames are synced in tail buffer', () async {
@@ -369,7 +367,7 @@ void main() {
       await sync.finalizeCurrentSession();
 
       expect(sync.testFrames, isEmpty);
-      // shouldStored is false because losses (0) <= threshold (1000), no WAL created
+      // shouldStored is false because every frame has delivery confirmation.
       expect(sync.testWals, isEmpty);
     });
   });

@@ -14,7 +14,7 @@ export default function Footer() {
             className="h-auto w-[70px]"
           />
           <p className="mt-1 text-gray-500">Made in San Fransisco</p>
-          <a href={'mailto:team@basedhardware.com>'} className="hover:underline">
+          <a href="mailto:team@basedhardware.com" className="hover:underline">
             team@basedhardware.com
           </a>
           <div className="mt-3 flex items-center gap-3">
@@ -89,11 +89,11 @@ export default function Footer() {
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'https://www.omi.me/products/omi-dev-kit-2'}
+                href={'https://www.omi.me/'}
                 target="_blank"
                 rel="noreferrer"
               >
-                Omi DEV KIT 2
+                Buy Omi
               </a>
             </li>
           </ul>

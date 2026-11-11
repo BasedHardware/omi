@@ -164,7 +164,7 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
     return client
   }
 
-  func testDeleteAllMemoriesDefaultScopeUsesUnscopedEndpoint() async {
+  func testDeleteAllMemoriesDefaultScopeUsesScopedEndpoint() async {
     let client = await makeClient()
 
     await XCTAssertThrowsErrorAsync({ try await client.deleteAllMemories(scope: .defaultAccess) }) { error in
@@ -176,6 +176,7 @@ final class APIClientMemoryBulkSafetyTests: XCTestCase {
     XCTAssertEqual(BulkURLCapture.capturedRequests.count, 1)
     XCTAssertEqual(BulkURLCapture.capturedRequests.first?.method, "DELETE")
     XCTAssertEqual(BulkURLCapture.capturedRequests.first?.url.path, "/v3/memories")
+    XCTAssertEqual(BulkURLCapture.capturedRequests.first?.url.query, "scope=default")
   }
 
   func testUpdateAllMemoriesVisibilityDefaultScopeUsesUnscopedEndpoint() async {

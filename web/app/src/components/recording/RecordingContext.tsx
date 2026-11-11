@@ -1,12 +1,24 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+  ReactNode,
+} from 'react';
 import type { AudioCapture } from '@/lib/audioCapture';
 import type { TranscriptionSocket } from '@/lib/transcriptionSocket';
 
 // Types
 export type AudioMode = 'mic-only' | 'mic-and-system';
-export type RecordingState = 'idle' | 'initializing' | 'recording' | 'paused' | 'processing';
+export type RecordingState =
+  | 'idle'
+  | 'initializing'
+  | 'recording'
+  | 'paused'
+  | 'processing';
 
 export interface TranscriptSegment {
   id: string;
@@ -21,6 +33,8 @@ interface RecordingContextValue {
   state: RecordingState;
   audioMode: AudioMode;
   segments: TranscriptSegment[];
+  isBatchSession: boolean;
+  setBatchSession: (isBatch: boolean) => void;
   duration: number;
   micLevel: number;
   systemLevel: number;
@@ -47,7 +61,9 @@ interface RecordingContextValue {
   setError: (error: string | null) => void;
 
   // Refs for hook integration
-  startRecordingRef: React.MutableRefObject<((overrideMode?: AudioMode) => Promise<void>) | null>;
+  startRecordingRef: React.MutableRefObject<
+    ((overrideMode?: AudioMode) => Promise<void>) | null
+  >;
   pauseRecordingRef: React.MutableRefObject<(() => void) | null>;
   resumeRecordingRef: React.MutableRefObject<(() => void) | null>;
   stopRecordingRef: React.MutableRefObject<(() => Promise<void>) | null>;
@@ -67,6 +83,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<RecordingState>('idle');
   const [audioMode, setAudioMode] = useState<AudioMode>('mic-only');
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [isBatchSession, setBatchSession] = useState(false);
   const [duration, setDuration] = useState(0);
   const [micLevel, setMicLevel] = useState(0);
   const [systemLevel, setSystemLevel] = useState(0);
@@ -76,7 +93,9 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const [isWidgetExpanded, setWidgetExpanded] = useState(false);
 
   // Refs for hook integration - these will be set by useRecording
-  const startRecordingRef = useRef<((overrideMode?: AudioMode) => Promise<void>) | null>(null);
+  const startRecordingRef = useRef<((overrideMode?: AudioMode) => Promise<void>) | null>(
+    null,
+  );
   const pauseRecordingRef = useRef<(() => void) | null>(null);
   const resumeRecordingRef = useRef<(() => void) | null>(null);
   const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
@@ -124,6 +143,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         state,
         audioMode,
         segments,
+        isBatchSession,
+        setBatchSession,
         duration,
         micLevel,
         systemLevel,

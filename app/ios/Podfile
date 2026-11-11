@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-platform :ios, '15.0'
+platform :ios, '15.1'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -11,6 +11,9 @@ project 'Runner', {
   'Debug-dev' => :debug,
   'Profile-dev' => :release,
   'Release-dev' => :release,
+  'Debug-raybanDat' => :debug,
+  'Profile-raybanDat' => :release,
+  'Release-raybanDat' => :release,
 }
 
 def flutter_root
@@ -27,19 +30,43 @@ def flutter_root
 end
 
 require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+require_relative 'rayban_dat_plugin_boundary'
 
 flutter_ios_podfile_setup
 
-target 'Runner' do
-  use_frameworks! :linkage => :static
-  use_modular_headers!
+if ENV['OMI_RAYBAN_DAT'] == '1'
+  RayBanDatPluginBoundary.prepare!(
+    app_root: File.expand_path('..', __dir__),
+    env: ENV,
+  )
 
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerRayBanDat' do
+    use_frameworks! :linkage => :static
+    use_modular_headers!
 
-  pod 'TwilioVoice', '~> 6.13'
+    flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+    pod 'TwilioVoice', '~> 6.13'
+  end
+else
+  # The default graph is untouched, including mcumgr_flutter firmware OTA.
+  target 'Runner' do
+    use_frameworks! :linkage => :static
+    use_modular_headers!
+
+    flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+    pod 'TwilioVoice', '~> 6.13'
+  end
 end
 
 post_install do |installer|
+  # Fail closed on native dependency drift; patch both copies compiled by the pod.
+  plugin = File.realpath(File.join(__dir__, '.symlinks/plugins/whisper_flutter_new'))
+  patch = File.expand_path('../scripts/patch_whisper_cleanup.py', __dir__)
+  sources = [File.join(plugin, 'src/main.cpp'), File.join(plugin, 'ios/Classes/whisper_flutter_new.cpp')]
+  raise 'Whisper cleanup patch failed' unless system('python3', patch, *sources)
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|

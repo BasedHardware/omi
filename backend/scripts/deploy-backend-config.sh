@@ -5,61 +5,34 @@ set -euo pipefail
 
 : "${ENVIRONMENT:?ENVIRONMENT must be set to dev or prod}"
 
-required_config=(
-  CONVERSATION_SUMMARIZED_APP_IDS
-  GOOGLE_CLIENT_ID
-  MCP_AUTHORIZATION_SERVER_URL
-  MCP_OAUTH_CHATGPT_CLIENT_ID
-  MCP_OAUTH_CHATGPT_REDIRECT_URIS
-  MCP_OAUTH_PUBLIC_CLIENT_ID
-  MCP_OAUTH_PUBLIC_REDIRECT_URIS
-  MCP_RESOURCE_URL
-  RAPID_API_HOST
-  REDIS_DB_HOST
-  STT_PRERECORDED_MODEL
-  STT_SERVICE_MODELS
-  TYPESENSE_HOST
-  TWILIO_ACCOUNT_SID
-  TWILIO_API_KEY_SID
-  TWILIO_TWIML_APP_SID
-  X_OAUTH_CLIENT_ID
-  X_OAUTH_REDIRECT_URI
-)
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+env_file="$(mktemp)"
+existing_file="$(mktemp)"
+trap 'rm -f "$env_file" "$existing_file"' EXIT
 
-if [[ "$ENVIRONMENT" == "prod" ]]; then
-  required_config+=(
-    ACCOUNT_DELETION_HANDLER_URL
-    MCP_OAUTH_CLAUDE_CLIENT_ID
-    MCP_OAUTH_CLAUDE_CLIENT_NAME
-    MCP_OAUTH_CLAUDE_REDIRECT_URIS
-    SYNC_TASKS_HANDLER_URL
-    SYNC_TASKS_INVOKER_SA
-  )
+manifest_args=()
+if [[ -n "${RUNTIME_ENV_MANIFEST:-}" ]]; then
+  manifest_args=(--manifest "$RUNTIME_ENV_MANIFEST")
 fi
-
-missing=()
-for name in "${required_config[@]}"; do
-  if [[ -z "${!name:-}" ]]; then
-    missing+=("$name")
-  fi
-done
-if (( ${#missing[@]} > 0 )); then
-  printf 'Missing required non-secret deployment variables: %s\n' "${missing[*]}" >&2
+manifest_config_map="$(python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" "${manifest_args[@]}" --format name)"
+config_map="${CONFIG_MAP_NAME_OVERRIDE:-$manifest_config_map}"
+if [[ ! "$config_map" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || [[ "${#config_map}" -gt 63 ]]; then
+  echo "ConfigMap name override is not a valid bounded Kubernetes name." >&2
   exit 1
 fi
-
 namespace="${ENVIRONMENT}-omi-backend"
-config_map="${ENVIRONMENT}-omi-backend-config"
-env_file="$(mktemp)"
-trap 'rm -f "$env_file"' EXIT
+# Standalone listener/pusher refreshes must not erase commercial references
+# installed by the full backend deploy. Missing maps are safe on first setup;
+# read/auth failures stop the mutation. Canary maps inherit the canonical map.
+kubectl -n "$namespace" get configmap "$manifest_config_map" --ignore-not-found -o json >"$existing_file"
+python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" "${manifest_args[@]}" \
+  --existing-config-map "$existing_file" --format env >"$env_file"
 
-for name in "${required_config[@]}"; do
-  printf '%s=%s\n' "$name" "${!name}" >> "$env_file"
-done
+key_count="$(wc -l <"$env_file" | tr -d ' ')"
 
 kubectl -n "$namespace" create configmap "$config_map" \
   --from-env-file="$env_file" \
   --dry-run=client \
   -o yaml | kubectl apply -f -
 
-echo "Applied non-secret runtime ConfigMap ${namespace}/${config_map} (${#required_config[@]} keys)."
+echo "Applied non-secret runtime ConfigMap ${namespace}/${config_map} (${key_count} keys)."

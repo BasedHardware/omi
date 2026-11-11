@@ -34,7 +34,7 @@ actor TaskPromotionService {
             return false
           }
           DesktopDiagnosticsManager.shared.recordFallback(
-            area: "other",
+            area: "task_workflow",
             from: "workflow_control",
             to: "promotion_disabled",
             reason: "other",

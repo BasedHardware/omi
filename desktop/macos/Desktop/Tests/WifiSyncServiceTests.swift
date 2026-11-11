@@ -11,6 +11,9 @@ final class WifiSyncServiceTests: XCTestCase {
   private var wifiSync: WifiSyncService!
 
   override func setUp() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+
     walDir = FileManager.default.temporaryDirectory
       .appendingPathComponent("wifi-sync-test-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: walDir, withIntermediateDirectories: true)
@@ -27,6 +30,7 @@ final class WifiSyncServiceTests: XCTestCase {
 
   override func tearDown() async throws {
     walService.uploadLocalFilesHandler = nil
+    AccountCutoverControlManager.shared.resetForTesting()
     try? FileManager.default.removeItem(at: walDir)
   }
 
@@ -75,5 +79,33 @@ final class WifiSyncServiceTests: XCTestCase {
 
     XCTAssertTrue(uploadCalled, "finishSync must call syncToCloud after download")
     XCTAssertEqual(walService.wals.first?.status, .synced)
+  }
+
+  // MARK: - Cancellation classification
+
+  /// A user-initiated Stop propagates a CancellationError through the sync task.
+  /// It must be classified as a cancellation (no user-facing error), never a
+  /// failure that surfaces `errorMessage` / a "Recording Error" banner.
+  func testUserStopIsClassifiedAsCancellationNotError() {
+    XCTAssertTrue(
+      WifiSyncService.isCancellation(CancellationError(), taskWasCancelled: false),
+      "a thrown CancellationError is a user Stop, not a failure")
+
+    // A cancelled parent can interrupt an await and surface a different error;
+    // once the task is cancelled we still treat it as a Stop.
+    XCTAssertTrue(
+      WifiSyncService.isCancellation(WifiSyncServiceError.timeout, taskWasCancelled: true),
+      "any error thrown after the task was cancelled is a Stop, not a failure")
+  }
+
+  /// A genuine transfer failure (not a cancellation) must remain a real error
+  /// so the UI can surface it.
+  func testGenuineFailureIsNotClassifiedAsCancellation() {
+    XCTAssertFalse(
+      WifiSyncService.isCancellation(WifiSyncServiceError.deviceFailed, taskWasCancelled: false),
+      "a device failure with no cancellation must surface as an error")
+    XCTAssertFalse(
+      WifiSyncService.isCancellation(WifiSyncServiceError.timeout, taskWasCancelled: false),
+      "a timeout with no cancellation must surface as an error")
   }
 }

@@ -1,10 +1,9 @@
 import AppKit
 import Foundation
-import Sentry
 import Vision
 
 /// Represents a text block with its bounding box (in normalized coordinates 0-1)
-struct OCRTextBlock: Codable, Equatable {
+struct OCRTextBlock: Codable, Equatable, Sendable {
   let text: String
   /// Bounding box in normalized coordinates (0-1), origin at bottom-left (Vision coordinate system)
   let x: Double
@@ -25,7 +24,7 @@ struct OCRTextBlock: Codable, Equatable {
 }
 
 /// Complete OCR result with all text blocks
-struct OCRResult: Codable, Equatable {
+struct OCRResult: Codable, Equatable, Sendable {
   let fullText: String
   let blocks: [OCRTextBlock]
   let processedAt: Date
@@ -73,21 +72,144 @@ struct OCRResult: Codable, Equatable {
   }
 }
 
+/// Owns exactly one terminal result across Vision's two completion paths.
+///
+/// `VNImageRequestHandler.perform` may synchronously throw after the request
+/// callback has already fired (or a late callback may arrive after a throw).
+/// Both paths therefore compete through this lock before touching Swift's
+/// checked continuation. The losing path is an expected no-op, not a second
+/// resume that traps the process.
+final class VisionRequestCompletion<Value: Sendable>: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<Value, Error>?
+
+  init(_ continuation: CheckedContinuation<Value, Error>) {
+    self.continuation = continuation
+  }
+
+  @discardableResult
+  func complete(_ result: Result<Value, Error>) -> Bool {
+    let continuation = lock.withLock {
+      let claimed = self.continuation
+      self.continuation = nil
+      return claimed
+    }
+    guard let continuation else { return false }
+    continuation.resume(with: result)
+    return true
+  }
+}
+
 /// Apple Vision-based OCR service for extracting text from screenshots
 actor RewindOCRService {
   static let shared = RewindOCRService()
 
   /// Recognition languages passed to `VNRecognizeTextRequest`.
   ///
-  /// Held as a process-lifetime constant so the bridged NSArray backing storage
-  /// can never be released while Vision's TextRecognition framework enumerates
-  /// it asynchronously on `com.apple.root.utility-qos.cooperative`. A Swift
-  /// array literal assigned to `recognitionLanguages` has its storage tied to
-  /// the call frame; once the request is dispatched to a background queue the
-  /// storage can be freed, leaving TextRecognition iterating an
+  /// Resolved once from the user's own preferred languages instead of a pinned
+  /// locale: a language absent from this list is not recognised poorly, it is
+  /// not recognised at all, so pinning `en-US` left every non-Latin script
+  /// silently unsearchable.
+  ///
+  /// Still held as a process-lifetime constant so the bridged NSArray backing
+  /// storage can never be released while Vision's TextRecognition framework
+  /// enumerates it asynchronously on `com.apple.root.utility-qos.cooperative`.
+  /// A Swift array literal assigned to `recognitionLanguages` has its storage
+  /// tied to the call frame; once the request is dispatched to a background
+  /// queue the storage can be freed, leaving TextRecognition iterating an
   /// `__EmptyArrayStorage` and tripping `_assertionFailure` (EXC_BREAKPOINT /
-  /// SIGTRAP). Pinning the array breaks that race. See #5891, #5151.
-  private static let recognitionLanguages: [String] = ["en-US"]
+  /// SIGTRAP). Resolving into a `static let` keeps exactly one pinned array for
+  /// the process lifetime, so that race stays closed. See #5891, #5151.
+  private static let recognitionLanguages: [String] = resolveRecognitionLanguages(
+    preferred: Locale.preferredLanguages,
+    supported: visionSupportedRecognitionLanguages()
+  )
+
+  /// Languages Vision can actually recognise at the level this service uses.
+  ///
+  /// Falls back to English when the query fails rather than propagating: an
+  /// unavailable capability list must not take OCR down with it.
+  static func visionSupportedRecognitionLanguages() -> [String] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = recognitionLevel()
+    request.revision = VNRecognizeTextRequest.currentRevision
+    return (try? request.supportedRecognitionLanguages()) ?? ["en-US"]
+  }
+
+  /// Picks the recognition languages for a user, in Vision's priority order.
+  ///
+  /// Pure and injectable so the ordering, filtering and fallback rules are
+  /// testable without invoking Vision or changing the host's locale.
+  ///
+  /// Preferred languages Vision does not support are dropped rather than passed
+  /// through: `perform` throws on an unsupported tag, which would fail the whole
+  /// request and turn a partial-recognition bug into total OCR loss.
+  static func resolveRecognitionLanguages(
+    preferred: [String],
+    supported: [String]
+  ) -> [String] {
+    guard !supported.isEmpty else { return ["en-US"] }
+
+    var resolved: [String] = []
+    var seen = Set<String>()
+
+    func append(_ tag: String) {
+      guard seen.insert(tag).inserted else { return }
+      resolved.append(tag)
+    }
+
+    // Vision treats the list as a priority order, so the user's own languages
+    // lead.
+    for tag in preferred {
+      if let match = bestSupportedMatch(for: tag, in: supported) {
+        append(match)
+      }
+    }
+
+    // English is retained even when it is not a preferred language. Screen text
+    // is routinely mixed — identifiers, URLs, product names — and dropping it
+    // would regress the Latin half of the very lines this is meant to fix.
+    for fallback in ["en-US", "en"] {
+      if let match = bestSupportedMatch(for: fallback, in: supported) {
+        append(match)
+        break
+      }
+    }
+
+    // Never hand back a tag Vision did not report: an unsupported language makes
+    // `perform` throw and takes the whole request down. When the capability list
+    // shares nothing with this user, fall back to the first language Vision does
+    // support. ["en-US"] is reserved for the empty-capability case above, where
+    // there is no reported list to choose from.
+    return resolved.isEmpty ? [supported[0]] : resolved
+  }
+
+  /// Matches a BCP-47 tag against Vision's supported tags: the exact tag first,
+  /// then the same language *and script*.
+  ///
+  /// Script matters, and collapsing to the primary language gets it wrong: `zh`
+  /// alone would let a `zh-TW` reader be handed Vision's `zh-Hans` scope and
+  /// recognised with the Simplified model. Comparing maximised identifiers keeps
+  /// `zh-TW` on `zh-Hant`, while still letting `ja` reach `ja-JP` and `en-GB`
+  /// reach `en-US`, because those agree once likely subtags are filled in.
+  private static func bestSupportedMatch(for tag: String, in supported: [String]) -> String? {
+    if let exact = supported.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+      return exact
+    }
+    let requested = Self.languageAndScript(of: tag)
+    return supported.first { Self.languageAndScript(of: $0) == requested }
+  }
+
+  /// Language and script for a tag, with likely subtags filled in, so tags that
+  /// name the same written language compare equal regardless of how they spell
+  /// it (`zh-TW` and `zh-Hant`; `ja` and `ja-JP`).
+  static func languageAndScript(of tag: String) -> String {
+    let maximal = Locale.Language(identifier: tag).maximalIdentifier
+    let expanded = Locale.Language(identifier: maximal)
+    let language = expanded.languageCode?.identifier.lowercased() ?? tag.lowercased()
+    let script = expanded.script?.identifier.lowercased() ?? ""
+    return "\(language)-\(script)"
+  }
 
   private init() {}
 
@@ -109,6 +231,25 @@ actor RewindOCRService {
 
   static func usesLanguageCorrection() -> Bool {
     true
+  }
+
+  /// Bridges a callback-style Vision request whose synchronous `perform` call
+  /// can also throw. Keeping this boundary generic makes the competing terminal
+  /// paths deterministically testable without mocking Vision framework types.
+  nonisolated static func awaitSingleVisionCompletion<Value: Sendable>(
+    perform: (@escaping @Sendable (Result<Value, Error>) -> Bool) throws -> Void
+  ) async throws -> Value {
+    try await withCheckedThrowingContinuation { continuation in
+      let completion = VisionRequestCompletion(continuation)
+      let finish: @Sendable (Result<Value, Error>) -> Bool = { result in
+        completion.complete(result)
+      }
+      do {
+        try perform(finish)
+      } catch {
+        _ = completion.complete(.failure(error))
+      }
+    }
   }
 
   /// Compute a perceptual difference hash (dHash) of a CGImage.
@@ -145,6 +286,36 @@ actor RewindOCRService {
     return hash
   }
 
+  /// dHash computed through an intermediate downscale to the preview-capture envelope.
+  ///
+  /// The proactive capture pipeline compares hashes of ≤80px preview grabs against a
+  /// history that also receives the hash of every full capture. Hashing a
+  /// full-resolution frame straight into dHash's 9x8 grid aliases differently than
+  /// hashing an 80px preview of the same screen, so cross-scale comparisons read as
+  /// "changed", defeat the preview-similarity skip, and trigger unnecessary full
+  /// captures (and the Gemini calls behind them). Downscaling to the same ≤80px
+  /// envelope first keeps both sides of the comparison in one representation.
+  static func previewScaleDHash(of cgImage: CGImage, maxSize: Int = 80) -> UInt64 {
+    let width = cgImage.width
+    let height = cgImage.height
+    guard width > maxSize || height > maxSize else { return dHash(of: cgImage) }
+    let scale = Double(maxSize) / Double(max(width, height))
+    let w = max(1, Int((Double(width) * scale).rounded()))
+    let h = max(1, Int((Double(height) * scale).rounded()))
+    guard
+      let ctx = CGContext(
+        data: nil, width: w, height: h,
+        bitsPerComponent: 8, bytesPerRow: w,
+        space: CGColorSpaceCreateDeviceGray(),
+        bitmapInfo: CGImageAlphaInfo.none.rawValue
+      )
+    else { return dHash(of: cgImage) }
+    ctx.interpolationQuality = .medium
+    ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
+    guard let downscaled = ctx.makeImage() else { return dHash(of: cgImage) }
+    return dHash(of: downscaled)
+  }
+
   /// Check if a frame should skip OCR because it's perceptually identical to the previous frame.
   /// Uses dHash with Hamming distance — small changes (cursor blink, spinners) produce
   /// distance 1-4 and are skipped, while real content changes produce distance 10+ and trigger OCR.
@@ -176,24 +347,21 @@ actor RewindOCRService {
   func extractTextWithBounds(from cgImage: CGImage) async throws -> OCRResult {
     let modeName = "accurate"
 
-    // Log OCR mode once, then only on change; set Sentry tag for queryability
+    // Log OCR mode once, then only on change
     if modeName != lastLoggedOCRMode {
       log("RewindOCRService: OCR mode set to \(modeName)")
-      SentrySDK.configureScope { scope in
-        scope.setTag(value: modeName, key: "ocr_mode")
-      }
       lastLoggedOCRMode = modeName
     }
 
-    return try await withCheckedThrowingContinuation { continuation in
+    return try await Self.awaitSingleVisionCompletion { finish in
       let request = VNRecognizeTextRequest { request, error in
         if let error = error {
-          continuation.resume(throwing: RewindError.ocrFailed(error.localizedDescription))
+          _ = finish(.failure(RewindError.ocrFailed(error.localizedDescription)))
           return
         }
 
         guard let observations = request.results as? [VNRecognizedTextObservation] else {
-          continuation.resume(returning: OCRResult(fullText: "", blocks: [], processedAt: Date()))
+          _ = finish(.success(OCRResult(fullText: "", blocks: [], processedAt: Date())))
           return
         }
 
@@ -232,7 +400,7 @@ actor RewindOCRService {
           blocks: blocks,
           processedAt: Date()
         )
-        continuation.resume(returning: result)
+        _ = finish(.success(result))
       }
 
       request.recognitionLevel = Self.recognitionLevel()
@@ -244,7 +412,7 @@ actor RewindOCRService {
       do {
         try handler.perform([request])
       } catch {
-        continuation.resume(throwing: RewindError.ocrFailed(error.localizedDescription))
+        throw RewindError.ocrFailed(error.localizedDescription)
       }
     }
   }

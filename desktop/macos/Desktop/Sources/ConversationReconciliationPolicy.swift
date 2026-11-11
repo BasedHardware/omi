@@ -125,8 +125,12 @@ enum ConversationReconciliationPolicy {
       }
     }
 
+    let currentByID = Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     var merged = server.map { serverConversation in
-      apply(mutation: nextPending[serverConversation.id], to: serverConversation)
+      apply(
+        mutation: nextPending[serverConversation.id],
+        to: retainingLoadedTranscript(server: serverConversation, current: currentByID[serverConversation.id])
+      )
     }
 
     // Preserve genuinely local in-progress rows that have not reached the
@@ -141,6 +145,46 @@ enum ConversationReconciliationPolicy {
       conversations: merged,
       pendingMutations: nextPending
     )
+  }
+
+  /// Detail endpoints on older servers omit the list-only Home projection.
+  /// Keep that failure while the pipeline is still active; terminal status or
+  /// an explicit projection can acknowledge recovery.
+  static func retainingHomeFailure(
+    server: ServerConversation,
+    current: ServerConversation?
+  ) -> ServerConversation {
+    guard server.homeStep == nil, current?.id == server.id, current?.homeStep == "failed",
+      [.inProgress, .processing, .merging].contains(server.status)
+    else { return server }
+    var retained = server
+    retained.homeStep = "failed"
+    return retained
+  }
+
+  /// List responses omit `transcript_segments`; that means "not loaded", not
+  /// "empty". A row that already holds a loaded transcript (local capture
+  /// cache, or a detail fetch) keeps it so a processing row's provisional
+  /// title does not flicker back to the clock on every list refresh.
+  static func retainingLoadedTranscript(
+    server: ServerConversation,
+    current: ServerConversation?
+  ) -> ServerConversation {
+    guard !server.transcriptSegmentsIncluded, let current, !current.transcriptSegments.isEmpty else {
+      return server
+    }
+    // A projected list row is bound to the server's current transcript. Do not attach a
+    // previously loaded transcript unless its verified projection names the same bytes.
+    if let projection = server.localSummary {
+      guard current.localSummary?.transcriptVerified == true,
+        current.localSummary?.transcriptSha256 == projection.transcriptSha256
+      else { return server }
+    }
+    var retained = server
+    retained.transcriptSegments = current.transcriptSegments
+    retained.transcriptSegmentsIncluded = true
+    retained.localSummary?.transcriptVerified = true
+    return retained
   }
 
   static func apply(
@@ -171,13 +215,17 @@ enum ConversationReconciliationPolicy {
       source: serverConversation.source,
       language: serverConversation.language,
       status: serverConversation.status,
+      homeStep: serverConversation.homeStep,
       discarded: serverConversation.discarded,
       deleted: serverConversation.deleted,
       isLocked: serverConversation.isLocked,
+      visibility: serverConversation.visibility,
       starred: mutation.starred ?? serverConversation.starred,
       folderId: mutation.hasFolderIdMutation ? mutation.folderId : serverConversation.folderId,
       inputDeviceName: serverConversation.inputDeviceName,
-      deferred: serverConversation.deferred
+      deferred: serverConversation.deferred,
+      localSummary: serverConversation.localSummary,
+      captureGroup: serverConversation.captureGroup
     )
   }
 

@@ -9,6 +9,9 @@ private struct EventPayloadBox: @unchecked Sendable {
 
 /// Memory extraction assistant that identifies facts and wisdom from screen content
 actor MemoryAssistant: ProactiveAssistant {
+  typealias ExtractionOverride =
+    @Sendable (_ jpegData: Data, _ appName: String) async throws -> MemoryExtractionResult?
+
   // MARK: - ProactiveAssistant Protocol
 
   nonisolated let identifier = "memory-extraction"
@@ -27,7 +30,9 @@ actor MemoryAssistant: ProactiveAssistant {
 
   // MARK: - Properties
 
-  private let geminiClient: GeminiClient
+  private let geminiClient: GeminiClient?
+  private let extractionOverride: ExtractionOverride?
+  private let durabilityPipeline: MemoryAssistantDurabilityPipeline
   private var isRunning = false
   private var lastAnalysisTime: Date = .distantPast
   private var previousMemories: [ExtractedMemory] = []  // Last 20 extracted memories for deduplication
@@ -68,8 +73,14 @@ actor MemoryAssistant: ProactiveAssistant {
   // MARK: - Initialization
 
   init(apiKey: String? = nil) throws {
-    // Use Gemini Flash for memory extraction (text+vision, no tool loop — Flash-safe)
-    self.geminiClient = try GeminiClient(apiKey: apiKey)
+    // Flash-Lite: vision-capable, off the Vertex PT reservation, and measurably more
+    // prompt-compliant than Flash on this lane (see ModelQoS.Gemini.lightweight).
+    self.geminiClient = try GeminiClient(
+      apiKey: apiKey, model: ModelQoS.Gemini.lightweight, lane: .memory, workload: .extraction)
+    self.extractionOverride = nil
+    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(
+      runner: MemoryAssistantProductionDurability(operations: MemoryAssistantLiveDurabilityOperations())
+    )
 
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     self.frameSignal = stream
@@ -79,6 +90,22 @@ actor MemoryAssistant: ProactiveAssistant {
     Task {
       await self.startProcessing()
     }
+  }
+
+  /// Hermetic analysis-attempt initializer. It uses the same `processFrame`
+  /// catch and analytics boundary as production without constructing a live
+  /// Gemini client or starting the background frame loop.
+  init(
+    extractionOverride: @escaping ExtractionOverride,
+    durabilityRunner: any MemoryAssistantDurabilityRunning
+  ) {
+    self.geminiClient = nil
+    self.extractionOverride = extractionOverride
+    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(runner: durabilityRunner)
+
+    let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
+    self.frameSignal = stream
+    self.frameSignalContinuation = continuation
   }
 
   // MARK: - Processing
@@ -128,10 +155,26 @@ actor MemoryAssistant: ProactiveAssistant {
 
   func analyze(frame: CapturedFrame) async -> AssistantResult? {
     // Skip apps excluded from memory extraction (built-in + user's custom list)
-    let excluded = await MainActor.run { MemoryAssistantSettings.shared.isAppExcluded(frame.appName) }
-    if excluded {
+    let exclusion = await MainActor.run {
+      let settings = MemoryAssistantSettings.shared
+      return (
+        settings.isAppExcluded(frame.appName),
+        settings.excludedHosts,
+        NegativeFeedbackRemediationFeature.isEnabled
+      )
+    }
+    if exclusion.0 {
       log("Memory: Skipping excluded app '\(frame.appName)'")
       return nil
+    }
+    if exclusion.2 {
+      let snapshot = WorkHistoryHandleExtractor.liveSnapshot(
+        appName: frame.appName, windowTitle: frame.windowTitle)
+      let urlString = snapshot.browserURL?.absoluteString ?? snapshot.documentURL?.absoluteString
+      if MemoryHostExclusion.isExcluded(urlString: urlString, excludedHosts: exclusion.1) {
+        log("Memory: Skipping excluded host '\(urlString ?? "")'")
+        return nil
+      }
     }
 
     // Store the latest frame - we'll process it when the interval has passed
@@ -153,6 +196,7 @@ actor MemoryAssistant: ProactiveAssistant {
       memoryResult,
       ownerID: ownerID,
       screenshotId: nil,
+      captureTime: nil,
       sendEvent: sendEvent
     )
   }
@@ -162,12 +206,14 @@ actor MemoryAssistant: ProactiveAssistant {
     _ memoryResult: MemoryExtractionResult,
     ownerID: String,
     screenshotId: Int64?,
+    captureTime: Date? = nil,
     windowTitle: String? = nil,
     sendEvent: @escaping (String, [String: Any]) -> Void
   ) async {
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
     // Check if AI found new memories
     guard memoryResult.hasNewMemory, !memoryResult.memories.isEmpty else {
+      await recordAnalysisOutcome(.noNewMemory, ownerID: ownerID)
       return
     }
 
@@ -183,6 +229,14 @@ actor MemoryAssistant: ProactiveAssistant {
     // Check confidence threshold
     guard memory.confidence >= threshold else {
       log("Memory: [\(confidencePercent)% < \(Int(threshold * 100))%] Filtered: \"\(memory.content)\"")
+      await recordAnalysisOutcome(.filteredLowConfidence, confidence: memory.confidence, ownerID: ownerID)
+      return
+    }
+
+    let subjectGateEnabled = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+    if subjectGateEnabled, !MemoryAdmissionGate.admits(memory) {
+      log("Memory: subject-admission refused: \"\(memory.content)\"")
+      await recordAnalysisOutcome(.filteredSubjectAdmission, confidence: memory.confidence, ownerID: ownerID)
       return
     }
 
@@ -194,40 +248,22 @@ actor MemoryAssistant: ProactiveAssistant {
       previousMemories.removeLast()
     }
 
-    // Save to SQLite first
-    let extractionRecord = await saveMemoryToSQLite(
-      memory: memory,
-      screenshotId: screenshotId,
-      contextSummary: memoryResult.contextSummary,
-      windowTitle: windowTitle,
-      ownerID: ownerID
+    let durability = await durabilityPipeline.persistSyncAndEmit(
+      MemoryAssistantDurabilityRequest(
+        memory: memory,
+        screenshotId: screenshotId,
+        captureTime: captureTime,
+        contextSummary: memoryResult.contextSummary,
+        windowTitle: windowTitle,
+        ownerID: ownerID
+      ),
+      confidence: memory.confidence
     )
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-
-    // Sync to backend with full extraction data
-    if let backendMemory = await syncMemoryToBackend(
-      memory: memory,
-      contextSummary: memoryResult.contextSummary,
-      windowTitle: windowTitle,
-      ownerID: ownerID)
-    {
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-      // Update SQLite record with backend ID
-      if let recordId = extractionRecord?.id {
-        do {
-          try await MemoryStorage.shared.markSynced(id: recordId, serverMemory: backendMemory)
-          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-        } catch {
-          logError("Memory: Failed to update sync status", error: error)
-        }
-      }
-    }
-
-    // Track memory extracted
-    await MainActor.run {
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-      AnalyticsManager.shared.memoryExtracted(memoryCount: 1)
-    }
+    // A failed insert never reaches backend sync and must never be reported as
+    // the historical extraction success. The pipeline already recorded exactly
+    // one closed analysis terminal (and historical success where appropriate).
+    guard durability.shouldEmitMemoryExtracted else { return }
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
     // Send notification if enabled
@@ -255,70 +291,18 @@ actor MemoryAssistant: ProactiveAssistant {
       ])
   }
 
-  /// Save extracted memory to SQLite using MemoryStorage
-  private func saveMemoryToSQLite(
-    memory: ExtractedMemory,
-    screenshotId: Int64?,
-    contextSummary: String,
-    windowTitle: String? = nil,
+  /// Record one analysis-outcome telemetry event, gated on the owner not having
+  /// switched mid-analysis (a prior owner's attempt must never be attributed to the
+  /// current PostHog identity). Supplements — never replaces — `Memory Extracted`,
+  /// which continues to fire only on the local-persistence success terminal below.
+  private func recordAnalysisOutcome(
+    _ outcome: MemoryAssistantTelemetry.AnalysisOutcome,
+    confidence: Double? = nil,
     ownerID: String
-  ) async -> MemoryRecord? {
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-    // Convert ExtractedMemory category to MemoryCategory string
-    let category = memory.category == .interesting ? "interesting" : "system"
-
-    let record = MemoryRecord(
-      backendSynced: false,
-      content: memory.content,
-      category: category,
-      source: "desktop",
-      screenshotId: screenshotId,
-      confidence: memory.confidence,
-      sourceApp: memory.sourceApp,
-      windowTitle: windowTitle,
-      contextSummary: contextSummary
-    )
-
-    do {
-      let inserted = try await MemoryStorage.shared.insertLocalMemory(record)
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-      log("Memory: Saved to SQLite (id: \(inserted.id ?? -1))")
-      return inserted
-    } catch {
-      logError("Memory: Failed to save to SQLite", error: error)
-      return nil
-    }
-  }
-
-  /// Sync memory to backend API, returns backend ID if successful
-  private func syncMemoryToBackend(
-    memory: ExtractedMemory,
-    contextSummary: String? = nil,
-    windowTitle: String? = nil,
-    ownerID: String
-  ) async -> ServerMemory? {
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-    do {
-      // Convert ExtractedMemory category to MemoryCategory
-      let category: MemoryCategory = memory.category == .interesting ? .interesting : .system
-
-      let response = try await APIClient.shared.createMemory(
-        content: memory.content,
-        visibility: "private",
-        category: category,
-        confidence: memory.confidence,
-        sourceApp: memory.sourceApp,
-        contextSummary: contextSummary,
-        windowTitle: windowTitle,
-        expectedOwnerId: ownerID
-      )
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
-
-      log("Memory: Synced to backend (id: \(response.id))")
-      return response
-    } catch {
-      logError("Memory: Failed to sync to backend", error: error)
-      return nil
+  ) async {
+    await MainActor.run {
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      AnalyticsManager.shared.memoryAssistantAnalysisRun(outcome: outcome, confidence: confidence)
     }
   }
 
@@ -329,8 +313,12 @@ actor MemoryAssistant: ProactiveAssistant {
     result: MemoryExtractionResult,
     windowTitle: String?
   ) async {
-    let title = memory.category == .interesting ? "Wisdom Captured" : "Memory Saved"
-    let message = "New memory: \(memory.content)"
+    // One category, one name: every memory notification presents as "Memory" — the
+    // "Wisdom Captured" variant read as an unclassifiable notification type.
+    // The category lives on the badge / system-banner title; the body is the
+    // memory itself. Prefixing "New memory:" stacked a third copy of the same word.
+    let title = "Memory Saved"
+    let message = memory.content
     let context = FloatingBarNotificationContext(
       sourceTitle: title,
       assistantId: identifier,
@@ -379,7 +367,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
   // MARK: - Analysis
 
-  private func processFrame(_ frame: CapturedFrame) async {
+  func processFrame(_ frame: CapturedFrame) async {
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     let enabled = await isEnabled
     guard enabled else {
@@ -391,6 +379,7 @@ actor MemoryAssistant: ProactiveAssistant {
     do {
       guard let result = try await extractMemories(from: frame.jpegData, appName: frame.appName) else {
         log("Memory: Analysis returned no result")
+        await recordAnalysisOutcome(.analysisFailed, ownerID: ownerID)
         return
       }
 
@@ -403,6 +392,7 @@ actor MemoryAssistant: ProactiveAssistant {
         result,
         ownerID: ownerID,
         screenshotId: frame.screenshotId,
+        captureTime: frame.captureTime,
         windowTitle: frame.windowTitle
       ) { type, data in
         let payload = EventPayloadBox(value: data)
@@ -412,10 +402,18 @@ actor MemoryAssistant: ProactiveAssistant {
       }
     } catch {
       logError("Memory extraction error", error: error)
+      await recordAnalysisOutcome(.analysisFailed, ownerID: ownerID)
     }
   }
 
   private func extractMemories(from jpegData: Data, appName: String) async throws -> MemoryExtractionResult? {
+    if let extractionOverride {
+      return try await extractionOverride(jpegData, appName)
+    }
+    guard let geminiClient else {
+      return nil
+    }
+
     // Build context with previous memories for deduplication
     var prompt = "Analyze this screenshot from \(appName).\n\n"
 
@@ -426,19 +424,40 @@ actor MemoryAssistant: ProactiveAssistant {
       }
       prompt += "\nLook for NEW memories that are NOT already in the list above."
     } else {
-      prompt += "Look for memories to extract (system facts about the user, or interesting wisdom from others)."
+      prompt += "Look for memories to extract (system facts about the user)."
     }
 
     // Get current system prompt from settings
     let currentSystemPrompt = await systemPrompt
 
     // Build response schema for memory extraction
-    let memoryProperties: [String: GeminiRequest.GenerationConfig.ResponseSchema.Property] = [
+    let subjectGateEnabled = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+    var memoryProperties: [String: GeminiRequest.GenerationConfig.ResponseSchema.Property] = [
       "content": .init(type: "string", description: "The memory content (max 15 words)"),
-      "category": .init(type: "string", enum: ["system", "interesting"], description: "Memory category"),
+      "category": .init(
+        type: "string",
+        enum: subjectGateEnabled ? ["system"] : ["system", "interesting"],
+        description: "Memory category"),
       "source_app": .init(type: "string", description: "App where memory was found"),
       "confidence": .init(type: "number", description: "Confidence score 0.0-1.0"),
     ]
+    var requiredFields = ["content", "category", "source_app", "confidence"]
+    if subjectGateEnabled {
+      memoryProperties["subject_scope"] = .init(
+        type: "string",
+        enum: ["primary_user", "third_party", "artifact"],
+        description: "Who the memory is about")
+      memoryProperties["subject_evidence"] = .init(
+        type: "string",
+        enum: ["user_authored", "addressed_to_user", "rendered_content", "ui_chrome"],
+        description: "How the subject was established")
+      memoryProperties["contains_credential_or_identifier"] = .init(
+        type: "boolean",
+        description: "True if the memory contains a password, API key, or account identifier")
+      requiredFields.append(contentsOf: [
+        "subject_scope", "subject_evidence", "contains_credential_or_identifier",
+      ])
+    }
 
     let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
       type: "object",
@@ -450,7 +469,7 @@ actor MemoryAssistant: ProactiveAssistant {
           items: .init(
             type: "object",
             properties: memoryProperties,
-            required: ["content", "category", "source_app", "confidence"]
+            required: requiredFields
           )
         ),
         "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
@@ -459,18 +478,13 @@ actor MemoryAssistant: ProactiveAssistant {
       required: ["has_new_memory", "memories", "context_summary", "current_activity"]
     )
 
-    do {
-      let responseText = try await geminiClient.sendRequest(
-        prompt: prompt,
-        imageData: jpegData,
-        systemPrompt: currentSystemPrompt,
-        responseSchema: responseSchema
-      )
+    let responseText = try await geminiClient.sendRequest(
+      prompt: prompt,
+      imageData: jpegData,
+      systemPrompt: currentSystemPrompt,
+      responseSchema: responseSchema
+    )
 
-      return try JSONDecoder().decode(MemoryExtractionResult.self, from: Data(responseText.utf8))
-    } catch {
-      logError("Memory analysis error", error: error)
-      return nil
-    }
+    return try JSONDecoder().decode(MemoryExtractionResult.self, from: Data(responseText.utf8))
   }
 }

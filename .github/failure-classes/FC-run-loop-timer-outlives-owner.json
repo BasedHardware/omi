@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-run-loop-timer-outlives-owner",
+  "violated_contract": "A repeating Timer added to RunLoop.main (or scheduled with Timer.scheduledTimer) is retained by the run loop, not by the object that armed it. An owner that dies without invalidating leaves a repeating source firing after the owner is gone. In production the leak is a silent CPU wake; in the test process it makes every later single-shot RunLoop.main.run(mode:before:) drain return early, so unrelated suites fail only when batched after the leaking one (#13460).",
+  "canonical_prevention": "Every type that arms a repeating run-loop timer invalidates it in deinit as well as in its explicit stop path, and its guard test proves that releasing the armed owner leaves the timer invalid. Test harnesses that wait on queued main-thread work pump the run loop until a deadline instead of a single run(mode:before:) call.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ChatScrollLiveEdgeTests.swift",
+    "desktop/macos/Desktop/Tests/WALServiceUploadTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/",
+    "desktop/macos/Desktop/Tests/"
+  ],
+  "status": "open"
+}

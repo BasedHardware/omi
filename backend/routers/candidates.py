@@ -8,9 +8,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 import database.candidates as candidates_db
 import database.task_recommendations as recommendation_db
 import database.task_intelligence_control as task_control_db
+from database.summary_task_links import SummaryTaskConflictError, SummaryTaskNotFoundError
 from models.action_item import TaskCreatePayload
 from models.candidate import (
     CandidateAction,
+    CandidateAcceptanceRequest,
     CandidateCreate,
     CandidateListResponse,
     CandidateMigrationReport,
@@ -20,15 +22,18 @@ from models.candidate import (
     CandidateResolutionRequest,
     CandidateStatus,
     CandidateSubjectKind,
+    SummaryTaskReference,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 from utils.other import endpoints as auth
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
 from utils.task_intelligence.recommendations import candidate_recommendation_dedupe_key
-from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
+from utils.task_intelligence.chat_first_eligibility import resolve_task_intelligence_for_user
+from utils.task_intelligence import chat_first_e2e_fixture
 from utils.task_intelligence.task_links import TaskLinkValidationError
 from utils.task_intelligence.staged_migration import migrate_staged_tasks
+from utils.task_intelligence.summary_tasks import prepare_summary_task
 
 router = APIRouter()
 
@@ -36,15 +41,20 @@ IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1,
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 SUGGESTED_CANDIDATE_LIMIT = 5
 SUGGESTED_CANDIDATE_RAW_LIMIT = 500
-SUGGESTED_CANDIDATE_FRESHNESS = candidates_db.PENDING_CANDIDATE_REUSE_WINDOW
+SUGGESTED_CANDIDATE_TTL = candidates_db.SUGGESTION_TTL
 
 
 def _require_candidate_write_control(uid: str, account_generation: int) -> None:
     control = task_control_db.get_task_workflow_control(uid)
+    rollout = resolve_task_intelligence_for_user(
+        uid=uid,
+        workflow_mode=control.workflow_mode,
+        account_generation=control.account_generation,
+    )
+    if not rollout.intelligence_product_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     if control.account_generation != account_generation:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Candidate writes are not enabled')
 
 
 def _raise_store_error(exc: candidates_db.CandidateStoreError) -> None:
@@ -87,14 +97,17 @@ def _has_suggested_candidate_shape(
         return False
     if (
         candidate.capture_confidence < MINIMUM_CAPTURE_CONFIDENCE
-        or candidate.ownership_confidence < MINIMUM_CAPTURE_CONFIDENCE
+        or (
+            candidate.ownership_confidence < MINIMUM_CAPTURE_CONFIDENCE
+            and not (candidate.reminder_origin and candidate.reminder_origin.review_reason == 'owner_unresolved')
+        )
         or not candidate.evidence_refs
     ):
         return False
     created_at = candidate.created_at
     if created_at.tzinfo is None:
         return False
-    return not enforce_freshness or created_at >= now - SUGGESTED_CANDIDATE_FRESHNESS
+    return not enforce_freshness or not candidates_db.candidate_has_lapsed(candidate, now=now)
 
 
 def _is_suggested_candidate(candidate: CandidateRecord, *, now: datetime) -> bool:
@@ -183,8 +196,8 @@ def list_candidates(
     surface: Optional[Literal['suggested']] = Query(default=None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    rollout = _require_suggested_rollout(uid)
     if surface == 'suggested':
-        rollout = _require_suggested_rollout(uid)
         records = candidates_db.list_candidates(
             uid,
             status=None,
@@ -210,11 +223,10 @@ def list_candidates(
             ),
             has_more=False,
         )
-    control = task_control_db.get_task_workflow_control(uid)
     records = candidates_db.list_candidates(
         uid,
         status=candidate_status,
-        account_generation=control.account_generation,
+        account_generation=rollout.account_generation,
         limit=limit + 1,
         offset=offset,
     )
@@ -227,12 +239,56 @@ def migrate_staged_candidates(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     control = task_control_db.get_task_workflow_control(uid)
-    return migrate_staged_tasks(uid, control, after_id=request.after_id, limit=request.limit)
+    rollout = resolve_task_intelligence_for_user(
+        uid=uid,
+        workflow_mode=control.workflow_mode,
+        account_generation=control.account_generation,
+    )
+    if not rollout.intelligence_product_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    return migrate_staged_tasks(
+        uid,
+        control.model_copy(update={'workflow_mode': TaskWorkflowMode.read}),
+        after_id=request.after_id,
+        limit=request.limit,
+    )
 
 
 @router.get('/v1/candidates/control', response_model=TaskWorkflowControl, tags=['candidates'])
 def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)) -> TaskWorkflowControl:
-    return task_control_db.get_task_workflow_control(uid)
+    # The named E2E bundle exercises the real desktop transport failure path,
+    # rather than accepting a client-supplied capability override.  This is
+    # false for every non-local/offline account and unavailable in production.
+    if chat_first_e2e_fixture.is_control_unreachable(uid):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Control temporarily unavailable')
+    try:
+        control = task_control_db.get_task_workflow_control(uid)
+    except Exception:
+        # This endpoint selects a shell. An unavailable control record must not
+        # expose a partial new experience or hide the legacy-safe response.
+        return TaskWorkflowControl()
+
+    try:
+        rollout = resolve_task_intelligence_for_user(
+            uid=uid,
+            workflow_mode=control.workflow_mode,
+            account_generation=control.account_generation,
+        )
+    except Exception:
+        # Control resolution is intentionally fail-closed: a backend outage or
+        # malformed generation fence keeps this user in the existing shell.
+        return control.model_copy(
+            update={
+                'workflow_mode': TaskWorkflowMode.off,
+            }
+        )
+
+    # Preserve the generation while projecting the server-owned product decision.
+    return control.model_copy(
+        update={
+            'workflow_mode': TaskWorkflowMode.read if rollout.intelligence_product_enabled else TaskWorkflowMode.off
+        }
+    )
 
 
 @router.post('/v1/candidates/integrations/drain', tags=['candidates'])
@@ -251,11 +307,35 @@ def drain_candidate_integrations(
     }
 
 
+@router.post('/v1/candidates/from-conversation', response_model=CandidateRecord, tags=['candidates'])
+def prepare_conversation_task_candidate(
+    request: SummaryTaskReference,
+    account_generation: AccountGenerationHeader,
+    idempotency_key: IdempotencyHeader,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Prepare only; the reader must separately accept to materialize a task."""
+    _require_candidate_write_control(uid, account_generation)
+    try:
+        return prepare_summary_task(
+            uid,
+            request,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+    except SummaryTaskNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Summary action item not found') from exc
+    except SummaryTaskConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except candidates_db.CandidateStoreError as exc:
+        _raise_store_error(exc)
+
+
 @router.get('/v1/candidates/{candidate_id}', response_model=CandidateRecord, tags=['candidates'])
 def get_candidate(candidate_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    rollout = _require_suggested_rollout(uid)
     candidate = candidates_db.get_candidate(uid, candidate_id)
-    control = task_control_db.get_task_workflow_control(uid)
-    if candidate is None or candidate.account_generation != control.account_generation:
+    if candidate is None or candidate.account_generation != rollout.account_generation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Candidate not found')
     return candidate
 
@@ -265,9 +345,14 @@ def accept_candidate(
     candidate_id: str,
     account_generation: AccountGenerationHeader,
     uid: str = Depends(auth.get_current_user_uid),
+    request: Optional[CandidateAcceptanceRequest] = None,
 ):
     _require_candidate_write_control(uid, account_generation)
     try:
+        if request and request.summary_item:
+            return candidate_service.accept_candidate(
+                uid, candidate_id, account_generation=account_generation, summary_item=request.summary_item
+            )
         return candidate_service.accept_candidate(uid, candidate_id, account_generation=account_generation)
     except TaskLinkValidationError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

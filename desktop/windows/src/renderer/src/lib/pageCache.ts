@@ -1,3 +1,5 @@
+import { readPersistedCache, writePersistedCache } from './persistentCache'
+
 export type ConversationRow = {
   id: string
   title: string
@@ -10,9 +12,19 @@ export type ConversationRow = {
   // For local rows: distinguishes captured recordings from saved Omi chats so
   // the list can badge them differently. Undefined for cloud rows.
   localKind?: 'recording' | 'chat'
+  // For local recording rows in the sync outbox: 'pending' (queued/in-flight/
+  // unconfirmed) or 'failed'. Undefined for chats, cloud rows, and legacy
+  // local-only rows (those show the "Not synced" badge instead).
+  sync?: 'pending' | 'failed'
   // True for optimistic placeholder rows shown immediately on finalize (titled
   // client-side, dropped once the backend's real conversation arrives).
   pending?: boolean
+  // --- Track 4: folders / starred (cloud rows only) ---
+  // Starred flag + folder assignment from the backend Conversation. Undefined for
+  // local-only/chat rows (they have no backend id, so can't be starred/filed —
+  // the star/folder/merge actions are gated to cloud rows; see filtering.ts).
+  starred?: boolean
+  folderId?: string | null
   sortAt: number
 }
 
@@ -20,6 +32,51 @@ export const conversationsCache = {
   rows: null as ConversationRow[] | null,
   error: null as string | null,
   loaded: false
+}
+
+// Persist at most this many rows to the per-uid cold-start snapshot — enough to
+// fill the first screen instantly on the next launch; revalidation loads the rest.
+const CONV_PERSIST_CAP = 200
+const CONV_SURFACE = 'conversations'
+// Set once hydrateConversationsFromDisk has run this session; reset on
+// invalidate so the next account re-hydrates from its own (post-teardown) state.
+let hydratedConversations = false
+
+// Readers that only want the CONTENT of the cache (the Hub's stat ribbon counts
+// conversations off it). The Conversations page owns the fetch; this lets another
+// surface observe the result instead of firing a second identical request.
+const cacheSubscribers = new Set<(rows: ConversationRow[]) => void>()
+
+/** Write the loaded rows and notify observers. The single write path for the cache. */
+export function publishConversationsCache(rows: ConversationRow[]): void {
+  conversationsCache.rows = rows
+  conversationsCache.loaded = true
+  // Mirror the canonical default-view list to the per-uid cold-start snapshot so
+  // the next launch paints it instantly (see hydrateConversationsFromDisk).
+  // Optimistic "pending" placeholders are transient, so they're excluded.
+  // Best-effort and bounded.
+  writePersistedCache(CONV_SURFACE, rows.filter((r) => !r.pending).slice(0, CONV_PERSIST_CAP))
+  cacheSubscribers.forEach((cb) => cb(rows))
+}
+
+// Cold-start hydration: seed the in-memory cache from the per-uid snapshot on the
+// first mount of the session so the Conversations list paints last-known rows
+// immediately instead of a spinner. `loaded` stays false, so the revalidating
+// fetch still runs (silently — see the Conversations mount effect). Runs at
+// component-mount time (not module load) so the signed-in uid is already set.
+export function hydrateConversationsFromDisk(): void {
+  if (hydratedConversations) return
+  hydratedConversations = true
+  if (conversationsCache.rows !== null) return
+  const persisted = readPersistedCache<ConversationRow>(CONV_SURFACE)
+  if (persisted && persisted.length > 0) conversationsCache.rows = persisted
+}
+
+export function subscribeConversationsCache(cb: (rows: ConversationRow[]) => void): () => void {
+  cacheSubscribers.add(cb)
+  return () => {
+    cacheSubscribers.delete(cb)
+  }
 }
 
 // Notify a mounted Conversations list that the local store changed so it can
@@ -38,6 +95,7 @@ export function invalidateConversationsCache(): void {
   conversationsCache.loaded = false
   conversationsCache.rows = null
   conversationsCache.error = null
+  hydratedConversations = false
   subscribers.forEach((cb) => cb())
 }
 
@@ -75,6 +133,8 @@ export function refreshCloudConversations(): void {
 // Pure data ops only — the client-side titling lives in pendingConversations.ts so
 // this module stays firebase-free / unit-testable.
 let pending: ConversationRow[] = []
+// Pending rows are in-memory only; a monotonic suffix keeps same-millisecond ids unique.
+let pendingIdSequence = 0
 
 export function getPendingConversations(): ConversationRow[] {
   return pending
@@ -83,7 +143,7 @@ export function getPendingConversations(): ConversationRow[] {
 // Add a placeholder row (empty title → the list renders "loading…" in italic) and
 // notify mounted lists. Returns its id so the titler can fill it in.
 export function addPendingConversation(transcript: string): string {
-  const id = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const id = `pending-${Date.now()}-${(pendingIdSequence++).toString(36)}`
   const now = Date.now()
   pending = [
     {
@@ -104,6 +164,13 @@ export function addPendingConversation(transcript: string): string {
   return id
 }
 
+// Drop all optimistic pending rows (sign-out teardown — they belong to the
+// outgoing user). Notifies mounted lists so they re-render without the rows.
+export function clearPendingConversations(): void {
+  pending = []
+  subscribers.forEach((cb) => cb())
+}
+
 export function setPendingTopic(id: string, title: string, emoji: string): void {
   pending = pending.map((p) => (p.id === id ? { ...p, title, emoji: emoji || p.emoji } : p))
   subscribers.forEach((cb) => cb())
@@ -117,7 +184,9 @@ export function reconcilePending(cloudRows: ConversationRow[]): void {
   const now = Date.now()
   pending = pending.filter((p) => {
     if (now - p.sortAt > TTL) return false
-    const replaced = cloudRows.some((c) => c.sortAt >= p.sortAt - 30_000 && c.sortAt <= p.sortAt + 180_000)
+    const replaced = cloudRows.some(
+      (c) => c.sortAt >= p.sortAt - 30_000 && c.sortAt <= p.sortAt + 180_000
+    )
     return !replaced
   })
 }

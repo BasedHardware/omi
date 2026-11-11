@@ -40,9 +40,6 @@ struct ModelQoS {
     /// Floating bar responses
     static var floatingBar: String { "claude-sonnet-4-6" }
 
-    /// Synthesis extraction tasks (calendar, gmail, notes, memory import)
-    static var synthesis: String { "claude-haiku-4-5-20251001" }
-
     /// ChatLab test queries
     static var chatLabQuery: String { "claude-sonnet-4-20250514" }
 
@@ -88,11 +85,38 @@ struct ModelQoS {
       }
     }
 
-    /// Insight generation
-    static var insight: String {
+    /// Low-value / schema-bounded lanes evicted from the Vertex PT Flash reservation
+    /// (2026-08-17 workload value ranking + overflow bakeoff, omi-knowledge-base
+    /// vertex-pt-flash-spend): memory extraction, LiveNotes, goals, task dedup,
+    /// task prioritization, home suggestions. Flash-Lite is `shared`/on-demand on
+    /// Vertex — it never competes with task extraction for the 13,450 tok/s PT cap —
+    /// and measured ~0.27x Flash's cost. On the memory lane it is also *more*
+    /// prompt-compliant than Flash (fires 5/12 vs Flash's 8/8 against a prompt that
+    /// says most screens should return nothing). Task extraction must NOT use this
+    /// pin: Flash-Lite measurably extracts from chat sidebars and drops second
+    /// commitments on that lane.
+    static var lightweight: String { "gemini-2.5-flash-lite" }
+
+    /// Voice-typing cleanup: the dictated transcript rewritten as the user
+    /// would have typed it, on the critical path between key-up and paste.
+    ///
+    /// Flash on both tiers, deliberately. Measured live (2026-09-04, named
+    /// bundle): Flash-Lite rewrote "hello there" as "hello then" and left a
+    /// name lowercase — a wording change in text the user is about to send is
+    /// the one failure this feature cannot have. Pro would add seconds of
+    /// thinking to every paste for no gain on a cleanup task.
+    static var dictation: String { "gemini-2.5-flash" }
+
+    /// Live notch suggestions.
+    ///
+    /// Deliberately a tier below the other proactive assistants. This one is triggered by
+    /// ordinary context changes rather than a slow timer, so its call volume is an order of
+    /// magnitude higher; the work — "does this screen plus what Omi already knows justify
+    /// one short sentence?" — is well within Flash-Lite. Cost, not capability, sets this.
+    static var suggestions: String {
       switch activeTier {
-      case .premium: return "gemini-2.5-flash"
-      case .max: return "gemini-2.5-pro"
+      case .premium: return "gemini-2.5-flash-lite"
+      case .max: return "gemini-2.5-flash"
       }
     }
 

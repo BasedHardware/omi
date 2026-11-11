@@ -7,7 +7,7 @@ struct LiveNameSpeakerSheet: View {
   let sampleText: String
   let people: [Person]
   let currentPersonId: String?
-  let onSave: (_ personId: String) -> Void
+  let onSave: (_ personId: String) async -> Bool
   let onCreatePerson: (_ name: String) async -> Person?
   let onDismiss: () -> Void
 
@@ -16,6 +16,8 @@ struct LiveNameSpeakerSheet: View {
   @State private var newPersonName: String = ""
   @State private var duplicateWarning: String? = nil
   @State private var isCreating: Bool = false
+  @State private var isSaving: Bool = false
+  @State private var saveError: String? = nil
 
   /// Preview text from the segment
   private var previewText: String {
@@ -31,16 +33,17 @@ struct LiveNameSpeakerSheet: View {
       HStack {
         Text("Name Speaker")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
         DismissButton(action: onDismiss)
+          .disabled(isSaving)
       }
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.top, OmiSpacing.xl)
       .padding(.bottom, OmiSpacing.md)
 
       Divider()
-        .background(OmiColors.border)
+        .background(Ink.separator)
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xl) {
@@ -54,7 +57,7 @@ struct LiveNameSpeakerSheet: View {
       }
 
       Divider()
-        .background(OmiColors.border)
+        .background(Ink.separator)
 
       // Action buttons
       HStack {
@@ -63,28 +66,34 @@ struct LiveNameSpeakerSheet: View {
           onDismiss()
         }
         .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.sm)
+        .disabled(isSaving)
 
         Button(action: save) {
-          Text("Save")
+          if isSaving {
+            ProgressView().controlSize(.small)
+          } else {
+            Text("Save")
+          }
         }
         .buttonStyle(.plain)
-        .foregroundColor(canSave ? .black : OmiColors.textTertiary)
+        .foregroundColor(canSave && !isSaving ? Ink.surface : Ink.secondary)
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.sm)
         .background(
           Capsule()
-            .fill(canSave ? Color.white : OmiColors.backgroundTertiary)
+            .fill(canSave && !isSaving ? Ink.primary : Ink.rowFillHover)
         )
-        .disabled(!canSave)
+        .disabled(!canSave || isSaving)
       }
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.vertical, OmiSpacing.md)
     }
     .frame(width: 400, height: 400)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
+    .glassContent()
     .onAppear {
       selectedPersonId = currentPersonId
     }
@@ -96,21 +105,21 @@ struct LiveNameSpeakerSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.sm) {
         Circle()
-          .fill(OmiColors.backgroundQuaternary)
+          .fill(Ink.rowFillHover)
           .frame(width: 28, height: 28)
           .overlay(
             Text(String(speakerId))
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
           )
         Text("Speaker \(speakerId)")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
       }
 
       Text("\"\(previewText)\"")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .italic()
         .lineLimit(3)
     }
@@ -118,7 +127,7 @@ struct LiveNameSpeakerSheet: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(OmiColors.backgroundSecondary)
+        .fill(Ink.rowFill)
     )
   }
 
@@ -128,7 +137,7 @@ struct LiveNameSpeakerSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text("Who is this?")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       FlowLayout(spacing: OmiSpacing.sm) {
         // Existing people chips
@@ -148,6 +157,13 @@ struct LiveNameSpeakerSheet: View {
           duplicateWarning = nil
         }
       }
+      .disabled(isSaving)
+
+      if let saveError {
+        Text(saveError)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.errorRed)
+      }
 
       // Inline text field for new person name
       if isAddingNewPerson {
@@ -156,16 +172,16 @@ struct LiveNameSpeakerSheet: View {
             TextField("Person name", text: $newPersonName)
               .textFieldStyle(.plain)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .padding(.horizontal, OmiSpacing.sm)
               .padding(.vertical, OmiSpacing.sm)
               .background(
                 RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                  .fill(OmiColors.backgroundSecondary)
+                  .fill(Ink.rowFill)
               )
               .overlay(
                 RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                  .stroke(duplicateWarning != nil ? OmiColors.error : OmiColors.border, lineWidth: 1)
+                  .stroke(duplicateWarning != nil ? Ink.errorRed : Ink.separator, lineWidth: 1)
               )
               .onChange(of: newPersonName) { _, newValue in
                 validateName(newValue)
@@ -180,21 +196,19 @@ struct LiveNameSpeakerSheet: View {
               Task { await createAndSelect() }
             }) {
               if isCreating {
-                ProgressView()
-                  .scaleEffect(0.5)
-                  .frame(width: 14, height: 14)
+                ProgressView().controlSize(.small)
               } else {
                 Text("Add")
                   .scaledFont(size: OmiType.caption, weight: .medium)
               }
             }
             .buttonStyle(.plain)
-            .foregroundColor(canCreate ? .black : OmiColors.textTertiary)
+            .foregroundColor(canCreate ? Ink.surface : Ink.secondary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.xs)
             .background(
               Capsule()
-                .fill(canCreate ? Color.white : OmiColors.backgroundTertiary)
+                .fill(canCreate ? Ink.primary : Ink.rowFillHover)
             )
             .disabled(!canCreate || isCreating)
           }
@@ -202,16 +216,17 @@ struct LiveNameSpeakerSheet: View {
           if let warning = duplicateWarning {
             Text(warning)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.error)
+              .foregroundColor(Ink.errorRed)
           }
         }
+        .disabled(isSaving)
       }
 
       Text(
         "This name will apply to all segments from this speaker in the current recording and will be saved when the conversation ends."
       )
       .scaledFont(size: OmiType.caption)
-      .foregroundColor(OmiColors.textQuaternary)
+      .foregroundColor(Ink.secondary)
       .padding(.top, OmiSpacing.xxs)
     }
   }
@@ -250,8 +265,18 @@ struct LiveNameSpeakerSheet: View {
   }
 
   private func save() {
-    guard let personId = selectedPersonId else { return }
-    onSave(personId)
+    guard let personId = selectedPersonId, !isSaving else { return }
+    isSaving = true
+    saveError = nil
+    Task {
+      let saved = await onSave(personId)
+      isSaving = false
+      if saved {
+        onDismiss()
+      } else {
+        saveError = "Could not save this speaker. Please try again."
+      }
+    }
   }
 
   private func personChip(label: String, isSelected: Bool, isAction: Bool = false, action: @escaping () -> Void)
@@ -260,17 +285,17 @@ struct LiveNameSpeakerSheet: View {
     Button(action: action) {
       Text(label)
         .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
-        .foregroundColor(isSelected ? .black : (isAction ? OmiColors.accent : OmiColors.textPrimary))
+        .foregroundColor(isSelected ? Ink.surface : Ink.primary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
           Capsule()
-            .fill(isSelected ? Color.white : OmiColors.backgroundTertiary)
+            .fill(isSelected ? Ink.primary : Ink.rowFillHover)
         )
         .overlay(
           Capsule()
             .stroke(
-              isSelected ? OmiColors.border : (isAction ? OmiColors.accent.opacity(0.3) : Color.clear), lineWidth: 1)
+              isSelected ? Ink.separator : (isAction ? Ink.hairline : Color.clear), lineWidth: 1)
         )
     }
     .buttonStyle(.plain)

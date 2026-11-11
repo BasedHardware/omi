@@ -1,0 +1,416 @@
+{
+  "schema_version": 1,
+  "description": "Render one primary summary. Existing overview overrides divergent sections; sections may replace their identical compatibility projection. First usable legacy app result resolves to explicit result identity, even with no app ID.",
+  "cases": [
+    {
+      "id": "projected_overview_once",
+      "conversation": {
+        "structured": {
+          "overview": "## Decisions\n\n- Ship the agreed design.",
+          "sections": [
+            {
+              "heading": "Decisions",
+              "body_markdown": "- Ship the agreed design.",
+              "source_segment_ids": [
+                "s1"
+              ]
+            }
+          ]
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "sections",
+        "content": "## Decisions\n\n- Ship the agreed design.",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "legacy_overview",
+      "conversation": {
+        "structured": {
+          "overview": "Legacy summary.",
+          "sections": []
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "overview",
+        "content": "Legacy summary.",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "edited_overview",
+      "conversation": {
+        "structured": {
+          "overview": "User corrected the decision.",
+          "sections": [
+            {
+              "heading": "Decisions",
+              "body_markdown": "- Ship the agreed design.",
+              "source_segment_ids": [
+                "s1"
+              ]
+            }
+          ]
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "overview",
+        "content": "User corrected the decision.",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "sections_only",
+      "conversation": {
+        "structured": {
+          "overview": "",
+          "sections": [
+            {
+              "heading": "Decisions",
+              "body_markdown": "- Ship the agreed design.",
+              "source_segment_ids": [
+                "s1"
+              ]
+            }
+          ]
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "sections",
+        "content": "## Decisions\n\n- Ship the agreed design.",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "trimmed_overview",
+      "conversation": {
+        "structured": {
+          "overview": " \nLegacy summary.\n ",
+          "sections": []
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "overview",
+        "content": "Legacy summary.",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "empty",
+      "conversation": {
+        "structured": {
+          "overview": "",
+          "sections": []
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "empty",
+        "content": "",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "whitespace_empty",
+      "conversation": {
+        "structured": {
+          "overview": " \n ",
+          "sections": []
+        },
+        "apps_results": [
+          {
+            "app_id": "blank",
+            "content": " \n\t"
+          }
+        ]
+      },
+      "expected": {
+        "kind": "empty",
+        "content": "",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "app_selected",
+      "conversation": {
+        "structured": {
+          "overview": "## Decisions\n\n- Ship the agreed design.",
+          "sections": [
+            {
+              "heading": "Decisions",
+              "body_markdown": "- Ship the agreed design.",
+              "source_segment_ids": [
+                "s1"
+              ]
+            }
+          ]
+        },
+        "apps_results": [
+          {
+            "app_id": "custom",
+            "content": " Custom result. "
+          }
+        ]
+      },
+      "expected": {
+        "kind": "app",
+        "content": "Custom result.",
+        "app_id": "custom",
+        "result_index": 0
+      }
+    },
+    {
+      "id": "blank_app_skipped",
+      "conversation": {
+        "structured": {
+          "overview": "## Decisions\n\n- Ship the agreed design.",
+          "sections": [
+            {
+              "heading": "Decisions",
+              "body_markdown": "- Ship the agreed design.",
+              "source_segment_ids": [
+                "s1"
+              ]
+            }
+          ]
+        },
+        "apps_results": [
+          {
+            "app_id": "blank",
+            "content": " \n"
+          },
+          {
+            "app_id": "custom",
+            "content": "Other result."
+          }
+        ]
+      },
+      "expected": {
+        "kind": "app",
+        "content": "Other result.",
+        "app_id": "custom",
+        "result_index": 1
+      }
+    },
+    {
+      "id": "unattributed_app_is_still_app",
+      "conversation": {
+        "structured": {
+          "overview": "## Decisions\n\n- Ship the agreed design.",
+          "sections": [
+            {
+              "heading": "Decisions",
+              "body_markdown": "- Ship the agreed design.",
+              "source_segment_ids": [
+                "s1"
+              ]
+            }
+          ]
+        },
+        "apps_results": [
+          {
+            "app_id": null,
+            "content": "Imported app output."
+          }
+        ]
+      },
+      "expected": {
+        "kind": "app",
+        "content": "Imported app output.",
+        "app_id": null,
+        "result_index": 0
+      }
+    },
+    {
+      "id": "blank_app_falls_back",
+      "conversation": {
+        "structured": {
+          "overview": "## Decisions\n\n- Ship the agreed design.",
+          "sections": [
+            {
+              "heading": "Decisions",
+              "body_markdown": "- Ship the agreed design.",
+              "source_segment_ids": [
+                "s1"
+              ]
+            }
+          ]
+        },
+        "apps_results": [
+          {
+            "app_id": "blank",
+            "content": " "
+          }
+        ]
+      },
+      "expected": {
+        "kind": "sections",
+        "content": "## Decisions\n\n- Ship the agreed design.",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "body_only",
+      "conversation": {
+        "structured": {
+          "overview": "",
+          "sections": [
+            {
+              "heading": "",
+              "body_markdown": " Text without heading. ",
+              "source_segment_ids": []
+            }
+          ]
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "sections",
+        "content": "Text without heading.",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "heading_only_is_empty",
+      "conversation": {
+        "structured": {
+          "overview": "",
+          "sections": [
+            {
+              "heading": "Empty heading",
+              "body_markdown": " ",
+              "source_segment_ids": []
+            }
+          ]
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "empty",
+        "content": "",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "duplicate_headings",
+      "conversation": {
+        "structured": {
+          "overview": "",
+          "sections": [
+            {
+              "heading": "Topic",
+              "body_markdown": "First detail.",
+              "source_segment_ids": [
+                "s1"
+              ]
+            },
+            {
+              "heading": "Topic",
+              "body_markdown": "Second detail.",
+              "source_segment_ids": [
+                "s2"
+              ]
+            }
+          ]
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "sections",
+        "content": "## Topic\n\nFirst detail.\n\n## Topic\n\nSecond detail.",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "trimmed_sections",
+      "conversation": {
+        "structured": {
+          "overview": " \n## Decisions\n\n- Ship the agreed design.\n",
+          "sections": [
+            {
+              "heading": " Decisions ",
+              "body_markdown": " - Ship the agreed design.\n",
+              "source_segment_ids": [
+                "s1"
+              ]
+            }
+          ]
+        },
+        "apps_results": []
+      },
+      "expected": {
+        "kind": "sections",
+        "content": "## Decisions\n\n- Ship the agreed design.",
+        "app_id": null,
+        "result_index": null
+      }
+    },
+    {
+      "id": "duplicate_app_id_with_blank_first_result",
+      "conversation": {
+        "structured": {
+          "overview": "First party overview",
+          "sections": []
+        },
+        "apps_results": [
+          {
+            "app_id": "same",
+            "content": "  "
+          },
+          {
+            "app_id": "same",
+            "content": "Selected second result"
+          }
+        ]
+      },
+      "expected": {
+        "kind": "app",
+        "content": "Selected second result",
+        "app_id": "same",
+        "result_index": 1
+      }
+    },
+    {
+      "id": "multiple_unattributed_app_results",
+      "conversation": {
+        "structured": {
+          "overview": "First party overview",
+          "sections": []
+        },
+        "apps_results": [
+          {
+            "app_id": null,
+            "content": "Primary unknown app"
+          },
+          {
+            "app_id": null,
+            "content": "Secondary unknown app"
+          }
+        ]
+      },
+      "expected": {
+        "kind": "app",
+        "content": "Primary unknown app",
+        "app_id": null,
+        "result_index": 0
+      }
+    }
+  ]
+}

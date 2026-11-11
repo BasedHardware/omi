@@ -109,37 +109,82 @@ private actor SuspendedContextClient: TaskContextualResurfacingClient {
 }
 
 private func transitionContextTestOwner(to ownerID: String?) async {
-  _ = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-    plannedNextOwner: { _, _ in ownerID },
-    quiesceVoice: { _, _ in },
-    retargetLocalStorage: { _, _ in },
-    ownerDidChange: {
-      await MainActor.run {
-        NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
-      }
-    }
-  ) { defaults in
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    if let ownerID {
-      defaults.set(ownerID, forKey: .authUserId)
-    } else {
-      defaults.removeObject(forKey: .authUserId)
-    }
+  do {
+    _ = try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+      plannedNextOwner: { _, _ in ownerID },
+      quiesceVoice: { _, _ in },
+      retargetLocalStorage: { _, _ in },
+      ownerDidChange: {
+        await MainActor.run {
+          NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+        }
+      },
+      { defaults in
+        defaults.removeObject(forKey: .automationOwnerOverride)
+        if let ownerID {
+          defaults.set(ownerID, forKey: .authUserId)
+        } else {
+          defaults.removeObject(forKey: .authUserId)
+        }
+      })
+  } catch {
+    XCTFail("owner transition failed: \(error)")
   }
 }
 
 final class TaskInterruptionLedgerOwnerIsolationTests: XCTestCase {
   func testDefaultOwnerTracksAuthenticationChanges() {
     let suite = "TaskInterruptionLedgerOwnerIsolationTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
+    guard let defaults = UserDefaults(suiteName: suite) else {
+      XCTFail("Failed to create isolated defaults suite")
+      return
+    }
     defer { defaults.removePersistentDomain(forName: suite) }
     let persistence = TaskInterruptionLedgerDefaults(defaults: defaults)
-    defaults.set("owner-a", forKey: "auth_userId")
+    defaults.set("owner-a", forKey: .authUserId)
     persistence.save(TaskInterruptionLedger(sentAt: [Date(timeIntervalSince1970: 42)]))
-    defaults.set("owner-b", forKey: "auth_userId")
+    defaults.set("owner-b", forKey: .authUserId)
     XCTAssertTrue(persistence.load().sentAt.isEmpty)
-    defaults.set("owner-a", forKey: "auth_userId")
+    defaults.set("owner-a", forKey: .authUserId)
     XCTAssertEqual(persistence.load().sentAt.count, 1)
+  }
+
+  func testLegacyQuietHoursTraceDecodesWithoutResettingLedger() throws {
+    let suite = "TaskInterruptionLedgerOwnerIsolationTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let persistence = TaskInterruptionLedgerDefaults(defaults: defaults, ownerID: "owner-a")
+    let payload: [String: Any] = [
+      "sentAt": [42.0],
+      "dedupeExpirations": ["dedupe-key": 4_200.0],
+      "lastTrace": [
+        "schemaVersion": 1,
+        "decisionID": "decision",
+        "recommendationID": "recommendation",
+        "interventionID": "intervention",
+        "dedupeHash": "sha256:legacy",
+        "cohort": "dogfood",
+        "reason": "quiet_hours",
+        "evaluatedAt": 123.0,
+      ],
+    ]
+    defaults.set(
+      try JSONSerialization.data(withJSONObject: payload),
+      forKey: .taskInterruptionLedger(ownerID: "owner-a")
+    )
+
+    let loaded = persistence.load()
+    XCTAssertEqual(loaded.sentAt, [Date(timeIntervalSinceReferenceDate: 42)])
+    XCTAssertEqual(loaded.dedupeExpirations["dedupe-key"], Date(timeIntervalSinceReferenceDate: 4_200))
+    XCTAssertEqual(loaded.lastTrace?.reason, .legacyQuietHours)
+
+    persistence.save(loaded)
+    let saved = try XCTUnwrap(
+      defaults.data(forKey: .taskInterruptionLedger(ownerID: "owner-a"))
+    )
+    let savedJSON = try XCTUnwrap(String(data: saved, encoding: .utf8))
+    XCTAssertFalse(savedJSON.contains("\"quiet_hours\""))
+    XCTAssertTrue(savedJSON.contains("\"legacy_quiet_hours\""))
   }
 }
 
@@ -203,16 +248,16 @@ final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient
 
 final class TaskContextualResurfacingTests: XCTestCase {
   private let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
-  private var previousOwnerID: String?
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
 
   override func setUp() async throws {
     try await super.setUp()
-    previousOwnerID = RuntimeOwnerIdentity.currentOwnerId()
-    await transitionContextTestOwner(to: "context-test-owner")
+    ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture?.establish(authOwnerID: "context-test-owner")
   }
 
   override func tearDown() async throws {
-    await transitionContextTestOwner(to: previousOwnerID)
+    await ownerFixture?.restore()
     try await super.tearDown()
   }
 
@@ -702,6 +747,64 @@ final class TaskContextualResurfacingTests: XCTestCase {
   }
 
   @MainActor
+  func testEligibilityDoesNotConsumeFrequencyUntilPresentation() async throws {
+    await transitionContextTestOwner(to: "notification-presentation-owner")
+    let snapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    let priorFrequency = UserDefaults.standard.object(
+      forKey: NotificationService.frequencyDefaultsKey)
+    defer {
+      Self.restoreDefault(priorFrequency, key: NotificationService.frequencyDefaultsKey)
+    }
+    UserDefaults.standard.set(3, forKey: NotificationService.frequencyDefaultsKey)
+
+    XCTAssertTrue(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot, now: baseDate))
+    XCTAssertTrue(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot,
+        now: baseDate.addingTimeInterval(1)),
+      "a preflight that never paints must not consume the user's frequency window")
+
+    service.recordProactiveNotificationPresentedForTesting(
+      assistantId: "insight", authorizationSnapshot: snapshot, now: baseDate)
+    XCTAssertFalse(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot,
+        now: baseDate.addingTimeInterval(1)),
+      "a visible insight notification must advance the shared global frequency clock")
+  }
+
+  @MainActor
+  func testProactiveEligibilityIgnoresTimeOfDay() async throws {
+    await transitionContextTestOwner(to: "notification-always-on-owner")
+    let snapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    let priorFrequency = UserDefaults.standard.object(
+      forKey: NotificationService.frequencyDefaultsKey)
+    defer {
+      Self.restoreDefault(priorFrequency, key: NotificationService.frequencyDefaultsKey)
+    }
+    // Level 3 exercises the real cooldown path; Maximum would return before any timestamp check.
+    UserDefaults.standard.set(3, forKey: NotificationService.frequencyDefaultsKey)
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+    let earlyMorning = try XCTUnwrap(
+      calendar.date(from: DateComponents(year: 2026, month: 8, day: 13, hour: 2)))
+    let lateNight = try XCTUnwrap(
+      calendar.date(from: DateComponents(year: 2026, month: 8, day: 13, hour: 23)))
+
+    XCTAssertTrue(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot, now: earlyMorning))
+    XCTAssertTrue(
+      service.proactiveNotificationEligibleForTesting(
+        assistantId: "insight", authorizationSnapshot: snapshot, now: lateNight))
+  }
+
+  @MainActor
   func testStaleContextualInterruptionCannotConsumeLedgerMetadataOrOwnerBThrottle() async throws {
     await transitionContextTestOwner(to: "notification-owner-a")
     let ownerASnapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
@@ -880,7 +983,6 @@ final class TaskContextualResurfacingTests: XCTestCase {
       (environment(ambientFrequency: false), candidate(), .frequencyBudget),
       (environment(task: false), candidate(), .taskDisabled),
       (environment(focus: true), candidate(), .focusSuppressed),
-      (environment(snoozed: true), candidate(), .snoozed),
       (environment(), candidate(expiresAt: baseDate), .expired),
       (environment(), candidate(canWait: true), .canWait),
     ]
@@ -894,30 +996,6 @@ final class TaskContextualResurfacingTests: XCTestCase {
         expected
       )
     }
-  }
-
-  func testInterruptionGateHonorsQuietHoursAcrossMidnight() {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    let late = ISO8601DateFormatter().date(from: "2027-01-15T23:00:00Z")!
-    let midday = ISO8601DateFormatter().date(from: "2027-01-15T12:00:00Z")!
-
-    XCTAssertEqual(
-      gate().evaluate(
-        candidate: candidate(expiresAt: late.addingTimeInterval(60)),
-        configuration: configuration(quiet: true),
-        environment: environment(now: late, calendar: calendar)
-      ).reason,
-      .quietHours
-    )
-    XCTAssertEqual(
-      gate().evaluate(
-        candidate: candidate(expiresAt: midday.addingTimeInterval(60)),
-        configuration: configuration(),
-        environment: environment(now: midday, calendar: calendar)
-      ).reason,
-      .allowed
-    )
   }
 
   func testInterruptionGateEnforcesDedupeSpacingAndDailyBudget() {
@@ -980,17 +1058,40 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ).reason, .minimumSpacing)
   }
 
-  func testDogfoodAndShippedEnrollmentRemainIndependent() {
-    let dogfood = configuration(enabled: true, shipped: false)
-    XCTAssertTrue(dogfood.isEnrolled(cohort: .dogfood))
-    XCTAssertFalse(dogfood.isEnrolled(cohort: .beta))
-    XCTAssertFalse(dogfood.isEnrolled(cohort: .production))
+  func testEnrollmentIsDogfoodOnlyAndRequiresOptIn() {
+    let optedIn = configuration(enabled: true)
+    XCTAssertTrue(optedIn.isEnrolled(cohort: .dogfood))
+    XCTAssertFalse(optedIn.isEnrolled(cohort: .beta))
+    XCTAssertFalse(optedIn.isEnrolled(cohort: .production))
 
-    let shipped = configuration(enabled: true, shipped: true)
-    XCTAssertTrue(shipped.isEnrolled(cohort: .dogfood))
-    XCTAssertTrue(shipped.isEnrolled(cohort: .beta))
-    XCTAssertTrue(shipped.isEnrolled(cohort: .production))
-    XCTAssertFalse(configuration(enabled: false, shipped: true).isEnrolled(cohort: .production))
+    let optedOut = configuration(enabled: false)
+    for cohort in [ProactiveTaskCohort.dogfood, .beta, .production] {
+      XCTAssertFalse(optedOut.isEnrolled(cohort: cohort))
+    }
+  }
+
+  func testLegacyShippedCohortsPayloadCannotEnrollBetaOrProduction() throws {
+    let legacyOptedIn = Data(
+      """
+      {"schemaVersion":1,"userOptedIn":true,"shippedCohortsEnabled":true,\
+      "dailyLimit":2,"minimumSpacing":5400,"allowedPreparationKinds":[]}
+      """.utf8)
+    let decoded = try JSONDecoder().decode(
+      ProactiveTaskInterruptionConfiguration.self, from: legacyOptedIn)
+    XCTAssertTrue(decoded.isEnrolled(cohort: .dogfood))
+    XCTAssertFalse(decoded.isEnrolled(cohort: .beta))
+    XCTAssertFalse(decoded.isEnrolled(cohort: .production))
+
+    let legacyOptedOut = Data(
+      """
+      {"schemaVersion":1,"userOptedIn":false,"shippedCohortsEnabled":true,\
+      "dailyLimit":2,"minimumSpacing":5400,"allowedPreparationKinds":[]}
+      """.utf8)
+    let decodedOptedOut = try JSONDecoder().decode(
+      ProactiveTaskInterruptionConfiguration.self, from: legacyOptedOut)
+    for cohort in [ProactiveTaskCohort.dogfood, .beta, .production] {
+      XCTAssertFalse(decodedOptedOut.isEnrolled(cohort: cohort))
+    }
   }
 
   @MainActor
@@ -1243,18 +1344,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
 
   private func configuration(
     enabled: Bool = true,
-    shipped: Bool = false,
     dailyLimit: Int = 2,
-    spacing: TimeInterval = 90 * 60,
-    quiet: Bool = false
+    spacing: TimeInterval = 90 * 60
   ) -> ProactiveTaskInterruptionConfiguration {
     ProactiveTaskInterruptionConfiguration(
       userOptedIn: enabled,
-      shippedCohortsEnabled: shipped,
       dailyLimit: dailyLimit,
       minimumSpacing: spacing,
-      quietHoursStartMinute: quiet ? 22 * 60 : 0,
-      quietHoursEndMinute: quiet ? 8 * 60 : 0,
       allowedPreparationKinds: []
     )
   }
@@ -1266,7 +1362,6 @@ final class TaskContextualResurfacingTests: XCTestCase {
     ambientFrequency: Bool = true,
     task: Bool = true,
     focus: Bool = false,
-    snoozed: Bool = false,
     now: Date? = nil,
     calendar: Calendar = Calendar(identifier: .gregorian)
   ) -> TaskInterruptionEnvironment {
@@ -1277,9 +1372,16 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ambientFrequencyEligible: ambientFrequency,
       taskNotificationsEnabled: task,
       focusSuppressed: focus,
-      snoozed: snoozed,
       now: now ?? baseDate,
       calendar: calendar
     )
+  }
+
+  private static func restoreDefault(_ value: Any?, key: String) {
+    if let value {
+      UserDefaults.standard.set(value, forKey: key)
+    } else {
+      UserDefaults.standard.removeObject(forKey: key)
+    }
   }
 }

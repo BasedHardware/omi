@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:omi/models/stt_response_schema.dart';
@@ -93,6 +93,16 @@ class SchemaBasedSttProvider implements ISttProvider {
   final SttFileUploadConfig? fileUploadConfig;
   final http.Client _client;
 
+  // A single custom-STT request used to hang for a full 60s
+  // before failing, which made every buffered chunk feel like a freeze
+  // during an outage. Fail fast and retry a couple of times with backoff
+  // instead — most transient blips (a dropped LAN packet, a slow cold
+  // start) resolve within a retry or two, and a real outage now surfaces in
+  // well under 60s per chunk instead of after it.
+  static const _requestTimeout = Duration(seconds: 10);
+  static const _maxAttempts = 3;
+  static const _retryBackoff = [Duration(seconds: 1), Duration(seconds: 2)];
+
   SchemaBasedSttProvider({
     required this.apiUrl,
     required this.schema,
@@ -103,8 +113,9 @@ class SchemaBasedSttProvider implements ISttProvider {
     String? requestType, // String version for unified config
     this.jsonBodyBuilder,
     this.fileUploadConfig,
+    @visibleForTesting http.Client? client,
   })  : requestBodyType = requestBodyType ?? SttRequestBodyType.fromString(requestType),
-        _client = http.Client();
+        _client = client ?? http.Client();
 
   factory SchemaBasedSttProvider.openAI({required String apiKey, String model = 'whisper-1', String language = 'en'}) {
     return SchemaBasedSttProvider(
@@ -277,6 +288,31 @@ class SchemaBasedSttProvider implements ISttProvider {
     }
   }
 
+  /// Retries [attempt] on network exceptions (including the 10s timeout
+  /// above) and 5xx responses, with a short backoff between tries. 4xx
+  /// responses are returned immediately — retrying a bad request/auth error
+  /// would not help. Rethrows/returns the last outcome once attempts run out.
+  Future<http.Response> _sendWithRetry(Future<http.Response> Function() attempt) async {
+    for (var i = 0; i < _maxAttempts; i++) {
+      final isLastAttempt = i == _maxAttempts - 1;
+      try {
+        final response = await attempt();
+        if (response.statusCode < 500 || isLastAttempt) {
+          return response;
+        }
+        CustomSttLogService.instance.warning(
+          'SchemaSTT',
+          'HTTP ${response.statusCode}, retrying (${i + 1}/$_maxAttempts)',
+        );
+      } catch (e) {
+        if (isLastAttempt) rethrow;
+        CustomSttLogService.instance.warning('SchemaSTT', 'Request failed ($e), retrying (${i + 1}/$_maxAttempts)');
+      }
+      await Future.delayed(_retryBackoff[i]);
+    }
+    throw StateError('unreachable');
+  }
+
   @override
   Future<SttTranscriptionResult?> transcribe(dynamic audioData, {double audioOffsetSeconds = 0}) async {
     final Uint8List audioBytes = audioData is Uint8List ? audioData : Uint8List.fromList(audioData);
@@ -292,8 +328,9 @@ class SchemaBasedSttProvider implements ISttProvider {
 
       switch (requestBodyType) {
         case SttRequestBodyType.rawBinary:
-          response =
-              await _client.post(uri, headers: defaultHeaders, body: audioBytes).timeout(const Duration(seconds: 60));
+          response = await _sendWithRetry(
+            () => _client.post(uri, headers: defaultHeaders, body: audioBytes).timeout(_requestTimeout),
+          );
           break;
 
         case SttRequestBodyType.jsonBase64:
@@ -301,19 +338,28 @@ class SchemaBasedSttProvider implements ISttProvider {
             throw Exception('jsonBodyBuilder required for jsonBase64 request type');
           }
           final audioInput = audioUrlFromUpload ?? base64Encode(audioBytes);
-          response = await _client
-              .post(uri, headers: defaultHeaders, body: jsonEncode(jsonBodyBuilder!(audioInput)))
-              .timeout(const Duration(seconds: 60));
+          response = await _sendWithRetry(
+            () => _client
+                .post(uri, headers: defaultHeaders, body: jsonEncode(jsonBodyBuilder!(audioInput)))
+                .timeout(_requestTimeout),
+          );
           break;
 
         case SttRequestBodyType.multipartForm:
-          final request = http.MultipartRequest('POST', uri)
-            ..headers.addAll(defaultHeaders)
-            ..fields.addAll(defaultFields)
-            ..files.add(http.MultipartFile.fromBytes(audioFieldName, audioBytes, filename: 'audio.wav'));
+          response = await _sendWithRetry(() async {
+            final request = http.MultipartRequest('POST', uri)
+              ..headers.addAll(defaultHeaders)
+              ..fields.addAll(defaultFields)
+              ..files.add(http.MultipartFile.fromBytes(audioFieldName, audioBytes, filename: 'audio.wav'));
 
-          final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
-          response = await http.Response.fromStream(streamedResponse);
+            // BaseRequest.send() (no receiver) spins up its own
+            // throwaway http.Client() instead of using this provider's
+            // _client, bypassing both the injected test client and (in
+            // practice) any client-level config. Route it through _client
+            // like every other request path here.
+            final streamedResponse = await _client.send(request).timeout(_requestTimeout);
+            return http.Response.fromStream(streamedResponse);
+          });
           break;
       }
 

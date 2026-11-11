@@ -78,55 +78,51 @@ class AssistantCoordinator {
   /// and window title changes — one unified path with one delay mechanism.
   /// - Returns: `true` if a context switch was detected and fired.
   @discardableResult
-  func checkContextSwitch(newApp: String, newWindowTitle: String?) -> Bool {
+  func checkContextSwitch(newApp: String, newWindowTitle: String?) async -> Bool {
     guard lastTrackedApp != nil else {
       lastTrackedApp = newApp
       lastTrackedWindowTitle = newWindowTitle
       return false
     }
-
-    let changed = ContextDetection.didContextChange(
-      fromApp: lastTrackedApp,
-      fromWindowTitle: lastTrackedWindowTitle,
-      toApp: newApp,
-      toWindowTitle: newWindowTitle
-    )
-    guard changed else { return false }
-
+    guard
+      ContextDetection.didContextChange(
+        fromApp: lastTrackedApp, fromWindowTitle: lastTrackedWindowTitle,
+        toApp: newApp, toWindowTitle: newWindowTitle
+      )
+    else { return false }
     let departingFrame = lastTrackedFrame
-    log(
-      "Context switch detected: \(lastTrackedApp ?? "nil") (\(ContextDetection.normalizeWindowTitle(lastTrackedWindowTitle) ?? "nil")) -> \(newApp) (\(ContextDetection.normalizeWindowTitle(newWindowTitle) ?? "nil"))"
-    )
-
-    // Update tracking state
     lastTrackedApp = newApp
     lastTrackedWindowTitle = newWindowTitle
-
-    // Context is an input to canonical re-evaluation, never permission to
-    // notify. Privacy-excluded apps do not even produce a normalized hash.
-    if AuthService.shared.isSignedIn,
-      !RewindSettings.shared.isAppExcluded(newApp),
-      let event = TaskLocalContextEvent.appWindow(
-        appName: newApp,
-        windowTitle: newWindowTitle
-      )
+    if AuthService.shared.isSignedIn, !RewindSettings.shared.isAppExcluded(newApp),
+      let event = TaskLocalContextEvent.appWindow(appName: newApp, windowTitle: newWindowTitle)
     {
-      let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      let matched = await ContextSubjectBindingService.shared.resolve(event)
       Task { await TaskContextualResurfacingService.shared.observe(matched) }
     }
-
-    // Fire on all assistants
-    for (_, assistant) in assistants {
-      Task {
-        await assistant.onContextSwitch(
-          departingFrame: departingFrame,
-          newApp: newApp,
-          newWindowTitle: newWindowTitle
-        )
-      }
-    }
-
+    await fireContextSwitchOnAllAssistants(
+      departingFrame: departingFrame, newApp: newApp, newWindowTitle: newWindowTitle)
     return true
+  }
+
+  /// Every registered assistant receives context changes independently of storage.
+  func fireContextSwitchOnAllAssistants(
+    departingFrame: CapturedFrame?,
+    newApp: String,
+    newWindowTitle: String?
+  ) async {
+    // Capture the arriving context before any assistant's awaited work so the
+    // reminder observation below cannot pair a pre-await title with a
+    // post-await frontmost app when the user switches windows mid-loop.
+    let arrivingContext = ContextReminderCoordinator.frontmostSnapshotContext()
+    for (_, assistant) in assistants {
+      await assistant.onContextSwitch(
+        departingFrame: departingFrame,
+        newApp: newApp,
+        newWindowTitle: newWindowTitle
+      )
+    }
+    await ContextReminderCoordinator.shared.observeFrontmostChange(
+      arriving: arrivingContext, appName: newApp, windowTitle: newWindowTitle)
   }
 
   // MARK: - Frame Tracking & Distribution
@@ -257,7 +253,6 @@ class AssistantCoordinator {
   /// Register the default set of assistants
   func registerDefaultAssistants() throws {
     // These will be added as we create the assistants
-    // try register(FocusAssistant())
     // try register(TaskAssistant())
   }
 }

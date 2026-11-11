@@ -24,7 +24,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }()
 
   func testDecodesV17TierAndMemoryIdAlias() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "memory_id": "mem-short-1",
         "content": "Short-term synthetic memory",
@@ -35,7 +36,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "captured_at": "2026-06-21T09:59:00Z",
         "expires_at": "2026-06-28T10:00:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -48,7 +49,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testDecodesMemoryTierAlias() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-archive-1",
         "content": "Archived synthetic memory",
@@ -57,7 +59,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -68,7 +70,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testMissingTierDefaultsLegacyMemoryToLongTerm() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "legacy-1",
         "content": "Legacy memory",
@@ -76,7 +79,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -84,25 +87,62 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     XCTAssertTrue(memory.tier.isDefaultAccessible)
     // Legacy records carry no tier from the backend, so the badge is suppressed.
     XCTAssertFalse(memory.tierIsExplicit)
+    XCTAssertTrue(SiriIndexScope.memory(MemoryRecord.from(memory), now: Date()))
   }
 
-  func testUnknownPresentTierFailsClosed() {
-    let json = """
+  func testNullAndActiveTiersStayIndexableWhileArchiveAndUnknownAreExcluded() throws {
+    let base: [String: Any] = [
+      "id": "legacy-1", "content": "Legacy memory", "category": "interesting",
+      "created_at": "2026-06-21T10:00:00Z", "updated_at": "2026-06-21T10:05:00Z",
+    ]
+    let cases: [(String, Any?, Bool)] = [
+      ("absent", nil, true), ("null", NSNull(), true),
+      ("short_term", "short_term", true), ("long_term", "long_term", true),
+      ("archive", "archive", false),
+    ]
+    for (name, tier, expected) in cases {
+      var payload = base
+      if name != "absent" { payload["memory_tier"] = tier }
+      let data = try JSONSerialization.data(withJSONObject: payload)
+      let row = try decoder.decode(ServerMemory.self, from: data)
+      XCTAssertEqual(SiriIndexScope.memory(MemoryRecord.from(row), now: Date()), expected, name)
+    }
+    var unknown = base
+    unknown["memory_tier"] = "future_tier"
+    XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: JSONSerialization.data(withJSONObject: unknown)))
+  }
+
+  func testUnknownLegacyTierAliasesAreIgnoredLikeBackendExtras() throws {
+    let payload: [String: Any] = [
+      "id": "legacy-extra", "content": "Legacy memory", "category": "interesting",
+      "created_at": "2026-06-21T10:00:00Z", "updated_at": "2026-06-21T10:05:00Z",
+      "layer": "future_tier", "tier": "future_tier",
+    ]
+    let memory = try decoder.decode(ServerMemory.self, from: JSONSerialization.data(withJSONObject: payload))
+    XCTAssertEqual(memory.tier, .longTerm)
+    XCTAssertFalse(memory.tierIsExplicit)
+    XCTAssertTrue(SiriIndexScope.memory(MemoryRecord.from(memory), now: Date()))
+  }
+
+  func testUnknownCanonicalMemoryTierFailsClosed() {
+    let json = Data(
+      """
       {
         "id": "mem-future",
         "content": "Future tier",
         "category": "system",
-        "tier": "future_archive",
+        "memory_tier": "future_archive",
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
   }
 
   func testConflictingTierAliasesFailClosed() {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-conflict",
         "content": "Conflicting tier",
@@ -112,13 +152,14 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
   }
 
   func testMatchingTierAliasesDecode() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-match",
         "content": "Matching tier",
@@ -128,7 +169,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
     XCTAssertEqual(memory.tier, .archive)
@@ -139,7 +180,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     // backend behaviour), which differs from id. Such rows must NOT fail
     // decoding — a single throw would abort the entire memories array and
     // break the desktop memories load. Prefer id when present.
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-a",
         "memory_id": "conv-legacy-1",
@@ -149,14 +191,15 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
     XCTAssertEqual(memory.id, "mem-a")
   }
 
   func testMatchingIdAliasesDecode() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-a",
         "memory_id": "mem-a",
@@ -166,14 +209,15 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
     XCTAssertEqual(memory.id, "mem-a")
   }
 
   func testDecodesLayerFieldWithoutTierAliases() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-layer-1",
         "content": "Canonical short-term via layer field",
@@ -183,7 +227,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "updated_at": "2026-06-21T10:05:00Z",
         "expires_at": "2026-06-28T10:00:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -193,7 +237,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testLayerPreferredOverTierAlias() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-layer-priority",
         "content": "Layer wins when all aliases agree on short_term",
@@ -204,7 +249,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
@@ -213,7 +258,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
   }
 
   func testConflictingLayerAndTierAliasesFailClosed() {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-layer-conflict",
         "content": "Conflicting layer",
@@ -223,13 +269,14 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
   }
 
   func testLayerOnlyLongTermSetsExplicitBadge() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "id": "mem-layer-lt",
         "content": "Canonical long-term via layer field",
@@ -238,12 +285,252 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }
-      """.data(using: .utf8)!
+      """.utf8)
 
     let memory = try decoder.decode(ServerMemory.self, from: json)
 
     XCTAssertEqual(memory.tier, .longTerm)
     XCTAssertTrue(memory.tierIsExplicit)
+  }
+
+  func testDecodesBoundedLedgerPayloadsIntoCanonicalMirrorMetadata() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-ledger-trigger",
+        "uid": "mem-ledger-trigger",
+        "content": "When release work is active",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "ledger_schema_version": "knowledge_ledger.v1",
+        "kind": "trigger",
+        "subject_scope": "primary_user",
+        "subject_entity_id": "user",
+        "intent_backed": true,
+        "curation_weight": 4,
+        "status": "active",
+        "valid_at": "2026-06-21T10:00:00Z",
+        "write_reason": "standing_trigger",
+        "object_entity_ids": ["project-release"],
+        "qualifiers": {"source": "user"},
+        "arguments": {"owner": "user"},
+        "trigger_condition": {
+          "schema_version": "jit_trigger.v1",
+          "keywords": ["release"],
+          "entity_aliases": {"release_owner": ["David", "dave"]}
+        }
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.ledgerMetadata["ledger_schema_version"], "knowledge_ledger.v1")
+    XCTAssertEqual(memory.ledgerMetadata["kind"], "trigger")
+    XCTAssertEqual(memory.ledgerMetadata["subject_scope"], "primary_user")
+    XCTAssertEqual(memory.ledgerMetadata["subject_entity_id"], "user")
+    XCTAssertEqual(memory.ledgerMetadata["write_reason"], "standing_trigger")
+    XCTAssertEqual(memory.ledgerMetadata["object_entity_ids_json"], "[\"project-release\"]")
+    XCTAssertEqual(memory.ledgerMetadata["qualifiers_json"], "{\"source\":\"user\"}")
+    XCTAssertEqual(memory.ledgerMetadata["arguments_json"], "{\"owner\":\"user\"}")
+    XCTAssertEqual(
+      memory.ledgerMetadata["trigger_condition_json"],
+      "{\"entity_aliases\":{\"release_owner\":[\"David\",\"dave\"]},\"keywords\":[\"release\"],\"schema_version\":\"jit_trigger.v1\"}"
+    )
+  }
+
+  func testDecodesGeneratedV3EvidenceIntoBoundedMirror() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-evidence",
+        "content": "Evidence remains readable",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "evidence": [
+          {
+            "evidence_id": "ev-1",
+            "independence_group": "conversation-1",
+            "source_type": "conversation",
+            "source_signal": "transcript",
+            "client_device_id": "desktop-1",
+            "artifact_ref": {"conversation_id": "conv-1"},
+            "capture_confidence": 0.91
+          }
+        ]
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.content, "Evidence remains readable")
+    XCTAssertTrue(memory.evidenceIsExplicit)
+    let evidence = try XCTUnwrap(memory.evidence.first)
+    XCTAssertEqual(evidence.evidenceId, "ev-1")
+    XCTAssertEqual(evidence.independenceGroup, "conversation-1")
+    XCTAssertEqual(evidence.sourceType, "conversation")
+    XCTAssertEqual(evidence.captureConfidence, 0.91)
+    XCTAssertLessThanOrEqual(
+      try XCTUnwrap(MemoryLedgerEvidence.canonicalJSONString(memory.evidence)).utf8.count,
+      MemoryLedgerEvidence.maxEvidenceJSONBytes
+    )
+  }
+
+  func testMalformedEvidenceFailsClosedWithoutRejectingMemoryText() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-malformed-evidence",
+        "content": "Keep this memory text",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "evidence": [{"evidence_id": "ev-missing-group"}]
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.content, "Keep this memory text")
+    XCTAssertFalse(memory.evidenceIsExplicit)
+    XCTAssertTrue(memory.evidence.isEmpty)
+  }
+
+  func testMalformedEvidenceDoesNotDefaultUnrelatedMemoryDBFields() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-malformed-fields",
+        "uid": "uid-malformed-fields",
+        "content": "Preserve unrelated fields",
+        "category": "workflow",
+        "layer": "archive",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "reviewed": true,
+        "visibility": "shared",
+        "manually_added": true,
+        "capture_confidence": 0.73,
+        "app_id": "com.example.editor",
+        "tags": ["important"],
+        "evidence": [{"evidence_id": "missing-independence-group"}]
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.content, "Preserve unrelated fields")
+    XCTAssertEqual(
+      memory.createdAt,
+      try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-21T10:00:00Z"))
+    )
+    XCTAssertEqual(
+      memory.updatedAt,
+      try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-06-21T10:05:00Z"))
+    )
+    XCTAssertEqual(memory.category, .workflow)
+    XCTAssertEqual(memory.tier, .archive)
+    XCTAssertTrue(memory.tierIsExplicit)
+    XCTAssertTrue(memory.reviewed)
+    XCTAssertEqual(memory.visibility, "shared")
+    XCTAssertTrue(memory.manuallyAdded)
+    XCTAssertEqual(memory.confidence, 0.73)
+    XCTAssertEqual(memory.sourceApp, "com.example.editor")
+    XCTAssertEqual(memory.tags, ["important"])
+    XCTAssertFalse(memory.evidenceIsExplicit)
+    XCTAssertTrue(memory.evidence.isEmpty)
+  }
+
+  func testExplicitEmptyEvidenceIsValidAndDistinguishedFromAbsent() throws {
+    let explicitJSON = Data(
+      """
+      {
+        "id": "mem-empty-evidence",
+        "content": "Explicitly no evidence",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "evidence": []
+      }
+      """.utf8)
+    let absentJSON = Data(
+      """
+      {
+        "id": "mem-absent-evidence",
+        "content": "Evidence omitted",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z"
+      }
+      """.utf8)
+
+    let explicit = try decoder.decode(ServerMemory.self, from: explicitJSON)
+    let absent = try decoder.decode(ServerMemory.self, from: absentJSON)
+
+    XCTAssertTrue(explicit.evidenceIsExplicit)
+    XCTAssertTrue(explicit.evidence.isEmpty)
+    XCTAssertFalse(absent.evidenceIsExplicit)
+    XCTAssertTrue(absent.evidence.isEmpty)
+  }
+
+  func testFutureShapedEvidenceFailsClosedWithoutRejectingMemoryText() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-future-evidence",
+        "content": "Future evidence must not block reads",
+        "category": "workflow",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "evidence": {"schema_version": "evidence.v4"}
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertEqual(memory.content, "Future evidence must not block reads")
+    XCTAssertFalse(memory.evidenceIsExplicit)
+    XCTAssertTrue(memory.evidence.isEmpty)
+  }
+
+  func testOversizedAndTooManyEvidenceEntriesFailClosed() throws {
+    let oversizedArtifact = String(
+      repeating: "x", count: MemoryLedgerEvidence.maxEvidenceJSONBytes)
+    let oversizedObject: [String: Any] = [
+      "id": "mem-oversized-evidence",
+      "content": "Oversized evidence must not block reads",
+      "category": "workflow",
+      "created_at": "2026-06-21T10:00:00Z",
+      "updated_at": "2026-06-21T10:05:00Z",
+      "evidence": [
+        [
+          "evidence_id": "ev-oversized",
+          "independence_group": "group",
+          "artifact_ref": ["payload": oversizedArtifact],
+        ]
+      ],
+    ]
+    let oversizedData = try JSONSerialization.data(withJSONObject: oversizedObject)
+    let oversized = try decoder.decode(ServerMemory.self, from: oversizedData)
+    XCTAssertEqual(oversized.content, "Oversized evidence must not block reads")
+    XCTAssertTrue(oversized.evidence.isEmpty)
+
+    let tooManyEntries = (0...MemoryLedgerEvidence.maxEvidenceEntries).map { index in
+      ["evidence_id": "ev-\(index)", "independence_group": "group"]
+    }
+    let tooManyObject: [String: Any] = [
+      "id": "mem-too-many-evidence",
+      "content": "Too many evidence rows must not block reads",
+      "category": "workflow",
+      "created_at": "2026-06-21T10:00:00Z",
+      "updated_at": "2026-06-21T10:05:00Z",
+      "evidence": tooManyEntries,
+    ]
+    let tooManyData = try JSONSerialization.data(withJSONObject: tooManyObject)
+    let tooMany = try decoder.decode(ServerMemory.self, from: tooManyData)
+    XCTAssertEqual(tooMany.content, "Too many evidence rows must not block reads")
+    XCTAssertTrue(tooMany.evidence.isEmpty)
   }
 
 }

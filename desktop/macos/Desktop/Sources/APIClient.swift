@@ -1,6 +1,59 @@
 import Foundation
 import OmiWAL
 
+private struct DesktopPublicWebSearchRequest: Encodable {
+  struct Message: Encodable {
+    let role: String
+    let content: String
+  }
+
+  let model = "omi-sonnet"
+  let messages: [Message]
+  let stream = false
+  let maxTokens = 512
+  let omiWebSearch = true
+
+  enum CodingKeys: String, CodingKey {
+    case model, messages, stream
+    case maxTokens = "max_tokens"
+    case omiWebSearch = "omi_web_search"
+  }
+}
+
+private struct DesktopPublicWebSearchResponse: Decodable {
+  struct Choice: Decodable {
+    struct Message: Decodable { let content: String }
+    let message: Message
+  }
+
+  struct SearchResult: Decodable {
+    let title: String?
+    let url: String?
+    let snippet: String?
+  }
+
+  let choices: [Choice]
+  let searchResults: [SearchResult]?
+
+  enum CodingKeys: String, CodingKey {
+    case choices
+    case searchResults = "search_results"
+  }
+
+  func evidenceText(answer: String) -> String {
+    let sources = (searchResults ?? []).prefix(8).compactMap { result -> String? in
+      let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let snippet = result.snippet?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !title.isEmpty || !snippet.isEmpty else { return nil }
+      let boundedSnippet = String(snippet.prefix(700))
+      let source = title.isEmpty ? (result.url ?? "Public web source") : title
+      return "Source result — \(source): \(boundedSnippet)"
+    }
+    guard !sources.isEmpty else { return answer }
+    return ([answer, "Search-result evidence:"] + sources).joined(separator: "\n")
+  }
+}
+
 actor APIClient {
   static let shared = APIClient()
   // Primary data backend URL — Python backend is the single source of truth for all data CRUD.
@@ -9,7 +62,7 @@ actor APIClient {
     DesktopBackendEnvironment.pythonBaseURL()
   }
 
-  // Rust desktop backend URL — used only for: agent VM provisioning/status,
+  // Python desktop backend URL — used only for: agent VM provisioning/status,
   // config/api-keys, Crisp, and local test subscription. All data CRUD,
   // chat AI, and title generation are on Python.
   // Set via OMI_DESKTOP_API_URL env var (in .env).
@@ -17,7 +70,7 @@ actor APIClient {
     let resolved = DesktopBackendEnvironment.rustBackendURL()
     if !resolved.isEmpty { return resolved }
 
-    NSLog("OMI API: OMI_DESKTOP_API_URL not set — Rust backend calls will fail")
+    NSLog("OMI API: OMI_DESKTOP_API_URL not set — Python desktop backend calls will fail")
     return ""
   }
 
@@ -68,10 +121,44 @@ actor APIClient {
     )
   }
 
+  /// Executes a fresh public-only lookup through the desktop chat endpoint.
+  ///
+  /// This intentionally does not reuse the canonical typed-chat session. That
+  /// session may contain private memories or prior tool results, and the backend
+  /// correctly withholds provider-hosted web search from a tainted transcript.
+  /// A single isolated user message both preserves that privacy boundary and
+  /// lets realtime voice use the same managed public-web lane as typed chat.
+  func searchPublicWebForVoice(
+    query: String,
+    expectedOwnerID: String,
+    customBaseURL: String? = nil,
+    includeSourceEvidence: Bool = false
+  ) async throws -> String {
+    let base = customBaseURL ?? rustBackendURL
+    guard !base.isEmpty else { throw APIError.invalidResponse }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    let body = DesktopPublicWebSearchRequest(
+      messages: [.init(role: "user", content: query)])
+    let response: DesktopPublicWebSearchResponse = try await post(
+      "v2/chat/completions",
+      body: body,
+      customBaseURL: normalized,
+      includeBYOK: false,
+      expectedOwnerId: expectedOwnerID,
+      requestTimeout: 45)
+    guard
+      let answer = response.choices.first?.message.content
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+      !answer.isEmpty
+    else { throw APIError.invalidResponse }
+    return includeSourceEvidence ? response.evidenceText(answer: answer) : answer
+  }
+
   // MARK: - HTTP Methods
 
   func get<T: Decodable>(
     _ endpoint: String,
+    queryItems: [URLQueryItem] = [],
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
@@ -84,8 +171,21 @@ actor APIClient {
     let authOwnerId = authPolicy.expectedAuthOwnerId
     try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
-    guard let url = URL(string: base + endpoint) else {
-      throw APIError.invalidResponse
+    let url: URL
+    if queryItems.isEmpty {
+      guard let endpointURL = URL(string: base + endpoint) else {
+        throw APIError.invalidResponse
+      }
+      url = endpointURL
+    } else {
+      guard var components = URLComponents(string: base + endpoint) else {
+        throw APIError.invalidResponse
+      }
+      components.queryItems = (components.queryItems ?? []) + queryItems
+      guard let endpointURL = components.url else {
+        throw APIError.invalidResponse
+      }
+      url = endpointURL
     }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
@@ -100,6 +200,9 @@ actor APIClient {
       authPolicy: authPolicy)
   }
 
+  /// - Parameter requestTimeout: overrides the shared 30s transport timeout. Managed LLM
+  ///   endpoints need a longer budget than a normal API call; without it a slow synthesis
+  ///   is cancelled client-side while the backend is still producing the answer.
   func post<T: Decodable, B: Encodable>(
     _ endpoint: String,
     body: B,
@@ -107,11 +210,14 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    allowsAuthRetry: Bool = true,
+    requestTimeout: TimeInterval? = nil
   ) async throws -> T {
-    let authPolicy = try resolvedRequestAuthPolicy(
+    var authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
+    authPolicy.allowsAuthRetry = allowsAuthRetry
     let authOwnerId = authPolicy.expectedAuthOwnerId
     try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
@@ -121,6 +227,9 @@ actor APIClient {
     log("APIClient: POST \(url.absoluteString)")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
+    if let requestTimeout {
+      request.timeoutInterval = requestTimeout
+    }
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: requireAuth,
       includeBYOK: includeBYOK,
@@ -139,7 +248,8 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    idempotencyKey: String? = nil
   ) async throws -> T {
     let authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
@@ -157,6 +267,9 @@ actor APIClient {
       includeBYOK: includeBYOK,
       expectedAuthOwnerId: authOwnerId)
     try validateExpectedOwner(authPolicy)
+    if let idempotencyKey {
+      request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+    }
 
     return try await performRequest(
       request,
@@ -271,7 +384,11 @@ actor APIClient {
         statusCode: httpResponse.statusCode,
         payload: payload,
         provider: provider)
-      throw RealtimeTokenMintError(statusCode: httpResponse.statusCode, healthError: healthError, payload: payload)
+      throw RealtimeTokenMintError(
+        statusCode: httpResponse.statusCode,
+        healthError: healthError,
+        payload: payload,
+        responseBody: data)
     }
 
     let resp = try decoder.decode(Resp.self, from: data)
@@ -297,7 +414,8 @@ actor APIClient {
     contextPlanID: String = "",
     stableCacheIdentity: String = "",
     dynamicContextIdentity: String = "",
-    contextCacheReplaced: Bool = false
+    contextCacheReplaced: Bool = false,
+    turnId: String = ""
   ) async {
     let base = rustBackendURL
     guard !base.isEmpty else { return }
@@ -310,25 +428,60 @@ actor APIClient {
     do {
       let headers = try await buildHeaders(requireAuth: true)
       for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-      let body: [String: Any] = [
-        "provider": provider,
-        "model": model,
-        "input_text_tokens": inputText,
-        "input_audio_tokens": inputAudio,
-        "input_cached_tokens": inputCached,
-        "output_text_tokens": outputText,
-        "output_audio_tokens": outputAudio,
-        // Opaque hashes/plan identifiers only; no rendered context or user text.
-        "context_plan_id": contextPlanID,
-        "stable_cache_identity": stableCacheIdentity,
-        "dynamic_context_identity": dynamicContextIdentity,
-        "context_cache_replaced": contextCacheReplaced,
-      ]
+      let body = Self.realtimeUsageReportBody(
+        provider: provider,
+        model: model,
+        inputText: inputText,
+        inputAudio: inputAudio,
+        inputCached: inputCached,
+        outputText: outputText,
+        outputAudio: outputAudio,
+        contextPlanID: contextPlanID,
+        stableCacheIdentity: stableCacheIdentity,
+        dynamicContextIdentity: dynamicContextIdentity,
+        contextCacheReplaced: contextCacheReplaced,
+        turnId: turnId)
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
       _ = try await session.data(for: request)
     } catch {
       log("APIClient: realtime usage report failed: \(error.localizedDescription)")
     }
+  }
+
+  /// Opaque turn identity only. Empty `turnId` is omitted so retries without a
+  /// turn stay on the backend's empty-string default.
+  static func realtimeUsageReportBody(
+    provider: String,
+    model: String,
+    inputText: Int,
+    inputAudio: Int,
+    inputCached: Int,
+    outputText: Int,
+    outputAudio: Int,
+    contextPlanID: String,
+    stableCacheIdentity: String,
+    dynamicContextIdentity: String,
+    contextCacheReplaced: Bool,
+    turnId: String
+  ) -> [String: Any] {
+    var body: [String: Any] = [
+      "provider": provider,
+      "model": model,
+      "input_text_tokens": inputText,
+      "input_audio_tokens": inputAudio,
+      "input_cached_tokens": inputCached,
+      "output_text_tokens": outputText,
+      "output_audio_tokens": outputAudio,
+      // Opaque hashes/plan identifiers only; no rendered context or user text.
+      "context_plan_id": contextPlanID,
+      "stable_cache_identity": stableCacheIdentity,
+      "dynamic_context_identity": dynamicContextIdentity,
+      "context_cache_replaced": contextCacheReplaced,
+    ]
+    if !turnId.isEmpty {
+      body["turn_id"] = turnId
+    }
+    return body
   }
 
   func performVoidRequest(
@@ -392,7 +545,7 @@ actor APIClient {
   }
 
   /// Refresh auth and build a retry request. Returns nil when already retried (caller should throw).
-  private func authorizedRetryRequest(
+  func authorizedRetryRequest(
     from request: URLRequest,
     retriedAuth: Bool,
     authPolicy: RequestAuthPolicy
@@ -442,6 +595,9 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401 {
+      guard authPolicy.allowsAuthRetry else {
+        throw APIError.unauthorized
+      }
       if retriedAuth, authPolicy.returnsPersistent401Response {
         return (data, httpResponse)
       }
@@ -486,10 +642,108 @@ actor APIClient {
     return (data, httpResponse)
   }
 
+  /// Streams a response body without first materializing it as one `Data` value.
+  ///
+  /// Authentication retry remains identical to `performAuthenticatedData`: a 401
+  /// is consumed, the Firebase header is refreshed once, and callers receive the
+  /// persistent response when their policy owns provider-boundary classification.
+  /// Successful bodies are delivered in bounded chunks; error bodies are retained
+  /// so endpoint-specific code can preserve its existing error mapping.
+  func performAuthenticatedStreamingData(
+    for request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false,
+    chunkSize: Int = 4 * 1024,
+    onChunk: @Sendable (Data) -> Void
+  ) async throws -> (Data, HTTPURLResponse) {
+    precondition(chunkSize > 0)
+    try validateExpectedOwner(authPolicy)
+    let endpoint = endpointLabel(for: request)
+    let (bytes, response) = try await session.bytes(for: request)
+    try validateExpectedOwner(authPolicy)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401 {
+      let body = try await Self.collect(bytes: bytes)
+      guard authPolicy.allowsAuthRetry else {
+        throw APIError.unauthorized
+      }
+      if retriedAuth, authPolicy.returnsPersistent401Response {
+        return (body, httpResponse)
+      }
+      if !retriedAuth, authPolicy.recordsAuthRetryTelemetry {
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
+      }
+      guard
+        let retryRequest = try await authorizedRetryRequest(
+          from: request,
+          retriedAuth: retriedAuth,
+          authPolicy: authPolicy
+        )
+      else {
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+        }
+        throw APIError.unauthorized
+      }
+      do {
+        let result = try await performAuthenticatedStreamingData(
+          for: retryRequest,
+          authPolicy: authPolicy,
+          retriedAuth: true,
+          chunkSize: chunkSize,
+          onChunk: onChunk
+        )
+        let outcome = (200...299).contains(result.1.statusCode) ? "succeeded" : "failed"
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        }
+        return result
+      } catch {
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        }
+        throw error
+      }
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      return (try await Self.collect(bytes: bytes), httpResponse)
+    }
+
+    var chunk = Data()
+    chunk.reserveCapacity(chunkSize)
+    for try await byte in bytes {
+      try Task.checkCancellation()
+      chunk.append(byte)
+      if chunk.count == chunkSize {
+        onChunk(chunk)
+        chunk.removeAll(keepingCapacity: true)
+      }
+    }
+    if !chunk.isEmpty {
+      onChunk(chunk)
+    }
+    try validateExpectedOwner(authPolicy)
+    return (Data(), httpResponse)
+  }
+
+  private nonisolated static func collect(bytes: URLSession.AsyncBytes) async throws -> Data {
+    var data = Data()
+    for try await byte in bytes {
+      try Task.checkCancellation()
+      data.append(byte)
+    }
+    return data
+  }
+
   /// An owner-bound request may finish after the app has signed out or switched
   /// accounts. The authorization header still belongs to the original owner,
   /// so never let that response flow into the new owner's local state.
   nonisolated func validateExpectedOwner(_ authPolicy: RequestAuthPolicy) throws {
+    try ScreenTaskWorkAuthority.require()
     if let authorizationSnapshot = authPolicy.authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw AuthError.userChangedDuringRequest
@@ -552,6 +806,21 @@ struct RealtimeTokenMintError: LocalizedError {
   let statusCode: Int
   let healthError: CredentialHealthError
   let payload: APIErrorPayload?
+  /// Raw HTTP body so `ManagedPlanGateHTTP` can read FastAPI nested `detail.error`
+  /// (`plan_gated`) that `APIErrorPayload` cannot decode as a string.
+  let responseBody: Data
+
+  init(
+    statusCode: Int,
+    healthError: CredentialHealthError,
+    payload: APIErrorPayload?,
+    responseBody: Data = Data()
+  ) {
+    self.statusCode = statusCode
+    self.healthError = healthError
+    self.payload = payload
+    self.responseBody = responseBody
+  }
 
   var errorDescription: String? {
     var description = healthError.localizedDescription
@@ -591,6 +860,7 @@ extension APIClient {
 
   static func conversationFilterQueryItems(
     statuses: [ConversationStatus] = [],
+    sources: [ConversationSource] = [],
     includeDiscarded: Bool = false,
     startDate: Date? = nil,
     endDate: Date? = nil,
@@ -604,6 +874,11 @@ extension APIClient {
     if !statuses.isEmpty {
       let statusStrings = statuses.map { $0.rawValue }.joined(separator: ",")
       queryItems.append("statuses=\(statusStrings)")
+    }
+
+    if !sources.isEmpty {
+      let sourceStrings = sources.map { $0.rawValue }.joined(separator: ",")
+      queryItems.append("sources=\(sourceStrings)")
     }
 
     if let startDate = startDate {
@@ -632,11 +907,13 @@ extension APIClient {
     limit: Int = 50,
     offset: Int = 0,
     statuses: [ConversationStatus] = [],
+    sources: [ConversationSource] = [],
     includeDiscarded: Bool = false,
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
-    starred: Bool? = nil
+    starred: Bool? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [ServerConversation] {
     var queryItems: [String] = [
       "limit=\(limit)",
@@ -644,6 +921,7 @@ extension APIClient {
     ]
     queryItems += Self.conversationFilterQueryItems(
       statuses: statuses,
+      sources: sources,
       includeDiscarded: includeDiscarded,
       startDate: startDate,
       endDate: endDate,
@@ -652,12 +930,48 @@ extension APIClient {
     )
 
     let endpoint = "v1/conversations?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
+    return try await get(endpoint, authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Fetches a single conversation by ID
-  func getConversation(id: String) async throws -> ServerConversation {
-    return try await get("v1/conversations/\(id)")
+  func getConversation(
+    id: String,
+    includeDiscarded: Bool? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ServerConversation {
+    let queryItems =
+      includeDiscarded.map {
+        [URLQueryItem(name: "include_discarded", value: String($0))]
+      } ?? []
+    return try await get(
+      "v1/conversations/\(id)",
+      queryItems: queryItems,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// Reads conversation-lifetime photo bytes. Storage-backed photos no longer
+  /// require inline base64 in the conversation JSON payload.
+  func getConversationPhotoImage(conversationId: String, photoId: String) async throws -> Data {
+    let authPolicy = try resolvedRequestAuthPolicy(expectedOwnerId: nil, authorizationSnapshot: nil)
+    let base = baseURL
+    guard let url = URL(string: base + "v1/conversations/\(conversationId)/photos/\(photoId)/image") else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    let (data, response) = try await performAuthenticatedData(for: request, authPolicy: authPolicy)
+    guard (200...299).contains(response.statusCode) else {
+      throw APIError.httpError(statusCode: response.statusCode, detail: nil)
+    }
+    return data
+  }
+
+  /// Reads a capture detail through the archive's strict Omi-device provenance
+  /// contract. This is intentionally separate from the legacy mixed-source
+  /// conversation detail API.
+  func getOmiCapture(id: String) async throws -> ServerConversation {
+    try await get("v1/conversations/\(id)?source=omi&include_discarded=false")
   }
 
   /// Deletes a conversation by ID
@@ -678,6 +992,13 @@ extension APIClient {
     return response.conversation
   }
 
+  /// Separates a conversation from its cross-surface capture group. Sticky: the
+  /// server never regroups it with the members it left.
+  func separateConversationFromCaptureGroup(id: String) async throws {
+    struct SeparateResponse: Decodable { let status: String }
+    let _: SeparateResponse = try await post("v1/conversations/\(id)/capture-group/separate")
+  }
+
   /// Sets the visibility of a conversation for sharing
   /// - Parameters:
   ///   - id: The conversation ID
@@ -693,14 +1014,61 @@ extension APIClient {
     try await performVoidRequest(request)
   }
 
-  /// Gets a shareable link for a conversation by setting it to shared visibility
-  /// - Parameter id: The conversation ID
-  /// - Returns: The shareable URL for the conversation
+  /// Gets a shareable link for a conversation by setting it to shared visibility.
+  ///
+  /// The visibility write is idempotent. When it fails, one read of the current
+  /// conversation decides the outcome: `shared` or `public` means the link
+  /// already exists, and any other state rethrows the original error.
   func getConversationShareLink(id: String) async throws -> String {
-    // Set visibility to shared
-    try await setConversationVisibility(id: id, visibility: "shared")
-    // Return the web URL for the shared conversation
-    return "https://h.omi.me/conversations/\(id)"
+    do {
+      try await setConversationVisibility(id: id, visibility: "shared")
+    } catch {
+      guard await conversationVisibilityAlreadyShareable(id: id) else { throw error }
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "other",
+        from: "visibility_patch",
+        to: "existing_visibility",
+        reason: "local_heal",
+        outcome: .recovered)
+    }
+    return DesktopBackendEnvironment.conversationShareURL(id: id)
+  }
+
+  /// Whether a failed share mutation left a link that already resolves.
+  /// A failed read is not evidence the conversation is shareable.
+  private func conversationVisibilityAlreadyShareable(id: String) async -> Bool {
+    guard let conversation = try? await getConversation(id: id) else { return false }
+    return conversation.visibility == "shared" || conversation.visibility == "public"
+  }
+
+  /// Calendar-detected people the meeting summary could be sent to (the other
+  /// participants' emails, never the owner's own address). Empty when the
+  /// conversation has no calendar identity or the meeting was too large for a
+  /// blanket proposal.
+  func getConversationShareRecipients(id: String) async throws -> [ConversationShareRecipient] {
+    guard let url = URL(string: baseURL + "v1/conversations/\(id)/share-recipients") else {
+      throw URLError(.badURL)
+    }
+    var request = URLRequest(url: url)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    let response: ConversationShareRecipientsResponse = try await performRequest(request)
+    return response.recipients
+  }
+
+  /// One-click send of the meeting summary email to detected participants.
+  /// The backend validates membership against the detected set and flips the
+  /// conversation to shared visibility so the emailed link resolves.
+  func sendConversationSummaryEmail(id: String, recipientEmails: [String]) async throws -> [String] {
+    guard let url = URL(string: baseURL + "v1/conversations/\(id)/share-email") else {
+      throw URLError(.badURL)
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONSerialization.data(withJSONObject: ["recipient_emails": recipientEmails])
+    let response: ConversationShareEmailResponse = try await performRequest(request)
+    return response.sentTo
   }
 
   /// Updates the title of a conversation
@@ -749,6 +1117,7 @@ extension APIClient {
   static func conversationsCountEndpoint(
     includeDiscarded: Bool = false,
     statuses: [ConversationStatus] = [.completed, .processing],
+    sources: [ConversationSource] = [],
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
@@ -756,6 +1125,7 @@ extension APIClient {
   ) -> String {
     let queryItems = Self.conversationFilterQueryItems(
       statuses: statuses,
+      sources: sources,
       includeDiscarded: includeDiscarded,
       startDate: startDate,
       endDate: endDate,
@@ -774,6 +1144,7 @@ extension APIClient {
   func getConversationsCount(
     includeDiscarded: Bool = false,
     statuses: [ConversationStatus] = [.completed, .processing],
+    sources: [ConversationSource] = [],
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
@@ -782,6 +1153,7 @@ extension APIClient {
     let endpoint = Self.conversationsCountEndpoint(
       includeDiscarded: includeDiscarded,
       statuses: statuses,
+      sources: sources,
       startDate: startDate,
       endDate: endDate,
       folderId: folderId,
@@ -902,13 +1274,22 @@ extension APIClient {
 extension APIClient {
 
   /// Fetches all active goals (up to 4). Uses 5-second cache to deduplicate parallel calls.
-  func getGoals() async throws -> [Goal] {
-    if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
+  func getGoals(authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil) async throws
+    -> [Goal]
+  {
+    // The short-lived shared cache is not owner-validated; owner-bound callers
+    // must always hit the network under their snapshot.
+    if authorizationSnapshot == nil, let cache = goalsCache, let time = goalsCacheTime,
+      Date().timeIntervalSince(time) < 5
+    {
       return cache
     }
-    let goals: [Goal] = try await get("v1/goals/all")
-    goalsCache = goals
-    goalsCacheTime = Date()
+    let goals: [Goal] = try await get(
+      "v1/goals/all", authorizationSnapshot: authorizationSnapshot)
+    if authorizationSnapshot == nil {
+      goalsCache = goals
+      goalsCacheTime = Date()
+    }
     return goals
   }
 

@@ -2,12 +2,15 @@
 
 import { useEffect } from 'react';
 import { TaskHub } from '@/components/tasks/TaskHub';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function TasksPage() {
   useEffect(() => {
-    MixpanelManager.pageView('Tasks');
+    PostHogManager.pageView('Tasks');
   }, []);
 
   return <TaskHub />;
 }
+
+registerMoonshineRoute('/tasks', TasksPage, 'authenticated');

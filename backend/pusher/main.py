@@ -1,38 +1,84 @@
 import json
-import logging
 import os
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from utils.logging_config import configure_split_stream_logging
+from omi_logging import configure_logging
 
-# Route INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
-# classify routine request logs as ERROR severity (issues #9136, #9138, #9135).
-configure_split_stream_logging(level=logging.INFO)
+# Text routes INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
+# classify routine request logs as ERROR severity (issues #9136, #9138, #9135), and keeps
+# textPayload for log metrics until pusher's consumers are admitted for JSON
+# (docs/runbooks/structured-logging-rollout.md). Pusher keeps its Uvicorn access lines.
+configure_logging('pusher', access_policy='keep', default_format='text')
 
 import firebase_admin
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response
 from firebase_admin import credentials
 
+from database.firestore_tier_context import FirestoreTierMiddleware
+from utils.rollout_cohorts import configure_rollout_runtime
+from utils.stt_cap_cohort import refresh_stt_cap_cohort_forever
 from routers import pusher, metrics
+from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.http_client import close_all_clients
+from utils.sync.cap_hold_lifecycle import flush_active
 from utils.executors import drain_background_tasks, log_executor_health, start_background_task
+from utils.readiness import ReadinessGate
+from utils.env_loader import firebase_admin_options
+from utils.stt.streaming import validate_streaming_stt_env
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     firebase_credentials = credentials.Certificate(service_account_info)
     firebase_admin_sdk: Any = firebase_admin
-    firebase_admin_sdk.initialize_app(firebase_credentials)
+    firebase_admin_sdk.initialize_app(firebase_credentials, options=firebase_admin_options())
 else:
     firebase_admin_sdk = firebase_admin
-    firebase_admin_sdk.initialize_app()
+    firebase_admin_sdk.initialize_app(options=firebase_admin_options())
+
+
+def _validate_static_capabilities(env: Mapping[str, str] | None = None) -> None:
+    """Reject a Pusher revision that cannot complete its mandatory finalizer.
+
+    This is a static configuration admission check only. Transient memory or
+    datastore availability must not flap process readiness.
+    """
+
+    memory_mode = rollout_mode_env_value(env)
+    if memory_mode not in {MemoryRolloutMode.write.value, MemoryRolloutMode.read.value}:
+        raise RuntimeError(
+            'pusher static capability admission failed: '
+            'conversation.finalize.persisted requires memory.canonical.mutate'
+        )
+    validate_streaming_stt_env(env)
 
 
 async def startup_event() -> None:
+    from database.pinecone_partition_state import start_mutations, drain_mutations
+    from database.pinecone_mutation_lifecycle import install_shutdown_drain
+
+    start_mutations()
+    app.state.pinecone_restore_signal = install_shutdown_drain(drain_mutations)
+    _validate_static_capabilities()
+    start_background_task(refresh_stt_cap_cohort_forever(), name='pusher:stt_cap_cohort_refresh')
     start_background_task(log_executor_health(), name='pusher:executor_health')
 
 
 async def shutdown_event() -> None:
+    # Defense-in-depth: close readiness FIRST so the LB stops sending NEW traffic
+    # even if the chart preStop hook did not run. Existing in-flight sessions are
+    # then drained by drain_background_tasks within the bounded grace period.
+    ReadinessGate.begin_drain()
+    from database.pinecone_partition_state import drain_mutations
+    from database.pinecone_mutation_lifecycle import drain_on_shutdown
+
+    # A blocked provider may occupy every shared DB worker during shutdown.
+    await drain_on_shutdown(drain_mutations)
+    if restore_signal := getattr(app.state, 'pinecone_restore_signal', None):
+        restore_signal()
+    await flush_active(timeout=30.0)
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
 
@@ -47,7 +93,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await shutdown_event()
 
 
+# Bind private cohort resolution once at the serving composition root.
+configure_rollout_runtime()
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(FirestoreTierMiddleware)
 app.include_router(pusher.router)
 app.include_router(metrics.router)
 
@@ -60,3 +109,28 @@ for path in paths:
 @app.get('/health')
 async def health_check() -> dict[str, str]:
     return {"status": "healthy"}
+
+
+@app.get('/ready')
+async def ready() -> Response:
+    # Readiness for the LB: 200 while serving new traffic, 503 once drain begins.
+    # Distinct from /health (liveness), which stays 200 as long as the process is alive.
+    if ReadinessGate.is_serving():
+        return JSONResponse(content={"status": "ready"}, status_code=200)
+    return JSONResponse(content={"status": "draining"}, status_code=503)
+
+
+@app.post('/__internal/drain')
+async def drain(request: Request) -> Response:
+    # Trust boundary: accept ONLY loopback peers (the preStop hook curls this from
+    # within the pod). The barrier is request.client.host being 127.0.0.1/::1, NOT
+    # network isolation: the Ingress path:/ Prefix does route this path, but an
+    # off-pod caller (internal LB) presents a non-loopback peer and is 403'd. This
+    # relies on uvicorn NOT running --proxy-headers, so request.client.host is the
+    # real TCP peer rather than a spoofable X-Forwarded-For.
+    client_host = request.client.host if request.client else None
+    if client_host not in {'127.0.0.1', '::1'}:
+        return Response(status_code=403)
+    # Idempotent: safe to call from both preStop and the lifespan shutdown path.
+    ReadinessGate.begin_drain()
+    return JSONResponse(content={"status": "draining"}, status_code=200)

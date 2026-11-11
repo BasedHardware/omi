@@ -8,16 +8,52 @@ It does not start emulators or desktop apps.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
 import signal
-import socket
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlparse
+
+if os.name == "nt":
+    import ctypes
+    from ctypes import wintypes
+
+    _SYNCHRONIZE = 0x00100000
+    _WAIT_OBJECT_0 = 0
+    _WAIT_TIMEOUT = 258
+    _WAIT_FAILED = 0xFFFFFFFF
+    _ERROR_ACCESS_DENIED = 5
+    _ERROR_INVALID_PARAMETER = 87
+
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _open_process = _kernel32.OpenProcess
+    _open_process.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    _open_process.restype = wintypes.HANDLE
+    _wait_for_single_object = _kernel32.WaitForSingleObject
+    _wait_for_single_object.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    _wait_for_single_object.restype = wintypes.DWORD
+    _close_handle = _kernel32.CloseHandle
+    _close_handle.argtypes = (wintypes.HANDLE,)
+    _close_handle.restype = wintypes.BOOL
+    _get_system_directory = _kernel32.GetSystemDirectoryW
+    _get_system_directory.argtypes = (wintypes.LPWSTR, wintypes.UINT)
+    _get_system_directory.restype = wintypes.UINT
+
+    def _windows_powershell_executable() -> Path:
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = _get_system_directory(buffer, len(buffer))
+        if length == 0:
+            raise ctypes.WinError(ctypes.get_last_error())
+        if length >= len(buffer):
+            raise OSError("Windows system directory exceeds the supported path length")
+        return Path(buffer.value) / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+
 
 DEFAULT_LOCAL_FIREBASE_PROJECT_ID = "demo-omi-local"
 DEFAULT_FIRESTORE_DATABASE_ID = "(default)"
@@ -75,7 +111,16 @@ _STRIPPED_ENV_PREFIXES = (
     "SERVICE_ACCOUNT",
     "FIREBASE_ADMIN",
 )
-_LOCAL_BACKEND_SECRET_KEYS = {"ENCRYPTION_SECRET", "ADMIN_KEY", "TYPESENSE_API_KEY", "FIREBASE_API_KEY"}
+_LOCAL_BACKEND_SECRET_KEYS = {
+    "ENCRYPTION_SECRET",
+    "ADMIN_KEY",
+    "TYPESENSE_API_KEY",
+    "FIREBASE_API_KEY",
+    # Harness-local HMAC key for internal screen-frame approval tokens. Matches
+    # _PROVIDER_SECRET_RE on "SECRET" but is not a provider credential, so offline
+    # mode must pass it through rather than refuse it.
+    "SCREEN_FRAME_SIGNING_SECRET",
+}
 _OFFLINE_PROVIDER_PLACEHOLDERS = {
     "OPENAI_API_KEY": "sk-omi-local-harness-offline-not-real",
     "DEEPGRAM_API_KEY": "omi-local-harness-offline-deepgram-not-real",
@@ -86,8 +131,6 @@ _PROVIDER_SECRET_RE = re.compile(
     r"(API_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|DEEPGRAM|OPENAI|ANTHROPIC|GROQ|ELEVENLABS)", re.IGNORECASE
 )
 _LOOPBACK_NAMES = {"localhost"}
-_LOOPBACK_V4_PREFIX = "127."
-_LOOPBACK_V6 = {"::1", "0:0:0:0:0:0:0:1"}
 _DANGEROUS_NAMES = {"", ".", ".."}
 
 
@@ -144,20 +187,59 @@ def _host_from_emulator_value(value: str) -> str:
 
 def is_loopback_host(value: str) -> bool:
     host = _host_from_emulator_value(value)
-    if host in _LOOPBACK_NAMES or host in _LOOPBACK_V6:
-        return True
-    if host.startswith(_LOOPBACK_V4_PREFIX):
+    if host in _LOOPBACK_NAMES:
         return True
     try:
-        ip = socket.inet_pton(socket.AF_INET6, host)
-    except OSError:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
         return False
-    return ip == socket.inet_pton(socket.AF_INET6, "::1")
 
 
 def validate_loopback_emulator_host(value: str, *, name: str = "emulator") -> str:
     if not is_loopback_host(value):
         raise SafetyError(f"{name} host must point to loopback, got {value!r}")
+    return value.strip()
+
+
+# Private ranges a LAN- or tailnet-reachable dev harness may bind to. Distinct
+# from the loopback-only guard above, which protects a different boundary: the
+# backend's own connection to its co-located emulators, which must never leave
+# loopback regardless of this setting. RFC 1918 covers ordinary LAN addresses;
+# 100.64.0.0/10 (RFC 6598 carrier-grade NAT) covers Tailscale, whose tailnet
+# addresses fall in that range and are the documented way a physical device
+# reaches this harness (see #11730/#11652).
+_PRIVATE_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+)
+
+
+def is_private_dev_host(value: str) -> bool:
+    """True for loopback or a non-public (LAN/CGNAT) address, never a public one."""
+
+    if is_loopback_host(value):
+        return True
+    host = _host_from_emulator_value(value)
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(addr in network for network in _PRIVATE_NETWORKS)
+
+
+def validate_dev_bind_host(value: str, *, name: str = "dev bind host") -> str:
+    """Fail closed unless the requested bind host is loopback or a private range.
+
+    Distinct from ``validate_loopback_emulator_host``: this guards what the
+    harness's own HTTP services and Firebase emulators may bind to when a
+    developer opts into LAN/tailnet reachability, never a publicly routable
+    address.
+    """
+
+    if not is_private_dev_host(value):
+        raise SafetyError(f"{name} must be loopback or a private (LAN/CGNAT) address, got {value!r}")
     return value.strip()
 
 
@@ -351,6 +433,27 @@ def load_json_file(path: Path) -> object:
 def process_exists(pid: int) -> bool:
     if pid <= 0:
         return False
+    if os.name == "nt":
+        handle = _open_process(_SYNCHRONIZE, False, pid)
+        if not handle:
+            error = ctypes.get_last_error()
+            if error == _ERROR_INVALID_PARAMETER:
+                return False
+            if error == _ERROR_ACCESS_DENIED:
+                return True
+            raise ctypes.WinError(error)
+        try:
+            wait_result = _wait_for_single_object(handle, 0)
+            if wait_result == _WAIT_TIMEOUT:
+                return True
+            if wait_result == _WAIT_OBJECT_0:
+                return False
+            if wait_result == _WAIT_FAILED:
+                raise ctypes.WinError(ctypes.get_last_error())
+            raise SafetyError(f"Unexpected Windows process wait result for PID {pid}: {wait_result}")
+        finally:
+            if not _close_handle(handle) and sys.exc_info()[0] is None:
+                raise ctypes.WinError(ctypes.get_last_error())
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -361,6 +464,39 @@ def process_exists(pid: int) -> bool:
 
 
 def command_line_for_pid(pid: int) -> str:
+    if os.name == "nt":
+        if pid <= 0:
+            return ""
+        command = (
+            "$ErrorActionPreference = 'Stop'; "
+            "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
+            f"$process = Get-CimInstance Win32_Process -Filter 'ProcessId = {int(pid)}'; "
+            "if ($null -eq $process) { exit 1 }; "
+            "[Console]::Out.Write($process.CommandLine)"
+        )
+        try:
+            result = subprocess.run(
+                [
+                    str(_windows_powershell_executable()),
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    command,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+                check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+
     proc_cmdline = Path("/proc") / str(pid) / "cmdline"
     if proc_cmdline.exists():
         return proc_cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
@@ -375,6 +511,103 @@ def command_line_for_pid(pid: int) -> str:
         return result.stdout.strip() if result.returncode == 0 else ""
     except OSError:
         return ""
+
+
+def listening_pids(port: int) -> tuple[int, ...]:
+    """Return the current loopback listener PIDs or fail closed when discovery is unavailable."""
+
+    if not 1 <= int(port) <= 65535:
+        raise SafetyError(f"Invalid port {port}")
+    try:
+        result = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{int(port)}", "-sTCP:LISTEN", "-t"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise SafetyError(f"Cannot inspect listener ownership for port {port}") from exc
+    if result.returncode not in {0, 1}:
+        raise SafetyError(f"Cannot inspect listener ownership for port {port}")
+    try:
+        pids = tuple(sorted({int(line) for line in result.stdout.splitlines() if line.strip()}))
+    except ValueError as exc:
+        raise SafetyError(f"Invalid listener PID output for port {port}") from exc
+    if any(pid <= 0 for pid in pids):
+        raise SafetyError(f"Invalid listener PID output for port {port}")
+    return pids
+
+
+def is_descendant_of(pid: int, ancestor_pid: int) -> bool:
+    """Prove a live child belongs to a recorded supervisor without command matching."""
+
+    current = int(pid)
+    ancestor = int(ancestor_pid)
+    seen: set[int] = set()
+    while current > 1 and current not in seen:
+        if current == ancestor:
+            return True
+        seen.add(current)
+        try:
+            result = subprocess.run(
+                ["ps", "-p", str(current), "-o", "ppid="],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+            )
+            parent = int(result.stdout.strip()) if result.returncode == 0 else -1
+        except (OSError, ValueError):
+            return False
+        current = parent
+    return current == ancestor
+
+
+def descendant_pids(ancestor_pid: int) -> tuple[int, ...]:
+    """Snapshot the live descendants of a supervised PID before it is signalled.
+
+    Emulator CLIs spawn their heavyweight children detached (`firebase
+    emulators:start` gives the Firestore JVM its own session), so a process
+    group signal never reaches them. Once the supervisor dies the survivors are
+    reparented to init and the tree is unrecoverable, so teardown has to capture
+    it first.
+    """
+
+    ancestor = int(ancestor_pid)
+    if ancestor <= 1:
+        return ()
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,ppid="],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ()
+    if result.returncode != 0:
+        return ()
+    children: dict[int, list[int]] = {}
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            continue
+        try:
+            pid, parent = int(fields[0]), int(fields[1])
+        except ValueError:
+            continue
+        children.setdefault(parent, []).append(pid)
+    found: set[int] = set()
+    queue = list(children.get(ancestor, ()))
+    while queue:
+        pid = queue.pop()
+        if pid in found or pid == ancestor:
+            continue
+        found.add(pid)
+        queue.extend(children.get(pid, ()))
+    return tuple(sorted(found))
 
 
 def validate_owned_pid(pid: int, *, process_manifest: Path, service: str | None = None) -> dict[str, object]:

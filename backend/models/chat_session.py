@@ -5,8 +5,8 @@ shapes mirror what ``database.chat`` returns:
 
 * Chat sessions (v2) carry ``title``, ``preview``, ``message_count``,
   ``starred`` and ``updated_at``. This is distinct from the legacy v1
-  ``models.chat.ChatSession`` (``message_ids`` / ``file_ids`` /
-  ``openai_thread_id``), so the v2 shape gets its own model.
+  ``models.chat.ChatSession`` (``message_ids`` / ``file_ids``), so the v2
+  shape gets its own model.
 * ``save_message`` returns a small ack-shaped dict (``id`` / ``created_at`` as
   an ISO string / ``session_id`` / ``created``), not a full ``Message``.
 
@@ -31,6 +31,9 @@ class ChatSessionResponse(BaseModel):
     plugin_id: Optional[str] = Field(default=None, description='Mirrors app_id for cross-platform query compatibility.')
     message_count: int = Field(description='Number of messages in the session.')
     starred: bool = Field(description='Whether the user starred the session.')
+    channel: Optional[str] = Field(default=None, description='Messaging channel for a channel session.')
+    channel_link_id: Optional[str] = Field(default=None, description='Link that owns a channel session.')
+    surface: Optional[str] = Field(default=None, description='Surface id. Absent means the app surface.')
 
     @model_validator(mode='before')
     @classmethod

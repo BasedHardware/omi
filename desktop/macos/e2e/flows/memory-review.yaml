@@ -1,0 +1,185 @@
+version: 2
+name: memory-review
+tier: 2
+description: >-
+  "Things I learned today" — the review rows on the dedicated daily-recap page, seeded from real
+  memories and voted on through the store the ✓ / ✗ buttons call. The rows render only from a
+  daily summary's `memories_learned`, and only the nightly job produces one, so the flow seeds the
+  record through a local/offline-only fixture and reads it back through the app's own
+  `getDailySummaries`. The recap pill in Chat renders no rows — the pill opens the page, and the
+  page is where the section mounts.
+app: non-prod
+covers:
+  # The row projection, the row state machine, and both mutations. S4 mounts the section from a
+  # real summary; S7 reads which items it bound and what each row shows; S8 and S9 drive
+  # `MemoryReviewCardStore.send` — the exact call the ✓ and ✗ buttons make — and assert the settled
+  # verdict, the copy under it, and that no inline error was raised; S10 re-reads after each
+  # mutation's `refreshLiveState`, which is where a verdict this device just made would be erased
+  # by a mirror that has not caught up yet.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/MemoryReviewCard.swift
+  # `MemoryReviewSection` lives here with the row view. S7's `rowCount` vs `maxRows`, read against
+  # S5's `memoriesLearnedCount`, asserts the section's own bound: four learned memories on the
+  # wire, three rows rendered. The row *view* is asserted by S11's `ax.expect`, which runs on the
+  # ui lane only; on the bridge lane S7-S10 pin the row model it draws from, including the
+  # faded/settled state its opacity and copy come from.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/MemoryReviewRowView.swift
+  # The three actions S4/S7/S8 drive, and `daily_summary_snapshot`'s learned-memory count.
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
+  # The fixture helpers those actions run through: the row catalog, the local-only seed contract,
+  # and the bounded waits against the mounted section's store.
+  - desktop/macos/Desktop/Sources/Automation/MemoryReviewFixture.swift
+  # The pill that opens the recap, and the page that hosts the section. S6 activates the row;
+  # the sheet's `DailyRecapPage` is what makes the section mounted from S7 on.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ChatDailyRecapRow.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DailyRecapPage.swift
+  # The store whose refresh brings the seeded record in.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummaryStore.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DailySummaries.swift
+preconditions:
+  - automation_bridge_ready
+  - auth_ready
+  # The inline Home chat is what mounts `ChatMessagesView`, and so the recap pill; the stage that
+  # opens it exists only on the chat-first shell, exactly as in `home-stage.yaml`.
+  - chat_first_cohort_named_bundle
+  # S4 writes through `POST /v1/dev-harness/daily-summary/seed`, which `main.py` registers only
+  # when `OMI_ENV_STAGE` is local or offline. On any other stack S4 reports a failed seed and the
+  # flow stops there rather than reading an empty card as a pass.
+  - offline_dev_stack
+
+steps:
+  - id: S1
+    name: Reset main chat for flow isolation
+    # Also what makes the pill admissible: `ChatMessagesView` admits the summary above the thread
+    # only while the transcript follows the live edge or is empty (INV-CHAT-2).
+    bridge.action:
+      name: reset_main_chat
+    expect:
+      result.detail.reset: "true"
+
+  - id: S2
+    name: Mount the shell that owns the Home stage
+    bridge.navigate:
+      target: chat
+      activateApp: false
+    wait:
+      state.shellVariant: chat_first
+      state.chatFirstRoute: chat
+
+  - id: S3
+    name: Open the inline chat, which is where the recap pill renders
+    bridge.action:
+      name: home_open_chat
+    wait:
+      state.homeMode: chat
+
+  - id: S4
+    name: Seed four real memories and the summary that learned them
+    # The memories are created through the production `POST /v3/memories`, so the ids the summary
+    # carries address rows `/v3/memories/{id}/review` really mutates. No `mountedRows` is expected
+    # here: the pill renders no rows, and the page that hosts the section is not open yet — the
+    # mount is asserted from S7 on.
+    bridge.action:
+      name: seed_memory_review_fixture
+      params:
+        count: "4"
+        timeoutMs: "2000"
+    expect:
+      result.detail.createdCount: "4"
+      result.detail.memoriesLearned: "4"
+
+  - id: S5
+    name: The wire carried four learned memories
+    # Shape-only, and the other half of the bound: the record has four, the page renders three.
+    bridge.action:
+      name: daily_summary_snapshot
+    expect:
+      result.detail.hasSummary: "true"
+      result.detail.memoriesLearnedCount: "4"
+
+  - id: S6
+    name: Open the dedicated recap page through the recap pill
+    ax.activate:
+      identifier: chat-daily-recap-row
+    timeout_seconds: 10
+    wait:
+      state.visibleChatFirstRoute: daily-recap
+
+  - id: S7
+    name: The page's section bound three rows, unreviewed, with their categories
+    bridge.action:
+      name: memory_review_snapshot
+    expect:
+      result.detail.mounted: "true"
+      result.detail.source: daily_summary_detail
+      result.detail.rowCount: "3"
+      result.detail.maxRows: "3"
+      result.detail.row0_content: "Prefers async standups over daily calls."
+      result.detail.row0_category: About You
+      result.detail.row0_verdict: none
+      result.detail.row0_settled: "false"
+      result.detail.row1_content: "Ships desktop releases on Wednesdays."
+      result.detail.row1_category: Workflow
+      result.detail.row1_verdict: none
+
+  - id: S8
+    name: ✓ settles the first row on a promise the backend keeps
+    # The copy is asserted verbatim, not merely "settled": rejection feeds bounded negative
+    # feedback into extraction and an edit re-enters short-term as a user assertion, so each line
+    # is a claim about backend behaviour and drifting it silently would make the page lie.
+    bridge.action:
+      name: memory_review_vote
+      params:
+        row: "0"
+        verdict: accept
+        timeoutMs: "20000"
+    expect:
+      result.detail.settledInTime: "true"
+      result.detail.row0_verdict: accepted
+      result.detail.row0_settled: "true"
+      result.detail.row0_status: "Confirmed. I'll act on this."
+      result.detail.row0_error: ""
+
+  - id: S9
+    name: ✗ fades the second row where it stands rather than removing it
+    bridge.action:
+      name: memory_review_vote
+      params:
+        row: "1"
+        verdict: reject
+        timeoutMs: "20000"
+    expect:
+      result.detail.settledInTime: "true"
+      result.detail.row1_verdict: rejected
+      result.detail.row1_faded: "true"
+      result.detail.row1_status: "Dropped. I'll avoid facts like this."
+      result.detail.row1_error: ""
+
+  - id: S10
+    name: Both verdicts survive the post-mutation re-read
+    # The failure this catches: each mutation ends in `refreshLiveState`, and the local memory
+    # mirror routinely lags the write it is being asked to confirm. A row that flickered back to
+    # "unreviewed" a second after the click reads as the vote not landing, and the reader votes
+    # again. `rowCount` is re-asserted because a rejected row must stay in place until the page is
+    # next refreshed — removing it would reflow every row below the one just clicked.
+    bridge.action:
+      name: memory_review_snapshot
+    expect:
+      result.detail.rowCount: "3"
+      result.detail.row0_verdict: accepted
+      result.detail.row1_verdict: rejected
+
+  - id: S11
+    name: The section, a row, and the settled copy are on screen
+    # UI lane only; skipped on the bridge lane, where S7-S10 pin the row model this view draws from.
+    ax.expect:
+      identifiers_visible:
+        - daily-recap-page
+        - memory-review-section
+        - memory-review-row
+        - memory-review-status
+
+  - id: S12
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

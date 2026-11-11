@@ -83,6 +83,45 @@ final class FloatingControlBarStateTests: XCTestCase {
     )
   }
 
+  /// Hovering the notch always shows something now — the shortcut legend and capture
+  /// controls — so the surface presents regardless of subagent count.
+  func testNotchHoverMenuAlwaysPresentsForTheControlPanel() {
+    XCTAssertTrue(NotchAgentMenuPresentation.shouldPresent(agentCount: 0))
+    XCTAssertTrue(NotchAgentMenuPresentation.shouldPresent(agentCount: 1))
+    XCTAssertTrue(NotchAgentMenuPresentation.shouldPresent(agentCount: 8))
+  }
+
+  /// The agent row list stays agent-only: presenting the surface must not imply drawing
+  /// rows, otherwise an empty list renders as dead space under the legend.
+  func testAgentRowsRemainGatedOnActiveSubagents() {
+    XCTAssertFalse(NotchAgentMenuPresentation.hasAgentRows(agentCount: 0))
+    XCTAssertTrue(NotchAgentMenuPresentation.hasAgentRows(agentCount: 1))
+    XCTAssertTrue(NotchAgentMenuPresentation.hasAgentRows(agentCount: 8))
+  }
+
+  func testIdleNotchTapOpensMainChatOnlyWhenTheNotchIsIdle() {
+    var openCount = 0
+    let openMainChat = { openCount += 1 }
+
+    NotchIdleTapRoute.perform(
+      isVoicePresentationActive: false,
+      isShowingConversation: false,
+      openMainChat: openMainChat
+    )
+    NotchIdleTapRoute.perform(
+      isVoicePresentationActive: true,
+      isShowingConversation: false,
+      openMainChat: openMainChat
+    )
+    NotchIdleTapRoute.perform(
+      isVoicePresentationActive: false,
+      isShowingConversation: true,
+      openMainChat: openMainChat
+    )
+
+    XCTAssertEqual(openCount, 1)
+  }
+
   func testAgentSurfaceDoesNotDependOnMainChatContentOrHeight() {
     let state = FloatingControlBarState()
     let agentID = UUID()
@@ -750,5 +789,28 @@ final class FloatingControlBarStateTests: XCTestCase {
     state.bindAnswerMessage(terminal)
     XCTAssertEqual(state.currentAIMessage(from: provider)?.id, producing.id)
     XCTAssertEqual(state.viewportDisplayResources(from: provider).map(\.id), [artifact.id])
+  }
+
+  /// PR #11801: a wake-word quiet answer must not leave its silence latched onto the bar.
+  /// Presenting any open surface is an explicit choice to show content, so it ends quiet —
+  /// otherwise the agent-chat and notification-conversation growth
+  /// (`resizeAnchored(makeResizable: true)`) stays silently swallowed after one hands-free
+  /// answer. Live-measured before this rule: opening an agent chat after a quiet answer
+  /// landed on the pills-observer fallback (430x148, non-resizable) instead of the proper
+  /// resizable agent-chat surface (430x400).
+  func testPresentingAnOpenSurfaceEndsAQuietAnswer() {
+    let state = FloatingControlBarState()
+    state.answersQuietly = true
+
+    state.present(.mainResponse)
+    XCTAssertFalse(state.answersQuietly, "presenting the response surface ends a quiet answer")
+    XCTAssertTrue(state.showingAIConversation)
+
+    let agentState = FloatingControlBarState()
+    agentState.answersQuietly = true
+    agentState.present(.agent(UUID()))
+    XCTAssertFalse(agentState.answersQuietly, "opening an agent chat ends a quiet answer")
+    XCTAssertTrue(agentState.showingAIConversation)
+    XCTAssertEqual(agentState.activeAgentChatPillID != nil, true)
   }
 }

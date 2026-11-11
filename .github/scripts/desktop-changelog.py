@@ -9,13 +9,13 @@ import sys
 from datetime import date
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_DIR = ROOT / "desktop" / "macos"
 CHANGELOG_DIR = DESKTOP_DIR / "changelog"
 UNRELEASED_DIR = CHANGELOG_DIR / "unreleased"
 RELEASES_DIR = CHANGELOG_DIR / "releases"
 LEGACY_CHANGELOG_PATH = DESKTOP_DIR / "CHANGELOG.json"
+NONE_KIND = "none"
 
 
 class ChangelogError(Exception):
@@ -24,14 +24,14 @@ class ChangelogError(Exception):
 
 def read_json(path: Path) -> object:
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ChangelogError(f"{path} is not valid JSON: {exc}") from exc
 
 
 def write_json(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def normalize_changes(raw: object, path: Path) -> list[str]:
@@ -50,14 +50,20 @@ def normalize_changes(raw: object, path: Path) -> list[str]:
     return normalized
 
 
+def is_none_kind_fragment(data: object) -> bool:
+    return isinstance(data, dict) and data.get("kind") == NONE_KIND
+
+
 def read_unreleased_fragment(path: Path) -> list[str]:
     data = read_json(path)
+    if is_none_kind_fragment(data):
+        return []
     if isinstance(data, dict):
         if "change" in data:
             return normalize_changes(data["change"], path)
         if "changes" in data:
             return normalize_changes(data["changes"], path)
-    raise ChangelogError(f"{path} must contain a 'change' string or 'changes' list")
+    raise ChangelogError(f"{path} must contain a 'change' string, 'changes' list, or 'kind': '{NONE_KIND}'")
 
 
 def read_release_file(path: Path) -> dict[str, object]:
@@ -120,7 +126,9 @@ def release_entries() -> list[dict[str, object]]:
                     releases.append(normalized)
                     seen_versions.add(version)
 
-    return sorted(releases, key=lambda release: (str(release["date"]), version_sort_key(str(release["version"]))), reverse=True)
+    return sorted(
+        releases, key=lambda release: (str(release["date"]), version_sort_key(str(release["version"]))), reverse=True
+    )
 
 
 def legacy_changelog() -> dict[str, object]:
@@ -154,6 +162,29 @@ def format_changes(changes: list[str], output_format: str) -> str:
 
 
 def consolidate(version: str, release_date: str, *, write: bool) -> dict[str, object]:
+    """Fold unreleased fragments into releases/<version>.json.
+
+    If that version file already exists and there are no unreleased fragments,
+    leave it untouched. Retries after a partial tag-release must not clobber a
+    previously consolidated 0.12.N entry with the generic fallback string.
+    """
+
+    release_path = RELEASES_DIR / f"{version}.json"
+    fragments = unreleased_fragment_paths()
+    if release_path.is_file() and not fragments:
+        existing = read_json(release_path)
+        if not isinstance(existing, dict):
+            raise ChangelogError(f"{release_path} must contain a JSON object")
+        normalized = {
+            "version": str(existing.get("version", version)).strip() or version,
+            "date": str(existing.get("date", release_date)).strip() or release_date,
+            "changes": normalize_changes(existing.get("changes", []), release_path),
+        }
+        if write:
+            # Keep legacy CHANGELOG.json aligned without rewriting the release file.
+            write_json(LEGACY_CHANGELOG_PATH, legacy_changelog())
+        return normalized
+
     changes = unreleased_changes() or ["Bug fixes and improvements"]
     release = {
         "version": version,
@@ -162,8 +193,8 @@ def consolidate(version: str, release_date: str, *, write: bool) -> dict[str, ob
     }
 
     if write:
-        write_json(RELEASES_DIR / f"{version}.json", release)
-        for path in unreleased_fragment_paths():
+        write_json(release_path, release)
+        for path in fragments:
             path.unlink()
         write_json(LEGACY_CHANGELOG_PATH, legacy_changelog())
 

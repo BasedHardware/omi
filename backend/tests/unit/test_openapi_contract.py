@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict
 
 from scripts import export_openapi
 
+UNDOCUMENTED_PUBLIC_ROUTES = dict(export_openapi.UNDOCUMENTED_PUBLIC_ROUTES)
+
 
 @pytest.fixture(autouse=True)
 def narrow_undocumented_route_allowlist(monkeypatch):
@@ -52,6 +54,52 @@ def test_public_openapi_filters_to_developer_contract():
     }
     assert schema['paths']['/v1/dev/example']['get']['security'] == [{'developerApiKey': []}]
     assert schema['paths']['/v1/dev/example']['get']['responses']['401'] == {'$ref': '#/components/responses/Error401'}
+
+
+def test_recording_speaker_routes_stay_first_party_like_single_conversation_assignments(monkeypatch):
+    app = FastAPI()
+    routes = {
+        ('PATCH', '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}'),
+        ('PATCH', '/v1/conversations/{conversation_id}/segments/assign-bulk'),
+        ('GET', '/v1/conversations/{conversation_id}/recording-speakers'),
+        ('PATCH', '/v1/conversations/{conversation_id}/recording-speakers'),
+    }
+    monkeypatch.setattr(
+        export_openapi,
+        'UNDOCUMENTED_PUBLIC_ROUTES',
+        {key: reason for key, reason in UNDOCUMENTED_PUBLIC_ROUTES.items() if key in routes},
+    )
+    for method, path in sorted(routes):
+        app.add_api_route(path, lambda: {}, methods=[method])
+
+    public_schema = export_openapi.build_public_openapi(app)
+    app_schema = export_openapi.build_openapi(app, 'app-client')
+
+    assert public_schema['paths'] == {}
+    assert set(export_openapi.documented_route_keys(app_schema)) == routes
+    for method, path in routes:
+        assert app_schema['paths'][path][method.lower()]['security'] == [{'firebaseBearer': []}]
+
+
+def test_task_membership_routes_are_first_party_not_developer_api(monkeypatch):
+    app = FastAPI()
+    routes = {
+        ('POST', '/v1/conversations/task-presence'),
+        ('POST', '/v1/conversations/with-tasks/page'),
+    }
+    monkeypatch.setattr(
+        export_openapi,
+        'UNDOCUMENTED_PUBLIC_ROUTES',
+        {key: reason for key, reason in UNDOCUMENTED_PUBLIC_ROUTES.items() if key in routes},
+    )
+    for method, path in sorted(routes):
+        app.add_api_route(path, lambda: {}, methods=[method])
+
+    assert export_openapi.build_public_openapi(app)['paths'] == {}
+    app_schema = export_openapi.build_openapi(app, 'app-client')
+    assert set(export_openapi.documented_route_keys(app_schema)) == routes
+    for method, path in routes:
+        assert app_schema['paths'][path][method.lower()]['security'] == [{'firebaseBearer': []}]
 
 
 def test_route_inventory_fails_when_public_route_missing_from_spec():

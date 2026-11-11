@@ -10,8 +10,10 @@ credentials and Python 3.10+, so we extract and test the function logic directly
 import os
 import re
 import sys
+import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import MagicMock as _MagicMock, patch
 
 import pytest
 
@@ -40,33 +42,35 @@ def _get_build_subscription_fn():
         'Dict': Dict,
         'Optional': Optional,
         'cast': _cast,
+        'time': __import__('time'),
+        'project_subscription': __import__(
+            'utils.subscription_state_machine', fromlist=['project_subscription']
+        ).project_subscription,
         'PlanType': PlanType,
         'SubscriptionStatus': SubscriptionStatus,
         'Subscription': Subscription,
         'get_plan_type_from_price_id': None,  # set per-test
         'get_plan_limits': None,  # set per-test
         'get_basic_plan_limits': lambda: {'daily_chat_message_limit': 10, 'daily_speech_hours_limit': 1},
+        # The unresolvable-price branch now emits fallback telemetry before returning
+        # None, so the extracted source needs these names. This namespace execs source
+        # text, so any new call in the copied function must be mirrored here or the
+        # test fails with NameError rather than on behavior.
+        'record_fallback': lambda **kwargs: None,
+        'logger': _MagicMock(),
+        'sanitize': lambda value: value,
     }
     exec(compile(func_source, '<payment.py>', 'exec'), namespace)
     return namespace['_build_subscription_from_stripe_object'], namespace
 
 
 def _get_current_paid_guard_fn():
-    source = (Path(__file__).resolve().parents[2] / "routers" / "payment.py").read_text(encoding="utf-8")
-    func_start = source.index('def _has_current_paid_subscription_for_different_stripe_sub')
-    next_func = source.index('\ndef ', func_start + 1)
-    func_source = source[func_start:next_func]
-    func_source = func_source.replace('Subscription | None', 'object')
-    func_source = func_source.replace('str | None', 'object')
-    func_source = func_source.replace('int | None', 'object')
+    from utils.subscription_state_machine import preserves_current_paid_subscription
 
-    namespace = {
-        'SubscriptionStatus': SubscriptionStatus,
-        'is_paid_plan': lambda plan: plan in {PlanType.unlimited, PlanType.architect, PlanType.operator},
-        'time': MagicMock(time=MagicMock(return_value=1_700_000_000)),
-    }
-    exec(compile(func_source, '<payment.py>', 'exec'), namespace)
-    return namespace['_has_current_paid_subscription_for_different_stripe_sub']
+    def guard(current, event_id, now=None):
+        return preserves_current_paid_subscription(current, event_id, now or 1_700_000_000)
+
+    return guard
 
 
 # ── Behavioral tests for _build_subscription_from_stripe_object ─────────────
@@ -156,6 +160,47 @@ class TestBuildSubscriptionFromStripeObject:
         assert result is not None
         assert result.cancel_at_period_end is False
 
+    def test_immediately_canceled_subscription_keeps_paid_plan_until_period_end(self):
+        """A canceled-now event with a future current_period_end must not strip
+        access the customer already paid for (portal "cancel immediately")."""
+        future = int(time.time()) + 86_400 * 20
+        sub = _make_stripe_sub(status='canceled', price_id='price_known')
+        sub['current_period_end'] = future
+        result = self.fn(sub, grant_cancel_grace=True)
+        assert result is not None
+        assert result.plan == PlanType.unlimited
+        assert result.status == SubscriptionStatus.active
+        assert result.cancel_at_period_end is True
+        assert result.current_period_end == future
+
+    def test_canceled_paid_through_keeps_basic_without_grant(self):
+        """Schedule/checkout paths keep main's downgrade: no grant, no grace."""
+        sub = _make_stripe_sub(status='canceled', price_id='price_known')
+        sub['current_period_end'] = int(time.time()) + 86_400 * 20
+        result = self.fn(sub)
+        assert result is not None
+        assert result.plan == PlanType.basic
+        assert result.cancel_at_period_end is False
+
+    def test_immediately_canceled_with_unresolvable_price_downgrades_to_basic(self):
+        """Paid-through preservation cannot invent a plan; unknown price stays Basic."""
+        self.ns['get_plan_type_from_price_id'] = MagicMock(side_effect=ValueError("Unknown"))
+        future = int(time.time()) + 86_400 * 20
+        sub = _make_stripe_sub(status='canceled', price_id='price_unknown')
+        sub['current_period_end'] = future
+        result = self.fn(sub, grant_cancel_grace=True)
+        assert result is not None
+        assert result.plan == PlanType.basic
+
+    def test_unpaid_with_future_period_end_still_downgrades_to_basic(self):
+        """Grace is limited to canceled; unpaid/incomplete_expired keep Basic."""
+        future = int(time.time()) + 86_400 * 20
+        sub = _make_stripe_sub(status='unpaid', price_id='price_known')
+        sub['current_period_end'] = future
+        result = self.fn(sub, grant_cancel_grace=True)
+        assert result is not None
+        assert result.plan == PlanType.basic
+
     def test_subscription_includes_stripe_id(self):
         """Result always includes the Stripe subscription ID."""
         result = self.fn(_make_stripe_sub())
@@ -185,11 +230,15 @@ class TestStripeWebhookDuplicateAndCustomerSourceLevel:
         return self.PAYMENT_SOURCE_FILE.read_text(encoding="utf-8")
 
     def test_checkout_duplicate_return_only_applies_to_paid_existing_subscription(self):
-        source = self._read_source()
-        duplicate_idx = source.find('Duplicate webhook event for existing subscription')
-        assert duplicate_idx != -1, "duplicate checkout guard not found"
-        guard_block = source[max(0, duplicate_idx - 600) : duplicate_idx]
-        assert 'is_paid_plan(existing_subscription.plan)' in guard_block
+        from utils.subscription_state_machine import ResolvedStripeEvent, transition
+
+        same = ResolvedStripeEvent('checkout.session.completed', 'sub_same', None, 1_700_000_000)
+        paid = Subscription(plan=PlanType.plus, stripe_subscription_id='sub_same', status=SubscriptionStatus.active)
+        basic = Subscription(plan=PlanType.basic, stripe_subscription_id='sub_same', status=SubscriptionStatus.active)
+        assert transition(paid, same).outcome == 'duplicate_checkout'
+        assert transition(basic, same).outcome == 'new_checkout'
+        other = ResolvedStripeEvent('checkout.session.completed', 'sub_other', None, 1_700_000_000)
+        assert transition(paid, other).outcome == 'replacement_checkout'
 
     def test_subscription_events_persist_customer_id_for_uid_metadata_path(self):
         source = self._read_source()
@@ -215,12 +264,28 @@ class TestStripeWebhookDuplicateAndCustomerSourceLevel:
         set_customer_idx = handler_block.find("users_db.set_stripe_customer_id")
         assert set_customer_idx != -1, "set_stripe_customer_id call not found in subscription handler"
         # The guard flag must precede the set_stripe_customer_id call
-        guard_idx = handler_block.find("adopted_active_paid = False")
+        guard_idx = handler_block.find("decision = transition(")
         assert guard_idx != -1, "adopted_active_paid flag not found"
         assert guard_idx < set_customer_idx, "guard flag must precede customer id write"
         # The write must be gated on NOT adopting active_paid
         guard_block = handler_block[max(0, set_customer_idx - 400) : set_customer_idx]
-        assert "not adopted_active_paid" in guard_block, "customer id write must be gated on not adopted_active_paid"
+        assert (
+            "'set_customer' in decision.effects" in guard_block
+        ), "customer id write must be gated on not adopted_active_paid"
+
+    def test_billing_projection_follows_reconciliation_and_durable_subscription_write(self):
+        source = self._read_source()
+        handler_start = source.index("'customer.subscription.updated'")
+        handler_end = source.index("subscription_schedule.completed", handler_start)
+        handler = source[handler_start:handler_end]
+        projection = handler.find("await schedule_billing_webhook_events(")
+        guard = handler.find("decision = transition(")
+        durable_write = handler.find("users_db.update_user_subscription")
+        assert projection != -1
+        assert guard != -1
+        assert durable_write != -1
+        assert guard < projection, "billing events must follow stale-subscription reconciliation"
+        assert durable_write < projection, "billing events must follow durable entitlement persistence"
 
 
 class TestStripeSubscriptionEventPrecedence:
@@ -307,40 +372,10 @@ class TestStripeSubscriptionEventPrecedence:
         assert 'get_default_basic_subscription' not in func_body
 
 
-class TestStripeEntitlementMismatchScannerDrift:
-    """Guard against price→plan mapping drift between the standalone support
-    scanner and the backend subscription mapping.
+def test_entitlement_scanner_consumes_catalog_instead_of_copying_price_ids():
+    support_file = Path(__file__).resolve().parents[2] / "scripts" / "support" / "find_stripe_entitlement_mismatches.py"
+    support_source = support_file.read_text(encoding="utf-8")
 
-    find_stripe_entitlement_mismatches.py cannot import the backend chain
-    (Firestore/Google Cloud deps), so it keeps its own DEFAULT_PRICE_TO_PLAN.
-    If it drifts from backend/utils/subscription.py LEGACY_PRICE_MAP, the
-    scanner silently skips active paid subscriptions and under-reports
-    entitlement mismatches. This test catches that drift.
-    """
-
-    SUPPORT_FILE = Path(__file__).resolve().parents[2] / "scripts" / "support" / "find_stripe_entitlement_mismatches.py"
-    SUBSCRIPTION_FILE = Path(__file__).resolve().parents[2] / "utils" / "subscription.py"
-
-    def _extract_price_ids(self, source: str, start_marker: str) -> set:
-        """Extract quoted price_ IDs between start_marker and the closing brace."""
-        start = source.find(start_marker)
-        assert start != -1, f"{start_marker} not found"
-        end = source.find("\n}", start)
-        block = source[start:end]
-        return set(re.findall(r"['\"](price_[A-Za-z0-9]+)['\"]", block))
-
-    def test_support_scanner_legacy_price_ids_match_backend(self):
-        """Every legacy price id in the backend LEGACY_PRICE_MAP must appear in
-        the support scanner's DEFAULT_PRICE_TO_PLAN so the scanner never silently
-        skips a known paid price."""
-        support_src = self.SUPPORT_FILE.read_text(encoding="utf-8")
-        sub_src = self.SUBSCRIPTION_FILE.read_text(encoding="utf-8")
-
-        backend_legacy = self._extract_price_ids(sub_src, "LEGACY_PRICE_MAP = {")
-        support_default = self._extract_price_ids(support_src, "DEFAULT_PRICE_TO_PLAN = {")
-
-        missing = backend_legacy - support_default
-        assert not missing, (
-            f"Support scanner is missing legacy price IDs that the backend knows about: {missing}. "
-            "Add them to DEFAULT_PRICE_TO_PLAN to avoid under-reporting entitlement mismatches."
-        )
+    assert "RECOGNIZED_STRIPE_PRICE_PLAN_TYPES" in support_source
+    assert "BILLING_ENV_VAR_PLAN_TYPES" in support_source
+    assert not re.search(r"['\"]price_[0-9][A-Za-z0-9]{10,}['\"]", support_source)

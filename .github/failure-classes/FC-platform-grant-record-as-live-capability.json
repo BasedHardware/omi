@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-platform-grant-record-as-live-capability",
+  "violated_contract": "A platform authorization record must not be treated as proof that the running process can exercise the capability it names. Screen Recording rights are bound when a process connects to the window server, so a bundle re-signed under a new identity reads CGPreflightScreenCaptureAccess() == true at launch while ScreenCaptureKit refuses that same process with userDeclined. A status model that carries only granted/denied has no state for granted-but-unusable, returns \"nothing is wrong\", and licenses the capture loop to re-issue the request at probe cadence — and because each request is itself the TCC ask, macOS answers every one with the system permission alert. The user sees the prompt on a loop over a switch they can see is already on.",
+  "canonical_prevention": "Model the capability as a trichotomy — granted, denied, granted-but-stale — and resolve it from two independent inputs: the platform's own record, and the refusal the subsystem that actually performs the work reported. Classify the definitive refusal at the boundary that observed it (SCStreamError.userDeclined, distinguished from recoverable faults such as failedToStart or a window that vanished mid-request), latch it in memory rather than persisting it since it is a fact about this process, and surface the only remedy that exists — relaunch — instead of re-requesting. A capability whose rights are fixed at process start must never be retried on a timer.",
+  "canonical_prevention_artifact": [
+    "desktop/context-for-claude/Tests/ContextAppTests/ScreenStaleGrantTests.swift"
+  ],
+  "evidence_prs": [
+    10783
+  ],
+  "scope_hints": [
+    "desktop/context-for-claude/Sources/ContextApp/Permissions.swift",
+    "desktop/context-for-claude/Sources/ContextApp/Capture/ScreenWatcher.swift",
+    "desktop/context-for-claude/Sources/ContextApp/Engine.swift"
+  ],
+  "status": "open"
+}

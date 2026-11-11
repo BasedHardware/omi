@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "untitled_en",
+      "canary": false,
+      "records": {
+        "conversations/untitled_en": {
+          "id": "untitled_en",
+          "structured": {
+            "title": "",
+            "overview": "The group agreed to build a small solar-powered toy boat."
+          },
+          "transcript_segments": [
+            {
+              "text": "We are building a solar-powered toy boat. The hull is ready and we will test it in a basin tomorrow.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "expected_problem": "quality",
+      "expected_refs": [
+        "conversations/untitled_en"
+      ],
+      "clusters": [
+        {
+          "refs": [
+            "conversations/untitled_en"
+          ],
+          "problem": "quality"
+        }
+      ],
+      "expected_kind": "title",
+      "after_contains": null
+    },
+    {
+      "id": "untitled_vi",
+      "canary": false,
+      "records": {
+        "conversations/untitled_vi": {
+          "id": "untitled_vi",
+          "structured": {
+            "title": "",
+            "overview": "Cả nhóm chuẩn bị trồng rau trên ban công."
+          },
+          "transcript_segments": [
+            {
+              "text": "Chúng ta sẽ trồng rau trên ban công. Tôi đã mua hạt giống và chúng ta sẽ đặt chậu cạnh cửa sổ vào cuối tuần.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "expected_problem": "quality",
+      "expected_refs": [
+        "conversations/untitled_vi"
+      ],
+      "clusters": [
+        {
+          "refs": [
+            "conversations/untitled_vi"
+          ],
+          "problem": "quality"
+        }
+      ],
+      "expected_kind": "title",
+      "after_contains": null
+    },
+    {
+      "id": "clean_bilingual",
+      "canary": false,
+      "records": {
+        "conversations/clean_bilingual": {
+          "id": "clean_bilingual",
+          "structured": {
+            "title": "Chuẩn bị buổi thử thuyền",
+            "overview": "Cả nhóm sẽ thử thuyền đồ chơi chạy bằng năng lượng mặt trời vào ngày mai."
+          },
+          "transcript_segments": [
+            {
+              "text": "Ngày mai chúng ta thử thuyền đồ chơi chạy bằng năng lượng mặt trời. The small boat is ready for testing. Tôi sẽ mang chậu nước đến.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "expected_problem": null,
+      "expected_refs": [],
+      "clusters": [
+        {
+          "refs": [
+            "conversations/clean_bilingual"
+          ],
+          "problem": "quality"
+        }
+      ]
+    },
+    {
+      "id": "brand_vi",
+      "canary": false,
+      "records": {
+        "conversations/brand_vi": {
+          "id": "brand_vi",
+          "structured": {
+            "title": "Thử nghiệm rô bốt Qorbi",
+            "overview": "Nhóm thử nghiệm rô bốt Qorbi."
+          },
+          "transcript_segments": [
+            {
+              "text": "Rô bốt này tên Qorbi, viết là Qorbi. Bản chép ghi Qorby là sai chính tả, cần sửa Qorby thành Qorbi.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "expected_problem": "spelling",
+      "expected_refs": [
+        "conversations/brand_vi"
+      ],
+      "clusters": [
+        {
+          "refs": [
+            "conversations/brand_vi"
+          ],
+          "problem": "spelling"
+        }
+      ],
+      "expected_kind": "spelling",
+      "after_contains": "Qorbi"
+    }
+  ]
+}

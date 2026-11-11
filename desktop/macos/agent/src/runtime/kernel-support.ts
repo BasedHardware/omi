@@ -43,6 +43,9 @@ export function stableHash(value: string | undefined): string {
   return createHash("sha256").update(value ?? "").digest("hex");
 }
 
+/** The MCP server entry for Omi's own tools server (omi-tools-stdio). */
+export const OMI_TOOLS_MCP_SERVER_NAME = "omi-tools";
+
 const VOLATILE_MCP_ENV_KEYS = new Set([
   "OMI_BRIDGE_PIPE",
   "OMI_CONTEXT_FILE",
@@ -592,12 +595,16 @@ export function canonicalAdapterEventType(event: OutboundMessageDraft): string |
     case "tool_activity":
       if (event.status === "started") return "tool.started";
       if (event.status === "completed") return "tool.completed";
-      if (event.status === "failed") return "tool.failed";
+      if (event.status === "failed" || event.status === "cancelled" || event.status === "interrupted") {
+        return "tool.failed";
+      }
       return "tool.updated";
     case "tool_use":
       return "tool.started";
     case "tool_result_display":
       return "tool.completed";
+    case "model_used":
+      return "progress.updated";
     case "error":
       return "progress.updated";
     default:
@@ -632,19 +639,29 @@ export function mcpServersForBinding(
   mcpServers: Record<string, unknown>[],
   sessionId: string,
   adapterId: string,
-  runtimeNodeId: string
+  runtimeNodeId: string,
+  workingDirectory?: string,
 ): Record<string, unknown>[] {
   return mcpServers.map((server) => {
     if (!server || typeof server !== "object" || Array.isArray(server)) {
       return server;
     }
     const normalized: Record<string, unknown> = { ...server };
+    const isOmiToolsServer = normalized.name === OMI_TOOLS_MCP_SERVER_NAME;
     const env = (Array.isArray(normalized.env) ? normalized.env : []).filter((entry) => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return true;
       const name = (entry as Record<string, unknown>).name;
+      // The relay socket lives as long as this runtime process, so a binding
+      // may carry it (it stays out of the binding hash). An adapter that
+      // launches omi-tools from this config has no other way to find it. It
+      // is the tool relay capability, so only Omi's own tools server keeps it.
+      if (name === "OMI_BRIDGE_PIPE") return isOmiToolsServer;
       return typeof name !== "string" || !VOLATILE_MCP_ENV_KEYS.has(name) || name === "OMI_CONTEXT_FILE";
     });
-    normalized.env = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    const bindingEnv = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    normalized.env = workingDirectory
+      ? upsertEnv(bindingEnv, "OMI_WORKSPACE", workingDirectory)
+      : bindingEnv;
     return normalized;
   });
 }

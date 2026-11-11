@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import LocalAuthentication
 import Security
 
 struct BrowserGoogleSession: Equatable {
@@ -11,6 +12,7 @@ struct BrowserGoogleSession: Equatable {
   static let chromiumCookiePythonSupport = """
     import sys, json, os, sqlite3, hashlib, time
     from http.cookiejar import MozillaCookieJar, Cookie
+    from urllib.request import Request
 
     try:
         from Crypto.Cipher import AES
@@ -114,6 +116,24 @@ struct BrowserGoogleSession: Equatable {
             jar.set_cookie(cookie)
         return jar
 
+    def cookie_value_for_request(jar, url, names):
+        # A Chromium profile can keep same-named Google cookies with different
+        # host scopes. Derive the value from the exact Cookie header this jar
+        # would send to `url`; querying the decrypted SQLite rows directly is
+        # unordered and can select a cookie Google will not receive.
+        request = Request(url)
+        jar.add_cookie_header(request)
+        cookie_header = request.get_header('Cookie') or ''
+        values = {}
+        for item in cookie_header.split(';'):
+            name, separator, value = item.strip().partition('=')
+            if separator and name not in values:
+                values[name] = value
+        for name in names:
+            if name in values:
+                return values[name]
+        return None
+
     def write_json_result(prefix, payload):
         import tempfile
         fd, outfile = tempfile.mkstemp(suffix='.json', prefix=prefix)
@@ -147,13 +167,22 @@ struct BrowserGoogleSession: Equatable {
     }
   }
 
-  static func configsForPython(logPrefix: String) -> [[String: String]] {
+  /// Resolve browser cookie stores for a connector operation.
+  ///
+  /// Browser Safe Storage is another app's Keychain item. Background work must
+  /// never turn a missing ACL into a macOS password sheet, so callers must
+  /// explicitly opt in when the user just requested a Gmail/Calendar read.
+  static func configsForPython(
+    logPrefix: String,
+    userInitiated: Bool = false
+  ) -> [[String: String]] {
     all().compactMap { session in
       guard FileManager.default.fileExists(atPath: session.cookiePath) else { return nil }
       guard
         let password = BrowserKeychainCache.shared.password(
           for: session.keychainService,
-          account: session.keychainAccount
+          account: session.keychainAccount,
+          userInitiated: userInitiated
         )
       else {
         log("\(logPrefix): No keychain password for \(session.browserName)")
@@ -230,22 +259,49 @@ struct BrowserGoogleSession: Equatable {
 
 /// Browser Safe Storage strategy for Chromium cookie scraping.
 ///
+/// Production-family bundles only: developer builds return nil without calling
+/// SecItem (login-keychain prompts are production-only).
+///
 /// Primary path: read the browser-created generic-password item in-process via
 /// `SecItemCopyMatching`. macOS attributes the keychain prompt to the *requesting
 /// process*, so the in-process read shows "<this app> wants to access …" — the app
 /// identity the user must recognize before granting — instead of "security wants to
 /// access …" (which is what shelling out to `/usr/bin/security` produced).
 ///
-/// A first cross-app read requires user approval. For a stably signed app, choosing
-/// "Always Allow" lets macOS add this app's code-signing identity and partition ID to
-/// the item's ACL, so later reads can proceed without another prompt. We intentionally
-/// do not retry through `/usr/bin/security`: that would attribute any second prompt to
-/// the CLI and persist access for the wrong requester.
+/// An explicit user-requested read may require approval. For a stably signed app,
+/// choosing "Always Allow" lets macOS add this app's code-signing identity and
+/// partition ID to the item's ACL, so later reads can proceed without another prompt.
+/// Background probes use a non-interactive authentication context and fail closed;
+/// they never turn a missing grant into a password sheet. We intentionally do not
+/// retry through `/usr/bin/security`: that would attribute any second prompt to the
+/// CLI and persist access for the wrong requester.
 ///
-/// The in-memory cache below coalesces concurrent reads within a single app run; we do
-/// not duplicate browser Safe Storage secrets into app preferences.
+/// The in-memory cache below coalesces concurrent explicit reads within a single app
+/// run; passive callers cannot consume either a cached secret or the Keychain item.
+/// We do not duplicate browser Safe Storage secrets into app preferences.
 final class BrowserKeychainCache: @unchecked Sendable {
   static let shared = BrowserKeychainCache()
+
+  /// Test seam: shipped bundles import browser Safe Storage from the login keychain;
+  /// every other bundle must return nil without calling SecItem.
+  nonisolated(unsafe) static var allowsBrowserKeychainImport: (() -> Bool)?
+  /// Test seam: replace the SecItem read so unit tests never touch the real keychain.
+  nonisolated(unsafe) static var safeStoragePasswordProvider:
+    ((_ service: String, _ account: String, _ userInitiated: Bool) -> String?)?
+  private nonisolated(unsafe) static var didLogProductionOnlyRestriction = false
+  private static let productionOnlyLogLock = NSLock()
+
+  static func resetTestHooks() {
+    allowsBrowserKeychainImport = nil
+    safeStoragePasswordProvider = nil
+    productionOnlyLogLock.lock()
+    didLogProductionOnlyRestriction = false
+    productionOnlyLogLock.unlock()
+  }
+
+  static var isBrowserKeychainImportAllowed: Bool {
+    allowsBrowserKeychainImport?() ?? AppBuild.isProductionBundle
+  }
 
   private enum CacheEntry {
     case found(String)
@@ -260,28 +316,80 @@ final class BrowserKeychainCache: @unchecked Sendable {
     UserDefaults.standard.removeObject(forKey: "cachedBrowserKeychainPasswords")
   }
 
-  func password(for service: String, account: String) -> String? {
-    password(for: "\(service)\u{0}\(account)") {
-      Self.nativeSafeStoragePassword(for: service, account: account)
+  /// Start a new explicit connector operation. A denied Safe Storage read is
+  /// sticky for the operation so scanning several browser profiles cannot
+  /// produce one password sheet per profile, but a later user action may try
+  /// again once.
+  func beginUserInitiatedOperation() {
+    lock.lock()
+    cache = cache.filter { _, entry in
+      if case .missing = entry { return false }
+      return true
+    }
+    lock.unlock()
+  }
+
+  func password(for service: String, account: String, userInitiated: Bool = false) -> String? {
+    password(for: "\(service)\u{0}\(account)", userInitiated: userInitiated) {
+      Self.nativeSafeStoragePassword(
+        for: service,
+        account: account,
+        userInitiated: userInitiated
+      )
     }
   }
 
-  static func safeStorageQuery(service: String, account: String) -> [String: Any] {
-    [
+  static func safeStorageQuery(
+    service: String,
+    account: String,
+    userInitiated: Bool = false
+  ) -> [String: Any] {
+    var query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
       kSecAttrAccount as String: account,
       kSecReturnData as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
     ]
+    if !userInitiated {
+      let context = LAContext()
+      context.interactionNotAllowed = true
+      query[kSecUseAuthenticationContext as String] = context
+      // Browser Safe Storage is a foreign app's file-based Keychain item. The
+      // LAContext is the preferred silent-auth mechanism, but macOS can still
+      // consult a TrustedApplication ACL and show the login-keychain sheet for
+      // these items. Skip authentication UI explicitly for background probes.
+      query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUISkip
+    }
+    return query
   }
 
   /// Reads the browser Safe Storage key in-process so the prompt and any durable
   /// "Always Allow" grant belong to this app rather than `/usr/bin/security`.
-  private static func nativeSafeStoragePassword(for service: String, account: String) -> String? {
+  static func nativeSafeStoragePassword(
+    for service: String,
+    account: String,
+    userInitiated: Bool
+  ) -> String? {
+    guard isBrowserKeychainImportAllowed else {
+      logBrowserKeychainImportRestrictedOnce()
+      return nil
+    }
+    if let safeStoragePasswordProvider {
+      return safeStoragePasswordProvider(service, account, userInitiated)
+    }
+    // A background connector probe may discover a browser profile, but it must
+    // fail closed rather than ask for the login keychain password. An explicit
+    // import/read passes userInitiated=true and may show the normal one-time
+    // consent sheet.
+    let query = safeStorageQuery(
+      service: service,
+      account: account,
+      userInitiated: userInitiated
+    )
     var item: CFTypeRef?
     let status = SecItemCopyMatching(
-      safeStorageQuery(service: service, account: account) as CFDictionary,
+      query as CFDictionary,
       &item
     )
     guard status == errSecSuccess,
@@ -294,7 +402,24 @@ final class BrowserKeychainCache: @unchecked Sendable {
     return password
   }
 
-  func password(for cacheKey: String, loader: () -> String?) -> String? {
+  private static func logBrowserKeychainImportRestrictedOnce() {
+    productionOnlyLogLock.lock()
+    defer { productionOnlyLogLock.unlock() }
+    guard !didLogProductionOnlyRestriction else { return }
+    didLogProductionOnlyRestriction = true
+    log("browser keychain import is production-only")
+  }
+
+  func password(
+    for cacheKey: String,
+    userInitiated: Bool = false,
+    loader: () -> String?
+  ) -> String? {
+    // A previous explicit grant is not consent for a later background browser
+    // scrape. Keep the purpose boundary at the cache itself so every caller,
+    // including Gmail and Calendar verification, fails closed consistently.
+    guard userInitiated else { return nil }
+
     loop: while true {
       lock.lock()
 
@@ -322,7 +447,9 @@ final class BrowserKeychainCache: @unchecked Sendable {
       lock.lock()
       if let password {
         cache[cacheKey] = .found(password)
-      } else {
+      } else if userInitiated {
+        // Cache an explicit denial for this run, but never cache a background
+        // non-interactive miss: a later user action must still be able to ask.
         cache[cacheKey] = .missing
       }
       let completedGroup = inFlight.removeValue(forKey: cacheKey)

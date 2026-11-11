@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-naive-utc-timestamp-in-llm-surface",
+  "violated_contract": "A timestamp value handed to the chat model as tool output or prompt context must carry an explicit time zone; a naive datetime string must never be presented as if it were already local time.",
+  "canonical_prevention": "Convert database-stored UTC datetime values to TimeZone.current with an explicit zone abbreviation/offset in the formatter that renders them for the model, rather than relying on prompt instructions asking the model to apply the offset itself.",
+  "evidence_prs": [],
+  "scope_hints": ["desktop/macos/Desktop/Sources/Chat/**", "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift"],
+  "status": "open"
+}

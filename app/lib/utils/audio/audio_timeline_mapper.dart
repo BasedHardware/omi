@@ -44,6 +44,10 @@ class AudioTimelineMapper {
 
   /// Wall-clock seconds -> MP3 seconds. A position inside a collapsed gap
   /// snaps forward to the next span's start; before/after the timeline clamps.
+  ///
+  /// Use this for scrubber interaction. Segment taps must use
+  /// [wallToArtifactStrict] so a tap in a collapsed gap does not jump into a
+  /// later span (#4471).
   double wallToArtifact(double wallSeconds) {
     if (spans.isEmpty) return 0;
     if (wallSeconds <= spans.first.wallOffset) return spans.first.artifactOffset;
@@ -62,6 +66,31 @@ class AudioTimelineMapper {
     }
     // In the gap after this span: snap to the next span, or clamp at the end.
     return lo + 1 < spans.length ? spans[lo + 1].artifactOffset : capturedDuration;
+  }
+
+  /// Wall-clock seconds -> MP3 seconds only when [wallSeconds] falls inside a
+  /// span. Returns null in collapsed gaps / outside the timeline (macOS
+  /// CapturePlayback contract). Half-open: [wallOffset, wallEnd).
+  double? wallToArtifactStrict(double wallSeconds) {
+    if (spans.isEmpty) return null;
+    for (final span in spans) {
+      if (wallSeconds >= span.wallOffset && wallSeconds < span.wallEnd) {
+        return span.artifactOffset + (wallSeconds - span.wallOffset);
+      }
+    }
+    return null;
+  }
+
+  /// Like [wallToArtifactStrict] but inclusive of each span's [ConversationAudioSpan.wallEnd]
+  /// so a segment's stop time on a span boundary still maps.
+  double? wallToArtifactStrictInclusive(double wallSeconds) {
+    if (spans.isEmpty) return null;
+    for (final span in spans) {
+      if (wallSeconds >= span.wallOffset && wallSeconds <= span.wallEnd) {
+        return span.artifactOffset + (wallSeconds - span.wallOffset);
+      }
+    }
+    return null;
   }
 
   /// MP3 seconds -> wall-clock seconds.

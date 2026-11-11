@@ -32,10 +32,9 @@ class GlowEdgeWindow: NSWindow {
       defer: false
     )
 
-    // Make window transparent and floating
-    self.isOpaque = false
-    self.backgroundColor = .clear
-    self.hasShadow = false
+    // Transparent, and shadowless because AppKit's window shadow traces the *frame* — which here is
+    // a rectangle around another app's window with nothing drawn in the middle of it.
+    WindowGlass.wear(self, as: .floating)
 
     // Float above other windows
     self.level = .popUpMenu

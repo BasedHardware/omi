@@ -37,7 +37,6 @@ final class APIClientAuthRecoveryTests: XCTestCase {
       "AppState/AppState+DataLoading.swift",
       "Stores/TasksStore.swift",
       "Stores/DashboardTaskRefreshService.swift",
-      "MainWindow/CrispManager.swift",
       "MainWindow/Pages/MemoriesPage.swift",
     ]
     for relative in callSites {

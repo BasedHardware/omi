@@ -78,12 +78,20 @@ struct OmiHTTPTransport {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
+      "X-Omi-Plan-Identity": "1",
       "X-App-Version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
       "X-App-Build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
       "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
       "X-Request-Start-Time": String(Date().timeIntervalSince1970),
       "X-Desktop-Request-ID": UUID().uuidString,
     ]
+
+    let accountGeneration = await MainActor.run {
+      AccountCutoverControlManager.shared.control.accountGeneration
+    }
+    if accountGeneration > 0 {
+      headers["X-Account-Generation"] = String(accountGeneration)
+    }
 
     if requireAuth {
       if let testHeader = testAuthHeader {
@@ -107,7 +115,7 @@ struct OmiHTTPTransport {
     // calls this request triggers. Sent per-request; never stored server-side.
     if includeBYOK, APIKeyService.isByokActive {
       let health = await MainActor.run { CredentialHealthManager.shared }
-      let snapshot = APIKeyService.byokSnapshot
+      let snapshot = APIKeyService.activeBYOKSnapshot
       for (provider, entry) in snapshot {
         let canAttach = await MainActor.run {
           health.canUseBYOK(provider: provider, fingerprint: entry.fingerprint)
@@ -275,14 +283,15 @@ struct OmiHTTPTransport {
   }
 
   static func extractErrorDetail(from data: Data) -> String? {
-    if let payload = extractErrorPayload(from: data) {
-      return payload.preferredMessage
+    if let message = extractErrorPayload(from: data)?.preferredMessage {
+      return message
     }
     guard
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let detail = json["detail"] as? String
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else { return nil }
-    return detail
+    if let detail = json["detail"] as? String { return detail }
+    // The attention retry contract returns this confirmation without a detail field.
+    return json["state"] as? String == "not_retryable" ? "not_retryable" : nil
   }
 
   static func extractErrorPayload(from data: Data) -> APIErrorPayload? {
@@ -300,6 +309,11 @@ enum APIError: LocalizedError {
   case unsupportedTierScopedBulkMutation(String)
   case syncRateLimited(retryAfterSeconds: Int?)
   case syncUploadRejected(reason: String)
+  case accountCutoverOfflineQueueBlocked
+  /// The backend's account-wide destructive-operation gate is held (409
+  /// `account_gate_busy`): the delete is retryable after `retryAfterSeconds`
+  /// (from the response's `Retry-After` header), not refused.
+  case memoryDeleteGateBusy(retryAfterSeconds: Int?)
 
   var detail: String? {
     switch self {
@@ -332,6 +346,13 @@ enum APIError: LocalizedError {
       return "Sync rate limited"
     case .syncUploadRejected(let reason):
       return reason
+    case .accountCutoverOfflineQueueBlocked:
+      return "Account cutover offline upload gate closed"
+    case .memoryDeleteGateBusy(let retryAfterSeconds):
+      if let retryAfterSeconds {
+        return "Memory delete is delayed by another account operation (retry after \(retryAfterSeconds)s)"
+      }
+      return "Memory delete is delayed by another account operation"
     }
   }
 }

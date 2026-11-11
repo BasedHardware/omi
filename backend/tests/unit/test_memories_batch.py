@@ -10,6 +10,7 @@ fanning out N requests per memory.
 
 import sys
 import types
+from contextlib import nullcontext
 from unittest.mock import MagicMock
 
 import pytest
@@ -50,6 +51,11 @@ sys.modules['google.cloud.firestore'].FieldFilter = MagicMock
 sys.modules['google.cloud.firestore'].Query = MagicMock
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 
+legal_holds_stub = types.ModuleType('database.legal_holds')
+legal_holds_stub.destructive_operation_gate = lambda *_args, **_kwargs: nullcontext()
+legal_holds_stub.external_write_fence = lambda *_args, **_kwargs: nullcontext()
+sys.modules['database.legal_holds'] = legal_holds_stub
+
 # Stub `utils.llm.clients.embeddings` only. Don't overwrite `utils` or
 # `utils.llm` as packages — other real submodules (utils.rate_limit_config,
 # utils.other.endpoints) must remain importable.
@@ -67,6 +73,7 @@ class TestUpsertMemoryVectorsBatch:
         fake_index = MagicMock()
         fake_index.upsert = MagicMock(return_value={'upserted_count': 2})
         monkeypatch.setattr(vector_db, 'index', None if index_none else fake_index)
+        monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
 
         fake_embeddings = MagicMock()
         fake_embeddings.embed_documents = MagicMock(
@@ -227,18 +234,23 @@ class TestBatchMemoriesEndpointErrorIsolation:
         return rest if end == -1 else rest[:end]
 
     def test_save_and_upsert_are_separate_steps(self):
-        """The bug was bundling save+upsert in one _persist whose vector failure
-        500s the whole (already-saved) request. They must be separate steps."""
+        """The route delegates one authoritative batch write to MemoryService.
+
+        Vector projection belongs to the canonical outbox, so the HTTP route
+        must not write either the legacy store or Pinecone directly.
+        """
         src = self._batch_fn_source()
         assert 'def _persist' not in src, "save and vector upsert must not be bundled into one fallible step"
-        assert 'save_memories' in src
-        assert 'upsert_memory_vectors_batch' in src
+        assert '.create_external_memory_batch' in src
+        assert 'memory_system=MemorySystem.CANONICAL' in src
+        assert 'memories_db.save_memories' not in src
+        assert 'upsert_memory_vectors_batch' not in src
 
     def test_vector_upsert_failure_is_swallowed(self):
-        """The vector upsert must be wrapped so its failure does not fail the
-        request — proven by the 'memories saved, vectors missing' marker."""
+        """The route disables direct vectors; the retryable outbox owns them."""
         src = self._batch_fn_source()
-        assert 'memories saved, vectors missing' in src
+        assert 'upsert_vectors=False' in src
+        assert 'upsert_memory_vectors_batch' not in src
 
     def test_firestore_write_failure_still_raises_503(self):
         """A genuine Firestore write failure must still surface as a retryable 503."""

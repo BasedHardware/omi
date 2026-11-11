@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { posthogResults } from "@/lib/posthog";
+import { parsePlatformScope, scopeFilterAnd } from "@/lib/platform-scope";
 
 export const dynamic = "force-dynamic";
 
 // Module-level cache (30 min TTL)
-let cache: { data: { date: string; dau: number }[]; days: number; timestamp: number } | null = null;
+let cache: {
+  data: { date: string; dau: number }[];
+  days: number;
+  platform: string;
+  timestamp: number;
+} | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -18,7 +24,7 @@ export async function GET(request: NextRequest) {
     const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
 
     if (!apiKey || !projectId) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "PostHog credentials not configured" },
         { status: 500 }
       );
@@ -26,30 +32,51 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const days = Math.min(parseInt(searchParams.get("days") || "60", 10), 90);
+    const platform = parsePlatformScope(
+      searchParams.get("platform") ?? "macos"
+    );
 
-    if (cache && cache.days === days && Date.now() - cache.timestamp < CACHE_TTL) {
-      return NextResponse.json({ data: cache.data, days });
+    if (
+      cache &&
+      cache.days === days &&
+      cache.platform === platform &&
+      Date.now() - cache.timestamp < CACHE_TTL
+    ) {
+      return authResult.json({ data: cache.data, days });
     }
 
-    // Daily unique macOS users = distinct clients emitting ANY event (rename-proof;
-    // the old `App Became Active` lifecycle event was removed from the desktop app).
+    // Daily unique users = distinct clients emitting ANY event (rename-proof;
+    // the old `App Became Active` lifecycle event was removed from the desktop
+    // app). `platform` scopes to macos / mobile / all (default macos keeps the
+    // legacy meaning for existing callers).
     const hogql = `
       SELECT
         toDate(timestamp) as day,
-        count(DISTINCT distinct_id) as users
+        count(DISTINCT COALESCE(person_id, distinct_id)) as users
       FROM events
-      WHERE properties.$os_name = 'macOS'
-        AND timestamp >= now() - interval ${days} day
+      WHERE timestamp >= now() - interval ${days} day
+        ${scopeFilterAnd(platform)}
       GROUP BY day
       ORDER BY day
     `;
 
+    const rollingHogql = `
+      SELECT count(DISTINCT COALESCE(person_id, distinct_id)) as users
+      FROM events
+      WHERE timestamp >= now() - interval 24 hour
+        ${scopeFilterAnd(platform)}
+    `;
+
     let results: [string, number][];
+    let rollingResult: [number][];
     try {
-      results = (await posthogResults(host, projectId, apiKey, hogql)) as [string, number][];
+      [results, rollingResult] = (await Promise.all([
+        posthogResults(host, projectId, apiKey, hogql),
+        posthogResults(host, projectId, apiKey, rollingHogql),
+      ])) as [[string, number][], [number][]];
     } catch (err) {
       console.error("PostHog query error:", err);
-      return NextResponse.json({ error: "PostHog API error" }, { status: 502 });
+      return authResult.json({ error: "PostHog API error" }, { status: 502 });
     }
 
     // Build map from results
@@ -64,7 +91,9 @@ export async function GET(request: NextRequest) {
     fromDate.setDate(fromDate.getDate() - days);
 
     const formatDate = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate()
+      ).padStart(2, "0")}`;
 
     const data: { date: string; dau: number }[] = [];
     const current = new Date(fromDate);
@@ -74,11 +103,11 @@ export async function GET(request: NextRequest) {
       current.setDate(current.getDate() + 1);
     }
 
-    cache = { data, days, timestamp: Date.now() };
-    return NextResponse.json({ data, days });
+    cache = { data, days, platform, timestamp: Date.now() };
+    return authResult.json({ data, days });
   } catch (error: any) {
     console.error("DAU trends error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to fetch DAU trends" },
       { status: 500 }
     );

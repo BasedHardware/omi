@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
+import { withRowLimit } from "@/lib/posthog";
 import {
-  desktopQualificationFromMetadata,
   desktopReleaseLifecycle,
   desktopStableCandidateFromMetadata,
+  newestSparkleVersion,
+  tagBuildNumber,
   type DesktopReleaseChannel,
   type DesktopReleaseLifecycle,
 } from "@/lib/desktop-release-lifecycle";
@@ -32,10 +34,7 @@ interface ReleaseRow {
   broken_count: number | null;
   rating: number | null;
   summary: string | null;
-  qualified_beta: boolean;
-  qualified_at: string | null;
-  qualification_evidence_url: string | null;
-  qualification_source: "canonical" | "legacy";
+  beta_live: boolean;
   stable_candidate: boolean;
   stable_candidate_at: string | null;
   stable_candidate_by: string | null;
@@ -55,10 +54,20 @@ async function fetchGithubReleases(): Promise<any[]> {
   }
   const res = await fetch(
     `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100`,
-    { headers, cache: "no-store" },
+    { headers, cache: "no-store" }
   );
   if (!res.ok) throw new Error(`GitHub ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+async function fetchBetaAppcast(): Promise<string> {
+  const res = await fetch(
+    "https://api.omi.me/v2/desktop/appcast.xml?identity=beta",
+    { cache: "no-store" }
+  );
+  if (!res.ok)
+    throw new Error(`Beta appcast ${res.status}: ${await res.text()}`);
+  return res.text();
 }
 
 function parseVersion(tag: string): string | null {
@@ -67,7 +76,7 @@ function parseVersion(tag: string): string | null {
 }
 
 function parseReleaseMetadata(
-  body: string | null | undefined,
+  body: string | null | undefined
 ): Record<string, string> {
   if (!body) return {};
   const metadata: Record<string, string> = {};
@@ -106,9 +115,15 @@ async function posthogQuery(query: string): Promise<any> {
         Authorization: `Bearer ${POSTHOG_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+      // This route has its own fetch (bypasses lib/posthog's posthogFetch), so
+      // it applies the same shared row-limit guard directly — the version×event
+      // query has no LIMIT and 5 events × ~40-80 versions exceeds the silent
+      // default 100, dropping per-version counts to 0 (#10190).
+      body: JSON.stringify({
+        query: { kind: "HogQLQuery", query: withRowLimit(query) },
+      }),
       cache: "no-store",
-    },
+    }
   );
   if (!res.ok) {
     const text = await res.text();
@@ -127,7 +142,7 @@ interface VersionMetrics {
 }
 
 async function fetchPostHogMetrics(
-  versions: string[],
+  versions: string[]
 ): Promise<Map<string, VersionMetrics>> {
   const results = new Map<string, VersionMetrics>();
   if (!POSTHOG_API_KEY || versions.length === 0) return results;
@@ -263,29 +278,42 @@ function computeRatingAndSummary(m: VersionMetrics): {
 // --- Handler ---
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:read");
   if (authResult instanceof NextResponse) return authResult;
 
   let github_error: string | null = null;
   let posthog_error: string | null = null;
+  let appcast_error: string | null = null;
 
-  // 1. GitHub releases
+  const [githubResult, appcastResult] = await Promise.allSettled([
+    fetchGithubReleases(),
+    fetchBetaAppcast(),
+  ]);
+
   let githubReleases: any[] = [];
-  try {
-    githubReleases = await fetchGithubReleases();
-  } catch (err: any) {
-    github_error = err?.message || String(err);
-    return NextResponse.json(
+  if (githubResult.status === "fulfilled") {
+    githubReleases = githubResult.value;
+  } else {
+    github_error = githubResult.reason?.message || String(githubResult.reason);
+    return authResult.json(
       { releases: [], github_error, posthog_error: null, partial: true },
-      { status: 502 },
+      { status: 502 }
     );
+  }
+
+  let liveBetaBuild: number | null = null;
+  if (appcastResult.status === "fulfilled") {
+    liveBetaBuild = newestSparkleVersion(appcastResult.value);
+  } else {
+    appcast_error =
+      appcastResult.reason?.message || String(appcastResult.reason);
   }
 
   const desktopReleases = githubReleases
     .filter(
       (r) =>
         typeof r.tag_name === "string" &&
-        r.tag_name.endsWith(RELEASE_TAG_SUFFIX),
+        r.tag_name.endsWith(RELEASE_TAG_SUFFIX)
     )
     .filter((r) => parseVersion(r.tag_name) !== null)
     .slice(0, RELEASE_LIMIT);
@@ -315,16 +343,12 @@ export async function GET(request: NextRequest) {
       channelRaw === "stable"
         ? channelRaw
         : null;
-    const qualification = desktopQualificationFromMetadata(metadata);
     const stableCandidate = desktopStableCandidateFromMetadata(metadata, {
       releaseTag: r.tag_name,
-      qualificationEvidence: qualification.evidence,
     });
-    const qualificationEvidenceUrl = qualification.evidence
-      ? (r.assets?.find(
-          (asset: { name?: string }) => asset.name === qualification.evidence,
-        )?.browser_download_url ?? null)
-      : null;
+    const build = tagBuildNumber(r.tag_name);
+    const betaLive =
+      liveBetaBuild !== null && build !== null && build === liveBetaBuild;
 
     return {
       version,
@@ -338,26 +362,24 @@ export async function GET(request: NextRequest) {
       broken_count: m?.brokens ?? null,
       rating,
       summary,
-      qualified_beta: qualification.qualified,
-      qualified_at: qualification.qualifiedAt,
-      qualification_evidence_url: qualificationEvidenceUrl,
-      qualification_source: qualification.source,
+      beta_live: betaLive,
       stable_candidate: stableCandidate.complete,
       stable_candidate_at: stableCandidate.nominatedAt,
       stable_candidate_by: stableCandidate.nominatedBy,
       lifecycle_state: desktopReleaseLifecycle(
         channel,
-        qualification,
-        stableCandidate,
+        betaLive,
+        stableCandidate
       ),
       channel,
     };
   });
 
-  return NextResponse.json({
+  return authResult.json({
     releases: rows,
     github_error: null,
     posthog_error,
-    partial: posthog_error !== null,
+    appcast_error,
+    partial: posthog_error !== null || appcast_error !== null,
   });
 }

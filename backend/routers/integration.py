@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi import Request
@@ -10,25 +10,30 @@ import database.conversations as conversations_db
 import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
-import database.memories as memory_db
 from database._client import db as firestore_db
-from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
-from database.redis_db import get_enabled_apps, r as redis_client
+from utils.memory.memory_service import MemoryService, truncate_locked_memory_preview
+from database.redis_db import get_enabled_apps
 import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.shared import EmptyResponse
+from utils.product_metrics import record_product_event
 from models.conversation import SearchRequest
 from models.app import App
 from models.geolocation import Geolocation
 from utils.app_integrations import (
-    send_app_notification,
     trigger_external_integrations,
+)
+from utils.notification_dispatch import (
+    APP_NOTIFICATION_LIMIT,
+    NotificationDispatchStatus,
+    NotificationIntent,
+    NotificationPolicy,
+    dispatch_notification,
 )
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import redact_conversation_for_integration
+from utils.conversations import transcribing_hold
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.search import search_conversations
@@ -38,46 +43,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Rate limit settings - more conservative limits to prevent notification fatigue
-RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
-MAX_NOTIFICATIONS_PER_HOUR = 10  # Maximum notifications per hour per app per user
+# Firestore 'in' filters accept at most 30 values (see database/apps.py, database/chat.py); keep
+# well under that so a caller-supplied statuses list can never blow the query up into a 500.
+MAX_STATUSES_FILTER_VALUES = 20
 
 router = APIRouter()
-
-
-def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
-    """
-    Check if the app has exceeded its rate limit for a specific user
-    Returns: (allowed, remaining, reset_time, retry_after)
-    """
-    now = datetime.now(timezone.utc)
-    hour_key = f"notification_rate_limit:{app_id}:{user_id}:{now.strftime('%Y-%m-%d-%H')}"
-
-    # Check hourly limit
-    hour_count = redis_client.get(hour_key)
-    if hour_count is None:
-        # Seed to 0, not 1: the unconditional incr below is the single source of truth for the count.
-        # Seeding to 1 AND incrementing made the first request consume two tokens, so only 9 of
-        # MAX_NOTIFICATIONS_PER_HOUR were ever allowed and the remaining header was off by one.
-        redis_client.setex(hour_key, RATE_LIMIT_PERIOD, 0)
-        hour_count = 0
-    else:
-        hour_count = int(hour_count)
-
-    # Calculate reset time
-    hour_reset = RATE_LIMIT_PERIOD - (int(now.timestamp()) % RATE_LIMIT_PERIOD)
-    reset_time = hour_reset
-
-    # Check if hourly limit is exceeded
-    if hour_count >= MAX_NOTIFICATIONS_PER_HOUR:
-        return False, MAX_NOTIFICATIONS_PER_HOUR - hour_count, hour_reset, hour_reset
-
-    # Increment counter
-    redis_client.incr(hour_key)
-
-    remaining = MAX_NOTIFICATIONS_PER_HOUR - hour_count - 1
-
-    return True, remaining, reset_time, 0
 
 
 async def _resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[Geolocation]:
@@ -89,13 +59,22 @@ async def _resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[G
             db_executor, get_google_maps_location, geolocation.latitude, geolocation.longitude
         )
         if enriched:
-            return enriched
+            return enriched.model_copy(
+                update={
+                    'latitude': geolocation.latitude,
+                    'longitude': geolocation.longitude,
+                    'captured_at': geolocation.captured_at,
+                    'capture_source': geolocation.capture_source,
+                    'accuracy': geolocation.accuracy,
+                    'altitude': geolocation.altitude,
+                }
+            )
     return geolocation
 
 
 @router.post(
     '/v2/integrations/{app_id}/user/conversations',
-    response_model=EmptyResponse,
+    response_model=integration_models.ConversationCreateResponse,
     tags=['integration', 'conversations'],
 )
 async def create_conversation_via_integration(
@@ -104,7 +83,7 @@ async def create_conversation_via_integration(
     create_conversation: conversation_models.ExternalIntegrationCreateConversation,
     uid: str,
     authorization: Optional[str] = Header(None),
-) -> Dict[str, Any]:
+) -> integration_models.ConversationCreateResponse:
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
@@ -166,9 +145,7 @@ async def create_conversation_via_integration(
     # Always trigger integration
     await trigger_external_integrations(uid, conversation)
 
-    # TODO: Empty for now, replace with ConversationCreateResponse once we don't have to wait for process_conversation
-    # to finish for the conversation id
-    return {}
+    return integration_models.ConversationCreateResponse(status="success", conversation_id=conversation.id)
 
 
 @router.post(
@@ -219,6 +196,12 @@ def create_memories_via_integration(
     # Process and save the memory using the utility function
     process_external_integration_memory(uid, fact_data, app_id)
 
+    record_product_event(
+        'memory_created',
+        client_kind='unknown',
+        source='integration',
+        uid=uid,
+    )
     # Empty response
     return {}
 
@@ -263,33 +246,19 @@ def get_memories_via_integration(
     if not apps_utils.app_can_read_memories(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
-    if memory_system == MemorySystem.CANONICAL:
-        memory_objects = memorydb_list_with_locked_preview(
-            MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
-        )
-        memory_items: List[integration_models.MemoryItem] = []
-        for memory in memory_objects:
-            try:
-                memory_items.append(integration_models.MemoryItem(**memory.dict()))
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"Error parsing memory {memory.id}: {str(e)}")
-                continue
-        return {"memories": memory_items}
-
-    memories = memory_db.get_memories(uid, limit=limit, offset=offset)
-    for memory in memories:
-        if memory.get('is_locked', False):
-            content = memory.get('content', '')
-            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+    memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
     memory_items: List[integration_models.MemoryItem] = []
-    for fact in memories:
+    for memory in memories:
         try:
-            memory_items.append(integration_models.MemoryItem(**fact))
+            # Keep the released integration privacy contract: a locked memory
+            # may be listed, but only with its bounded preview.  MemoryService
+            # is the authority for both physical origins, so apply the same
+            # exposure rule after the universal read rather than trusting the
+            # route's former legacy-only branch.
+            exposed = truncate_locked_memory_preview(memory)
+            memory_items.append(integration_models.MemoryItem(**exposed.model_dump(mode='json')))
         except Exception as e:  # noqa: BLE001 - intentional broad catch: skip any malformed record
-            # One malformed/legacy record must not 500 the whole page; skip it (mirrors the
-            # conversation conversion guard in get_conversations_via_integration).
-            logger.error(f"Error parsing memory {fact.get('id')}: {str(e)}")
+            logger.error(f"Error parsing memory {getattr(memory, 'id', None)}: {str(e)}")
             continue
 
     return {"memories": memory_items}
@@ -353,6 +322,9 @@ def get_conversations_via_integration(
     if not apps_utils.app_can_read_conversations(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
 
+    if len(statuses) > MAX_STATUSES_FILTER_VALUES:
+        raise HTTPException(status_code=400, detail=f"statuses accepts at most {MAX_STATUSES_FILTER_VALUES} values")
+
     # Convert string dates to datetime objects if needed
     if isinstance(start_date, str) and start_date:
         try:
@@ -384,6 +356,7 @@ def get_conversations_via_integration(
         limit=limit,
         offset=offset,
         include_discarded=include_discarded,
+        presentation=True,
         statuses=statuses,
         start_date=cast(Optional[datetime], start_date),
         end_date=cast(Optional[datetime], end_date),
@@ -393,6 +366,7 @@ def get_conversations_via_integration(
     conversation_items: List[integration_models.ConversationItem] = []
     for conv in conversations_data:
         try:
+            conv = transcribing_hold.project(conv)
             redact_conversation_for_integration(conv)
             item = integration_models.ConversationItem.model_validate(conv)
 
@@ -511,7 +485,13 @@ def search_conversations_via_integration(
     # Get full conversation data using the IDs
     full_conversations = []
     if conversation_ids:
-        full_conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
+        # Hydration must honour the same include_discarded the search above ran with, or a
+        # discarded match is dropped here after the search window already moved past it.
+        full_conversations = conversations_db.get_conversations_by_id(
+            uid,
+            conversation_ids,
+            include_discarded=cast(bool, search_request.include_discarded),
+        )
 
     # Convert database conversations to integration model
     conversation_items: List[integration_models.ConversationItem] = []
@@ -572,25 +552,27 @@ def send_notification_via_integration(
     if app_id not in user_enabled:
         raise HTTPException(status_code=403, detail='User does not have this app installed')
 
-    # Check rate limit
-    allowed, remaining, reset_time, retry_after = check_rate_limit(app.id, uid)
+    outcome = dispatch_notification(
+        NotificationIntent.app_integration(
+            user_id=uid,
+            app_name=app.name,
+            app_id=app.id,
+            message=message,
+            source='api.v2.integration',
+            policy=NotificationPolicy.EXTERNAL_APP_HOURLY,
+        )
+    )
+    if outcome.rate_limit is None:
+        raise RuntimeError('external app notification dispatch did not return rate-limit metadata')
+    headers = outcome.rate_limit.headers()
 
-    # Add rate limit headers to response
-    headers = {
-        'X-RateLimit-Limit': str(MAX_NOTIFICATIONS_PER_HOUR),
-        'X-RateLimit-Remaining': str(remaining),
-        'X-RateLimit-Reset': str(reset_time),
-    }
-
-    if not allowed:
-        headers['Retry-After'] = str(retry_after)
+    if outcome.status == NotificationDispatchStatus.SUPPRESSED:
         return JSONResponse(
             status_code=429,
             headers=headers,
-            content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
+            content={'detail': f'Rate limit exceeded. Maximum {APP_NOTIFICATION_LIMIT} notifications per hour.'},
         )
 
-    send_app_notification(uid, app.name, app.id, message)
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
 
 
@@ -719,7 +701,7 @@ def get_tasks_via_integration(
     for task in tasks:
         task_data = task.copy()
         if task_data.get('is_locked', False):
-            description = task_data.get('description', '')
+            description = task_data.get('description') or ''
             task_data['description'] = (description[:70] + '...') if len(description) > 70 else description
         try:
             task_items.append(integration_models.TaskItem(**task_data))

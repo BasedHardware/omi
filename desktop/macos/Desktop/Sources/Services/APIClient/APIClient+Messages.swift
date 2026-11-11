@@ -39,13 +39,29 @@ extension APIClient {
   /// - Parameters:
   ///   - messageId: The message ID to rate
   ///   - rating: 1 for thumbs up, -1 for thumbs down, nil to clear rating
-  func rateMessage(messageId: String, rating: Int?) async throws {
+  ///   - reason: why the answer was rated down; nil when not asked or skipped
+  ///   - surface: "text" for main-window chat, "voice" for floating-bar answers
+  func rateMessage(
+    messageId: String,
+    rating: Int?,
+    reason: ChatFeedbackReason? = nil,
+    surface: String = "text"
+  ) async throws {
     struct RateRequest: Encodable {
       let rating: Int?
       let app_version: String?
+      let reason: String?
+      let surface: String
     }
     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-    let body = RateRequest(rating: rating, app_version: version)
+    // A reason only ever accompanies a thumbs-down. Sending one with a
+    // thumbs-up or a cleared rating would put a nonsense row in the report.
+    let body = RateRequest(
+      rating: rating,
+      app_version: version,
+      reason: rating == -1 ? reason?.rawValue : nil,
+      surface: surface
+    )
     let _: MessageStatusResponse = try await patch(
       "v2/desktop/messages/\(messageId)/rating", body: body)
   }
@@ -98,6 +114,62 @@ extension APIClient {
     return try await performRequest(request)
   }
 
+  /// Upload a video as frames sampled on device (plus its audio track) to `/v2/files/video`.
+  /// The backend tiles the most distinct frames into one numbered image and transcribes the
+  /// audio; the response has the same shape as `/v2/files`.
+  func uploadChatVideo(
+    _ video: SampledChatVideo,
+    fileName: String,
+    appId: String? = nil
+  ) async throws -> [ChatFileResponse] {
+    var endpoint = "v2/files/video"
+    if let appId = appId, !appId.isEmpty, appId != "no_selected" {
+      endpoint += "?app_id=\(appId)"
+    }
+    guard let url = URL(string: baseURL + endpoint),
+      let timesJSON = try? JSONSerialization.data(withJSONObject: video.times)
+    else {
+      throw APIError.invalidResponse
+    }
+
+    let boundary = "Boundary-\(UUID().uuidString)"
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+    var body = Data()
+    let lineBreak = "\r\n"
+    func field(_ name: String, _ value: String) {
+      body.append(Data("--\(boundary)\(lineBreak)".utf8))
+      body.append(Data("Content-Disposition: form-data; name=\"\(name)\"\(lineBreak)\(lineBreak)".utf8))
+      body.append(Data(value.utf8))
+      body.append(Data(lineBreak.utf8))
+    }
+    func file(_ name: String, _ fileName: String, _ mimeType: String, _ data: Data) {
+      body.append(Data("--\(boundary)\(lineBreak)".utf8))
+      body.append(
+        Data(
+          "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(fileName)\"\(lineBreak)".utf8))
+      body.append(Data("Content-Type: \(mimeType)\(lineBreak)\(lineBreak)".utf8))
+      body.append(data)
+      body.append(Data(lineBreak.utf8))
+    }
+    field("frame_times", String(decoding: timesJSON, as: UTF8.self))
+    field("duration_seconds", String(video.duration))
+    field("name", fileName)
+    for (index, frame) in video.frames.enumerated() {
+      file("frames", "frame-\(index).jpg", "image/jpeg", frame)
+    }
+    if let audio = video.audio {
+      file("audio", audio.fileName, audio.mimeType, audio.data)
+    }
+    body.append(Data("--\(boundary)--\(lineBreak)".utf8))
+    request.httpBody = body
+
+    return try await performRequest(request)
+  }
+
   // MARK: - Sync local files (WAL upload)
 
   /// Upload-only POST to `/v2/sync-local-files`. Mirrors Flutter `uploadLocalFilesV2`.
@@ -105,6 +177,9 @@ extension APIClient {
     fileURLs: [URL],
     conversationId: String? = nil
   ) async throws -> UploadLocalFilesResult {
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      throw APIError.accountCutoverOfflineQueueBlocked
+    }
     guard var components = URLComponents(string: baseURL + "v2/sync-local-files") else {
       throw APIError.invalidResponse
     }
@@ -126,7 +201,20 @@ extension APIClient {
     }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try? await buildHeaders(requireAuth: true)
+
+    // Build the auth header explicitly. If token minting throws (e.g. an account
+    // transition races the reconciler, or the Keychain is locked right after
+    // login), do NOT fall through and send an UNAUTHENTICATED GET — that returns
+    // 401, was misread as `.transient`, and parked the WAL in a forever-retry.
+    // Surface `.unauthorized` so the reconciler reverts the WAL for re-upload via
+    // the authenticated upload path, which owns the forced refresh. Per
+    // INV-AUTH-1 the background poll is session-preserving: it never invalidates
+    // the Firebase session itself.
+    do {
+      request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    } catch {
+      return SyncJobFetch(outcome: .unauthorized)
+    }
 
     guard let (data, response) = try? await session.data(for: request),
       let http = response as? HTTPURLResponse
@@ -134,27 +222,19 @@ extension APIClient {
       return SyncJobFetch(outcome: .transient)
     }
 
-    if http.statusCode == 404 {
-      return SyncJobFetch(outcome: .notFound)
-    }
-    // 403 means the caller is not permitted to access this sync job. Unlike a
-    // transient transport failure, re-polling will not resolve it — the upload
-    // path already refreshed auth on 401, so a 403 here is a durable permission
-    // failure. Surface it as `.forbidden` so the reconciler reverts the WAL to
-    // `.miss` for re-upload (the backend dedupes by conversation/timestamp)
-    // instead of polling forever.
-    if http.statusCode == 403 {
-      return SyncJobFetch(outcome: .forbidden)
-    }
-    guard http.statusCode == 200 else {
-      return SyncJobFetch(outcome: .transient)
-    }
-
-    do {
-      let status = try decoder.decode(SyncJobStatusResponse.self, from: data)
-      return SyncJobFetch(outcome: .ok, status: status)
-    } catch {
-      return SyncJobFetch(outcome: .transient)
+    // 401/403/404 are durable for this fetch: re-polling won't resolve them, so
+    // the reconciler reverts the WAL to `.miss` for re-upload (the backend
+    // dedupes by conversation/timestamp) instead of polling forever.
+    switch SyncJobFetchOutcome.forStatusCode(http.statusCode) {
+    case .ok:
+      do {
+        let status = try decoder.decode(SyncJobStatusResponse.self, from: data)
+        return SyncJobFetch(outcome: .ok, status: status)
+      } catch {
+        return SyncJobFetch(outcome: .transient)
+      }
+    case let outcome:
+      return SyncJobFetch(outcome: outcome)
     }
   }
 
@@ -331,7 +411,22 @@ enum SyncJobFetchOutcome: Equatable {
   case ok
   case notFound
   case forbidden
+  case unauthorized
   case transient
+
+  /// Pure HTTP-status → outcome mapping for a sync-job status GET. `.ok` means
+  /// the 200 body still must be decoded by the caller (a decode failure is
+  /// `.transient`); every other case is terminal for this fetch. Extracted so
+  /// the mapping is unit-testable without a URLSession.
+  static func forStatusCode(_ statusCode: Int) -> SyncJobFetchOutcome {
+    switch statusCode {
+    case 200: return .ok
+    case 401: return .unauthorized
+    case 403: return .forbidden
+    case 404: return .notFound
+    default: return .transient
+    }
+  }
 }
 
 struct SyncJobFetch: Equatable {

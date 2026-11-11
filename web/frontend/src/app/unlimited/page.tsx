@@ -1,14 +1,19 @@
 import { headers } from 'next/headers';
 import { Metadata } from 'next';
+import { getOmiPlatformDeepLink } from '@/src/lib/conversation-share-platform-link.mjs';
 
 export const metadata: Metadata = {
-  title: 'Omi Unlimited | Omi',
+  title: 'Omi Pro | Omi',
   description:
-    'Unlock the full potential with Unlimited. Get advanced AI capabilities, longer memory retention, and more.',
+    'Unlock the full potential with Omi Pro. Get advanced AI capabilities, longer memory retention, and more.',
   openGraph: {
-    title: 'Omi Unlimited | Omi',
-    description: 'Unlock the full potential with Unlimited.',
+    title: 'Omi Pro | Omi',
+    description: 'Unlock the full potential with Omi Pro.',
     type: 'website',
+  },
+  other: {
+    'apple-itunes-app': 'app-id=6502156163',
+    'google-play-app': 'app-id=com.friend.ios',
   },
 };
 
@@ -27,19 +32,19 @@ export default async function UnlimitedPage() {
   const userAgent = (await headers()).get('user-agent') || '';
   const isMobile = isMobileDevice(userAgent);
   const appStoreLink = getAppStoreLink(userAgent);
-  const deepLink = 'omi://h.omi.me/unlimited';
+  const openInOmiHref = getOmiPlatformDeepLink(userAgent, 'unlimited');
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#0B0F17] px-4 text-center">
-      <h1 className="mb-4 text-4xl font-bold text-white">Omi Unlimited</h1>
+      <h1 className="mb-4 text-4xl font-bold text-white">Omi Pro</h1>
       <p className="mb-8 max-w-md text-lg text-gray-400">
-        Unlock the full potential with Omi Unlimited.
+        Unlock the full potential with Omi Pro.
       </p>
 
       {isMobile ? (
         <div className="flex flex-col gap-4">
           <a
-            href={deepLink}
+            href={openInOmiHref}
             className="rounded-xl bg-white px-8 py-4 text-lg font-semibold text-[#0B0F17] transition-all duration-300 hover:bg-gray-200"
           >
             Open in App

@@ -11,9 +11,27 @@ extension APIClient {
 }
 
 private final class AuthorizedToolRequestGate: @unchecked Sendable {
+  private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<URLRequest, Never>?
+
+    init(_ continuation: CheckedContinuation<URLRequest, Never>) {
+      self.continuation = continuation
+    }
+
+    func resume(_ request: URLRequest) {
+      let pending: CheckedContinuation<URLRequest, Never>? = lock.withLock {
+        let value = continuation
+        continuation = nil
+        return value
+      }
+      pending?.resume(returning: request)
+    }
+  }
+
   private struct RequestWaiter {
     let path: String
-    let continuation: CheckedContinuation<URLRequest, Never>
+    let once: ResumeOnce
   }
 
   private let lock = NSLock()
@@ -22,10 +40,21 @@ private final class AuthorizedToolRequestGate: @unchecked Sendable {
   private var requestWaiters: [RequestWaiter] = []
 
   func reset() async {
-    lock.withLock {
+    let abandoned: [RequestWaiter]
+    let leftover: [AuthorizedToolOwnerURLProtocol]
+    (abandoned, leftover) = lock.withLock {
+      let waiters = requestWaiters
+      let pending = pendingProtocols
       pendingProtocols.removeAll()
       selectedProtocols.removeAll()
       requestWaiters.removeAll()
+      return (waiters, pending)
+    }
+    for waiter in abandoned {
+      waiter.once.resume(URLRequest(url: URL(string: "https://authorized-tool-gate.invalid/reset")!))
+    }
+    for proto in leftover {
+      proto.client?.urlProtocol(proto, didFailWithError: URLError(.cancelled))
     }
   }
 
@@ -34,34 +63,53 @@ private final class AuthorizedToolRequestGate: @unchecked Sendable {
   /// for the URLProtocol instance (shared with the URL-loading infrastructure). State is
   /// serialized by `lock`; continuations are resumed outside the lock to avoid re-entrancy.
   func receive(_ urlProtocol: AuthorizedToolOwnerURLProtocol) {
-    var toResume: RequestWaiter?
+    var toResume: ResumeOnce?
     lock.withLock {
       pendingProtocols.append(urlProtocol)
       let path = urlProtocol.request.url?.path ?? ""
       if let index = requestWaiters.firstIndex(where: { $0.path == path }) {
-        toResume = requestWaiters.remove(at: index)
+        toResume = requestWaiters.remove(at: index).once
         selectedProtocols[path] = urlProtocol
       }
     }
-    if let waiter = toResume {
-      waiter.continuation.resume(returning: urlProtocol.request)
-    }
+    toResume?.resume(urlProtocol.request)
   }
 
-  func waitForRequest(path: String) async -> URLRequest {
+  /// Arm the waiter before returning so a later MainActor client task cannot
+  /// deadlock behind this wait. CI hung for 60s when `Task { @MainActor in
+  /// execute }` was started first from an already-MainActor test body: the
+  /// URL load never started, `waitForRequest` never resumed, and `succeed`
+  /// no-op'd.
+  nonisolated func waitForRequest(path: String) async -> URLRequest {
     await withCheckedContinuation { continuation in
+      let once = ResumeOnce(continuation)
       var immediate: URLRequest?
       lock.withLock {
         if let pendingProtocol = pendingProtocols.last(where: { $0.request.url?.path == path }) {
           selectedProtocols[path] = pendingProtocol
           immediate = pendingProtocol.request
         } else {
-          requestWaiters.append(RequestWaiter(path: path, continuation: continuation))
+          requestWaiters.append(RequestWaiter(path: path, once: once))
         }
       }
       if let request = immediate {
-        continuation.resume(returning: request)
+        once.resume(request)
       }
+    }
+  }
+
+  func isArmed(path: String) -> Bool {
+    lock.withLock {
+      requestWaiters.contains { $0.path == path }
+        || selectedProtocols[path] != nil
+        || pendingProtocols.contains { $0.request.url?.path == path }
+    }
+  }
+
+  func waitUntilArmed(path: String) async {
+    for _ in 0..<10_000 {
+      if isArmed(path: path) { return }
+      await Task.yield()
     }
   }
 
@@ -182,6 +230,10 @@ private actor PermissionCallbackBox<Value: Sendable> {
 
   func testMemoryReadRejectsPrivateResponseAfterMidFlightAccountSwitch() async {
     let client = await makeClient()
+    let pendingRequest = Task.detached {
+      await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v1/tools/memories")
+    }
+    await AuthorizedToolOwnerURLProtocol.gate.waitUntilArmed(path: "/v1/tools/memories")
     let operation = Task { @MainActor in
       await ChatToolExecutor.execute(
         ToolCall(name: "get_memories", arguments: [:], thoughtSignature: nil),
@@ -189,7 +241,7 @@ private actor PermissionCallbackBox<Value: Sendable> {
         backendAPIClient: client)
     }
 
-    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v1/tools/memories")
+    let request = await pendingRequest.value
     XCTAssertEqual(request.httpMethod, "GET")
     XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer owner-a-token")
 
@@ -204,8 +256,12 @@ private actor PermissionCallbackBox<Value: Sendable> {
     XCTAssertFalse(result.contains("owner-a-private-memory"))
   }
 
-  func testMemoryReadReturnsResponseWhileOriginalOwnerRemainsCurrent() async {
+  func testMemoryReadReturnsResponseWhileOriginalOwnerRemainsCurrent() async throws {
     let client = await makeClient()
+    let pendingRequest = Task.detached {
+      await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v1/tools/memories")
+    }
+    await AuthorizedToolOwnerURLProtocol.gate.waitUntilArmed(path: "/v1/tools/memories")
     let operation = Task { @MainActor in
       await ChatToolExecutor.execute(
         ToolCall(name: "get_memories", arguments: [:], thoughtSignature: nil),
@@ -213,18 +269,28 @@ private actor PermissionCallbackBox<Value: Sendable> {
         backendAPIClient: client)
     }
 
-    _ = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v1/tools/memories")
+    _ = await pendingRequest.value
     await AuthorizedToolOwnerURLProtocol.gate.succeed(
       path: "/v1/tools/memories",
       with:
-        #"{"tool_name":"get_memories","result_text":"owner-a-memory","is_error":false}"#)
+        #"{"tool_name":"get_memories","result_text":"owner-a-memory","is_error":false,"sources":[]}"#)
 
     let result = await operation.value
-    XCTAssertEqual(result, "owner-a-memory")
+    let object = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any])
+    XCTAssertEqual(object["ok"] as? Bool, true)
+    XCTAssertEqual(object["tool"] as? String, "get_memories")
+    let sections = try XCTUnwrap(object["sections"] as? [[String: Any]])
+    let textSection = try XCTUnwrap(sections.first { $0["name"] as? String == "text" })
+    XCTAssertEqual(textSection["items"] as? [String], ["owner-a-memory"])
   }
 
   func testActionItemWriteKeepsOriginalCredentialAndRejectsResultAfterMidFlightAccountSwitch() async {
     let client = await makeClient()
+    let pendingRequest = Task.detached {
+      await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v1/tools/action-items")
+    }
+    await AuthorizedToolOwnerURLProtocol.gate.waitUntilArmed(path: "/v1/tools/action-items")
     let operation = Task { @MainActor in
       await ChatToolExecutor.execute(
         ToolCall(
@@ -235,7 +301,7 @@ private actor PermissionCallbackBox<Value: Sendable> {
         backendAPIClient: client)
     }
 
-    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v1/tools/action-items")
+    let request = await pendingRequest.value
     XCTAssertEqual(request.httpMethod, "POST")
     XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer owner-a-token")
     let body = AuthorizedToolOwnerURLProtocol.bodyData(from: request).flatMap {
@@ -254,48 +320,12 @@ private actor PermissionCallbackBox<Value: Sendable> {
     XCTAssertFalse(result.contains("created-owner-a-task"))
   }
 
-  func testRealtimeHigherModelNeverReleasesOwnerAContextAfterMidFlightAccountSwitch() async {
-    let client = await makeClient()
-    let operation = Task { @MainActor in
-      let privateBody: [String: Any] = [
-        "messages": [
-          [
-            "role": "user",
-            "content": "owner-a-private-query\nowner-a-private-about-user",
-          ]
-        ]
-      ]
-      do {
-        _ = try await client.askHigherModel(
-          body: privateBody,
-          expectedOwnerID: "owner-a",
-          customBaseURL: "https://owner-bound.invalid/")
-        return false
-      } catch AuthError.userChangedDuringRequest {
-        return true
-      } catch {
-        return false
-      }
-    }
-
-    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v2/chat/completions")
-    XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer owner-a-token")
-    let body = AuthorizedToolOwnerURLProtocol.bodyData(from: request).flatMap {
-      try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
-    }
-    XCTAssertNotNil(body)
-
-    UserDefaults.standard.set("owner-b", forKey: .authUserId)
-    await AuthorizedToolOwnerURLProtocol.gate.succeed(
-      path: "/v2/chat/completions",
-      with: #"{"choices":[{"message":{"content":"owner-a-private-answer"}}]}"#)
-
-    let rejectedLateResponse = await operation.value
-    XCTAssertTrue(rejectedLateResponse)
-  }
-
   func testRealtimeMintNeverReleasesOwnerATokenAfterMidFlightAccountSwitch() async {
     let client = await makeClient()
+    let pendingRequest = Task.detached {
+      await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v2/realtime/session")
+    }
+    await AuthorizedToolOwnerURLProtocol.gate.waitUntilArmed(path: "/v2/realtime/session")
     let operation = Task { @MainActor in
       do {
         _ = try await client.mintRealtimeToken(
@@ -310,7 +340,7 @@ private actor PermissionCallbackBox<Value: Sendable> {
       }
     }
 
-    let request = await AuthorizedToolOwnerURLProtocol.gate.waitForRequest(path: "/v2/realtime/session")
+    let request = await pendingRequest.value
     XCTAssertEqual(request.url?.path, "/v2/realtime/session")
     XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer owner-a-token")
 
@@ -498,6 +528,45 @@ private actor PermissionCallbackBox<Value: Sendable> {
     XCTAssertEqual(retryCount, 0)
   }
 
+  func testBackendTaskWriteRefreshesTasksForCreateActionItem() async {
+    var refreshCount = 0
+    let completed = await ChatToolExecutor.executeBackendTaskWritePostEffects(
+      toolName: "create_action_item",
+      expectedOwnerID: "owner-a",
+      ownerIsCurrent: { _ in true },
+      refreshTasksFromServer: { refreshCount += 1 })
+
+    // Regression: an agent-created task must refresh the list from the server
+    // so it appears without waiting for the next poll or a manual reload.
+    XCTAssertTrue(completed)
+    XCTAssertEqual(refreshCount, 1)
+  }
+
+  func testBackendTaskWriteDoesNotRefreshForReadTools() async {
+    var refreshCount = 0
+    let completed = await ChatToolExecutor.executeBackendTaskWritePostEffects(
+      toolName: "get_action_items",
+      expectedOwnerID: "owner-a",
+      ownerIsCurrent: { _ in true },
+      refreshTasksFromServer: { refreshCount += 1 })
+
+    // Read tools (and non-task writes) must not trigger a server refresh.
+    XCTAssertTrue(completed)
+    XCTAssertEqual(refreshCount, 0)
+  }
+
+  func testBackendTaskWriteDoesNotRefreshUnderReplacementOwner() async {
+    var refreshCount = 0
+    let completed = await ChatToolExecutor.executeBackendTaskWritePostEffects(
+      toolName: "create_action_item",
+      expectedOwnerID: "owner-a",
+      ownerIsCurrent: { $0 == "owner-b" },  // expected owner-a is no longer current
+      refreshTasksFromServer: { refreshCount += 1 })
+
+    XCTAssertFalse(completed)
+    XCTAssertEqual(refreshCount, 0)
+  }
+
   func testNonHubProviderDispatchIsNotCalledAfterOwnerChangesDuringPreparation() async {
     var currentOwner = "owner-a"
     let coordinator = VoiceTurnCoordinator(
@@ -551,28 +620,34 @@ private actor PermissionCallbackBox<Value: Sendable> {
     await establishStandardOwner("owner-a")
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [AuthorizedToolOwnerURLProtocol.self]
+    configuration.timeoutIntervalForRequest = 5
+    configuration.timeoutIntervalForResource = 5
     let client = APIClient(session: URLSession(configuration: configuration))
     await client.setOwnerBoundTestAuthHeader("Bearer owner-a-token")
     return client
   }
 
   private func replaceStandardOwner(with ownerID: String?) async {
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: .standard,
-      allowAutomationOverride: false,
-      plannedNextOwner: { _, _ in ownerID },
-      quiesceVoice: { _, _ in },
-      revokeKernelOwner: { _, _ in },
-      retargetLocalStorage: { _, _ in },
-      ownerDidChange: {}
-    ) { defaults in
-      defaults.removeObject(forKey: .automationOwnerOverride)
-      defaults.removeObject(forKey: .automationOwnerABackup)
-      if let ownerID {
-        defaults.set(ownerID, forKey: .authUserId)
-      } else {
-        defaults.removeObject(forKey: .authUserId)
+    do {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        defaults: .standard,
+        allowAutomationOverride: false,
+        plannedNextOwner: { _, _ in ownerID },
+        quiesceVoice: { _, _ in },
+        revokeKernelOwner: { _, _ in },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {}
+      ) { defaults in
+        defaults.removeObject(forKey: .automationOwnerOverride)
+        defaults.removeObject(forKey: .automationOwnerABackup)
+        if let ownerID {
+          defaults.set(ownerID, forKey: .authUserId)
+        } else {
+          defaults.removeObject(forKey: .authUserId)
+        }
       }
+    } catch {
+      XCTFail("owner transition failed: \(error)")
     }
   }
 
@@ -597,26 +672,30 @@ private actor PermissionCallbackBox<Value: Sendable> {
     // Force one distinct completed generation first so even an authority that
     // a mismatch test deliberately left revoked is quiescent before restore.
     await replaceStandardOwner(with: "authorized-tool-owner-restore")
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: .standard,
-      allowAutomationOverride: true,
-      plannedNextOwner: { _, _ in effectiveOwner },
-      quiesceVoice: { _, _ in },
-      revokeKernelOwner: { _, _ in },
-      retargetLocalStorage: { _, _ in },
-      ownerDidChange: {}
-    ) { defaults in
-      for (key, value) in [
-        (DefaultsKey.authUserId, authOwner),
-        (DefaultsKey.automationOwnerOverride, ownerOverride),
-        (DefaultsKey.automationOwnerABackup, ownerBackup),
-      ] {
-        if let value {
-          defaults.set(value, forKey: key.rawValue)
-        } else {
-          defaults.removeObject(forKey: key.rawValue)
+    do {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        defaults: .standard,
+        allowAutomationOverride: true,
+        plannedNextOwner: { _, _ in effectiveOwner },
+        quiesceVoice: { _, _ in },
+        revokeKernelOwner: { _, _ in },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {}
+      ) { defaults in
+        for (key, value) in [
+          (DefaultsKey.authUserId, authOwner),
+          (DefaultsKey.automationOwnerOverride, ownerOverride),
+          (DefaultsKey.automationOwnerABackup, ownerBackup),
+        ] {
+          if let value {
+            defaults.set(value, forKey: key.rawValue)
+          } else {
+            defaults.removeObject(forKey: key.rawValue)
+          }
         }
       }
+    } catch {
+      XCTFail("owner restoration failed: \(error)")
     }
   }
 }

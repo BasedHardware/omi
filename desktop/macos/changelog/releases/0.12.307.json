@@ -1,0 +1,7 @@
+{
+  "version": "0.12.307",
+  "date": "2026-09-06",
+  "changes": [
+    "Voice typing now always copies (or pastes) what you dictated instead of occasionally asking Omi to type it for you when Accessibility access hasn't been granted"
+  ]
+}

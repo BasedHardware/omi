@@ -4,12 +4,14 @@ Complete hardware design files for the Omi Consumer, the world's leading open-so
 
 Licensed under MIT (see [LICENSE](LICENSE)).
 
+**New to the pendant?** Start with the visual guide, [How the Omi pendant works](https://docs.omi.me/doc/hardware/how-the-pendant-works). Its source is in [`explainer/`](explainer/).
+
 ## What's Inside
 
 ### Electrical (`electrical/`)
-- **Mainboard** (nRF5340 + nRF7002): Altium source, Gerber files, schematics (v1.2)
-- **Charger Board**: Altium source, Gerber files, schematic (v1.0)
-- **FPC (Flexible PCB)**: Altium source, Gerber files, schematic (v1.0)
+- **Mainboard** (nRF5340 + nRF7002): KiCad 9 source, Gerber files, schematics (v1.2)
+- **Charger Board**: KiCad 9 source, Gerber files, schematic (v1.0)
+- **FPC (Flexible PCB)**: KiCad 9 source, Gerber files, schematic (v1.0)
 
 ### Bill of Materials (`bom/`)
 - 88 components with manufacturer part numbers (MPN)
@@ -53,7 +55,7 @@ The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Bui
 ## Getting Started
 
 1. **Build one**: Use the Gerber files to order PCBs, the BOM to source components, and the STEP files to manufacture the enclosure.
-2. **Modify the design**: Open Altium source files to customize the electronics, or edit STEP files to redesign the enclosure.
+2. **Modify the design**: Open the KiCad source files (free) to customize the electronics, or edit STEP files to redesign the enclosure.
 3. **Flash firmware**: Follow the [firmware guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
 4. **Documentation**: Visit [docs.omi.me](https://docs.omi.me/doc/hardware/consumer) for detailed guides.
 

@@ -7,15 +7,26 @@ users/{uid}/fcm_tokens (subcollection)
       ├── token: "actual_token_value"
       ├── created_at: timestamp
       └── time_zone: "America/New_York"
+
+users/{uid} always carries daily_summary_enabled and daily_summary_hour_local
+once a time_zone or preference write has run (and after the one-time backfill).
+Those two fields are the write-time form of the Python defaults True / 22.
 """
+
+from models.time_zone_admission import is_schedulable_time_zone
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
-from ._client import db
+from config.daily_summary_depth import VALID_DAILY_SUMMARY_DEPTHS, normalize_daily_summary_depth
+from ._client import db, get_firestore_client
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from .cache import get_memory_cache
+from .firestore_index_registry import DAILY_SUMMARY_RECIPIENTS_QUERY
+from .firestore_transaction_retry import run_with_transaction_contention_retry
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union, cast
+from utils.other.daily_summary_budget import DeferredTokens
 
 logger = logging.getLogger(__name__)
 
@@ -25,21 +36,53 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def save_token(uid: str, data: Dict[str, Any]) -> None:
+def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) -> bool:
     """
     Store token in subcollection with device key as document ID
     Structure: users/{uid}/fcm_tokens/{device_key}
     Also maintains time_zone in main user document for backward compatibility
-    Migrates legacy fcm_token to subcollection
+    Migrates legacy fcm_token to subcollection. Returns False for a superseded write.
     """
     device_key = data.get('device_key', 'unknown_default')
     token = data.get('fcm_token')
     time_zone = data.get('time_zone')
 
-    user_ref = db.collection('users').document(uid)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    token_ref = user_ref.collection('fcm_tokens').document(device_key)
+    token_patch = {'token': token, 'time_zone': time_zone, 'created_at': firestore.SERVER_TIMESTAMP}
+    schedule_patch = {'time_zone': time_zone} if is_schedulable_time_zone(time_zone) else {}
+    registration_order = data.get('registration_order')
 
-    # Step 1: Migrate legacy token if exists
+    if registration_order is not None:
+
+        @firestore.transactional
+        def save_ordered(transaction):
+            token_snapshot = token_ref.get(transaction=transaction)
+            current = _typed_doc(token_snapshot) if token_snapshot.exists else {}
+            previous = current.get('registration_order')
+            if previous is not None and registration_order <= previous:
+                # A transport retry may repeat the accepted POST. Its timezone
+                # must not overwrite a newer schedule setting on that retry.
+                return registration_order == previous and (token, time_zone) == (
+                    current.get('token'),
+                    current.get('time_zone'),
+                )
+            user_snapshot = user_ref.get(transaction=transaction)
+            defaults = daily_summary_schedule_defaults(_typed_doc(user_snapshot) if user_snapshot.exists else {})
+            transaction.set(token_ref, {**token_patch, 'registration_order': registration_order}, merge=True)
+            if defaults or schedule_patch:
+                transaction.set(user_ref, {**defaults, **schedule_patch}, merge=True)
+            return True
+
+        if not run_with_transaction_contention_retry(
+            client.transaction, save_ordered, operation_name='notification_token_registration'
+        ):
+            return False
+
+    # Migrate legacy tokens only after an ordered registration is accepted.
     user_doc = user_ref.get()
+    user_data: Dict[str, Any] = {}
     if getattr(user_doc, "exists", False):
         user_data = _typed_doc(user_doc)
         legacy_token = user_data.get('fcm_token')
@@ -50,7 +93,7 @@ def save_token(uid: str, data: Dict[str, Any]) -> None:
                 t for t in (_typed_doc(d).get('token') for d in user_ref.collection('fcm_tokens').stream())
             ]
 
-            if legacy_token not in existing_tokens:
+            if legacy_token not in existing_tokens and (registration_order is None or device_key != 'unknown_default'):
                 # Migrate to unknown_default
                 user_ref.collection('fcm_tokens').document('unknown_default').set(
                     {
@@ -74,14 +117,12 @@ def save_token(uid: str, data: Dict[str, Any]) -> None:
             if unknown_token == token:
                 unknown_ref.delete()
 
-    # Step 3: Save new token to subcollection
-    user_ref.collection('fcm_tokens').document(device_key).set(
-        {'token': token, 'time_zone': time_zone, 'created_at': firestore.SERVER_TIMESTAMP}, merge=True
-    )
-
-    # Also update time_zone in main user document (for backward compatibility and efficient queries)
-    if time_zone:
-        user_ref.set({'time_zone': time_zone}, merge=True)
+    if registration_order is None:
+        # Released clients still use the unversioned request. Read schedule
+        # defaults transactionally so migration cannot undo a concurrent opt-out.
+        token_ref.set(token_patch, merge=True)
+        _update_summary_schedule(uid, schedule_patch, firestore_client=client)
+    return True
 
 
 def get_user_time_zone(uid: str) -> Optional[str]:
@@ -94,12 +135,147 @@ def get_user_time_zone(uid: str) -> Optional[str]:
     return None
 
 
+def get_cached_user_time_zone(uid: str) -> Optional[str]:
+    """The stored IANA zone for read-time labels, reused for 10 minutes per process.
+
+    Projected field read only. A missing zone is cached as absent too, so Home
+    rows without one never re-read per row. Callers treat ``None`` as UTC.
+    """
+
+    def fetch() -> str:
+        doc = db.collection('users').document(uid).get(field_paths=['time_zone'])
+        if getattr(doc, "exists", False):
+            tz = _typed_doc(doc).get('time_zone')
+            return str(tz) if tz else ''
+        return ''
+
+    return get_memory_cache().get_or_fetch(f"home_time_zone:{uid}", fetch, ttl=600) or None
+
+
+def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None) -> None:
+    """Persist the client timezone and atomically fill absent schedule fields.
+
+    Tokenless clients need the same defaults as token registration to match the
+    indexed recipient query. Present values, including False and 0, are preserved.
+    """
+    schedulable_tz = time_zone if is_schedulable_time_zone(time_zone) else None
+    _update_summary_schedule(
+        uid, {'time_zone': schedulable_tz} if schedulable_tz else {}, firestore_client=firestore_client
+    )
+
+
+def resolve_user_timezone(uid: str) -> str:
+    """Return a schedulable IANA timezone for ``uid``, or ``UTC`` when missing/unusable."""
+    tz = get_user_time_zone(uid)
+    if tz is None:
+        return "UTC"
+    if is_schedulable_time_zone(tz):
+        return tz
+    return "UTC"
+
+
+def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
+    """Persist a client-reported IANA timezone when it changes and return the resolved zone."""
+    if not request_tz:
+        return resolve_user_timezone(uid)
+    if not is_schedulable_time_zone(request_tz):
+        logger.warning("sync_user_time_zone_from_client - invalid request_tz, ignoring")
+        return resolve_user_timezone(uid)
+    stored = get_user_time_zone(uid)
+    if stored != request_tz:
+        try:
+            set_user_time_zone(uid, request_tz)
+        except Exception:
+            logger.exception(
+                "sync_user_time_zone_from_client - failed to persist time_zone uid=%s",
+                uid,
+            )
+    return request_tz
+
+
+def set_user_time_zone_if_missing(uid: str, time_zone: str, *, firestore_client: Any = None) -> bool:
+    """Write ``time_zone`` on the user document only when it has none. Returns True when it wrote.
+
+    ``save_token`` above is otherwise the only writer, and it runs from the mobile app's FCM
+    registration. A desktop-only owner never registers a token, so their document never carried
+    the field — and ``get_users_for_daily_summary_indexed`` selects users *by* it, so the
+    daily-summary cron never saw them. Mobile stays authoritative: a zone already present is never
+    replaced here.
+    """
+    if not is_schedulable_time_zone(time_zone):
+        return False
+    return _update_summary_schedule(
+        uid, {'time_zone': time_zone}, only_if_timezone_missing=True, firestore_client=firestore_client
+    )
+
+
 # **************************************
 # *** Daily Summary Time Preferences ***
 # **************************************
 
-# Default: 22:00 local time (10 PM)
+# Default: 22:00 local time (10 PM); enabled unless the user turned it off.
 DEFAULT_DAILY_SUMMARY_HOUR_LOCAL = 22
+DEFAULT_DAILY_SUMMARY_ENABLED = True
+
+
+def get_daily_summary_depth(uid: str, *, firestore_client: Any = None) -> str:
+    """Read the account's recap depth, including the brief default for older users."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = client.collection('users').document(uid).get()
+    data = _typed_doc(snapshot) if snapshot.exists else {}
+    return normalize_daily_summary_depth(data.get('daily_summary_depth'))
+
+
+def set_daily_summary_depth(uid: str, depth: str, *, firestore_client: Any = None) -> bool:
+    """Persist a validated depth without changing notification schedule fields."""
+    if depth not in VALID_DAILY_SUMMARY_DEPTHS:
+        raise ValueError('Invalid daily summary depth')
+    return _update_summary_schedule(uid, {'daily_summary_depth': depth}, firestore_client=firestore_client)
+
+
+def daily_summary_schedule_defaults(user_data: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return write-time defaults for whichever schedule fields are absent.
+
+    Present values, including explicit ``False`` and hour ``0``, are never
+    included. Empty dict when both fields are already on the document.
+    """
+    patch: Dict[str, Any] = {}
+    if not isinstance(user_data.get('daily_summary_enabled'), bool):
+        patch['daily_summary_enabled'] = DEFAULT_DAILY_SUMMARY_ENABLED
+    if not isinstance(h := user_data.get('daily_summary_hour_local'), (int, float)) or isinstance(h, bool):
+        patch['daily_summary_hour_local'] = DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
+    return patch
+
+
+def _update_summary_schedule(
+    uid: str, patch: Dict[str, Any], *, only_if_timezone_missing: bool = False, firestore_client: Any = None
+) -> bool:
+    """Fill absent defaults from the same snapshot whose write is committed.
+
+    Explicit fields remain authoritative; implicit defaults and desktop timezone
+    seeding must never overwrite a concurrent client choice.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+
+    @firestore.transactional
+    def update(transaction):
+        snapshot = user_ref.get(transaction=transaction)
+        current = _typed_doc(snapshot) if snapshot.exists else {}
+        if only_if_timezone_missing and current.get('time_zone'):
+            return False
+        payload = {**daily_summary_schedule_defaults(current), **patch}
+        if not payload:
+            return False
+        if snapshot.exists:
+            transaction.update(user_ref, payload)
+        else:
+            transaction.create(user_ref, payload)
+        return True
+
+    return bool(
+        run_with_transaction_contention_retry(client.transaction, update, operation_name='notification_schedule_update')
+    )
 
 
 def get_daily_summary_hour_local(uid: str) -> int | None:
@@ -108,11 +284,11 @@ def get_daily_summary_hour_local(uid: str) -> int | None:
     if getattr(user_ref, "exists", False):
         user_data = _typed_doc(user_ref)
         value = user_data.get('daily_summary_hour_local')
-        return int(value) if isinstance(value, (int, float)) else None
+        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
     return None
 
 
-def set_daily_summary_hour_local(uid: str, hour_local: int) -> bool:
+def set_daily_summary_hour_local(uid: str, hour_local: int, *, firestore_client: Any = None) -> bool:
     """
     Set user's preferred daily summary hour in local time.
 
@@ -126,9 +302,7 @@ def set_daily_summary_hour_local(uid: str, hour_local: int) -> bool:
     if not (0 <= hour_local <= 23):
         raise ValueError(f"Invalid hour: {hour_local}. Must be 0-23.")
 
-    user_ref = db.collection('users').document(uid)
-    user_ref.set({'daily_summary_hour_local': hour_local}, merge=True)
-    return True
+    return _update_summary_schedule(uid, {'daily_summary_hour_local': hour_local}, firestore_client=firestore_client)
 
 
 def get_daily_summary_enabled(uid: str) -> bool:
@@ -136,15 +310,13 @@ def get_daily_summary_enabled(uid: str) -> bool:
     user_ref = db.collection('users').document(uid).get()
     if getattr(user_ref, "exists", False):
         user_data = _typed_doc(user_ref)
-        return bool(user_data.get('daily_summary_enabled', True))
+        return DEFAULT_DAILY_SUMMARY_ENABLED if (val := user_data.get('daily_summary_enabled')) is None else bool(val)
     return True
 
 
-def set_daily_summary_enabled(uid: str, enabled: bool) -> bool:
+def set_daily_summary_enabled(uid: str, enabled: bool, *, firestore_client: Any = None) -> bool:
     """Enable or disable daily summary for user."""
-    user_ref = db.collection('users').document(uid)
-    user_ref.set({'daily_summary_enabled': enabled}, merge=True)
-    return True
+    return _update_summary_schedule(uid, {'daily_summary_enabled': enabled}, firestore_client=firestore_client)
 
 
 # **************************************
@@ -205,8 +377,12 @@ def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
     return True
 
 
-def get_all_tokens(uid: str) -> list[str]:
-    """Get all device tokens for a user from subcollection and legacy field"""
+def get_all_tokens(uid: str, *, legacy_token: Optional[str] = None, user_document_loaded: bool = False) -> list[str]:
+    """Get device and legacy tokens; reuse a selected owner document when supplied.
+
+    ``user_document_loaded`` distinguishes an absent legacy field from an unread
+    owner, so even tokenless selected owners avoid another parent-document read.
+    """
     tokens: List[str] = []
 
     # Get tokens from new subcollection
@@ -218,12 +394,14 @@ def get_all_tokens(uid: str) -> list[str]:
             tokens.append(str(token_value))
 
     # Get legacy token from main user document (backward compatibility)
-    user_ref = db.collection('users').document(uid).get()
-    if getattr(user_ref, "exists", False):
-        user_data = _typed_doc(user_ref)
-        legacy_token = user_data.get('fcm_token')
-        if legacy_token and legacy_token not in tokens:
-            tokens.append(str(legacy_token))
+    if not user_document_loaded:
+        user_ref = db.collection('users').document(uid).get()
+        if getattr(user_ref, "exists", False):
+            user_data = _typed_doc(user_ref)
+            legacy_value = user_data.get('fcm_token')
+            legacy_token = str(legacy_value) if legacy_value else None
+    if legacy_token and legacy_token not in tokens:
+        tokens.append(legacy_token)
 
     return tokens
 
@@ -278,76 +456,56 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
     return _get_users_in_timezones(timezones, 'id')
 
 
-def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, List[str], Any]]:
-    """
-    Get users who should receive daily summary notifications.
+def get_users_for_daily_summary_indexed(
+    timezones: list[str], target_local_hour: int, *, firestore_client: Any = None
+) -> List[Tuple[str, DeferredTokens, Any]]:
+    """Read only due owners using the existing schedule index.
 
-    This function queries users who:
-    1. Are in one of the provided timezones (where it's currently target_local_hour)
-    2. Have daily_summary_hour_local set to target_local_hour OR have no preference (uses default)
-    3. Have daily_summary_enabled not explicitly set to False
-
-    Args:
-        timezones: List of IANA timezone names where it's currently target_local_hour
-        target_local_hour: The local hour we're sending notifications for (0-23)
-
-    Returns:
-        List of (uid, [tokens], time_zone) tuples.
+    The token slot carries the already-selected legacy token. The sender
+    resolves device tokens only before it creates a recap; existing, locked, dormant and
+    budget-deferred owners cost no FCM-token reads. Tokenless owners still get
+    their durable recap. Query errors propagate to the cohort coordinator so
+    it checkpoints the failed chunk instead of declaring a partial pass done.
     """
     if not timezones:
         return []
 
-    users: List[Tuple[str, List[str], Any]] = []
-
-    # 'Where in' query only supports 30 or fewer items in list so we split in chunks
-    timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
-
-    for chunk in timezone_chunks:
-        chunk_users: List[Tuple[str, List[str], Any]] = []
-        try:
-            # Query users in these timezones
-            query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
-
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    users: List[Tuple[str, DeferredTokens, Any]] = []
+    query_count = 0
+    complete = False
+    try:
+        for offset in range(0, len(timezones), 30):
+            query_count += 1
+            query = DAILY_SUMMARY_RECIPIENTS_QUERY.build(
+                client.collection('users'),
+                {'enabled': True, 'hour_local': target_local_hour, 'time_zones': timezones[offset : offset + 30]},
+                field_filter_factory=FieldFilter,
+            )
             for user_doc in query.stream():
                 uid = str(user_doc.id)
+                if account_deletion_blocks_user_work(uid):
+                    continue
                 user_data = _typed_doc(user_doc)
-
-                # Check if daily summary is enabled (default: True)
-                if user_data.get('daily_summary_enabled') is False:
-                    continue
-
-                # Check if user's preferred hour matches target hour
-                # If not set, use default (22 = 10 PM)
-                user_hour = user_data.get('daily_summary_hour_local', DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
-                if user_hour != target_local_hour:
-                    continue
-
-                # Collect tokens from subcollection
-                tokens: List[str] = []
-                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-                for token_doc in token_docs:
-                    token_data = _typed_doc(token_doc)
-                    token_value = token_data.get('token')
-                    if token_value:
-                        tokens.append(str(token_value))
-
-                # Add legacy token if exists and not already in list
-                legacy_token = user_data.get('fcm_token')
-                if legacy_token and legacy_token not in tokens:
-                    tokens.append(str(legacy_token))
-
-                # Skip users with no tokens
-                if not tokens:
-                    continue
-
-                time_zone = user_data.get('time_zone')
-                chunk_users.append((uid, tokens, time_zone))
-
-        except Exception as e:
-            logger.error(f"Error querying chunk for daily summary: {e}")
-        users.extend(chunk_users)
-
-    return users
+                legacy_value = user_data.get('fcm_token')
+                users.append(
+                    (
+                        uid,
+                        DeferredTokens(str(legacy_value) if legacy_value else None),
+                        user_data.get('time_zone'),
+                    )
+                )
+        complete = True
+        return users
+    finally:
+        # Returned-document reads, not all billed Firestore operations: empty
+        # queries and generation reads are accounted separately by the platform.
+        logger.info(
+            'daily_summary_recipient_reads user_docs_read=%d token_docs_read=0 queries=%d complete=%s',
+            len(users),
+            query_count,
+            complete,
+        )
 
 
 def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
@@ -365,6 +523,8 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
 
             for user_doc in query.stream():
                 uid = str(user_doc.id)
+                if account_deletion_blocks_user_work(uid):
+                    continue
                 user_data = _typed_doc(user_doc)
 
                 # Collect tokens from subcollection

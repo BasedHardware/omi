@@ -1,5 +1,72 @@
-from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
-from fastapi import Response
+import os
+import re
+import threading
+from typing import TYPE_CHECKING, Any
+
+from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
+from utils.conversation_relevance_labels import DECISION_TRIGGERS, TERMINAL_METRIC_TRIGGERS, TERMINAL_METRIC_REASONS
+
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    REGISTRY,
+    disable_created_metrics,
+    generate_latest,
+    start_http_server,
+)
+from utils import omi_flag_metrics as _omi_flag_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.conversations import phase_shadow as _phase_shadow  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+
+if TYPE_CHECKING:
+    from fastapi import Response
+
+# All metrics endpoints import this module. prometheus_client otherwise exports a second _created
+# series for every Counter and Histogram child, including idle zero children.
+disable_created_metrics()
+
+OMI_MCP_OAUTH_TOKEN_TOTAL = Counter(
+    'omi_mcp_oauth_token_total',
+    'MCP OAuth token requests by bounded grant type and terminal outcome',
+    ['grant_type', 'outcome'],
+)
+
+SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
+    'omi_screen_task_gate_frames_total', 'Screen-task gate HTTP admissions by bounded terminal outcome', ['outcome']
+)
+SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
+    'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
+)
+
+OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
+    'omi_listen_stt_unavailable_total',
+    'Listen sessions rejected before STT setup because providers or reconnect budget are unavailable',
+    ['reason'],
+)
+
+OMI_PRODUCT_EVENT_TOTAL = Counter(
+    'omi_product_event_total',
+    (
+        'Product events by bounded event, client kind, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics. '
+        'Never labeled by uid or raw version strings.'
+    ),
+    ['event', 'client_kind', 'app_build', 'outcome', 'source', 'op'],
+)
+
+OMI_PRODUCT_EVENT_USER_DAILY_OVER_TOTAL = Counter(
+    'omi_product_event_user_daily_over_total',
+    (
+        'Pod-local uid-days whose product-event tally crossed a closed threshold. '
+        'Incremented once per (event, uid, UTC-day, threshold). Never labeled by uid. '
+        'sum() across pods counts pod-local crossings: a user split across pods may be '
+        'undercounted; a user who independently crosses on two pods is counted twice.'
+    ),
+    ['event', 'threshold'],
+)
 
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
@@ -9,6 +76,67 @@ BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
 PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
     'pusher_active_ws_connections',
     'Number of currently active WebSocket connections in pusher',
+)
+
+PUSHER_STORAGE_PCM_INFLIGHT_BYTES = Gauge(
+    'omi_pusher_storage_pcm_inflight_bytes',
+    'PCM payload bytes in custody storage awaits; enabled byte admission retains accounting until actual completion',
+)
+
+PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
+    'omi_pusher_storage_pcm_budget_limit_bytes',
+    'Pusher storage PCM byte budget limit; zero means no budget is enforced',
+)
+
+from utils.observability.reasons import PusherPcmErrorReason, PusherPcmStage, ReasonFamily, reason_label
+
+PUSHER_STORAGE_PCM_REFUSALS_TOTAL = Counter(
+    'omi_pusher_storage_pcm_refusals_total',
+    'Custody PCM submissions refused before storage; no receipt or ACK',
+    ['stage'],
+)
+
+for _pcm_stage in PusherPcmStage:
+    PUSHER_STORAGE_PCM_REFUSALS_TOTAL.labels(stage=reason_label(ReasonFamily.PUSHER_PCM, _pcm_stage, PusherPcmStage))
+
+PUSHER_STORAGE_PCM_ERRORS_TOTAL = Counter(
+    'omi_pusher_storage_pcm_errors_total',
+    'PCM admission accounting faults and late post-cancellation storage failures',
+    ['reason'],
+)
+for _pcm_error in PusherPcmErrorReason:
+    PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(
+        reason=reason_label(ReasonFamily.PUSHER_PCM, _pcm_error, PusherPcmErrorReason)
+    )
+
+PUSHER_QUEUE_DROPS = Counter(
+    'pusher_queue_drops_total',
+    'Pusher queue items dropped by bounded queue name',
+    ['queue'],
+)
+
+# Alert selectors must exist before the first loss, including emergency rollback.
+for _pusher_queue in (
+    'speaker_sample',
+    'transcript',
+    'audio_bytes',
+    'private_cloud',
+    'private_cloud_buffer',
+    'private_cloud_pending',
+    'audio_app_buffer',
+    'audio_webhook_buffer',
+):
+    PUSHER_QUEUE_DROPS.labels(queue=_pusher_queue).inc(0)
+
+PUSHER_QUEUE_DROPPED_BYTES = Counter(
+    'pusher_queue_dropped_bytes_total',
+    'Pusher queue bytes dropped by bounded queue name',
+    ['queue'],
+)
+
+PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS = Counter(
+    'pusher_private_cloud_upload_drops_total',
+    'Private cloud audio batches dropped after exhausting upload attempts',
 )
 
 PUSHER_CIRCUIT_BREAKER_STATE = Gauge(
@@ -38,11 +166,14 @@ OMI_JOURNEY_TERMINAL_TOTAL = Counter(
     ['journey', 'outcome'],
 )
 
+# 10 finite buckets, not 15: the 3x4 journey/outcome product is pre-created
+# below per pod/instance; no rule reads an explicit le= here (p50/p95 only).
+JOURNEY_LATENCY_BUCKETS = (0.5, 1, 2.5, 5, 10, 30, 60, 300, 3600, 21600)
 OMI_JOURNEY_LATENCY_SECONDS = Histogram(
     'omi_journey_latency_seconds',
     'Elapsed time from accepted real-traffic journey to terminal outcome',
     ['journey', 'outcome'],
-    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600, 21600, 86400),
+    buckets=JOURNEY_LATENCY_BUCKETS,
 )
 
 OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
@@ -51,8 +182,266 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
     ['outcome'],
 )
 
+# Audio-timeline v2 observability. Labels are bounded and never carry UID,
+# conversation id, or any transcript/audio content. mode=legacy|v2;
+# segments outcome=mapped|rejected|recovered|unplaced|straddled|late_owner_dropped;
+# coverage outcome is the 3.4 vocabulary covered|missing|pending_upload|no_audio|unsupported.
+OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL = Counter(
+    'omi_capture_evidence_envelopes_total',
+    'S1 metadata attempts on existing writes, by fixed ingest path and coverage status.',
+    ['path', 'status'],
+)
+
+OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
+    'omi_audio_timeline_segments_total',
+    'Live transcript segments by audio-timeline mapping outcome',
+    ['mode', 'outcome'],
+)
+OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL = Counter(
+    'omi_live_audio_capture_windows_total',
+    'Committed legacy live segment versions by capture-window availability',
+    ['outcome', 'reason'],
+)
+OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL = Counter(
+    'omi_live_audio_capture_attribution_total',
+    'Committed legacy live capture windows by cause and population (version or first stored segment ID)',
+    ['population', 'reason'],
+)
+# Keep the established outcome metric stable for existing dashboards. This
+# companion metric exposes a fixed reason vocabulary for every rejected
+# provider interval, including clock-only sessions while the v2 flag is off.
+AUDIO_TIMELINE_REJECT_REASONS = (
+    'non_numeric',
+    'non_finite',
+    'zero_length',
+    'outside_accepted_sends',
+    'collapsed_interval',
+    'discontinuous_interval',
+    'evicted_interval',
+    'callback_error',
+    'unverified_elapsed_gap',
+    'other',
+)
+OMI_AUDIO_TIMELINE_REJECTS_TOTAL = Counter(
+    'omi_audio_timeline_rejects_total',
+    'Provider epoch translation rejects by bounded reason',
+    ['mode', 'reason', 'provider', 'send_path'],
+)
+OMI_AUDIO_TIMELINE_MAPPED_TOTAL = Counter(
+    'omi_audio_timeline_mapped_total',
+    'Mapped provider intervals by bounded adapter',
+    ['mode', 'provider', 'send_path'],
+)
+OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL = Counter(
+    'omi_audio_timeline_elapsed_validation_total',
+    'Mapped capture windows compared with raw VAD speech decisions',
+    ['provider', 'outcome'],
+)
+OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL = Counter(
+    'omi_audio_timeline_elapsed_shadow_errors_total',
+    'Failures in validation-only Soniox elapsed-axis bookkeeping',
+)
+AUDIO_TIMELINE_SEND_PATHS = (
+    'vad_gate_active',
+    'vad_gate_passthrough',
+    'direct_unrecorded',
+    'direct_recorded',
+    'managed_chain',
+    'replay_failover',
+    'unknown',
+)
+AUDIO_TIMELINE_VAD_STATES = ('active', 'passthrough', 'off', 'failed', 'unknown')
+
+
+def audio_timeline_send_path_label(send_path: str | None) -> str:
+    return send_path if send_path in AUDIO_TIMELINE_SEND_PATHS else 'unknown'
+
+
+OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL = Counter(
+    'omi_audio_timeline_provider_sockets_total',
+    'Selected provider sockets by bounded send path and VAD state',
+    ['provider', 'send_path', 'vad_state'],
+)
+OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL = Counter(
+    'omi_audio_timeline_past_send_total',
+    'Provider segments past the last accepted send by seconds',
+    ['provider', 'send_path', 'bucket'],
+)
+
+
+AUDIO_TIMELINE_OUTSIDE_SUBREASONS = (
+    'empty_map',
+    'before_first_send',
+    'after_last_send',
+    'interior_hole',
+    'evicted',
+)
+OMI_AUDIO_TIMELINE_OUTSIDE_SENDS_TOTAL = Counter(
+    'omi_audio_timeline_outside_sends_total',
+    'Outside accepted-send refusals by bounded map geometry (not inferred cause)',
+    ['provider', 'send_path', 'subreason'],
+)
+
+
+def audio_timeline_past_send_bucket(seconds: float | None) -> str:
+    if seconds is None:
+        return 'no_send'
+    if seconds < 0:
+        return 'before_last_send'
+    for limit in (0.25, 1, 5, 30, 120):
+        if seconds <= limit:
+            return str(limit)
+    return 'inf'
+
+
+OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL = Counter(
+    'omi_audio_timeline_callback_errors_total',
+    'Deferred provider callback failures by bounded adapter',
+    ['mode', 'provider'],
+)
+AUDIO_TIMELINE_PROVIDERS = ('modulate', 'soniox', 'deepgram', 'parakeet', 'unknown')
+
+
+def audio_timeline_provider_label(provider: str | None) -> str:
+    return provider if provider in AUDIO_TIMELINE_PROVIDERS else 'unknown'
+
+
+OMI_AUDIO_TIMELINE_COVERAGE_TOTAL = Counter(
+    'omi_audio_timeline_coverage_total',
+    'Audio-linked coverage checks observed at bounded reconciliation points',
+    ['mode', 'outcome'],
+)
+# Pusher-side v2 replay reconciliation: frames overlapping already-accepted
+# audio whose bytes could not be proven identical (live-buffer compare or
+# flushed-run digest). Bounded counter, no identity labels.
+OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
+    'omi_audio_timeline_replay_conflicts_total',
+    'v2 audio frames dropped because an already-accepted range holds different bytes',
+)
+
+OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL = Counter(
+    'omi_audio_timeline_chunks_written_total',
+    'Successful audio chunk upload completions, by span metadata presence; an idempotent retry can complete the same object more than once',
+    ['reason'],
+)
+# GCS-4: all-zero private-cloud runs skipped at enqueue. Readers zero-fill
+# gaps between objects with the same bytes, so an all-zero run stored as its
+# own object is audio-identical to the gap it would leave behind.
+PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL = Counter(
+    'pusher_silent_run_flushes_skipped_total',
+    'All-zero private-cloud runs not enqueued; their bytes are reproduced by gap fill on read',
+)
+# GCS-3b: span uploads that skipped the replay-reconcile listing because the
+# session ledger showed no replay for that conversation.
+PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL = Counter(
+    'pusher_reconcile_lists_skipped_total',
+    'Private-cloud span uploads that skipped the per-flush replay-reconcile listing',
+)
+OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL = Counter(
+    'omi_listen_pusher_audio_discarded_bytes_total',
+    'Listen-side pusher audio envelope bytes discarded without resend, by bounded reason',
+    ['reason'],
+)
+OMI_AUDIO_PLACEMENT_TOTAL = Counter(
+    'omi_audio_placement_total',
+    'Audio placement outcomes for embeddable segments, by reason',
+    ['reason'],
+)
+for _mode in ('legacy', 'v2'):
+    for _provider in AUDIO_TIMELINE_PROVIDERS:
+        OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL.labels(mode=_mode, provider=_provider)
+    for _outcome in (
+        'mapped',
+        'rejected',
+        'recovered',
+        'unplaced',
+        'straddled',
+        'late_owner_dropped',
+        'send_owner_fallback',
+        'send_owner_unavailable',
+    ):
+        OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=_mode, outcome=_outcome)
+    for _outcome in ('covered', 'missing', 'pending_upload', 'no_audio', 'unsupported'):
+        OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode=_mode, outcome=_outcome)
+
+# Live speaker-ID match exits: every early return before a match decision, by
+# bounded reason (enumerated in routers/listen/speakers.py). The reason is the
+# only label — never uid, session, or conversation identifiers; those travel on
+# the paired log line instead, which is how a single user report is attributed.
+OMI_LIVE_SPEAKER_COLLAPSE_TOTAL = Counter(
+    'omi_live_speaker_collapse_total',
+    'Single-voice live segment runs with repeated rejected voice matches (observational)',
+)
+
+OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
+    'omi_speaker_id_match_exits_total',
+    'Live speaker-ID detections that returned before a match decision, by bounded reason',
+    ['reason'],
+)
+for _reason in (
+    'window_outside_buffer',
+    'segment_shorter_than_minimum',
+    'no_fresh_audio',
+    'window_shorter_than_minimum',
+    'no_pcm',
+    'stale_generation',
+    'already_mapped',
+    'authority_unavailable',
+):
+    OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
+
+OMI_SPEAKER_CLIP_COVERAGE_TOTAL = Counter(
+    'omi_speaker_clip_coverage_total',
+    'Legacy speaker clip extraction by bounded coverage, reason and caller',
+    ['outcome', 'reason', 'caller'],
+)
+
+OMI_PERSON_VOICE_LEARNING_TOTAL = Counter(
+    'omi_person_voice_learning_total',
+    'Person voice-learning attempts by bounded outcome',
+    ['outcome'],
+)
+for _outcome in (
+    'stored',
+    'disabled',
+    'person_missing',
+    'conversation_missing',
+    'no_audio',
+    'no_chunks',
+    'no_authorized_segments',
+    'contaminated',
+    'insufficient_speech',
+    'uncovered_audio',
+    'transcription_failed',
+    'insufficient_words',
+    'multi_speaker',
+    'text_mismatch',
+    'embedding_failed',
+    'stale_assignment',
+    'timeout',
+    'error',
+):
+    OMI_PERSON_VOICE_LEARNING_TOTAL.labels(outcome=_outcome)
+
+OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL = Counter(
+    'omi_conversation_summary_vector_upserts_total',
+    'Conversation summary vector writes by bounded outcome',
+    ['outcome'],
+)
+OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL = Counter(
+    'omi_chat_search_tool_outcomes_total',
+    'Chat conversation retrieval paths by bounded outcome',
+    ['path', 'outcome'],
+)
+
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
+for _outcome in ('success', 'skipped_discarded', 'skipped_no_structured', 'skipped_stale', 'error'):
+    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome=_outcome)
+for _path in ('keyword', 'vector', 'transcript', 'firestore'):
+    for _outcome in ('ok', 'degraded', 'empty'):
+        OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path=_path, outcome=_outcome)
+
 for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
     OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey)
     for _outcome in ('success', 'failure', 'cancelled', 'stale'):
@@ -61,15 +450,427 @@ for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
 for _outcome in ('requeued', 'enqueue_failed'):
     OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
 
+# Lazy desktop deferral: a raw transcript is stored at capture and enrichment
+# runs only when the user first opens the conversation. `stored` vs `enrich_*`
+# is the observed ever-opened fraction. Bounded
+# label set; anything else collapses to `other` so a new call site cannot mint
+# an unbounded series.
+#
+# Three constraints on reading the ratio (also carried in the HELP text, because
+# whoever writes the PromQL will not read this file):
+#  1. `stored` and `fenced` are emitted by EVERY job that runs the finalizer --
+#     the backend API and the pusher (`routers/pusher.py` ->
+#     `utils/pusher_finalization.py`) -- while `enrich_*` is emitted only by the
+#     backend first-open route. The ratio must therefore be
+#     `sum by (event) (lazy_desktop_deferral_total)` across every such job, and
+#     the pusher scrape target must be live or the denominator is truncated.
+#  2. `enrich_complete / stored` is an attempt-over-persist ratio, NOT a
+#     per-conversation one: a failed enrichment re-arms `deferred`, so the next
+#     open counts a second `enrich_started`, and a retried deferred persist can
+#     count `stored` (or `fenced`) more than once for a single conversation.
+#  3. The ratio is undefined when funded budget admission defers capture: the
+#     deferred-store path stops emitting `stored` while the already-stored
+#     backlog keeps emitting `enrich_*`, so the ratio drifts above 100%.
+LAZY_DESKTOP_DEFERRAL_EVENTS = frozenset(
+    {
+        'stored',
+        'fenced',
+        'enrich_started',
+        'enrich_lost_ownership',
+        'enrich_reacquire_error',
+        'enrich_complete',
+        'enrich_failed',
+    }
+)
+
+LAZY_DESKTOP_DEFERRAL_TOTAL = Counter(
+    'lazy_desktop_deferral_total',
+    (
+        'Lazy desktop deferral lifecycle: store at capture and first-open enrichment outcomes; '
+        'never labeled by UID. Aggregate as sum by (event) across BOTH backend and pusher: '
+        'stored/fenced are emitted by every host running the finalizer, enrich_* only by the '
+        'backend first-open route. enrich_complete/stored is an attempt/persist ratio, not a '
+        'per-conversation one (a re-armed retry counts again). The ratio is undefined while '
+        'funded cap deferral replaces legacy lazy stores while the enrich_* backlog drains.'
+    ),
+    ['event'],
+)
+
+# Export zero-valued children so a healthy but idle process is distinguishable
+# from an absent scrape target, matching the journey-metric convention above.
+for _lazy_event in LAZY_DESKTOP_DEFERRAL_EVENTS | {'other'}:
+    LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=_lazy_event)
+
+
+def record_lazy_desktop_deferral(*, event: str) -> None:
+    """Never raises: observability must not change a persistence or enrichment outcome."""
+    try:
+        label = event if event in LAZY_DESKTOP_DEFERRAL_EVENTS else 'other'
+    except Exception:
+        # Unhashable/invalid runtime values must not escape the guard; they
+        # collapse to `other` instead of breaking the owning path.
+        label = 'other'
+    try:
+        LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=label).inc()
+    except Exception:
+        pass
+
+
+# Conversation relevance (utils/conversations/relevance.py): one increment per
+# processed conversation. `decided_by="policy"` counts triggers that never
+# assess; a share of them that grows is a path skipping the gate by design,
+# and degraded reasons identify the cheaper arm that resolved a model failure.
+CONVERSATION_RELEVANCE_LABELS = {
+    'trigger': DECISION_TRIGGERS,
+    'verdict': frozenset({'keep', 'discard'}),
+    'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override', 'deterministic'}),
+}
+
+CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
+    # `omi_` prefix: the Cloud Run metrics sidecar keeps only omi_.* (deploy/cloud_run_gmp_sidecar.yaml).
+    'omi_conversation_relevance_decision_total',
+    (
+        'Conversation relevance decisions by processing trigger, verdict, deciding tier, and '
+        'bounded reason (a rule id, model_keep/model_discard, jev_keep/jev_discard, fallback arm reasons, a policy trigger, '
+        'restored, or calendar_overlap). Never labeled by uid. Per-pod; sum() across jobs.'
+    ),
+    ['trigger', 'verdict', 'decided_by', 'reason'],
+)
+
+_RELEVANCE_REASON = re.compile(r'^[a-z][a-z0-9_]{0,39}$')
+
+
+def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str, reason: str) -> None:
+    """Never raises: observability must not change a processing outcome."""
+    try:
+        labels = {
+            name: value if value in CONVERSATION_RELEVANCE_LABELS[name] else 'other'
+            for name, value in (('trigger', trigger), ('verdict', verdict), ('decided_by', decided_by))
+        }
+        allowed_reason = (
+            reason in TERMINAL_METRIC_REASONS
+            if trigger in TERMINAL_METRIC_TRIGGERS
+            else bool(_RELEVANCE_REASON.match(reason))
+        )
+        labels['reason'] = reason if allowed_reason else 'other'
+        CONVERSATION_RELEVANCE_DECISION_TOTAL.labels(**labels).inc()
+    except Exception:
+        pass
+
+
+# Jev decision model (utils/llm/jev_client.py, #14835). One increment per
+# caller-visible Jev question, after its retry. `lane` names the product
+# decision, never a user; every non-success outcome means the caller kept its
+# safe default.
+JEV_DECISION_LABELS = {
+    'lane': frozenset(
+        {
+            'conversation_relevance',
+            'screen_task',
+            'capture_same_scene',
+            'capture_resummary',
+            'conversation_smart_merge',
+            'episode_boundary',
+            'episode_boundary_f',
+        }
+    ),
+    'outcome': frozenset(
+        {'success', 'unconfigured', 'timeout', 'transport_error', 'http_error', 'http_429', 'malformed'}
+    ),
+}
+
+JEV_DECISION_TOTAL = Counter(
+    # `omi_` prefix: the Cloud Run metrics sidecar keeps only omi_.* (deploy/cloud_run_gmp_sidecar.yaml).
+    'omi_jev_decision_total',
+    'Jev decision-model questions by product lane and outcome. Never labeled by uid. Per-pod; sum() across jobs.',
+    ['lane', 'outcome'],
+)
+
+JEV_DECISION_LATENCY_SECONDS = Histogram(
+    'omi_jev_decision_latency_seconds',
+    'Wall time of one Jev question including its single retry, by product lane and outcome.',
+    ['lane', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 7.5),
+)
+
+# Primary scorer outcomes provide the denominator and failure categories for
+# degraded relevance paths. Keep this separate from shared transition telemetry.
+CONVERSATION_RELEVANCE_SCORER_TOTAL = Counter(
+    'omi_conversation_relevance_scorer_total',
+    'Paid relevance scorer outcomes; failures enter the cheaper decision chain.',
+    ['arm', 'outcome'],
+)
+
+
+CONVERSATION_RELEVANCE_CIRCUIT_TOTAL = Counter(
+    'omi_conversation_relevance_circuit_total',
+    'Primary relevance circuit transitions; open skips all paid decision arms.',
+    ['arm', 'state'],
+)
+
+
+def record_relevance_circuit_state(arm: str, state: str) -> None:
+    try:
+        CONVERSATION_RELEVANCE_CIRCUIT_TOTAL.labels(
+            arm=arm if arm in {'jev', 'model'} else 'other',
+            state=state if state in {'open', 'half_open', 'closed'} else 'other',
+        ).inc()
+    except Exception:
+        pass
+
+
+def record_relevance_scorer_outcome(outcome: str, *, arm: str = 'jev') -> None:
+    try:
+        CONVERSATION_RELEVANCE_SCORER_TOTAL.labels(
+            arm=arm if arm in {'jev', 'model'} else 'other',
+            outcome=outcome if outcome in JEV_DECISION_LABELS['outcome'] | {'unavailable'} else 'other',
+        ).inc()
+    except Exception:
+        pass
+
+
+def record_jev_decision(*, lane: str, outcome: str, latency_seconds: float) -> None:
+    """Never raises: observability must not change a decision."""
+    try:
+        labels = {
+            name: value if value in JEV_DECISION_LABELS[name] else 'other'
+            for name, value in (('lane', lane), ('outcome', outcome))
+        }
+        JEV_DECISION_TOTAL.labels(**labels).inc()
+        JEV_DECISION_LATENCY_SECONDS.labels(**labels).observe(max(0.0, latency_seconds))
+    except Exception:
+        pass
+
+
+from utils.metrics_smart_merge import (  # noqa: E402
+    CONVERSATION_SMART_MERGE_AUDIT_OUTCOMES as CONVERSATION_SMART_MERGE_AUDIT_OUTCOMES,
+    CONVERSATION_SMART_MERGE_AUDIT_TOTAL as CONVERSATION_SMART_MERGE_AUDIT_TOTAL,
+    CONVERSATION_SMART_MERGE_DECISION_TOTAL as CONVERSATION_SMART_MERGE_DECISION_TOTAL,
+    CONVERSATION_SMART_MERGE_LABELS as CONVERSATION_SMART_MERGE_LABELS,
+    CONVERSATION_SMART_MERGE_REASONS as CONVERSATION_SMART_MERGE_REASONS,
+    CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES as CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES,
+    CONVERSATION_SMART_MERGE_REFRESH_TOTAL as CONVERSATION_SMART_MERGE_REFRESH_TOTAL,
+    CONVERSATION_SMART_MERGE_SCORE as CONVERSATION_SMART_MERGE_SCORE,
+    CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS as CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS,
+    CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL as CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL,
+    OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL as OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL,
+    record_conversation_smart_merge as record_conversation_smart_merge,
+    record_conversation_smart_merge_audit as record_conversation_smart_merge_audit,
+    record_conversation_smart_merge_refresh as record_conversation_smart_merge_refresh,
+    record_conversation_smart_merge_survivor_deleted as record_conversation_smart_merge_survivor_deleted,
+    record_smart_merge_flatten as record_smart_merge_flatten,
+)
+
+OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
+    'omi_client_journey_accepted_total',
+    (
+        'Accepted client-segmented product journeys by bounded journey and client kind. '
+        'app_build is a constant compatibility label, not a client-supplied build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['journey', 'client_kind', 'app_build'],
+)
+
+OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
+    'omi_client_journey_terminal_total',
+    (
+        'Terminal client-segmented product journey outcomes; reason is a closed issue class or none. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['journey', 'client_kind', 'app_build', 'outcome', 'reason'],
+)
+
+OMI_CLIENT_JOURNEY_ISSUES_TOTAL = Counter(
+    'omi_client_journey_issues_total',
+    'Bounded issue detail for failed or degraded client-segmented product journeys',
+    ['journey', 'client_kind', 'app_build', 'issue_class'],
+)
+
+OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
+    'omi_client_journey_duration_seconds',
+    'Elapsed time from acceptance to terminal client-segmented journey outcome',
+    ['journey', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600, 21600, 86400),
+)
+
+# This is a separate, versioned contract from the legacy omi_journey_* family
+# above. Keep client_kind off the histogram: its 16 bucket series per child
+# would multiply the most expensive metric without helping outcome segmentation.
+# Emit these children only when a journey occurs. The dashboard queries use
+# rate/increase, and no alert relies on an idle child being present. An idle
+# scrape is distinguished from a failed scrape by the scrape target's `up`.
+
+# The gauges below report one GLOBAL Firestore-derived quantity, and every
+# replica publishes the same value. Aggregate them with max(), never sum(): a
+# sum() multiplies the real number by the replica count and, while replicas run
+# different images, mixes two different answers to the same question.
 LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
-    'Age of the oldest queued, leased, or blocked listen finalization job',
+    'Global age of the oldest queued or leased listen finalization job; '
+    'replicated per process, aggregate with max() not sum()',
+    registry=None,
 )
+
+LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS = Gauge(
+    'listen_finalization_oldest_blocked_byok_age_seconds',
+    'Legacy global age since created_at; recent state-entry dwell is exported by omi_finalization_byok; '
+    'replicated per process, aggregate with max() not sum()',
+    registry=None,
+)
+
+LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS = Gauge(
+    'listen_finalization_oldest_dead_letter_age_seconds',
+    'Global time in dead_letter for the oldest terminal_at timestamp; '
+    'replicated per process, aggregate with max() not sum()',
+    registry=None,
+)
+
+LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H = Gauge(
+    'listen_finalization_byok_session_abandoned_last_24h',
+    'Global COUNT of dead_letter jobs with byok_session_abandoned and terminal_at in the last 24 hours; '
+    'derived from committed job documents, aggregate with max() not sum()',
+    registry=None,
+)
+
+LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS = Gauge(
+    'listen_finalization_summary_last_success_timestamp_seconds',
+    'Unix timestamp of the last successful Firestore finalization summary in this process',
+    registry=None,
+)
+
+_LISTEN_FINALIZATION_SUMMARY_METRIC_LOCK = threading.Lock()
+_listen_finalization_summary_metrics_registered = False
+
+
+def register_listen_finalization_summary_metrics() -> None:
+    """Expose Firestore-derived gauges only after a successful summary is ready."""
+    global _listen_finalization_summary_metrics_registered
+    with _LISTEN_FINALIZATION_SUMMARY_METRIC_LOCK:
+        if _listen_finalization_summary_metrics_registered:
+            return
+        for metric in (
+            LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
+            LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+            LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS,
+            LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H,
+            LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
+        ):
+            REGISTRY.register(metric)
+        _listen_finalization_summary_metrics_registered = True
+
+
+# Durable-queue substrate age. Every replica publishes the same Firestore-derived
+# value for a given queue name; aggregate with max(), never sum(). Do not
+# zero-initialize: absent() means the periodic publisher has not run.
+OMI_QUEUE_OLDEST_READY_AGE_SECONDS = Gauge(
+    'omi_queue_oldest_ready_age_seconds',
+    'Age in seconds of the oldest ready durable-queue item; replicated per process, ' 'aggregate with max() not sum()',
+    ['queue'],
+)
+
+OMI_QUEUE_NAMES = (
+    'memory_outbox',
+    'candidate_integration_outbox',
+    'conversation_finalization_jobs',
+    'daily_summary_hour_groups',
+    'vector_repair_outbox',
+    'task_recurrence_inbox',
+    'frame_deletion_outbox',
+)
+
+# Closed queue inventory bounds cardinality. Before the first tick, age absence
+# remains the startup signal; thereafter unknown is explicit per queue.
+OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN = Gauge(
+    'omi_queue_oldest_ready_sample_unknown',
+    'Whether the latest durable-queue age sample is unknown; aggregate with max()',
+    ['queue'],
+)
+for _queue_name in OMI_QUEUE_NAMES:
+    OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN.labels(queue=_queue_name).set(0)
+
+# Closed sweep dispositions. Zero-initialize every child so an idle process
+# exports the whole set; never label by uid.
+CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS = (
+    'dead_letter_generation_mismatch',
+    'dead_letter_in_doubt',
+    'dead_letter_malformed',
+    'dead_letter_missing_created_at',
+    'dead_letter_stale_abandoned',
+    'error',
+    'recovered_external_id',
+    'retried',
+    'skipped_account_deleting',
+    'skipped_attempt_budget',
+    'skipped_live_lease',
+    'skipped_not_claimed',
+    'skipped_not_due',
+    'skipped_pending_young',
+)
+OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL = Counter(
+    'omi_candidate_integration_sweep_total',
+    'Candidate integration outbox sweep rows by closed disposition',
+    ['disposition'],
+)
+for _disposition in CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS:
+    OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL.labels(disposition=_disposition)
+
+# Error-class sentinel (services/error_class_sentinel.py). Outcomes are pinned
+# literals: ok, truncated (counts unbounded, alerts suppressed), error (read
+# failed), permission_denied (logging.read grant missing on backend-runtime).
+OMI_ERROR_CLASS_SWEEP_TOTAL = Counter(
+    'omi_error_class_sweep_total',
+    'Error-class sentinel sweep ticks by outcome',
+    ['outcome'],
+)
+for _outcome in ('ok', 'truncated', 'error', 'permission_denied'):
+    OMI_ERROR_CLASS_SWEEP_TOTAL.labels(outcome=_outcome)
+OMI_ERROR_CLASS_ALERT_FIRING = Gauge(
+    'omi_error_class_alert_firing',
+    'Error classes currently firing a new/surge alert (1) on the last sweep tick',
+    ['fingerprint', 'service'],
+)
+# Monotonic firing signal the Grafana rule keys on (display gauge above cannot
+# be cleared reliably across instances). No pre-zeroed labels: a series appears
+# the first time that class fires.
+OMI_ERROR_CLASS_ALERT_FIRED_TOTAL = Counter(
+    'omi_error_class_alert_fired_total',
+    'Error-class new/surge alert firings by class',
+    ['fingerprint', 'service'],
+)
+# increase() over a series born at 1 and flat returns 0, so the paging rule
+# keys on this timestamp gauge instead: freshly fired = time() - max(...) is
+# small; a frozen or stale instance's value ages out of the window.
+OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP = Gauge(
+    'omi_error_class_last_fired_timestamp_seconds',
+    'Unix time of the most recent new/surge firing per error class',
+    ['fingerprint', 'service'],
+)
+
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
-    'Current durable listen finalization job count by non-success status',
+    'Global durable listen finalization job count by non-success status; replicated '
+    'per process, aggregate with max() not sum(). dead_letter is terminal stock '
+    'across every generation from a status COUNT; other statuses use projection shards',
     ['status'],
+)
+
+LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
+    'listen_finalization_durable_jobs',
+    'Global authoritative Firestore finalization jobs by closed durable lifecycle '
+    'state; replicated per process, aggregate with max() not sum()',
+    ['state'],
+)
+
+MEETING_NOTES_EVIDENCE_WAIT_TOTAL = Counter(
+    'meeting_notes_evidence_wait_total',
+    'Desktop meeting finalizations by screen-evidence admission outcome',
+    ['outcome'],
+)
+
+CONVERSATION_ORPHANED_UNFINALIZED = Counter(
+    'omi_conversation_orphaned_unfinalized',
+    'Quiet content-bearing conversations observed without a finalization job and with no live recording lease',
 )
 
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
@@ -82,6 +883,67 @@ LISTEN_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
     'Listen finalization jobs terminalized after their final Cloud Tasks attempt',
 )
 
+FINALIZATION_DEAD_LETTER_CAUSES = (  # closed set; mirror smart_merge._INCOMPLETE_CODES (no import: keep metrics light)
+    'donor_receipt_revision_changed',
+    'refresh_lease_busy',
+    'survivor_changed_before_refresh',
+    'refresh_not_persisted',
+    'survivor_vector_failed',
+    'refresh_completion_fenced',
+    'processing_checkpoint_fenced',
+    'donor_cleanup_deferred',
+    'flatten_cleanup_source_invalid',
+    'processing_failed',
+    'worker_failed',
+    'invalid_job',
+    'recovery_structure_unavailable',
+    'final_attempt_failed',
+    'unknown',
+)
+OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
+    'omi_conversation_finalization_dead_letter_total',
+    'Terminal listen finalization jobs by bounded cause class',
+    ['cause'],
+)
+OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL = Counter(
+    'omi_conversation_finalization_budget_requeues_total',
+    'Attempt-budget exhaustion delayed requeues granted, by bounded cause class',
+    ['cause'],
+)
+
+# Zero-initialize the closed cause set so an idle process exports every
+# series, distinguishing no dead-letters yet from a missing scrape target.
+for _cause in FINALIZATION_DEAD_LETTER_CAUSES:
+    OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL.labels(cause=_cause)
+    OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL.labels(cause=_cause)
+
+LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
+    'listen_finalization_stale_processing_reconciliations_total',
+    'Stale bare-processing conversation reconciliation outcomes by the crash-orphan sweep',
+    ['outcome'],
+)
+
+# Zero-initialize the closed outcome set so an idle process exports every
+# series, distinguishing no stranded rows from a missing scrape target.
+for _outcome in ('completed', 'migrated', 'skipped', 'error'):
+    LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
+
+LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL = Counter(
+    'listen_finalization_byok_session_abandoned_total',
+    'Best-effort post-commit BYOK abandonment signal; use the document-derived last_24h gauge for alerting',
+)
+
+LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL = Counter(
+    'listen_finalization_byok_abandonments_total',
+    'Stranded BYOK finalization job dispositions by the abandonment sweep',
+    ['outcome'],
+)
+
+# Zero-initialize the closed outcome set so an idle process exports every
+# series, distinguishing no stranded rows from a missing scrape target.
+for _outcome in ('abandoned_conversation_closed', 'abandoned_bookkeeping', 'skipped', 'error'):
+    LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome=_outcome)
+
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
     'LLM gateway routing outcomes by feature (serving, fallback, direct_exception, shadow)',
@@ -92,12 +954,6 @@ LLM_GATEWAY_DIRECT_EXCEPTION_REQUESTS = Counter(
     'llm_gateway_direct_exception_requests_total',
     'Inventoried direct-provider surfaces used while gateway feature mode is active',
     ['surface', 'reason'],
-)
-
-LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(
-    'llm_gateway_chat_extraction_comparisons_total',
-    'Privacy-safe comparison buckets between shadow gateway output and legacy extraction output',
-    ['feature', 'field', 'outcome'],
 )
 
 LLM_GATEWAY_CIRCUIT_OPEN = Gauge(
@@ -112,16 +968,14 @@ LLM_GATEWAY_CLIENT_FIRST_BYTE_SECONDS = Histogram(
     buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 30),
 )
 
-OMI_FALLBACK_TOTAL = Counter(
-    'omi_fallback_total',
-    'Fallback / resilience transitions by component, path, reason, and outcome',
-    ['component', 'from_mode', 'to_mode', 'reason', 'outcome'],
-)
-
 DESKTOP_UPDATE_RESOLUTION_TOTAL = Counter(
     'desktop_update_resolution_total',
-    'Desktop update channel resolutions by platform, channel, and source',
-    ['platform', 'channel', 'source'],
+    (
+        'Desktop update channel resolutions by platform, channel, source, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics. '
+        'Server-to-server emitters omit app_build (unknown).'
+    ),
+    ['platform', 'channel', 'source', 'app_build'],
 )
 
 DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL = Counter(
@@ -150,8 +1004,17 @@ DESKTOP_UPDATE_FEED_VALID = Gauge(
 
 OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
     'omi_sync_dispatch_attempts_total',
-    'Sync v2 dispatch attempts by selected mode (denominator for fallback rates)',
-    ['mode'],
+    (
+        'Sync v2 dispatch attempts by selected mode and app build (denominator for fallback rates). '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['mode', 'app_build'],
+)
+
+OMI_SYNC_DISPATCH_FAILURES_TOTAL = Counter(
+    'omi_sync_dispatch_failures_total',
+    'Sync v2 Cloud Tasks staging failures by closed reason',
+    ['reason'],
 )
 
 OMI_SYNC_LANE_JOBS_TOTAL = Counter(
@@ -164,6 +1027,18 @@ OMI_SYNC_LANE_SPEECH_MS_TOTAL = Counter(
     'omi_sync_lane_speech_ms_total',
     'Successfully reserved sync speech milliseconds by lane',
     ['lane'],
+)
+
+OMI_SYNC_LANE_ADMISSIONS_TOTAL = Counter(
+    'omi_sync_lane_admissions_total',
+    'V2 sync upload lane decisions after the legacy fresh budget',
+    ['lane', 'trust', 'reason'],
+)
+
+OMI_SYNC_CAPTURE_TIME_TOTAL = Counter(
+    'omi_sync_capture_time_total',
+    'Sync upload capture-time admission outcomes under the shared future-skew tolerance',
+    ['outcome'],
 )
 
 OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
@@ -204,6 +1079,16 @@ OMI_TRANSCRIPTION_LATENCY_SECONDS = Histogram(
     buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300),
 )
 
+# Audio duration actually submitted for transcription (from PCM byte length or
+# WAV headers), not wall-clock latency: query as minutes to compare provider
+# STT volume. Skips deployment_version to keep cardinality at provider+route+
+# outcome+platform.
+OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL = Counter(
+    'omi_voice_transcription_audio_seconds_total',
+    'Audio seconds submitted for accepted prerecorded transcription journeys (measured duration, not latency)',
+    ['route', 'provider', 'outcome', 'client_platform'],
+)
+
 OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL = Counter(
     'omi_sync_transcription_segments_total',
     'Terminal semantic outcomes for sync transcription segments',
@@ -216,11 +1101,387 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
     ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
 )
 
+OMI_SYNC_EMPTY_SUCCESS_GUARD_TOTAL = Counter(
+    'omi_sync_empty_success_guard_total',
+    'Zero-word sync segment dispositions at the silence decision, by provider and reason',
+    ['provider', 'reason'],
+)
+
+OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
+    'omi_sync_bridge_retraction_total',
+    (
+        'Sync-bridge donor retraction outcomes. Labels are a closed set: '
+        'outcome=attempted|deferred|converged|failed and '
+        'reason=none|gate_busy|hold_active|authority_unavailable|other. '
+        'Never labeled by uid, conversation id, or exception text.'
+    ),
+    ['outcome', 'reason'],
+)
+
+# Counted alongside omi_sync_transcription_*_total{outcome="internal_error"}:
+# the bounded internal cause (config.sync_telemetry.SyncFailureReason).
+OMI_SYNC_INTERNAL_FAILURES_TOTAL = Counter(
+    'omi_sync_internal_failures_total',
+    'Sync job/segment failures in persistence or finalize, by bounded internal cause; never STT vendor errors',
+    ['kind', 'lane', 'failure_reason'],
+)
+
+OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL = Counter(
+    'omi_sync_bridge_audio_copy_total',
+    (
+        'Per-object sync-bridge audio copies. outcome=copied|skipped (destination already held the '
+        'same bytes)|rate_limited (one GCS 429, retried with backoff)|raced (a concurrent copier won)'
+    ),
+    ['outcome'],
+)
+
+OMI_SYNC_FRESH_CONVERSATION_TURN_TOTAL = Counter(
+    'omi_sync_fresh_conversation_turn_total',
+    (
+        'Fresh-lane per-conversation persistence turns. outcome=acquired|waited (acquired after another '
+        'fresh job released it)|timeout|unavailable (both proceed unserialized; the transaction stays correct)'
+    ),
+    ['outcome'],
+)
+
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
     'omi_live_stt_terminal_failures_total',
-    'Terminal live-STT failures by bounded provider, outcome, client platform, revision, and phase',
-    ['provider', 'outcome', 'client_platform', 'deployment_version', 'phase'],
+    'Terminal live-STT failures by bounded provider, outcome, client platform, environment, and phase',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
 )
+
+OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
+    'omi_live_stt_accepted_total',
+    'Accepted live-STT attempts by bounded provider, client platform, and deployment environment',
+    ['provider', 'client_platform', 'deployment_environment'],
+)
+
+# VAD-measured speech seconds for backend-provider live sessions, metered once
+# per speech-delta flush: speech sent to the provider, not wall-clock session
+# length and not fair-use transcription_seconds.
+OMI_LIVE_STT_AUDIO_SECONDS_TOTAL = Counter(
+    'omi_live_stt_audio_seconds_total',
+    'VAD speech seconds flushed for backend-provider live-STT sessions (speech sent, not wall-clock)',
+    ['provider', 'client_platform', 'deployment_environment'],
+)
+
+# Whether misaligned frames actually occur in production is unmeasured; Velma rejects
+# them outright, so this counter is what tells a Velma canary if that was the cause.
+OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
+    'omi_live_stt_misaligned_frames_total',
+    'Live-STT frames that were not a whole number of 16-bit samples, by provider and pipeline stage',
+    ['provider', 'stage'],
+)
+
+# Vendor stream-close frames by bounded provider and bounded reason. Budget/quota
+# exhaustion is never a transient blip; the PAGE alert keys on
+# reason=provider_budget_exhausted. Raw vendor messages are not label values.
+OMI_STT_STREAM_CLOSE_TOTAL = Counter(
+    'omi_stt_stream_close_total',
+    'Live-STT provider stream-close frames by bounded provider and bounded reason',
+    ['provider', 'reason'],
+)
+
+OMI_VAD_GATE_AUDIO_SECONDS_TOTAL = Counter(
+    'omi_vad_gate_audio_seconds_total',
+    'Live VAD gate audio seconds by gate outcome and mode',
+    ['outcome', 'mode'],
+)
+
+OMI_VAD_GATE_SESSIONS_TOTAL = Counter(
+    'omi_vad_gate_sessions_total',
+    'Live VAD gate sessions by mode',
+    ['mode'],
+)
+
+# D2 edge shadow mirrors (utils/stt/edge_shadow.py). outcome: completed,
+# queue_full, connect_failed, send_failed, edge_closed.
+OMI_LISTEN_EDGE_SHADOW_SESSIONS_TOTAL = Counter(
+    'omi_listen_edge_shadow_sessions_total',
+    'Listen sessions mirrored to listen-edge by how the mirror ended',
+    ['outcome'],
+)
+
+OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
+    'omi_live_stt_terminal_total',
+    'Terminal live-STT outcomes for accepted attempts by bounded labels',
+    ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
+)
+
+# Headline SLI for live listening: did this session get any transcript? Emitted
+# exactly once per backend-STT listen session at teardown (never for custom-STT
+# sessions, whose transcripts the client produces). too_short (under ~10s of
+# audio or no VAD speech) is excluded from the success-ratio denominator by the
+# alert, so quiet sessions cannot page. No provider/session labels: this is the
+# user-felt outcome, not provider attribution (2026-09-26 incident: ~34.8k/35k
+# modulate terminals failed for hours with nothing paging on the user outcome).
+OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL = Counter(
+    'omi_live_session_transcript_outcome_total',
+    'Terminal transcript outcome per backend-STT live listen session (transcribed / no_transcript / too_short)',
+    ['outcome', 'demand_cohort'],
+)
+
+# Process-local STT breaker state (utils/stt/provider_resilience.py), published
+# on every state transition. Per pod: sum across job=backend-listen-metrics for
+# "pods with this provider's breaker open". kind=account is the 402/balance
+# bench; kind=selection is the connect/serve bench.
+OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
+    'omi_stt_provider_circuit_open',
+    'Whether the process-local STT provider breaker is currently refusing traffic (1) or not (0)',
+    ['provider', 'kind'],
+)
+
+# Trips of the same breaker (closed/half-open -> open), counted once per
+# transition by the bounded cause that opened it: the serve-death reason
+# (connection_lost, send_failed, ...) or the connect-failure reason that
+# reached the threshold. error_class uses the shared live-reason vocabulary;
+# 'untyped' covers trips whose caller could not name a cause. Re-arming an
+# already-open breaker does not count. reason groups the bounded cause into
+# auth/quota/5xx/latency/no_text/connect, with capacity/unknown kept explicit.
+# The gauge shows current state; this counter shows why it tripped.
+OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL = Counter(
+    'omi_stt_provider_circuit_trip_total',
+    'STT provider breaker transitions into open by bounded cause (serve-death or connect-failure reason)',
+    ['provider', 'kind', 'error_class', 'reason'],
+)
+
+# Per-provider live-STT connection attempts on every connect path (legacy order
+# and configured chain), with a bounded error class for the failure tail.
+OMI_STT_PROVIDER_CONNECT_TOTAL = Counter(
+    'omi_stt_provider_connect_total',
+    'Live-STT provider connection attempts by bounded provider, outcome, and error class',
+    ['provider', 'outcome', 'error_class'],
+)
+
+OMI_LIVE_STT_OPEN_STREAMS = Gauge(
+    'omi_live_stt_open_streams',
+    'Currently open provider sockets serving live STT, by bounded provider',
+    ['provider'],
+)
+
+# Deployment-marked retired providers (intentionally unfunded legs). Budget and
+# leg-error alerts subtract these so a provider that is dead on purpose cannot
+# page forever. Populated from STT_RETIRED_PROVIDERS (utils/stt/stream_close.py).
+OMI_STT_PROVIDER_RETIRED = Gauge(
+    'omi_stt_provider_retired',
+    'STT providers this deployment has retired (unfunded or decommissioned legs alerts must ignore)',
+    ['provider'],
+)
+
+# /v4/listen funnel for sources the client cannot self-report (phone_call today):
+# STT-admitted session -> first decoded audio -> transcript delivery. Provider-
+# unavailable and reconnect-budget rejections are excluded. Labels are bounded.
+OMI_LISTEN_ACCEPTED_TOTAL = Counter(
+    'omi_listen_accepted_total',
+    (
+        'STT-admitted /v4/listen sessions by bounded transcription source, client platform, and app build. '
+        'WebSocket accept paths omit app_build (unknown). Counters are per-pod; alert queries must '
+        'sum() across job=backend-listen-metrics.'
+    ),
+    ['transcription_source', 'client_platform', 'app_build'],
+)
+
+# Wall seconds of live /v4/listen sessions by who could have watched them in real
+# time (routers/listen/realtime_demand.py). The input for routing background
+# capture off real-time vendor streams; seconds, never session identifiers.
+OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS = Gauge(
+    'omi_listen_live_no_audio_sessions',
+    'Open backend-STT sockets awaiting first decoded frame for 300s, or receiving no raw byte frames for 300s afterward',
+)
+
+OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(
+    'omi_listen_realtime_demand_seconds_total',
+    'Live listen session wall seconds by real-time demand bucket, bounded source and client platform',
+    ['transcription_source', 'client_platform', 'realtime_demand'],
+)
+
+OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL = Counter(
+    'omi_cloud_live_stt_mode_sessions_total',
+    'Listen sessions by resolved CLOUD_LIVE_STT_MODE and whether the client declared a local on-device preview',
+    ['mode', 'local_preview', 'client_platform'],
+)
+
+OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL = Counter(
+    'omi_cloud_live_stt_saved_seconds_total',
+    'Decoded listen audio seconds that would have been sent to a cloud streaming STT session under stream mode, by mode',
+    ['mode'],
+)
+
+OMI_LISTEN_SERVER_BATCH_SUPPRESSION_TOTAL = Counter(
+    'omi_listen_server_batch_suppression_total',
+    'Server batch suppression decisions at STT initialization (including reinitialization), closed reason set',
+    ['decision', 'reason', 'client_platform', 'language'],
+)
+
+OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL = Counter(
+    'omi_listen_local_preview_sessions_total',
+    'Listen sessions by mobile local-preview lane admission outcome (closed reason set)',
+    ['outcome', 'client_platform'],
+)
+
+OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL = Counter(
+    'omi_listen_deferred_stream_opened_total',
+    'Deferred cloud live STT streams opened because audio reached the socket, by why the stream was deferred',
+    ['deferred_by'],
+)
+
+OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
+    'omi_listen_audio_outcome_total',
+    'Per-session listen audio outcomes by bounded transcription source, outcome, and client platform',
+    ['transcription_source', 'outcome', 'client_platform'],
+)
+
+OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL = Counter(
+    'omi_listen_audio_decode_failures_total',
+    'Undecodable /v4/listen audio frames by bounded declared codec and client platform',
+    ['codec', 'client_platform'],
+)
+# Publish every bounded child at zero (alert doctrine: a scraped zero before the
+# first failure makes family absence unambiguously a source failure). The label
+# vocabularies mirror _record_decode_failure in routers/listen/receiver.py.
+for _codec in ('opus', 'opus_fs320', 'aac', 'lc3', 'pcm8', 'other'):
+    for _decode_platform in (
+        'android',
+        'desktop',
+        'ios',
+        'linux',
+        'macos',
+        'mobile',
+        'web',
+        'windows',
+        'unknown',
+    ):
+        OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL.labels(codec=_codec, client_platform=_decode_platform)
+
+OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
+    'omi_listen_unknown_channel_prefix_total',
+    'Multi-channel frames dropped for an unknown channel prefix, by bounded source and client platform',
+    ['transcription_source', 'client_platform'],
+)
+
+OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL = Counter(
+    'omi_listen_zero_byte_session_total',
+    (
+        'VAD-gated /v4/listen sessions that tore down after receiving literally no audio '
+        '(bytes_received==0, chunks_total==0, session_duration_sec==0.0)'
+    ),
+    ['transcription_source', 'client_platform'],
+)
+
+OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
+    'omi_listen_no_audio_teardown_total',
+    (
+        'Accepted /v4/listen sessions that tore down before any first audio byte, '
+        'complementing outcome="first_audio" on omi_listen_audio_outcome_total'
+    ),
+    ['transcription_source', 'client_platform'],
+)
+
+# Sync intake created-vs-merged. Emitted from ingest_sync_conversation on Cloud Run
+# backend-sync, which Prometheus does not scrape today (exporter allowlist is
+# backend + desktop-backend only). Counters are still the contract; alerts on this
+# series use Cloud Logging of the matching omi_sync_intake line until scrape lands.
+OMI_SYNC_INTAKE_TOTAL = Counter(
+    'omi_sync_intake_total',
+    'Sync conversation intake outcomes (created vs merged) by bounded outcome and projected encoded-size bucket',
+    ['outcome', 'projected_size_bucket'],
+)
+
+# One decision per safety-WAL upload that carries a recording id and audio
+# bounds (utils/sync/recording_lineage.py). Emitted from backend-sync, so the
+# matching `event=sync_lineage_resolve` log line is the queryable backup.
+OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
+    'omi_sync_lineage_resolve_total',
+    (
+        'Sync lineage binding decisions. outcome is a closed set: bound|split_across_generations|stamp_overridden|'
+        'stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted|s1_refused'
+    ),
+    ['outcome', 'stage', 'claim_count_bucket', 'file_count_bucket'],
+)
+
+# Task identity is emitted by all processing hosts; event=action_item_identity logs cover unscraped hosts.
+OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
+    'omi_action_item_identity_total',
+    'Task identity on replace: reused_identity|new|skipped_already_exported|disabled',
+    ['outcome'],
+)
+
+OMI_ENRICHMENT_EARLY_ABORT_TOTAL = Counter(
+    'omi_enrichment_early_abort_total',
+    'Enrichment revision checkpoints: stage=pre_notes|pre_persist, outcome=superseded|check_failed',
+    ['stage', 'outcome'],
+)
+OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
+    'omi_action_item_refresh_total',
+    'Automatic refresh task preservation: kept_existing|added_new|transferred_from_donor|skipped_duplicate|disabled',
+    ['outcome'],
+)
+
+OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL = Counter(
+    'omi_action_item_extraction_dropped_total',
+    'Model-extracted tasks rejected by conservative guards: other_owner|status_statement',
+    ['reason'],
+)
+
+# Shape at first durable completed persist; omi_conversation_shape logs cover unscraped backend-sync hosts.
+CONVERSATION_SHAPE_SOURCES = (
+    'live',
+    'sync',
+    'import',
+    'integration',
+    'desktop',
+    'unknown',
+)
+# 11 finite buckets, not 18: each source product is pre-created per emitter.
+# 10/15 back omi_conversation_shape's log; 120 backs the Core Features
+# le="120.0" panel; the rest only needs p10/p50/p90 resolution.
+CONVERSATION_DURATION_BUCKETS = (
+    5,
+    10,
+    15,
+    30,
+    60,
+    120,
+    300,
+    600,
+    1800,
+    3600,
+    14400,
+)
+CONVERSATION_SEGMENT_BUCKETS = (1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 5000)
+
+OMI_CONVERSATION_DURATION_SECONDS = Histogram(
+    'omi_conversation_duration_seconds',
+    (
+        'Wall-clock conversation duration (finished_at - started_at) at first durable '
+        'completed persist, by bounded source. Never labeled by uid. Sync is dark in '
+        'Prometheus until backend-sync is scraped; read omi_conversation_shape logs until then.'
+    ),
+    ['source'],
+    buckets=CONVERSATION_DURATION_BUCKETS,
+)
+
+OMI_CONVERSATION_SPEECH_SECONDS = Histogram(
+    'omi_conversation_speech_seconds',
+    (
+        'Sum of transcript segment (end - start) at first durable completed persist, '
+        'by bounded source. Speech extent, not wall-clock. Never labeled by uid.'
+    ),
+    ['source'],
+    buckets=CONVERSATION_DURATION_BUCKETS,
+)
+
+OMI_CONVERSATION_SEGMENTS = Histogram(
+    'omi_conversation_segments',
+    'Transcript segment count at first durable completed persist, by bounded source. Never labeled by uid.',
+    ['source'],
+    buckets=CONVERSATION_SEGMENT_BUCKETS,
+)
+
+for _shape_source in CONVERSATION_SHAPE_SOURCES:
+    OMI_CONVERSATION_DURATION_SECONDS.labels(source=_shape_source)
+    OMI_CONVERSATION_SPEECH_SECONDS.labels(source=_shape_source)
+    OMI_CONVERSATION_SEGMENTS.labels(source=_shape_source)
 
 TASK_WORKSTREAM_ASSOCIATION_TOTAL = Counter(
     'task_workstream_association_total',
@@ -234,10 +1495,62 @@ TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
     ['event', 'subject_kind', 'code'],
 )
 
+MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL = Counter(
+    'memory_universal_read_origin_total',
+    'Logical memory rows considered by the universal repository by physical origin',
+    ['origin'],
+)
+
+MEMORY_HISTORICAL_SUPPRESSION_TOTAL = Counter(
+    'memory_historical_suppression_total',
+    'Historical rows suppressed by canonical identity or canonical state',
+    ['reason'],
+)
+
+LIST_READ_REQUEST_TOTAL = Counter(
+    'list_read_requests_total',
+    'Bounded list GET read outcomes by route',
+    ['route', 'outcome'],
+)
+
+LIST_READ_DOCUMENTS_TOTAL = Counter(
+    'list_read_documents_total',
+    'Documents scanned by bounded list GET reads by route',
+    ['route'],
+)
+
+LIST_READ_SECONDS = Histogram(
+    'list_read_seconds',
+    'Wall-clock seconds spent in bounded list GET reads by route',
+    ['route'],
+)
+
+for _list_route in ('action-items', 'conversations', 'memories'):
+    LIST_READ_DOCUMENTS_TOTAL.labels(route=_list_route)
+    LIST_READ_SECONDS.labels(route=_list_route)
+    for _list_outcome in ('complete', 'truncated'):
+        LIST_READ_REQUEST_TOTAL.labels(route=_list_route, outcome=_list_outcome)
+
+MEMORY_HISTORICAL_MATERIALIZATION_TOTAL = Counter(
+    'memory_historical_materialization_total',
+    'Lazy historical-memory materialization outcomes',
+    ['outcome'],
+)
+
+for _origin in ('canonical', 'historical'):
+    MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL.labels(origin=_origin)
+for _reason in ('canonical_identity', 'canonical_state'):
+    MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason=_reason)
+for _outcome in ('not_needed', 'committed'):
+    MEMORY_HISTORICAL_MATERIALIZATION_TOTAL.labels(outcome=_outcome)
+
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
-    'Auth flow events by provider, stage, outcome, and sanitized failure class',
-    ['provider', 'stage', 'outcome', 'failure_class'],
+    (
+        'Auth flow events by provider, stage, outcome, sanitized failure class, and app build. '
+        'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
+    ),
+    ['provider', 'stage', 'outcome', 'failure_class', 'app_build'],
 )
 
 AUTH_FLOW_DURATION_SECONDS = Histogram(
@@ -246,6 +1559,172 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     ['provider', 'terminal_state'],
 )
 
+OMI_SUBSCRIPTION_EVENTS = Counter(
+    'omi_subscription_events_total',
+    'Stripe subscription lifecycle events observed via webhook. Counts webhook '
+    'deliveries, which Stripe may retry, so treat these as an operational trend '
+    'signal rather than a billing-grade figure; Stripe remains source of truth.',
+    ['event', 'plan', 'interval', 'reason'],
+)
 
-def metrics_response() -> Response:
+OMI_NEW_BUYER_CHECKOUT_REJECTED = Counter(
+    'omi_new_buyer_checkout_rejected_total',
+    'Checkout-session rejections for a retired-plan price (Omi Pro, '
+    "unlimited_v2, is the only plan sold), by reason and the target price's "
+    'plan. Reason `non_omi_pro_price`. The closed label surfaces and '
+    'zero-initialization live next to the recorder in utils.subscription.',
+    ['reason', 'plan'],
+)
+
+
+# Pusher readiness / drain gauges. Label-free (low cardinality) so they scrape
+# cheaply. Initialized to serving below so an idle healthy pod reads
+# pusher_ready=1 / pusher_drain_in_progress=0 and is distinguishable from a
+# missing scrape target (a labelless Gauge defaults to 0, which would wrongly
+# read as "draining"). utils.readiness.ReadinessGate flips these on drain.
+PUSHER_READY = Gauge(
+    'pusher_ready',
+    '1 = serving new traffic, 0 = draining',
+)
+PUSHER_DRAIN_IN_PROGRESS = Gauge(
+    'pusher_drain_in_progress',
+    '1 = drain initiated, readiness closed',
+)
+PUSHER_READY.set(1)
+PUSHER_DRAIN_IN_PROGRESS.set(0)
+
+
+OMI_SYNC_JOB_POLL_REQUESTS_TOTAL = Counter(
+    'omi_sync_job_poll_requests_total',
+    'Authenticated GET /v2/sync-local-files/{job_id} requests, including rejected polls',
+)
+OMI_SYNC_JOB_POLL_THROTTLED_TOTAL = Counter(
+    'omi_sync_job_poll_throttled_total',
+    'GET /v2/sync-local-files/{job_id} requests rejected by the per-UID poll ceiling',
+)
+
+
+# GET /v1/action-items read-cost controls (see database/action_items_cache.py).
+# `action_items_list` was 48.8% of every billable Firestore document read before
+# the 12/min per-uid cap shipped (#12258); the residual cost is a small number of
+# large-backlog accounts re-reading a full backlog on every allowed poll. These
+# counters are how a deploy proves the remaining reads went away, rather than
+# inferring it from the billing export a week later.
+OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL = Counter(
+    'omi_action_items_list_throttled_total',
+    'GET /v1/action-items requests rejected with 429 by a list ceiling',
+    ['client', 'policy'],
+)
+
+OMI_ACTION_ITEMS_LIST_CACHE_TOTAL = Counter(
+    'omi_action_items_list_cache_total',
+    'GET /v1/action-items list responses by cache outcome (a hit or not_modified reads zero Firestore documents)',
+    ['outcome'],
+)
+
+OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL = Counter(
+    'omi_action_items_list_refused_total',
+    (
+        'GET /v1/action-items requests classified as the stale Windows build. '
+        'decision=allow while ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE is off; '
+        'decision=refuse when the request is rejected with 426. '
+        'client is the closed classification constant, never a raw User-Agent.'
+    ),
+    ['client', 'decision'],
+)
+
+_ACTION_ITEMS_LIST_REFUSED_CLIENTS = frozenset({'stale_windows'})
+_ACTION_ITEMS_LIST_REFUSED_DECISIONS = frozenset({'allow', 'refuse'})
+
+
+def record_action_items_list_throttled(*, client: str, policy: str) -> None:
+    OMI_ACTION_ITEMS_LIST_THROTTLED_TOTAL.labels(client=client, policy=policy).inc()
+
+
+def record_action_items_list_refused(*, client: str, decision: str) -> None:
+    """client: stale_windows. decision: allow | refuse. Unknown values collapse to other."""
+    if client not in _ACTION_ITEMS_LIST_REFUSED_CLIENTS:
+        client = 'other'
+    if decision not in _ACTION_ITEMS_LIST_REFUSED_DECISIONS:
+        decision = 'other'
+    OMI_ACTION_ITEMS_LIST_REFUSED_TOTAL.labels(client=client, decision=decision).inc()
+
+
+def record_action_items_list_cache(outcome: str) -> None:
+    """outcome: hit | not_modified | miss | bypass | unavailable."""
+    OMI_ACTION_ITEMS_LIST_CACHE_TOTAL.labels(outcome=outcome).inc()
+
+
+def metrics_response() -> 'Response':
+    # Imported here, not at module scope: this module is reachable from the
+    # record-seal row process (utils.observability.fallback -> utils.metrics),
+    # and fastapi/pydantic is ~60% of that process's import bill. Only the
+    # /metrics route needs the web framework.
+    from fastapi import Response
+
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+_sidecar_server_lock = threading.Lock()
+_sidecar_server: Any | None = None
+_sidecar_server_thread: threading.Thread | None = None
+
+
+def start_metrics_sidecar_server() -> None:
+    """Expose the process registry only on loopback for the Cloud Run sidecar."""
+    raw_port = os.environ.get('PROMETHEUS_SIDECAR_PORT', '').strip()
+    if not raw_port:
+        return
+    try:
+        port = int(raw_port)
+    except ValueError as exc:
+        raise RuntimeError('PROMETHEUS_SIDECAR_PORT must be an integer') from exc
+    if not 1 <= port <= 65535:
+        raise RuntimeError('PROMETHEUS_SIDECAR_PORT must be between 1 and 65535')
+
+    global _sidecar_server, _sidecar_server_thread
+    with _sidecar_server_lock:
+        if _sidecar_server is not None:
+            return
+        _sidecar_server, _sidecar_server_thread = start_http_server(port, addr='127.0.0.1')
+
+
+def stop_metrics_sidecar_server() -> None:
+    global _sidecar_server, _sidecar_server_thread
+    with _sidecar_server_lock:
+        server = _sidecar_server
+        thread = _sidecar_server_thread
+        _sidecar_server = None
+        _sidecar_server_thread = None
+    if server is None:
+        return
+    server.shutdown()
+    server.server_close()
+    if thread is not None:
+        thread.join(timeout=5)
+
+
+OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL = Counter(
+    'omi_conversation_speaker_resolution_total',
+    'Conversation-wide speaker resolution runs by outcome',
+    ['outcome'],
+)
+
+OMI_CONVERSATION_SPEAKER_RESOLUTION_REASONS_TOTAL = Counter(
+    'omi_conversation_speaker_resolution_reasons_total',
+    'Conversation-wide speaker resolution runs by outcome and bounded reason',
+    ['outcome', 'reason'],
+)
+
+OMI_CONVERSATION_NOTE_PRESENTATION_TOTAL = Counter(
+    'omi_conversation_note_presentation_total',
+    'Generated conversation-note presentation contract outcomes',
+    ['outcome', 'reason', 'contract_version'],
+)
+
+OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES = Histogram(
+    'omi_conversation_speaker_resolution_voices',
+    'Speaker ids before and after conversation-wide resolution',
+    ['stage'],
+    buckets=(1, 2, 3, 4, 6, 8, 12, 16, 25, 50, 100, 250, 1000, 2500),
+)

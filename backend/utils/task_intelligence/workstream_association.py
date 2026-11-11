@@ -1,4 +1,4 @@
-"""Canonical-memory evidence association into durable workflow workstreams."""
+"""Evidence association into durable workflow workstreams."""
 
 import hashlib
 import json
@@ -8,6 +8,7 @@ from typing import Any, Optional, Protocol, cast
 
 import database.recurrence_inbox as recurrence_inbox_db
 import database.workstreams as workstreams_db
+from database.durable_queue import ProcessOutcome, drain_isolated
 from database.vector_db import (
     delete_workstream_association_vector,
     query_workstream_association_candidates,
@@ -15,7 +16,6 @@ from database.vector_db import (
 from models.action_item import TaskCreatePayload
 from models.candidate import CandidateCreate, WorkstreamCreateCandidate, WorkstreamProposal
 from models.memory_recurrence import CanonicalRecurrenceSignal
-from models.task_intelligence import TaskWorkflowMode
 from models.workstream import (
     Workstream,
     WorkstreamEventCreate,
@@ -36,7 +36,6 @@ from models.workstream_association import (
     RecurrenceOutcomeKind,
 )
 from utils.llm.gateway_client import invoke_chat_structured_gateway
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.metrics import TASK_WORKSTREAM_ASSOCIATION_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.task_intelligence import candidate_service
@@ -108,7 +107,7 @@ def _association_idempotency_key(evidence: AssociationEvidence, workstream_id: s
     return f'association_{hashlib.sha256(payload.encode("utf-8")).hexdigest()[:40]}'
 
 
-def associate_canonical_evidence(
+def associate_workflow_evidence(
     uid: str,
     evidence: AssociationEvidence,
     *,
@@ -138,11 +137,7 @@ def associate_canonical_evidence(
             telemetry(outcome.outcome)
         return outcome
 
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
-        return finish(AssociationOutcome(outcome=AssociationOutcomeKind.not_canonical_cohort))
     control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
-    if control.workflow_mode == TaskWorkflowMode.off:
-        return finish(AssociationOutcome(outcome=AssociationOutcomeKind.workflow_disabled))
 
     target_generation = control.account_generation if account_generation is None else account_generation
     if target_generation != control.account_generation:
@@ -224,17 +219,6 @@ def associate_canonical_evidence(
                 judgment_reason=judgment.reason,
             )
         )
-    if control.workflow_mode == TaskWorkflowMode.shadow:
-        return finish(
-            AssociationOutcome(
-                outcome=AssociationOutcomeKind.would_append,
-                retrieved_candidate_ids=retrieved_ids,
-                hydrated_candidate_ids=hydrated_ids,
-                workstream_id=judgment.workstream_id,
-                judgment_reason=judgment.reason,
-            )
-        )
-
     event = append_event(
         uid,
         judgment.workstream_id,
@@ -274,19 +258,9 @@ def consume_recurrence_signal(
     firestore_client: Any = None,
     create_candidate: Callable[..., Any] = candidate_service.create_candidate,
 ) -> RecurrenceConsumptionOutcome:
-    if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
-        return RecurrenceConsumptionOutcome(
-            outcome=RecurrenceOutcomeKind.not_canonical_cohort,
-            signal_id=signal.signal_id,
-        )
     control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
     if control.account_generation != account_generation:
         raise recurrence_inbox_db.RecurrenceGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode == TaskWorkflowMode.off:
-        return RecurrenceConsumptionOutcome(
-            outcome=RecurrenceOutcomeKind.workflow_disabled,
-            signal_id=signal.signal_id,
-        )
     if (
         not signal.unresolved
         or signal.occurrence_count < RECURRENCE_MIN_OCCURRENCES
@@ -299,19 +273,12 @@ def consume_recurrence_signal(
         )
 
     idempotency_key = _recurrence_idempotency_key(signal)
-    if control.workflow_mode == TaskWorkflowMode.shadow:
-        return RecurrenceConsumptionOutcome(
-            outcome=RecurrenceOutcomeKind.would_create,
-            signal_id=signal.signal_id,
-            idempotency_key=idempotency_key,
-        )
-
     proposal = CandidateCreate(
         root=WorkstreamCreateCandidate(
             capture_confidence=signal.confidence,
             ownership_confidence=0.5,
             evidence_refs=signal.evidence_refs,
-            source_surface='canonical_memory_recurrence',
+            source_surface='memory_recurrence',
             workstream_proposal=WorkstreamProposal(
                 title=signal.title,
                 objective=signal.objective,
@@ -343,19 +310,6 @@ def persist_recurrence_signals_for_maintenance(
     """Durably hand off a consolidation batch before its memory watermark advances."""
     control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
     signal_list = list(signals)
-    if control.workflow_mode == TaskWorkflowMode.shadow:
-        return sum(
-            consume_recurrence_signal(
-                uid,
-                signal,
-                account_generation=control.account_generation,
-                firestore_client=firestore_client,
-            ).outcome
-            == RecurrenceOutcomeKind.would_create
-            for signal in signal_list
-        )
-    if control.workflow_mode == TaskWorkflowMode.off:
-        return 0
 
     persisted = 0
     for signal in signal_list:
@@ -389,8 +343,6 @@ def drain_recurrence_inbox_for_maintenance(
     retry: Callable[..., None] = recurrence_inbox_db.retry_recurrence_receipt,
 ) -> int:
     control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
-    if control.workflow_mode in {TaskWorkflowMode.off, TaskWorkflowMode.shadow}:
-        return 0
 
     created = 0
     receipts = list_pending(
@@ -398,7 +350,9 @@ def drain_recurrence_inbox_for_maintenance(
         account_generation=control.account_generation,
         firestore_client=firestore_client,
     )
-    for receipt in receipts:
+
+    def process_one(receipt: RecurrenceInboxReceipt) -> ProcessOutcome:
+        nonlocal created
         try:
             result = consume_recurrence_signal(
                 uid,
@@ -414,8 +368,9 @@ def drain_recurrence_inbox_for_maintenance(
                 firestore_client=firestore_client,
             )
             created += int(result.outcome == RecurrenceOutcomeKind.candidate_created)
+            return ProcessOutcome.ack()
         except recurrence_inbox_db.RecurrenceGenerationMismatchError:
-            continue
+            return ProcessOutcome.reject('generation mismatch', reason='generation_mismatch')
         except Exception as exc:
             retry(
                 uid,
@@ -431,6 +386,9 @@ def drain_recurrence_inbox_for_maintenance(
                 reason='other',
                 outcome='degraded',
             )
+            return ProcessOutcome.retry(type(exc).__name__, reason='retryable')
+
+    drain_isolated(receipts, process_one)
     return created
 
 
@@ -444,15 +402,12 @@ def consume_recurrence_signals_for_maintenance(
     complete: Callable[..., None] = recurrence_inbox_db.complete_recurrence_receipt,
     retry: Callable[..., None] = recurrence_inbox_db.retry_recurrence_receipt,
 ) -> int:
-    evaluated_or_persisted = persist_recurrence_signals_for_maintenance(
+    persist_recurrence_signals_for_maintenance(
         uid,
         signals,
         firestore_client=firestore_client,
         enqueue=enqueue,
     )
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
-    if control.workflow_mode == TaskWorkflowMode.shadow:
-        return evaluated_or_persisted
     return drain_recurrence_inbox_for_maintenance(
         uid,
         firestore_client=firestore_client,
@@ -466,6 +421,7 @@ __all__ = [
     'ASSOCIATION_INDEX_VERSION',
     'ASSOCIATION_POLICY_VERSION',
     'ASSOCIATION_PROMPT_V1',
+    'associate_workflow_evidence',
     'associate_canonical_evidence',
     'consume_recurrence_signal',
     'consume_recurrence_signals_for_maintenance',
@@ -473,3 +429,13 @@ __all__ = [
     'persist_recurrence_signals_for_maintenance',
     'rebuild_workstream_association_index',
 ]
+
+
+def associate_canonical_evidence(*args: Any, **kwargs: Any) -> AssociationOutcome:
+    """Deprecated compatibility alias for :func:`associate_workflow_evidence`.
+
+    The old symbol remains import-compatible for released/non-owned callers;
+    all new task code should use the neutral workflow entrypoint.
+    """
+
+    return associate_workflow_evidence(*args, **kwargs)

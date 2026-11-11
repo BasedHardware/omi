@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 
@@ -14,40 +13,7 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   static const int lc3DataSize = 90; // 3 frames of 30 bytes each
   static const int lc3FrameSize = 30; // Single LC3 frame size
 
-  final _audioController = StreamController<List<int>>.broadcast();
-  StreamSubscription? _audioSub;
-
   FriendPendantDeviceConnection(super.device, super.transport);
-
-  @override
-  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
-    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Subscribe to audio stream
-    _audioSub = transport
-        .getCharacteristicStream(friendPendantServiceUuid, friendPendantAudioCharacteristicUuid)
-        .listen((data) {
-      final payload = _processAudioPacket(data);
-      if (payload != null && payload.isNotEmpty) {
-        // Split 90-byte payload into 30-byte LC3 frames and add each separately
-        for (int i = 0; i < payload.length; i += lc3FrameSize) {
-          final end = (i + lc3FrameSize <= payload.length) ? i + lc3FrameSize : payload.length;
-          final chunk = payload.sublist(i, end);
-          if (chunk.length == lc3FrameSize) {
-            _audioController.add(chunk);
-          }
-        }
-      }
-    });
-  }
-
-  @override
-  Future<void> disconnect() async {
-    await _audioSub?.cancel();
-    await _audioController.close();
-    await super.disconnect();
-  }
 
   /// Process audio packet by stripping the 5-byte footer
   List<int>? _processAudioPacket(List<int> data) {
@@ -71,19 +37,9 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   }) async {
     if (onBatteryLevelChange == null) return null;
 
-    final controller = StreamController<List<int>>();
-
-    // Send initial battery level immediately
+    // No hardware battery source: publish the placeholder once per listener.
     onBatteryLevelChange(90);
-
-    // Send 90% battery level every 30 seconds
-    final timer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      onBatteryLevelChange(90);
-    });
-
-    controller.onCancel = () => timer.cancel();
-
-    return controller.stream.listen(null);
+    return null;
   }
 
   @override
@@ -93,7 +49,17 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
-    return _audioController.stream.listen(onAudioBytesReceived);
+    // Own the characteristic subscription through the capture listener. Cancelling
+    // capture must unsubscribe BLE, not just detach from a broadcast relay.
+    return transport
+        .getCharacteristicStream(friendPendantServiceUuid, friendPendantAudioCharacteristicUuid)
+        .expand<List<int>>((data) {
+      final payload = _processAudioPacket(data);
+      if (payload == null) return const <List<int>>[];
+      return [
+        for (var i = 0; i + lc3FrameSize <= payload.length; i += lc3FrameSize) payload.sublist(i, i + lc3FrameSize),
+      ];
+    }).listen(onAudioBytesReceived);
   }
 
   @override

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,11 +14,43 @@ from . import providers, safety
 FIRESTORE_PORT = 8085
 AUTH_PORT = 9099
 BACKEND_PORT = 8000
+LLM_GATEWAY_PORT = 9080
 DESKTOP_BACKEND_PORT = 10201
 REDIS_PORT = 6380
 TYPESENSE_PORT = 8108
+# The official container listens on its internal default unless an explicit
+# --api-port is supplied. Harness instances vary only the loopback host port.
+TYPESENSE_CONTAINER_PORT = 8108
+TYPESENSE_PINNED_VERSION = "27.1"
 LOCAL_TYPESENSE_API_KEY = "local-typesense-api-key-not-real"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
+LOCAL_LLM_GATEWAY_SERVICE_TOKEN = "local-dev-llm-gateway-service-token-not-real"
+# Signs the internal screen-frame approval token. Production sets either this or
+# SCREEN_FRAME_KMS_KEY; without one the egress routes fail closed, so the harness
+# supplies a throwaway value rather than leaving meeting screenshots unrunnable locally.
+LOCAL_SCREEN_FRAME_SIGNING_SECRET = "local-dev-screen-frame-signing-secret-not-real"
+LOCAL_STORAGE_BUCKET_ENV = {
+    "BUCKET_SPEECH_PROFILES": "speech-profiles",
+    "BUCKET_POSTPROCESSING": "postprocessing",
+    "BUCKET_PRIVATE_CLOUD_SYNC": "omi-private-cloud-sync",
+    "BUCKET_TEMPORAL_SYNC_LOCAL": "sync-temporal",
+    "BUCKET_MEMORIES_RECORDINGS": "memories-recordings",
+    "BUCKET_PLUGINS_LOGOS": "plugins-logos",
+    "BUCKET_APP_THUMBNAILS": "app-thumbnails",
+    "BUCKET_CHAT_FILES": "chat-files",
+    "BUCKET_DESKTOP_UPDATES": "desktop-updates",
+    "BUCKET_SCREEN_FRAMES": "screen-frames",
+}
+PORT_OFFSET_ENV = "OMI_HARNESS_PORT_OFFSET"
+PORT_OVERRIDE_ENVS = {
+    "firestore": "OMI_HARNESS_FIRESTORE_PORT",
+    "auth": "OMI_HARNESS_AUTH_PORT",
+    "backend": "OMI_HARNESS_BACKEND_PORT",
+    "desktop_backend": "OMI_HARNESS_DESKTOP_BACKEND_PORT",
+    "redis": "OMI_HARNESS_REDIS_PORT",
+    "typesense": "OMI_HARNESS_TYPESENSE_PORT",
+    "llm_gateway": "OMI_HARNESS_LLM_GATEWAY_PORT",
+}
 PROVIDER_MODES = providers.PROVIDER_MODES
 CORE_PROVIDER_ENV = (
     "OPENAI_API_KEY",
@@ -45,12 +76,34 @@ class HarnessConfig:
     layout: safety.HarnessLayout
     project_id: str = safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID
     database_id: str = safety.DEFAULT_FIRESTORE_DATABASE_ID
-    firestore_host: str = f"127.0.0.1:{FIRESTORE_PORT}"
-    auth_host: str = f"127.0.0.1:{AUTH_PORT}"
-    backend_host: str = f"127.0.0.1:{BACKEND_PORT}"
-    desktop_backend_host: str = f"127.0.0.1:{DESKTOP_BACKEND_PORT}"
+    firestore_port: int = FIRESTORE_PORT
+    auth_port: int = AUTH_PORT
+    backend_port: int = BACKEND_PORT
+    desktop_backend_port: int = DESKTOP_BACKEND_PORT
     redis_host: str = "127.0.0.1"
     redis_port: int = REDIS_PORT
+    typesense_port: int = TYPESENSE_PORT
+    dev_bind_host: str = "127.0.0.1"
+    # Address clients on other machines (a phone) reach the backend at; only
+    # used for URLs the backend hands out, such as local-storage file links.
+    dev_advertise_host: str = "127.0.0.1"
+    llm_gateway_port: int = LLM_GATEWAY_PORT
+
+    @property
+    def firestore_host(self) -> str:
+        return f"127.0.0.1:{self.firestore_port}"
+
+    @property
+    def auth_host(self) -> str:
+        return f"127.0.0.1:{self.auth_port}"
+
+    @property
+    def backend_host(self) -> str:
+        return f"127.0.0.1:{self.backend_port}"
+
+    @property
+    def desktop_backend_host(self) -> str:
+        return f"127.0.0.1:{self.desktop_backend_port}"
 
     @property
     def redis_url(self) -> str:
@@ -61,8 +114,23 @@ class HarnessConfig:
         return f"http://{self.backend_host}"
 
     @property
+    def backend_public_url(self) -> str:
+        """Backend URL as reachable from a physical device (see OMI_DEV_HOST)."""
+        return f"http://{self.dev_advertise_host}:{self.backend_port}"
+
+    @property
     def desktop_backend_url(self) -> str:
         return f"http://{self.desktop_backend_host}"
+
+    @property
+    def llm_gateway_url(self) -> str:
+        return f"http://127.0.0.1:{self.llm_gateway_port}"
+
+    @property
+    def llm_gateway_service_token(self) -> str:
+        # Isolate tokens per harness instance so parallel offsets cannot reuse
+        # the shared local default and accidentally authorize each other.
+        return f"{LOCAL_LLM_GATEWAY_SERVICE_TOKEN}:{self.instance}"
 
 
 def repo_root_from(path: Path) -> Path:
@@ -75,6 +143,90 @@ def repo_root_from(path: Path) -> Path:
 
 def provider_mode_from_env(env: Mapping[str, str] | None = None) -> str:
     return providers.provider_mode_from_env(env)
+
+
+DEV_BIND_HOST_ENV = "OMI_DEV_BIND_HOST"
+# Falls back to OMI_DEV_HOST (app/setup.sh:53) so a contributor who follows the
+# documented physical-device setup — set OMI_DEV_HOST to the Mac's reachable
+# address — gets a harness that actually listens there too, not just an app
+# built to expect it (#11774). OMI_DEV_BIND_HOST exists for the narrower case
+# of wanting an asymmetric bind (e.g. a different advertise vs. listen address).
+APP_DEV_HOST_ENV = "OMI_DEV_HOST"
+
+
+def dev_bind_host_from_env(env: Mapping[str, str] | None = None) -> str:
+    """Resolve what the harness's HTTP services and Firebase emulators bind to.
+
+    Defaults to loopback-only, preserving today's behavior. Binds all
+    interfaces (0.0.0.0) when a private LAN/CGNAT address is requested, rather
+    than that literal address, so loopback callers (health checks, a booted
+    simulator) keep working alongside the newly reachable LAN/tailnet address.
+    Fails closed (SafetyError) on a publicly routable address.
+    """
+
+    source = os.environ if env is None else env
+    requested = source.get(DEV_BIND_HOST_ENV, "").strip() or source.get(APP_DEV_HOST_ENV, "").strip()
+    if not requested:
+        return "127.0.0.1"
+    safety.validate_dev_bind_host(requested, name=DEV_BIND_HOST_ENV)
+    if safety.is_loopback_host(requested):
+        return "127.0.0.1"
+    return "0.0.0.0"
+
+
+def dev_advertise_host_from_env(env: Mapping[str, str] | None = None) -> str:
+    """Resolve the address the backend advertises itself at in generated URLs.
+
+    A phone built against OMI_DEV_HOST cannot fetch a local-storage file (the
+    saved speech profile, say) from a 127.0.0.1 link, so when OMI_DEV_HOST names
+    a LAN/tailnet address the backend hands out links on that address instead.
+    Loopback stays the default for simulator-only setups.
+    """
+
+    source = os.environ if env is None else env
+    requested = source.get(APP_DEV_HOST_ENV, "").strip()
+    if not requested or safety.is_loopback_host(requested):
+        return "127.0.0.1"
+    safety.validate_dev_bind_host(requested, name=APP_DEV_HOST_ENV)
+    return requested
+
+
+def _port_from_env(source: Mapping[str, str], name: str, default: int, offset: int) -> int:
+    raw = source.get(PORT_OVERRIDE_ENVS[name], "").strip()
+    try:
+        value = int(raw) if raw else default + offset
+    except ValueError as exc:
+        raise safety.SafetyError(f"{PORT_OVERRIDE_ENVS[name]} must be an integer, got {raw!r}") from exc
+    if not 1 <= value <= 65535:
+        raise safety.SafetyError(f"{PORT_OVERRIDE_ENVS[name]} resolved outside valid port range: {value}")
+    return value
+
+
+def harness_ports_from_env(env: Mapping[str, str] | None = None) -> dict[str, int]:
+    """Resolve one isolated loopback port set while preserving dev defaults."""
+
+    source = os.environ if env is None else env
+    raw_offset = source.get(PORT_OFFSET_ENV, "0").strip()
+    try:
+        offset = int(raw_offset)
+    except ValueError as exc:
+        raise safety.SafetyError(f"{PORT_OFFSET_ENV} must be an integer, got {raw_offset!r}") from exc
+    if not 0 <= offset <= 50000:
+        raise safety.SafetyError(f"{PORT_OFFSET_ENV} must be between 0 and 50000, got {offset}")
+    defaults = {
+        "firestore": FIRESTORE_PORT,
+        "auth": AUTH_PORT,
+        "backend": BACKEND_PORT,
+        "desktop_backend": DESKTOP_BACKEND_PORT,
+        "redis": REDIS_PORT,
+        "typesense": TYPESENSE_PORT,
+        "llm_gateway": LLM_GATEWAY_PORT,
+    }
+    ports = {name: _port_from_env(source, name, default, offset) for name, default in defaults.items()}
+    duplicates = sorted(port for port in set(ports.values()) if list(ports.values()).count(port) > 1)
+    if duplicates:
+        raise safety.SafetyError(f"Harness ports must be distinct; duplicate values: {duplicates}")
+    return ports
 
 
 def secrets_file_path(cfg: HarnessConfig) -> Path:
@@ -158,7 +310,24 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         if create_layout
         else safety.layout_for_instance(repo_root, instance, source)
     )
-    cfg = HarnessConfig(repo_root=repo_root.resolve(), instance=instance, provider_mode=provider_mode, layout=layout)
+    ports = harness_ports_from_env(source)
+    dev_bind_host = dev_bind_host_from_env(source)
+    dev_advertise_host = dev_advertise_host_from_env(source)
+    cfg = HarnessConfig(
+        repo_root=repo_root.resolve(),
+        instance=instance,
+        provider_mode=provider_mode,
+        layout=layout,
+        firestore_port=ports["firestore"],
+        auth_port=ports["auth"],
+        backend_port=ports["backend"],
+        desktop_backend_port=ports["desktop_backend"],
+        redis_port=ports["redis"],
+        typesense_port=ports["typesense"],
+        llm_gateway_port=ports["llm_gateway"],
+        dev_bind_host=dev_bind_host,
+        dev_advertise_host=dev_advertise_host,
+    )
     parsed = parse_secrets_file(cfg)
     if parsed.secrets.get("PROVIDER_MODE"):
         provider_mode = provider_mode_from_env({**dict(source), **parsed.secrets})
@@ -167,6 +336,15 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
             instance=cfg.instance,
             provider_mode=provider_mode,
             layout=cfg.layout,
+            firestore_port=cfg.firestore_port,
+            auth_port=cfg.auth_port,
+            backend_port=cfg.backend_port,
+            desktop_backend_port=cfg.desktop_backend_port,
+            redis_port=cfg.redis_port,
+            typesense_port=cfg.typesense_port,
+            llm_gateway_port=cfg.llm_gateway_port,
+            dev_bind_host=cfg.dev_bind_host,
+            dev_advertise_host=cfg.dev_advertise_host,
         )
     safety.validate_harness_runtime_config(
         project_id=cfg.project_id,
@@ -176,42 +354,24 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
     return cfg
 
 
-def _canonical_users_for_harness(cfg: HarnessConfig) -> str:
-    manifest_path = cfg.layout.state_root / "manifests" / "canonical-auth-uids.json"
-    if manifest_path.is_file():
-        try:
-            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            payload = {}
-        if isinstance(payload, dict):
-            canonical = payload.get("canonical_users")
-            if isinstance(canonical, list):
-                values = [str(item).strip() for item in canonical if str(item).strip()]
-                if values:
-                    return ",".join(values)
-            users = payload.get("users")
-            if isinstance(users, dict):
-                alice_uid = users.get("alice")
-                if isinstance(alice_uid, str) and alice_uid.strip():
-                    return alice_uid.strip()
-            selected = payload.get("selected_user")
-            if isinstance(selected, str) and selected.strip():
-                return selected.strip()
-    return os.environ.get("MEMORY_CANONICAL_USERS", "alice").strip()
-
-
 def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
-    canonical_users = _canonical_users_for_harness(cfg)
+    # Offline harness uses direct/stub LLM paths. OMI_ENV_STAGE=offline is not a
+    # gateway-local stage, so FEATURE_MODE=gateway would make gateway_client reject
+    # startup while still advertising gateway routing.
+    gateway_feature_mode = "off" if cfg.provider_mode == "offline" else "gateway"
     return {
         "OMI_HARNESS_INSTANCE": cfg.instance,
         "OMI_HARNESS_STATE_ROOT": str(cfg.layout.state_root),
+        "OMI_LOCAL_STORAGE_ROOT": str(cfg.layout.services_dir / "storage"),
+        "OMI_LOCAL_STORAGE_BASE_URL": f"{cfg.backend_public_url}/_local/storage",
         "FIRESTORE_EMULATOR_HOST": cfg.firestore_host,
         "FIREBASE_AUTH_EMULATOR_HOST": cfg.auth_host,
         "FIREBASE_AUTH_PROJECT_ID": cfg.project_id,
         "FIREBASE_PROJECT_ID": cfg.project_id,
         "FIRESTORE_DATABASE_ID": cfg.database_id,
         "FIREBASE_API_KEY": LOCAL_FIREBASE_API_KEY,
-        "MEMORY_CANONICAL_USERS": canonical_users,
+        "MEMORY_MODE": "read",
+        "MEMORY_CANONICAL_CONSOLIDATION_ENABLED": "true",
         "REDIS_DB_HOST": cfg.redis_host,
         "REDIS_DB_PORT": str(cfg.redis_port),
         "REDIS_DB_PASSWORD": "",
@@ -219,18 +379,25 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "ENCRYPTION_SECRET": "omi_local_dev_harness_32_byte_test_secret_not_prod",
         "ADMIN_KEY": "local-dev-admin-key-",
         "TYPESENSE_HOST": "127.0.0.1",
-        "TYPESENSE_HOST_PORT": str(TYPESENSE_PORT),
+        "TYPESENSE_HOST_PORT": str(cfg.typesense_port),
         "TYPESENSE_API_KEY": LOCAL_TYPESENSE_API_KEY,
         "TYPESENSE_PROTOCOL": "http",
         "BASE_API_URL": cfg.backend_url,
         "API_BASE_URL": cfg.backend_url,
+        "OMI_LLM_GATEWAY_URL": cfg.llm_gateway_url,
+        "OMI_LLM_GATEWAY_SERVICE_TOKEN": cfg.llm_gateway_service_token,
+        "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,
+        # Production ships default-off and turns this on deliberately; the harness is
+        # the one place the feature must be on, since running it is the whole point.
+        "SCREEN_FRAME_SIGNING_SECRET": LOCAL_SCREEN_FRAME_SIGNING_SECRET,
+        **LOCAL_STORAGE_BUCKET_ENV,
     }
 
 
 def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     extra = {
         **_harness_service_extra(cfg),
-        "PORT": str(BACKEND_PORT),
+        "PORT": str(cfg.backend_port),
         "PYTHONUNBUFFERED": "1",
         "OMI_ENV_STAGE": "offline" if cfg.provider_mode == "offline" else "local",
     }
@@ -239,13 +406,22 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     env = safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
     if cfg.provider_mode == "offline":
         env.update(safety.offline_provider_placeholders())
+        # Offline strips real provider keys. Default STT_SERVICE_MODELS includes
+        # soniox, and backend startup then fails closed on an empty SONIOX_API_KEY.
+        # Pin a keyless chain so isolated sessions can boot without paid STT.
+        env["STT_SERVICE_MODELS"] = "parakeet"
+        # Pre-recorded STT has no keyless chain: without the deterministic stub,
+        # uploaded captures dead-end at PrerecordedSTTConfigurationError and
+        # conversations never finalize. Stub output is self-declaring synthetic
+        # text and is double-gated to offline stages (utils.stt.prerecorded_stub).
+        env["OMI_STT_STUB"] = "1"
     return env
 
 
 def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     extra = {
         **_harness_service_extra(cfg),
-        "PORT": str(DESKTOP_BACKEND_PORT),
+        "PORT": str(cfg.desktop_backend_port),
         "USE_VERTEX_AI": "false",
         "OMI_ENV_STAGE": "offline" if cfg.provider_mode == "offline" else "local",
     }
@@ -255,4 +431,5 @@ def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     if cfg.provider_mode == "offline":
         env.update(safety.offline_provider_placeholders())
         env["OMI_LLM_STUB"] = "1"
+        env["STT_SERVICE_MODELS"] = "parakeet"
     return env

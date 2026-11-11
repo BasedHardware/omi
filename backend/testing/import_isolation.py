@@ -32,11 +32,17 @@ D3). Do not extend it; migrate its consumers to the mechanisms here.
 from __future__ import annotations
 
 import sys
-import types
+import sysconfig
 from contextlib import contextmanager
+from importlib.machinery import ExtensionFileLoader
+from pathlib import Path
 from types import ModuleType
-from typing import Iterator
+from typing import Any, Iterable, Iterator, Mapping
 from unittest.mock import MagicMock
+
+# Stdlib modules that ``stub_modules`` keeps once loaded; see the eviction step.
+_ZONEINFO_FAMILY = ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+_STDLIB_DIRS = tuple({Path(sysconfig.get_path(key)).resolve() for key in ("stdlib", "platstdlib")})
 
 
 class AutoMockModule(ModuleType):
@@ -54,6 +60,44 @@ class AutoMockModule(ModuleType):
         mock = MagicMock()
         setattr(self, name, mock)
         return mock
+
+
+def _has_existing_file_origin(module: ModuleType | None) -> bool:
+    spec = getattr(module, "__spec__", None)
+    origin = getattr(spec, "origin", None) if spec else None
+    return isinstance(origin, str) and Path(origin).is_file()
+
+
+def _is_real_stdlib_module(module: ModuleType | None) -> bool:
+    """True for a module the interpreter loaded from its own stdlib; fakes carry no such spec."""
+    spec = getattr(module, "__spec__", None)
+    origin = getattr(spec, "origin", None) if spec else None
+    if origin == "built-in":
+        return True
+    if not (isinstance(origin, str) and Path(origin).is_file()):
+        return False
+    resolved = Path(origin).resolve()
+    return any(resolved.is_relative_to(stdlib_dir) for stdlib_dir in _STDLIB_DIRS)
+
+
+def _is_existing_extension_module(module: ModuleType | None) -> bool:
+    spec = getattr(module, "__spec__", None)
+    loader = getattr(spec, "loader", None) if spec else None
+    return isinstance(loader, ExtensionFileLoader) and _has_existing_file_origin(module)
+
+
+def install_auto_mock_modules(names: Iterable[str]) -> None:
+    """Stub each top-level dependency with an ``AutoMockModule`` before an import.
+
+    Module-import-time companion to :func:`stub_modules` for the residual case where
+    the module under test imports optional dependencies eagerly and the stub must be
+    present before that import runs. Prefer ``stub_modules`` (fixture scope) when the
+    import does not need the fakes up front; the static checker bans direct
+    module-scope ``sys.modules`` writes in test files, so route through here instead.
+    """
+    for name in names:
+        if name not in sys.modules or not isinstance(sys.modules[name], AutoMockModule):
+            sys.modules[name] = AutoMockModule(name)
 
 
 def _set_parent_attr(name: str, module: ModuleType | None) -> None:
@@ -78,11 +122,12 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
     including deleting entries that were absent before and repairing parent attrs.
 
     It ALSO snapshots the FULL ``sys.modules`` mapping (key -> object) at entry and
-    restores it on teardown: newly-added keys are evicted AND existing keys whose
-    object was swapped (e.g. by ``load_module_fresh`` re-exec'ing a module against
-    the fakes) are restored to the original object. This is what makes a fixture
-    hermetic: subsequent test files always see the *real* module, never a stub-fed
-    fresh copy left behind.
+    restores it on teardown: newly-added keys are evicted except for exact names in
+    the explicit import-safety allowlist, and existing keys whose object was swapped
+    (e.g. by ``load_module_fresh`` re-exec'ing a module against the fakes) are
+    restored to the original object. Explicit fakes are restored and backend-owned
+    modules are always evicted, so a stub-fed backend copy never leaks to later
+    test files.
 
     Use ONLY inside a function/fixture scope (never at module scope in a test file —
     the static checker bans that). For most test seams prefer ``monkeypatch.setattr``
@@ -132,20 +177,66 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
         # 2. Evict any module keys that appeared during the block (e.g. a module
         #    exec'd via load_module_fresh against the fakes) and clear the parent
         #    attribute each one set, so a stub-fed version never leaks to later files.
-        #    Skip C extension / spec-less modules outside the backend namespace
-        #    (e.g. ``_openssl``) that cannot be safely re-imported once evicted —
-        #    evicting them corrupts the crypto stack for all subsequent test files.
-        #    Backend-owned modules (database.*, utils.*, etc.) are always evicted
-        #    because they may be stubs that must not leak.
-        _backend_prefixes = ("database.", "utils.", "models.", "routers.", "jobs.", "dependencies")
-        for extra in list(sys.modules.keys() - saved_keys):
-            extra_mod = sys.modules.get(extra)
-            if extra_mod is not None:
-                spec = getattr(extra_mod, "__spec__", None)
-                origin = getattr(spec, "origin", None) if spec else None
-                is_backend = any(extra == p.rstrip(".") or extra.startswith(p) for p in _backend_prefixes)
-                if not is_backend and (spec is None or (origin and origin.endswith((".so", ".pyd")))):
+        # Preserve only these exact families. Jiter's source package must remain
+        # paired with its extension because its initializer binds the child module;
+        # the listed Google modules register descriptors in protobuf's global pool.
+        # Add future native families explicitly rather than discovering .so files.
+        _extension_family_companions = {
+            "google": (
+                "google._upb._message",
+                "proto",
+                "google.ai.generativelanguage_v1beta.types.cache_service",
+                "google.ai.generativelanguage_v1beta.types.cached_content",
+                "google.ai.generativelanguage_v1beta.types.citation",
+                "google.ai.generativelanguage_v1beta.types.content",
+                "google.ai.generativelanguage_v1beta.types.discuss_service",
+                "google.ai.generativelanguage_v1beta.types.file",
+                "google.ai.generativelanguage_v1beta.types.file_service",
+                "google.ai.generativelanguage_v1beta.types.generative_service",
+                "google.ai.generativelanguage_v1beta.types.model",
+                "google.ai.generativelanguage_v1beta.types.model_service",
+                "google.ai.generativelanguage_v1beta.types.permission",
+                "google.ai.generativelanguage_v1beta.types.permission_service",
+                "google.ai.generativelanguage_v1beta.types.prediction_service",
+                "google.ai.generativelanguage_v1beta.types.retriever",
+                "google.ai.generativelanguage_v1beta.types.retriever_service",
+                "google.ai.generativelanguage_v1beta.types.safety",
+                "google.ai.generativelanguage_v1beta.types.text_service",
+                "google.ai.generativelanguage_v1beta.types.tuned_model",
+            ),
+            "jiter": ("jiter", "jiter.jiter"),
+        }
+        extra_names = list(sys.modules.keys() - saved_keys)
+        preserve_for_import_safety: set[str] = set()
+        extra_name_set = set(extra_names)
+        google_extension_loaded = _is_existing_extension_module(sys.modules.get("google._upb._message"))
+        jiter_extension_loaded = _is_existing_extension_module(sys.modules.get("jiter.jiter"))
+        if google_extension_loaded:
+            for companion_name in _extension_family_companions["google"]:
+                if companion_name in extra_name_set and _has_existing_file_origin(sys.modules.get(companion_name)):
+                    preserve_for_import_safety.add(companion_name)
+        if jiter_extension_loaded:
+            for companion_name in _extension_family_companions["jiter"]:
+                if companion_name not in extra_name_set:
                     continue
+                companion = sys.modules.get(companion_name)
+                if companion_name == "jiter.jiter":
+                    if _is_existing_extension_module(companion):
+                        preserve_for_import_safety.add(companion_name)
+                elif _has_existing_file_origin(companion):
+                    preserve_for_import_safety.add(companion_name)
+        # CPython 3.11's _zoneinfo frees its module globals when its module object is
+        # collected, but the static ZoneInfo type lives on in every module that imported
+        # it. An evicted copy collected after a later re-import nulls the globals under
+        # the live type, and ZoneInfo(...) raises "null argument to internal routine".
+        preserve_for_import_safety.update(
+            name
+            for name in _ZONEINFO_FAMILY
+            if name in extra_name_set and _is_real_stdlib_module(sys.modules.get(name))
+        )
+        for extra in extra_names:
+            if extra in preserve_for_import_safety:
+                continue
             _clear_parent_attr_if_added(extra, saved_submodule_attrs)
             sys.modules.pop(extra, None)
         # 3. Restore existing keys whose object was swapped in place (load_module_fresh
@@ -154,6 +245,19 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
             current = sys.modules.get(name)
             if current is not None and current is not original:
                 sys.modules[name] = original
+        # 4. Rebind submodules on the now-restored parent package objects.
+        #
+        # A mapping may replace both ``pkg.child`` and ``pkg`` in that order.
+        # Installing the child first mutates the original ``pkg.child`` attribute;
+        # restoring that attribute before restoring ``pkg`` only repairs the fake
+        # parent and leaves the original parent pointing at the fake child.  String
+        # monkeypatch targets then resolve through the stale parent attribute even
+        # though ``sys.modules["pkg.child"]`` is correct.  Do this final pass only
+        # after every module object is back in ``sys.modules``.
+        for name, original_parent_attr in saved_submodule_attrs.items():
+            _set_parent_attr(name, original_parent_attr)
+        for name, original_parent_attr in saved_parent_attrs.items():
+            _set_parent_attr(name, original_parent_attr)
 
 
 def _get_parent_attr(name: str) -> ModuleType | None:
@@ -206,6 +310,13 @@ def load_module_fresh(name: str, path: str) -> ModuleType:
     """
     import importlib.util
 
+    if name == "utils.llm.goals" and "models.goal" not in sys.modules:
+        models_pkg = sys.modules.get("models")
+        if isinstance(models_pkg, ModuleType) and getattr(models_pkg, "__path__", None) == []:
+            goal_path = Path(path).resolve().parents[2] / "models" / "goal.py"
+            if goal_path.is_file():
+                models_pkg.__path__ = [str(goal_path.parent)]  # type: ignore[attr-defined]
+
     sys.modules.pop(name, None)
     # Do NOT pass submodule_search_locations: passing it (even []) marks the module
     # as a package, which corrupts ``__package__`` and breaks relative imports
@@ -216,6 +327,26 @@ def load_module_fresh(name: str, path: str) -> ModuleType:
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+# Stdlib-only relevance policy that sync intake and the pipeline import at module
+# scope. Harnesses that replace ``utils.conversations`` with a stub register the
+# real files so the policy under test is production's, never a copy.
+PURE_RELEVANCE_MODULES = (
+    'utils.conversations.processing_trigger',
+    'utils.conversations.relevance_circuit',
+    'utils.conversations.relevance_rules',
+    'utils.conversations.relevance',
+    'utils.conversations.fragment_visibility',
+)
+
+
+def register_pure_relevance_modules(saved_modules: dict[str, ModuleType | None]) -> None:
+    """Exec the real relevance modules into ``sys.modules``, saving priors for restore."""
+    backend = Path(__file__).resolve().parents[1]
+    for name in PURE_RELEVANCE_MODULES:
+        saved_modules.setdefault(name, sys.modules.get(name))
+        load_module_fresh(name, str(backend.joinpath(*name.split('.')).with_suffix('.py')))
 
 
 def fake_firestore_transactional(func):
@@ -246,4 +377,175 @@ def fake_firestore_transactional(func):
     return wrapper
 
 
-__all__ = ["AutoMockModule", "stub_modules", "load_module_fresh", "fake_firestore_transactional"]
+def _dotted_parts(package: str) -> list[str]:
+    """Split a dotted package name, rejecting path-escape and non-identifier segments."""
+
+    parts = package.split(".")
+    if not parts or any(not part.isidentifier() for part in parts):
+        raise LookupError(f"package_submodule_stubs: {package!r} is not a dotted package name")
+    return parts
+
+
+def _package_directory(package: str) -> Path:
+    """Resolve a dotted package to its directory on disk, ignoring ``sys.modules``.
+
+    Deliberately does NOT use ``importlib.util.find_spec``: inside a ``stub_modules``
+    block the package may already be a stub whose ``__spec__`` is ``None``, so spec
+    lookup would report the fake instead of the real tree. This file lives at
+    ``backend/testing/import_isolation.py``, so ``parent.parent`` is the backend root
+    and joining the dotted name is the honest source — independent of cwd and of
+    whatever is currently in ``sys.modules``.
+    """
+
+    backend_root = Path(__file__).resolve().parent.parent
+    return backend_root.joinpath(*_dotted_parts(package))
+
+
+def _skip_directory_entry(name: str) -> bool:
+    """Skip hidden and dunder entries; keep ``_``-prefixed modules.
+
+    A router can ``from pkg._private import X``. Treating an underscore as an opt-out
+    would recreate the hand-list failure for those modules. ``__init__.py`` and
+    ``__pycache__`` still drop out because they start with ``__``.
+    """
+
+    return name.startswith(".") or name.startswith("__")
+
+
+def _enumerate_submodules(package: str, directory: Path) -> dict[str, bool]:
+    """Map dotted child names to ``is_package``, walking nested packages.
+
+    Sub-packages are included so a later ``from pkg.child.leaf import X`` can resolve
+    against stubs in ``sys.modules``. They must present as packages (empty ``__path__``)
+    *and* have their children stubbed: empty ``__path__`` prevents the import system
+    from loading the real nested module off disk.
+    """
+
+    found: dict[str, bool] = {}
+    for entry in sorted(directory.iterdir(), key=lambda path: path.name):
+        if _skip_directory_entry(entry.name):
+            continue
+        if entry.is_dir():
+            child = f"{package}.{entry.name}"
+            nested = _enumerate_submodules(child, entry)
+            if nested or (entry / "__init__.py").is_file():
+                found[child] = True
+                found.update(nested)
+        elif entry.is_file() and entry.suffix == ".py":
+            found[f"{package}.{entry.stem}"] = False
+    return found
+
+
+def package_submodule_stubs(
+    package: str,
+    *,
+    extra: Iterable[str] = (),
+    include_package: bool = True,
+    directory: Path | None = None,
+) -> dict[str, ModuleType]:
+    """Derive a stub set from a package's real submodules instead of hand-listing them.
+
+    WHY this exists: a hand-maintained list of module names drifts silently. The next
+    module added to the package is absent from the list, and every suite that stubs
+    that package fails at *collection* with ``ModuleNotFoundError`` — which reads as a
+    product bug rather than a stale fixture, and which the module's author discovers in
+    CI rather than the fixture's owner discovering it locally. This is
+    ``FC-hand-listed-test-isolation-membership`` in the backend.
+
+    The membership is derived from the source signal — what actually sits in the
+    package directory — and then unioned with ``extra``, so naming something
+    explicitly is still allowed but omitting it is not an opt-out.
+
+    Submodules are enumerated from disk and never imported, so no package side effect
+    runs. Sub-packages are stubbed with an empty ``__path__`` so they present as
+    packages and can themselves parent further stubs, without the import system
+    searching the real tree.
+
+    ``directory`` overrides the on-disk location (tests); the dotted ``package`` is
+    still the stub identity. The default resolves under the backend root without
+    consulting ``sys.modules``.
+
+    Example::
+
+        fakes = package_submodule_stubs("utils.conversations")
+        with stub_modules(fakes):
+            from routers.conversations import router
+    """
+
+    _dotted_parts(package)
+    package_dir = directory if directory is not None else _package_directory(package)
+    if not package_dir.is_dir():
+        raise LookupError(f"package_submodule_stubs: {package!r} is not a package directory ({package_dir})")
+
+    stubs: dict[str, ModuleType] = {}
+
+    def _stub(name: str, *, is_package: bool) -> ModuleType:
+        module = AutoMockModule(name)
+        if is_package:
+            module.__path__ = []  # type: ignore[attr-defined]
+        return module
+
+    if include_package:
+        stubs[package] = _stub(package, is_package=True)
+
+    for name, is_package in _enumerate_submodules(package, package_dir).items():
+        stubs[name] = _stub(name, is_package=is_package)
+
+    for name in extra:
+        if name not in stubs:
+            stubs[name] = _stub(name, is_package=False)
+
+    return stubs
+
+
+def install_package_submodule_stubs(
+    package: str,
+    saved_modules: dict[str, Any],
+    *,
+    overrides: Mapping[str, ModuleType] | None = None,
+    directory: Path | None = None,
+) -> None:
+    """Bind every on-disk submodule under a package stub whose ``__path__`` is empty.
+
+    An empty ``__path__`` stops the import system from reading the real tree, so a
+    hand-listed child set drifts: the next module added to ``package`` raises
+    ``ModuleNotFoundError`` at collection. Membership comes from
+    ``package_submodule_stubs``. ``overrides`` replace the auto-mock (harness spies).
+    A child already loaded from a real file stays in ``sys.modules`` and is attached
+    to the parent, so telemetry retained before the package stub survives.
+
+    The parent must already sit in ``sys.modules``. Each name this function writes
+    is recorded with ``setdefault``, so a caller that snapshotted the name earlier
+    keeps that original for restore.
+    """
+
+    parent = sys.modules.get(package)
+    if not isinstance(parent, ModuleType):
+        raise LookupError(f"install_package_submodule_stubs: {package!r} is not an installed module")
+
+    chosen = dict(overrides or {})
+    for name in chosen:
+        if not name.startswith(package + "."):
+            raise LookupError(f"install_package_submodule_stubs: {name!r} is not a child of {package!r}")
+
+    modules = package_submodule_stubs(package, include_package=False, directory=directory)
+    modules.update(chosen)
+    for name, module in modules.items():
+        if name not in chosen:
+            existing = sys.modules.get(name)
+            if _has_existing_file_origin(existing):
+                _set_parent_attr(name, existing)
+                continue
+        saved_modules.setdefault(name, sys.modules.get(name))
+        sys.modules[name] = module
+        _set_parent_attr(name, module)
+
+
+__all__ = [
+    "AutoMockModule",
+    "stub_modules",
+    "load_module_fresh",
+    "fake_firestore_transactional",
+    "package_submodule_stubs",
+    "install_package_submodule_stubs",
+]

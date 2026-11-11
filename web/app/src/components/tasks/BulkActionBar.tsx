@@ -1,8 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Trash2, Clock, X, ChevronDown, Copy, Download, FileJson, FileText, FileCode, CheckSquare, Square } from 'lucide-react';
+import {
+  Check,
+  Trash2,
+  Clock,
+  X,
+  ChevronDown,
+  Copy,
+  Download,
+  FileJson,
+  FileText,
+  FileCode,
+  CheckSquare,
+  Square,
+  MoreHorizontal,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
 
@@ -15,15 +29,155 @@ interface BulkActionBarProps {
   onClear: () => void;
   onCopy?: () => void;
   onExport?: (format: 'csv' | 'json' | 'markdown') => void;
-  // Inline mode props
   inline?: boolean;
   onSelectAll?: () => void;
   onDone?: () => void;
   allSelected?: boolean;
   totalCount?: number;
-  // Hide task-specific actions (for use in Memories, etc.)
   hideComplete?: boolean;
   hideSnooze?: boolean;
+}
+
+type OpenMenu = 'snooze' | 'export' | 'overflow' | null;
+type ExportFormat = 'csv' | 'json' | 'markdown';
+
+const menuPanelClass =
+  'z-50 rounded-lg border border-bg-tertiary bg-bg-secondary py-1 shadow-lg shadow-black/20';
+const menuItemClass =
+  'flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-bg-tertiary';
+
+const SNOOZE_OPTIONS = [
+  { days: 0, label: 'Today' },
+  { days: 1, label: 'Tomorrow' },
+  { days: 7, label: 'Next week' },
+] as const;
+
+const EXPORT_OPTIONS = [
+  { format: 'csv' as const, label: 'CSV', Icon: FileText },
+  { format: 'json' as const, label: 'JSON', Icon: FileJson },
+  { format: 'markdown' as const, label: 'Markdown', Icon: FileCode },
+];
+
+function MenuPanel({
+  inline,
+  align = 'start',
+  className,
+  role,
+  children,
+}: {
+  inline: boolean;
+  align?: 'start' | 'end';
+  className?: string;
+  role?: string;
+  children: ReactNode;
+}) {
+  return (
+    <motion.div
+      role={role}
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 5 }}
+      transition={{ duration: 0.15 }}
+      className={cn(
+        inline ? 'absolute top-full mt-2' : 'absolute bottom-full mb-2',
+        align === 'end' ? 'right-0' : 'left-0',
+        menuPanelClass,
+        className,
+      )}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function MenuItem({
+  children,
+  className,
+  role,
+  onClick,
+}: {
+  children: ReactNode;
+  className?: string;
+  role?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role={role}
+      onClick={onClick}
+      className={cn(menuItemClass, className)}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MenuLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-text-quaternary">
+      {children}
+    </p>
+  );
+}
+
+function MenuSeparator({ className }: { className?: string }) {
+  return <div className={cn('my-1 h-px bg-bg-tertiary', className)} role="separator" />;
+}
+
+function SnoozeItems({
+  onSnooze,
+  onDone,
+  menuitem,
+}: {
+  onSnooze: (days: number) => void;
+  onDone: () => void;
+  menuitem?: boolean;
+}) {
+  return (
+    <>
+      {SNOOZE_OPTIONS.map(({ days, label }) => (
+        <MenuItem
+          key={days}
+          role={menuitem ? 'menuitem' : undefined}
+          onClick={() => {
+            onSnooze(days);
+            onDone();
+          }}
+        >
+          {label}
+        </MenuItem>
+      ))}
+    </>
+  );
+}
+
+function ExportItems({
+  onExport,
+  onDone,
+  menuitem,
+}: {
+  onExport: (format: ExportFormat) => void;
+  onDone: () => void;
+  menuitem?: boolean;
+}) {
+  return (
+    <>
+      {EXPORT_OPTIONS.map(({ format, label, Icon }) => (
+        <MenuItem
+          key={format}
+          role={menuitem ? 'menuitem' : undefined}
+          onClick={() => {
+            onExport(format);
+            onDone();
+          }}
+        >
+          <Icon className="h-3.5 w-3.5" />
+          {label}
+        </MenuItem>
+      ))}
+    </>
+  );
 }
 
 export function BulkActionBar({
@@ -43,16 +197,49 @@ export function BulkActionBar({
   hideComplete = false,
   hideSnooze = false,
 }: BulkActionBarProps) {
-  const [showSnoozeMenu, setShowSnoozeMenu] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const snoozeRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
+  const overflowRef = useRef<HTMLDivElement>(null);
 
-  // For inline mode, always show the bar (it's part of the page layout)
-  // For floating mode, hide when nothing selected
+  const closeMenu = () => setOpenMenu(null);
+  const toggleMenu = (menu: Exclude<OpenMenu, null>) => {
+    setOpenMenu((current) => (current === menu ? null : menu));
+  };
+
+  useEffect(() => {
+    if (!openMenu) return;
+
+    const root =
+      openMenu === 'snooze'
+        ? snoozeRef.current
+        : openMenu === 'export'
+          ? exportRef.current
+          : overflowRef.current;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (root?.contains(target)) return;
+      closeMenu();
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenu();
+    };
+
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [openMenu]);
+
   if (!inline && selectedCount === 0) return null;
 
   const content = (
     <>
-      {/* Select All - only in inline mode */}
       {inline && onSelectAll && (
         <>
           <button
@@ -61,8 +248,8 @@ export function BulkActionBar({
               'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
               'transition-colors',
               allSelected
-                ? 'bg-purple-primary/10 text-purple-primary'
-                : 'text-text-tertiary hover:text-text-primary hover:bg-bg-quaternary'
+                ? 'bg-white/10 text-white'
+                : 'text-text-tertiary hover:text-text-primary hover:bg-bg-quaternary',
             )}
           >
             {allSelected ? (
@@ -76,7 +263,6 @@ export function BulkActionBar({
         </>
       )}
 
-      {/* Selection count */}
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium text-text-primary">
           {selectedCount} selected
@@ -92,23 +278,21 @@ export function BulkActionBar({
         )}
       </div>
 
-      {/* Divider */}
       <div className="w-px h-6 bg-bg-tertiary" />
 
-      {/* Actions */}
       <div className="flex items-center gap-2">
-        {/* Snooze dropdown - hidden when hideSnooze is true */}
         {!hideSnooze && onSnooze && (
-          <div className="relative">
+          <div ref={snoozeRef} className="relative hidden min-[1200px]:block">
             <button
-              onClick={() => setShowSnoozeMenu(!showSnoozeMenu)}
+              type="button"
+              onClick={() => toggleMenu('snooze')}
               disabled={selectedCount === 0}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
                 'bg-bg-tertiary hover:bg-bg-quaternary',
                 'text-text-secondary text-sm',
                 'transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
               <Clock className="w-4 h-4" />
@@ -116,65 +300,26 @@ export function BulkActionBar({
               <ChevronDown className="w-3 h-3" />
             </button>
 
-            {/* Dropdown menu */}
             <AnimatePresence>
-              {showSnoozeMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 5 }}
-                  transition={{ duration: 0.15 }}
-                  className={cn(
-                    inline ? 'absolute top-full mt-2 left-0' : 'absolute bottom-full mb-2 left-0',
-                    'bg-bg-secondary border border-bg-tertiary rounded-lg',
-                    'shadow-lg shadow-black/20',
-                    'py-1 min-w-[120px] z-50'
-                  )}
-                >
-                  <button
-                    onClick={() => {
-                      onSnooze(0);
-                      setShowSnoozeMenu(false);
-                    }}
-                    className="w-full px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-bg-tertiary"
-                  >
-                    Today
-                  </button>
-                  <button
-                    onClick={() => {
-                      onSnooze(1);
-                      setShowSnoozeMenu(false);
-                    }}
-                    className="w-full px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-bg-tertiary"
-                  >
-                    Tomorrow
-                  </button>
-                  <button
-                    onClick={() => {
-                      onSnooze(7);
-                      setShowSnoozeMenu(false);
-                    }}
-                    className="w-full px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-bg-tertiary"
-                  >
-                    Next week
-                  </button>
-                </motion.div>
+              {openMenu === 'snooze' && (
+                <MenuPanel inline={inline} className="min-w-[120px]">
+                  <SnoozeItems onSnooze={onSnooze} onDone={closeMenu} />
+                </MenuPanel>
               )}
             </AnimatePresence>
           </div>
         )}
 
-        {/* Complete button - hidden when hideComplete is true */}
         {!hideComplete && onComplete && (
           <button
             onClick={onComplete}
             disabled={selectedCount === 0}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+              'hidden min-[1430px]:flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
               'bg-success/20 hover:bg-success/30',
               'text-success text-sm',
               'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
             <Check className="w-4 h-4" />
@@ -182,36 +327,35 @@ export function BulkActionBar({
           </button>
         )}
 
-        {/* Delete button */}
         <button
           onClick={onDelete}
           disabled={selectedCount === 0}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+            'hidden min-[1430px]:flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
             'bg-error/20 hover:bg-error/30',
             'text-error text-sm',
             'transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
           <Trash2 className="w-4 h-4" />
           <span>Delete</span>
         </button>
 
-        {/* Divider */}
-        {(onCopy || onExport) && <div className="w-px h-6 bg-bg-tertiary" />}
+        {(onCopy || onExport) && (
+          <div className="hidden h-6 w-px shrink-0 bg-bg-tertiary min-[1600px]:block" />
+        )}
 
-        {/* Copy button */}
         {onCopy && (
           <button
             onClick={onCopy}
             disabled={selectedCount === 0}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+              'hidden min-[1600px]:flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
               'bg-bg-tertiary hover:bg-bg-quaternary',
               'text-text-secondary text-sm',
               'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
             title="Copy to clipboard"
           >
@@ -220,18 +364,18 @@ export function BulkActionBar({
           </button>
         )}
 
-        {/* Export dropdown */}
         {onExport && (
-          <div className="relative">
+          <div ref={exportRef} className="relative hidden min-[1600px]:block">
             <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
+              type="button"
+              onClick={() => toggleMenu('export')}
               disabled={selectedCount === 0}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
                 'bg-bg-tertiary hover:bg-bg-quaternary',
                 'text-text-secondary text-sm',
                 'transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
               <Download className="w-4 h-4" />
@@ -239,59 +383,17 @@ export function BulkActionBar({
               <ChevronDown className="w-3 h-3" />
             </button>
 
-            {/* Export dropdown menu */}
             <AnimatePresence>
-              {showExportMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 5 }}
-                  transition={{ duration: 0.15 }}
-                  className={cn(
-                    inline ? 'absolute top-full mt-2 right-0' : 'absolute bottom-full mb-2 right-0',
-                    'bg-bg-secondary border border-bg-tertiary rounded-lg',
-                    'shadow-lg shadow-black/20',
-                    'py-1 min-w-[140px] z-50'
-                  )}
-                >
-                  <button
-                    onClick={() => {
-                      onExport('csv');
-                      setShowExportMenu(false);
-                    }}
-                    className="w-full px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-bg-tertiary flex items-center gap-2"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    CSV
-                  </button>
-                  <button
-                    onClick={() => {
-                      onExport('json');
-                      setShowExportMenu(false);
-                    }}
-                    className="w-full px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-bg-tertiary flex items-center gap-2"
-                  >
-                    <FileJson className="w-3.5 h-3.5" />
-                    JSON
-                  </button>
-                  <button
-                    onClick={() => {
-                      onExport('markdown');
-                      setShowExportMenu(false);
-                    }}
-                    className="w-full px-3 py-1.5 text-left text-sm text-text-secondary hover:bg-bg-tertiary flex items-center gap-2"
-                  >
-                    <FileCode className="w-3.5 h-3.5" />
-                    Markdown
-                  </button>
-                </motion.div>
+              {openMenu === 'export' && (
+                <MenuPanel inline={inline} align="end" className="min-w-[140px]">
+                  <ExportItems onExport={onExport} onDone={closeMenu} />
+                </MenuPanel>
               )}
             </AnimatePresence>
           </div>
         )}
       </div>
 
-      {/* Done button - only in inline mode */}
       {inline && onDone && (
         <>
           <div className="w-px h-6 bg-bg-tertiary ml-auto" />
@@ -299,19 +401,104 @@ export function BulkActionBar({
             onClick={onDone}
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-              'bg-purple-primary/10 hover:bg-purple-primary/20',
-              'text-purple-primary text-sm font-medium',
-              'transition-colors'
+              'bg-white/10 hover:bg-white/20',
+              'text-white text-sm font-medium',
+              'transition-colors',
             )}
           >
             Done
           </button>
         </>
       )}
+
+      {(onCopy || onExport) && (
+        <div ref={overflowRef} className="relative">
+          <button
+            type="button"
+            aria-label="More actions"
+            aria-haspopup="menu"
+            aria-expanded={openMenu === 'overflow'}
+            disabled={selectedCount === 0}
+            onClick={() => toggleMenu('overflow')}
+            className={cn(
+              'flex items-center justify-center rounded-lg p-1.5 min-[1600px]:hidden',
+              'bg-bg-tertiary hover:bg-bg-quaternary',
+              'text-text-secondary',
+              'transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+          <AnimatePresence>
+            {openMenu === 'overflow' && (
+              <MenuPanel
+                inline={inline}
+                align="end"
+                role="menu"
+                className="min-w-[140px]"
+              >
+                {!hideSnooze && onSnooze && (
+                  <div className="hidden max-[1199px]:block">
+                    <MenuLabel>Snooze</MenuLabel>
+                    <SnoozeItems onSnooze={onSnooze} onDone={closeMenu} menuitem />
+                    <MenuSeparator />
+                  </div>
+                )}
+                {!hideComplete && onComplete && (
+                  <MenuItem
+                    role="menuitem"
+                    onClick={() => {
+                      onComplete();
+                      closeMenu();
+                    }}
+                    className="hidden text-success hover:bg-success/10 max-[1429px]:flex"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Complete
+                  </MenuItem>
+                )}
+                <MenuItem
+                  role="menuitem"
+                  onClick={() => {
+                    onDelete();
+                    closeMenu();
+                  }}
+                  className="hidden text-error hover:bg-error/10 max-[1429px]:flex"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </MenuItem>
+                {(onCopy || onExport) && (
+                  <MenuSeparator className="hidden max-[1429px]:block" />
+                )}
+                {onCopy && (
+                  <MenuItem
+                    role="menuitem"
+                    onClick={() => {
+                      onCopy();
+                      closeMenu();
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy
+                  </MenuItem>
+                )}
+                {onCopy && onExport && <MenuSeparator />}
+                {onExport && (
+                  <>
+                    <MenuLabel>Export</MenuLabel>
+                    <ExportItems onExport={onExport} onDone={closeMenu} menuitem />
+                  </>
+                )}
+              </MenuPanel>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </>
   );
 
-  // Inline mode - normal flow layout
   if (inline) {
     return (
       <motion.div
@@ -321,7 +508,7 @@ export function BulkActionBar({
         transition={{ duration: 0.2 }}
         className={cn(
           'flex items-center gap-3 py-2 px-3 rounded-lg',
-          'bg-bg-tertiary/50 border border-bg-quaternary'
+          'bg-bg-tertiary/50 border border-bg-quaternary',
         )}
       >
         {content}
@@ -329,7 +516,6 @@ export function BulkActionBar({
     );
   }
 
-  // Floating mode - fixed position at bottom
   return (
     <AnimatePresence>
       <motion.div
@@ -343,7 +529,7 @@ export function BulkActionBar({
           'rounded-xl shadow-lg shadow-black/30',
           'px-4 py-3',
           'flex items-center gap-4',
-          'z-50'
+          'z-50',
         )}
       >
         {content}

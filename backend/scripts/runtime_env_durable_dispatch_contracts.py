@@ -18,6 +18,8 @@ _ACCOUNT_DELETION_DYNAMIC_ENV = frozenset(
     {'ACCOUNT_DELETION_HANDLER_URL', 'SYNC_TASKS_INVOKER_SA', 'SYNC_TASKS_HANDLER_URL'}
 )
 _LISTEN_FINALIZATION_PROD_CLOUD_RUN_SERVICES = ('backend', 'backend-sync')
+_LISTEN_FINALIZATION_GEOCODE_WORKER_SERVICES = ('backend-sync',)
+_LISTEN_FINALIZATION_GEOCODE_SECRET = 'GOOGLE_MAPS_API_KEY'
 _LISTEN_FINALIZATION_LITERAL_ENV = {
     'LISTEN_FINALIZATION_DISPATCH_MODE': 'cloud_tasks',
     'LISTEN_FINALIZATION_TASKS_QUEUE': 'conversation-finalization',
@@ -65,12 +67,25 @@ def validate_account_deletion_dispatch_contract(env: str, env_config: ConfigDict
 
 def validate_listen_finalization_dispatch_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
     """Keep the customer exact-ID route on its deployed durable worker boundary."""
-    if env != 'prod':
-        return []
-
     errors: list[ValidationError] = []
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     services = _as_config_dict(cloud_run.get('services')) or {}
+
+    for service in _LISTEN_FINALIZATION_GEOCODE_WORKER_SERVICES:
+        service_config = _as_config_dict(services.get(service)) or {}
+        secrets = _as_config_dict(service_config.get('secrets')) or {}
+        entry = _as_config_dict(secrets.get(_LISTEN_FINALIZATION_GEOCODE_SECRET))
+        if entry is None or entry.get('secret') != _LISTEN_FINALIZATION_GEOCODE_SECRET:
+            errors.append(
+                ValidationError(
+                    f'{env}/cloud_run/{service}',
+                    f'missing required listen-finalization secret {_LISTEN_FINALIZATION_GEOCODE_SECRET}',
+                )
+            )
+
+    if env != 'prod':
+        return errors
+
     for service in _LISTEN_FINALIZATION_PROD_CLOUD_RUN_SERVICES:
         service_config = _as_config_dict(services.get(service)) or {}
         _validate_listen_finalization_env_entries(

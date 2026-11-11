@@ -9,6 +9,13 @@ from tests.unit.test_firestore_security_rules import MEMORY_PROTECTED_COLLECTION
 
 _REPO_ROOT = Path(__file__).resolve().parents[2].parent
 _PYTHON_APPLY_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "firestore_python_apply_emulator_test.py"
+_KNOWLEDGE_LEDGER_MIGRATION_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "knowledge_ledger_migration_emulator_test.py"
+_KNOWLEDGE_LEDGER_WRITER_TRANSITION_SCRIPT = (
+    _REPO_ROOT / "backend" / "scripts" / "knowledge_ledger_writer_transition_emulator_test.py"
+)
+_KNOWLEDGE_LEDGER_CORRECTION_SCRIPT = (
+    _REPO_ROOT / "backend" / "scripts" / "knowledge_ledger_correction_emulator_test.py"
+)
 
 
 def test_memory_firestore_rules_emulator_harness_is_wired_to_all_protected_collections():
@@ -81,6 +88,86 @@ def test_python_apply_adapter_emulator_harness_is_wired_to_real_adapter():
 
     package = json.loads((_REPO_ROOT / "package.json").read_text())
     assert package["scripts"]["test:memory-firestore-python-apply:emulator"] == (
-        "firebase emulators:exec --only firestore --project demo-memory "
-        '"python3 backend/scripts/firestore_python_apply_emulator_test.py"'
+        "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-memory "
+        '"backend/.venv/bin/python backend/scripts/firestore_python_apply_emulator_test.py"'
+    )
+    assert package["scripts"]["test:memory-v3-state-head:emulator"] == (
+        "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-memory "
+        '"node backend/scripts/firestore_rules_emulator_test.mjs && '
+        'PYTHONPATH=backend backend/.venv/bin/python backend/scripts/firestore_python_apply_emulator_test.py"'
+    )
+
+
+def test_knowledge_ledger_migration_emulator_harness_is_wired_to_real_migration() -> None:
+    assert _KNOWLEDGE_LEDGER_MIGRATION_SCRIPT.exists(), "missing knowledge-ledger migration emulator harness"
+    script = _KNOWLEDGE_LEDGER_MIGRATION_SCRIPT.read_text()
+    for required in (
+        "plan_ledger_migration",
+        "apply_ledger_migration_plan",
+        "FIRESTORE_EMULATOR_HOST",
+        "render_profile",
+        "read_ledger_migration_completion",
+        "memory_operations",
+        "memory_commits",
+        "memory_state_head",
+        "memory_outbox",
+        "PASS: Firestore emulator migration proof",
+    ):
+        assert required in script
+
+    package = json.loads((_REPO_ROOT / "package.json").read_text())
+    command = package["scripts"]["test:memory-knowledge-ledger-migration:emulator"]
+    assert command.startswith("MEMORY_ENABLED=on npx --no-install firebase emulators:exec")
+    assert "backend/.venv/bin/python backend/scripts/knowledge_ledger_migration_emulator_test.py" in command
+
+
+def test_knowledge_ledger_writer_transition_emulator_harness_is_wired_to_real_transition() -> None:
+    assert _KNOWLEDGE_LEDGER_WRITER_TRANSITION_SCRIPT.exists(), "missing writer-transition emulator harness"
+    script = _KNOWLEDGE_LEDGER_WRITER_TRANSITION_SCRIPT.read_text()
+    for required in (
+        "FIRESTORE_EMULATOR_HOST",
+        "publish_ledger_migration_cutover",
+        "rollback_ledger_writer_to_compatibility",
+        "read_ledger_migration_completion",
+        "knowledge_ledger_writer_transition_receipt",
+        "PASS: writer transition emulator proof",
+    ):
+        assert required in script
+
+    package = json.loads((_REPO_ROOT / "package.json").read_text())
+    command = package["scripts"]["test:memory-knowledge-ledger-writer-transition:emulator"]
+    assert command.startswith("MEMORY_ENABLED=on npx --no-install firebase emulators:exec")
+    assert "backend/.venv/bin/python backend/scripts/knowledge_ledger_writer_transition_emulator_test.py" in command
+
+
+def test_knowledge_ledger_correction_emulator_harness_is_wired_to_real_service() -> None:
+    assert _KNOWLEDGE_LEDGER_CORRECTION_SCRIPT.exists(), "missing knowledge-ledger correction emulator harness"
+    script = _KNOWLEDGE_LEDGER_CORRECTION_SCRIPT.read_text()
+    for required in (
+        "FIRESTORE_EMULATOR_HOST",
+        "MemoryService",
+        "service.update_content",
+        "service.revert_superseded_ledger_fact",
+        "close_fact",
+        "explicit_user_correction",
+        "explicit_user_revert",
+        "explicit_user_reopen",
+        "STANDALONE_REOPEN_OPERATION_ID",
+        "memory_ledger_reopens",
+        "memory_operations",
+        "memory_commits",
+        "memory_outbox",
+        "item_revision",
+        "tombstone_memory_items_firestore",
+        "privacy_race=blocked",
+        "competing_reopen=blocked",
+        "standalone_evidence_race=blocked",
+        "PASS: Firestore emulator explicit ledger correction and revert proof",
+    ):
+        assert required in script
+
+    package = json.loads((_REPO_ROOT / "package.json").read_text())
+    assert package["scripts"]["test:memory-knowledge-ledger-correction:emulator"] == (
+        "MEMORY_ENABLED=on npx --no-install firebase emulators:exec --only firestore --project demo-memory "
+        '"backend/.venv/bin/python backend/scripts/knowledge_ledger_correction_emulator_test.py"'
     )

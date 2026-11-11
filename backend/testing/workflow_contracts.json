@@ -11,23 +11,8 @@
         },
         {
           "path": "backend/utils/memory/legacy_backfill.py",
-          "function": "_sync_backfill_side_effects",
-          "reason": "Legacy contract from issue 8786; covered by backfill contract tests until migrated."
-        },
-        {
-          "path": "backend/utils/memory/legacy_backfill.py",
-          "function": "_reconcile_backfill_side_effects_for_rows",
-          "reason": "Legacy contract from issue 8786; covered by backfill contract tests until migrated."
-        },
-        {
-          "path": "backend/utils/memory/legacy_backfill.py",
           "function": "reconcile_backfill_counts",
           "reason": "Legacy contract from issue 8786; covered by backfill contract tests until migrated."
-        },
-        {
-          "path": "backend/utils/memory/short_term_promotion.py",
-          "function": "promote_short_term_item_via_apply",
-          "reason": "Existing promotion apply contract; covered by short-term promotion contract tests until migrated."
         },
         {
           "path": "backend/utils/memory/product_authorization.py",
@@ -48,11 +33,37 @@
           "path": "backend/utils/memory_ingestion/pipeline.py",
           "function": "_compile_mutations",
           "reason": "Existing mutation compilation contract; covered by memory ingestion contract tests until migrated."
+        },
+        {
+          "path": "backend/utils/memory/memory_service.py",
+          "function": "read_scan_page",
+          "reason": "Retired offset-scan stub (raises RuntimeError); retained only so accidental callers fail loudly. Annotated return type kept for the legacy call surface."
         }
       ]
     }
   },
   "workflows": [
+    {
+      "id": "empty_capture_operator_recovery",
+      "risk": "high",
+      "sources": [
+        "backend/scripts/capture_empty_recovery.py",
+        "backend/utils/conversations/empty_capture_recovery.py",
+        "backend/scripts/capture_empty_recovery_privacy.py"
+      ],
+      "tests": [
+        "tests/unit/test_empty_capture_recovery.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "dry run performs no product writes or paid transcription and emits counts only",
+        "whole-document update-time preconditions preserve concurrent transcripts and user edits",
+        "standard and enhanced transcripts retain their persisted protection level",
+        "one durable claim prevents duplicate paid attempts on rerun",
+        "only measured zero-speech short rows can be reversibly discarded with private write-ahead undo",
+        "partial or unreadable retained audio never proves silence"
+      ]
+    },
     {
       "id": "task_candidate_resolution",
       "risk": "high",
@@ -108,9 +119,13 @@
       "risk": "high",
       "sources": [
         "backend/database/desktop_update_channels.py",
+        "backend/database/desktop_beta_breakglass.py",
+        "backend/utils/beta_breakglass_evidence.py",
         "backend/utils/desktop_update_resolver.py",
         "backend/routers/updates.py",
         ".github/workflows/desktop_promote_beta.yml",
+        ".github/workflows/desktop_rollback_beta.yml",
+        ".github/workflows/desktop_breakglass_rollout_beta.yml",
         ".github/workflows/desktop_promote_prod.yml"
       ],
       "tests": [
@@ -122,6 +137,7 @@
       "checks": [],
       "invariants": [
         "stable never resolves or downloads a beta release",
+        "appcast never exposes an untagged item when only beta resolves (#9528)",
         "validated pointer LKG precedes exact-channel legacy fallback",
         "immutable manifests are registered before atomic pointer promotion",
         "beta visibility requires exact-tag T2 qualification evidence"
@@ -130,12 +146,24 @@
     {
       "id": "legacy_memory_backfill",
       "risk": "high",
-      "sources": ["backend/utils/memory/legacy_backfill.py", "backend/scripts/backfill_legacy_memories.py"],
-      "tests": ["tests/unit/test_ws_c_backfill.py"],
-      "checks": ["no_large_tuple_results"],
+      "sources": [
+        "backend/utils/memory/legacy_backfill.py",
+        "backend/utils/memory/legacy_backfill_support.py",
+        "backend/utils/memory/legacy_backfill_inventory.py",
+        "backend/scripts/backfill_legacy_memories.py"
+      ],
+      "tests": [
+        "tests/unit/test_ws_c_backfill.py",
+        "tests/unit/test_backfill_legacy_memories_cli.py"
+      ],
+      "checks": [
+        "no_large_tuple_results"
+      ],
       "invariants": [
         "completed checkpoints recognize required-processing and quarantined pending-admission destinations without derived side effects",
         "partial checkpoints resume idempotently",
+        "repair runs are explicitly UID-scoped, resumable, and dry-run by default",
+        "inventory and structured summaries never return raw memory content",
         "legacy/domain timestamps are preserved while rows await required processing",
         "unreviewed bulk legacy rows remain hidden pending-admission candidates",
         "legacy rows never reach long-term, vector, keyword, or KG without processing admission"
@@ -144,13 +172,16 @@
     {
       "id": "canonical_memory_fanout",
       "risk": "high",
-      "sources": ["backend/utils/memory/canonical_memory_adapter.py"],
+      "sources": [
+        "backend/utils/memory/canonical_memory_adapter.py"
+      ],
       "tests": [
-        "tests/unit/test_ws_i_write_convergence.py",
         "tests/unit/test_ws_j_delete_privacy.py",
         "tests/unit/test_canonical_kg_promotion.py"
       ],
-      "checks": ["no_large_tuple_results"],
+      "checks": [
+        "no_large_tuple_results"
+      ],
       "invariants": [
         "domain writes use injected stores",
         "derived keyword/vector/KG fanout is either durable or explicitly recoverable"
@@ -175,7 +206,9 @@
         "tests/unit/test_ws_m_atom_keyword_index.py",
         "tests/unit/test_ws_n_graph_traversal.py"
       ],
-      "checks": ["no_large_tuple_results"],
+      "checks": [
+        "no_large_tuple_results"
+      ],
       "invariants": [
         "explicit submissions remain pending short-term until a content-bound processing receipt exists",
         "pending text is visible only to the first-party memory list and never to agent, developer, MCP, search, vector, or KG reads",
@@ -192,38 +225,64 @@
         "backend/scripts/reconcile_firestore_indexes.py",
         "config/deployment-setting-classification.json",
         "firestore.indexes.json",
+        ".github/actions/release-eligibility/action.yml",
         ".github/workflows/gcp_backend.yml",
         ".github/workflows/gcp_backend_auto_dev.yml",
-        ".github/workflows/gcp_firestore_indexes.yml"
+        ".github/workflows/gcp_firestore_indexes.yml",
+        ".github/workflows/release-eligibility.yml",
+        ".github/scripts/verify_release_eligibility.py",
+        ".github/scripts/verify_backend_release_admission.py",
+        ".github/scripts/verify_auto_backend_release_admission.py",
+        ".github/scripts/check_backend_deploy_source_admission.py",
+        ".github/actions/firestore-readiness/action.yml",
+        ".github/workflows/**"
       ],
       "tests": [
-        "tests/unit/test_reconcile_firestore_indexes.py",
         "tests/unit/test_backend_runtime_env_validator.py",
-        "tests/unit/test_verify_backend_release_vector.py"
+        "tests/unit/test_firestore_index_rules.py",
+        "tests/unit/test_firestore_query_shapes.py",
+        "tests/unit/test_firestore_shape_recorder.py",
+        "tests/unit/test_reconcile_firestore_indexes.py",
+        "tests/unit/test_verify_backend_release_vector.py",
+        "tests/unit/test_workflow_contracts.py"
       ],
       "checks": [],
       "invariants": [
         "backend deploy workflows only perform read-only readiness checks against the serving Firestore project",
         "Firestore schema writes use only the manual main-scoped migration workflow and serialize with backend deployment readiness",
-        "manual branch deploys cannot change the Firestore manifest, execute branch-owned schema control code before the gate, or move after the checked SHA",
+        "automatic dev and manual backend deploys use only exact main SHAs with a successful Release Eligibility proof; traffic-only repair is source-independent",
+        "manual deploys cannot change the Firestore manifest, execute source-owned schema control code before admission, or move after the admitted SHA",
         "failed readiness gates upload only a locally revalidated create-only proposal bound to the source commit, target, manifest hash, and short TTL"
       ]
     },
     {
       "id": "sync_cloud_tasks",
       "risk": "high",
-      "sources": ["backend/routers/sync.py", "backend/utils/sync/pipeline.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
+      "sources": [
+        "backend/routers/sync.py",
+        "backend/utils/sync/pipeline.py",
+        "backend/database/sync_jobs.py",
+        "backend/utils/sync/*.py",
+        "backend/testing/sync_cloud_tasks_stack/**",
+        ".github/workflows/backend-hermetic-e2e.yml",
+        "package.json",
+        "package-lock.json"
+      ],
       "tests": [
         "tests/unit/test_sync_v2.py",
         "tests/unit/test_sync_cloud_tasks.py",
+        "tests/unit/test_sync_status_read_ownership.py",
         "tests/unit/test_audio_merge_tasks.py",
-        "tests/unit/test_sync_fair_use_gate.py"
+        "tests/unit/test_sync_fair_use_gate.py",
+        "tests/unit/test_sync_cloud_tasks_stack_ci_wiring.py"
       ],
       "checks": [],
       "invariants": [
         "task retries do not double-count usage or completed segments",
         "segment failures cannot be reported as completed work",
-        "enqueued jobs retain staged blobs until handler completion"
+        "status reads cannot bypass run ownership or overwrite a concurrent terminal result; abandoned Cloud Tasks still recover through the lease-owning finalizer",
+        "enqueued jobs retain staged blobs until handler completion",
+        "fresh v2 Sync admission runs a credential-free local Firestore, Redis, storage, and separate Cloud Tasks-worker stack gauntlet in blocking PR CI"
       ]
     },
     {
@@ -233,7 +292,9 @@
         "backend/scripts/sync_ledger_fence_cutover.py",
         ".github/workflows/sync_ledger_fence_cutover.yml"
       ],
-      "tests": ["tests/unit/test_sync_ledger_fence_cutover.py"],
+      "tests": [
+        "tests/unit/test_sync_ledger_fence_cutover.py"
+      ],
       "checks": [],
       "invariants": [
         "standby admission traffic reaches every sync surface before Cloud Tasks queues are paused",
@@ -253,7 +314,9 @@
         "tests/unit/test_vector_repair_outbox_worker.py",
         "tests/unit/test_vector_repair_outbox_infra.py"
       ],
-      "checks": ["no_large_tuple_results"],
+      "checks": [
+        "no_large_tuple_results"
+      ],
       "invariants": [
         "leased work is recoverable after worker death",
         "completed and dead-lettered work is never reclaimed"
@@ -278,7 +341,8 @@
         "tests/unit/test_sync_cloud_tasks.py",
         "tests/unit/test_backend_runtime_env_validator.py",
         "tests/unit/test_claim_deletion_wipe_txn.py",
-        "tests/unit/test_delete_account_purge_storage.py"
+        "tests/unit/test_delete_account_purge_storage.py",
+        "testing/e2e/test_account_deletion_cloud_tasks.py"
       ],
       "checks": [],
       "invariants": [
@@ -291,52 +355,61 @@
     {
       "id": "projection_repair",
       "risk": "high",
-      "sources": ["backend/database/projection_repair.py"],
-      "tests": ["tests/unit/test_memory_ledger.py"],
-      "checks": ["no_large_tuple_results"],
+      "sources": [
+        "backend/database/projection_repair.py"
+      ],
+      "tests": [
+        "tests/unit/test_memory_ledger.py"
+      ],
+      "checks": [
+        "no_large_tuple_results"
+      ],
       "invariants": [
-        "repair enqueue is idempotent",
-        "repair processing uses injected stores and has retry/dead-letter accounting"
+        "projection metadata preserves tombstone state",
+        "projection reconciliation identifies missing and stale vectors"
       ]
     },
     {
       "id": "short_term_lifecycle",
       "risk": "high",
       "sources": [
+        "backend/database/memory_apply_store.py",
+        "backend/database/memory_outbox_worker.py",
+        "backend/models/memory_apply.py",
+        "backend/models/memory_promotion.py",
+        "backend/utils/memory/canonical_consolidation.py",
         "backend/jobs/short_term_lifecycle_worker.py",
-        "backend/utils/memory/short_term_promotion.py",
-        "backend/utils/memory/canonical_short_term_maintenance_cron.py"
+        "backend/utils/memory/short_term_promotion.py"
       ],
       "tests": [
+        "tests/unit/test_atomic_apply.py",
+        "tests/unit/test_canonical_consolidation.py",
+        "tests/unit/test_canonical_consolidation_apply.py",
         "tests/unit/test_short_term_lifecycle_firestore_store.py",
         "tests/unit/test_ws_b_short_term_lifecycle.py",
-        "tests/unit/test_canonical_short_term_maintenance_cron.py"
+        "tests/unit/test_memory_outbox_worker.py"
       ],
-      "checks": ["no_large_tuple_results"],
-      "invariants": [
-        "promotion and maintenance reruns are idempotent",
-        "derived side-effect failures are accounted for"
-      ]
-    },
-    {
-      "id": "l2_promotion_worker",
-      "risk": "high",
-      "sources": ["backend/jobs/l2_promotion_worker.py", "backend/jobs/l2_promotion_orchestrator.py"],
-      "tests": [
-        "tests/unit/test_l2_promotion_agent_v2.py",
-        "tests/unit/test_l2_promotion_worker.py"
+      "checks": [
+        "no_large_tuple_results"
       ],
-      "checks": [],
       "invariants": [
-        "forward and backfill modes have explicit gates",
-        "per-item failures are reported without corrupting later work"
+        "every eligible short-term item receives exactly one terminal L2 route",
+        "long-term admission and its graph assertion commit atomically against one exact short-term revision",
+        "maintenance reruns are idempotent and never invoke a generic promotion pass",
+        "projection delivery is leased, generation and revision fenced, retryable, and dead-letter bounded"
       ]
     },
     {
       "id": "webhook_delivery_health",
       "risk": "high",
-      "sources": ["backend/utils/webhooks.py", "backend/database/webhook_health.py"],
-      "tests": ["tests/unit/test_async_webhooks.py", "tests/unit/test_webhook_auto_disable.py"],
+      "sources": [
+        "backend/utils/webhooks.py",
+        "backend/database/webhook_health.py"
+      ],
+      "tests": [
+        "tests/unit/test_async_webhooks.py",
+        "tests/unit/test_webhook_auto_disable.py"
+      ],
       "checks": [],
       "invariants": [
         "delivery failures are counted durably",
@@ -346,9 +419,17 @@
     {
       "id": "memory_ingestion_export_runner",
       "risk": "high",
-      "sources": ["backend/utils/memory_ingestion/export_runner.py", "backend/utils/memory_ingestion/pipeline.py"],
-      "tests": ["tests/unit/test_memory_ingestion_pipeline.py", "tests/unit/test_production_like_memory_model.py"],
-      "checks": ["no_large_tuple_results"],
+      "sources": [
+        "backend/utils/memory_ingestion/export_runner.py",
+        "backend/utils/memory_ingestion/pipeline.py"
+      ],
+      "tests": [
+        "tests/unit/test_memory_ingestion_pipeline.py",
+        "tests/unit/test_production_like_memory_model.py"
+      ],
+      "checks": [
+        "no_large_tuple_results"
+      ],
       "invariants": [
         "resume config mismatches fail closed",
         "failed shards remain visible in run summaries"
@@ -384,10 +465,14 @@
         "backend/utils/memory/**",
         "backend/utils/memory_ingestion/**"
       ],
-      "tests": ["testing/e2e/test_canonical_memory_pipeline.py"],
-      "checks": ["no_large_tuple_results"],
+      "tests": [
+        "testing/e2e/test_canonical_memory_pipeline.py"
+      ],
+      "checks": [
+        "no_large_tuple_results"
+      ],
       "invariants": [
-        "capture→consolidate→promote→read with archive excluded from default reads",
+        "capture\u2192consolidate\u2192promote\u2192read with archive excluded from default reads",
         "canonical fail-closed without legacy bleed"
       ]
     },
@@ -402,6 +487,7 @@
         "backend/utils/conversations/finalization_decision.py",
         "backend/utils/conversations/lifecycle.py",
         "backend/utils/conversations/finalizer.py",
+        "backend/utils/conversations/meeting_receipt.py",
         "backend/routers/transcribe.py",
         "backend/routers/conversation_finalization.py",
         "backend/routers/pusher.py",
@@ -410,23 +496,38 @@
         "backend/routers/developer.py",
         "backend/utils/sync/pipeline.py",
         "backend/utils/conversations/process_conversation.py",
+        "backend/config/notes_short_clip.py",
+        "backend/utils/llm/notes_short_clip.py",
+        "backend/utils/llm/notes_short_clip_policy.py",
+        "backend/utils/conversations/minimum_derived.py",
         "backend/utils/app_integrations.py",
-        "backend/utils/conversations/postprocess_conversation.py",
         "backend/utils/conversations/merge_conversations.py",
         "backend/utils/imports/limitless.py"
       ],
       "tests": [
         "tests/unit/test_conversation_lifecycle_contract.py",
+        "tests/unit/test_short_clip_floor.py",
+        "tests/unit/test_short_clip_rollout.py",
+        "tests/unit/test_short_clip_authority.py",
+        "tests/unit/test_short_clip_summary_debt.py",
+        "tests/unit/test_summary_delivery.py",
+        "tests/unit/test_notes_packet_v2.py",
+        "tests/unit/test_structured_emoji_never_defaults_to_brain.py",
         "tests/unit/test_finalization_decision.py",
         "tests/unit/test_check_conversation_lifecycle_writes.py",
         "tests/unit/test_conversation_finalization_jobs.py",
+        "tests/unit/test_developer_from_segments_idempotency.py",
         "tests/unit/test_recording_sessions.py",
-        "tests/unit/test_listen_finalization_cloud_tasks.py"
+        "tests/unit/test_listen_finalization_cloud_tasks.py",
+        "tests/services/test_conversation_finalization.py"
       ],
-      "checks": ["conversation-lifecycle-write-guard"],
+      "checks": [
+        "conversation-lifecycle-write-guard"
+      ],
       "invariants": [
         "only one finalizer claim succeeds for an in-progress conversation",
         "finalization outbox reconnects reuse one durable job and lease fences stale workers before any fanout",
+        "meeting treatment has one durable job-backed verdict and missing Chat intents are reconciled idempotently",
         "only utils.conversations.lifecycle may invoke lifecycle persistence primitives",
         "a recording session binds exactly one user-scoped conversation and emits only monotonic lifecycle envelopes",
         "merge rejects sources that are still processing",
@@ -443,9 +544,13 @@
         "backend/utils/listen_pusher_session.py",
         "backend/utils/pusher.py",
         "backend/utils/stt/live_failure.py",
+        "backend/utils/stt/streaming.py",
+        "backend/config/stt_provider_policy.py",
+        "backend/charts/parakeet/**",
         "backend/utils/transcribe_decisions.py",
         "backend/pusher/main.py",
         "backend/utils/conversations/finalizer.py",
+        "backend/utils/observability/finalization.py",
         "backend/utils/conversations/lifecycle.py",
         "backend/testing/listen_pusher_stack/**",
         ".github/workflows/backend-hermetic-e2e.yml",
@@ -456,19 +561,27 @@
         "tests/unit/test_listen_pipeline.py",
         "tests/unit/test_pusher_heartbeat.py",
         "tests/unit/test_pusher_conversation_retry.py",
+        "tests/unit/test_pusher_static_capability_admission.py",
+        "tests/unit/test_conversation_finalizer_failure_logging.py",
+        "tests/unit/test_finalization_failure_observability.py",
         "tests/unit/test_live_stt_failure.py",
+        "tests/unit/test_listen_runtime_regressions.py",
         "tests/unit/test_transcribe_decisions.py",
+        "tests/unit/test_stt_provider_policy.py",
+        "tests/unit/test_streaming_deepgram_backoff.py",
         "tests/unit/utils/test_listen_pusher_session.py",
         "tests/unit/test_transcribe_teardown_flush.py",
         "tests/unit/test_listen_pusher_stack_ci_wiring.py",
-        "testing/e2e/test_listen_stt.py"
+        "testing/e2e/test_listen_stt.py",
+        "testing/e2e/test_listen_pusher_wire_contract.py"
       ],
       "checks": [],
       "invariants": [
         "teardown flushes tail audio before pusher close",
         "pending conversation requests retry until ack or give-up limit",
         "pusher heartbeat prevents idle connection drops",
-        "listen-to-pusher boundary changes run the credential-free local Firestore, Redis, and Parakeet-stub stack gauntlet in blocking PR CI"
+        "a client Parakeet preference cannot route a live session to an incompatible model",
+        "listen-to-pusher boundary changes run the credential-free local Firestore, Redis, and Parakeet-stub stack gauntlet in PR CI"
       ]
     },
     {
@@ -495,16 +608,17 @@
       "id": "backend_cloud_run_deploy",
       "risk": "high",
       "sources": [
+        ".github/actions/deploy-backend-stack/**",
+        ".github/actions/sync-backfill-lifecycle/**",
         ".github/actions/transcription-release-candidate-probe/**",
         ".github/workflows/gcp_backend*.yml",
         ".github/workflows/gcp_llm_gateway.yml",
-        ".github/workflows/gcp_llm_gateway_auto_dev.yml",
-        ".github/workflows/gcp_memory_maintenance_job.yml",
-        ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
         ".github/workflows/gcp_notifications_job.yml",
+        ".github/workflows/gcp_x_connector_sync_job.yml",
         ".github/workflows/sync_ledger_fence_cutover.yml",
         "backend/deploy/runtime_env.yaml",
         "backend/scripts/preflight-cloud-run-deploy.py",
+        "backend/scripts/check_cloud_run_env_drift.py",
         "backend/scripts/resolve_cloud_run_tagged_url.py",
         "backend/scripts/sync_ledger_fence_cutover.py",
         "backend/scripts/verify_backend_release_vector.py",
@@ -513,17 +627,23 @@
         "backend/scripts/probe-llm-gateway-from-cloud-run.sh",
         "backend/scripts/render_backend_runtime_env.py",
         "backend/scripts/repair_cloud_run_traffic.py",
+        "backend/scripts/cloud_run_traffic_snapshot.py",
         "backend/scripts/firebase_release_probe_token.py",
         "backend/scripts/transcription_capability_probe.py",
         "backend/scripts/pre-deploy-check.sh",
+        "backend/scripts/validate_x_connector_sync_scheduler.py",
+        "backend/scripts/scheduler_reconcile.py",
         "backend/scripts/validate-backend-runtime-env.py"
       ],
       "tests": [
         "tests/unit/test_render_backend_runtime_env.py",
         "tests/unit/test_preflight_cloud_run_deploy.py",
+        "tests/unit/test_check_cloud_run_env_drift.py",
+        "tests/unit/test_plan_quota_env_retirement.py",
         "tests/unit/test_verify_backend_release_vector.py",
         "tests/unit/test_resolve_cloud_run_tagged_url.py",
         "tests/unit/test_repair_cloud_run_traffic.py",
+        "tests/unit/test_cloud_run_traffic_snapshot.py",
         "tests/unit/test_deploy_status_report.py",
         "tests/unit/test_backend_runtime_env_validator.py",
         "tests/unit/test_verify_llm_gateway_serving.py",
@@ -531,16 +651,75 @@
         "tests/unit/test_sync_two_lane.py",
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
+        "tests/unit/test_validate_x_connector_sync_scheduler.py",
+        "tests/unit/test_scheduler_reconcile.py",
         "tests/unit/test_verify_sync_ledger_fence_transition.py"
       ],
       "checks": [],
       "invariants": [
         "preflight fails before revision creation when Secret Manager bindings are missing",
         "traffic shifts only after candidate revisions are Ready=True",
+        "all four Cloud Run traffic specs are durably captured before promotion and restored automatically after a failed shift, serving-vector check, or production serving smoke",
+        "GKE runtime config, backend secrets, and backend-listen mutate only after the no-traffic Cloud Run candidate is accepted",
         "spec.traffic mismatches are repaired or block deploy with an explicit command",
         "normal deploys cannot change the serving sync ledger fence mode",
-        "production backend traffic cannot shift until the exact tagged candidate proves the known-audio full route",
+        "production backend traffic shifts only after the Cloud Run-only candidate vector passes, then rolls back if the post-promotion serving route or known-audio smoke fails",
+        "memory-maintenance job deploys fail unless the exact enabled hourly OAuth Scheduler trigger targets that deployed job",
+        "x-connector-sync job deploys fail unless the exact enabled 6h OAuth Scheduler trigger targets that deployed job",
         "gateway-first serving cannot be promoted until the ready workload, EndpointSlice, ingress/ILB attachment, and authenticated Cloud Run VPC route all pass"
+      ]
+    },
+    {
+      "id": "pusher_rollout_readiness",
+      "risk": "high",
+      "sources": [
+        "backend/charts/pusher/**",
+        ".github/workflows/gcp_backend_pusher.yml",
+        ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
+        "backend/scripts/verify_pusher_rollout_budget.py",
+        "backend/scripts/verify_pusher_live_deployment_gate.py",
+        "backend/scripts/verify_pusher_promotion_evidence.py",
+        "backend/scripts/pusher_release_receipt.py",
+        "backend/scripts/pusher_semantic_probe.py",
+        "backend/scripts/pusher_prod_canary.py",
+        "backend/scripts/verify_pusher_live_alert_route.py",
+        "backend/scripts/runtime_env_capability_contracts.py",
+        "backend/testing/release_fixtures/transcription-release-probe.json",
+        "backend/testing/release_fixtures/transcription-release-probe.wav",
+        "backend/scripts/verify_pusher_dev_observability.py",
+        "backend/scripts/verify_pusher_source_closure.py",
+        "backend/scripts/verify_pusher_cohost_env_diff.py"
+      ],
+      "tests": [
+        "tests/unit/test_verify_pusher_rollout_budget.py",
+        "tests/unit/test_verify_pusher_live_deployment_gate.py",
+        "tests/unit/test_verify_pusher_promotion_evidence.py",
+        "tests/unit/test_verify_pusher_dev_observability.py",
+        "tests/unit/test_pusher_deployment_control_workflow.py",
+        "tests/unit/test_pusher_auto_deploy_paths.py",
+        "tests/unit/test_pusher_semantic_probe.py",
+        "tests/unit/test_verify_pusher_live_alert_route.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_pusher_static_capability_admission.py",
+        "tests/unit/test_verify_pusher_cohost_env_diff.py",
+        "tests/unit/test_conversation_notes_v2_beta_rollout.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "Pusher's Kubernetes progress deadline and CI rollout wait both cover every configured healthy-availability wave at the committed HPA ceiling",
+        "a chart change to Pusher startup/readiness/min-ready, HPA, or RollingUpdate inputs cannot silently make a healthy rollout appear failed",
+        "production Pusher deploys only an exact digest attested by a successful automatic development rollout and never rebuilds that production artifact",
+        "production Pusher promotion fails before any registry, config, or Helm mutation unless the exact source, image, rendered chart, live config, and live development deployment receipt agree",
+        "development qualification exercises the deployed public listen route with the isolated Firebase release-probe principal and versioned real-audio fixture, then requires durable terminal finalization plus authenticated conversation read-back",
+        "semantic-probe and separately protected attributable-canary outcomes must be explicit identity-bound PASS receipts with closed windows and samples; missing, NOT_RUN, failed, or contradictory evidence halts promotion",
+        "post-rollout success is an exact live deployment and pod identity receipt, never the GitHub workflow conclusion",
+        "the exact proposed production ConfigMap is isolated for the canary and its semantic hash must equal the final shared ConfigMap receipt",
+        "publishing and promotion fail closed unless the committed finalization alert is live, unpaused, queryable through a healthy Prometheus datasource, and routed to the Telegram contact point",
+        "rollback remains absent until a complete image, config, schema, and protocol compatibility receipt exists; the workflow never blindly rolls back to the prior revision",
+        "the live deployment gate rejects missing matching-node surge capacity before Helm can mutate the release",
+        "the prod freshness check compares the full Dockerfile COPY source closure so a post-qualification change to any shared backend module cannot ship a stale digest",
+        "the live capacity gate has a confirm-and-reason break-glass hatch that records a tracking issue, matching the repo's gated-surface contract",
+        "pusher and backend-listen explicit env key sets cannot gain an unexplained divergence; required process_conversation rollout flags must resolve identically"
       ]
     },
     {
@@ -549,7 +728,6 @@
       "sources": [
         "backend/charts/backend-listen/**",
         "backend/charts/pusher/**",
-        "backend/charts/agent-proxy/**",
         "backend/charts/llm-gateway/**",
         "backend/charts/diarizer/**",
         "backend/charts/parakeet/**",
@@ -557,12 +735,34 @@
         "backend/charts/vad/**",
         "backend/scripts/validate_rendered_deployment_contract.py"
       ],
-      "tests": ["tests/unit/test_rendered_deployment_contract.py"],
+      "tests": [
+        "tests/unit/test_rendered_deployment_contract.py",
+        "tests/unit/test_plan_quota_env_retirement.py"
+      ],
       "checks": [],
       "invariants": [
         "every first-party GKE workload renders an explicit immutable image identity",
         "rendered Deployments keep their environment-specific service account, secret references, port, and health probes",
         "chart defaults cannot fall back to an application-version or latest image tag"
+      ]
+    },
+    {
+      "id": "cloud_run_metrics_egress_deploy",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_cloud_run_metrics_egress.yml",
+        "backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml",
+        "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml",
+        "backend/charts/monitoring/gmp/**"
+      ],
+      "tests": [
+        "tests/unit/test_cloud_run_metrics_egress_workflow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "reviewed Cloud Run application exporter values are automatically installed in development after merge",
+        "production metrics egress deploys only through an explicit protected-environment dispatch from main",
+        "pinned Helm charts preserve new production PVCs on failure; production stack rollback requires reviewed Retain values"
       ]
     },
     {
@@ -590,6 +790,197 @@
         "deletions and both sides of renames select the checks owned by the old and new paths",
         "unmapped backend production paths cannot be hidden by adding one direct test",
         "desktop-only pushes do not require a backend virtual environment"
+      ]
+    },
+    {
+      "id": "shared_internal_model_gateway",
+      "risk": "high",
+      "sources": [
+        "backend/charts/internal-gateway/**",
+        "backend/charts/diarizer/**",
+        "backend/charts/parakeet/**",
+        "backend/charts/vad/**",
+        "backend/charts/nllb-translation/**"
+      ],
+      "tests": [
+        "tests/unit/test_internal_gateway_helm.py",
+        "tests/unit/test_diarizer_batch_prereqs.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "Gateway routes and policies target distinct Services while legacy Ingress, Service and BackendConfig resources remain unchanged",
+        "dev and prod use named regional internal addresses, disjoint path prefixes and native health checks",
+        "batch diarization has no Ingress and preserves its isolated capacity and 900 second timeout"
+      ]
+    },
+    {
+      "id": "audio_path_fleet",
+      "risk": "high",
+      "sources": [
+        "backend/charts/backend-listen/**",
+        "backend/charts/pusher/**",
+        "backend/charts/parakeet/**",
+        "backend/scripts/audit_audio_fleet_callers.py",
+        "backend/scripts/qualify_parakeet_route.py",
+        "backend/scripts/fixtures/parakeet_route_synthetic.*"
+      ],
+      "tests": [
+        "tests/unit/test_audio_fleet_helm.py",
+        "tests/unit/test_qualify_parakeet_route.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "CPU scheduling stays unchanged and current pools remain eligible under stockouts",
+        "Parakeet retains 2 request and 35 percent GPU scale-out triggers, floor 3 and cap 12 with a latency guard",
+        "Self-hosted teardown is blocked by any caller or unresolved runtime binding",
+        "Gateway qualification uses served clients and synthetic speech; refusals and protocol failures block qualification"
+      ]
+    },
+    {
+      "id": "monitoring_as_code",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/grafana_dashboard_provisioning.yml",
+        "backend/scripts/provision_grafana_dashboards.py",
+        "backend/scripts/provision_monitoring_alerts.py",
+        "backend/scripts/verify_gmp_frontend_render.py",
+        "backend/charts/monitoring/gmp/**",
+        "backend/scripts/monitoring_gmp_shadow.py",
+        "backend/charts/monitoring/gmp-query-migration-inventory.json",
+        "backend/charts/monitoring/gmp-shadow-mappings.json"
+      ],
+      "tests": [
+        "tests/unit/test_provision_grafana_dashboards.py",
+        "tests/unit/test_provision_monitoring_alerts.py",
+        "tests/unit/test_monitoring_gmp_frontend.py",
+        "tests/unit/test_monitoring_datasource_health.py",
+        "tests/unit/test_cloud_run_metrics_egress_workflow.py",
+        "tests/unit/test_monitoring_gmp_shadow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "production Grafana changes require explicit prod dispatch with the production Environment secret",
+        "alert upserts retain unknown live rules, preserve provenance, back up before writes, and verify complete definitions",
+        "dashboard imports preserve folders and authenticated requests never follow redirects",
+        "GMP addition preserves local sources, HPA routing, recording rules and the history warmup pin",
+        "canaries are installed, read back and queried before KeepLast business updates",
+        "shadow comparison rejects missingness, nonfinite values and redirected credentials; it never authorizes cutover"
+      ]
+    },
+    {
+      "id": "monitoring_log_and_route_migration",
+      "risk": "high",
+      "sources": [
+        "backend/charts/monitoring/dashboards/omi-services/omi-services-overview.json",
+        "backend/charts/monitoring/alert-rules.json",
+        "backend/charts/monitoring/alerts/**",
+        "backend/charts/monitoring/metric-inventory.prod.json",
+        "backend/charts/monitoring/retired-loki-alerts.json",
+        "backend/charts/monitoring/route-errors/**",
+        "backend/scripts/retire_paused_loki_alerts.py",
+        "backend/scripts/check_route_error_preparation.py",
+        "backend/scripts/check_edge_storm_preparation.py"
+      ],
+      "tests": [
+        "tests/unit/test_monitoring_log_plane_migration.py",
+        "tests/unit/test_retire_paused_loki_alerts.py",
+        "tests/unit/test_route_error_preparation.py",
+        "tests/unit/test_edge_storm_preparation.py",
+        "tests/unit/test_monitoring_alert_rule_contract.py",
+        "tests/unit/test_monitoring_gmp_shadow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "Cloud Logging panels use scoped supported log queries and do not claim numeric LogQL parity",
+        "manual deletion requires exact still-paused Loki identities and an exclusive private backup",
+        "route labels remain finite; metrics and alerts stay held until source coverage and replay acceptance",
+        "same-LB-stream storm and nonstorm partitions preserve unrelated errors without a blanket mute",
+        "collector or datastore retirement never happens through these preparation sources"
+      ]
+    },
+    {
+      "id": "batch_pipeline_capacity_sim",
+      "risk": "high",
+      "sources": [
+        "backend/testing/pipeline_sim/**",
+        "backend/utils/batch_pipeline/scheduler.py",
+        "backend/utils/batch_pipeline/pump.py",
+        "backend/utils/batch_pipeline/serving.py",
+        "backend/utils/batch_pipeline/merge.py",
+        "backend/utils/batch_pipeline/quarantine_recovery.py",
+        "backend/utils/batch_pipeline/recovery_disposition.py",
+        "backend/utils/batch_pipeline/admission.py",
+        "backend/diarizer/batch_pipeline.py"
+      ],
+      "tests": [
+        "tests/unit/test_pipeline_sim.py",
+        "tests/unit/test_pipeline_sim_scenarios.py",
+        "tests/unit/test_pipeline_sim_revision.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "a healthy mixed fleet passes the fleet-gate outcome metrics in the virtual-clock simulation",
+        "known production capacity failures (serial per-owner burst, provider exhaustion, summaries behind transcription, revision drain) still reproduce, so a fix shows up as a verdict change",
+        "privacy-blocked and deleted targets never spend paid recovery calls"
+      ]
+    },
+    {
+      "id": "batch_pipeline_characterization_goldens",
+      "risk": "high",
+      "sources": [
+        "backend/diarizer/batch_pipeline.py",
+        "backend/utils/batch_pipeline/contracts.py",
+        "backend/utils/batch_pipeline/correctness_metrics.py",
+        "backend/utils/batch_pipeline/merge.py",
+        "backend/utils/batch_pipeline/pump.py",
+        "backend/utils/batch_pipeline/quarantine_recovery.py",
+        "backend/utils/batch_pipeline/recovery_disposition.py",
+        "backend/utils/batch_pipeline/scheduler.py",
+        "backend/utils/batch_pipeline/serving.py",
+        "backend/utils/batch_pipeline/worker_silence.py",
+        "backend/database/batch_pipeline_intake.py",
+        "backend/database/batch_pipeline_privacy.py",
+        "backend/database/batch_pipeline_projection_protocol.py",
+        "backend/database/batch_pipeline_quarantine_recovery.py",
+        "backend/database/batch_pipeline_staging.py",
+        "backend/testing/pipeline_sim/**",
+        "backend/tests/unit/fixtures/pipeline_sim_goldens/**"
+      ],
+      "tests": [
+        "tests/unit/test_pipeline_characterization.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "the externally visible batch-pipeline trace (durable transitions, intake and recovery-task responses, paid calls, projected results) of each seeded golden configuration is unchanged unless the PR regenerates and reviews its golden",
+        "the trace is deterministic for a seed and changes when real pipeline behavior changes"
+      ]
+    },
+    {
+      "id": "cross_service_deploy_wiring",
+      "risk": "high",
+      "sources": [
+        "backend/deploy/runtime_env.yaml",
+        "backend/deploy/cross_service_known_gaps.json",
+        "backend/scripts/cross_service_contract.py",
+        "backend/scripts/render_backend_runtime_env.py",
+        "backend/scripts/render_gke_backend_config.py",
+        "backend/main.py",
+        "backend/utils/cloud_tasks.py",
+        "backend/diarizer/batch_pipeline_runtime.py",
+        "backend/utils/batch_pipeline/**",
+        "backend/routers/batch_pipeline.py",
+        "backend/config/batch_pipeline.py",
+        "backend/charts/batch-pipeline-worker/**"
+      ],
+      "tests": [
+        "tests/unit/test_cross_service_deploy_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "every gke.config_map entry has a supported source and the deploy-time ConfigMap renders",
+        "every Cloud Tasks dispatcher targets a same-env service whose handler mode is on, whose audience matches, and whose timeout covers the dispatch deadline",
+        "a flag read by a process is set on that process's deployment when its coupled flag is on elsewhere",
+        "the public manifest gains no UID-shaped literal and no cross-environment service URL"
       ]
     }
   ]

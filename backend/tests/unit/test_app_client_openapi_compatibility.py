@@ -112,6 +112,24 @@ def test_additive_endpoint_optional_request_property_and_response_property_are_c
     assert checker.compare_specs(base, head) == []
 
 
+def test_deliberately_removed_endpoints_are_allowed_but_only_those():
+    checker = load_checker()
+    base = contract()
+    base['paths']['/v1/agent/keepalive'] = {
+        'post': {'responses': {'200': {'content': {'application/json': {'schema': {'type': 'object'}}}}}}
+    }
+    head = copy.deepcopy(base)
+    del head['paths']['/v1/agent/keepalive']
+
+    assert checker.compare_specs(base, head) == []
+
+    head_unknown = copy.deepcopy(base)
+    del head_unknown['paths']['/v1/goals']
+
+    failures = [str(issue) for issue in checker.compare_specs(base, head_unknown)]
+    assert any('paths./v1/goals: released endpoint was removed' in item for item in failures)
+
+
 def test_released_query_parameter_cannot_move_to_body():
     checker = load_checker()
     base = contract()
@@ -143,6 +161,30 @@ def test_released_goal_properties_and_enum_values_cannot_disappear():
         "properties.source.enum: value(s) ['ai', 'onboarding_typed'] are no longer accepted" in item
         for item in failures
     )
+
+
+def test_removed_declared_request_property_is_accepted_by_open_additional_properties():
+    checker = load_checker()
+    base = contract()
+    head = copy.deepcopy(base)
+    goal = head['components']['schemas']['GoalCreate']
+    del goal['properties']['description']
+    goal['additionalProperties'] = True
+
+    assert checker.compare_specs(base, head) == []
+
+
+def test_removed_declared_request_property_must_match_typed_additional_properties():
+    checker = load_checker()
+    base = contract()
+    head = copy.deepcopy(base)
+    goal = head['components']['schemas']['GoalCreate']
+    del goal['properties']['description']
+    goal['additionalProperties'] = {'type': 'integer'}
+
+    failures = messages(checker, base, head)
+
+    assert any('properties.description.type: request no longer supports type(s): string' in item for item in failures)
 
 
 def test_new_required_request_property_is_breaking_but_optional_is_not():
@@ -223,6 +265,48 @@ def test_removing_success_status_is_response_narrowing_and_compatible():
     del head['paths']['/v1/goals']['post']['responses']['201']
 
     assert checker.compare_specs(base, head) == []
+
+
+def test_recorded_released_status_restoration_is_allowed(monkeypatch):
+    """A recorded restoration lets a lost released status come back; nothing else.
+
+    The merge-base baseline can itself carry a spec-only regression (a status
+    removed from the spec while released clients still require it). The record
+    — and only the record — re-allows restoring exactly that (route, method,
+    status) triple.
+    """
+    checker = load_checker()
+    base = contract()
+    base['paths']['/v1/conversations/{conversation_id}'] = {
+        'delete': {'responses': {'200': {'content': {'application/json': {'schema': {'type': 'object'}}}}}}
+    }
+    head = copy.deepcopy(base)
+    head['paths']['/v1/conversations/{conversation_id}']['delete']['responses'] = {'204': {'description': 'No Content'}}
+
+    monkeypatch.setattr(checker_module, 'RELEASED_STATUS_RESTORES', frozenset())
+    assert any(
+        'responses.204: new success response status is not modeled' in item for item in messages(checker, base, head)
+    )
+
+    monkeypatch.setattr(
+        checker_module,
+        'RELEASED_STATUS_RESTORES',
+        frozenset({('/v1/conversations/{conversation_id}', 'delete', '204')}),
+    )
+    assert checker.compare_specs(base, head) == []
+
+
+def test_released_status_restoration_record_is_narrow():
+    """An unrecorded operation cannot borrow a restoration record's allowance."""
+    checker = load_checker()
+    base = contract()
+    head = copy.deepcopy(base)
+    head['paths']['/v1/goals']['post']['responses']['204'] = {'description': 'No Content'}
+
+    assert any(
+        'responses.204: new success response status is not modeled' in item for item in messages(checker, base, head)
+    )
+    assert ('/v1/conversations/{conversation_id}', 'delete', '204') in checker_module.RELEASED_STATUS_RESTORES
 
 
 def test_response_media_types_follow_response_direction():
@@ -379,6 +463,63 @@ def test_changed_composed_schema_fails_conservatively_instead_of_being_ignored()
     )
 
 
+def _storefront_contract(version: int, *, keep_display_name: bool) -> dict:
+    properties: dict = {'schema_version': {'type': 'integer', 'const': version}}
+    required = ['schema_version']
+    if keep_display_name:
+        properties['display_name'] = {'type': 'string'}
+        required.append('display_name')
+    return {
+        'openapi': '3.1.0',
+        'paths': {
+            '/v2/payments/plans': {
+                'get': {
+                    'parameters': [
+                        {'name': 'source', 'in': 'query', 'required': False, 'schema': {'type': 'string'}},
+                    ],
+                    'responses': {
+                        '200': {
+                            'content': {'application/json': {'schema': {'$ref': '#/components/schemas/Storefront'}}}
+                        }
+                    },
+                }
+            }
+        },
+        'components': {
+            'schemas': {
+                'Storefront': {'type': 'object', 'properties': properties, 'required': required},
+            }
+        },
+    }
+
+
+def test_unreleased_storefront_schema_v1_to_v2_skips_only_that_response_replacement():
+    """Schema 1 never shipped. The exception must not cover requests or later response breaks."""
+    checker = load_checker()
+    base = _storefront_contract(1, keep_display_name=True)
+    head = _storefront_contract(2, keep_display_name=False)
+
+    assert checker.compare_specs(base, head) == []
+
+    required_source = copy.deepcopy(head)
+    required_source['paths']['/v2/payments/plans']['get']['parameters'][0]['required'] = True
+    request_failures = messages(checker, base, required_source)
+    assert any('optional request parameter became required' in item for item in request_failures)
+
+    shipped = _storefront_contract(2, keep_display_name=True)
+    later = _storefront_contract(2, keep_display_name=False)
+    later_failures = messages(checker, shipped, later)
+    assert any('display_name' in item and 'removed' in item for item in later_failures)
+
+    other_base = copy.deepcopy(base)
+    other_head = copy.deepcopy(head)
+    other_base['paths']['/v1/other'] = copy.deepcopy(base['paths']['/v2/payments/plans'])
+    other_head['paths']['/v1/other'] = copy.deepcopy(head['paths']['/v2/payments/plans'])
+    other_failures = messages(checker, other_base, other_head)
+    assert any(item.startswith('paths./v1/other.') for item in other_failures)
+    assert not any(item.startswith('paths./v2/payments/plans.') for item in other_failures)
+
+
 def test_cli_reports_precise_breaking_paths(tmp_path, capsys):
     checker = load_checker()
     base = contract()
@@ -403,6 +544,8 @@ def test_compatibility_check_is_wired_in_ci_and_pre_push():
 
     assert 'fetch-depth: 0' in workflow
     assert 'check_app_client_openapi_compatibility.py --base-ref FETCH_HEAD' in workflow
+    # The public Developer API is released to third parties too; breaks need a new version, not an edit.
+    assert "--head-spec docs/api-reference/openapi.json --label 'Developer API'" in workflow
     assert 'backend/scripts/check_app_client_openapi_compatibility.py' in pre_push
     assert '--base-ref "$BASE_REMOTE_REF"' in pre_push
 
@@ -418,3 +561,20 @@ def test_compatibility_check_is_wired_in_ci_and_pre_push():
     assert openapi_body.index('PRE_PUSH_SKIP_OPENAPI_CONTRACT') < openapi_body.index(
         'check_app_client_openapi_compatibility.py'
     )
+
+
+def test_pre_push_openapi_guard_is_limited_to_the_impacted_app_client_surface():
+    """API models/routes need the released-client check, not every OpenAPI surface locally."""
+    pre_push = (ROOT / 'scripts/pre-push').read_text(encoding='utf-8')
+    openapi_start = pre_push.index('check_openapi_contract_if_needed()')
+    openapi_end = pre_push.index('\n}\n', openapi_start)
+    openapi_body = pre_push[openapi_start:openapi_end]
+
+    assert 'backend/models/*.py' in openapi_body
+    assert 'backend/routers/*.py' in openapi_body
+    assert (
+        'scripts/export_openapi.py --surface app-client --check ../docs/api-reference/app-client-openapi.json'
+        in openapi_body
+    )
+    assert 'scripts/export_openapi.py --check ../docs/api-reference/openapi.json' not in openapi_body
+    assert 'integration-public' not in openapi_body

@@ -36,8 +36,7 @@ final class PTTSilentTurnRecoveryWiringTests: XCTestCase {
       silentTurnCalls,
       "Every silent-turn discard must call recordDiscardedTurn")
     XCTAssertEqual(
-      source.components(separatedBy: "requestCoreAudioCaptureRecovery(reason: \"repeated dead-mic PTT turns\"").count
-        - 1,
+      source.components(separatedBy: "reason: \"repeated dead-mic PTT turns\"").count - 1,
       silentTurnCalls,
       "Every silent-turn discard must guard a capture rebuild")
 

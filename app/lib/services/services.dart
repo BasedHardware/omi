@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 
+import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/mic/mic_arbiter.dart';
@@ -30,13 +31,16 @@ class ServiceManager {
       arbiter: micArbiter,
       owner: 'mic',
     );
-    // Conversation capture uses the native AVAudioEngine recorder on iOS;
-    // everything else (chat voice memos, speech profile, all of Android)
-    // stays on the flutter_sound path. The shared arbiter keeps the two
-    // stacks from contending for the microphone.
-    sm._phoneMic = Platform.isIOS
+    // Conversation capture uses the native recorder on iOS (AVAudioEngine) and
+    // Android (AudioRecord); chat voice memos and the speech profile stay on the
+    // flutter_sound path via [mic]. The shared arbiter keeps the two stacks from
+    // contending for the microphone.
+    // iOS lengthens the healthy-state watchdog poll (5s, deadline-capped).
+    // Android keeps the 1s poll; its native heartbeat also does mode checks
+    // that this flag must not slow down.
+    sm._phoneMic = (Platform.isIOS || Platform.isAndroid)
         ? ArbitratedMic(
-            inner: NativeMicRecorderService(),
+            inner: NativeMicRecorderService(paceHealthyChecks: Platform.isIOS),
             arbiter: micArbiter,
             owner: 'conversation',
           )
@@ -58,8 +62,8 @@ class ServiceManager {
 
   IMicRecorderService get mic => _mic;
 
-  /// The recorder for conversation capture: native on iOS, flutter_sound
-  /// elsewhere. Chat voice memos and speech profile keep using [mic].
+  /// The recorder for conversation capture: native on iOS and Android,
+  /// flutter_sound elsewhere. Chat voice memos and speech profile keep using [mic].
   IMicRecorderService get phoneMic => _phoneMic;
 
   DeviceService get device => _device;
@@ -74,6 +78,8 @@ class ServiceManager {
     }
     _instance = ServiceManager._create();
     await ConnectivityService().init();
+    // Pooled sockets opened on the previous network fail once reused there.
+    ConnectivityService().onNetworkChange.listen((_) => HttpPoolManager.instance.resetConnections());
   }
 
   Future<void> start() async {
@@ -88,7 +94,7 @@ class ServiceManager {
     if (!identical(_phoneMic, _mic)) {
       _phoneMic.stop();
     }
-    _device.stop();
+    await _device.stop();
   }
 }
 
@@ -107,22 +113,26 @@ Future onStart(ServiceInstance service) async {
   MicRecorderService? recorder;
   service.on('recorder.start').listen((event) async {
     recorder = MicRecorderService(isInBG: Platform.isAndroid ? true : false);
-    recorder?.start(
-      onByteReceived: (bytes) {
-        Uint8List audioBytes = bytes;
-        List<dynamic> audioBytesList = audioBytes.toList();
-        service.invoke("recorder.ui.audioBytes", {"data": audioBytesList});
-      },
-      onStop: () {
-        service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
-      },
-      onRecording: () {
-        service.invoke("recorder.ui.stateUpdate", {"state": 'recording'});
-      },
-      onStalled: () {
-        service.invoke("recorder.ui.stalled");
-      },
-    );
+    try {
+      await recorder?.start(
+        onByteReceived: (bytes) {
+          Uint8List audioBytes = bytes;
+          List<dynamic> audioBytesList = audioBytes.toList();
+          service.invoke("recorder.ui.audioBytes", {"data": audioBytesList});
+        },
+        onStop: () {
+          service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
+        },
+        onRecording: () {
+          service.invoke("recorder.ui.stateUpdate", {"state": 'recording'});
+        },
+        onStalled: () {
+          service.invoke("recorder.ui.stalled");
+        },
+      );
+    } catch (e) {
+      service.invoke("recorder.ui.stateUpdate", {"state": 'error', "error": e.toString()});
+    }
   });
 
   service.on('recorder.stop').listen((event) async {
@@ -168,11 +178,7 @@ class BackgroundService {
     _status = BackgroundServiceStatus.initiated;
 
     await _service.configure(
-      iosConfiguration: IosConfiguration(
-        autoStart: false,
-        onForeground: onStart,
-        onBackground: onIosBackground,
-      ),
+      iosConfiguration: IosConfiguration(autoStart: false, onForeground: onStart, onBackground: onIosBackground),
       androidConfiguration: AndroidConfiguration(
         autoStart: false,
         onStart: onStart,
@@ -283,8 +289,9 @@ abstract class IMicRecorderService {
   // Transcribe Later capture: audio is opus-encoded and written to WAL-compatible
   // .bin files natively (no onByteReceived — nothing streams to Dart). onBatchStalled
   // fires when the native liveness feed (onBatchProgress) goes silent; onError
-  // forwards non-fatal native failures (e.g. batch_storage_full). iOS-only — the
-  // flutter_sound stacks throw UnsupportedError.
+  // forwards non-fatal native failures (e.g. batch_storage_full). Requires the native
+  // recorder (`ServiceManager.phoneMic` on iOS/Android); the flutter_sound
+  // implementations throw UnsupportedError.
   Future<void> startBatch({
     Function()? onStop,
     Function(bool began)? onInterruption,
@@ -293,6 +300,12 @@ abstract class IMicRecorderService {
   });
 
   void stop();
+
+  /// Soft-rearm frame/progress liveness after the app returns to foreground.
+  /// iOS may suspend Dart timers while Stage Manager lets another app steal
+  /// the mic (#4706). Must not immediately escalate — that races native rebuild
+  /// and false-restarts healthy sessions. No-op on flutter_sound stacks.
+  void probeStallAfterForeground();
 }
 
 class MicRecorderBackgroundService implements IMicRecorderService {
@@ -331,13 +344,16 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     Function()? onBatchStalled,
     Function(String code, String message)? onError,
   }) async {
-    throw UnsupportedError('batch capture requires the native iOS recorder');
+    throw UnsupportedError('batch capture requires the native recorder');
   }
 
   @override
   void stop() {
     _runner.stopRecorder();
   }
+
+  @override
+  void probeStallAfterForeground() {}
 }
 
 class MicRecorderService implements IMicRecorderService {
@@ -351,7 +367,7 @@ class MicRecorderService implements IMicRecorderService {
   RecorderServiceStatus? _status;
 
   late FlutterSoundRecorder _recorder;
-  late StreamController<Uint8List> _controller;
+  StreamController<Uint8List>? _controller;
 
   Function(Uint8List bytes)? _onByteReceived;
   Function? _onRecording;
@@ -381,9 +397,7 @@ class MicRecorderService implements IMicRecorderService {
     Function(bool began)? onInterruption,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
-      throw Exception(
-        "Recorder is recording, please stop it before start new recording.",
-      );
+      throw Exception("Recorder is recording, please stop it before start new recording.");
     }
     if (_status == RecorderServiceStatus.initialising) {
       throw Exception("Recorder is initialising");
@@ -396,44 +410,63 @@ class MicRecorderService implements IMicRecorderService {
     _onStop = onStop;
     _onRecording = onRecording;
     _onStalled = onStalled;
-    if (_onRecording != null) {
-      _onRecording!();
-    }
 
-    // new record
-    await _recorder.openRecorder(isBGService: _isInBG);
-    _controller = StreamController<Uint8List>();
+    try {
+      // new record
+      await _recorder.openRecorder(isBGService: _isInBG);
+      final controller = StreamController<Uint8List>();
+      _controller = controller;
 
-    await _recorder.startRecorder(
-      toStream: _controller.sink,
-      codec: Codec.pcm16,
-      numChannels: 1,
-      sampleRate: 16000,
-      bufferSize: 8192,
-    );
-    _lastByteAt = DateTime.now();
-    _stallReported = false;
-    _controller.stream.listen((buffer) {
+      await _recorder.startRecorder(
+        toStream: controller.sink,
+        codec: Codec.pcm16,
+        numChannels: 1,
+        sampleRate: 16000,
+        bufferSize: 8192,
+      );
       _lastByteAt = DateTime.now();
       _stallReported = false;
-      if (_onByteReceived != null) {
-        _onByteReceived!(buffer);
-      }
-    });
+      controller.stream.listen((buffer) {
+        _lastByteAt = DateTime.now();
+        _stallReported = false;
+        if (_onByteReceived != null) {
+          _onByteReceived!(buffer);
+        }
+      });
 
-    _stallTimer?.cancel();
-    _stallTimer = Timer.periodic(_stallCheckInterval, (_) {
-      // The stream going silent for longer than the threshold means the native
-      // audio engine has stopped delivering bytes — on iOS this happens when
-      // AVAudioSession is interrupted (incoming call) and is not resumed.
-      if (_stallReported || _lastByteAt == null) return;
-      if (DateTime.now().difference(_lastByteAt!) >= _stallThreshold) {
-        _stallReported = true;
-        _onStalled?.call();
-      }
-    });
+      _stallTimer?.cancel();
+      _stallTimer = Timer.periodic(_stallCheckInterval, (_) {
+        // The stream going silent for longer than the threshold means the native
+        // audio engine has stopped delivering bytes — on iOS this happens when
+        // AVAudioSession is interrupted (incoming call) and is not resumed.
+        if (_stallReported || _lastByteAt == null) return;
+        if (DateTime.now().difference(_lastByteAt!) >= _stallThreshold) {
+          _stallReported = true;
+          _onStalled?.call();
+        }
+      });
 
-    _status = RecorderServiceStatus.recording;
+      _status = RecorderServiceStatus.recording;
+      if (_onRecording != null) {
+        _onRecording!();
+      }
+    } catch (_) {
+      _status = RecorderServiceStatus.stop;
+      _stallTimer?.cancel();
+      _stallTimer = null;
+      _lastByteAt = null;
+      _stallReported = false;
+      try {
+        await _recorder.stopRecorder();
+      } catch (_) {}
+      try {
+        await _recorder.closeRecorder();
+      } catch (_) {}
+      try {
+        _controller?.close();
+      } catch (_) {}
+      rethrow;
+    }
     return;
   }
 
@@ -444,7 +477,7 @@ class MicRecorderService implements IMicRecorderService {
     Function()? onBatchStalled,
     Function(String code, String message)? onError,
   }) async {
-    throw UnsupportedError('batch capture requires the native iOS recorder');
+    throw UnsupportedError('batch capture requires the native recorder');
   }
 
   @override
@@ -456,7 +489,7 @@ class MicRecorderService implements IMicRecorderService {
 
     _recorder.stopRecorder();
     _recorder.closeRecorder();
-    _controller.close();
+    _controller?.close();
 
     // callback
     _status = RecorderServiceStatus.stop;
@@ -469,4 +502,7 @@ class MicRecorderService implements IMicRecorderService {
     _onRecording = null;
     _onStalled = null;
   }
+
+  @override
+  void probeStallAfterForeground() {}
 }

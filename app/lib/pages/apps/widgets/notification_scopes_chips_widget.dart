@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/ui/ui.dart';
 
 class NotificationScopesChipsWidget extends StatelessWidget {
   const NotificationScopesChipsWidget({super.key});
@@ -15,16 +16,15 @@ class NotificationScopesChipsWidget extends StatelessWidget {
       child: Container(
         height: 44,
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          color: isSelected ? OmiColors.accent : Colors.transparent,
+          borderRadius: OmiRadius.mdAll,
           border: Border.all(color: isSelected ? Colors.white : Colors.grey.withValues(alpha: 0.3), width: 1),
         ),
         child: Center(
           child: Text(
             scope.getLocalizedTitle(context),
-            style: TextStyle(
-              color: isSelected ? Colors.black : Colors.white,
-              fontSize: 14,
+            style: OmiType.subhead.copyWith(
+              color: isSelected ? OmiColors.onAccent : OmiColors.textPrimary,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             ),
           ),

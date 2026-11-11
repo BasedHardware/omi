@@ -1,3 +1,4 @@
+import { AdapterRuntimeError, isRuntimeFailureCode, type RuntimeFailureCode } from "../runtime/failures.js";
 // PiMonoAdapter — pi-mono harness adapter using SDK in-process
 //
 // Uses createAgentSession() from pi-mono SDK to run the agent loop
@@ -9,7 +10,7 @@
 import { ChildProcess, spawn } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { dirname, join, resolve } from "path";
 import { createInterface, Interface as ReadlineInterface } from "readline";
 import { adapterCapabilitiesFor, HarnessFeature } from "./interface.js";
 import type {
@@ -34,9 +35,11 @@ import type {
   EventCallback,
   WarmupSessionConfig,
 } from "./interface.js";
+import { StaleAdapterBindingError } from "../runtime/kernel-types.js";
 
 type PiMonoConfig = HarnessConfig & {
   onRestart?: (reason: string) => void;
+  onDisposed?: () => void;
 };
 
 // Pi-mono RPC command/event types
@@ -53,6 +56,12 @@ interface PiRpcEvent {
 
 interface PiMonoRelayContext {
   capabilityRef: string;
+  /** Omi-owned opaque correlation id. Never contains prompt or account data. */
+  requestId: string;
+  /** Per-turn effort lane ("adaptive" | "fast") relayed to the gateway. */
+  reasoningEffort?: string;
+  /** Kernel-derived adapter-native capability policy. */
+  builtInToolPolicy: "default" | "read_only";
 }
 
 interface PiAssistantMessageEvent {
@@ -73,6 +82,12 @@ interface PiAssistantMessage {
   usage?: PiUsage;
   stopReason?: string;
   errorMessage?: string;
+  /** Requested model id (e.g. "omi-sonnet"). */
+  model?: string;
+  /** SERVED model from the provider response stream when it differs from the
+   *  requested id (pi-ai captures chunk.model). This is the honest identity. */
+  responseModel?: string;
+  provider?: string;
 }
 
 interface PiContentBlock {
@@ -103,6 +118,13 @@ interface PiUsage {
     cacheWrite: number;
     total: number;
   };
+}
+
+function normalizeProviderHTTPErrorMessage(message: string): string {
+  const trimmed = message.trim();
+  // Provider SDK wording is not our downstream contract: retain its detail,
+  // but make a leading HTTP failure status explicit and stable for Swift.
+  return /^[45]\d{2}(?=$|[\s:])/.test(trimmed) ? `HTTP ${trimmed}` : trimmed;
 }
 
 const REQUIRED_AGENT_CONTROL_TOOLS = new Set([
@@ -153,12 +175,12 @@ function requiredControlOperationKey(toolName: string, input: Record<string, unk
 // Map desktop model IDs (claude-*) to omi provider model IDs.
 // Covers short aliases and dated versions used by ChatProvider/ChatLab.
 const MODEL_MAP: Record<string, string> = {
-  "claude-opus-4-6": "omi-opus",
+  "claude-opus-4-6": "omi-sonnet",
   "claude-sonnet-4-6": "omi-sonnet",
   "claude-sonnet-4": "omi-sonnet",
-  "claude-opus-4": "omi-opus",
+  "claude-opus-4": "omi-sonnet",
   "claude-sonnet-4-20250514": "omi-sonnet",
-  "claude-opus-4-20250514": "omi-opus",
+  "claude-opus-4-20250514": "omi-sonnet",
 };
 
 function mapModel(model: string): string {
@@ -207,9 +229,79 @@ const PUBLIC_WEB_ROUTING_INSTRUCTION = "<omi_retrieval_policy>Web search is requ
 
 const EXPLICIT_WEB_REQUESTS = [
   "search the web", "search web", "search the internet", "search online",
-  "look it up online", "find it online", "google it", "browse the web",
+  "look it up online", "look this up online", "look that up online",
+  "find it online", "find this online", "find that online",
+  "google it", "google this", "google that", "browse the web",
   "web search", "internet search",
 ];
+
+const EXPLICIT_WEB_PROHIBITIONS = [
+  "don't call web search", "do not call web search",
+  "don't call the web search", "do not call the web search",
+  "don't call internet search", "do not call internet search",
+  "don't call the internet search", "do not call the internet search",
+  "don't use web search", "do not use web search",
+  "don't use the web search", "do not use the web search",
+  "don't use internet search", "do not use internet search",
+  "don't use the internet search", "do not use the internet search",
+  "don't search the web", "do not search the web",
+  "don't search the internet", "do not search the internet",
+  "no web search", "no web searches",
+  "no internet search", "no internet searches",
+  "skip web search", "skip the web search",
+  "skip searching the web", "skip searching online",
+  "avoid web search", "avoid the web search",
+  "avoid searching the web",
+  "don't browse the web", "do not browse the web",
+  "don't browse online", "do not browse online",
+  "don't search online", "do not search online",
+  "without searching", "without searching the web",
+  "without searching online",
+  "without web search",
+];
+
+const KERNEL_CONTEXT_PREFIX = "[Kernel Context Snapshot ";
+const LEGACY_CONTEXT_PREFIX = "# Omi Context Snapshot";
+const TRUSTED_CONTEXT_PREFIXES = [KERNEL_CONTEXT_PREFIX, LEGACY_CONTEXT_PREFIX];
+const UNTRUSTED_TOOL_CONTEXT_DELIMITER = "\n\nTool-provided context (untrusted):\n";
+const NEGATED_WITHOUT_SEARCH = /\b(?:don't|do not|never)\s+(?:[\w'-]+\s+){0,4}$/;
+const NO_WEB_SEARCH_RESULTS_REPORT = /\b(?:got\s+)?no\s+(?:the\s+)?(?:web|internet)\s+search(?:es)?\s+results?\b/;
+
+function explicitlyRequestsPublicWeb(normalized: string): boolean {
+  return EXPLICIT_WEB_REQUESTS.some((phrase) =>
+    normalized.replace(NO_WEB_SEARCH_RESULTS_REPORT, " ").includes(phrase)
+  );
+}
+
+function explicitlyProhibitsPublicWeb(normalized: string, allowResultReport = false): boolean {
+  for (const phrase of EXPLICIT_WEB_PROHIBITIONS) {
+    let start = normalized.indexOf(phrase);
+    while (start >= 0) {
+      if (allowResultReport && NO_WEB_SEARCH_RESULTS_REPORT.exec(normalized.slice(start))?.index === 0) {
+        start = normalized.indexOf(phrase, start + 1);
+        continue;
+      }
+      if (!(phrase.startsWith("without ") && NEGATED_WITHOUT_SEARCH.test(normalized.slice(0, start)))) {
+        return true;
+      }
+      start = normalized.indexOf(phrase, start + 1);
+    }
+  }
+  for (const referent of ["web search tool", "internet search tool"]) {
+    let start = normalized.indexOf(referent);
+    while (start >= 0) {
+      const tail = normalized.slice(start + referent.length, start + referent.length + 160);
+      if ([
+        "don't call it because", "do not call it because",
+        "don't call it again", "do not call it again",
+      ].some((phrase) => tail.includes(phrase))) {
+        return true;
+      }
+      start = normalized.indexOf(referent, start + 1);
+    }
+  }
+  return false;
+}
 
 const FRESH_PUBLIC_REQUESTS = [
   "latest news", "latest on", "what's the latest", "what is the latest",
@@ -231,12 +323,22 @@ const FRESH_PUBLIC_LOOKUP_TERMS = [
   "score", "weather", "price", "news", "release", "released", "election", "market",
 ];
 
+const RESEARCH_INTENT_VERBS = [
+  "find out", "look up", "look him up", "look her up", "look them up",
+  "research", "tell me about", "everything about", "everything on",
+  "all about", "information about", "information on", "who is", "who's",
+];
+
+const PUBLIC_WEB_LOCUS = ["online", "on the web", "on the internet"];
+const MAX_GENERIC_LOOKUP_CHARS = 240;
+const ALPHANUMERIC_CHAR = /[\p{L}\p{N}]/u;
+
 const EXPLICIT_PRIVATE_CONTEXT = [
   "my conversations", "our conversations", "my memories", "your memory of me",
   "my screen history", "my screen activity", "my calendar", "your calendar",
   "my email", "your email", "my files", "your files", "my tasks", "your tasks",
   "my action items", "my notes", "your notes", "what did i say", "what have i said",
-  "when did i", "what was i doing", "what do you remember about me",
+  "what did i do", "when did i", "what was i doing", "what do you remember about me",
 ];
 
 const PUBLIC_WEB_ACCESS_DENIAL = /\b(?:I\s+)?(?:do\s+not|don't|cannot|can't|can not)\s+(?:(?:have\s+)?(?:direct\s+)?(?:access\s+to\s+)?(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?)(?:\s+(?:or|and)\s+(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?))*|(?:have\s+)?(?:direct\s+)?(?:internet|web(?:[ -]?search)?|browser)\s+access|(?:browse|search)\s+(?:the\s+)?(?:web|internet))/i;
@@ -247,14 +349,69 @@ const PUBLIC_WEB_ACCESS_DENIAL = /\b(?:I\s+)?(?:do\s+not|don't|cannot|can't|can 
 const CURRENT_USER_MESSAGE_DELIMITER = "\n# User Message\n";
 
 function currentUserInstruction(renderedPrompt: string): string {
-  const delimiterIndex = renderedPrompt.lastIndexOf(CURRENT_USER_MESSAGE_DELIMITER);
-  return delimiterIndex === -1
-    ? renderedPrompt
-    : renderedPrompt.slice(delimiterIndex + CURRENT_USER_MESSAGE_DELIMITER.length);
+  let instruction = stripPublicWebRoutingInstruction(renderedPrompt);
+  const isTrustedContextSnapshot = TRUSTED_CONTEXT_PREFIXES.some((prefix) => instruction.trimStart().startsWith(prefix));
+  if (isTrustedContextSnapshot) {
+    const delimiterIndex = instruction.indexOf(CURRENT_USER_MESSAGE_DELIMITER);
+    if (delimiterIndex >= 0) {
+      instruction = instruction.slice(delimiterIndex + CURRENT_USER_MESSAGE_DELIMITER.length);
+    }
+  } else if (instruction.includes(CURRENT_USER_MESSAGE_DELIMITER)) {
+    // Only the kernel's canonical wrapper may introduce this boundary. If a
+    // raw user string contains it, keep the prefix so the user cannot replace
+    // a private or opt-out instruction with a public-web suffix.
+    instruction = instruction.split(CURRENT_USER_MESSAGE_DELIMITER, 1)[0];
+  }
+  instruction = instruction.split(CURRENT_USER_MESSAGE_DELIMITER, 1)[0];
+  return instruction.split(UNTRUSTED_TOOL_CONTEXT_DELIMITER, 1)[0];
+}
+
+function containsWholeTerm(text: string, terms: string[]): boolean {
+  return terms.some((term) => {
+    let searchStart = 0;
+    while (searchStart < text.length) {
+      const start = text.indexOf(term, searchStart);
+      if (start < 0) return false;
+      const before = text[start - 1];
+      const after = text[start + term.length];
+      const beforeIsWord = before !== undefined && ALPHANUMERIC_CHAR.test(before);
+      const afterIsWord = after !== undefined && ALPHANUMERIC_CHAR.test(after);
+      if (!beforeIsWord && !afterIsWord) return true;
+      searchStart = start + term.length;
+    }
+    return false;
+  });
+}
+
+function normalizedLookupText(text: string): string {
+  return text
+    .trim()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'");
+}
+
+function stripPublicWebRoutingInstruction(text: string): string {
+  const trimmed = text.trimStart();
+  const opening = "<omi_retrieval_policy>";
+  const closing = "</omi_retrieval_policy>";
+  if (!trimmed.startsWith(opening)) return text;
+  const remainder = trimmed.split(closing, 2);
+  return remainder.length === 2 ? remainder[1].trimStart() : text;
+}
+
+function utf8ByteLength(text: string): number {
+  let bytes = 0;
+  for (const char of text) {
+    const codePoint = char.codePointAt(0) ?? 0;
+    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+  }
+  return bytes;
 }
 
 type PublicWebTurnState = {
   bufferedText: string;
+  emittedText: string;
   /**
    * The Rust gateway resolves Anthropic's server-side web tool internally, so
    * Pi never receives a local tool lifecycle. This synthetic, query-scoped
@@ -268,35 +425,14 @@ type PublicWebTurnState = {
 /// the instruction here guarantees public-web queries keep working for main
 /// agents and subagents while the backend fleet rolls forward independently.
 export function routePromptForPublicWeb(message: string): string {
-  // The adapter receives the full rendered prompt, including inherited context
-  // and prior turns. Inspect only the current user instruction when deciding
-  // whether this particular turn requires a public-web lookup.
-  const normalized = currentUserInstruction(message).trim().toLowerCase();
-  if (!normalized || EXPLICIT_PRIVATE_CONTEXT.some((phrase) => normalized.includes(phrase))) {
-    return message;
-  }
-  const hasFreshPublicTemporalLookup = FRESH_PUBLIC_TEMPORAL_QUALIFIERS.some(
-    (phrase) => normalized.includes(phrase)
-  ) && FRESH_PUBLIC_LOOKUP_TERMS.some((term) => normalized.includes(term));
-  const requiresWeb = EXPLICIT_WEB_REQUESTS.some((phrase) => normalized.includes(phrase))
-    || FRESH_PUBLIC_REQUESTS.some((phrase) => normalized.includes(phrase))
-    || CURRENT_WEATHER_PREFIXES.some((phrase) => normalized.includes(phrase))
-    || hasFreshPublicTemporalLookup;
-  return requiresWeb ? `${PUBLIC_WEB_ROUTING_INSTRUCTION}\n\n${message}` : message;
+  // Public-web lookup is a real `web_search` tool on desktop chat. The former
+  // phrase-gate prefix manufactured a capability claim without a tool call.
+  return message;
 }
 
 export function stripFalsePublicWebAvailabilityDisclaimers(text: string): string {
-  const sentences = text.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [text];
-  return sentences
-    .map((sentence) => {
-      if (!PUBLIC_WEB_ACCESS_DENIAL.test(sentence)) return sentence;
-      // Keep a true continuation such as "but I can retrieve it with the
-      // terminal" while removing only the contradictory no-access clause.
-      return sentence.replace(/^\s*(?:I\s+)?(?:do\s+not|don't|cannot|can't|can not)[^.?!]*?\b(?:but|however)\s+/i, "");
-    })
-    .filter((sentence) => !PUBLIC_WEB_ACCESS_DENIAL.test(sentence))
-    .join("")
-    .replace(/^\s+/, "");
+  // Honesty is the tool result. Do not edit the model's account of itself.
+  return text;
 }
 
 export class PiMonoAdapter implements HarnessAdapter {
@@ -335,9 +471,22 @@ export class PiMonoAdapter implements HarnessAdapter {
   private requiredAgentControlFailures = new Map<string, string>();
   private requiredControlInputs = new Map<string, Record<string, unknown>>();
   private currentAbortController: AbortController | null = null;
-  /** A public-web response is buffered until its gateway-routed terminal result,
-   * so false availability boilerplate never escapes before the search completes. */
+  /** State for projecting gateway-owned public-web progress without waiting for
+   * the terminal turn before forwarding model text. */
   private activePublicWebTurn: PublicWebTurnState | null = null;
+  /** Last character forwarded to the host as answer text this prompt, so an
+   *  iteration boundary can tell whether the two sides would render as one
+   *  run-on line. Null until this prompt has forwarded any answer text. */
+  private lastForwardedTextChar: string | null = null;
+  /** Set once the provider pauses on a tool mid-prompt. The next text delta
+   *  opens a new provider iteration; without a separator the host renders the
+   *  pre-tool sentence and the continuation joined together
+   *  ("…handle it.Capture the…"). */
+  private awaitingContinuationText = false;
+  /** Served models observed on the in-flight prompt, deduplicated. Reported
+   *  once per identity through the adapter event sink (`model_used`) so the
+   *  Response Context popover can attribute the answer honestly. */
+  private reportedPromptModels = new Set<string>();
   private piPath: string;
   private extensionPath: string;
   private readonly contextFilePath = join(
@@ -347,10 +496,19 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
+  /** Kernel-admitted directory bound to this pinned worker process. Pi's
+   * native file tools resolve relative paths from the subprocess cwd. */
+  private currentWorkingDirectory: string | undefined;
   private currentExecutionRole: "coordinator" | "leaf" = "coordinator";
+  private currentToolProjection: {
+    surfaceKind?: string;
+    chatFirstUi: boolean;
+    controlGeneration: number | null;
+  } = { chatFirstUi: false, controlGeneration: null };
   private readonly sessionPrefix: string;
-  /** True when a token refresh was deferred because a prompt was active */
-  private pendingTokenRefresh = false;
+  /** Numeric HTTP classification correlated with the active provider request. */
+  private providerFailureCode: RuntimeFailureCode | undefined;
+  private providerRequestId: string | undefined;
   /** True when a system-prompt change was deferred because a prompt was active */
   private pendingSystemPromptRefresh = false;
 
@@ -378,13 +536,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       "omi",
       "--model",
       "omi-sonnet",
-      // Auto-discover extensions and MCP servers from the user's machine
-      // to maximize pi-mono's capabilities (e.g. Playwright, filesystem tools).
-      // SECURITY NOTE: auto-discovered extensions run in the pi subprocess and
-      // can read process.env (including OMI_API_KEY). This is acceptable because:
-      // 1. OMI_API_KEY is a short-lived Firebase ID token (~1 hour expiry)
-      // 2. Extensions are user-installed — the trust boundary is the user's machine
-      // 3. ANTHROPIC_API_KEY is always scrubbed (never exposed to extensions)
     ];
     // Pi has no set_system_prompt RPC — system prompt must be baked at spawn
     // time via the --system-prompt CLI flag. To change it, restart the process.
@@ -392,22 +543,10 @@ export class PiMonoAdapter implements HarnessAdapter {
       args.push("--system-prompt", this.currentSystemPrompt);
     }
 
-    // SECURITY: require a Firebase ID token. We MUST NOT fall back to
-    // ANTHROPIC_API_KEY — the Omi backend rejects provider keys and forwarding
-    // one here would leak the upstream secret to api.omi.me.
-    if (!this.config.authToken) {
-      throw new Error(
-        "pi-mono adapter requires config.authToken (Firebase ID token)"
-      );
+    const env: Record<string, string> = { ...process.env as Record<string, string> };
+    for (const key of Object.keys(env)) {
+      if (["ANTHROPIC_API_KEY", "OMI_AUTH_TOKEN", "OMI_API_KEY"].includes(key) || key.startsWith("OMI_BYOK_")) delete env[key];
     }
-
-    // Scrub any ANTHROPIC_API_KEY from the child env so the extension cannot
-    // accidentally read it as a credential. pi-mono talks to api.omi.me with
-    // OMI_API_KEY only.
-    const env: Record<string, string> = {
-      ...process.env as Record<string, string>,
-    };
-    delete env.ANTHROPIC_API_KEY;
 
     // SECURITY: OMI_YOLO_MODE bypasses the extension's entire tool denylist.
     // Scrub it from the subprocess env, then only re-inject when explicitly
@@ -420,16 +559,41 @@ export class PiMonoAdapter implements HarnessAdapter {
       process.stderr.write("[pi-mono] WARNING: OMI_YOLO_MODE=1 — denylist bypass active\n");
     }
 
-    // Pass the raw Firebase ID token. pi's openai-completions client already
-    // prepends `Authorization: Bearer ${apiKey}` — adding our own "Bearer "
-    // prefix here would produce a malformed `Bearer Bearer <token>` header.
-    env.OMI_API_KEY = this.config.authToken;
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
     env.OMI_ADAPTER_ID = "pi-mono";
     env.OMI_EXECUTION_ROLE = this.currentExecutionRole;
+    // The typed-chat surface is needed for both the chat-first rollout tools
+    // and legacy typed-chat writes such as create_memory. Keep the surface
+    // marker independent from the optional chat-first capability flags so a
+    // legacy typed-chat session does not accidentally look like a background
+    // or voice run to the stdio projection.
+    if (this.currentToolProjection.surfaceKind === "main_chat" || this.currentToolProjection.surfaceKind === "floating_chat") {
+      env.OMI_SURFACE_KIND = this.currentToolProjection.surfaceKind;
+      if (
+        this.currentToolProjection.chatFirstUi
+        && Number.isSafeInteger(this.currentToolProjection.controlGeneration)
+        && (this.currentToolProjection.controlGeneration ?? -1) >= 0
+      ) {
+        env.OMI_CHAT_FIRST_UI = "true";
+        env.OMI_CHAT_FIRST_CONTROL_GENERATION = String(this.currentToolProjection.controlGeneration);
+      } else {
+        delete env.OMI_CHAT_FIRST_UI;
+        delete env.OMI_CHAT_FIRST_CONTROL_GENERATION;
+      }
+    } else {
+      delete env.OMI_SURFACE_KIND;
+      delete env.OMI_CHAT_FIRST_UI;
+      delete env.OMI_CHAT_FIRST_CONTROL_GENERATION;
+    }
     env.OMI_CONTEXT_FILE = this.contextFilePath;
+    // User-authored skills from the Apps page: point pi's agent dir at the
+    // managed plugin root so pi's native skill catalog discovers
+    // skills/<slug>/SKILL.md there (auth/provider still come from env above).
+    if (process.env.OMI_USER_SKILLS_DIR) {
+      env.PI_CODING_AGENT_DIR = process.env.OMI_USER_SKILLS_DIR;
+    }
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
     // The shared runtime process sets the pipe in process.env before starting pi-mono.
@@ -437,6 +601,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.process = spawn(this.piPath, args, {
       stdio: ["pipe", "pipe", "pipe"],
       env,
+      ...(this.currentWorkingDirectory ? { cwd: this.currentWorkingDirectory } : {}),
     });
 
     if (!this.process.stdout || !this.process.stdin) {
@@ -503,9 +668,29 @@ export class PiMonoAdapter implements HarnessAdapter {
     rmSync(this.contextFilePath, { force: true });
   }
 
+  async dispose(): Promise<void> {
+    try {
+      await this.stop();
+    } finally {
+      this.config.onDisposed?.();
+    }
+  }
+
   async createSession(opts: SessionOpts): Promise<string> {
     const mapped = opts.model ? mapModel(opts.model) : undefined;
     await this.setExecutionRole(opts.executionRole ?? "coordinator");
+
+    const admittedWorkingDirectory = resolve(opts.cwd);
+    if (
+      this.currentWorkingDirectory !== undefined
+      && this.currentWorkingDirectory !== admittedWorkingDirectory
+      && this.process
+    ) {
+      // A pinned worker may be reassigned only while idle. Process-local Pi
+      // sessions cannot cross artifact roots, so restart before rebinding it.
+      await this.stop();
+    }
+    this.currentWorkingDirectory = admittedWorkingDirectory;
 
     // Pi bakes the system prompt at spawn time via --system-prompt. If the
     // caller requested a different prompt than the currently-running process,
@@ -518,7 +703,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const sessionId = `${this.sessionPrefix}-session-${this.nextSessionId++}`;
     this.sessions.set(sessionId, {
-      cwd: opts.cwd,
+      cwd: admittedWorkingDirectory,
       model: mapped,
       systemPrompt: opts.systemPrompt,
     });
@@ -545,6 +730,40 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
   }
 
+  async setToolProjection(projection: {
+    surfaceKind?: string;
+    chatFirstUi: boolean;
+    controlGeneration: number | null;
+  }): Promise<void> {
+    const normalized: {
+      surfaceKind?: string;
+      chatFirstUi: boolean;
+      controlGeneration: number | null;
+    } = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat"
+      ? {
+          surfaceKind: projection.surfaceKind,
+          chatFirstUi: projection.chatFirstUi
+            && Number.isSafeInteger(projection.controlGeneration)
+            && (projection.controlGeneration ?? -1) >= 0,
+          controlGeneration: projection.chatFirstUi
+            && Number.isSafeInteger(projection.controlGeneration)
+            && (projection.controlGeneration ?? -1) >= 0
+            ? projection.controlGeneration
+            : null,
+        }
+      : {
+          chatFirstUi: false,
+          controlGeneration: null,
+        };
+    if (
+      normalized.surfaceKind === this.currentToolProjection.surfaceKind
+      && normalized.chatFirstUi === this.currentToolProjection.chatFirstUi
+      && normalized.controlGeneration === this.currentToolProjection.controlGeneration
+    ) return;
+    this.currentToolProjection = normalized;
+    if (this.process) await this.stop();
+  }
+
   async sendPrompt(
     sessionId: string,
     prompt: PromptBlock[],
@@ -556,7 +775,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     relayContext?: PiMonoRelayContext
   ): Promise<PromptResult> {
     if (!this.sessions.has(sessionId)) {
-      throw new Error(`pi-mono session is no longer active: ${sessionId}`);
+      throw new StaleAdapterBindingError(`pi-mono session is no longer active: ${sessionId}`);
     }
     // Serialization invariant: pi-mono RPC only handles one prompt at a time.
     // Do not supersede an in-flight prompt: pi-mono turn_end events do not carry
@@ -566,6 +785,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
 
     this.eventHandler = onEvent;
+    this.reportedPromptModels.clear();
+    this.lastForwardedTextChar = null;
+    this.awaitingContinuationText = false;
     this.toolExecutor = onToolCall;
     this.requiredAgentControlFailures.clear();
     this.requiredControlInputs.clear();
@@ -573,6 +795,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.writeRelayContext(relayContext);
 
     const generation = this.nextPromptGeneration++;
+    this.providerFailureCode = undefined;
+    this.providerRequestId = relayContext?.requestId;
     this.activePromptGeneration = generation;
 
     if (signal) {
@@ -599,18 +823,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const rawMessage = textParts.join("\n");
     const message = routePromptForPublicWeb(rawMessage);
-    this.activePublicWebTurn = message === rawMessage
-      ? null
-      : { bufferedText: "", progressToolUseId: `gateway-public-web-${generation}` };
-    if (this.activePublicWebTurn) {
-      this.eventHandler?.({
-        type: "tool_activity",
-        name: "web_search",
-        status: "started",
-        toolUseId: this.activePublicWebTurn.progressToolUseId,
-        input: { executor: "gateway" },
-      });
-    }
+    this.activePublicWebTurn = null;
 
     const cmd: PiRpcCommand = {
       type: "prompt",
@@ -748,45 +961,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     return true;
   }
 
-  /** Update auth token by restarting the subprocess when idle.
-   *  The pi-mono extension bakes OMI_API_KEY at startup, so the only way
-   *  to refresh is to restart the process. If a prompt is active, marks a
-   *  pending restart that handleTurnEnd will execute after the prompt completes.
-   *  Returns true if restart happened immediately, false if deferred. */
-  async updateAuthToken(token: string): Promise<boolean> {
-    this.config.authToken = token;
-    if (this.pendingRequests.size > 0) {
-      this.pendingTokenRefresh = true;
-      process.stderr.write("[pi-mono] auth token stored (restart deferred, prompt active)\n");
-      return false;
-    }
-    await this.stop();
-    await this.start();
-    this.config.onRestart?.("token_refresh");
-    this.pendingTokenRefresh = false;
-    process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
-    return true;
-  }
-
   /** Whether a prompt is currently in-flight */
   get isIdle(): boolean {
     return this.pendingRequests.size === 0;
   }
 
-  /** Whether a deferred restart is pending (token or system prompt) */
+  /** Whether a system-prompt restart is pending. */
   get hasPendingRestart(): boolean {
-    return this.pendingTokenRefresh || this.pendingSystemPromptRefresh;
+    return this.pendingSystemPromptRefresh;
   }
 
   /** Execute the deferred restart (call after prompt completes).
-   *  Handles both token refresh and system-prompt change — both baked at
-   *  spawn time, both requiring a restart. */
+   *  System prompts are baked at spawn time. Credentials are request-scoped. */
   async executePendingRestart(): Promise<void> {
-    if (!this.pendingTokenRefresh && !this.pendingSystemPromptRefresh) return;
+    if (!this.pendingSystemPromptRefresh) return;
     const reasons: string[] = [];
-    if (this.pendingTokenRefresh) reasons.push("token");
     if (this.pendingSystemPromptRefresh) reasons.push("systemPrompt");
-    this.pendingTokenRefresh = false;
     this.pendingSystemPromptRefresh = false;
     await this.stop();
     await this.start();
@@ -826,13 +1016,53 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.process.stdin.write(JSON.stringify(cmd) + "\n");
   }
 
+  /** Reply on stdin without allocating a req-* id (must echo the request id). */
+  private writeRaw(cmd: PiRpcCommand): void {
+    if (!this.process?.stdin?.writable) return;
+    this.process.stdin.write(JSON.stringify(cmd) + "\n");
+  }
+
+  /**
+   * Pi extensions emit extension_ui_request for host UI. Desktop chat has no TUI,
+   * so fire-and-forget methods are ignored and blocking dialogs are cancelled.
+   * Leaving these unhandled hangs the turn (infinite loading).
+   */
+  private handleExtensionUIRequest(event: PiRpcEvent): void {
+    const method = typeof event.method === "string" ? event.method : "";
+    switch (method) {
+      case "notify":
+      case "setStatus":
+      case "setWidget":
+      case "setTitle":
+      case "set_editor_text":
+        return;
+      case "select":
+      case "confirm":
+      case "input":
+      case "editor":
+      default: {
+        const id = typeof event.id === "string" ? event.id : "";
+        if (!id) return;
+        this.writeRaw({ type: "extension_ui_response", id, cancelled: true });
+      }
+    }
+  }
+
   private writeRelayContext(context: PiMonoRelayContext | undefined): void {
     if (!context) {
       rmSync(this.contextFilePath, { force: true });
       return;
     }
     mkdirSync(dirname(this.contextFilePath), { recursive: true });
-    writeFileSync(this.contextFilePath, JSON.stringify({ capabilityRef: context.capabilityRef }));
+    writeFileSync(
+      this.contextFilePath,
+      JSON.stringify({
+        capabilityRef: context.capabilityRef,
+        requestId: context.requestId,
+        ...(context.reasoningEffort ? { reasoningEffort: context.reasoningEffort } : {}),
+        builtInToolPolicy: context.builtInToolPolicy,
+      })
+    );
   }
 
   private clearRelayContext(expectedCapabilityRef?: string): void {
@@ -864,13 +1094,19 @@ export class PiMonoAdapter implements HarnessAdapter {
     // Log key events for diagnostic visibility
     if (event.type === 'turn_end') {
       const msg = (event as any).message;
-      const errMsg = msg?.errorMessage;
+      const errMsg = typeof msg?.errorMessage === "string"
+        ? normalizeProviderHTTPErrorMessage(msg.errorMessage)
+        : undefined;
       if (errMsg) {
         process.stderr.write(`[pi-mono] turn_end ERROR: ${errMsg}\n`);
       }
     }
 
     switch (event.type) {
+      case "omi_provider_status":
+        if (!this.activePromptGeneration || event.requestId !== this.providerRequestId) return;
+        this.providerFailureCode = isRuntimeFailureCode(event.failureCode) ? event.failureCode : undefined;
+        return;
       case "message_update":
         this.handleMessageUpdate(event);
         break;
@@ -880,7 +1116,7 @@ export class PiMonoAdapter implements HarnessAdapter {
         break;
 
       case "tool_execution_update":
-        // Partial tool output — emit as tool_activity
+        this.handleToolProgress(event);
         break;
 
       case "tool_execution_end":
@@ -891,11 +1127,14 @@ export class PiMonoAdapter implements HarnessAdapter {
         this.handleTurnEnd(event);
         break;
 
+      case "message_end":
+        this.recordServedModel(event.message as PiAssistantMessage | undefined);
+        break;
+
       case "agent_start":
       case "agent_end":
       case "turn_start":
       case "message_start":
-      case "message_end":
       case "response":
       case "compaction_start":
       case "compaction_end":
@@ -912,11 +1151,33 @@ export class PiMonoAdapter implements HarnessAdapter {
         // the terminal result that can settle Omi's canonical run lifecycle.
         break;
 
+      case "extension_ui_request":
+        this.handleExtensionUIRequest(event);
+        break;
+
       default:
         process.stderr.write(
           `[pi-mono] unknown event type: ${event.type}\n`
         );
     }
+  }
+
+  /** Report the model that actually served an assistant message — ONLY the
+   *  response-observed identity (pi-ai's `responseModel`, captured from the
+   *  provider stream's chunk.model). A response that names no model gets no
+   *  attribution: the requested id here is always the "omi-sonnet" alias, and
+   *  presenting it as the served model is the exact lie #11521 removed. */
+  private recordServedModel(message: PiAssistantMessage | undefined): void {
+    if (!message || message.role !== "assistant") return;
+    const served = message.responseModel;
+    if (!served || this.reportedPromptModels.has(served)) return;
+    this.reportedPromptModels.add(served);
+    this.eventHandler?.({
+      type: "model_used",
+      model: served,
+      requestedModel: message.model,
+      provider: message.provider,
+    });
   }
 
   private handleMessageUpdate(event: PiRpcEvent): void {
@@ -930,11 +1191,14 @@ export class PiMonoAdapter implements HarnessAdapter {
         if (msgEvent.delta) {
           if (this.activePublicWebTurn) {
             this.activePublicWebTurn.bufferedText += msgEvent.delta;
+            this.emitPublicWebText(this.activePublicWebTurn);
           } else {
-            this.eventHandler?.({
-              type: "text_delta",
-              text: msgEvent.delta,
-            });
+            if (this.awaitingContinuationText) {
+              this.awaitingContinuationText = false;
+              const gap = this.iterationGapDelta(msgEvent.delta);
+              if (gap) this.forwardAnswerDelta(gap);
+            }
+            this.forwardAnswerDelta(msgEvent.delta);
           }
         }
         break;
@@ -980,6 +1244,60 @@ export class PiMonoAdapter implements HarnessAdapter {
         // Handled by turn_end
         break;
     }
+  }
+
+  /** Forward answer text to the host, remembering the last character so a
+   *  later iteration boundary can tell whether the two sides run together. */
+  private forwardAnswerDelta(delta: string): void {
+    const last = delta[delta.length - 1];
+    if (last !== undefined) this.lastForwardedTextChar = last;
+    this.eventHandler?.({ type: "text_delta", text: delta });
+  }
+
+  /** The separator to emit before a continuation's first text delta, empty
+   *  when either side already carries whitespace so the provider's own line
+   *  breaks are never doubled. Same rule the backend chat agent loop applies
+   *  between its own tool-loop iterations. */
+  private iterationGapDelta(nextDelta: string): string {
+    const previous = this.lastForwardedTextChar;
+    const next = nextDelta[0];
+    if (!previous || !next) return "";
+    // Whitespace of any kind (\t, \r, …) counts as an existing break — the
+    // provider's own separator must never be doubled by a blank paragraph.
+    const carriesBreak = (c: string) => /\s/.test(c);
+    return carriesBreak(previous) || carriesBreak(next) ? "" : "\n\n";
+  }
+
+  /** Terminal answer text for the prompt result: every text block of the
+   *  provider's final message, with an iteration separator where a tool block
+   *  splits two text runs that would otherwise join into one line. */
+  static terminalText(content: PiContentBlock[] | undefined): string {
+    if (!content) return "";
+    let text = "";
+    let separated = false;
+    for (const block of content) {
+      if (block.type === "text") {
+        const blockText = block.text || "";
+        if (blockText) {
+          // Same whitespace contract as iterationGapDelta: any whitespace
+          // character counts as an existing break.
+          const carriesBreak = (c: string) => /\s/.test(c);
+          if (
+            separated &&
+            text &&
+            !carriesBreak(text[text.length - 1]) &&
+            !carriesBreak(blockText[0])
+          ) {
+            text += "\n\n";
+          }
+          text += blockText;
+        }
+        separated = false;
+      } else {
+        separated = true;
+      }
+    }
+    return text;
   }
 
   private handleToolStart(event: PiRpcEvent): void {
@@ -1042,6 +1360,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     });
   }
 
+  private handleToolProgress(event: PiRpcEvent): void {
+    const name = event.toolName as string;
+    const toolCallId = event.toolCallId as string;
+    if (!name || !toolCallId) return;
+
+    // A progress event proves the local tool is still moving, but its partial
+    // result can contain document content or filesystem paths. Carry only the
+    // bounded lifecycle identity across the bridge.
+    this.eventHandler?.({
+      type: "tool_activity",
+      name,
+      status: "progress",
+      toolUseId: toolCallId,
+    });
+  }
+
   private handleTurnEnd(event: PiRpcEvent): void {
     // Drop stray turn_end events that don't belong to an in-flight prompt.
     // This happens after abort() or when the subprocess emits a late
@@ -1066,7 +1400,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const message = event.message as PiAssistantMessage | undefined;
     const errorMessage = typeof message?.errorMessage === "string" && message.errorMessage.trim()
-      ? message.errorMessage.trim()
+      ? normalizeProviderHTTPErrorMessage(message.errorMessage)
       : undefined;
     if (errorMessage) {
       this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
@@ -1078,7 +1412,17 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.pendingRequests.delete(generation);
       this.activePromptGeneration = 0;
       this.activePublicWebTurn = null;
-      pending.reject(new Error(errorMessage));
+      pending.reject(this.providerFailureCode ? new AdapterRuntimeError({
+        code: this.providerFailureCode === "authentication" ? "omi_session_authentication" : "omi_provider_failed",
+        failureCode: this.providerFailureCode,
+        provider: "omi",
+        adapterId: "pi-mono",
+        source: "adapter_execution",
+        userMessage: this.providerFailureCode === "authentication" ? "Your session expired. Sign in to continue." : errorMessage,
+        technicalMessage: errorMessage,
+        retryable: !["authentication", "provider_setup_needed", "quota_exceeded"].includes(this.providerFailureCode),
+      }) : new Error(errorMessage));
+      this.providerFailureCode = undefined;
       this.eventHandler = null;
       this.toolExecutor = null;
       return;
@@ -1092,6 +1436,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     // snake_case "tool_use". Check both for robustness.
     const stopReason = message?.stopReason;
     if (stopReason === "toolUse" || stopReason === "tool_use") {
+      // The continuation's text opens a new provider iteration. If text was
+      // already forwarded this prompt, the two sides must not render as one
+      // run-on line — the next text delta carries the separator.
+      this.awaitingContinuationText = true;
       process.stderr.write(
         `[pi-mono] intermediate turn_end (${stopReason}) — keeping prompt alive\n`
       );
@@ -1118,25 +1466,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     const publicWebTurn = this.activePublicWebTurn;
     this.activePublicWebTurn = null;
 
-    // Extract text from content blocks
-    let text = "";
-    if (message?.content) {
-      text = message.content
-        .filter((b) => b.type === "text")
-        .map((b) => b.text || "")
-        .join("");
-    }
+    // Extract text from content blocks. A provider that keeps its whole loop
+    // in one message puts tool blocks between the text blocks; joining only
+    // the text runs the iterations together ("…handle it.Capture the…"), so
+    // the separator mirrors what the streamed deltas carry.
+    let text = PiMonoAdapter.terminalText(message?.content);
     if (publicWebTurn) {
       text = publicWebTurn.bufferedText || text;
       // A terminal public-web turn proves the gateway completed the required
       // provider interaction. Do not make this depend on local Pi tool events:
-      // Anthropic's server-side web_search intentionally never exposes one.
+      // managed Perplexity search runs server-side and never exposes one.
       text = stripFalsePublicWebAvailabilityDisclaimers(text);
+      this.emitPublicWebText(publicWebTurn, true);
       this.finishPublicWebProgress(publicWebTurn, "completed");
-      if (text) {
-        this.eventHandler?.({ type: "text_delta", text });
-      }
     }
+
+    this.recordServedModel(message ?? undefined);
 
     // Extract usage
     const usage = message?.usage;
@@ -1173,6 +1518,74 @@ export class PiMonoAdapter implements HarnessAdapter {
       toolUseId: publicWebTurn.progressToolUseId,
     });
   }
+
+  private emitPublicWebText(publicWebTurn: PublicWebTurnState, terminal = false): void {
+    const raw = publicWebTurn.bufferedText;
+    const normalized = raw.trimStart().toLowerCase();
+    const possibleDenialPrefixes = [
+      "i don't",
+      "i do not",
+      "i cannot",
+      "i can't",
+      "i can not",
+      "don't",
+      "do not",
+      "cannot",
+      "can't",
+      "can not",
+    ];
+    const mayBecomeAvailabilityDenial = possibleDenialPrefixes.some(
+      (prefix) => prefix.startsWith(normalized) || normalized.startsWith(prefix),
+    );
+    if (
+      !terminal
+      && publicWebTurn.emittedText.length === 0
+      && mayBecomeAvailabilityDenial
+      && !/[.!?]/.test(raw)
+      && !/\b(?:but|however)\b/i.test(raw)
+    ) {
+      return;
+    }
+
+    const sanitized = stripFalsePublicWebAvailabilityDisclaimers(raw);
+    if (!sanitized.startsWith(publicWebTurn.emittedText)) return;
+    const delta = sanitized.slice(publicWebTurn.emittedText.length);
+    publicWebTurn.emittedText = sanitized;
+    if (delta) this.eventHandler?.({ type: "text_delta", text: delta });
+  }
+}
+
+/** Allowlisted per-turn effort lane from run metadata — anything else is dropped. */
+function relayReasoningEffort(metadata: Record<string, unknown> | undefined): string | undefined {
+  const raw = metadata?.reasoningEffort;
+  return raw === "adaptive" || raw === "fast" ? raw : undefined;
+}
+
+export function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefined): {
+  surfaceKind?: string;
+  chatFirstUi: boolean;
+  controlGeneration: number | null;
+} {
+  const generation = Number(metadata?.chatFirstControlGeneration);
+  const typedSurface = metadata?.surfaceKind === "main_chat"
+    ? "main_chat"
+    : metadata?.surfaceKind === "floating_chat"
+      ? "floating_chat"
+      : undefined;
+  const enabled = typedSurface !== undefined
+    && metadata?.chatFirstUi === true
+    && Number.isSafeInteger(generation)
+    && generation >= 0;
+  return typedSurface
+    ? {
+        surfaceKind: typedSurface,
+        chatFirstUi: enabled,
+        controlGeneration: enabled ? generation : null,
+      }
+    : {
+        chatFirstUi: false,
+        controlGeneration: null,
+      };
 }
 
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {
@@ -1191,10 +1604,11 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   }
 
   stop(): Promise<void> {
-    return this.harness.stop();
+    return this.harness.dispose();
   }
 
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
+    await this.harness.setToolProjection(toolProjectionFromMetadata(input.metadata));
     const adapterNativeSessionId = await this.harness.createSession({
       cwd: input.cwd,
       model: input.model,
@@ -1206,13 +1620,14 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   }
 
   async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
+    await this.harness.setToolProjection(toolProjectionFromMetadata(input.metadata));
     await this.harness.setExecutionRole(input.metadata?.executionRole === "leaf" ? "leaf" : "coordinator");
     await this.start();
     // pi-mono has no native resume after daemon/process loss, but while this
     // RuntimeAdapter instance is alive the opaque session id is still usable as
     // process-local state. Startup reconciliation marks these bindings stale.
     if (!this.harness.hasSession(input.adapterNativeSessionId)) {
-      throw new Error(`pi-mono binding is stale: ${input.adapterNativeSessionId}`);
+      throw new StaleAdapterBindingError(`pi-mono binding is stale: ${input.adapterNativeSessionId}`);
     }
     return this.binding(input, input.adapterNativeSessionId);
   }
@@ -1222,17 +1637,33 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
     sink: AdapterEventSink,
     signal: AbortSignal
   ): Promise<AdapterAttemptResult> {
+    const providerTargets = new Set<string>();
+    const modelsUsed = new Set<string>();
+    const observingSink: AdapterEventSink = (event) => {
+      if (event.type === "model_used") {
+        if (typeof event.provider === "string" && event.provider.length > 0) {
+          providerTargets.add(event.provider);
+        }
+        if (typeof event.model === "string" && event.model.length > 0) {
+          modelsUsed.add(event.model);
+        }
+      }
+      sink(event);
+    };
     try {
       const result = await this.harness.sendPrompt(
         context.binding.adapterNativeSessionId,
         context.prompt,
         context.tools ?? [],
         context.mode,
-        sink,
+        observingSink,
         async () => "",
         signal,
         {
           capabilityRef: context.toolCapabilityRef,
+          requestId: context.requestId,
+          reasoningEffort: relayReasoningEffort(context.metadata),
+          builtInToolPolicy: context.builtInToolPolicy,
         }
       );
 
@@ -1243,6 +1674,8 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         outputTokens: result.outputTokens,
         cacheReadTokens: result.cacheReadTokens,
         cacheWriteTokens: result.cacheWriteTokens,
+        providerTargets: [...providerTargets],
+        modelsUsed: [...modelsUsed],
         adapterSessionId: result.sessionId,
         terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
       };

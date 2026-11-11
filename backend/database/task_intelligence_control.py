@@ -3,7 +3,7 @@
 from google.api_core.exceptions import AlreadyExists, Conflict
 
 from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID, is_development_smoke_fixture
-from database._client import db
+from database._client import get_firestore_client
 from database.read_boundary import parse_snapshot_or_none
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 
@@ -16,12 +16,13 @@ class DevelopmentSmokeFixtureConflictError(RuntimeError):
     """The code-owned smoke fixture will not replace an existing control document."""
 
 
-def _control_ref(uid: str):
-    return db.collection('users').document(uid).collection(CONTROL_COLLECTION).document(CONTROL_DOCUMENT)
+def _control_ref(uid: str, *, firestore_client=None):
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    return database.collection('users').document(uid).collection(CONTROL_COLLECTION).document(CONTROL_DOCUMENT)
 
 
-def get_task_workflow_control(uid: str) -> TaskWorkflowControl:
-    ref = _control_ref(uid)
+def get_task_workflow_control(uid: str, *, firestore_client=None) -> TaskWorkflowControl:
+    ref = _control_ref(uid) if firestore_client is None else _control_ref(uid, firestore_client=firestore_client)
     snapshot = ref.get()
     if snapshot.exists is not True:
         return TaskWorkflowControl()
@@ -30,7 +31,7 @@ def get_task_workflow_control(uid: str) -> TaskWorkflowControl:
 
 def set_task_workflow_control(uid: str, control: TaskWorkflowControl) -> None:
     ref = _control_ref(uid)
-    ref.set(control.model_dump(mode='json'))
+    ref.set(control.persisted_payload())
 
 
 def ensure_development_smoke_fixture(uid: str, *, stage: str | None = None) -> bool:
@@ -38,15 +39,17 @@ def ensure_development_smoke_fixture(uid: str, *, stage: str | None = None) -> b
 
     if not is_development_smoke_fixture(uid, stage=stage):
         return False
-    expected_payload = _SMOKE_FIXTURE_CONTROL.model_dump(mode='json')
+    expected_payload = _SMOKE_FIXTURE_CONTROL.persisted_payload()
     ref = _control_ref(uid)
     try:
         # Firestore's create operation is an atomic exists=false compare-and-create.
         ref.create(expected_payload)
     except (AlreadyExists, Conflict):
         snapshot = ref.get()
-        if snapshot.exists and snapshot.to_dict() == expected_payload:
-            return False
+        if snapshot.exists:
+            existing = parse_snapshot_or_none(TaskWorkflowControl, snapshot)
+            if existing is not None and existing.persisted_payload() == expected_payload:
+                return False
         raise DevelopmentSmokeFixtureConflictError(
             'development smoke fixture control already exists with differing state'
         ) from None

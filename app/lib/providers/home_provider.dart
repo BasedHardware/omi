@@ -1,41 +1,27 @@
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
-
-/// Languages supported by Deepgram Nova-3 multi-language auto-detection.
-/// When a user picks one of these, multi-language mode is enabled (single_language_mode = false).
-const multiLanguageSupported = {
-  'en',
-  'en-US',
-  'en-AU',
-  'en-GB',
-  'en-IN',
-  'en-NZ',
-  'es',
-  'es-419',
-  'fr',
-  'fr-CA',
-  'de',
-  'hi',
-  'ru',
-  'pt',
-  'pt-BR',
-  'pt-PT',
-  'ja',
-  'it',
-  'nl',
-};
+import 'package:omi/utils/analytics/lag_recorder.dart';
 
 class HomeProvider extends ChangeNotifier {
+  /// The two pages of the Home shell, switched at the top of the screen.
+  static const int homeTab = 0;
+  static const int tasksTab = 1;
+  static const int tabCount = 2;
+
   int _sessionGeneration = 0;
-  int selectedIndex = 0;
+  bool _languageDialogOffered = false;
+  int selectedIndex = homeTab;
   Function(int idx)? onSelectedIndexChanged;
   final FocusNode chatFieldFocusNode = FocusNode();
   final FocusNode appsSearchFieldFocusNode = FocusNode();
@@ -51,8 +37,9 @@ class HomeProvider extends ChangeNotifier {
   String userPrimaryLanguage = SharedPreferencesUtil().userPrimaryLanguage;
   bool hasSetPrimaryLanguage = SharedPreferencesUtil().hasSetPrimaryLanguage;
 
-  // Available languages ordered by popularity
-  final Map<String, String> availableLanguages = {
+  /// Offline floor for the served list. Not dead code — a first run with no
+  /// network shows this.
+  static const Map<String, String> _bundledLanguages = {
     // Top languages first
     'English': 'en',
     'English (US)': 'en-US',
@@ -108,6 +95,7 @@ class HomeProvider extends ChangeNotifier {
     'Marathi': 'mr',
     'Norwegian': 'no',
     'Persian': 'fa',
+    'Punjabi': 'pa',
     'Polish': 'pl',
     'Romanian': 'ro',
     'Serbian': 'sr',
@@ -126,6 +114,47 @@ class HomeProvider extends ChangeNotifier {
     'Vietnamese': 'vi',
   };
 
+  Map<String, String>? _serverLanguages;
+
+  Map<String, String> get availableLanguages => _serverLanguages ?? _bundledLanguages;
+
+  /// Cached list first so the UI never waits, then the server's. A failed fetch
+  /// leaves whatever the picker already had.
+  Future<void> loadAvailableLanguages({Future<Map<String, String>?> Function()? fetch}) async {
+    final cached = SharedPreferencesUtil().cachedAvailableLanguages;
+    if (cached.isNotEmpty) {
+      final restored = _decodeLanguages(cached);
+      if (restored != null) {
+        _serverLanguages = restored;
+        notifyListeners();
+      }
+    }
+
+    final generation = _sessionGeneration;
+    Map<String, String>? fetched;
+    try {
+      fetched = await (fetch ?? getAvailableLanguages)();
+    } catch (e) {
+      Logger.debug('Error loading available languages: $e');
+      return;
+    }
+    if (fetched == null || fetched.isEmpty || generation != _sessionGeneration) return;
+
+    SharedPreferencesUtil().cachedAvailableLanguages = jsonEncode(fetched);
+    _serverLanguages = fetched;
+    notifyListeners();
+  }
+
+  static Map<String, String>? _decodeLanguages(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map || decoded.isEmpty) return null;
+      return {for (final entry in decoded.entries) entry.key as String: entry.value as String};
+    } catch (_) {
+      return null;
+    }
+  }
+
   HomeProvider() {
     chatFieldFocusNode.addListener(_onFocusChange);
     appsSearchFieldFocusNode.addListener(_onFocusChange);
@@ -135,7 +164,8 @@ class HomeProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
-    selectedIndex = 0;
+    _languageDialogOffered = false;
+    selectedIndex = homeTab;
     isAppsSearchFieldFocused = false;
     isChatFieldFocused = false;
     isConvoSearchFieldFocused = false;
@@ -169,6 +199,7 @@ class HomeProvider extends ChangeNotifier {
   void setIndex(int index) {
     selectedIndex = index;
     onSelectedIndexChanged?.call(index);
+    lagHomeTabChanged?.call(index);
     notifyListeners();
   }
 
@@ -219,23 +250,38 @@ class HomeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setupUserPrimaryLanguage() async {
+  /// Loads the picker options, then runs primary-language setup — but only if
+  /// the session survived the request. setupUserPrimaryLanguage captures the
+  /// generation when it starts, which is too late to notice a sign-out that
+  /// happened while the options were still loading.
+  Future<void> loadLanguagesThenSetupPrimary({Future<Map<String, String>?> Function()? fetch}) async {
+    final generation = _sessionGeneration;
+    await loadAvailableLanguages(fetch: fetch);
+    if (generation != _sessionGeneration) return;
+    await setupUserPrimaryLanguage();
+  }
+
+  Future<void> setupUserPrimaryLanguage({Future<String?> Function()? fetchPrimaryLanguage}) async {
     if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
       return;
     }
 
     final generation = _sessionGeneration;
     try {
-      final language = await getUserPrimaryLanguage();
+      final language = await (fetchPrimaryLanguage ?? getUserPrimaryLanguage)();
       if (generation != _sessionGeneration) return;
       if (language == null) {
         // User hasn't set a primary language yet
         userPrimaryLanguage = '';
         hasSetPrimaryLanguage = false;
 
-        // Show language dialog after a short delay to ensure UI is ready
+        // Show language dialog after a short delay to ensure UI is ready. Not during onboarding:
+        // it has its own language step, and the required sheet would cover whichever step a
+        // relaunch resumed on, consent included (#20788).
         Future.delayed(const Duration(milliseconds: 500), () {
-          if (generation == _sessionGeneration && globalNavigatorKey.currentContext != null) {
+          if (generation == _sessionGeneration &&
+              SharedPreferencesUtil().onboardingCompleted &&
+              globalNavigatorKey.currentContext != null) {
             showLanguageDialogIfNeeded(globalNavigatorKey.currentContext!);
           }
         });
@@ -257,25 +303,28 @@ class HomeProvider extends ChangeNotifier {
     return;
   }
 
+  /// Opens the language picker once per session when no language is saved.
+  /// The sheet is closable; closing it keeps the default language and this
+  /// does not reopen it on the next Home rebuild.
   void showLanguageDialogIfNeeded(BuildContext context) {
-    if (!hasSetPrimaryLanguage) {
-      LanguageSelectionDialog.show(context, isRequired: true);
-    }
+    if (hasSetPrimaryLanguage || _languageDialogOffered) return;
+    _languageDialogOffered = true;
+    LanguageSelectionDialog.show(context);
   }
 
   Future<bool> updateUserPrimaryLanguage(String languageCode, {UserProvider? userProvider}) async {
     try {
-      final success = await setUserPrimaryLanguage(languageCode);
-      if (success) {
+      final serverSingleLanguageMode = await setUserPrimaryLanguage(languageCode);
+      if (serverSingleLanguageMode != null) {
         userPrimaryLanguage = languageCode;
         hasSetPrimaryLanguage = true;
         SharedPreferencesUtil().userPrimaryLanguage = languageCode;
         SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         PlatformManager.instance.analytics.setUserAttribute('Primary Language', languageCode);
 
-        // Backend auto-sets single_language_mode — sync local state to match
-        final singleLanguageMode = !multiLanguageSupported.contains(languageCode);
-        userProvider?.updateSingleLanguageModeLocally(singleLanguageMode);
+        // The server decides single_language_mode from the live STT policy
+        // (#10022); local state mirrors its response, never a client-side list.
+        userProvider?.updateSingleLanguageModeLocally(serverSingleLanguageMode);
 
         notifyListeners();
         return true;
@@ -288,11 +337,22 @@ class HomeProvider extends ChangeNotifier {
   }
 
   String getLanguageName(String code) {
-    return availableLanguages.entries.firstWhere((element) => element.value == code).key;
+    // A stored code can outlive the list that offered it.
+    for (final entry in availableLanguages.entries) {
+      if (entry.value == code) return entry.key;
+    }
+    for (final entry in _bundledLanguages.entries) {
+      if (entry.value == code) return entry.key;
+    }
+    return code;
   }
 
   Future setUserPeople() async {
-    SharedPreferencesUtil().cachedPeople = await getAllPeople();
+    final response = await getAllPeople();
+    if (response != null) {
+      SharedPreferencesUtil().cachedPeople =
+          preserveCachedPeopleStats(response.people, SharedPreferencesUtil().cachedPeople);
+    }
     notifyListeners();
   }
 

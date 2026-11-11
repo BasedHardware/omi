@@ -6,8 +6,8 @@ import pytest
 import yaml
 
 from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
-from llm_gateway.gateway.schemas import Surface
-from utils.llm.model_config import get_all_configured_features, get_model
+from llm_gateway.gateway.schemas import Capabilities, StructuredOutputMode, Surface
+from utils.llm.model_config import LUNA_MODEL, get_all_configured_features, get_model, get_provider
 
 LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
@@ -24,28 +24,75 @@ def test_loads_default_gateway_config():
     assert lane.last_known_good == LKG_ROUTE
     assert config.route_artifacts[ACTIVE_ROUTE].content_digest.startswith('sha256:')
     assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
-    assert config.route_artifacts[ACTIVE_ROUTE].primary.model == 'gpt-5.4-nano'
+    assert config.route_artifacts[ACTIVE_ROUTE].primary.model == LUNA_MODEL
     assert config.route_artifacts[ACTIVE_ROUTE].provider_options['reasoning_effort'] == 'low'
 
 
 def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     config = load_gateway_config(prod_mode=True)
 
-    assert get_model('conv_discard') == 'gpt-4.1-nano'
-    assert get_model('memories') == 'gpt-4.1-mini'
-    assert get_model('fair_use') == 'gpt-5.1'
-    assert get_model('chat_agent') == 'claude-sonnet-4-6'
+    assert get_model('conv_discard') == 'gpt-5-nano'
+    assert get_model('memories') == LUNA_MODEL
+    assert get_model('fair_use') == LUNA_MODEL
+    assert get_model('chat_agent') == LUNA_MODEL
 
     assert config.route_artifacts['route.conv_discard.model_config.001'].primary.model == 'gpt-5-nano'
-    assert config.route_artifacts['route.memories.model_config.001'].primary.model == 'gpt-5.4-nano'
-    assert config.route_artifacts['route.fair_use.model_config.001'].primary.model == 'gpt-5.6-luna'
-    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == 'claude-sonnet-5'
+    assert config.route_artifacts['route.memories.model_config.001'].primary.model == LUNA_MODEL
+    assert config.route_artifacts['route.fair_use.model_config.001'].primary.model == LUNA_MODEL
+    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.provider == 'openai'
+    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == LUNA_MODEL
     assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'
-    assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options['effort'] == 'medium'
+    assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options == {'reasoning_effort': 'none'}
+    assert config.route_artifacts['route.wake_word_adjudication.model_config.001'].provider_options == {
+        'reasoning_effort': 'high'
+    }
     chat_agent_lane = config.lanes['omi:auto:chat-agent']
-    assert chat_agent_lane.surface == Surface.ANTHROPIC_MESSAGES
+    assert chat_agent_lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
     assert chat_agent_lane.capabilities.streaming is True
     assert chat_agent_lane.capabilities.tools is True
+    # Agentic meeting notes call read-only tools before a terminal submit on their own lane.
+    conv_structure_lane = config.lanes['omi:auto:conv-structure']
+    assert conv_structure_lane.capabilities.tools is True
+    assert conv_structure_lane.capabilities.streaming is True
+
+
+def test_memory_l2_gateway_lane_resolves_to_luna():
+    config = load_gateway_config(prod_mode=True)
+
+    assert get_model('memory_l2') == LUNA_MODEL
+    assert get_provider('memory_l2') == 'openai'
+    lane = config.lanes['omi:auto:memory-l2']
+    route = config.route_artifacts[lane.active_route]
+    assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
+    assert route.primary.model == LUNA_MODEL
+    assert route.primary.provider == 'openai'
+
+
+def test_retired_desktop_proactive_lanes_are_absent():
+    config = load_gateway_config(prod_mode=True)
+    assert 'omi:auto:desktop-proactive-extraction' not in config.lanes
+    assert 'omi:auto:desktop-proactive-reasoning' not in config.lanes
+
+
+def test_translation_uses_the_gateway_translation_capability():
+    config = load_gateway_config(prod_mode=True)
+
+    assert get_model('translation') == LUNA_MODEL
+    assert get_provider('translation') == 'openai'
+    lane = config.lanes['omi:auto:translation']
+    assert lane.capabilities.translation is True
+    assert lane.capabilities.structured_output.value == 'json_schema'
+
+
+def test_translation_capability_requires_json_schema_output():
+    with pytest.raises(ValueError, match='translation lanes require json_schema'):
+        Capabilities(
+            text_input=True,
+            streaming=False,
+            structured_output=StructuredOutputMode.NONE,
+            tools=False,
+            translation=True,
+        )
 
 
 def test_unknown_gateway_route_override_fails(tmp_path):

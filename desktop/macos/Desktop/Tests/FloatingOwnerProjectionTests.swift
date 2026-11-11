@@ -61,7 +61,8 @@ final class FloatingOwnerProjectionTests: XCTestCase {
         title: "owner A private title",
         message: "owner A private content",
         assistantId: "insight",
-        sound: .none)
+        sound: .none,
+        kind: .insight)
     }
     await gate.waitUntilStarted()
     defaults.set("owner-b", forKey: .authUserId)
@@ -70,6 +71,47 @@ final class FloatingOwnerProjectionTests: XCTestCase {
     let result = await workflow.value
     XCTAssertEqual(result, .rejectedOwnerChange)
     XCTAssertEqual(manager.notificationProjectionSnapshot, baseline)
+  }
+
+  @MainActor
+  func testImmediatePresentationInvokesDroppedOnceWhenOwnerBecomesStaleBeforePaint() async {
+    let defaults = UserDefaults.standard
+    let previousOwner = defaults.object(forKey: .authUserId)
+    let previousOverride = defaults.object(forKey: .automationOwnerOverride)
+    let manager = FloatingControlBarManager.shared
+    defer {
+      restore(previousOwner, key: .authUserId, defaults: defaults)
+      restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
+      manager.resetOwnerProjection()
+    }
+    defaults.removeObject(forKey: .automationOwnerOverride)
+    defaults.set("owner-a", forKey: .authUserId)
+    manager.resetOwnerProjection()
+
+    var droppedCount = 0
+    var presentedCount = 0
+    let gate = FloatingOwnerPauseGate()
+
+    let workflow = Task { @MainActor in
+      await gate.pause()
+      return manager.showNotification(
+        ownerID: "owner-a",
+        title: "stale before paint",
+        message: "must not mark delivered",
+        assistantId: "insight",
+        sound: .none,
+        kind: .insight,
+        onPresented: { presentedCount += 1 },
+        onDropped: { droppedCount += 1 })
+    }
+    await gate.waitUntilStarted()
+    defaults.set("owner-b", forKey: .authUserId)
+    await gate.release()
+
+    let result = await workflow.value
+    XCTAssertEqual(result, .rejectedOwnerChange)
+    XCTAssertEqual(droppedCount, 1)
+    XCTAssertEqual(presentedCount, 0)
   }
 
   @MainActor

@@ -1,3 +1,5 @@
+// dart format width=80
+
 /// GENERATED CODE - DO NOT MODIFY BY HAND
 /// *****************************************************
 ///  FlutterGen
@@ -5,7 +7,7 @@
 
 // coverage:ignore-file
 // ignore_for_file: type=lint
-// ignore_for_file: directives_ordering,unnecessary_import,implicit_dynamic_list_literal,deprecated_member_use
+// ignore_for_file: deprecated_member_use,directives_ordering,implicit_dynamic_list_literal,unnecessary_import
 
 import 'package:flutter/widgets.dart';
 
@@ -18,51 +20,6 @@ class $AssetsCompetitorLogosGen {
 
   /// List of all assets
   List<AssetGenImage> get values => [limitlessLogo];
-}
-
-class $AssetsFontsGen {
-  const $AssetsFontsGen();
-
-  /// File path: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
-  String get sfprodisplayblackitalic =>
-      'assets/fonts/SFPRODISPLAYBLACKITALIC.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYBOLD.OTF
-  String get sfprodisplaybold => 'assets/fonts/SFPRODISPLAYBOLD.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYHEAVYITALIC.OTF
-  String get sfprodisplayheavyitalic =>
-      'assets/fonts/SFPRODISPLAYHEAVYITALIC.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYLIGHTITALIC.OTF
-  String get sfprodisplaylightitalic =>
-      'assets/fonts/SFPRODISPLAYLIGHTITALIC.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYMEDIUM.OTF
-  String get sfprodisplaymedium => 'assets/fonts/SFPRODISPLAYMEDIUM.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYREGULAR.OTF
-  String get sfprodisplayregular => 'assets/fonts/SFPRODISPLAYREGULAR.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF
-  String get sfprodisplaysemibolditalic =>
-      'assets/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYTHINITALIC.OTF
-  String get sfprodisplaythinitalic =>
-      'assets/fonts/SFPRODISPLAYTHINITALIC.OTF';
-
-  /// List of all assets
-  List<String> get values => [
-    sfprodisplayblackitalic,
-    sfprodisplaybold,
-    sfprodisplayheavyitalic,
-    sfprodisplaylightitalic,
-    sfprodisplaymedium,
-    sfprodisplayregular,
-    sfprodisplaysemibolditalic,
-    sfprodisplaythinitalic,
-  ];
 }
 
 class $AssetsImagesGen {
@@ -336,79 +293,79 @@ class $AssetsImagesGen {
 
   /// List of all assets
   List<dynamic> get values => [
-    a1,
-    a2,
-    a3,
-    a4,
-    a5,
-    logoTextWhite,
-    aiMagic,
-    appLauncherIcon,
-    appleRemindersLogo,
-    appleLogo,
-    appleWatch,
-    background,
-    beeDevice,
-    blob,
-    calendarLogo,
-    checkbox,
-    clone,
-    emailLogo,
-    emotionalFeedback1,
-    facebookLogo,
-    fieldy,
-    friendPendant,
-    googleLogo,
-    gradientCard,
-    herologo,
-    icChart,
-    icCloneChat,
-    icClonePlus,
-    icDollar,
-    imessageLogo,
-    instagramLogo,
-    instruction1,
-    instruction2,
-    instruction3,
-    limitless,
-    linkIcon,
-    linkedinLogo,
-    logoTransparent,
-    logoTransparentV2,
-    neoOne,
-    newBackground,
-    notionLogo,
-    omiDevkitWithoutRope,
-    omiGlass,
-    omiWithRopeNoPadding,
-    omiWithRope,
-    omiWithoutRopeGreenCharging,
-    omiWithoutRopeTurnedOff,
-    omiWithoutRope,
-    onboardingBg1,
-    onboardingBg2,
-    onboardingBg3,
-    onboardingBg4,
-    onboardingBg51,
-    onboardingBg52,
-    onboardingBg6,
-    onboarding,
-    plaudNotePin,
-    raybanMeta,
-    recordingGreenCircleIcon,
-    slackLogo,
-    speaker0Icon,
-    speaker1Icon,
-    splash,
-    splashIcon,
-    stars,
-    stripeLogo,
-    telegramLogo,
-    whatsappLogo,
-    xLogo,
-    xLogoMini,
-    youtubeLogo,
-  ];
+        a1,
+        a2,
+        a3,
+        a4,
+        a5,
+        logoTextWhite,
+        aiMagic,
+        appLauncherIcon,
+        appleRemindersLogo,
+        appleLogo,
+        appleWatch,
+        background,
+        beeDevice,
+        blob,
+        calendarLogo,
+        checkbox,
+        clone,
+        emailLogo,
+        emotionalFeedback1,
+        facebookLogo,
+        fieldy,
+        friendPendant,
+        googleLogo,
+        gradientCard,
+        herologo,
+        icChart,
+        icCloneChat,
+        icClonePlus,
+        icDollar,
+        imessageLogo,
+        instagramLogo,
+        instruction1,
+        instruction2,
+        instruction3,
+        limitless,
+        linkIcon,
+        linkedinLogo,
+        logoTransparent,
+        logoTransparentV2,
+        neoOne,
+        newBackground,
+        notionLogo,
+        omiDevkitWithoutRope,
+        omiGlass,
+        omiWithRopeNoPadding,
+        omiWithRope,
+        omiWithoutRopeGreenCharging,
+        omiWithoutRopeTurnedOff,
+        omiWithoutRope,
+        onboardingBg1,
+        onboardingBg2,
+        onboardingBg3,
+        onboardingBg4,
+        onboardingBg51,
+        onboardingBg52,
+        onboardingBg6,
+        onboarding,
+        plaudNotePin,
+        raybanMeta,
+        recordingGreenCircleIcon,
+        slackLogo,
+        speaker0Icon,
+        speaker1Icon,
+        splash,
+        splashIcon,
+        stars,
+        stripeLogo,
+        telegramLogo,
+        whatsappLogo,
+        xLogo,
+        xLogoMini,
+        youtubeLogo
+      ];
 }
 
 class $AssetsIntegrationAppLogosGen {
@@ -467,31 +424,50 @@ class $AssetsIntegrationAppLogosGen {
 
   /// List of all assets
   List<dynamic> get values => [
-    appleHealthLogo,
-    asanaLogo,
-    clickupLogo,
-    githubLogo,
-    gmailLogo,
-    googleCalendar,
-    googleTasksLogo,
-    mondayLogo,
-    notionLogo,
-    todoistLogo,
-    trelloLogo,
-    whoop,
-    xLogo,
-  ];
+        appleHealthLogo,
+        asanaLogo,
+        clickupLogo,
+        githubLogo,
+        gmailLogo,
+        googleCalendar,
+        googleTasksLogo,
+        mondayLogo,
+        notionLogo,
+        todoistLogo,
+        trelloLogo,
+        whoop,
+        xLogo
+      ];
 }
 
-class Assets {
-  const Assets._();
+class $AssetsModelsGen {
+  const $AssetsModelsGen();
 
+  /// File path: assets/models/silero_vad.onnx
+  String get sileroVad => 'assets/models/silero_vad.onnx';
+
+  /// List of all assets
+  List<String> get values => [sileroVad];
+}
+
+class $AssetsTestGen {
+  const $AssetsTestGen();
+
+  /// File path: assets/test/tts_progressive_probe.mp3
+  String get ttsProgressiveProbe => 'assets/test/tts_progressive_probe.mp3';
+
+  /// List of all assets
+  List<String> get values => [ttsProgressiveProbe];
+}
+
+abstract final class Assets {
   static const $AssetsCompetitorLogosGen competitorLogos =
       $AssetsCompetitorLogosGen();
-  static const $AssetsFontsGen fonts = $AssetsFontsGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();
   static const $AssetsIntegrationAppLogosGen integrationAppLogos =
       $AssetsIntegrationAppLogosGen();
+  static const $AssetsModelsGen models = $AssetsModelsGen();
+  static const $AssetsTestGen test = $AssetsTestGen();
   static const String shorebird = 'shorebird.yaml';
 
   /// List of all assets
@@ -499,12 +475,18 @@ class Assets {
 }
 
 class AssetGenImage {
-  const AssetGenImage(this._assetName, {this.size, this.flavors = const {}});
+  const AssetGenImage(
+    this._assetName, {
+    this.size,
+    this.flavors = const {},
+    this.animation,
+  });
 
   final String _assetName;
 
   final Size? size;
   final Set<String> flavors;
+  final AssetGenImageAnimation? animation;
 
   Image image({
     Key? key,
@@ -559,11 +541,30 @@ class AssetGenImage {
     );
   }
 
-  ImageProvider provider({AssetBundle? bundle, String? package}) {
-    return AssetImage(_assetName, bundle: bundle, package: package);
+  ImageProvider provider({
+    AssetBundle? bundle,
+    String? package,
+  }) {
+    return AssetImage(
+      _assetName,
+      bundle: bundle,
+      package: package,
+    );
   }
 
   String get path => _assetName;
 
   String get keyName => _assetName;
+}
+
+class AssetGenImageAnimation {
+  const AssetGenImageAnimation({
+    required this.isAnimation,
+    required this.duration,
+    required this.frames,
+  });
+
+  final bool isAnimation;
+  final Duration duration;
+  final int frames;
 }

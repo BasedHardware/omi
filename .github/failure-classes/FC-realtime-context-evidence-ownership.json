@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-realtime-context-evidence-ownership",
+  "violated_contract": "A realtime voice turn must treat the latest spoken utterance as authoritative and may use visual, background, or prior-turn evidence only within that evidence's explicit source and lifetime. Unscoped evidence can override the current request, make a visual answer inspect the wrong screen, or make a standalone question inherit an unrelated topic.",
+  "canonical_prevention": "Bind captured images to the active voice-turn identity, isolate background context as system evidence, gate visual attachment on the current request, and cover standalone, follow-up, visual, and historical-research routing through the production session and tool manifest.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/HubSystemInstructionTests.swift",
+    "desktop/macos/Desktop/Tests/RealtimeHubSessionInputLifecycleTests.swift",
+    "desktop/macos/agent/evals/realtime-routing-cases.json"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController*.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift",
+    "desktop/macos/agent/src/runtime/omi-tool-manifest.ts"
+  ],
+  "status": "open"
+}

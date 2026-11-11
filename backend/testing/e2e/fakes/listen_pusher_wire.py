@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Callable, Optional
+from urllib.parse import parse_qs, urlsplit
 
 import websockets
 
@@ -26,6 +27,7 @@ import websockets
 PUSHER_TRANSCRIPT = 102
 PUSHER_PROCESS_CONVERSATION = 104
 PUSHER_PROCESS_RESULT = 201
+PUSHER_AUDIO_TIMELINE_ACK = 202
 
 
 @dataclass(frozen=True)
@@ -163,6 +165,10 @@ class ScriptedParakeetPeer(_LoopbackWebSocketServer):
             self.connection_count += 1
             self.paths.append(_peer_path(websocket, path))
             self._condition.notify_all()
+        # The production Parakeet service confirms stream admission by sending a
+        # readiness frame before accepting audio. Mirror that contract so the
+        # real ParakeetWebSocketSocket completes its startup handshake.
+        await websocket.send(json.dumps({'type': 'ready'}))
         segment_index = 0
         async for message in websocket:
             if isinstance(message, bytes):
@@ -237,6 +243,64 @@ class RejectingParakeetPeer(_LoopbackWebSocketServer):
         raise AssertionError('rejected Parakeet peer must never complete a WebSocket session')
 
 
+class ScriptedModulatePeer(_LoopbackWebSocketServer):
+    """Minimal Velma-2 peer that returns one final utterance per audio frame.
+
+    The production client sends raw PCM binary frames and signals teardown with
+    an empty text frame.  The peer deliberately implements only that wire
+    contract, retaining the real client URL construction and socket lifecycle.
+    """
+
+    def __init__(self, *, segment_text: str = 'Modulate wire-contract transcript.') -> None:
+        super().__init__()
+        self.segment_text = segment_text
+        self._condition = threading.Condition()
+        self.paths: list[str] = []
+        self.audio_chunks: list[bytes] = []
+        self.connection_count = 0
+
+    @property
+    def api_url(self) -> str:
+        return f'ws://127.0.0.1:{self.port}'
+
+    def wait_for_audio(self, count: int, *, timeout: float = 3.0) -> list[bytes]:
+        deadline = time.monotonic() + timeout
+        with self._condition:
+            while len(self.audio_chunks) < count:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(f'expected {count} Modulate audio chunk(s), saw {len(self.audio_chunks)}')
+                self._condition.wait(remaining)
+            return list(self.audio_chunks)
+
+    async def _handle(self, websocket: Any, path: Optional[str] = None) -> None:
+        with self._condition:
+            self.connection_count += 1
+            self.paths.append(_peer_path(websocket, path))
+            self._condition.notify_all()
+        async for message in websocket:
+            if isinstance(message, bytes):
+                with self._condition:
+                    self.audio_chunks.append(message)
+                    self._condition.notify_all()
+                await websocket.send(
+                    json.dumps(
+                        {
+                            'type': 'utterance',
+                            'utterance': {
+                                'text': self.segment_text,
+                                'start_ms': 0,
+                                'duration_ms': 250,
+                                'speaker': 1,
+                            },
+                        },
+                        separators=(',', ':'),
+                    )
+                )
+            elif message == '':
+                await websocket.send(json.dumps({'type': 'done', 'duration_ms': 250}, separators=(',', ':')))
+
+
 class ScriptedPusherPeer(_LoopbackWebSocketServer):
     """Script pusher replies while recording the production binary wire contract."""
 
@@ -292,11 +356,19 @@ class ScriptedPusherPeer(_LoopbackWebSocketServer):
         await websocket.send(_encode_pusher_result(payload))
 
     async def _handle(self, websocket: Any, path: Optional[str] = None) -> None:
+        request_path = _peer_path(websocket, path)
         with self._condition:
             self.connection_count += 1
             connection = self.connection_count
-            self.paths.append(_peer_path(websocket, path))
+            self.paths.append(request_path)
             self._condition.notify_all()
+        if parse_qs(urlsplit(request_path).query).get('audio_timeline') == ['2']:
+            # Eligible sessions now always negotiate span storage. Act like the
+            # capable production pusher before listen announces readiness.
+            await websocket.send(
+                struct.pack('<I', PUSHER_AUDIO_TIMELINE_ACK)
+                + json.dumps({'type': 'audio_timeline_ack', 'version': 2}).encode('utf-8')
+            )
         async for raw in websocket:
             if not isinstance(raw, bytes) or len(raw) < 4:
                 continue
@@ -544,18 +616,25 @@ def install_fake_firestore_transactions(monkeypatch: Any, store: Any) -> _Transa
     cross-worker storage proof.
     """
 
-    from database import conversation_finalization_jobs, recording_sessions
+    from database import (
+        conversation_finalization_jobs,
+        conversation_quiet_checks,
+        quiet_check_retirement,
+        recording_sessions,
+    )
 
     transactional_store = _TransactionalFirestore(store)
 
-    monkeypatch.setattr(conversation_finalization_jobs, 'get_firestore_client', lambda: transactional_store)
-    monkeypatch.setattr(recording_sessions, 'get_firestore_client', lambda: transactional_store)
-    monkeypatch.setattr(
+    # Quiet custody and its post-admission retirement share the same staged
+    # transaction protocol as the durable finalization/recording reducers.
+    for module in (
         conversation_finalization_jobs,
-        'firestore',
-        _FirestoreTransactionFacade(conversation_finalization_jobs.firestore),
-    )
-    monkeypatch.setattr(recording_sessions, 'firestore', _FirestoreTransactionFacade(recording_sessions.firestore))
+        conversation_quiet_checks,
+        quiet_check_retirement,
+        recording_sessions,
+    ):
+        monkeypatch.setattr(module, 'get_firestore_client', lambda: transactional_store)
+        monkeypatch.setattr(module, 'firestore', _FirestoreTransactionFacade(module.firestore))
     return transactional_store
 
 

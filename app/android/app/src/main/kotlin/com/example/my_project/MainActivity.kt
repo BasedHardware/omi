@@ -1,12 +1,23 @@
 package com.friend.ios
 
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.Context
+import android.os.Build
+import android.os.BatteryManager
+import android.os.PowerManager
+import android.os.SystemClock
 import com.friend.ios.ble.BleHostApiImpl
 import com.friend.ios.phonecalls.PhoneCallsPlugin
 import com.friend.ios.ble.OmiBleForegroundService
 import com.friend.ios.ble.OmiBleManager
 import com.friend.ios.ble.OmiCompanionManager
+import com.friend.ios.batch.CaptureAdmissionPolicy
 import com.friend.ios.batch.OmiBackgroundAudioStreamer
+import com.friend.ios.batch.CaptureAdmissionLatch
+import com.friend.ios.phonemic.*
+import com.friend.ios.sync.SyncTransferForegroundService
+import com.friend.ios.sync.SyncTransferPlugin
 import android.os.Bundle
 import androidx.annotation.NonNull
 import android.Manifest
@@ -25,9 +36,20 @@ class MainActivity: FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        OmiPostHogSetup.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        com.friend.ios.ondevice.OnDeviceBackgroundWorker.attach(this, flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/device_health_policy").setMethodCallHandler { call, result ->
+            if (call.method != "setPolicy") { result.notImplemented() } else {
+                com.friend.ios.ble.DeviceHealthPersistence.setPolicy(applicationContext,
+                    call.argument<Boolean>("enabled") == true, call.argument<Number>("epoch")!!.toLong(), call.argument<Boolean>("retire") == true)
+                result.success(null)
+            }
+        }
 
-        // Register WiFi Network Plugin
-        WifiNetworkPlugin.registerWith(flutterEngine, this)
+
+        com.friend.ios.ondevice.PhoneBatteryChannel.register(this, flutterEngine)
+        // On-device live preview for local-preview listen sessions (display only).
+        com.friend.ios.livepreview.LivePreviewPlugin.register(this, flutterEngine)
 
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)
@@ -44,6 +66,15 @@ class MainActivity: FlutterActivity() {
         hostApi.initCompanionManager(this)
         bleHostApiImpl = hostApi
         BleHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, hostApi)
+
+        // Register Native Phone Mic Pigeon APIs
+        PhoneMicController.initialize(application)
+        PhoneMicController.instance.bindFlutterApi(PhoneMicFlutterApi(flutterEngine.dartExecutor.binaryMessenger))
+        PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
+        SyncTransferPlugin.register(flutterEngine, this)
+        TtsMp3DecoderPlugin.register(flutterEngine)
+        ChatVideoSamplerPlugin.register(flutterEngine, this)
+        TtsPcmPlayerPlugin.register(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
             call, result ->
             if (call.method == "drain") {
@@ -51,6 +82,47 @@ class MainActivity: FlutterActivity() {
             } else {
                 result.notImplemented()
             }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/capture_policy").setMethodCallHandler {
+            call, result ->
+            if (call.method == "getRevision") {
+                result.success(CaptureAdmissionLatch.highWaterRevision())
+                return@setMethodCallHandler
+            }
+            if (call.method != "setMuted") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val muted = call.argument<Boolean>("muted")
+            val revision = when (val raw = call.argument<Any>("revision")) {
+                is Int -> raw.toLong()
+                is Long -> raw
+                else -> null
+            }
+            if (muted == null || revision == null || revision < 0) {
+                result.error("invalid_capture_policy", "muted must be bool and revision must be nonnegative", null)
+                return@setMethodCallHandler
+            }
+            val persisted = runCatching {
+                getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                    .getString("flutter.capturePolicy", null)
+            }.getOrNull()?.let(CaptureAdmissionPolicy::parse)
+            if (revision < (persisted?.revision ?: 0L)) {
+                result.error("stale_capture_policy", "capture policy revision is older than durable state", null)
+                return@setMethodCallHandler
+            }
+            // Release only after the canonical unmuted revision is visible.
+            // Mute does not depend on storage succeeding.
+            if (!muted && (persisted == null || persisted.muted || persisted.revision != revision)) {
+                result.error("capture_policy_not_durable", "unmuted policy is not durably persisted", null)
+                return@setMethodCallHandler
+            }
+            if (!CaptureAdmissionLatch.apply(muted, revision)) {
+                result.error("stale_capture_policy", "capture policy revision is older or conflicts", null)
+                return@setMethodCallHandler
+            }
+            result.success(true)
         }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
@@ -86,6 +158,7 @@ class MainActivity: FlutterActivity() {
     override fun onResume() {
         super.onResume()
         OmiBleManager.isAppForeground = true
+        OmiBleForegroundService.instance?.recordPermissionStates()
     }
 
     override fun onPause() {
@@ -94,13 +167,33 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onDestroy() {
+        // The engine dies with the activity whether or not it is finishing, so these flags
+        // must clear outside the isFinishing guard — a system-initiated destroy otherwise
+        // leaves native deferring audio to an engine that is gone (issue #10847).
+        // configureFlutterEngine re-arms both on the next attach.
+        OmiBleManager.isFlutterAlive = false
+        // Dart owns transfer lifetime; once the engine is gone the FGS cannot
+        // finish a sync and must not keep the notification/wake lock.
+        SyncTransferForegroundService.stop(this)
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .edit()
+            .putBoolean("flutter.nativeBleForegroundReady", false)
+            .apply()
         if (isFinishing) {
-            OmiBleManager.isFlutterAlive = false
+            // Engine + main isolate die with the activity; a live capture session must not outlive its consumer.
+            if (PhoneMicController.isInitialized) PhoneMicController.instance.onFlutterEngineDestroyed()
             // Background Mode and Transcribe Later both need the foreground service to keep
             // the device connected/capturing after a task close. With both off (default),
             // tear it down so the device disconnects when the app is closed.
-            if (!OmiBleForegroundService.isPersistentModeEnabled(this)) {
+            val bleServiceMustPersist = OmiBleForegroundService.isPersistentModeEnabled(this)
+            if (!bleServiceMustPersist) {
                 OmiBleForegroundService.stopService(this)
+            }
+            if (DeviceDiagnosticsLifecyclePolicy.shouldMarkRunClosed(isFinishing, bleServiceMustPersist)) {
+                getSharedPreferences("ble_diagnostics", MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("run_open", false)
+                    .apply()
             }
         }
         super.onDestroy()

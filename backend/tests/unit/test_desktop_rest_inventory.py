@@ -97,14 +97,14 @@ def _in_scope(routes: Set[str]) -> Set[str]:
 def _load_spec_paths() -> Set[str]:
     import json
 
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     return set(spec.get('paths', {}).keys())
 
 
 def _load_spec() -> dict[str, Any]:
     import json
 
-    return json.loads(SPEC_PATH.read_text())
+    return json.loads(SPEC_PATH.read_text(encoding='utf-8'))
 
 
 def _normalize_for_match(path: str) -> str:
@@ -120,7 +120,8 @@ def _normalize_for_match(path: str) -> str:
 DESKTOP_NAMED_MODEL_RESPONSE_CONTRACTS = {
     ('post', '/v1/conversations/search'): {
         'response_schema': 'SearchConversationsResponse',
-        'array_properties': {'items': 'Conversation'},
+        # Search returns ConversationSearchItem (Conversation + optional match_snippets), not bare Conversation.
+        'array_properties': {'items': 'ConversationSearchItem'},
         'desktop_decode': 'ConversationSearchResult.items -> [ServerConversation] -> OmiAPI.Conversation',
     },
 }
@@ -180,8 +181,12 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     '/v1/personas/generate-prompt',
     '/v3/memories/mark-all-read',
     '/v3/memories/visibility',  # backend has /v3/memories/{memory_id}/visibility
-    '/v3/memories/{param}/read',
     '/v3/memory-imports/batch',  # backend route exists but lacks response_model export
+    # Added by the context-director third retrieval source (#11613): the backend
+    # route exists (routers/tools.py, ToolResponse) but /v1/tools is not part of
+    # the app-client OpenAPI surface. Follow-up: expose the tools search routes
+    # in the app-client contract and remove this entry.
+    '/v1/tools/conversations/search-chunks',
     # These backend routes exist but return unmodeled (loose) responses, so
     # adding them to the app-client surface would regress the strict
     # `unmodeled_success_response_count == 0` gate. They are tracked for a
@@ -191,14 +196,13 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     '/v1/staged-tasks',
     '/v1/staged-tasks/{param}',
     '/v1/staged-tasks/batch-scores',
-    '/v1/staged-tasks/migrate',
-    '/v1/staged-tasks/migrate-conversation-items',
     '/v1/staged-tasks/promote',
     '/v1/tools/action-items',
     '/v1/tools/action-items/{param}',
     '/v1/tools/calendar-events',
     '/v1/tools/conversations',
     '/v1/tools/conversations/search',
+    '/v1/tools/conversations/search-chunks',  # #11613 desktop client; OpenAPI export follow-up
     '/v1/tools/memories',
     '/v1/tools/memories/search',
 }
@@ -280,7 +284,7 @@ def test_desktop_named_model_response_items_are_not_free_form_objects():
 
 
 def test_conversations_search_hydrates_index_hits_before_returning_app_client_rows():
-    source = CONVERSATIONS_ROUTER.read_text()
+    source = CONVERSATIONS_ROUTER.read_text(encoding='utf-8')
     endpoint_start = source.index('def search_conversations_endpoint(')
     endpoint_end = source.index(
         '@router.get(\n    "/v1/conversations/{conversation_id}/suggested-apps"', endpoint_start
@@ -296,7 +300,7 @@ def test_conversations_search_hydrates_index_hits_before_returning_app_client_ro
 
 
 def test_conversation_id_hydration_backfills_legacy_missing_ids():
-    source = CONVERSATIONS_DB.read_text()
+    source = CONVERSATIONS_DB.read_text(encoding='utf-8')
     helper_start = source.index('def _get_conversations_by_id(')
     helper_end = source.index('# **************************************', helper_start)
     helper_source = source[helper_start:helper_end]

@@ -1,0 +1,710 @@
+import Foundation
+
+struct MeetingScreenActivitySnapshot: Equatable, Sendable {
+  let timestamp: Date
+  let appName: String
+  let windowTitle: String?
+  let ocrText: String?
+}
+
+protocol MeetingScreenActivityProviding: Sendable {
+  func snapshots(overlapping interval: DateInterval) async -> [MeetingScreenActivitySnapshot]
+}
+
+actor RewindMeetingScreenActivityProvider: MeetingScreenActivityProviding {
+  func snapshots(overlapping interval: DateInterval) async -> [MeetingScreenActivitySnapshot] {
+    do {
+      return try await RewindDatabase.shared
+        .getScreenshots(from: interval.start, to: interval.end, limit: 240)
+        .map {
+          MeetingScreenActivitySnapshot(
+            timestamp: $0.timestamp,
+            appName: $0.appName,
+            windowTitle: $0.windowTitle,
+            ocrText: $0.ocrText)
+        }
+    } catch {
+      // Local OCR context is optional; database availability must never hold finalization open.
+      return []
+    }
+  }
+}
+
+enum OnDeviceMeetingIdentityExtractor {
+  static let maximumRows = 80
+  static let maximumCharacters = 12_000
+  static let maximumParticipants = 12
+
+  private static let emailPattern = regex("[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}")
+  // Single source for the bare-meeting-code title lives in the shared conferencing catalog.
+  private static let meetCodeTitle = regex(ConferencingApps.browserCallTitlePattern)
+  private static let rosterPatterns = [
+    regex("(?i)^(?<people>.+?)\\s+(?:are|is)\\s+in\\s+this\\s+call\\b"),
+    regex("(?i)^(?<people>.+?)\\s+(?:has|have)\\s+joined\\b"),
+    regex("(?i)^Meet\\s+with\\s+(?<people>.+?)\\s*$"),
+    regex("(?i)^In\\s+call\\s+with\\s+(?<people>.+?)\\s*$"),
+  ]
+  private static let rosterSeparator = regex("(?i),|\\band\\b|&|\\+")
+  private static let nameDecoration = regex("(?i)\\s*(?:\\(.*?\\)|\\d{1,2}:\\d{2}\\s*(?:AM|PM)?|·.*)\\s*$")
+  private static let nameWord = regex("^[A-Za-z][A-Za-z.'’\\-]*$")
+  private static let nonPersonWords: Set<String> = [
+    "account", "admin", "all", "anyone", "call", "everyone", "guest", "guests", "host", "me", "others",
+    "participants", "people", "presenting", "you",
+  ]
+  private static let joinerWords: Set<String> = ["and", "with", "vs", "versus", "or", "et"]
+  private static let uiTitles: Set<String> = [
+    "audio", "camera", "chat", "leave", "meeting", "microphone", "more", "mute", "participants", "reactions",
+    "record", "screen", "share", "stop video", "unmute",
+  ]
+
+  static func payload(
+    from snapshots: [MeetingScreenActivitySnapshot],
+    overlapping interval: DateInterval,
+    ownerNames: [String] = [],
+    ownerEmails: [String] = []
+  ) -> DesktopMeetingPayload? {
+    let selected = selectConferencingRows(snapshots)
+    guard !selected.isEmpty else { return nil }
+    // Tile persistence is judged over every row, not the character-budgeted selection: three
+    // full-desktop frames exhaust that budget.
+    // Agent tiles join after the people, as plain names: the backend roster classifies them as
+    // `ai_agent` by name (the upload has no participant kind), never as a person.
+    let tiles =
+      callTileNames(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails)
+      + callTileAgentNames(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails)
+    var participants = participants(from: selected.map(callContent), tileNames: tiles)
+    if participants.isEmpty {
+      participants = messagingCallParticipants(from: snapshots)
+    }
+    let owners = Set(ownerNames.map { cleanLine($0).casefolded }).union(
+      snapshots.flatMap { ($0.ocrText ?? "").components(separatedBy: .newlines) }
+        .filter { firstMatch(ownerTileMarker, in: cleanLine($0)) != nil }
+        .map { cleanLine(replacingMatches(nameDecoration, in: cleanLine($0), with: "")).casefolded })
+    let emails = Set(ownerEmails.map { $0.casefolded })
+    let locals = Set(emails.map { String($0.split(separator: "@", maxSplits: 1).first ?? "") })
+    let chrome = screenChromeNames(snapshots)
+    participants = participants.filter { participant in
+      if let name = participant.name,
+        chrome.contains(name.casefolded) || isOwnerName(name, owners: owners, ownerLocals: locals)
+      {
+        return false
+      }
+      return participant.email.map { !emails.contains($0.casefolded) } ?? true
+    }
+    guard !participants.isEmpty else { return nil }
+
+    let title = selected.compactMap(meetingTitle).first ?? "Video meeting"
+    let platform = selected.compactMap { conferencingPlatform(for: $0) }.first ?? "Video conference"
+    let start = interval.start
+    let end = max(interval.end, start.addingTimeInterval(1))
+    let eventID = "screen-activity:\(Int(start.timeIntervalSince1970)):\(Int(end.timeIntervalSince1970))"
+
+    return DesktopMeetingPayload(
+      calendarEventID: eventID,
+      source: .derived(
+        calendarSource: "screen_activity",
+        egress: DerivedDataEgressRequest(
+          dataClass: .meetingIdentity,
+          route: .calendarMeetings,
+          purpose: DerivedDataEgressPolicy.meetingIdentityPurpose)),
+      title: title,
+      startTime: start,
+      endTime: end,
+      participants: participants,
+      platform: platform,
+      meetingLink: nil,
+      observedCallTiles: participants.filter { $0.name.map(tiles.contains) ?? false })
+  }
+
+  static func participants(from texts: [String], tileNames: [String] = []) -> [DesktopMeetingParticipant] {
+    var roster: [String] = []
+    var emails: [String] = []
+    var looseNames: [String] = []
+    for text in texts where !text.isEmpty {
+      appendUnique(rosterNames(in: text), to: &roster)
+      appendUnique(
+        matches(emailPattern, in: text).map {
+          $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        },
+        to: &emails)
+      appendUnique(decoratedNameLines(in: text), to: &looseNames)
+    }
+
+    let localTokens = Set(emails.flatMap { emailLocalTokens($0) })
+    var names = roster
+    for candidate in looseNames where !names.contains(candidate) {
+      if !Set(nameTokens(candidate)).isDisjoint(with: localTokens) { names.append(candidate) }
+    }
+    var known = Set(names.map { $0.casefolded })
+    for tile in tileNames where known.insert(tile.casefolded).inserted {
+      names.append(tile)
+    }
+
+    var result: [DesktopMeetingParticipant] = []
+    var usedEmails = Set<String>()
+    for name in names.prefix(maximumParticipants) {
+      let tokens = Set(nameTokens(name))
+      let email = emails.first {
+        !usedEmails.contains($0) && !Set(emailLocalTokens($0)).isDisjoint(with: tokens)
+      }
+      if let email { usedEmails.insert(email) }
+      result.append(DesktopMeetingParticipant(name: name, email: email))
+    }
+    for email in emails where !usedEmails.contains(email) && result.count < maximumParticipants {
+      result.append(DesktopMeetingParticipant(name: nil, email: email))
+    }
+    return result
+  }
+
+  private static func selectConferencingRows(_ snapshots: [MeetingScreenActivitySnapshot])
+    -> [MeetingScreenActivitySnapshot]
+  {
+    let ranked = snapshots.enumerated().filter { conferencingPlatform(for: $0.element) != nil }.sorted {
+      let left = identitySignal($0.element.combinedText)
+      let right = identitySignal($1.element.combinedText)
+      return left == right ? $0.offset < $1.offset : left > right
+    }
+    var selected: [MeetingScreenActivitySnapshot] = []
+    var characters = 0
+    for (_, snapshot) in ranked.prefix(maximumRows) {
+      guard characters < maximumCharacters else { break }
+      let available = maximumCharacters - characters
+      let clipped = String(snapshot.combinedText.prefix(available))
+      selected.append(
+        MeetingScreenActivitySnapshot(
+          timestamp: snapshot.timestamp,
+          appName: snapshot.appName,
+          windowTitle: snapshot.windowTitle,
+          ocrText: clipped))
+      characters += clipped.count
+    }
+    return selected
+  }
+
+  private static func conferencingPlatform(for snapshot: MeetingScreenActivitySnapshot) -> String? {
+    let metadata = "\(snapshot.appName) \(snapshot.windowTitle ?? "")".lowercased()
+    if metadata.contains("google meet") || metadata.contains("meet.google")
+      || firstMatch(meetCodeTitle, in: cleanLine(snapshot.windowTitle ?? "")) != nil
+      || firstMatch(meetTabTitle, in: cleanLine(snapshot.windowTitle ?? "")) != nil
+      || snapshot.combinedText.lowercased().contains("meet.google.com/")
+    {
+      return "Google Meet"
+    }
+    if metadata.contains("zoom") || snapshot.combinedText.lowercased().contains("zoom.us/j/") { return "Zoom" }
+    if metadata.contains("microsoft teams") || metadata.contains("teams")
+      || snapshot.combinedText.lowercased().contains("teams.microsoft.com/l/meetup")
+    {
+      return "Teams"
+    }
+    if metadata.contains("webex") || snapshot.combinedText.lowercased().contains("webex.com/meet") { return "Webex" }
+    if metadata.contains("facetime") { return "FaceTime" }
+    if ConferencingApps.isMessagingCallApp(appName: snapshot.appName), hasCallControlChrome(snapshot) {
+      return ConferencingApps.nativeCallPlatform(forAppName: snapshot.appName)
+    }
+    return nil
+  }
+
+  private static func meetingTitle(for snapshot: MeetingScreenActivitySnapshot) -> String? {
+    let title = cleanLine(snapshot.windowTitle ?? "")
+    guard !title.isEmpty, !uiTitles.contains(title.lowercased()) else { return nil }
+    if firstMatch(meetCodeTitle, in: title) != nil { return title }
+
+    // A native conferencing app owns its window title. A browser row recognized
+    // only from OCR does not: its tab/window title might describe any other page.
+    if ConferencingApps.nativeCallPlatform(forAppName: snapshot.appName) != nil {
+      return title
+    }
+    let app = snapshot.appName.lowercased()
+    let nativeMarkers = ["zoom", "microsoft teams", "webex", "facetime", "google meet"]
+    return nativeMarkers.contains(where: app.contains) ? title : nil
+  }
+
+  private static let callControlMarkers: [String] = [
+    "mute", "unmute", "end call", "hang up", "leave call",
+    "stop video", "start video", "screen share", "screenshare",
+    "in call", "in-call", "camera off", "camera on",
+  ]
+
+  private static func hasCallControlChrome(_ snapshot: MeetingScreenActivitySnapshot) -> Bool {
+    let haystack = snapshot.combinedText.lowercased()
+    return callControlMarkers.contains { marker in
+      let pattern = "\\b\(NSRegularExpression.escapedPattern(for: marker))\\b"
+      return haystack.range(of: pattern, options: .regularExpression) != nil
+    }
+  }
+
+  /// For native messaging-call apps only: a name-shaped window title is a
+  /// participation assertion only when the row also shows in-call chrome.
+  private static func messagingCallParticipants(from snapshots: [MeetingScreenActivitySnapshot])
+    -> [DesktopMeetingParticipant]
+  {
+    let messaging = snapshots.filter { ConferencingApps.isMessagingCallApp(appName: $0.appName) }
+    guard !messaging.isEmpty else { return [] }
+    let source = messaging.filter(hasCallControlChrome)
+    guard !source.isEmpty else { return [] }
+
+    var names: [String] = []
+    for snapshot in source {
+      let title = cleanLine(snapshot.windowTitle ?? "")
+      guard looksLikePersonName(title), !uiTitles.contains(title.lowercased()) else { continue }
+      if title.lowercased() == snapshot.appName.lowercased() { continue }
+      if !names.contains(title) { names.append(title) }
+    }
+    return names.prefix(maximumParticipants).map { DesktopMeetingParticipant(name: $0, email: nil) }
+  }
+
+  // MARK: - Call tiles
+
+  // A video tile labels its person with a bare name and nothing else, so no roster sentence or email
+  // ever corroborates it (conversation 449565eb: a 1:1 Meet whose other participant was on screen
+  // the whole call but never reached the roster). What corroborates a tile label is persistence: it
+  // stays on screen across the call while tab-strip text churns. The backend twin
+  // (`utils/conversations/meeting_context.py` `call_tile_names`) implements the same rule; both are
+  // pinned by `backend/tests/fixtures/meeting_identity/call_tile_vectors.json`.
+  static let minimumTileRows = 3
+  static let minimumTileRowShare = 0.25
+  static let maximumTileNames = 8
+  /// A label that recurs across most non-call rows too is browser chrome (bookmarks bar, profile
+  /// button), not a tile. Only judged with enough non-call rows.
+  static let minimumNonCallRowsForChromeCheck = 3
+  static let maximumNonCallRowShare = 0.5
+
+  private static let tileParticles: Set<String> = [
+    "al", "bin", "da", "de", "del", "der", "di", "du", "la", "le", "van", "von",
+  ]
+  private static let ownerTileMarker = regex("(?i)\\((?:[^)]*[,\\s])?you(?:[,\\s][^)]*)?\\)\\s*$")
+  private static let meetCode = regex("(?i)\\b[a-z]{3}-[a-z]{4}-[a-z]{3}\\b")
+  private static let titleSeparator = regex("\\s[-\u{2013}\u{2014}|:]\\s")
+  /// Words that make a capitalised line app chrome, a meeting title, or a page name, not a person.
+  private static let tileChromeWords: Set<String> = Set(
+    """
+    access account accounts activities admin advisories agenda allow analytics api backgrounds bank \
+    banking billing board bookmarks calendar call camera captions channel chat chrome cloud console \
+    controls cost dashboard dashboards demo docs document drive edit effects everyone feedback file \
+    general github gmail google guest hand help home host inbox intro issues join keys kickoff leave \
+    login meet meeting meetings mic microphone monitor more mute new notes notion options overview \
+    participants pay people platform portal present presentation presenting profile project pull raise \
+    rate reactions record recording registration report requests review roadmap screen search security \
+    settings share sharing sheets sign slack slides standup summary sync tab tabs team teams tokens \
+    untitled unmute update usage users view webex window workspace you zoom
+    """.split(separator: " ").map(String.init))
+  /// AI notetakers and assistants join calls as tiles too; they are never human participants.
+  /// Whole tokens only: a suffix rule ("ends with bot") also drops people named Talbot or Abbot.
+  /// Dotted agent names ("Otter.ai", "Read.ai", "tl;dv") already fail the tile-name shape.
+  private static let aiAgentTileWords: Set<String> = [
+    "agent", "ai", "assistant", "boardy", "bot", "chatbot", "companion", "fathom", "fireflies", "gemini",
+    "granola", "meetbot", "notebot", "notes", "notetaker", "otter", "recorder", "tldv",
+  ]
+
+  /// Names shown as call-tile labels, by persistence across the call's rows. A candidate is a line
+  /// that is only a 2-4 token capitalised name (tile decorations stripped). It is accepted when it
+  /// appears in at least `minimumTileRows` conferencing rows and at least `minimumTileRowShare` of
+  /// them, is not the owner (their tile says "(You)", or it matches a supplied owner name or email),
+  /// not an AI agent, not part of a conferencing window title, and not chrome that recurs across the
+  /// non-call rows as well.
+  static func callTileNames(
+    in snapshots: [MeetingScreenActivitySnapshot],
+    ownerNames: [String] = [],
+    ownerEmails: [String] = []
+  ) -> [String] {
+    callTileLabels(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails, agents: false)
+  }
+
+  /// AI-agent tiles that pass the same persistence rule. They are kept, as agents and never as
+  /// people, because an agent on the call is a fact about the call; only the ones the roster's own
+  /// name classifier (`looksLikeAIAgentName`) also calls agents are returned, so none becomes human.
+  static func callTileAgentNames(
+    in snapshots: [MeetingScreenActivitySnapshot],
+    ownerNames: [String] = [],
+    ownerEmails: [String] = []
+  ) -> [String] {
+    callTileLabels(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails, agents: true)
+      .filter(looksLikeAIAgentName)
+  }
+
+  private static func callTileLabels(
+    in snapshots: [MeetingScreenActivitySnapshot],
+    ownerNames: [String],
+    ownerEmails: [String],
+    agents: Bool
+  ) -> [String] {
+    let callRows = snapshots.filter(isCallWindowRow)
+    guard callRows.count >= minimumTileRows else { return [] }
+    var owners = Set(ownerNames.map { cleanLine($0).casefolded }.filter { !$0.isEmpty })
+    let ownerLocals = Set(
+      ownerEmails.compactMap { email -> String? in
+        let folded = email.trimmingCharacters(in: .whitespacesAndNewlines).casefolded
+        guard folded.contains("@") else { return nil }
+        return folded.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
+      })
+    let titleParts = screenChromeNames(snapshots)
+    var counts: [String: Int] = [:]
+    var spelling: [String: String] = [:]
+    var order: [String] = []
+    for row in callRows {
+      var seen = Set<String>()
+      for rawLine in callContent(row).components(separatedBy: .newlines) {
+        let line = cleanLine(rawLine)
+        guard let name = tileName(line) else { continue }
+        let key = name.casefolded
+        if firstMatch(ownerTileMarker, in: line) != nil { owners.insert(key) }
+        guard seen.insert(key).inserted else { continue }
+        if counts[key] == nil {
+          counts[key] = 0
+          spelling[key] = name
+          order.append(key)
+        }
+        counts[key, default: 0] += 1
+      }
+    }
+
+    // Browser chrome (tab strip, bookmarks) recurs in the same app's other windows.
+    let callApps = Set(callRows.map { $0.appName.casefolded })
+    let nonCallRows = snapshots.filter { !isCallWindowRow($0) && callApps.contains($0.appName.casefolded) }
+    let minimum = max(Double(minimumTileRows), minimumTileRowShare * Double(callRows.count))
+    var accepted: [String] = []
+    for key in order {
+      guard let name = spelling[key], let count = counts[key] else { continue }
+      if Double(count) < minimum || titleParts.contains(key) { continue }
+      if isOwnerName(name, owners: owners, ownerLocals: ownerLocals) || isAIAgentTileName(name) != agents { continue }
+      if nonCallRows.count >= minimumNonCallRowsForChromeCheck {
+        let elsewhere = nonCallRows.filter { row in
+          row.combinedText.components(separatedBy: .newlines).contains { tileName(cleanLine($0)) == name }
+        }.count
+        if Double(elsewhere) > maximumNonCallRowShare * Double(nonCallRows.count) { continue }
+      }
+      accepted.append(name)
+    }
+    // `accepted` is already in first-appearance order, so a stable sort by count is the full order.
+    let ranked = accepted.enumerated().sorted {
+      let left = counts[$0.element.casefolded] ?? 0
+      let right = counts[$1.element.casefolded] ?? 0
+      return left == right ? $0.offset < $1.offset : left > right
+    }
+    accepted = ranked.map(\.element)
+    return Array(accepted.prefix(maximumTileNames))
+  }
+
+  /// A joined Meet tab is titled "Meet - <code>" or "Meet - <meeting name>".
+  private static let meetTabTitle = regex("(?i)^meet\\s*[-\u{2013}\u{2014}]\\s*\\S")
+  private static let unreadTitlePrefix = regex("^\\(\\d+\\)\\s*")
+  private static let titleTrailingNoise = regex("[^\\w)]+$")
+  private static let tileMessagingApps = ["telegram", "discord", "slack", "whatsapp"]
+  private static let nativeVideoApps = ["zoom", "microsoft teams", "webex", "facetime"]
+  private static let conferencingMarkers = [
+    "zoom", "microsoft teams", "webex", "facetime", "google meet", "meet.google",
+  ]
+
+  /// A row whose own window is the video call, the only place a tile label shows. Narrower than
+  /// `conferencingPlatform`: a row recognised only by a Meet URL in its OCR is often another page
+  /// (a LinkedIn profile, a tab strip), and a messaging app's recurring lines are its chat list.
+  /// Messaging calls keep their own window-title rule (`messagingCallParticipants`).
+  private static func isCallWindowRow(_ snapshot: MeetingScreenActivitySnapshot) -> Bool {
+    let app = snapshot.appName.casefolded
+    if tileMessagingApps.contains(where: app.contains) { return false }
+    let title = cleanLine(snapshot.windowTitle ?? "").casefolded
+    if firstMatch(meetTabTitle, in: title) != nil { return true }  // a joined Meet tab: its title is the call
+    let conferencing =
+      nativeVideoApps.contains(where: app.contains)
+      || conferencingMarkers.contains(where: "\(app) \(title)".contains)
+    // A conferencing app's other windows (Teams chat, a contact list, Zoom's home screen) repeat
+    // names too. The window must show that it is the call itself.
+    return conferencing && (hasCallControlChrome(snapshot) || firstMatch(callWindowTitle, in: title) != nil)
+  }
+
+  private static let callWindowTitle = regex("(?<!\\w)(?:zoom meeting|meeting|call|webinar|huddle)(?!\\w)")
+
+  // The backend roster's name-only agent classifier (`meeting_participants.looks_like_ai_agent_name`).
+  private static let rosterAgentNames: Set<String> = [
+    "boardy", "otter", "otter.ai", "fireflies", "fred from fireflies", "read.ai", "fathom", "tl;dv", "notetaker",
+    "zoom ai companion", "gemini", "omi agent", "o. omi agent",
+  ]
+  private static let rosterAgentTokens: Set<String> = [
+    "bot", "chatbot", "meetbot", "notebot", "notetaker", "note-taker", "recorder", "assistant", "companion",
+  ]
+  private static let rosterAgentFirstTokens: Set<String> = ["boardy", "fireflies", "otter.ai", "read.ai", "tl;dv"]
+  private static let rosterAgentPhrases = ["omi agent", "zoom ai companion", "fred from fireflies", "notetaker"].map {
+    regex("(?<![\\w])\(NSRegularExpression.escapedPattern(for: $0))(?![\\w])")
+  }
+
+  /// Whether the backend roster would classify a bare name (no email, no catalog entry) as an agent.
+  static func looksLikeAIAgentName(_ name: String) -> Bool {
+    let hay = name.trimmingCharacters(in: .whitespacesAndNewlines).casefolded
+    if rosterAgentNames.contains(hay) || hay.hasSuffix(" notetaker") { return true }
+    let words = hay.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    let tokens = Set(words.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ".'’-")) })
+    if !tokens.isDisjoint(with: rosterAgentTokens) { return true }
+    if let first = words.first, rosterAgentFirstTokens.contains(first) { return true }
+    return rosterAgentPhrases.contains { firstMatch($0, in: hay) != nil }
+  }
+
+  /// A window-title segment as it would read on screen: no unread counter, no trailing icon.
+  private static func titlePart(_ part: String) -> String {
+    let cleaned = replacingMatches(unreadTitlePrefix, in: cleanLine(part), with: "")
+    return replacingMatches(titleTrailingNoise, in: cleaned, with: "")
+      .trimmingCharacters(in: .whitespaces).casefolded
+  }
+
+  /// Tab-strip OCR precedes the address bar; it cannot label a participant tile.
+  private static func callContent(_ row: MeetingScreenActivitySnapshot) -> String {
+    let text = row.ocrText ?? ""
+    let lines = text.components(separatedBy: .newlines)
+    if let index = lines.firstIndex(where: {
+      $0.range(
+        of: "^\\s*(?:https?://)?meet\\.google\\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}",
+        options: [.regularExpression, .caseInsensitive]) != nil
+    }) {
+      return lines.dropFirst(index + 1).joined(separator: "\n")
+    }
+    return text
+  }
+
+  private static func screenChromeNames(_ snapshots: [MeetingScreenActivitySnapshot]) -> Set<String> {
+    var excluded = Set<String>()
+    for row in snapshots {
+      excluded.insert(titlePart(row.appName))
+      if !ConferencingApps.isMessagingCallApp(appName: row.appName) {
+        for part in split(titleSeparator, text: row.windowTitle ?? "") {
+          excluded.insert(titlePart(part))
+        }
+      }
+    }
+    return excluded
+  }
+
+  static func isAIAgentTileName(_ name: String) -> Bool {
+    name.split(separator: " ").contains { word in
+      let token = String(word).casefolded.trimmingCharacters(in: CharacterSet(charactersIn: ".'’-"))
+      return aiAgentTileWords.contains(token)
+    }
+  }
+
+  /// The name a call tile shows on this line, if the line is only a name.
+  private static func tileName(_ line: String) -> String? {
+    if line.contains("@") || line.casefolded.contains("http") || firstMatch(meetCode, in: line) != nil {
+      return nil
+    }
+    let name = cleanLine(replacingMatches(nameDecoration, in: line, with: ""))
+    let tokens = name.split(separator: " ").map(String.init)
+    guard (2...4).contains(tokens.count), name.count <= 60, tokens.allSatisfy(isTileToken) else { return nil }
+    if let first = tokens.first, let last = tokens.last,
+      tileParticles.contains(first.casefolded) || tileParticles.contains(last.casefolded)
+    {
+      return nil
+    }
+    let folded = tokens.map(trimmedToken)
+    guard
+      !folded.contains(where: {
+        tileChromeWords.contains($0) || nonPersonWords.contains($0) || joinerWords.contains($0)
+      })
+    else { return nil }
+    return name
+  }
+
+  private static func isTileToken(_ token: String) -> Bool {
+    if tileParticles.contains(token.casefolded) { return true }
+    guard token.first?.isUppercase == true,
+      token.allSatisfy({ $0.isLetter || "-'’".contains($0) })
+    else { return false }
+    return token.contains { $0.isLowercase }
+  }
+
+  private static func isOwnerName(_ name: String, owners: Set<String>, ownerLocals: Set<String>) -> Bool {
+    let folded = name.casefolded
+    let tokens = folded.split(separator: " ").map(String.init)
+    for owner in owners {
+      let ownerTokens = owner.split(separator: " ").map(String.init)
+      if folded == owner
+        || (!ownerTokens.isEmpty && tokens.first == ownerTokens.first
+          && (ownerTokens.count == 1 || tokens.last == ownerTokens.last))
+      {
+        return true
+      }
+    }
+    let joined = tokens.joined()
+    return ownerLocals.contains { local in
+      joined == local.filter { !"._-+".contains($0) }
+    }
+  }
+
+  private static func trimmedToken(_ word: String) -> String {
+    word.casefolded.trimmingCharacters(in: CharacterSet(charactersIn: "'’-"))
+  }
+
+  private static func rosterNames(in text: String) -> [String] {
+    text.components(separatedBy: .newlines).flatMap { rawLine -> [String] in
+      let line = cleanLine(rawLine)
+      // Roster sentences are short UI chrome, never a 4k-character OCR smear.
+      guard
+        line.count <= 200,
+        let match = rosterPatterns.compactMap({ firstMatch($0, in: line, group: "people") }).first
+      else { return [] }
+      return split(rosterSeparator, text: match).map(cleanLine).filter(looksLikePersonName)
+    }
+  }
+
+  private static func decoratedNameLines(in text: String) -> [String] {
+    text.components(separatedBy: .newlines).compactMap { rawLine in
+      var line = cleanLine(rawLine)
+      guard !line.contains("@"), !line.lowercased().contains("http") else { return nil }
+      line = cleanLine(replacingMatches(nameDecoration, in: line, with: ""))
+      return looksLikePersonName(line) ? line : nil
+    }
+  }
+
+  private static func looksLikePersonName(_ value: String) -> Bool {
+    guard !value.isEmpty, value.count <= 60 else { return false }
+    let words = value.split(separator: " ").map(String.init)
+    guard (1...4).contains(words.count), !words.contains(where: { nonPersonWords.contains($0.casefolded) }) else {
+      return false
+    }
+    // One person is never called "X and Y": such a line is a roster or an event title.
+    guard
+      !words.contains(where: {
+        joinerWords.contains($0.casefolded.trimmingCharacters(in: CharacterSet(charactersIn: ".'’-")))
+      })
+    else { return false }
+    return words.allSatisfy { firstMatch(nameWord, in: $0) != nil }
+      && words.contains { $0.first?.isUppercase == true }
+  }
+
+  private static func identitySignal(_ text: String) -> Int {
+    (rosterNames(in: text).isEmpty ? 0 : 2) + (firstMatch(emailPattern, in: text) == nil ? 0 : 1)
+  }
+
+  private static func nameTokens(_ name: String) -> [String] {
+    name.split(separator: " ").map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".'’-")) }
+  }
+
+  private static func emailLocalTokens(_ email: String) -> [String] {
+    guard let local = email.split(separator: "@", maxSplits: 1).first else { return [] }
+    return local.split(whereSeparator: { "._-".contains($0) }).map { $0.lowercased() }
+  }
+
+  private static func cleanLine(_ value: String) -> String {
+    value.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+      .trimmingCharacters(in: CharacterSet(charactersIn: " •|*·-—\t"))
+  }
+
+  private static func appendUnique(_ values: [String], to destination: inout [String]) {
+    for value in values where !destination.contains(value) { destination.append(value) }
+  }
+
+  private static func regex(_ pattern: String) -> NSRegularExpression {
+    do {
+      return try NSRegularExpression(pattern: pattern)
+    } catch {
+      preconditionFailure("Invalid static meeting-identity pattern")
+    }
+  }
+
+  private static func firstMatch(_ regex: NSRegularExpression, in text: String, group: String? = nil) -> String? {
+    let range = NSRange(text.startIndex..., in: text)
+    guard let match = regex.firstMatch(in: text, range: range) else { return nil }
+    let matchRange = group.map { match.range(withName: $0) } ?? match.range
+    guard let swiftRange = Range(matchRange, in: text) else { return nil }
+    return String(text[swiftRange])
+  }
+
+  private static func matches(_ regex: NSRegularExpression, in text: String) -> [String] {
+    regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap {
+      Range($0.range, in: text).map { String(text[$0]) }
+    }
+  }
+
+  private static func replacingMatches(
+    _ regex: NSRegularExpression,
+    in text: String,
+    with replacement: String
+  ) -> String {
+    regex.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: replacement)
+  }
+
+  private static func split(_ regex: NSRegularExpression, text: String) -> [String] {
+    var pieces: [String] = []
+    var cursor = text.startIndex
+    for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+      guard let range = Range(match.range, in: text) else { continue }
+      pieces.append(String(text[cursor..<range.lowerBound]))
+      cursor = range.upperBound
+    }
+    pieces.append(String(text[cursor...]))
+    return pieces
+  }
+}
+
+extension MeetingScreenActivitySnapshot {
+  fileprivate var combinedText: String { "\(windowTitle ?? "")\n\(ocrText ?? "")" }
+}
+
+actor OnDeviceMeetingIdentityService {
+  static let shared = OnDeviceMeetingIdentityService()
+
+  /// The signed-in user's own names and emails, so their tile is never listed as someone else.
+  struct OwnerIdentity: Sendable {
+    var names: [String]
+    var emails: [String]
+  }
+
+  private let provider: any MeetingScreenActivityProviding
+  private let uploader: any DesktopMeetingUploading
+  private let ownerIdentity: @Sendable () async -> OwnerIdentity
+  private let captureAuthorization: @Sendable () -> MeetingEvidenceAuthorization?
+  private var uploadedEventIDs = Set<String>()
+
+  init(
+    provider: any MeetingScreenActivityProviding = RewindMeetingScreenActivityProvider(),
+    uploader: any DesktopMeetingUploading = BackendDesktopMeetingUploader(),
+    ownerIdentity: @escaping @Sendable () async -> OwnerIdentity = { @MainActor in
+      OnDeviceMeetingIdentityService.signedInOwner()
+    },
+    captureAuthorization: @escaping @Sendable () -> MeetingEvidenceAuthorization? = {
+      MeetingEvidenceAuthorization.captureCurrentOwner()
+    }
+  ) {
+    self.captureAuthorization = captureAuthorization
+    self.provider = provider
+    self.uploader = uploader
+    self.ownerIdentity = ownerIdentity
+  }
+
+  @MainActor
+  static func signedInOwner() -> OwnerIdentity {
+    let auth = AuthService.shared
+    let names = [auth.displayName].filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    let emails = [AuthState.shared.userEmail].compactMap { $0 }.filter { $0.contains("@") }
+    return OwnerIdentity(names: names, emails: emails)
+  }
+
+  func syncIdentity(overlapping interval: DateInterval) async {
+    // Bind to one owner before reading that owner's screen history; the names read below must
+    // never be uploaded under a session that replaced them.
+    guard let authorization = captureAuthorization() else { return }
+    let snapshots = await provider.snapshots(overlapping: interval)
+    let owner = await ownerIdentity()
+    guard
+      let payload = OnDeviceMeetingIdentityExtractor.payload(
+        from: snapshots, overlapping: interval, ownerNames: owner.names, ownerEmails: owner.emails)
+    else { return }
+    guard !uploadedEventIDs.contains(payload.calendarEventID) else { return }
+    do {
+      _ = try payload.wireBody
+      guard authorization.isCurrent else {
+        log("OnDeviceMeetingIdentity: signed-in account changed; identity not uploaded")
+        return
+      }
+      try await uploader.upload(payload, authorizationSnapshot: authorization.snapshot)
+      uploadedEventIDs.insert(payload.calendarEventID)
+      log("OnDeviceMeetingIdentity: stored meeting identity")
+    } catch {
+      // Metadata-only log: OCR, names, emails, titles, and transport bodies stay out of logs.
+      log("OnDeviceMeetingIdentity: upload failed")
+    }
+  }
+}
+
+extension String {
+  /// Unicode full case folding, equal to Python's `str.casefold()` on the backend twin: "Groß" and
+  /// "Gross" fold together and a final sigma folds to σ, where `lowercased()` keeps both apart.
+  fileprivate var casefolded: String { folding(options: [.caseInsensitive], locale: nil) }
+}

@@ -190,13 +190,17 @@ def prepare_for_write(
     return decorator
 
 
-def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any]]) -> Callable[[F], F]:
+def prepare_for_read(
+    decrypt_func: Callable[..., Optional[Dict[str, Any]]], *, read_budget_arg: Optional[str] = None
+) -> Callable[[F], F]:
     """
     Decorator to decrypt data after reading from the database.
     It processes the return value of the decorated function. If the return value is a dict or
     list of dicts, it applies the decrypt_func based on the 'data_protection_level' field.
 
     Assumes 'uid' is an argument to the decorated function to be used for decryption.
+    An explicit read_budget_arg forwards that getter argument into its decoder;
+    existing unbudgeted read contracts retain their two-argument decoder call.
     """
 
     def decorator(func: F) -> F:
@@ -211,12 +215,15 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
 
             result = func(*args, **kwargs)
 
-            if result is None:
-                return None
+            if result is None or bound_args.arguments.get('metadata_only', False):
+                return result
 
             def _process(item: Any) -> Any:
                 if isinstance(item, dict):
                     # The decrypt_func is responsible for checking the level and acting accordingly
+                    read_budget = bound_args.arguments.get(read_budget_arg) if read_budget_arg else None
+                    if read_budget is not None:
+                        return decrypt_func(cast(Dict[str, Any], item), uid, read_budget=read_budget)
                     return decrypt_func(cast(Dict[str, Any], item), uid)
                 return item
 
@@ -224,7 +231,7 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
                 return _process(result)
             elif isinstance(result, list):
                 items: List[Any] = cast(List[Any], result)
-                return [_process(item) for item in items]
+                return [processed for item in items if (processed := _process(item)) is not None]
             elif isinstance(result, tuple):
                 # Handle functions that return a tuple, e.g., (data, doc_id)
                 elements: Tuple[Any, ...] = cast(Tuple[Any, ...], result)
@@ -233,7 +240,13 @@ def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any
                     if isinstance(element, dict):
                         processed_elements.append(_process(element))
                     elif isinstance(element, list):
-                        processed_elements.append([_process(item) for item in cast(List[Any], element)])
+                        processed_elements.append(
+                            [
+                                processed
+                                for item in cast(List[Any], element)
+                                if (processed := _process(item)) is not None
+                            ]
+                        )
                     else:
                         processed_elements.append(element)
                 return tuple(processed_elements)
@@ -265,8 +278,8 @@ def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
             # Execute the original function to get the conversation data
             result = func(*args, **kwargs)
 
-            if result is None:
-                return None
+            if result is None or bound_args.arguments.get('metadata_only', False):
+                return result
 
             def _fetch_and_attach_photos(conversation_data: Any) -> Any:
                 if not isinstance(conversation_data, dict) or 'id' not in conversation_data:
@@ -279,8 +292,20 @@ def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
                 if data_dict.get('photos'):
                     return data_dict
 
+                # New conversation documents carry an authoritative marker maintained
+                # transactionally with photo writes. Avoid an empty subcollection query
+                # for the overwhelmingly common no-photo case. Legacy documents omit the
+                # marker and deliberately keep the lookup so their response cannot change.
+                if data_dict.get('has_photos') is False:
+                    data_dict['photos'] = []
+                    return data_dict
+
                 conversation_id = data_dict['id']
-                photos = photos_getter(uid=uid, conversation_id=conversation_id)
+                firestore_client = bound_args.arguments.get('firestore_client')
+                if firestore_client is not None:
+                    photos = photos_getter(uid=uid, conversation_id=conversation_id, firestore_client=firestore_client)
+                else:
+                    photos = photos_getter(uid=uid, conversation_id=conversation_id)
                 data_dict['photos'] = photos
                 return data_dict
 

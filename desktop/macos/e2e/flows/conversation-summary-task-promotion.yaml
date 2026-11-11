@@ -1,0 +1,36 @@
+version: 2
+name: conversation-summary-task-promotion
+tier: manual
+description: "Explicit summary gesture resolves the extraction Candidate once and persists the task link across reopening"
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationSummaryTaskPromoter.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+SummaryTasks.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+preconditions:
+  - named_non_production_bundle_ui_lane
+  - loopback_backend_with_real_candidate_router_and_firestore_emulator
+  - synthetic_conversation_summary_with_matching_pending_candidate
+
+steps:
+  - id: S1
+    name: Open a synthetic conversation before acceptance
+    do: "Open the seeded conversation with `scripts/omi-ctl open-conversation <id>`. Inspect its summary action item and the matching Suggested Candidate. Confirm the Firestore owner has no action item for that Candidate."
+    expect:
+      text_visible:
+        - Add to Tasks
+
+  - id: S2
+    name: Accept through the mounted summary row
+    do: "Use `scripts/omi-ctl action conversation_detail_prompt prompt=add_task index=0` to invoke the mounted row's real task handler. Wait for the button to become Open Task. Inspect backend state: one accepted Candidate, one action item, and the selected summary row's target_task_id equal to that action item's ID. Verify conversation_id, due_at, owner and transcript provenance are retained and the matching pending suggestion is gone."
+    expect:
+      text_visible:
+        - Open Task
+
+  - id: S3
+    name: Reopen and reuse the saved task
+    do: "Navigate away, then reopen the same conversation. Confirm Open Task remains without another prepare/accept call. Replay the accept request against the real backend and assert newly_resolved=false, the same task ID, and still exactly one task. Capture only the synthetic conversation as evidence."
+    expect:
+      text_visible:
+        - Open Task

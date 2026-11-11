@@ -142,6 +142,25 @@ enum NotchHoverSurfacePolicy {
   }
 }
 
+/// The compact idle notch has an explicit route to the main chat. Its expanded hover
+/// surface shows actionable subagents when there are any, and always shows the shortcut
+/// legend and capture controls — so hovering the notch is never a no-op.
+///
+/// The surface was previously agent-only because the rows it carried were duplicate entry
+/// points into chat and settings (`FC-split-mutation-authority`). The legend is a
+/// read-only reference and the capture toggles route through the single
+/// `SystemCaptureControls` owner, so neither reintroduces a second authority.
+enum NotchAgentMenuPresentation {
+  static func shouldPresent(agentCount: Int) -> Bool {
+    true
+  }
+
+  /// Whether the agent row list itself has anything to draw.
+  static func hasAgentRows(agentCount: Int) -> Bool {
+    agentCount > 0
+  }
+}
+
 /// Hidden provenance carried with a floating-bar notification so follow-up
 /// questions can explain where the notification came from without guessing.
 struct FloatingBarNotificationContext: Equatable {
@@ -153,42 +172,193 @@ struct FloatingBarNotificationContext: Equatable {
   let currentActivity: String?
   let reasoning: String?
   let detail: String?
+  /// Producer-owned durable identity, such as a proactivity v2 feed item ID.
+  let provenanceRef: String?
+
+  init(
+    sourceTitle: String,
+    assistantId: String,
+    sourceApp: String? = nil,
+    windowTitle: String? = nil,
+    contextSummary: String? = nil,
+    currentActivity: String? = nil,
+    reasoning: String? = nil,
+    detail: String? = nil,
+    provenanceRef: String? = nil
+  ) {
+    self.sourceTitle = sourceTitle
+    self.assistantId = assistantId
+    self.sourceApp = sourceApp
+    self.windowTitle = windowTitle
+    self.contextSummary = contextSummary
+    self.currentActivity = currentActivity
+    self.reasoning = reasoning
+    self.detail = detail
+    self.provenanceRef = provenanceRef
+  }
+}
+
+/// Pure decision for how a persistent card interacts with the notification
+/// queue: a newcomer displaces it (the persistent card returns right after)
+/// rather than queueing behind a card that has no timeout — otherwise one
+/// un-acted persistent card would starve every later proactive notification.
+enum FloatingBarNotificationQueuePolicy {
+  static func shouldDisplacePersistentCard(
+    currentIsPersistent: Bool,
+    showingAIConversation: Bool
+  ) -> Bool {
+    currentIsPersistent && !showingAIConversation
+  }
+
+  /// A displaced persistent card rejoins at the TAIL: every notification that
+  /// queued while it was visible presents first, and the card — which never
+  /// times out — returns once the queue drains, so it can neither be lost nor
+  /// starve anything behind it.
+  static func requeueIndex(queueCount: Int) -> Int {
+    queueCount
+  }
+}
+
+/// Decides whether a proactive card is delivered by the notch alone.
+///
+/// The bar grows to a 508pt panel to show a card. That panel is the right surface for
+/// something the user has to act on, and the wrong one for a remark: it covers the top of
+/// the screen unasked, for a sentence that could have simply been said.
+///
+/// So a card that is *actually spoken* keeps the notch collapsed and rides the response
+/// glow instead. The panel stays the fallback for everything else, which is what makes
+/// this safe to turn on — a card that would be silent is still shown, so nothing is
+/// delivered to nobody.
+///
+/// Two cards always take the panel regardless: one carrying an action has buttons that
+/// have to be reachable, and a persistent card is waiting on an explicit decision. Neither
+/// can be answered by a glow.
+enum FloatingBarNotchOnlyCardPolicy {
+  static func staysInNotch(
+    spokenAloud: Bool,
+    hasAction: Bool,
+    isPersistent: Bool
+  ) -> Bool {
+    spokenAloud && !hasAction && !isPersistent
+  }
 }
 
 enum FloatingBarNotificationAction: Equatable {
   case openWhatMattersNow(recommendationID: String)
+  /// Offer to connect an integration the user has open but has not set up.
+  /// Carries the catalog's telemetry id (`import:email`, `export:notion`, …),
+  /// which is unique across both halves of the catalog — the bare connector id
+  /// is not, because ChatGPT and Claude exist on both sides. `triggerID` names
+  /// what was recognized, so a conversion can be attributed to the native-app
+  /// or browser-site trigger that produced the card rather than merged.
+  case connectIntegration(telemetryID: String, triggerID: String)
+  /// Post-meeting summary share card: carries what the card's buttons need —
+  /// the conversation to share and the calendar-detected recipients a
+  /// one-click "Send to …" email would go to (empty = no send button).
+  case meetingSummaryShare(conversationID: String, recipients: [ConversationShareRecipient])
+  /// The daily recap's announcement card. The recap never journals a transcript
+  /// turn (INV-CHAT-1), so the generic open-notification-chat fallthrough has no
+  /// stored message to resolve — the card carries its own destination instead:
+  /// the recap page the in-chat recap row opens, by the same route identity.
+  case openDailyRecap(DailyRecapRouteRef)
+  /// Open the main chat with `prompt` already in the composer, focused and
+  /// **not sent**. Raised by the first-real-app card, whose whole purpose is to
+  /// turn a dead-end notch card into the user's first question — they still
+  /// press return, so the question stays theirs.
+  case askOmiPrefilled(prompt: String)
+  /// Place-bound reminder: Done marks it complete, Remind me tomorrow snoozes
+  /// until the next calendar day. Bound to the frontmost app/document, not a time.
+  case contextReminder(reminderID: String)
+}
+
+enum NotificationInteraction: String {
+  case opened
+  case dismissed
+  case timeout
+  case thumbsUp = "thumbs_up"
+  case thumbsDown = "thumbs_down"
 }
 
 /// A custom in-app notification rendered directly below the floating bar.
 struct FloatingBarNotification: Identifiable, Equatable {
-  let id = UUID()
+  let id: UUID
+  let expiresAt: Date?
+  let onInteraction: ((NotificationInteraction) -> Void)?
   /// Immutable owner provenance captured before the workflow that produced
   /// this notification crossed an async boundary.
   let ownerID: String
   let title: String
   let message: String
   let assistantId: String
+  let kind: ProactiveNotificationKind
   let context: FloatingBarNotificationContext?
   let action: FloatingBarNotificationAction?
+  /// Optional opaque proactive-suggestion join keys. No card content or screen
+  /// provenance enters notification analytics through this field.
+  let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
   /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
   let screenshotData: Data?
+  /// A persistent card never times out: it stays presented until the user
+  /// acts on it or dismisses it. Reserved for cards whose whole point is an
+  /// explicit decision (e.g. the meeting summary share card).
+  let isPersistent: Bool
+  /// Proactive cards must revalidate snooze and presence when they leave the queue.
+  let isProactive: Bool
+  /// Whether speech was eligible before live presence is applied at presentation.
+  let speechEligible: Bool
+  /// The card is spoken, so the notch carries it and the bar never grows into the panel.
+  /// See `FloatingBarNotchOnlyCardPolicy`.
+  var staysInNotch: Bool
 
   init(
     ownerID: String,
     title: String,
     message: String,
     assistantId: String,
+    kind: ProactiveNotificationKind,
+    id: UUID = UUID(),
+    onInteraction: ((NotificationInteraction) -> Void)? = nil,
+    expiresAt: Date? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
-    screenshotData: Data? = nil
+    suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    screenshotData: Data? = nil,
+    isPersistent: Bool = false,
+    isProactive: Bool = false,
+    speechEligible: Bool = false,
+    staysInNotch: Bool = false
   ) {
+    self.id = id
+    self.onInteraction = onInteraction
+    self.expiresAt = expiresAt
     self.ownerID = ownerID
     self.title = title
     self.message = message
     self.assistantId = assistantId
+    // Required, never derived here. Deriving it from `assistantId` meant every
+    // producer that forgot to say what its card was silently became `.general`
+    // and journaled a bare `notification:<uuid>` row badged "Notification".
+    self.kind = kind
     self.context = context
     self.action = action
+    self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
     self.screenshotData = screenshotData
+    self.isPersistent = isPersistent
+    self.isProactive = isProactive
+    self.speechEligible = speechEligible
+    self.staysInNotch = staysInNotch
+  }
+
+  /// Identity every shown card can write. SuggestionAssistant supplies a real
+  /// pair; other cards synthesize from delivery id / card id
+  /// so the ledger is not gated on suggestion-only telemetry.
+  var feedbackIdentity: SuggestionAssistantTelemetry.NotificationIdentity {
+    if let suggestionTelemetryIdentity { return suggestionTelemetryIdentity }
+    let evaluationID =
+      UUID(uuidString: context?.provenanceRef ?? "")
+      ?? id
+    return SuggestionAssistantTelemetry.NotificationIdentity(
+      evaluationID: evaluationID, suggestionID: id)
   }
 
   static func == (lhs: FloatingBarNotification, rhs: FloatingBarNotification) -> Bool {
@@ -208,6 +378,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @Published var isHoveringBar: Bool = false
   @Published var requiresHoverReset: Bool = false
   @Published var currentNotification: FloatingBarNotification? = nil
+
+  /// Onboarding-only: pulse a glowing border on the bar so first-run users
+  /// notice it. Cleared automatically once they start typing.
+  @Published var onboardingBarGlow: Bool = false
 
   // AI conversation chrome (not transcript content)
   @Published var showingAIConversation: Bool = false
@@ -234,6 +408,19 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @Published private(set) var localAnswerOverride: ChatMessage? = nil
   @Published var lastConversationActivityAt: Date? = nil
   @Published var activeAgentChatPillID: UUID? = nil
+  /// This query answers in the notch: spoken, with the existing response glow, and without
+  /// growing the bar into a response panel.
+  ///
+  /// Set for a wake-word command, where hands and eyes are elsewhere and a panel covering a
+  /// fifth of the screen is the opposite of what was asked for. It has to survive the whole
+  /// query rather than just its start: the answer's arrival presents `.mainResponse` again
+  /// on its own, which is why suppressing only the initial expansion left the panel showing.
+  /// The query's own presentation sites skip presenting entirely while this is set, so the
+  /// flag ends when any *other* open surface is presented — `present(_:)` clears it — never
+  /// sooner. A latch that outlived its answer silently swallowed the next agent-chat or
+  /// notification-conversation growth (`resizeAnchored(makeResizable: true)`).
+  @Published var answersQuietly: Bool = false
+
   @Published var conversationSurface: FloatingConversationSurface = .closed
   private var activeAIDraftKey = ChatDraftKey.floatingMain
   private var isRestoringAIDraft = false
@@ -254,9 +441,14 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @MainActor
   final class PTTBarPresenter {
     private weak var barState: FloatingControlBarState?
+    private let resizeForPTT: @MainActor (Bool) -> Void
 
-    init(barState: FloatingControlBarState) {
+    init(
+      barState: FloatingControlBarState,
+      resizeForPTT: @escaping @MainActor (Bool) -> Void
+    ) {
       self.barState = barState
+      self.resizeForPTT = resizeForPTT
     }
 
     func apply(_ projection: VoiceTurnUIProjection) {
@@ -269,11 +461,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
       // compete with the reducer-owned voice presentation.
       barState.dismissNotchHoverForVoicePresentation()
 
+      // Onboarding uses this same renderer. Its PTT demo must receive the
+      // same surface transition as a completed user's first voice turn.
       if shouldExpandForVoice != wasExpandedForVoice,
-        !barState.showingAIConversation,
-        UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
+        !barState.showingAIConversation
       {
-        FloatingControlBarManager.shared.resizeForPTT(expanded: shouldExpandForVoice)
+        resizeForPTT(shouldExpandForVoice)
       }
     }
   }
@@ -363,6 +556,8 @@ class FloatingControlBarState: NSObject, ObservableObject {
   var pttHintText: String { VoiceTurnUICopy.statusBannerText(for: voiceProjection) }
   var isVoiceResponseActive: Bool { voiceProjection.isResponseActive }
   var isVoiceResponseWaiting: Bool { voiceProjection.isResponseWaiting }
+  /// The current hold has been recognised as a dictation.
+  var isVoiceDictating: Bool { voiceProjection.isDictating }
   /// True while a committed Push-to-Talk query is being processed and no
   /// response output (voice glow or conversation surface) has surfaced yet.
   /// Drives the notch/pill "thinking" animation.
@@ -685,6 +880,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
   }
 
   func present(_ surface: FloatingConversationSurface) {
+    // Presenting an open surface is an explicit choice to show content, and it ends a
+    // quiet (wake-word) answer's silence. The quiet answer's own presentation sites never
+    // present while the latch is set, so this only fires for surfaces opened afterwards
+    // (agent chat, a tapped notification, a restored conversation) — exactly the surfaces
+    // whose growth the stale latch would otherwise silently swallow.
+    if surface.isOpen { answersQuietly = false }
     conversationSurface = surface
     activeAgentChatPillID = surface.agentID
     showingAIConversation = surface.isOpen
@@ -778,6 +979,15 @@ extension ChatContentBlock {
     case .toolCall(let id, let name, let status, _, _, _): return "c:\(id):\(name):\(status)"
     case .thinking(let id, _): return "h:\(id)"
     case .discoveryCard(let id, _, _, _): return "d:\(id)"
+    case .questionCard(let id, _, _, _, _, _, _): return "q:\(id)"
+    case .taskCard(let id, _): return "t:\(id)"
+    case .goalLink(let id, _, _): return "g:\(id)"
+    case .captureLink(let id, _, _, _): return "c:\(id)"
+    case .conversationLink(let id, _, _, _): return "v:\(id)"
+    case .memoryLink(let id, _, _): return "m:\(id)"
+    case .memoryReviewCard(let id, _, _, let items): return "mr:\(id):\(items.count)"
+    case .citation(let id, let reference): return "r:\(id):\(reference.ordinal)"
+    case .followUp(let id, let text): return "f:\(id):\(text.count)"
     case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
     case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
     }

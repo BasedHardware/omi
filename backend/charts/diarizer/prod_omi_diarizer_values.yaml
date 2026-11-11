@@ -57,8 +57,15 @@ service:
   port: 8080
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+# /v2/diarization is intentionally NOT routed to this embedding GPU.
+# Use the separate prod-omi-diarizer-batch ClusterIP service/release; see
+# prod_omi_diarizer_batch_values.yaml and scripts/diarization_eval/capacity.md.
+# Callerless since the shared-gateway /diarizer route took over: every caller
+# (listen/pusher/parakeet in-cluster, Cloud Run services) reaches this service
+# by ClusterIP DNS or 172.16.160.20. Keep the block for rollback; the ALB
+# re-forms on the reserved prod-diarizer-ilb-ip-address when re-enabled.
 ingress:
-  enabled: true
+  enabled: false
   className: ""
   annotations:
     kubernetes.io/ingress.class: "gce-internal"
@@ -80,6 +87,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: OMI_ENV_STAGE
+    value: prod
+  - name: GOOGLE_CLOUD_PROJECT
+    value: based-hardware
   - name: HUGGINGFACE_TOKEN
     valueFrom:
       secretKeyRef:
@@ -191,3 +202,8 @@ strategy:
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway

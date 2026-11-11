@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, cast
 
 from google.cloud import firestore
 
+from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt, drain_isolated, oldest_ready_age_seconds
 from database.memory_collections import MemoryCollections
 from database.memory_vector_repair_outbox_telemetry import (
     VectorRepairOutboxTelemetryConfig,
@@ -127,6 +128,7 @@ def run_vector_repair_outbox_worker_tick(
     summary["skipped_count"] = processed["skipped_count"]
     summary["failed_count"] = processed["failed_count"]
     summary["actions"] = processed["actions"]
+    summary["oldest_ready_age_seconds"] = processed.get("oldest_ready_age_seconds")
     return _attach_vector_repair_outbox_worker_telemetry(
         summary,
         telemetry_emitter=telemetry_emitter,
@@ -441,20 +443,25 @@ def process_vector_repair_purge_outbox_records(
     processed_count = 0
     skipped_count = 0
     failed_count = 0
+    created_ats: List[datetime] = []
 
-    for record in records:
+    def process_one(record: Dict[str, Any]) -> ProcessOutcome:
+        nonlocal processed_count, skipped_count, failed_count
+        created_at = record.get("created_at")
+        if isinstance(created_at, datetime):
+            created_ats.append(created_at)
         idempotency_key = _required_str(record, "idempotency_key")
         record_id = _required_str(record, "record_id")
         status = record.get("status")
         if status != VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
             skipped_count += 1
-            continue
+            return ProcessOutcome.ack()
         if record.get("event_type") != VECTOR_REPAIR_PURGE_EVENT_TYPE:
             skipped_count += 1
-            continue
+            return ProcessOutcome.ack()
         if idempotency_key in seen_idempotency_keys:
             skipped_count += 1
-            continue
+            return ProcessOutcome.ack()
         seen_idempotency_keys.add(idempotency_key)
 
         action = "delete" if _should_delete_without_authoritative_load(record) else None
@@ -488,30 +495,43 @@ def process_vector_repair_purge_outbox_records(
             )
             processed_count += 1
             actions.append({"record_id": record_id, "idempotency_key": idempotency_key, "action": action})
+            return ProcessOutcome.ack()
         except Exception as exc:
             failed_count += 1
-            next_attempt_count = int(record.get("attempt_count") or 0) + 1
+            observed_dt = now if isinstance(now, datetime) else datetime.now(timezone.utc)
+            decision = decide_attempt(
+                attempt_count=int(record.get("attempt_count") or 0) + 1,
+                outcome=ProcessOutcome.retry(str(exc), reason="vector_repair_failed"),
+                policy=QueuePolicy(max_attempts=max_attempts, base_backoff_seconds=1, max_backoff_seconds=1800),
+                now=observed_dt,
+            )
             next_status = (
-                VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS
-                if next_attempt_count >= max_attempts
-                else VECTOR_REPAIR_OUTBOX_PENDING_STATUS
+                VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS if decision.terminal else VECTOR_REPAIR_OUTBOX_PENDING_STATUS
             )
-            outbox_updater(
-                record,
-                {
-                    "status": next_status,
-                    "attempt_count": next_attempt_count,
-                    "last_error": str(exc),
-                    "failed_at": observed_now,
-                    "action": action or "unknown",
-                },
-            )
+            patch: Dict[str, Any] = {
+                "status": next_status,
+                "attempt_count": decision.attempt_count,
+                "last_error": decision.error_text,
+                "last_error_text": decision.error_text,
+                "failed_at": observed_now,
+                "action": action or "unknown",
+            }
+            if decision.terminal:
+                patch["dead_letter_reason"] = decision.reason
+            if decision.available_at is not None:
+                patch["available_at"] = decision.available_at
+            outbox_updater(record, patch)
+            return ProcessOutcome.retry(decision.error_text, reason=decision.reason)
 
+    drain_isolated(list(records), process_one)
+
+    observed_dt = now if isinstance(now, datetime) else datetime.now(timezone.utc)
     return {
         "processed_count": processed_count,
         "skipped_count": skipped_count,
         "failed_count": failed_count,
         "actions": actions,
+        "oldest_ready_age_seconds": oldest_ready_age_seconds(created_ats, now=observed_dt),
     }
 
 

@@ -45,10 +45,15 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     // register-first helper (each of these files had an open-then-register path).
     for path in [
       "Sources/MainWindow/Pages/PermissionsPage.swift",
-      "Sources/MainWindow/SidebarView.swift",
       "Sources/Rewind/UI/RewindPage.swift",
-      "Sources/MainWindow/Pages/DashboardPage.swift",
-      "Sources/OmiApp.swift",
+      // The legacy sidebar shell (SidebarView.swift) and DashboardPage were
+      // deleted with the one-chat-shell migration; ChatFirstShell's capture
+      // toggle now delegates to CaptureListeningLogic, which owns the
+      // register-first screen-recording grant.
+      "Sources/MainWindow/CaptureListeningLogic.swift",
+      // OmiApp's menu-bar toggle now delegates to SystemCaptureControls, which owns the
+      // register-first screen-recording grant for both the menu bar and the notch cluster.
+      "Sources/FloatingControlBar/SystemCaptureControls.swift",
       "Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift",
       "Sources/MainWindow/RewindOnlyView.swift",
     ] {
@@ -59,9 +64,8 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     // Negative guard: the register-after-open-Settings anti-pattern is gone.
     for path in [
       "Sources/MainWindow/Pages/PermissionsPage.swift",
-      "Sources/MainWindow/SidebarView.swift",
       "Sources/Rewind/UI/RewindPage.swift",
-      "Sources/MainWindow/Pages/DashboardPage.swift",
+      "Sources/MainWindow/CaptureListeningLogic.swift",
     ] {
       let src = try sourceFile(path)
       XCTAssertNil(
@@ -137,24 +141,178 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertEqual(CloudConnectorGuidanceOverlay.dragCardInitialAlpha(reduceMotion: true), 1)
   }
 
-  /// The drag card sits centered in the bottom quarter of the screen (below the
-  /// Settings list, never covering the drop target), x-centered on the anchor.
   @MainActor
-  func testDragCardSitsInBottomQuarterOfScreen() {
-    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
-    let card = CGSize(width: 180, height: 164)
-    let anchor = CGRect(x: 900, y: 300, width: 600, height: 500)
+  func testDragHelperIsSkippedWheneverPermissionIsAlreadyGranted() {
+    XCTAssertFalse(PermissionDragGuidance.shouldPresentDragGuidance(permissionGranted: true))
+    XCTAssertTrue(PermissionDragGuidance.shouldPresentDragGuidance(permissionGranted: false))
+  }
+
+  @MainActor
+  func testAccessibilityDragHelperOnlySkipsAWorkingGrant() {
+    XCTAssertTrue(
+      PermissionDragGuidance.accessibilityGrantIsUsable(
+        AccessibilityProbeSignals(tccTrusted: true, axProbe: .working)))
+    XCTAssertTrue(
+      PermissionDragGuidance.accessibilityGrantIsUsable(
+        AccessibilityProbeSignals(tccTrusted: false, axProbe: .working)),
+      "A functional AX call overrides a stale false TCC read")
+    XCTAssertFalse(
+      PermissionDragGuidance.accessibilityGrantIsUsable(
+        AccessibilityProbeSignals(tccTrusted: false, axProbe: .indeterminate)),
+      "An off toggle with no working AX evidence still needs guidance")
+    XCTAssertFalse(
+      PermissionDragGuidance.accessibilityGrantIsUsable(
+        AccessibilityProbeSignals(tccTrusted: true, axProbe: .failing)),
+      "A stale or broken TCC grant still needs repair guidance")
+  }
+
+  @MainActor
+  func testGrantedDragDismissesGuidanceBeforeRefocusingOmi() {
+    var events: [String] = []
+
+    PermissionDragGuidance.completeGrantedDrag(
+      dismissGuidance: { events.append("dismiss") },
+      refocusOmi: { events.append("refocus") })
+
+    XCTAssertEqual(events, ["dismiss", "refocus"])
+  }
+
+  @MainActor
+  func testDragGrantWatcherWaitsForARealPermissionGrant() async {
+    var checks = 0
+    let granted = await PermissionDragGuidance.waitForGrantedDrag(
+      permission: .accessibility,
+      overlayIsVisible: { true },
+      permissionIsGranted: { _ in
+        checks += 1
+        return checks == 3
+      },
+      waitForNextPoll: {})
+
+    XCTAssertTrue(granted)
+    XCTAssertEqual(checks, 3)
+  }
+
+  @MainActor
+  func testDragGrantWatcherStopsWithoutRefocusWhenGuidanceCloses() async {
+    var visible = true
+    var checks = 0
+    let granted = await PermissionDragGuidance.waitForGrantedDrag(
+      permission: .accessibility,
+      overlayIsVisible: { visible },
+      permissionIsGranted: { _ in
+        checks += 1
+        return false
+      },
+      waitForNextPoll: { visible = false })
+
+    XCTAssertFalse(granted)
+    XCTAssertEqual(checks, 1)
+  }
+
+  @MainActor
+  func testDragHelperDirectsUsersToTheAppListWithoutClaimingExactBounds() {
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragInstructionText(appName: "Omi"),
+      "Drag Omi into the app list")
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragInstructionAccessibilityText(appName: "Omi"),
+      "Press and drag Omi into the privacy permission app list, then release")
+  }
+
+  /// Regression for the reported detached icon: the draggable source must begin
+  /// immediately beside the in-window permission list, not below the entire
+  /// System Settings window.
+  @MainActor
+  func testDragCardStartsAdjacentToPermissionAppList() {
+    let visible = CGRect(x: 0, y: 0, width: 1_600, height: 1_000)
+    let settings = CGRect(x: 600, y: 160, width: 800, height: 640)
+    let card = CloudConnectorGuidanceOverlay.dragCardSize(appName: "Omi Dev")
+    let target = CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: settings)
 
     let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
-      anchor: anchor, cardSize: card, visibleFrame: visible)
-    XCTAssertEqual(frame.midX, anchor.midX)
-    XCTAssertLessThanOrEqual(frame.maxY, visible.minY + visible.height / 4)
+      target: target, cardSize: card, visibleFrame: visible)
+    XCTAssertGreaterThan(target.midX, settings.midX, "target belongs in the Settings content pane")
+    XCTAssertEqual(frame.maxX, target.minX - 16, accuracy: 0.001)
+    XCTAssertEqual(frame.midY, target.midY, accuracy: 0.001)
+    XCTAssertTrue(frame.intersection(target).isEmpty, "source must never cover the drop list")
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragCardDirection(cardFrame: frame, targetFrame: target),
+      .right)
+  }
 
-    // No anchor → centered on the screen, still in the bottom quarter.
-    let centered = CloudConnectorGuidanceOverlay.dragCardFrame(
-      anchor: nil, cardSize: card, visibleFrame: visible)
-    XCTAssertEqual(centered.midX, visible.midX)
-    XCTAssertLessThanOrEqual(centered.maxY, visible.minY + visible.height / 4)
+  /// System Settings renders the Screen Recording list in the upper content
+  /// pane, beneath its toolbar/header. The target must not fall into the lower
+  /// pane merely because AppKit's Y axis starts at the bottom.
+  @MainActor
+  func testPermissionListTargetSitsInUpperContentPane() {
+    let settings = CGRect(x: 600, y: 160, width: 800, height: 640)
+    let target = CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: settings)
+
+    XCTAssertGreaterThan(target.midY, settings.midY)
+    XCTAssertLessThan(settings.maxY - target.maxY, settings.height * 0.25)
+    XCTAssertGreaterThanOrEqual(target.minY, settings.minY + settings.height * 0.5)
+    XCTAssertGreaterThan(target.midX, settings.midX, "target belongs in the content pane")
+  }
+
+  /// Target and source geometry must follow a resized/moved System Settings
+  /// window instead of drifting to a screen-relative fallback position.
+  @MainActor
+  func testPermissionListTargetAndSourceFollowSettingsResize() {
+    let visible = CGRect(x: 0, y: 0, width: 1_800, height: 1_100)
+    let initialSettings = CGRect(x: 200, y: 140, width: 760, height: 620)
+    let movedSettings = CGRect(x: 680, y: 280, width: 920, height: 700)
+    let card = CloudConnectorGuidanceOverlay.dragCardSize(appName: "Omi Dev")
+    let initialTarget = CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: initialSettings)
+    let movedTarget = CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: movedSettings)
+    let movedCard = CloudConnectorGuidanceOverlay.dragCardFrame(
+      target: movedTarget, cardSize: card, visibleFrame: visible)
+
+    XCTAssertGreaterThan(movedTarget.width, initialTarget.width)
+    XCTAssertGreaterThan(movedTarget.minX, initialTarget.minX)
+    XCTAssertEqual(movedCard.maxX, movedTarget.minX - 16, accuracy: 0.001)
+    XCTAssertEqual(movedCard.midY, movedTarget.midY, accuracy: 0.001)
+  }
+
+  @MainActor
+  func testSettingsWindowFrameUsesWindowServerMetadataWithoutAccessibility() {
+    let settingsPID: pid_t = 42
+    let windows: [[String: Any]] = [
+      [
+        kCGWindowOwnerPID as String: settingsPID,
+        kCGWindowLayer as String: 0,
+        kCGWindowBounds as String: [
+          "X": CGFloat(200), "Y": CGFloat(100), "Width": CGFloat(700), "Height": CGFloat(600),
+        ],
+      ],
+      [
+        kCGWindowOwnerPID as String: settingsPID,
+        kCGWindowLayer as String: 0,
+        kCGWindowBounds as String: [
+          "X": CGFloat(250), "Y": CGFloat(150), "Width": CGFloat(300), "Height": CGFloat(200),
+        ],
+      ],
+      [
+        kCGWindowOwnerPID as String: pid_t(99),
+        kCGWindowLayer as String: 0,
+        kCGWindowBounds as String: ["X": CGFloat(0), "Y": CGFloat(0), "Width": CGFloat(1200), "Height": CGFloat(900)],
+      ],
+    ]
+
+    let frame = CloudConnectorFormAutomation.appKitWindowFrame(pid: settingsPID, windows: windows)
+    XCTAssertEqual(frame?.minX, 200)
+    XCTAssertEqual(frame?.width, 700)
+    XCTAssertEqual(frame?.height, 600)
+  }
+
+  @MainActor
+  func testDragCardExpandsForLongBundleDisplayNames() {
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragCardSize(appName: "Omi Dev"),
+      CGSize(width: 220, height: 190))
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragCardSize(appName: "omi-tool-stall-reliability"),
+      CGSize(width: 260, height: 200))
   }
 
   func testCaptureKitFailureDoesNotOverrideGrantedTccPermission() {
@@ -166,6 +324,105 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
 
   func testCaptureKitFailureDoesNotCreatePermissionFailureWhenTccIsDenied() {
     XCTAssertFalse(ScreenRecordingPermissionPolicy.shouldMarkCaptureKitBroken(tccGranted: false))
+  }
+
+  /// Regression: the onboarding request tool reopened System Settings (and the
+  /// FDA drag card) even when the permission was already granted. Opening must
+  /// stay behind a granted check, like the notifications/automation cases.
+  func testRequestToolOpensSettingsOnlyWhenDenied() throws {
+    // omi-test-quality: source-inspection -- static contract: the tool's
+    // NSWorkspace/System Settings side effects cannot be exercised hermetically.
+    let src = try sourceFile("Sources/Providers/ChatToolExecutor.swift")
+    for (caseStart, caseEnd, grantedGuard, pane) in [
+      ("case \"screen_recording\":", "case \"microphone\":", "if !screenRecordingGranted {", "Privacy_ScreenCapture"),
+      ("case \"full_disk_access\":", "default:", "if !checkFullDiskAccessDirectly() {", "Privacy_AllFiles"),
+    ] {
+      guard let start = src.range(of: caseStart)?.upperBound,
+        let end = src.range(of: caseEnd, range: start..<src.endIndex)?.lowerBound
+      else { return XCTFail("request tool must handle \(caseStart)") }
+      let body = String(src[start..<end])
+      guard let guardPos = body.range(of: grantedGuard)?.lowerBound,
+        let openPos = body.range(of: pane)?.lowerBound
+      else { return XCTFail("\(caseStart) must guard its \(pane) open behind \(grantedGuard)") }
+      XCTAssertLessThan(
+        guardPos, openPos,
+        "\(caseStart): opening \(pane) must sit inside the not-granted branch")
+    }
+  }
+
+  /// Regression: the onboarding "Reopen Omi" prompt looped forever because the
+  /// offer was static step config with no memory of restarts. The offer must
+  /// fire only for a grant that arrived during this process's lifetime.
+  func testRelaunchOfferedOnlyForGrantsArrivingWhileRunning() {
+    XCTAssertTrue(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: true, grantedAtLaunch: false),
+      "granted while running → capture is dead until relaunch, offer the reopen")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: true, grantedAtLaunch: true),
+      "already granted at launch (incl. right after a reopen) → never re-offer")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: false, grantedAtLaunch: false),
+      "not granted → nothing to apply")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: false, grantedAtLaunch: true),
+      "revoked while running → a relaunch can't help; the grant flow handles it")
+  }
+
+  func testScreenCaptureKitInvokedOnlyWhenGrantWasLiveAtLaunch() {
+    XCTAssertTrue(
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(grantedAtLaunch: true),
+      "SCK is usable when this process launched with Screen Recording already granted")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(grantedAtLaunch: false),
+      "an in-session first grant is not live on this window-server connection")
+  }
+
+  func testFirstGrantPathsDoNotCallScreenCaptureKitUntilRelaunch() throws {
+    // omi-test-quality: source-inspection -- static contract: SCK abort after an
+    // in-session first grant is not reproducible in XCTest without a WindowServer
+    // connection that predates TCC; every SCK entry must consult the policy gate.
+    let src = try sourceFile("Sources/ScreenCaptureService.swift")
+    XCTAssertTrue(src.contains("requestScreenCaptureKitPermissionIfUsableInThisProcess()"))
+    XCTAssertTrue(
+      src.contains("ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit("),
+      "ScreenCaptureService must consult the launch-time SCK gate")
+
+    guard let rfn = src.range(of: "static func requestAllScreenCapturePermissions() {"),
+      let rend = src.range(of: "\n  }", range: rfn.upperBound..<src.endIndex)?.lowerBound
+    else { return XCTFail("requestAllScreenCapturePermissions must exist") }
+    let rbody = String(src[rfn.upperBound..<rend])
+    XCTAssertTrue(
+      rbody.contains("requestScreenCaptureKitPermissionIfUsableInThisProcess()"),
+      "requestAll must not call SCK until the grant is live in this process")
+    XCTAssertFalse(
+      rbody.contains("await requestScreenCaptureKitPermission()"),
+      "requestAll must not call raw SCK after the first TCC dialog")
+
+    guard
+      let pfn = src.range(of: "static func primeCaptureConsent() async {"),
+      let pend = src.range(of: "\n  }", range: pfn.upperBound..<src.endIndex)?.lowerBound
+    else { return XCTFail("primeCaptureConsent must exist") }
+    let pbody = String(src[pfn.upperBound..<pend])
+    XCTAssertTrue(
+      pbody.contains("shouldInvokeScreenCaptureKit"),
+      "primeCaptureConsent must skip SCK when the grant arrived after launch")
+
+    let onboarding = try sourceFile("Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift")
+    guard let ofn = onboarding.range(of: "func primeScreenCaptureConsentIfNeeded() {"),
+      let oend = onboarding.range(of: "\n  }", range: ofn.upperBound..<onboarding.endIndex)?
+        .lowerBound
+    else { return XCTFail("primeScreenCaptureConsentIfNeeded must exist") }
+    let obody = String(onboarding[ofn.upperBound..<oend])
+    XCTAssertTrue(
+      obody.contains("shouldInvokeScreenCaptureKit"),
+      "onboarding must not prime SCK until a relaunch makes the grant live")
+    XCTAssertTrue(
+      obody.contains("screenRecordingGrantedAtLaunch"),
+      "onboarding must use AppState's launch-time snapshot, not a post-grant preflight")
   }
 
   func testScreenCaptureRestartsUseSharedRelaunchCommand() throws {
@@ -183,5 +440,45 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertTrue(resetSnippet.contains("screenCaptureRelaunchCommand(appPath: bundleURL.path)"))
     XCTAssertFalse(softSnippet.contains("sleep 0.5 && open"))
     XCTAssertFalse(resetSnippet.contains("sleep 0.5 && open"))
+  }
+
+  /// Regression: first run on a new Mac restarted the app three times in 45 seconds, mid
+  /// onboarding, on permission pages that have nothing to do with screen recording
+  /// (0.12.187, macOS 15.1). Capture legitimately fails before the grant exists, the failure
+  /// tracker read that as a broken install, and the recovery path terminates and relaunches
+  /// the process. The "already recovered once" flag lives in the process it just killed, so
+  /// the fresh process did it again.
+  func testCaptureRecoveryNeverRestartsDuringOnboardingOrBeforeTheGrantIsLive() {
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: false, onboardingComplete: false),
+      "a new Mac mid-onboarding must never be restarted by capture recovery")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: true, onboardingComplete: false),
+      "still onboarding: the reopen prompt owns relaunch, not the recovery path")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: false, onboardingComplete: true),
+      "a grant that is not live in this process cannot be repaired by restarting again")
+    XCTAssertTrue(
+      ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: true, onboardingComplete: true),
+      "a granted, finished install may still restart to clear stale capture state")
+  }
+
+  /// The loop itself: every restart begins a process that would decide the same way again.
+  func testTheRecoveryDecisionCannotLoopAcrossRestartsWhileOnboarding() {
+    var restarts = 0
+    for _ in 0..<5 {
+      // Each iteration models a fresh process: per-session flags are back to their defaults
+      // and the grant is still not live, which is exactly the state that repeated before.
+      if ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: false, onboardingComplete: false)
+      {
+        restarts += 1
+      }
+    }
+    XCTAssertEqual(restarts, 0, "the fix must hold on every relaunch, not just the first")
   }
 }

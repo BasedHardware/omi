@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-agent-iteration-text-runs-together",
+  "violated_contract": "Answer text produced by separate provider tool-loop iterations must carry a separator at the iteration boundary; the pre-tool sentence and the post-tool continuation must never render as one run-on line in a chat transcript.",
+  "canonical_prevention": "The desktop chat adapter emits the same iteration separator the backend chat loop inserts — before a continuation's first text delta after a tool-pause turn and between tool-separated text blocks when extracting the terminal answer — and the desktop chat terminal overwrite applies the same sentence-spacing projection the streaming path applies.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/agent/tests/pi-mono-adapter.test.ts",
+    "desktop/macos/Desktop/Tests/ChatCitationTests.swift"
+  ],
+  "evidence_prs": [5725],
+  "scope_hints": [
+    "desktop/macos/agent/src/adapters/pi-mono.ts",
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift"
+  ],
+  "status": "open"
+}

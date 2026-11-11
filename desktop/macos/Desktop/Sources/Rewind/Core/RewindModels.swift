@@ -1,10 +1,17 @@
+import Combine
 import Foundation
 @preconcurrency import GRDB
 
 // MARK: - Screenshot Model
 
 /// Represents a captured screenshot stored in the Rewind database
-struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Equatable {
+///
+/// **`MutablePersistableRecord`, deliberately.** `didInsert` is how this row learns the rowid
+/// SQLite generated for it, and capture keys everything that follows the insert — embeddings,
+/// canonical-memory linkage — to that id. `PersistableRecord` declares `didInsert` non-mutating
+/// and ships an empty default, so a `mutating func didInsert` on a `PersistableRecord` struct is
+/// not a witness for it: it compiles, never runs, and every insert quietly returns `id == nil`.
+struct Screenshot: Codable, FetchableRecord, MutablePersistableRecord, Identifiable, Equatable {
   /// Database row ID (auto-generated)
   var id: Int64?
 
@@ -47,6 +54,12 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
   /// Whether OCR was skipped because the Mac was on battery (needs backfill when AC reconnects)
   var skippedForBattery: Bool
 
+  /// User-facing computer name captured with this screenshot (nil when provenance is unknown)
+  var deviceName: String?
+
+  /// Stable per-installation capture identity used by the canonical memory system
+  var clientDeviceId: String?
+
   static let databaseTableName = "screenshots"
 
   // MARK: - Storage Type
@@ -72,7 +85,9 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
     focusStatus: String? = nil,
     extractedTasksJson: String? = nil,
     adviceJson: String? = nil,
-    skippedForBattery: Bool = false
+    skippedForBattery: Bool = false,
+    deviceName: String? = nil,
+    clientDeviceId: String? = nil
   ) {
     self.id = id
     self.timestamp = timestamp
@@ -88,6 +103,8 @@ struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Eq
     self.extractedTasksJson = extractedTasksJson
     self.adviceJson = adviceJson
     self.skippedForBattery = skippedForBattery
+    self.deviceName = deviceName
+    self.clientDeviceId = clientDeviceId
   }
 
   // MARK: - Persistence Callbacks
@@ -306,9 +323,9 @@ enum RewindError: LocalizedError {
   case storageError(String)
   /// A storage failure that preserves the underlying OS error (e.g. an
   /// AVAssetWriter disk-out-of-space failure). Keeping the wrapped `NSError`
-  /// lets the Sentry classifier recognize environmental disk failures
+  /// lets the error classifier recognize environmental disk failures
   /// ("The file couldn't be saved") and collapse them into breadcrumbs instead
-  /// of flooding Sentry with unactionable error clusters.
+  /// of flooding the log with unactionable error clusters.
   case storageWriteFailed(String, underlying: Error)
   case ocrFailed(String)
   case screenshotNotFound
@@ -364,7 +381,7 @@ class RewindSettings: ObservableObject {
   static let defaultExcludedApps: Set<String> = [
     "Omi Computer",  // Our own app - no point capturing ourselves (legacy name)
     "Omi Beta",  // Legacy production app name
-    "omi",  // Production app name
+    "Omi",  // Production app name
     "Omi Dev",  // Development app name
     "Passwords",  // macOS Passwords app
     "1Password",  // 1Password (various versions)
@@ -378,10 +395,43 @@ class RewindSettings: ObservableObject {
     "Keychain Access",  // macOS Keychain Access
   ]
 
+  /// The retention setting that means "never delete a captured frame".
+  ///
+  /// **This is what makes an all-time Rewind possible at all.** Every other value here is a
+  /// deletion window: the cleanup pass runs `DELETE FROM screenshots WHERE timestamp < cutoff` and
+  /// removes the backing video chunks from disk, so on the shipped 7-day default a Rewind timeline
+  /// physically cannot reach further back than a week no matter what the UI is willing to draw.
+  /// Zero is the sentinel rather than a large day count because "3,650 days" is still a promise the
+  /// cleanup would eventually break, and because it stores as a plain `Int` in the same key.
+  static let unlimitedRetentionDays = 0
+
   @Published var retentionDays: Int {
     didSet {
       defaults.set(retentionDays, forKey: "rewindRetentionDays")
     }
+  }
+
+  /// Whether capture is kept forever.
+  var keepsEverything: Bool { Self.isUnlimited(retentionDays: retentionDays) }
+
+  /// A retention day count that promises never to delete.
+  ///
+  /// Non-positive rather than `== 0` so a value that arrives from an older build, a corrupted
+  /// default, or a hand-edited plist can only ever fail *safe* — an unreadable retention setting
+  /// keeps the user's history instead of silently erasing it.
+  static func isUnlimited(retentionDays: Int) -> Bool { retentionDays <= unlimitedRetentionDays }
+
+  /// The instant before which capture may be deleted — or `nil` when nothing may be.
+  ///
+  /// Pure and static so the boundary between "keep everything" and "prune at N days" is testable
+  /// without a database, a clock, or the indexer that calls it.
+  static func retentionCutoff(
+    retentionDays: Int,
+    now: Date = Date(),
+    calendar: Calendar = .current
+  ) -> Date? {
+    guard !isUnlimited(retentionDays: retentionDays) else { return nil }
+    return calendar.date(byAdding: .day, value: -retentionDays, to: now)
   }
 
   @Published var captureInterval: Double {
@@ -392,6 +442,10 @@ class RewindSettings: ObservableObject {
 
   @Published var excludedApps: Set<String> {
     didSet {
+      for appName in oldValue.symmetricDifference(excludedApps) {
+        RewindCaptureExclusionGeneration.setExcluded(
+          appName, excluded: excludedApps.contains(appName))
+      }
       let array = Array(excludedApps)
       defaults.set(array, forKey: "rewindExcludedApps")
     }
@@ -421,6 +475,8 @@ class RewindSettings: ObservableObject {
     } else {
       self.excludedApps = Self.defaultExcludedApps
     }
+    RewindCaptureExclusionGeneration.setInitialExcludedApps(self.excludedApps)
+
   }
 
   /// Check if an app is excluded from screen capture
@@ -433,12 +489,14 @@ class RewindSettings: ObservableObject {
   }
 
   /// Add an app to the exclusion list
+  @MainActor
   func excludeApp(_ appName: String) {
     excludedApps.insert(appName)
     // If re-excluding a default app, stop tracking it as removed
     if Self.defaultExcludedApps.contains(appName) {
       removedDefaults.remove(appName)
     }
+
   }
 
   /// Remove an app from the exclusion list
@@ -448,6 +506,7 @@ class RewindSettings: ObservableObject {
     if Self.defaultExcludedApps.contains(appName) {
       removedDefaults.insert(appName)
     }
+
   }
 
   /// Reset excluded apps to defaults
@@ -456,6 +515,10 @@ class RewindSettings: ObservableObject {
     removedDefaults = []
   }
 }
+
+/// Owner-scoped retry journal for context-bucket purge-on-exclude. A global
+/// string-array marker would let account A's failed purge run against account B
+/// after an owner switch; this map keeps retries bound to the originating owner.
 
 // MARK: - Date Formatting Extensions
 

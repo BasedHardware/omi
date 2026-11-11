@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { KnowledgeGraph } from '../../../shared/types'
-import { buildUserNode, buildLanguage, buildApps } from './onboardingGraphModel'
+import { buildUserNode, buildLanguage, buildApps, USER_NODE_ID } from './onboardingGraphModel'
 
 const EMPTY: KnowledgeGraph = { nodes: [], edges: [] }
 
@@ -24,6 +24,35 @@ export async function resetOnboardingGraph(): Promise<void> {
   await window.omi.localGraphClear()
   current = EMPTY
   emit()
+}
+
+// Adopt the persisted graph as-is (no clear). Used when onboarding RESUMES:
+// the nodes from the steps already completed are on disk and must survive.
+export async function hydrateOnboardingGraph(): Promise<void> {
+  current = await window.omi.localGraphLoad()
+  emit()
+}
+
+/**
+ * Graph state for an Onboarding mount.
+ *
+ * A FRESH start (step 0) wipes the store, mirroring macOS's "clear the graph
+ * when onboarding begins". A RESUME must NOT: onboarding re-mounts on every
+ * renderer reload (the main process reloads a crashed renderer) and on a
+ * quit-and-relaunch, and it comes back at the persisted step. Clearing there
+ * deleted the `user` node the name step wrote — and since EVERY edge anchors at
+ * `user`, the map lost the user's own node and rendered as unconnected dots.
+ * Hydrate instead, and re-add the user node if it is somehow missing so
+ * `centerNodeId="user"` always resolves.
+ */
+export async function initOnboardingGraph(step: number, displayName?: string): Promise<void> {
+  if (step <= 0) {
+    await resetOnboardingGraph()
+    return
+  }
+  await hydrateOnboardingGraph()
+  const name = displayName?.trim()
+  if (name && !current.nodes.some((n) => n.id === USER_NODE_ID)) await addUserNode(name)
 }
 
 export async function addUserNode(name: string): Promise<void> {

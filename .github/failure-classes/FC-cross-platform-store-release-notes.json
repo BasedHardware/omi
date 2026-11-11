@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-cross-platform-store-release-notes",
+  "violated_contract": "Each store's release notes must describe only that store's platform. The shared mobile changelog fed every store's submission text from one list, so Android bullets reached the Apple What's New and Apple rejected the 1.0.555 (1336) submission under Guideline 2.3.10; Play notes likewise advertised iOS-only features.",
+  "canonical_prevention": "Let changelog entries declare their platforms ({\"change\", \"platforms\"}), drop other-platform entries when deriving store notes, and fail closed when derived notes still name the other platform (whole-word: Android/Google Play/Play Store vs iOS/iPhone/iPad/iPadOS/Apple). The store-promote path inherits the guard because it derives notes through mobile-changelog.store_notes.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/mobile-changelog.py",
+    ".github/scripts/test_mobile_changelog.py",
+    "app/changelog/README.md",
+    "app/scripts/mobile_store_promote.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/scripts/mobile-changelog.py",
+    "app/changelog/releases/*.json",
+    "app/changelog/unreleased/*.json",
+    "app/scripts/mobile_store_promote.py"
+  ],
+  "status": "open"
+}

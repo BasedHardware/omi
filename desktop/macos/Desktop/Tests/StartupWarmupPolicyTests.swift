@@ -17,13 +17,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
-  func testCrispInitialPollWaitsUntilAfterDeferredWarmupStarts() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.crispInitialPollDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
-  }
-
   func testAgentVMProvisioningWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.agentVMProvisioningDelay,
@@ -68,6 +61,22 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
+  func testRemainingDelayGeneralizesLaunchAnchorMath() {
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: 0), 6.0)
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: 2.0), 4.0)
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: 10.0), 0)
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: -5), 6.0)
+  }
+
+  func testRemainingProactiveAssistantsStartDelayUsesRemainingDelay() {
+    let elapsed: TimeInterval = 2.5
+    XCTAssertEqual(
+      StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: elapsed),
+      StartupWarmupPolicy.remainingDelay(
+        StartupWarmupPolicy.proactiveAssistantsStartDelay, elapsedSinceLaunch: elapsed)
+    )
+  }
+
   func testConversationWarmupWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.conversationWarmupDelay,
@@ -88,14 +97,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
       StartupWarmupPolicy.deferredWarmupDelay
     )
   }
-
-  func testRecurringTaskSchedulerWaitsUntilAfterDeferredWarmupStarts() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.recurringTaskSchedulerInitialDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
-  }
-
   func testDashboardNetworkRefreshWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.dashboardNetworkRefreshDelay,
@@ -105,17 +106,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
   func testFloatingBarPlanFetchRunsImmediatelyForQuotaGate() {
     XCTAssertEqual(StartupWarmupPolicy.floatingBarPlanFetchDelay, 0)
-  }
-
-  func testMCPKeyWarmupRunsAfterInteractiveLoadButBeforeDeferredWarmup() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.mcpKeyWarmupDelay,
-      StartupWarmupPolicy.immediateWarmupDelay
-    )
-    XCTAssertLessThan(
-      StartupWarmupPolicy.mcpKeyWarmupDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
   }
 
   func testInitialSettingsSyncWaitsUntilAfterDeferredWarmupStarts() {
@@ -136,27 +126,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.apiKeyFetchDelay,
       StartupWarmupPolicy.dashboardNetworkRefreshDelay
-    )
-  }
-
-  func testTranscriptionDeferralStartsAPIKeyFetchImmediately() throws {
-    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let homeURL =
-      testsURL
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/MainWindow/DesktopHomeView.swift")
-    let source = try String(contentsOf: homeURL, encoding: .utf8)
-
-    guard let deferralRange = source.range(of: "DesktopHomeView: Deferring transcription — API keys not yet loaded"),
-      let immediateFetchRange = source.range(of: "Task { await APIKeyService.shared.waitForKeys() }")
-    else {
-      return XCTFail("Transcription auto-start deferral must kick off API key fetch immediately")
-    }
-
-    XCTAssertGreaterThan(
-      immediateFetchRange.lowerBound,
-      deferralRange.lowerBound,
-      "Immediate key fetch should be started from the transcription deferral branch"
     )
   }
 
@@ -283,7 +252,12 @@ final class StartupWarmupPolicyTests: XCTestCase {
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     XCTAssertTrue(source.contains("private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>]"))
-    XCTAssertTrue(source.contains("scheduleSessionWarmup(id: .mcpKeyWarmup"))
+    // omi-test-quality: source-inspection -- static contract: startup wiring cannot reference credential issuance.
+    // Assert the removed APIs are absent rather than banning the type wholesale: a
+    // harmless MemoryExportService status refresh at startup is fine, issuing keys is not.
+    XCTAssertFalse(source.contains("mcpKeyWarmup"))
+    XCTAssertFalse(source.contains("warmMCPKeyForCurrentUser"))
+    XCTAssertFalse(source.contains("createMCPKey"))
     XCTAssertTrue(source.contains("guard self.isCurrentSession(scope) else"))
     XCTAssertTrue(source.contains("guard isCurrentSession(scope) else { return }"))
     XCTAssertTrue(source.contains("sessionTasks.values.forEach { $0.cancel() }"))
@@ -303,10 +277,13 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertTrue(source.contains("id: .initialFileIndexing"))
     XCTAssertTrue(source.contains("id: .proactiveAssistantsStart"))
     XCTAssertTrue(source.contains("viewModelContainer.resetStartupState()"))
-    XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: true)"))
-    XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: false)"))
-    XCTAssertTrue(source.contains("CrispManager.shared.stop(preserveReadState: preserveCrispReadState)"))
+    XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups()"))
     XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
+    // omi-test-quality: source-inspection -- same no-credential-issuance-at-startup
+    // contract as the coordinator check above, enforced on this wiring surface too.
+    XCTAssertFalse(source.contains("mcpKeyWarmup"))
+    XCTAssertFalse(source.contains("warmMCPKeyForCurrentUser"))
+    XCTAssertFalse(source.contains("createMCPKey"))
   }
 
   @MainActor
@@ -424,7 +401,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
     let dashboardURL =
       testsURL
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift")
+      .appendingPathComponent("Sources/MainWindow/Dashboard/DashboardViewModel.swift")
     let containerSource = try String(contentsOf: containerURL, encoding: .utf8)
     let dashboardSource = try String(contentsOf: dashboardURL, encoding: .utf8)
 
@@ -491,6 +468,50 @@ final class StartupWarmupPolicyTests: XCTestCase {
         "AppProvider reset must include \(requiredReset)"
       )
     }
+  }
+
+  /// Ratchet for the "Preparing your data…" indefinite-hang fix (a wedged
+  /// `RewindDatabase.initialize()` — stalled disk, actor deadlock — left the
+  /// loading screen up forever with no crash and no CPU). Both database-init
+  /// call sites must go through the single timeout-bounded helper.
+  func testViewModelContainerBoundsDatabaseInitWithATimeout() throws {
+    let source = try viewModelContainerSource()
+
+    XCTAssertTrue(
+      source.contains("private func initializeDatabaseWithTimeout() async -> Bool"),
+      "Database init must be routed through a single timeout-bounded helper")
+    XCTAssertTrue(
+      source.contains("awaitWithTimeout(StartupWarmupPolicy.databaseInitTimeout"),
+      "Database init must race against StartupWarmupPolicy.databaseInitTimeout, not await RewindDatabase.initialize() unboundedly"
+    )
+
+    guard let helperRange = source.range(of: "private func initializeDatabaseWithTimeout() async -> Bool") else {
+      return XCTFail("initializeDatabaseWithTimeout() not found")
+    }
+    let helperBody = String(source[helperRange.lowerBound...])
+    XCTAssertFalse(
+      helperBody.contains("withThrowingTaskGroup") || helperBody.contains("withTaskGroup"),
+      """
+      A withTaskGroup-based timeout awaits the wedged child task at scope exit and would hang \
+      the timeout itself — see AwaitWithTimeoutTests.
+      """)
+  }
+
+  func testLoadAllDataAndRetryBothRouteThroughTheDatabaseTimeoutHelper() throws {
+    let source = try viewModelContainerSource()
+    XCTAssertGreaterThanOrEqual(
+      source.components(separatedBy: "await initializeDatabaseWithTimeout()").count - 1,
+      2,
+      "Both the initial load path and retryDatabaseInit() must use the timeout-bounded helper")
+  }
+
+  private func viewModelContainerSource() throws -> String {
+    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let sourceURL =
+      testsURL
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/ViewModelContainer.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
   func testAuthSignInFetchesFloatingBarPlanImmediately() throws {

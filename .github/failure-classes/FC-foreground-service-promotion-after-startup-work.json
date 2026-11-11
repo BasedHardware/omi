@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-foreground-service-promotion-after-startup-work",
+  "violated_contract": "After startForegroundService starts the Android deadline, the service must call startForeground before preference loading, notification customization, Flutter startup, or a permission-gated foreground type can delay or reject its first promotion.",
+  "canonical_prevention": "Promote in the native service onCreate with a static notification and a type that has no while-in-use prerequisite, then switch to the requested type when allowed or stop promptly. Guard patch application for both fresh and previously patched plugin sources and assert that the first promotion precedes plugin startup work.",
+  "canonical_prevention_artifact": [
+    "app/scripts/patch_flutter_foreground_task.py",
+    "app/scripts/patch_flutter_foreground_task_test.py"
+  ],
+  "evidence_prs": [16600],
+  "scope_hints": [
+    "app/scripts/patch_flutter_foreground_task.py",
+    "app/android/build.gradle"
+  ],
+  "status": "open"
+}

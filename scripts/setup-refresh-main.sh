@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+bash "$(dirname "${BASH_SOURCE[0]}")/repair-git-primary-worktree.sh"
+
 REMOTE="${SETUP_REMOTE:-origin}"
 BRANCH="${SETUP_MAIN_BRANCH:-main}"
 REMOTE_BRANCH="${REMOTE}/${BRANCH}"

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-adapter-boundary-compared-across-time-bases",
+  "violated_contract": "A streaming adapter's emission bookkeeping (high-water marks, monotonic clamps, window anchors) must be computed and retained in the adapter's own coordinate, snapshotted from values the adapter itself produced. Segment dicts are rewritten in place by downstream consumers (an epoch translator projects wall-epoch seconds onto start/end; a legacy rebase writes offset-shifted seconds), so reading a boundary back from those payloads after the callback mixes time bases: the wall-epoch value dwarfs every stream-second position, the monotonic max silently swallows all honest positions, and the outer min/max clamp then collapses both endpoints onto the window or span edge as a zero-length segment. Nothing raises — the persisted transcript just degrades to points at accepted-span edges (dev 2026-09-26: every post-first-batch window segment stored as (18.9, 18.9), (28.82, 28.82), (39.2, 39.2)), which fails audio span coverage and starves speaker-ID windows while each component's own tests stay green.",
+  "canonical_prevention": "Snapshot adapter-local boundaries before invoking the transcript callback; emit only honestly mapped provider positions and drop unmappable ones (timestamps at/beyond the posted window, degenerate intervals, re-detections of already-emitted audio) with a counted reason; and make the shared translator map interval endpoints independently, rejecting — never clamping — any interval whose two different provider times would land on one capture sample. Pin it with a hermetic repro that drives the real receiver, managed chain, VAD gate, window adapter and epoch translator against a fake provider whose later batches carry drifted timestamps, plus translator-level collapse-rejection tests.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_audio_timeline_segment_collapse.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/parakeet_window.py",
+    "backend/utils/stt/live_session.py",
+    "backend/utils/audio_timeline.py"
+  ],
+  "status": "open"
+}

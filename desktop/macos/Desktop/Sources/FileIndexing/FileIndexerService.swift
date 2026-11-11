@@ -6,9 +6,7 @@ import Foundation
 actor FileIndexerService {
   static let shared = FileIndexerService()
 
-  private var _dbQueue: DatabasePool?
-  /// Shared Rewind pool epoch. `nil` denotes an explicitly injected test pool.
-  private var _dbGeneration: Int?
+  private let repository: RewindRepository
   private var isScanning = false
   private var activeScanOperations = 0
   private var scanCompletionWaiters: [CheckedContinuation<Void, Never>] = []
@@ -18,12 +16,13 @@ actor FileIndexerService {
   private let batchSize: Int
 
   private init() {
+    repository = RewindRepository(owner: "FileIndexerService")
     scanPolicy = .standard
     batchSize = 500
   }
 
   init(databasePool: DatabasePool, scanPolicy: FileIndexScanPolicy = .standard, batchSize: Int = 500) {
-    _dbQueue = databasePool
+    repository = RewindRepository(owner: "FileIndexerService", initialPool: databasePool)
     self.scanPolicy = scanPolicy
     self.batchSize = batchSize
   }
@@ -31,21 +30,10 @@ actor FileIndexerService {
   // MARK: - Database Access
 
   private func ensureDB() async throws -> DatabasePool {
-    if let db = _dbQueue {
-      guard let generation = _dbGeneration else { return db }
-      if await RewindDatabase.shared.poolGeneration() == generation {
-        return db
-      }
-    }
-
-    try await RewindDatabase.shared.initialize()
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw FileIndexerError.databaseNotInitialized
     }
-    _dbQueue = db
-    _dbGeneration = generation
-    return db
+    return databasePool
   }
 
   func invalidateCache() async {
@@ -54,8 +42,7 @@ actor FileIndexerService {
         scanCompletionWaiters.append(continuation)
       }
     }
-    _dbQueue = nil
-    _dbGeneration = nil
+    await repository.invalidate()
   }
 
   private func finishScanning() {
@@ -67,7 +54,9 @@ actor FileIndexerService {
     guard activeScanOperations == 0 else { return }
     let waiters = scanCompletionWaiters
     scanCompletionWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters {
+      waiter.resume()
+    }
   }
 
   /// Returns the total number of indexed files in the database
@@ -116,16 +105,16 @@ actor FileIndexerService {
     }
     log("FileIndexer: Scanned \(totalFiles) files")
 
-    // 2. Mark complete and set pending chat flag for ChatPage to pick up
+    // 2. Mark complete and set the pending chat flag.
     await MainActor.run {
       UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-      // Set pending flag so ChatPage picks it up when it mounts (or on next navigation)
+      // NOTE: nothing reads `pendingFileIndexingChat` or `.fileIndexingComplete` today.
       if UserDefaults.standard.integer(forKey: "pendingFileIndexingChat") == 0 {
         UserDefaults.standard.set(totalFiles, forKey: "pendingFileIndexingChat")
       }
     }
 
-    // 3. Post notification so ChatPage can trigger AI analysis (if already mounted)
+    // 3. Post the completion notification.
     await MainActor.run {
       NotificationCenter.default.post(
         name: .fileIndexingComplete,
@@ -138,9 +127,14 @@ actor FileIndexerService {
 
   // MARK: - Background Re-scan
 
-  /// Incremental background re-scan of all standard folders.
+  /// Incremental background re-scan of the standard folders.
   /// Updates metadata for existing files and adds new ones.
-  func backgroundRescan() async {
+  ///
+  /// - Parameter fullDiskAccessGranted: Automatic callers probe and pass the real
+  ///   answer; without it the TCC-protected roots (Documents/Desktop/Downloads) are
+  ///   skipped so a background scan never raises a per-folder consent sheet. Pass
+  ///   `true` for explicit user-initiated rescans, which may scan everything.
+  func backgroundRescan(fullDiskAccessGranted: Bool = true) async {
     guard !isScanning else {
       log("FileIndexer: Scan already in progress, skipping background rescan")
       return
@@ -152,9 +146,14 @@ actor FileIndexerService {
     log("FileIndexer: Starting background rescan")
 
     let home = FileManager.default.homeDirectoryForCurrentUser
-    let folders = scanPolicy.standardScanRoots(homeURL: home)
+    let scanPlan = scanPolicy.automaticScanPlan(
+      homeURL: home,
+      fullDiskAccessGranted: fullDiskAccessGranted)
 
-    let count = await scanFolders(folders, incremental: true)
+    let count = await scanFolders(
+      scanPlan.roots,
+      incremental: true,
+      retentionProtectedPrefixes: scanPlan.retainedPrefixes)
     log("FileIndexer: Background rescan complete, \(count) files indexed")
   }
 
@@ -163,9 +162,15 @@ actor FileIndexerService {
   /// Scan folders and store file metadata in indexed_files table
   /// Returns total number of files indexed
   @discardableResult
-  func scanFolders(_ folders: [URL], incremental: Bool = false) async -> Int {
+  func scanFolders(
+    _ folders: [URL],
+    incremental: Bool = false,
+    retentionProtectedPrefixes: Set<String> = [],
+    shouldContinue: @escaping @Sendable () -> Bool = { !Task.isCancelled }
+  ) async -> Int {
     activeScanOperations += 1
     defer { finishScanOperation() }
+    guard shouldContinue() else { return 0 }
     let db: DatabasePool
     do {
       db = try await ensureDB()
@@ -177,11 +182,14 @@ actor FileIndexerService {
     // For incremental scans, load existing index for O(1) lookup
     let existingIndex: [String: Date?] = incremental ? loadExistingIndex(from: db) : [:]
     var scannedPaths = Set<String>()
-    // ~-relative prefixes of directories whose enumeration FAILED (permission
-    // revoked, transient I/O). Files under these were not scanned, but that is
-    // a read error — not deletion — so they must be excluded from the retention
-    // diff (otherwise a single unreadable folder purges its whole index subtree).
-    var failedDirectories = Set<String>()
+    // ~-relative prefixes of subtrees that were NOT scanned, for either of two
+    // reasons: enumeration failed (permission revoked, transient I/O), or the
+    // caller deliberately omitted a TCC-protected root it has no access to and
+    // passed it in as `retentionProtectedPrefixes`. Neither is deletion, so both
+    // must be excluded from the retention diff — otherwise one unreadable folder,
+    // or one root left out for want of Full Disk Access, purges its whole index
+    // subtree.
+    var failedDirectories = retentionProtectedPrefixes
 
     if incremental {
       log("FileIndexer: Loaded \(existingIndex.count) existing paths for incremental scan")
@@ -198,6 +206,7 @@ actor FileIndexerService {
     ]
 
     for folder in folders {
+      guard shouldContinue() else { return 0 }
       guard fm.fileExists(atPath: folder.path) else { continue }
 
       let folderName = folder.lastPathComponent
@@ -215,17 +224,19 @@ actor FileIndexerService {
         db: db,
         existingIndex: existingIndex,
         scannedPaths: &scannedPaths,
-        failedDirectories: &failedDirectories
+        failedDirectories: &failedDirectories,
+        shouldContinue: shouldContinue
       )
+      guard shouldContinue() else { return 0 }
     }
 
     // Flush remaining batch
-    if !batch.isEmpty {
+    if !batch.isEmpty, shouldContinue() {
       insertBatch(batch, into: db)
     }
 
     // For incremental scans, remove files that no longer exist on disk
-    if incremental && !existingIndex.isEmpty {
+    if incremental && !existingIndex.isEmpty, shouldContinue() {
       deleteRemovedFiles(
         scannedPaths: scannedPaths,
         existingPaths: Set(existingIndex.keys),
@@ -249,8 +260,10 @@ actor FileIndexerService {
     db: DatabasePool,
     existingIndex: [String: Date?],
     scannedPaths: inout Set<String>,
-    failedDirectories: inout Set<String>
+    failedDirectories: inout Set<String>,
+    shouldContinue: @escaping @Sendable () -> Bool
   ) {
+    guard shouldContinue() else { return }
     guard scanPolicy.shouldScanDirectory(atDepth: depth) else { return }
 
     let contents: [URL]
@@ -270,8 +283,21 @@ actor FileIndexerService {
     }
 
     for item in contents {
+      guard shouldContinue() else { return }
       // Check directory
       let resourceValues = try? item.resourceValues(forKeys: Set(resourceKeys))
+      if resourceValues == nil {
+        // A per-item stat/permission failure is a READ error, not a deletion.
+        // We cannot tell whether this entry is a directory; defaulting
+        // `isDirectory` to false would treat a real subdirectory as a file,
+        // drop it (makeFileRecord returns nil), never descend into it, and never
+        // add its children to `scannedPaths` — so the retention diff would purge
+        // every previously-indexed file under it. Protect its subtree like an
+        // enumeration failure instead of silently dropping it.
+        failedDirectories.insert(scanPolicy.relativePath(for: item, homePath: homePath))
+        log("FileIndexer: Cannot stat \(item.lastPathComponent); protecting its subtree from retention purge")
+        continue
+      }
       let isDirectory = resourceValues?.isDirectory ?? false
 
       if isDirectory {
@@ -320,7 +346,8 @@ actor FileIndexerService {
             db: db,
             existingIndex: existingIndex,
             scannedPaths: &scannedPaths,
-            failedDirectories: &failedDirectories
+            failedDirectories: &failedDirectories,
+            shouldContinue: shouldContinue
           )
           continue
         }

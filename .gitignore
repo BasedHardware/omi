@@ -7,6 +7,7 @@
 !.env.prod.template
 !.env.offline.template
 !.envrc.example
+.personal_configs/
 *__pycache__/
 *venv/
 libraries/
@@ -19,6 +20,8 @@ dump/
 *.zip
 *.wav
 !backend/testing/release_fixtures/transcription-release-probe.wav
+!backend/tests/fixtures/messaging/adapters/audio/voice.wav
+!desktop/macos/Desktop/Sources/Resources/VoicePhrases/*.wav
 node_modules
 yarn.lock
 
@@ -26,8 +29,10 @@ yarn.lock
 .coordination/
 
 # General
+/.pr-body.md
 .idea/
 .next/
+.worktrees/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -37,6 +42,8 @@ yarn.lock
 build/
 dist/
 .build/
+# scripts/worktree_env_doctor.py --fix moves a stale SwiftPM .build aside to this name.
+.build.stale-*/
 .swiftpm/
 
 # VS Code
@@ -112,6 +119,8 @@ web/app/public/firebase-messaging-sw.js
 !app/ios/Podfile.lock
 !mcp/uv.lock
 *.lock
+# After *.lock: the last matching pattern wins, so a re-include must follow it.
+!web/app/bun.lock
 *.log
 *.swo
 *.swp
@@ -124,6 +133,7 @@ src/recordings
 # Apps
 /app/lib/firebase_options.dart
 /app/lib/firebase_options_*.dart
+!/app/lib/firebase_options_local.dart
 /app/firebase.json
 
 # Solidworks models
@@ -195,9 +205,16 @@ app/lib/env/prod_env.g.dart
 /omi/firmware/v2.9.0/
 /omi/firmware/build/
 
+# PlatformIO refetches omiGlass firmware lib deps from platformio.ini lib_deps
+/omiGlass/firmware/.pio/
+
 
 # Additional Expo/React Native specific ignores
-.expo/*
+# `**/` is required: a bare `.expo/*` is anchored to the repo root and silently
+# misses every nested Expo app (app/react-native, and any added later). That gap
+# is why this line has been re-patched per-path three times (this one, the
+# sdks/react-native/example line below, and omiGlass/.expo further down).
+**/.expo/*
 sdks/react-native/example/.expo/*
 sdks/react-native/lib/
 web-build/
@@ -221,6 +238,7 @@ app/android/.kotlin/
 
 CLAUDE.md
 web/app/next-env.d.ts
+web/app/tsconfig.tsbuildinfo
 .claude/settings.local.json
 .claude/worktrees/
 .mcp.json
@@ -246,3 +264,51 @@ builds-snapshot.md
 .hermes/
 backend/.venv
 backend/.harness/
+
+# Rust / Cargo
+target/
+
+# Python bytecode
+*.pyc
+
+# Python test / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage output
+coverage/
+htmlcov/
+.coverage
+
+# Python packaging
+*.egg-info/
+
+# macOS finder (recursive)
+**/.DS_Store
+
+# pnpm store
+.pnpm-store/
+
+# `bunx shadcn` shells out to pnpm and drops these at the repo root. This repo
+# is Bun-only, so they are byproducts, never inputs — ignored so a shadcn run
+# cannot quietly commit a second lockfile.
+pnpm-lock.yaml
+pnpm-workspace.yaml
+# Flutter regenerates the iOS ephemeral tree on every pub get/build
+# (files self-describe as "Generated file. Do not edit."); tracking them made
+# every worktree dirty and failed diff-hygiene on the regenerated whitespace.
+**/ios/Flutter/ephemeral/
+
+# amp orb portal links (generated); .amp/services.yaml stays tracked
+.amp/portals/
+
+.github/firestore-workflow
+.github/firestore-source
+
+# Track this admission change's UI proof even with shared agent-artifact excludes.
+!.agent-artifacts/
+.agent-artifacts/*
+!.agent-artifacts/ui-evidence/
+.agent-artifacts/ui-evidence/*
+!.agent-artifacts/ui-evidence/lane-web-batch/

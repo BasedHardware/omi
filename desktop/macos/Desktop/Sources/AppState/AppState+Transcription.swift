@@ -1,3 +1,9 @@
+// Transcription control on AppState: toggle semantics, audio recording mode,
+// and the microphone/system-audio permission flows behind them.
+//
+// The toggle writes AssistantSettings.audioRecordingMode rather than directly
+// starting or stopping capture -- the persisted mode is the intent that capture
+// reconciliation restores across launches and settings syncs.
 @preconcurrency import AVFoundation
 import Combine
 import SwiftUI
@@ -7,17 +13,64 @@ import SwiftUI
 extension AppState {
   func toggleTranscription() {
     if isTranscribing {
-      stopTranscription()
+      AssistantSettings.shared.audioRecordingMode = .off
     } else {
-      startTranscription()
+      let selected = AssistantSettings.shared.audioRecordingMode
+      let requested: AssistantSettings.AudioRecordingMode = selected == .off ? .onlyMeetings : selected
+      if !AudioCaptureService.checkPermission() {
+        requestMicrophonePermission()
+      }
+      AssistantSettings.shared.audioRecordingMode = requested
     }
   }
 
-  /// Start real-time transcription
-  /// - Parameter source: Audio source to use (defaults to current audioSource setting)
-  func startTranscription(source: AudioSource? = nil) {
+  /// Starts transcription. `userInitiated` is false on automatic paths (launch,
+  /// reactivation, key load, sync, wake, rotations, post-onboarding), which must
+  /// never raise the mic TCC sheet — see `MicrophoneCaptureAuthorizationPolicy`.
+  func startTranscription(
+    source: AudioSource? = nil,
+    conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient,
+    userInitiated: Bool = true,
+    armedRetry: Bool = false,
+    launchContext: CaptureLaunchContext.Kind? = nil
+  ) {
     guard !isTranscribing else { return }
+    if ArmedCaptureRecoveryPolicy.shouldDeferStart(
+      transitionInFlight: armedMicrophoneTransitionInFlight, userInitiated: userInitiated)
+    {
+      return
+    }
+    if userInitiated {
+      // A manual start ends any remembered automatic flap episode, including
+      // the recovered-but-still-continuable interval.
+      armedMicrophoneRecovery.cancel()
+    } else if armedMicrophoneRecovery.isWaitingOrProbing && !armedRetry {
+      return
+    }
+    guard AssistantSettings.shared.audioRecordingMode != .off else {
+      log("Transcription: start ignored because Audio Recording is Off")
+      return
+    }
+    if deferMeetingRelaunchStart(
+      source: source, conversationRole: conversationRole, userInitiated: userInitiated,
+      armedRetry: armedRetry, launchContext: launchContext)
+    {
+      return
+    }
     sttSession.prepareForStart()
+    silentMicRecoveryAttempts = 0
+    isMicrophoneSignalMissing = false
+    currentConversationRole = conversationRole
+    meetingBoundaryInProgress = false
+    pendingMeetingState = nil
+    pendingMeetingEndedAt = nil
+    conversationRotationInFlight = false
+    pendingPreferredMicReapplyDeviceID = nil
+    pendingPreferredMicReapplyDeviceName = nil
+    lastPreferredMicSwapAt = nil
+    // A new session re-evaluates the route from scratch: the user may have unplugged the
+    // dead device, and pinning last session's heal would ignore a working default.
+    silentMicHealedDeviceID = nil
     meetingEndFinalizationInProgress = false
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
@@ -36,31 +89,65 @@ extension AppState {
         return
       }
     } else {
-      // For microphone, check permission
-      guard AudioCaptureService.checkPermission() else {
-        requestMicrophonePermission()
+      // For microphone: user-initiated starts may raise the sheet (or the denied
+      // alert); automatic starts abandon and let the intent wait for an explicit
+      // Listen/Grant action instead of re-prompting after a skip.
+      let action = MicrophoneCaptureAuthorizationPolicy.action(
+        for: AudioCaptureService.authorizationStatus(), userInitiated: userInitiated)
+      guard action == .proceed else {
+        if action == .abandonAutomaticStart {
+          log(
+            "Transcription: automatic start abandoned — microphone permission not granted; automatic paths never prompt"
+          )
+          if armedRetry {
+            recordSilentMicDiagnostic(detection: nil, phase: "armed_retry", result: "permission_abandoned")
+            armedMicrophoneRecovery.cancel()
+          }
+        } else {
+          requestMicrophonePermission()
+        }
+        return
+      }
+    }
+
+    if effectiveSource == .microphone && !userInitiated && !armedRetry {
+      let presence = CapturePresence.current()
+      if ArmedCaptureRecoveryPolicy.shouldWaitForUpdateRelaunch(
+        isUpdateRelaunch: CaptureLaunchContext.kindForStart() == .updateRelaunch,
+        consoleActive: presence.consoleSessionActive,
+        screenLocked: presence.screenLocked,
+        displaysAsleep: presence.displaysAsleep)
+      {
+        armedMicrophoneRecovery.enter(appState: self)
         return
       }
     }
 
     do {
       // Get effective language from settings (handles auto-detect vs single language)
-      let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
+      let languageSelection = AssistantSettings.shared.transcriptionLanguageSelection
       log(
-        "Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
+        "Transcription: Using language=\(languageSelection.effective) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(languageSelection.primary), onDevice=\(String(describing: languageSelection.onDeviceModel)))"
       )
 
       // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
-      // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
-      // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
+      // Intel Macs and languages no on-device model covers use the cloud path. Force cloud for debugging
+      // with OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`. Identified basic
+      // BLE matches mic (local, unnamed); cache miss / unknown plan fail open to BLE→cloud.
       let debugForceCloud = STTSessionState.debugForceCloudSTT(
         environmentForceCloud: ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1",
         userDefaultsForceCloud: UserDefaults.standard.bool(forKey: "forceCloudSTT")
       )
+      let preferLocalOnBasic =
+        SubscriptionEntitlementService.shared.cachedDecisionForManagedProactivity() == .planGated
+      Task { _ = await SubscriptionEntitlementService.shared.snapshot() }
       sttSession.beginRecording(
         audioSource: effectiveSource,
         isAppleSilicon: Self.isAppleSilicon,
-        debugForceCloud: debugForceCloud
+        debugForceCloud: debugForceCloud,
+        wakeWordNeedsRecognizableName: AssistantSettings.shared.wakeWordNeedsRecognizableName,
+        preferLocalOnBasic: preferLocalOnBasic,
+        language: languageSelection
       )
       let clientConversationId = UUID().uuidString.lowercased()
       currentClientConversationId = sttSession.useLocalSTT ? nil : clientConversationId
@@ -77,17 +164,18 @@ extension AppState {
           self?.handleLocalSTTModelLoadFailure()
         }
         // Mic = the user; system audio = another speaker. Transcribed separately for diarization.
-        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
+        let mic = LocalTranscriptionService(language: languageSelection, isUser: true)
         mic.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localMicService = mic
-        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
+        let system = LocalTranscriptionService(language: languageSelection, isUser: false)
         system.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localSystemService = system
       } else {
         // Always streaming via Python backend /v4/listen
         transcriptionService = try TranscriptionService(
-          language: effectiveLanguage,
-          clientConversationId: clientConversationId
+          language: languageSelection.effective,
+          clientConversationId: clientConversationId,
+          conversationRole: currentConversationRole
         )
       }
 
@@ -103,7 +191,9 @@ extension AppState {
 
       // Initialize audio services based on source
       if effectiveSource == .microphone {
-        // Initialize audio capture service
+        // Initialize audio capture service. The user's persisted microphone
+        // choice is resolved and applied in startMicCaptureIfNeeded(), off the
+        // main actor, right before the device actually opens.
         audioCaptureService = AudioCaptureService()
 
         // Initialize audio mixer for combining mic and system audio
@@ -112,18 +202,17 @@ extension AppState {
         // VAD gate not used for Python backend streaming (backend handles its own VAD)
         vadGateService = nil
 
-        // Initialize system audio capture if supported (macOS 14.4+) and not in "Never" mode.
-        // The actual start/stop is driven by reconcileCapture() based on the user's System Audio
-        // mode (Always / Only during meetings / Never) and meeting state. `.never` is also forced
-        // by the hidden `disableSystemAudioCapture` debug flag — see effectiveSystemAudioMode.
+        // Initialize system audio capture if supported (macOS 14.4+). The user's one Audio
+        // Recording mode controls intent + meeting gating; a hidden developer override may suppress
+        // only the system tap without creating another user-facing policy.
         // Toggle the debug flag with: defaults write <bundle> disableSystemAudioCapture -bool true
-        let systemAudioMode = effectiveSystemAudioMode
-        if systemAudioMode == .never {
-          log("Transcription: System audio capture mode = never — not initializing")
+        let recordingMode = audioRecordingMode
+        if !shouldCaptureSystemAudio {
+          log("Transcription: System audio capture disabled by developer override")
         } else if #available(macOS 14.4, *) {
           systemAudioCaptureService = SystemAudioCaptureService()
           log(
-            "Transcription: System audio capture initialized (mode=\(systemAudioMode.rawValue), macOS 14.4+)"
+            "Transcription: System audio capture initialized (mode=\(recordingMode.rawValue), macOS 14.4+)"
           )
         } else {
           log("Transcription: System audio capture not available (requires macOS 14.4+)")
@@ -135,7 +224,7 @@ extension AppState {
       // Local (Parakeet) mode has no WebSocket — start capture immediately instead.
       if sttSession.useLocalSTT {
         Task { [weak self] in
-          await self?.startAudioCapture(source: effectiveSource)
+          await self?.startAudioCapture(source: effectiveSource, userInitiated: userInitiated)
         }
       } else {
         transcriptionService?.start(
@@ -167,7 +256,7 @@ extension AppState {
             Task { @MainActor in
               log("Transcription: Connected to Python backend")
               // Start audio capture once connected
-              await self?.startAudioCapture(source: effectiveSource)
+              await self?.startAudioCapture(source: effectiveSource, userInitiated: userInitiated)
             }
           },
           onDisconnected: {
@@ -178,18 +267,33 @@ extension AppState {
 
       isTranscribing = true
       recordingGeneration &+= 1
-      AssistantSettings.shared.transcriptionEnabled = true
       audioSource = effectiveSource
       currentTranscript = ""
       speakerSegments = []
       totalSegmentCount = 0
       totalWordCount = 0
-      liveSpeakerPersonMap = [:]
+      (liveSpeakerPersonMap, liveManualSpeakerPersonMap) = ([:], [:])
       LiveTranscriptMonitor.shared.clear()
       recordingStartTime = Date()
       currentBackendConversationId = nil
       pendingBackendConversationId = nil
       ignoredRotatedBackendConversationIds = []
+      // One attempt identity spans this arming through every conversation
+      // rotation to the session's terminalization; sessions created during the
+      // attempt persist it so `Memory Created` can join the attempt.
+      let captureContext =
+        armedRetry
+        ? armedMicrophoneRecovery.episodeContext
+        : CaptureLaunchContext.kindForStart(override: launchContext)
+      captureAttempt = CaptureAttemptOutcomeState(
+        mode: AssistantSettings.shared.audioRecordingMode.rawValue,
+        intent: userInitiated ? .userStart : .auto,
+        launchContext: captureContext.rawValue,
+        secondsSinceLaunch: CaptureLaunchContext.timeBucket(
+          Date().timeIntervalSince(CaptureLaunchContext.launchedAt)),
+        updateAttemptID: captureContext == .updateRelaunch ? CaptureLaunchContext.updateAttemptID : nil,
+        armedEpisodeID: armedRetry ? armedMicrophoneRecovery.episodeID : nil)
+      CaptureLaunchContext.hasStartedCapture = true
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
 
@@ -198,20 +302,57 @@ extension AppState {
       )
 
       // Create crash-safe DB session for persistence
+      let sessionGeneration = recordingGeneration
+      // Snapshot provenance before any awaited microphone/device resolution;
+      // a detector edge may rotate the live role while this task is suspended,
+      // but it must not rewrite the identity of the session being created.
+      let sessionConversationRole = currentConversationRole
       Task {
         do {
+          // Persist the microphone this session will actually use: an explicit
+          // selection resolves asynchronously (off-main HAL read), so wait for
+          // it here rather than recording the system-default name and leaving
+          // the conversation with wrong input-device provenance. Microphone
+          // sessions only — a BLE session's provenance is the BLE device.
+          if effectiveSource == .microphone,
+            let preferredName = await AudioCaptureService.resolvePreferredMicrophone()?.name
+          {
+            // The recording may have stopped (or stopped and restarted) while
+            // the HAL lookup was in flight — a stale task must not create a
+            // session for a dead recording nor touch a newer one's state.
+            guard recordingGeneration == sessionGeneration else { return }
+            recordingInputDeviceName = preferredName
+          }
+          guard recordingGeneration == sessionGeneration else { return }
           let sessionId = try await TranscriptionStorage.shared.startSession(
             source: currentConversationSource.rawValue,
-            language: effectiveLanguage,
+            language: languageSelection.effective,
             timezone: TimeZone.current.identifier,
             inputDeviceName: recordingInputDeviceName,
             clientConversationId: sttSession.useLocalSTT ? nil : clientConversationId,
-            finalizationStrategy: sttSession.useLocalSTT ? .localSegments : .cloudReconcile
+            conversationRole: sessionConversationRole,
+            finalizationStrategy: sttSession.useLocalSTT ? .localSegments : .cloudReconcile,
+            captureAttemptId: captureAttempt?.attemptId
           )
-          await MainActor.run {
+          // Stale after creation: leave the orphaned row to the crash-safe
+          // reconciler rather than pointing a newer recording at it — and stop
+          // the whole task so the backend binding below cannot run either.
+          let sessionStillCurrent = await MainActor.run { () -> Bool in
+            guard self.recordingGeneration == sessionGeneration else { return false }
             self.currentSessionId = sessionId
             // Start live notes session
             LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+            return true
+          }
+          guard sessionStillCurrent else { return }
+          let pendingMeetingState = await MainActor.run { () -> Bool? in
+            let pending = self.pendingMeetingState
+            self.pendingMeetingState = nil
+            return pending
+          }
+          if let pendingMeetingState {
+            await self.handleMeetingObservation(active: pendingMeetingState)
+            guard self.recordingGeneration == sessionGeneration else { return }
           }
           if let backendId = await MainActor.run(body: { () -> String? in
             let candidate = self.pendingBackendConversationId ?? self.currentBackendConversationId
@@ -245,6 +386,7 @@ extension AppState {
           guard let self = self, self.isTranscribing else { return }
           log("Transcription: 4-hour limit reached - restarting session")
           let sessionId = self.currentSessionId
+          let conversationRole = self.currentConversationRole
           let wasLocalSTT = self.sttSession.useLocalSTT
           let mic = self.localMicService
           let sys = self.localSystemService
@@ -257,7 +399,9 @@ extension AppState {
           if wasLocalSTT {
             await mic?.finish()
             await sys?.finish()
+            await self.flushTranscriptPersistence()
           }
+          self.captureFinishedRecordingForLifecycleIfCloud(wasLocalSTT: wasLocalSTT)
           if let sessionId {
             try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
           }
@@ -276,12 +420,15 @@ extension AppState {
               )
             }
           }
-          self.startTranscription()
+          self.startTranscription(conversationRole: conversationRole, userInitiated: false)
         }
       }
 
       // Track transcription started
-      AnalyticsManager.shared.transcriptionStarted()
+      AnalyticsManager.shared.transcriptionStarted(
+        attemptId: captureAttempt?.attemptId,
+        mode: captureAttempt?.mode,
+        intent: captureAttempt?.intent.rawValue)
 
       log("Transcription: Starting...")
 
@@ -301,54 +448,17 @@ extension AppState {
 
   /// Start audio capture and pipe to transcription service
   /// - Parameter source: Audio source to capture from
-  func startAudioCapture(source: AudioSource = .microphone) async {
+  func startAudioCapture(
+    source: AudioSource = .microphone,
+    userInitiated: Bool = false
+  ) async {
     if source == .bleDevice {
       // Use BLE device audio
       await startBleAudioCapture()
     } else {
       // Use microphone (+ optional system audio)
-      await startMicrophoneAudioCapture()
+      await startMicrophoneAudioCapture(userInitiated: userInitiated)
     }
-  }
-
-  /// Arm microphone + system audio capture for the session. Actual capture is managed by
-  /// `reconcileCapture()` according to the System Audio mode + meeting state:
-  ///  - Always / Never: the microphone runs for the whole session (system audio per mode).
-  ///  - Only during meetings: nothing is captured until a call is detected, then mic + system
-  ///    start, and both pause when the call ends — so the mic (and its indicator) stays off
-  ///    outside meetings.
-  /// Captured audio is mixed into one mono stream (cloud) or fed to separate Parakeet instances
-  /// (local) so calls/videos/music end up in the transcript alongside the user's voice.
-  func startMicrophoneAudioCapture() async {
-    guard let audioCaptureService = audioCaptureService else { return }
-
-    // Silent-mic watchdog: on A2DP profile conflict the Bluetooth input device returns zero
-    // samples even though CoreAudio reports healthy capture. Fall back to built-in mic for
-    // Bluetooth, and rebuild the full CoreAudio capture stack for stale-route wedges.
-    audioCaptureService.onSilentMicDetected = { [weak self] detection in
-      Task { @MainActor in
-        switch detection.suggestedAction {
-        case .fallbackToBuiltIn:
-          self?.handleSilentMicFallback()
-        case .rebuildCoreAudioStack:
-          await self?.rebuildCoreAudioCaptureStack(reason: detection.reason)
-        }
-      }
-    }
-
-    // Cloud mode: the mixer sums mic + system into one mono stream for the WebSocket.
-    // Local mode: bypass the mixer — mic and system are transcribed by SEPARATE Parakeet
-    // instances so transcripts are diarized by source (mic = you, system = another speaker).
-    if !sttSession.useLocalSTT {
-      audioMixer?.start { [weak self] monoMixed in
-        self?.transcriptionService?.sendAudio(monoMixed)
-      }
-    }
-
-    // Start (or gate) microphone + system capture according to the System Audio mode + meeting state.
-    await reconcileCapture()
-
-    log("Transcription: Audio capture armed (mic + system managed by meeting gate)")
   }
 
   /// Start microphone capture and wire its chunks/level to the active sink (the mixer in cloud mode,
@@ -357,18 +467,103 @@ extension AppState {
   ///   false on a hard start failure (or if the session was torn down during the async start).
   @discardableResult
   func startMicCaptureIfNeeded() async -> Bool {
-    guard let mic = audioCaptureService else { return false }
-    guard !mic.capturing else { return true }
+    guard var mic = audioCaptureService else { return false }
+    guard !mic.capturing else {
+      captureAttempt?.noteCaptureEligible()
+      return true
+    }
+
+    // Honor the user's persisted microphone choice (e.g. Ray-Ban Meta glasses)
+    // at the moment the device opens — this also covers the meetings-only gate
+    // and recovery rebuilds. Re-resolved every open because device IDs are not
+    // stable across reconnects, through the shared single-flight resolver so a
+    // wedged HAL strands at most one worker across all callers and retries.
+    let preferredUID =
+      UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+    if !preferredUID.isEmpty, !mic.hasOverrideDevice {
+      let resolved = await AudioCaptureService.resolvePreferredMicrophone()
+      // The session may have been torn down or the service swapped while the
+      // resolution was in flight.
+      guard let current = audioCaptureService, current === mic else { return false }
+      if let resolved {
+        let replacement = AudioCaptureService(overrideDeviceID: resolved.id)
+        configureSharedCaptureWatchdog(replacement)
+        audioCaptureService = replacement
+        mic = replacement
+        recordingInputDeviceName = resolved.name ?? recordingInputDeviceName
+        log("Transcription: using preferred microphone \(recordingInputDeviceName ?? "?")")
+      } else {
+        // The user's explicit choice is unavailable — capture continues on the
+        // system default. A silent substitution must be visible to release
+        // health, so record the degradation on the shared fallback surface.
+        log("Transcription: preferred microphone unavailable — using the system default input")
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "transcription_input",
+          from: "preferred_microphone",
+          to: "system_default_input",
+          reason: "device_unavailable",
+          outcome: .degraded)
+      }
+    }
+
+    // A parked PTT warm capture may still hold the very device this session is
+    // about to open — release it and wait for its HAL teardown so the two
+    // owners' IOProcs can never overlap on one device (Bluetooth A2DP↔HFP
+    // profile flap, stream-format reconfiguration races). Deliberately the
+    // LAST await before the device opens: a PTT turn finishing during the
+    // preferred-mic resolution above can park a fresh capture, which an
+    // earlier handshake would miss.
+    if let parked = PushToTalkManager.shared.releaseParkedMicCapture() {
+      await parked.waitForPhysicalStop()
+      guard let current = audioCaptureService, current === mic else { return false }
+    }
+    // A warm PTT capture whose CoreAudio start has not resolved holds the same
+    // device and cannot be stopped from here — waiting for its own completion is
+    // the boundary. See `PushToTalkManager.releaseInFlightWarmCapture`.
+    await PushToTalkManager.shared.drainInFlightWarmCapture()
+    guard let current = audioCaptureService, current === mic else { return false }
+
     do {
       let useLocalSTT = sttSession.useLocalSTT
       let localService = localMicService
       let mixer = audioMixer
+      let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
+      // A dictation app holding the mic replaces the chunk with silence (`DictationMicSuppression`).
+      let dictationGate = ensureDictationMicSuppressionMonitor().gate
+      let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
+      let firstLiveMicFrame = CaptureAttemptFirstAudioFrameLatch()
+      let captureGeneration = recordingGeneration
+      let captureIdentity = ObjectIdentifier(mic)
       try await mic.startCapture(
-        onAudioChunk: { audioData in
+        onAudioChunk: { [weak self] rawAudioData in
+          firstAudioFrame.noteFirstAudioFrame { [weak self] in
+            guard let self, self.recordingGeneration == captureGeneration,
+              let current = self.audioCaptureService, ObjectIdentifier(current) == captureIdentity
+            else { return }
+            self.captureAttempt?.noteFirstAudioFrame()
+          }
+          let audioData = dictationGate.gated(rawAudioData)
+          if AudioCaptureService.containsLivePCM(audioData) {
+            firstLiveMicFrame.noteFirstAudioFrame { [weak self] in
+              guard let self, self.recordingGeneration == captureGeneration,
+                let current = self.audioCaptureService, ObjectIdentifier(current) == captureIdentity
+              else { return }
+              if self.silentMicRecoveryAttempts > 0 {
+                self.recordSilentMicDiagnostic(
+                  detection: nil, phase: "rebuild", result: "live_signal")
+              }
+              self.handleSharedMicrophoneSignalRecovered(from: current)
+              self.armedMicrophoneRecovery.recovered()
+            }
+          }
           if useLocalSTT {
-            localService?.appendAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              localService?.appendAudio(chunk)
+            }
           } else {
-            mixer?.setMicAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              mixer?.setMicAudio(chunk)
+            }
           }
         },
         onAudioLevel: { level in
@@ -385,6 +580,14 @@ extension AppState {
         return false
       }
       log("Transcription: Microphone capture started")
+      // This path released the parked push-to-talk capture above so the two
+      // IOProcs could not overlap, and until now nothing put one back: every
+      // press after an ambient capture start paid a cold CoreAudio start inside
+      // the hold. Re-arm now that this session's device is open — PTT routes
+      // around a contended input, so the warm capture it opens is not the one
+      // this session holds.
+      PushToTalkManager.shared.schedulePTTCaptureWarmup(trigger: .ambientCaptureStarted)
+      captureAttempt?.noteCaptureEligible()
       return true
     } catch {
       logError("Transcription: Failed to start microphone capture", error: error)
@@ -405,12 +608,21 @@ extension AppState {
       let useLocalSTT = sttSession.useLocalSTT
       let localSystem = localSystemService
       let mixer = audioMixer
+      let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
+      let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
       try await systemService.startCapture(
-        onAudioChunk: { audioData in
+        onAudioChunk: { [weak self] audioData in
+          firstAudioFrame.noteFirstAudioFrame { [weak self] in
+            self?.captureAttempt?.noteFirstAudioFrame()
+          }
           if useLocalSTT {
-            localSystem?.appendAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              localSystem?.appendAudio(chunk)
+            }
           } else {
-            mixer?.setSystemAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              mixer?.setSystemAudio(chunk)
+            }
           }
         },
         onAudioLevel: { level in
@@ -430,7 +642,7 @@ extension AppState {
         return
       }
       recordSystemAudioCaptureOutcome(.granted)
-      log("Transcription: System audio capture started (mode=\(effectiveSystemAudioMode.rawValue))")
+      log("Transcription: System audio capture started (mode=\(audioRecordingMode.rawValue))")
     } catch {
       // Mirror the success path's staleness guards: if recording stopped or the
       // service was replaced while startCapture was suspended, the failure says
@@ -460,6 +672,8 @@ extension AppState {
     guard isTranscribing else {
       meetingDetector?.stop()
       meetingDetector = nil
+      meetingDetectorMode = nil
+      stopDictationMicSuppressionMonitor()
       isAwaitingMeeting = false
       return
     }
@@ -470,47 +684,48 @@ extension AppState {
       return
     }
 
-    let mode = effectiveSystemAudioMode
-
-    // The meeting detector runs only in "Only during meetings" mode.
-    if mode == .onlyDuringMeetings {
-      if meetingDetector == nil {
-        let detector = MeetingDetector(
-          onInitialStateObserved: { [weak self] in
-            Task { @MainActor in await self?.reconcileCapture() }
-          },
-          onChange: { [weak self] active in
-            Task { @MainActor in await self?.reconcileCapture() }
-            if let event = TaskLocalContextEvent.normalized(
-              kind: .meeting,
-              rawReference: active ? "meeting-active" : "meeting-ended"
-            ) {
-              let matched = TaskContextSubjectMatcher.shared.resolve(event)
-              Task { await TaskContextualResurfacingService.shared.observe(matched) }
-            }
-          }
-        )
-        meetingDetector = detector
-        detector.start()
-      }
-    } else {
-      meetingDetector?.stop()
-      meetingDetector = nil
+    let mode = audioRecordingMode
+    guard mode != .off else {
+      stopTranscription(finalizationReason: .recordingDisabled)
+      return
     }
 
-    let meetingStateReady = mode != .onlyDuringMeetings || meetingDetector?.hasObservedState == true
+    // The detector supplies meeting boundaries in every active microphone mode. Only Meetings
+    // uses the signal to gate capture; Always uses it to label/rotate conversations.
+    ensureMeetingDetector(for: mode)
+
+    let meetingStateReady = mode != .onlyMeetings || meetingDetector?.hasObservedState == true
     let meetingActive = meetingDetector?.isMeetingActive ?? false
-    // Only during meetings → capture (mic + system) only while in a call. Always/Never → the mic
-    // runs continuously (system audio still respects the mode below).
-    let shouldCapture = mode != .onlyDuringMeetings || meetingActive
-    isAwaitingMeeting = mode == .onlyDuringMeetings && !meetingActive
+    // Only Meetings captures mic + system only while a call is active. Always captures both
+    // continuously, subject to OS capability and the hidden developer system-tap override.
+    let shouldCapture = mode == .always || meetingActive
+    isAwaitingMeeting = mode == .onlyMeetings && !meetingActive
+    if isAwaitingMeeting {
+      captureAttempt?.noteIdleMeetingWait()
+      // Only Meetings intentionally has no microphone to prove until a call.
+      // Return to its ordinary gated state instead of leaving an armed retry
+      // stuck in "probing" with no first mic frame to complete it.
+      if armedMicrophoneRecovery.isProbing {
+        recordSilentMicDiagnostic(detection: nil, phase: "armed_retry", result: "idle_meeting")
+        armedMicrophoneRecovery.cancel()
+      }
+    }
 
     guard meetingStateReady else {
+      // Fail closed while the gate has not answered — see `pauseCaptureWhileMeetingGateUnknown`.
+      pauseCaptureIfMeetingGateUnknown(mode: mode, meetingStateReady: meetingStateReady)
       log("Transcription: waiting for meeting detector before changing capture state")
       return
     }
 
     captureGateInFlight = true
+
+    // A retained local session keeps its wall-clock timestamps across a closed meeting gate.
+    if sttSession.useLocalSTT {
+      let transitionAt = Date()
+      localMicService?.setCapturePaused(!shouldCapture, at: transitionAt)
+      localSystemService?.setCapturePaused(!shouldCapture, at: transitionAt)
+    }
 
     // Microphone
     if let mic = audioCaptureService {
@@ -520,8 +735,9 @@ extension AppState {
           // Hard mic failure on a required start — stop the session rather than leave it silently
           // "recording" with no audio (the silent-mic watchdog handles zero-sample mics separately).
           log("Transcription: stopping — microphone could not start")
+          captureAttempt?.noteErrorTerminal()
           captureGateInFlight = false
-          stopTranscription()
+          stopTranscription(finalizationReason: .microphoneUnavailable)
           return
         }
       } else if !shouldCapture, mic.capturing {
@@ -531,9 +747,9 @@ extension AppState {
       }
     }
 
-    // System audio (macOS 14.4+). Captured when we should capture AND the mode isn't "never".
+    // System audio (macOS 14.4+). Captured whenever the chosen policy is actively recording.
     if #available(macOS 14.4, *) {
-      let systemShouldCapture = shouldCapture && mode != .never
+      let systemShouldCapture = shouldCapture && shouldCaptureSystemAudio
       if systemShouldCapture, systemAudioCaptureService == nil {
         systemAudioCaptureService = SystemAudioCaptureService()
         log("Transcription: System audio capture service created on demand (mode=\(mode.rawValue))")
@@ -549,39 +765,19 @@ extension AppState {
       }
     }
 
-    if !meetingEndFinalizationInProgress,
-      MeetingConversationBoundaryPolicy.shouldFinishConversation(
-        mode: mode,
-        meetingStateReady: meetingStateReady,
-        shouldCapture: shouldCapture,
-        segmentCount: totalSegmentCount,
-        hasSpeakerSegments: !speakerSegments.isEmpty
-      )
-    {
-      meetingEndFinalizationInProgress = true
-      log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
-      Task { @MainActor in
-        defer { self.meetingEndFinalizationInProgress = false }
-        guard
-          MeetingConversationBoundaryPolicy.shouldFinishConversation(
-            mode: self.effectiveSystemAudioMode,
-            meetingStateReady: self.meetingDetector?.hasObservedState == true,
-            shouldCapture: self.meetingDetector?.isMeetingActive == true,
-            segmentCount: self.totalSegmentCount,
-            hasSpeakerSegments: !self.speakerSegments.isEmpty
-          )
-        else {
-          log("Transcription: skipped meeting-ended finalization because meeting state changed")
-          return
-        }
-        _ = await self.finishConversation(finalizationReason: .meetingEnded)
-      }
-    }
+    finalizeEndedMeetingIfNeeded(mode: mode, meetingStateReady: meetingStateReady, shouldCapture: shouldCapture)
 
     captureGateInFlight = false
-    if let recoveryReason = pendingCoreAudioCaptureRecoveryReason {
-      pendingCoreAudioCaptureRecoveryReason = nil
-      await rebuildCoreAudioCaptureStack(reason: recoveryReason)
+    if let recovery = pendingCoreAudioCaptureRecovery {
+      pendingCoreAudioCaptureRecovery = nil
+      await rebuildCoreAudioCaptureStack(reason: recovery.reason, scope: recovery.scope)
+      return
+    }
+    if let pendingDeviceID = pendingPreferredMicReapplyDeviceID {
+      let pendingDeviceName = pendingPreferredMicReapplyDeviceName
+      pendingPreferredMicReapplyDeviceID = nil
+      pendingPreferredMicReapplyDeviceName = nil
+      await reapplyPreferredMicrophone(deviceID: pendingDeviceID, deviceName: pendingDeviceName)
       return
     }
     if captureReconcilePending {
@@ -590,73 +786,32 @@ extension AppState {
     }
   }
 
-  /// Fall back from a silent Bluetooth mic to the built-in microphone.
-  /// Triggered by `AudioCaptureService.onSilentMicDetected`.
+  /// Tell the user the actual problem when capture is blocked by permission, and take
+  /// them to the exact pane that fixes it.
   @MainActor
-  func handleSilentMicFallback() {
-    guard isTranscribing, !silentMicFallbackInProgress else { return }
-    silentMicFallbackInProgress = true
-
-    guard let builtInID = AudioCaptureService.findBuiltInMicDeviceID() else {
-      log("Transcription: silent-mic detected but no built-in microphone available — leaving capture as-is")
-      silentMicFallbackInProgress = false
-      return
-    }
-
-    log("Transcription: silent-mic fallback — switching to built-in mic (deviceID=\(builtInID))")
+  func surfaceMicrophonePermissionAlert() {
+    log("Transcription: microphone permission not granted — surfacing permission alert")
     DesktopDiagnosticsManager.shared.recordFallback(
-      area: "silent_mic",
-      from: "bluetooth",
-      to: "built_in",
-      reason: "local_heal",
-      outcome: .recovered,
-      extra: ["user_visible": false])
-
-    // Tear down the dead Bluetooth capture and spin a new one pinned to the built-in mic.
-    // Silent healing — no user-facing UI, the recording just keeps working.
-    audioCaptureService?.stopCapture()
-    audioCaptureService = AudioCaptureService(overrideDeviceID: builtInID)
-    recordingInputDeviceName =
-      AudioCaptureService.getCurrentMicrophoneName() ?? "Built-in Microphone"
-
-    Task { @MainActor in
-      await self.startMicrophoneAudioCapture()
-      self.silentMicFallbackInProgress = false
-    }
-  }
-
-  @MainActor
-  func rebuildCoreAudioCaptureStack(reason: String) async {
-    guard isTranscribing, audioCaptureService != nil else { return }
-
-    if captureGateInFlight {
-      pendingCoreAudioCaptureRecoveryReason = reason
-      return
-    }
-
-    log("Transcription: rebuilding CoreAudio capture stack — \(reason)")
-    captureReconcilePending = false
-    silentMicFallbackInProgress = false
-
-    if #available(macOS 14.4, *) {
-      if let systemService = systemAudioCaptureService as? SystemAudioCaptureService {
-        systemService.stopCapture()
+      area: "mic_permission",
+      from: "capture_start",
+      to: "permission_alert",
+      reason: "not_authorized",
+      outcome: .degraded,
+      extra: ["status": String(describing: AudioCaptureService.authorizationStatus())])
+    showAlert(
+      title: "Omi Needs Microphone Access",
+      message:
+        "macOS is not letting Omi hear the microphone. Enable Omi under "
+        + "System Settings → Privacy & Security → Microphone, then start recording again."
+    ) {
+      // Pause before the hand-off. NSWorkspace.open can return while Omi is
+      // still the active app, and a queued alert must not attach a sheet that
+      // System Settings then covers. didBecomeActive resumes the queue.
+      self.alertPresenter.pauseQueueUntilAppActive()
+      if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+        NSWorkspace.shared.open(url)
       }
-      systemAudioCaptureService = nil
-      AudioLevelMonitor.shared.updateSystemLevel(0)
     }
-
-    audioCaptureService?.stopCapture()
-    audioCaptureService = AudioCaptureService()
-    AudioLevelMonitor.shared.updateMicrophoneLevel(0)
-
-    if !sttSession.useLocalSTT {
-      audioMixer?.stop()
-      audioMixer = AudioMixer()
-    }
-
-    recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName() ?? recordingInputDeviceName
-    await startMicrophoneAudioCapture()
   }
 
   /// Start BLE device audio capture
@@ -665,7 +820,8 @@ extension AppState {
       let transcriptionService = transcriptionService
     else {
       logError("Transcription: No device connection or transcription service", error: nil)
-      stopTranscription()
+      captureAttempt?.noteErrorTerminal()
+      stopTranscription(finalizationReason: .deviceUnavailable)
       return
     }
 
@@ -745,33 +901,51 @@ extension AppState {
   /// The Python backend handles conversation lifecycle automatically when the WebSocket closes.
   /// When `/v4/listen` has announced the backend conversation id, finalize that exact conversation
   /// instead of relying on the user's current in-progress pointer.
-  func stopTranscription() {
-    // On-device path: there is no backend WebSocket/conversation, so skip the cloud
-    // force-process/reconciliation entirely. Stop capture, then AWAIT both Parakeet instances'
-    // final tail flushes (delivered to the still-current session) BEFORE clearing state, so the
-    // last words persist to the right conversation instead of racing the async drain.
+  @discardableResult
+  func stopTranscription(
+    finalizationReason: TranscriptionFinalizationReason = .userStop
+  ) -> Task<Void, Never>? {
+    if finalizationReason == .userStop || finalizationReason == .recordingDisabled
+      || finalizationReason == .settingsChange
+    {
+      armedMicrophoneRecovery.cancel()
+    }
+    // Even a redundant stop must invalidate in-flight rotations and the
+    // settings restart — both abort on a `recordingGeneration` change.
+    recordingGeneration &+= 1
+    // A second terminalization must not re-emit `Desktop Recording Stopped` —
+    // the session that already owns the event cleared `isTranscribing`. The
+    // user-facing error surface still clears: a "stop" on a session that
+    // already ended in failure must dismiss its banner.
+    guard isTranscribing else {
+      transcriptionServiceError = nil
+      return nil
+    }
+    preferredMicrophoneReconnectMonitor.stop()
+    let meetingCaptureEnd = audioRecordingMode == .onlyMeetings ? meetingDetector?.resumeOffAt : nil
+    // On-device path: await both Parakeet tail flushes before clearing state so the last words persist to the current conversation.
     if sttSession.useLocalSTT {
       let mic = localMicService
       let sys = localSystemService
       localMicService = nil
       localSystemService = nil
-      Task { @MainActor in
+      return Task { @MainActor in
         self.stopAudioCapture()
         await mic?.finish()
         await sys?.finish()
-        self.clearTranscriptionState(finalizationReason: .userStop, allowCloudForceProcess: false)
+        await self.flushTranscriptPersistence()
+        self.clearTranscriptionState(
+          finalizationReason: finalizationReason, allowCloudForceProcess: false, finishedAt: meetingCaptureEnd)
         self.silentMicFallbackInProgress = false
       }
-      return
     }
-
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil).
     let capturedSessionId = currentSessionId
     let capturedBackendId = currentBackendConversationId ?? pendingBackendConversationId
-
+    captureCurrentFinishedRecordingForLifecycle()
     stopAudioCapture()
     clearTranscriptionState(
-      finalizationReason: .userStop,
+      finalizationReason: finalizationReason,
       runFinalizer: false,
       allowCloudForceProcess: false,
       finishSession: false
@@ -793,7 +967,8 @@ extension AppState {
           }
         }
         do {
-          try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+          try await TranscriptionStorage.shared.finishSession(
+            id: sessionId, reason: finalizationReason, finishedAt: meetingCaptureEnd)
         } catch {
           logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
           return
@@ -801,7 +976,7 @@ extension AppState {
 
         await ConversationFinalizationService.shared.finalizeSession(
           id: sessionId,
-          reason: .userStop,
+          reason: finalizationReason,
           allowCloudForceProcess: DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
             capturedBackendId: capturedBackendId,
             persistedBackendId: persistedBackendId
@@ -811,6 +986,7 @@ extension AppState {
 
       await loadConversations()
     }
+    return nil
   }
 
   /// On-device Parakeet failed to load — fall back to cloud STT instead of silently recording a
@@ -829,7 +1005,9 @@ extension AppState {
       stage: "fallback"
     )
     let source = audioSource
-    stopTranscription()
+    let conversationRole = currentConversationRole
+    captureAttempt?.noteErrorTerminal()
+    stopTranscription(finalizationReason: .sttFallback)
     // Restart in cloud mode once stop has settled (isTranscribing flips false inside the stop's
     // async teardown). Bounded wait avoids racing the `!isTranscribing` guard in startTranscription.
     Task { @MainActor [weak self] in
@@ -838,7 +1016,7 @@ extension AppState {
         if !self.isTranscribing { break }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
-      self.startTranscription(source: source)
+      self.startTranscription(source: source, conversationRole: conversationRole, userInitiated: false)
       self.sttSession.completeFallback()
     }
   }
@@ -856,11 +1034,28 @@ extension AppState {
         isAppleSilicon: Self.isAppleSilicon
       )
     else {
-      stopTranscription()
+      // Could not fail open (no local STT): record the exhausted cloud→stopped rotation.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "cloud_stt",
+        from: "cloud",
+        to: "stopped",
+        reason: "cloud_stt_reconnect_failed",
+        outcome: .exhausted,
+        extra: ["source": currentConversationSource.rawValue])
+      captureAttempt?.noteErrorTerminal()
+      stopTranscription(finalizationReason: .sttFallback)
       return
     }
     sttSession.beginCloudToLocalFallback()
     log("Transcription: cloud STT unreachable (reconnects exhausted) — falling back to on-device Parakeet")
+    // Fail-open cloud → on-device Parakeet switch: shared fallback telemetry (AGENTS.md).
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "cloud_stt",
+      from: "cloud",
+      to: "local",
+      reason: "cloud_stt_reconnect_failed",
+      outcome: .recovered,
+      extra: ["source": currentConversationSource.rawValue])
     AnalyticsManager.shared.recordingError(
       error: "cloud_stt_reconnect_failed_fallback_local",
       reason: "cloud_stt_reconnect_failed",
@@ -868,14 +1063,16 @@ extension AppState {
       stage: "fallback"
     )
     let source = audioSource
-    stopTranscription()
+    let conversationRole = currentConversationRole
+    captureAttempt?.noteErrorTerminal()
+    stopTranscription(finalizationReason: .sttFallback)
     Task { @MainActor [weak self] in
       guard let self else { return }
       for _ in 0..<20 {
         if !self.isTranscribing { break }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
-      self.startTranscription(source: source)
+      self.startTranscription(source: source, conversationRole: conversationRole, userInitiated: false)
       self.sttSession.completeFallback()
     }
   }
@@ -883,23 +1080,37 @@ extension AppState {
   /// Finish the current conversation and keep recording for a new one.
   /// Disconnects the WebSocket (triggers backend conversation processing) then reconnects.
   func finishConversation(
-    finalizationReason: TranscriptionFinalizationReason = .finishAndContinue
+    finalizationReason: TranscriptionFinalizationReason = .finishAndContinue,
+    allowEmptyRotation: Bool = false,
+    nextConversationRole: MeetingConversationBoundaryPolicy.Role? = nil,
+    finishedAt: Date? = nil
   ) async -> FinishConversationResult {
-    guard totalSegmentCount > 0 || !speakerSegments.isEmpty else {
+    guard isTranscribing else { return .error("transcription is no longer active") }
+    // One rotation at a time, across every caller. `meetingBoundaryInProgress`
+    // serializes detector edges only; the deferred `.meetingEnded` finalizer, the
+    // BLE double-tap, and the Rewind finish action all reach this method through
+    // other flags. Two overlapping rotations collide on `recordingGeneration` —
+    // the loser used to surface as `.error` and get the session hard-stopped by
+    // `handleMeetingObservation` (SCA-526). The in-flight rotation already covers
+    // the loser's finalize intent, so `.busy` is a safe no-op for callers.
+    guard !conversationRotationInFlight else {
+      log("Transcription: finish requested while a rotation is in flight — coalescing")
+      return .busy
+    }
+    guard allowEmptyRotation || totalSegmentCount > 0 || !speakerSegments.isEmpty else {
       log("Transcription: No segments to finish")
       return .discarded
     }
-
+    conversationRotationInFlight = true
+    defer { conversationRotationInFlight = false }
     log("Transcription: Finishing conversation — reason=\(finalizationReason.rawValue)")
+    recordingGeneration &+= 1
+    let rotationGeneration = recordingGeneration
 
-    // Capture state before rotation — memory_created event for this conversation
-    // may arrive on the new WebSocket after currentSessionId and recordingStartTime have changed.
-    finishedSessionId = currentSessionId
-    finishedClientConversationId = currentClientConversationId
-    finishedRecordingStartTime = recordingStartTime
+    // Capture state before rotation; memory_created may arrive on the new WebSocket.
     let finishedUsesLocalSTT = sttSession.useLocalSTT
     let sessionToFinalize = currentSessionId
-
+    captureFinishedRecordingForLifecycleIfCloud(wasLocalSTT: finishedUsesLocalSTT)
     // Local mode: flush both Parakeet instances' final tails to the CURRENT session BEFORE we
     // rotate currentSessionId, so the last sub-window words attach to THIS conversation rather
     // than racing into the next one. `finish()` delivers its segments on the main actor and
@@ -907,22 +1118,31 @@ extension AppState {
     if sttSession.useLocalSTT {
       await localMicService?.finish()
       await localSystemService?.finish()
+      await flushTranscriptPersistence()
     } else {
       // Close the cloud stream before marking the old local session finished, so no late
       // WebSocket segments can be persisted after the finalization snapshot starts.
+      transcriptionService?.markFinalizationReason(finalizationReason.rawValue)
       transcriptionService?.stop()
       transcriptionService = nil
+    }
+    guard isTranscribing, recordingGeneration == rotationGeneration else {
+      return .error("transcription session changed during rotation")
     }
 
     // Mark current DB session as finished before stopping
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
     if let sessionId = sessionToFinalize {
       do {
-        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: finalizationReason)
+        try await TranscriptionStorage.shared.finishSession(
+          id: sessionId, reason: finalizationReason, finishedAt: finishedAt)
         log("Transcription: Finished DB session \(sessionId) before reconnect")
       } catch {
         logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
       }
+    }
+    guard isTranscribing, recordingGeneration == rotationGeneration else {
+      return .error("transcription session changed during rotation")
     }
 
     // Clear currentSessionId BEFORE reconnecting — any segments arriving on the new WebSocket
@@ -934,7 +1154,7 @@ extension AppState {
     speakerSegments = []
     totalSegmentCount = 0
     totalWordCount = 0
-    liveSpeakerPersonMap = [:]
+    (liveSpeakerPersonMap, liveManualSpeakerPersonMap) = ([:], [:])
     LiveTranscriptMonitor.shared.clear()
     LiveNotesMonitor.shared.endSession()
     LiveNotesMonitor.shared.clear()
@@ -945,6 +1165,11 @@ extension AppState {
     // fresh local SQLite session to that rotated id.
     recordingStartTime = Date()
     if let currentBackendConversationId {
+      if ignoredRotatedBackendConversationIds.count >= Self.maxIgnoredRotatedBackendConversationIds,
+        let evicted = ignoredRotatedBackendConversationIds.first
+      {
+        ignoredRotatedBackendConversationIds.remove(evicted)
+      }
       ignoredRotatedBackendConversationIds.insert(currentBackendConversationId)
     }
     currentBackendConversationId = nil
@@ -969,6 +1194,7 @@ extension AppState {
         guard let self = self, self.isTranscribing else { return }
         log("Transcription: 4-hour limit reached — stopping and restarting")
         let sessionId = self.currentSessionId
+        let conversationRole = self.currentConversationRole
         let wasLocalSTT = self.sttSession.useLocalSTT
         let mic = self.localMicService
         let sys = self.localSystemService
@@ -976,11 +1202,15 @@ extension AppState {
           self.localMicService = nil
           self.localSystemService = nil
         }
+        self.transcriptionService?.markFinalizationReason(
+          TranscriptionFinalizationReason.maxDurationRotation.rawValue)
         self.stopAudioCapture()
         if wasLocalSTT {
           await mic?.finish()
           await sys?.finish()
+          await self.flushTranscriptPersistence()
         }
+        self.captureFinishedRecordingForLifecycleIfCloud(wasLocalSTT: wasLocalSTT)
         if let sessionId {
           try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
         }
@@ -999,15 +1229,21 @@ extension AppState {
             )
           }
         }
-        self.startTranscription()
+        self.startTranscription(conversationRole: conversationRole, userInitiated: false)
       }
     }
 
-    // Reconnect transcription service for the next conversation
+    // Reconnect transcription service for the next conversation. A stop can
+    // arrive while an awaited local tail flush/rebuild is suspended; it bumps
+    // recordingGeneration and tears down the capture stack. Re-check before
+    // reconnecting so a stale boundary cannot resurrect a stopped session.
+    guard isTranscribing, recordingGeneration == rotationGeneration else {
+      return .error("transcription session changed before reconnect")
+    }
     let nextClientConversationId = sttSession.useLocalSTT ? nil : UUID().uuidString.lowercased()
     currentClientConversationId = nextClientConversationId
     do {
-      let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
+      let languageSelection = AssistantSettings.shared.transcriptionLanguageSelection
       if sttSession.useLocalSTT {
         // On-device mode: re-arm fresh local Parakeet instances (mic + system) for the next
         // conversation — do NOT reconnect the cloud WebSocket. Stopping the old ones flushes
@@ -1015,17 +1251,32 @@ extension AppState {
         let onLocalSegments: LocalTranscriptionService.SegmentsHandler = { [weak self] segments in
           self?.handleBackendSegments(segments)
         }
-        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
-        mic.start(onSegments: onLocalSegments)
+        // Mirror startTranscription: wire onModelLoadFailed so a Parakeet model
+        // load failure on the re-armed instances falls back to cloud instead of
+        // recording into a void (a silent blank transcript). Without this, every
+        // conversation after the first in a session loses that protection.
+        let onModelLoadFailed: @MainActor () -> Void = { [weak self] in
+          self?.handleLocalSTTModelLoadFailure()
+        }
+        let mic = LocalTranscriptionService(language: languageSelection, isUser: true)
+        mic.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localMicService = mic
-        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
-        system.start(onSegments: onLocalSegments)
+        let system = LocalTranscriptionService(language: languageSelection, isUser: false)
+        system.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localSystemService = system
+        // CoreAudio callbacks capture their local transcription sinks when the
+        // tap starts. Rebuild them so audio reaches these fresh services rather
+        // than the retired instances whose tails were just flushed.
+        await rebuildCoreAudioCaptureStack(reason: "local_conversation_rotation")
+        guard isTranscribing, recordingGeneration == rotationGeneration else {
+          return .error("transcription session changed during reconnect")
+        }
         log("Transcription: Re-armed on-device Parakeet (mic + system) for next conversation")
       } else {
         transcriptionService = try TranscriptionService(
-          language: effectiveLanguage,
-          clientConversationId: nextClientConversationId
+          language: languageSelection.effective,
+          clientConversationId: nextClientConversationId,
+          conversationRole: nextConversationRole ?? currentConversationRole
         )
         transcriptionService?.start(
           onSegments: { [weak self] segments in
@@ -1041,7 +1292,12 @@ extension AppState {
           onError: { [weak self] error in
             Task { @MainActor in
               logError("Transcription error (reconnect)", error: error)
-              self?.stopTranscription()
+              // Mirror startTranscription: on cloud reconnect exhaustion, fail
+              // over to on-device Parakeet (Apple Silicon) instead of hard-
+              // stopping capture mid-meeting. Plain stopTranscription() here
+              // dropped the cloud->local resilience for every conversation after
+              // the first.
+              self?.handleCloudSTTReconnectFailure()
             }
           },
           onConnected: {
@@ -1059,6 +1315,8 @@ extension AppState {
 
     // Start a new DB session for the next conversation
     let lang = AssistantSettings.shared.effectiveTranscriptionLanguage
+    let sessionConversationRole = nextConversationRole ?? currentConversationRole
+    let sessionGeneration = recordingGeneration
     Task {
       do {
         let sessionId = try await TranscriptionStorage.shared.startSession(
@@ -1067,13 +1325,28 @@ extension AppState {
           timezone: TimeZone.current.identifier,
           inputDeviceName: recordingInputDeviceName,
           clientConversationId: nextClientConversationId,
-          finalizationStrategy: sttSession.useLocalSTT ? .localSegments : .cloudReconcile
+          conversationRole: sessionConversationRole,
+          finalizationStrategy: sttSession.useLocalSTT ? .localSegments : .cloudReconcile,
+          captureAttemptId: await MainActor.run(body: { self.captureAttempt?.attemptId })
         )
-        await MainActor.run {
+        let sessionStillCurrent = await MainActor.run { () -> Bool in
+          guard self.isTranscribing, self.recordingGeneration == sessionGeneration else { return false }
           self.currentSessionId = sessionId
           LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+          return true
+        }
+        guard sessionStillCurrent else { return }
+        let pendingMeetingState = await MainActor.run { () -> Bool? in
+          let pending = self.pendingMeetingState
+          self.pendingMeetingState = nil
+          return pending
+        }
+        if let pendingMeetingState {
+          await self.handleMeetingObservation(active: pendingMeetingState)
+          guard self.recordingGeneration == sessionGeneration else { return }
         }
         if let backendId = await MainActor.run(body: { () -> String? in
+          guard self.isTranscribing, self.recordingGeneration == sessionGeneration else { return nil }
           let candidate = self.pendingBackendConversationId ?? self.currentBackendConversationId
           guard let candidate else { return nil }
           return DesktopConversationMatchPolicy.shouldBindConversationSession(
@@ -1085,6 +1358,7 @@ extension AppState {
         }) {
           try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
           await MainActor.run {
+            guard self.isTranscribing, self.recordingGeneration == sessionGeneration else { return }
             self.currentBackendConversationId = backendId
             self.pendingBackendConversationId = nil
             self.ignoredRotatedBackendConversationIds = []
@@ -1122,11 +1396,21 @@ extension AppState {
     // Stop the meeting detector (only active in "Only during meetings" mode)
     meetingDetector?.stop()
     meetingDetector = nil
+    meetingDetectorMode = nil
+    stopDictationMicSuppressionMonitor()
     captureGateInFlight = false
     captureReconcilePending = false
-    pendingCoreAudioCaptureRecoveryReason = nil
+    pendingCoreAudioCaptureRecovery = nil
+    pendingPreferredMicReapplyDeviceID = nil
+    pendingPreferredMicReapplyDeviceName = nil
+    silentMicRecoveryAttempts = 0
+    isMicrophoneSignalMissing = false
+    silentMicHealedDeviceID = nil
     isAwaitingMeeting = false
-    meetingEndFinalizationInProgress = false
+    meetingBoundaryInProgress = false
+    pendingMeetingState = nil
+    pendingMeetingEndedAt = nil
+    conversationRotationInFlight = false
 
     // Stop system audio capture first (if available)
     if #available(macOS 14.4, *) {
@@ -1166,7 +1450,8 @@ extension AppState {
     finalizationReason: TranscriptionFinalizationReason = .userStop,
     runFinalizer: Bool = true,
     allowCloudForceProcess: Bool = false,
-    finishSession: Bool = true
+    finishSession: Bool = true,
+    finishedAt: Date? = nil
   ) {
     log(
       "Transcription: Final segments count: \(totalSegmentCount) (in-memory: \(speakerSegments.count)), words: \(totalWordCount)"
@@ -1184,7 +1469,8 @@ extension AppState {
     if finishSession, let sessionId = currentSessionId {
       Task {
         do {
-          try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: finalizationReason)
+          try await TranscriptionStorage.shared.finishSession(
+            id: sessionId, reason: finalizationReason, finishedAt: finishedAt)
           log("Transcription: Finished DB session \(sessionId)")
           if runFinalizer {
             await ConversationFinalizationService.shared.finalizeSession(
@@ -1201,16 +1487,28 @@ extension AppState {
 
     // Clear segments after finalization
     speakerSegments = []
-    liveSpeakerPersonMap = [:]
+    (liveSpeakerPersonMap, liveManualSpeakerPersonMap) = ([:], [:])
     LiveTranscriptMonitor.shared.clear()
     LiveNotesMonitor.shared.clear()
     recordingStartTime = nil
     currentSessionId = nil
     currentClientConversationId = nil
-    meetingEndFinalizationInProgress = false
+    meetingBoundaryInProgress = false
+    pendingMeetingState = nil
+    pendingMeetingEndedAt = nil
+    // Terminal outcome of the armed capture attempt (one per arming; the
+    // guard keeps double clears and the hermetic automation session silent).
+    let attemptIdForEvents = captureAttempt?.attemptId
+    if var attempt = captureAttempt {
+      captureAttempt = nil
+      AnalyticsManager.shared.captureAttemptOutcome(&attempt, finalizationReason: finalizationReason)
+    }
 
-    // Track transcription stopped
-    AnalyticsManager.shared.transcriptionStopped(wordCount: totalWordCount)
+    // Track transcription stopped — `finalization_reason` self-attributes the
+    // stop so a stop/re-arm loop can be told apart from an explicit user stop.
+    AnalyticsManager.shared.transcriptionStopped(
+      wordCount: totalWordCount, attemptId: attemptIdForEvents,
+      reason: finalizationReason.rawValue)
     totalSegmentCount = 0
     totalWordCount = 0
     currentTranscript = ""
@@ -1304,9 +1602,7 @@ extension AppState {
       translations: nil
     )
     handleBackendSegments([segment])
-    if let sessionId = currentSessionId {
-      await persistBackendSegmentsToStorage([segment], sessionId: sessionId)
-    }
+    await flushTranscriptPersistence()
     return [
       "injected": trimmed,
       "session_id": currentSessionId.map { "\($0)" } ?? "",
@@ -1377,9 +1673,7 @@ extension AppState {
     }
 
     handleBackendSegments(backendSegments)
-    if let sessionId = currentSessionId {
-      await persistBackendSegmentsToStorage(backendSegments, sessionId: sessionId)
-    }
+    await flushTranscriptPersistence()
     let uniqueSpeakers = Set(speakerLabels).sorted().joined(separator: ",")
     return [
       "injected_count": "\(backendSegments.count)",
@@ -1422,6 +1716,7 @@ extension AppState {
     LiveNotesMonitor.shared.endSession()
 
     var finalizeError: String?
+    await flushTranscriptPersistence()
     if let sessionId {
       do {
         try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
@@ -1439,7 +1734,7 @@ extension AppState {
     // can't leave `automationCaptureTestSessionActive` stuck true (which made a
     // retried stop silently report "already_stopped" without ever finalizing).
     speakerSegments = []
-    liveSpeakerPersonMap = [:]
+    (liveSpeakerPersonMap, liveManualSpeakerPersonMap) = ([:], [:])
     LiveTranscriptMonitor.shared.clear()
     LiveNotesMonitor.shared.clear()
     recordingStartTime = nil
@@ -1466,6 +1761,5 @@ extension AppState {
       "latest_conversation_id": latestConversationId,
     ]
   }
-
   // MARK: - Conversations
 }

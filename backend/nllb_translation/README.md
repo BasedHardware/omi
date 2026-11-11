@@ -1,6 +1,14 @@
 # NLLB Translation Service
 
-Self-hosted translation using **Meta NLLB-200** (No Language Left Behind) — a 200-language neural machine translation model running on GPU via CTranslate2. Replaces Google Cloud Translation V3 for realtime transcript translation in the Omi listen pipeline.
+Self-hosted translation using **Meta NLLB-200** (No Language Left Behind) — a 200-language neural machine translation model running on GPU via CTranslate2. Replaces Gemini 2.5 Flash-Lite for realtime transcript translation in the Omi listen pipeline.
+
+## Logging and image build
+
+Build from the repository root: `docker build -f backend/nllb_translation/Dockerfile .`.
+The image copies the shared standalone logger into `/app`. GCP logs use JSON with
+service `nllb` and request trace context, including each inference executor submission.
+General access logs remain enabled until matching Gateway/Ingress coverage is proven;
+successful health, liveness, readiness and metrics requests are filtered.
 
 ## Architecture
 
@@ -12,7 +20,7 @@ backend-listen (transcribe.py)
                     └── CTranslate2 + SentencePiece (GPU inference)
 ```
 
-The backend auto-detects source language via `langdetect` before each NLLB call, passing the detected BCP-47 code as `source_language_code` so the model receives proper source language tokens. If NLLB fails, the backend falls back to Google Cloud Translation V3 automatically.
+The backend auto-detects source language via `langdetect` before each NLLB call, passing the detected BCP-47 code as `source_language_code` so the model receives proper source language tokens. If NLLB fails, the backend falls back to Gemini 2.5 Flash-Lite automatically.
 
 ## API
 
@@ -41,14 +49,27 @@ Response:
 - `source_language_code` is optional — omit for auto-detect (no source token prefix)
 - `contents` max batch size controlled by `NLLB_MAX_BATCH_SIZE` (default 64)
 - Language codes: BCP-47 (en, es, zh-CN, etc.) or NLLB native (eng_Latn, spa_Latn, etc.)
-
+- Admission control: at most `NLLB_MAX_IN_FLIGHT` requests run concurrently. Requests beyond
+  the cap are rejected immediately with HTTP 503 `{"detail": "admission_full"}` — they are
+  never queued on the inference executor. Callers treat 503 like any 5xx (listen falls back
+  to Gemini).
 ### `GET /health` — Health Check
 
-Returns model config and load status. Used by startup probe.
+Returns model config and load status. Used by startup probe. Always 200 once the server is
+up, regardless of saturation — the startup probe must not die while translations are slow.
 
 ### `GET /ready` — Readiness
 
-Returns 200 when model is loaded and ready for inference, 503 otherwise. Used by readiness probe.
+Returns 200 only when the model is loaded **and** in-flight requests are below the admission
+cap. 503 (pod dropped from Endpoints) when the model is not loaded or the service is
+saturated, so callers fail fast instead of timing out against a saturated replica. Used by
+readiness probe.
+
+### `GET /live` — Liveness
+
+Returns 200 while the service is healthy — including short bursts at the admission cap. If
+in-flight has been at or above the cap continuously for `NLLB_SATURATED_LIVE_SECONDS`
+ (default 180s), returns 503 so kubelet restarts the stuck pod. Used by liveness probe.
 
 ### `GET /metrics` — Prometheus Metrics
 
@@ -104,6 +125,8 @@ Unsupported language codes return HTTP 400.
 | `NLLB_MAX_BATCH_SIZE` | `64` | Max sentences per request |
 | `NLLB_BEAM_SIZE` | `1` | Beam search width (1 = greedy, fastest) |
 | `NLLB_INFERENCE_WORKERS` | `2` | Thread pool size for GPU inference |
+| `NLLB_MAX_IN_FLIGHT` | `INFERENCE_WORKERS * 2` | Admission cap: max concurrent accepted requests. Beyond it → immediate 503 `admission_full` (never queued). Clamped to ≥ `NLLB_INFERENCE_WORKERS` |
+| `NLLB_SATURATED_LIVE_SECONDS` | `180` | How long in-flight may stay at/above the cap before `/live` fails 503 and kubelet restarts the pod |
 | `PORT` | `8080` | Server port |
 
 ## Performance
@@ -125,18 +148,21 @@ See `TUNING_RESULTS.md` for the full tuning sweep across beam sizes, compute typ
 
 The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.py`. Provider is controlled exclusively by `TRANSLATION_SERVICE_MODELS` — the URL alone never changes provider.
 
+Prod retired this service on 2026-11-02: prod and dev listen run `TRANSLATION_SERVICE_MODELS=luna`, and the
+deploy workflow targets development only. The options below are for dev experiments.
+
 ```bash
-# 1. Google only (default — no config needed)
-# TRANSLATION_SERVICE_MODELS is unset
+# 1. Luna only (default — no config needed; prod/dev listen)
+TRANSLATION_SERVICE_MODELS=luna
 
-# 2. NLLB primary with Google fallback
-TRANSLATION_SERVICE_MODELS=nllb,google
+# 2. NLLB primary with Luna fallback for capacity/outage only
+TRANSLATION_SERVICE_MODELS=nllb,luna
 
-# 3. NLLB only (errors stay retryable; no implicit Google fallback)
+# 3. NLLB only (errors stay retryable; no implicit Luna fallback)
 TRANSLATION_SERVICE_MODELS=nllb
 ```
 
-The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to Google.
+The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to Luna. Luna is tried after NLLB only for NLLB timeout, 429, 5xx, or transport unavailability — not for unsupported languages or invalid responses. The retired `gemini` and `google` tokens still parse as `luna`, with a warning and `omi_translation_deprecated_provider_tokens_total{token}`; metric labels always say `luna`.
 
 ## Deploy
 
@@ -171,7 +197,7 @@ After NLLB is deployed, set `HOSTED_TRANSLATION_API_URL` in the backend-listen H
   value: "http://dev-omi-nllb-translation:8080"
 ```
 
-Then set `TRANSLATION_SERVICE_MODELS=nllb,google` and restart the backend.
+Then set `TRANSLATION_SERVICE_MODELS=nllb,luna` and restart the backend.
 
 ## Local Development
 

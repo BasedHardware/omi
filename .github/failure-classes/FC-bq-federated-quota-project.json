@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-bq-federated-quota-project",
+  "violated_contract": "A workflow job that authenticates via workload identity federation (google-github-actions/auth@v3 with id-token, no ADC file) must not invoke `bq` without an explicit per-invocation quota project. bq resolves its quota project from Application Default Credentials; under WIF none exists, so every `bq` invocation exits 1 with 'User is not authorized as a quota project' before inserting any job — invisible to callers that discard stderr. The reconcile cron burned five dispatches on this: auth succeeded, the JSON printed with billed=0 (fetch-failure fallback), and no BigQuery job ever appeared in the audit log.",
+  "canonical_prevention": "Pass `--billing_project=<project>` on every `bq` invocation from a federated-CI identity (per-invocation quota project; `gcloud auth application-default set-quota-project` cannot work because it annotates an ADC file that does not exist under WIF). Prefer subprocess error handling that surfaces the child tool's stderr in the raised exception, so a denial names itself in CI output. Verify the path end-to-end by checking the target service's audit log for the job insertion, not just the caller's exit code.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_firestore_reconcile_workflow_contract.py"
+  ],
+  "evidence_prs": [20919, 20920],
+  "scope_hints": ["backend/scripts/firestore_read_reconcile.py", ".github/workflows/**"],
+  "status": "open"
+}

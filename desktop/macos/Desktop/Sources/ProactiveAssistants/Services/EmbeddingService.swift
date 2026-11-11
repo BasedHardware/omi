@@ -34,21 +34,66 @@ actor EmbeddingService {
   /// Cap in-memory embeddings to limit memory (~12KB each, 5000 = ~60MB max)
   private let maxIndexSize = 5000
 
-  /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
-  private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingCString: cString), !url.isEmpty {
-      return url.hasSuffix("/") ? url : url + "/"
+  /// Backend proxy base URL resolved through the identity-bound endpoint policy.
+  /// Do not read OMI_DESKTOP_API_URL directly: Beta must remain on its fixed
+  /// development serving endpoint even when an inherited environment is stale.
+  static var proxyBaseURL: String {
+    proxyBaseURL(bundleIdentifier: AppBuild.bundleIdentifier)
+  }
+
+  static func proxyBaseURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil,
+    launchEnvironmentValue: String? = nil
+  ) -> String {
+    DesktopBackendEnvironment.rustBackendURL(
+      useDevelopmentBackends: DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: bundleIdentifier,
+        updateChannel: AppBuild.currentUpdateChannel
+      ),
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue ?? ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"],
+      launchEnvironmentValue: launchEnvironmentValue ?? ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"]
+    )
+  }
+
+  private let acquireAuth: @Sendable (RuntimeOwnerAuthorizationSnapshot) async throws -> String
+  private let dispatch: @Sendable (URLRequest) async throws -> (Data, URLResponse)
+  private let cloudEmbeddingAllowed: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
+  private let ownerIsCurrent: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
+
+  init(
+    cloudEmbeddingAllowed: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      ScreenCloudEntitlementService.shared.allowsCloud($0)
+    },
+    acquireAuth: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) async throws -> String = { authorization in
+      let auth = await MainActor.run { AuthService.shared }
+      return try await auth.getAuthHeader(expectedUserId: authorization.ownerID)
+    },
+    dispatch: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = {
+      try await URLSession.shared.data(for: $0)
+    },
+    ownerIsCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      RuntimeOwnerIdentity.isAuthorizationCurrent($0)
     }
-    return ""
+  ) {
+    self.cloudEmbeddingAllowed = cloudEmbeddingAllowed
+    self.acquireAuth = acquireAuth
+    self.dispatch = dispatch
+    self.ownerIsCurrent = ownerIsCurrent
   }
 
-  /// Get Firebase auth header for proxy requests
-  private func authHeader() async throws -> String {
-    let authService = await MainActor.run { AuthService.shared }
-    return try await authService.getAuthHeader()
+  private func requireAuthority(_ authorization: RuntimeOwnerAuthorizationSnapshot) throws {
+    try Task.checkCancellation()
+    try ScreenTaskWorkAuthority.require()
+    if !ownerIsCurrent(authorization) { throw ScreenTaskFailure.ownerRevoked }
   }
 
-  private init() {}
+  private func requireCloudEntitlement(_ authorization: RuntimeOwnerAuthorizationSnapshot) throws {
+    guard cloudEmbeddingAllowed(authorization) else {
+      throw EmbeddingError.serverError(statusCode: 402, body: "plan_gated")
+    }
+  }
 
   // MARK: - Embedding API
 
@@ -56,7 +101,11 @@ actor EmbeddingService {
   /// - Parameters:
   ///   - text: Text to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
-  func embed(text: String, taskType: String? = nil) async throws -> [Float] {
+  func embed(text: String, taskType: String? = nil, authorization: RuntimeOwnerAuthorizationSnapshot)
+    async throws -> [Float]
+  {
+    try requireAuthority(authorization)
+    try requireCloudEntitlement(authorization)
     guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
     }
@@ -78,11 +127,16 @@ actor EmbeddingService {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+    let header = try await acquireAuth(authorization)
+    try requireAuthority(authorization)
+    request.applyGeminiProxyHeaders(lane: .embedding, workload: .maintenance, authorization: header)
     request.timeoutInterval = 30
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    try requireCloudEntitlement(authorization)
+    try requireAuthority(authorization)
+    let (data, response) = try await dispatch(request)
+    try requireAuthority(authorization)
 
     // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
     // cause "data couldn't be read" errors that mask the real problem.
@@ -106,7 +160,11 @@ actor EmbeddingService {
   /// - Parameters:
   ///   - texts: Texts to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
-  func embedBatch(texts: [String], taskType: String? = nil) async throws -> [[Float]] {
+  func embedBatch(texts: [String], taskType: String? = nil, authorization: RuntimeOwnerAuthorizationSnapshot)
+    async throws -> [[Float]]
+  {
+    try requireAuthority(authorization)
+    try requireCloudEntitlement(authorization)
     guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
     }
@@ -133,11 +191,17 @@ actor EmbeddingService {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+    let header = try await acquireAuth(authorization)
+    try requireAuthority(authorization)
+    request.applyGeminiProxyHeaders(
+      lane: .embedding, workload: .maintenance, authorization: header)
     request.timeoutInterval = 60
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    try requireCloudEntitlement(authorization)
+    try requireAuthority(authorization)
+    let (data, response) = try await dispatch(request)
+    try requireAuthority(authorization)
 
     // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
     // cause "data couldn't be read" errors that mask the real problem.
@@ -268,7 +332,7 @@ actor EmbeddingService {
         if items.isEmpty { break }
 
         let texts = items.map { $0.description }
-        let embeddings = try await embedBatch(texts: texts)
+        let embeddings = try await embedBatch(texts: texts, authorization: authorizationSnapshot)
 
         for (i, embedding) in embeddings.enumerated() where i < items.count {
           guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
@@ -296,15 +360,21 @@ actor EmbeddingService {
       while true {
         guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         let items = try await StagedTaskStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         if items.isEmpty { break }
 
         let texts = items.map { $0.description }
-        let embeddings = try await embedBatch(texts: texts)
+        let embeddings = try await embedBatch(texts: texts, authorization: authorizationSnapshot)
 
         for (i, embedding) in embeddings.enumerated() where i < items.count {
           let item = items[i]
           let data = floatsToData(embedding)
-          try await StagedTaskStorage.shared.updateEmbedding(id: item.id, embedding: data)
+          try await StagedTaskStorage.shared.updateEmbedding(
+            id: item.id, embedding: data,
+            authorization: LocalMutationAuthorization {
+              RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+            })
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
           addToIndex(source: .staged, id: item.id, embedding: embedding)
         }
 
@@ -429,7 +499,7 @@ actor EmbeddingService {
 
     /// Expected product-gating / backend-limit states (paywall/trial-expired, rate-limited).
     /// These are not actionable bugs: they should be logged locally rather than reported to
-    /// Sentry as high-priority errors, and must not drive tight retry loops.
+    /// as high-priority errors, and must not drive tight retry loops.
     var isExpectedBackendState: Bool {
       if case .serverError(let statusCode, _) = self {
         return statusCode == 402 || statusCode == 429

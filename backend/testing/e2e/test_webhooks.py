@@ -22,6 +22,11 @@ def _enable_realtime_webhook(client, auth_headers):
     assert enabled.status_code == 200, enabled.text
 
 
+def _disable_realtime_webhook(client, auth_headers):
+    disabled = client.post("/v1/users/developer/webhook/realtime_transcript/disable", headers=auth_headers)
+    assert disabled.status_code == 200, disabled.text
+
+
 def _health(fake_redis, uid="123", wtype="realtime_transcript"):
     return {k.decode(): v.decode() for k, v in fake_redis.hgetall(f"dev_webhook_health:{uid}:{wtype}").items()}
 
@@ -31,7 +36,7 @@ def _run_realtime_delivery(monkeypatch, handler):
 
     async def exercise_webhook():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as fake_client:
-            monkeypatch.setattr(webhooks, "get_webhook_client", lambda: fake_client)
+            monkeypatch.setattr(webhooks, "get_pinned_delivery_client", lambda: fake_client)
             await webhooks.realtime_transcript_webhook(
                 "123",
                 [{"text": "Hermetic realtime transcript", "speaker": "SPEAKER_00", "start": 0.0, "end": 1.0}],
@@ -62,7 +67,10 @@ def test_realtime_webhook_config_roundtrip_and_delivery_capture(client, auth_hea
     _run_realtime_delivery(monkeypatch, handler)
 
     assert len(requests) == 1
-    assert str(requests[0].url) == "https://webhook.test/realtime?uid=123"
+    # Delivery connects to the pinned resolved address (.test resolves to
+    # 8.8.8.8 hermetically) while preserving the original Host and query.
+    assert str(requests[0].url) == "https://8.8.8.8/realtime?uid=123"
+    assert requests[0].headers["host"] == "webhook.test"
     payload = requests[0].read()
     assert b"Hermetic realtime transcript" in payload
     assert _health(fake_redis)["failure_count"] == "0"
@@ -74,6 +82,7 @@ def test_realtime_webhook_config_roundtrip_and_delivery_capture(client, auth_hea
 
 def test_realtime_webhook_does_not_call_provider_when_disabled(client, auth_headers, monkeypatch, fake_redis):
     _configure_realtime_webhook(client, auth_headers)
+    _disable_realtime_webhook(client, auth_headers)
     requests = []
 
     async def handler(request):
@@ -83,7 +92,8 @@ def test_realtime_webhook_does_not_call_provider_when_disabled(client, auth_head
     _run_realtime_delivery(monkeypatch, handler)
 
     assert requests == []
-    assert _health(fake_redis) == {}
+    assert _health(fake_redis)["disabled"] == "0"
+    assert _health(fake_redis)["last_status"] == "200"
 
 
 @pytest.mark.parametrize(

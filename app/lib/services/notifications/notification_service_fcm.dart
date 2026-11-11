@@ -1,49 +1,100 @@
+import 'package:omi/services/recap_events.dart';
+import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/notifications/fcm_token_registration.dart';
+import 'package:omi/services/notifications.dart' show NotificationUtil;
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/notification_channel_strings.dart';
 
 /// Firebase Cloud Messaging enabled notification service
 /// Supports iOS, Android, macOS, web, and Linux with full FCM functionality
-class _FCMNotificationService implements NotificationInterface {
+class _FCMNotificationService with WidgetsBindingObserver implements NotificationInterface {
   _FCMNotificationService._();
 
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
-  final channel = NotificationChannel(
-    channelGroupKey: 'channel_group_key',
-    channelKey: 'channel',
-    channelName: 'Omi Notifications',
-    channelDescription: 'Notification channel for Omi',
-    defaultColor: const Color(0xFF9D50DD),
-    ledColor: Colors.white,
-  );
+  // Resolved in initialize() after NotificationChannelStrings.loadAppLocale().
+  late final NotificationChannel channel;
 
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
+  bool _registrationReady = false;
+  bool _registrationListenersInstalled = false;
+  bool _messageListenersInstalled = false;
+  late final FcmTokenRegistration _registration = FcmTokenRegistration(
+    capture: () {
+      final owner = AuthService.instance.captureSessionSnapshot();
+      // Capturing may synchronously report an account change and revoke the
+      // admission flag. A refresh event must not admit that replacement user.
+      return _registrationReady ? owner : null;
+    },
+    isCurrent: (owner) => AuthService.instance.isSessionSnapshotCurrent(owner),
+    readApns: _firebaseMessaging.getAPNSToken,
+    readToken: _firebaseMessaging.getToken,
+    readTimeZone: getTimeZone,
+    requiresApns: Platform.isIOS,
+    persist: (token, zone, owner) async {
+      bool current() => AuthService.instance.isSessionSnapshotCurrent(owner);
+      final accepted = await saveFcmTokenServer(token: token, timeZone: zone, canSend: current);
+      if (!accepted || !current()) return false;
+      unawaited(Future<void>.sync(() async {
+        try {
+          if (current()) await IntercomManager.instance.sendTokenToIntercom(token);
+        } catch (error) {
+          Logger.debug('Intercom push registration deferred: ${error.runtimeType}');
+        }
+      }));
+      return current();
+    },
+  );
 
   @override
   Future<void> initialize() async {
+    await NotificationChannelStrings.loadAppLocale();
+    channel = NotificationChannel(
+      channelGroupKey: 'channel_group_key',
+      channelKey: 'channel',
+      channelName: NotificationChannelStrings.omiChannelName,
+      channelDescription: NotificationChannelStrings.omiChannelDescription,
+      defaultColor: const Color(0xFF9D50DD),
+      ledColor: Colors.white,
+    );
     await _initializeAwesomeNotifications();
-    // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
-    // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
-    await _firebaseMessaging.getAPNSToken();
+    if (PhysicalQualification.enabled) return;
+    if (!_registrationListenersInstalled) {
+      _registrationListenersInstalled = true;
+      WidgetsBinding.instance.addObserver(this);
+      // Install before the first token lookup; startup/permission timing cannot
+      // lose a rotation, and repeated sign-ins cannot add duplicate listeners.
+      _firebaseMessaging.onTokenRefresh.listen((token) {
+        if (_registrationReady) unawaited(saveFcmToken(token));
+      }, onError: (Object error) {
+        Logger.debug('Push token stream deferred: ${error.runtimeType}');
+      });
+      AuthService.instance.sessionGenerationEvents.listen((_) {
+        _registrationReady = false;
+        _registration.invalidateSession();
+      });
+    }
     listenForMessages();
   }
 
@@ -108,62 +159,52 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   Future<bool> requestNotificationPermissions() async {
+    final owner = AuthService.instance.captureSessionSnapshot();
     bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
     if (!isAllowed) {
       isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
-      register();
+    }
+    if (isAllowed && owner != null && AuthService.instance.isSessionSnapshotCurrent(owner)) {
+      unawaited(register());
     }
     return isAllowed;
   }
 
   @override
-  Future<void> register() async {}
+  Future<void> register() async {
+    if (PhysicalQualification.enabled) return;
+    // Existing sign-in/restored-shell/permission entry points admit the owner.
+    // Settle a newly observed auth generation before enabling token callbacks.
+    final owner = AuthService.instance.captureSessionSnapshot();
+    if (owner == null) {
+      _registrationReady = false;
+      _registration.invalidateSession();
+      return;
+    }
+    _registrationReady = true;
+    await _registration.refresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _registrationReady) unawaited(register());
+  }
 
   @override
   Future<String> getTimeZone() async {
-    final String currentTimeZone = await FlutterTimezone.getLocalTimezone();
-    return currentTimeZone;
+    final timezone = await FlutterTimezone.getLocalTimezone();
+    return timezone.identifier;
   }
 
   @override
   Future<void> saveFcmToken(String? token) async {
-    if (token == null) return;
-    String timeZone = await getTimeZone();
-    if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
-      await saveFcmTokenServer(token: token, timeZone: timeZone);
-
-      try {
-        await IntercomManager.instance.sendTokenToIntercom(token);
-      } catch (e) {
-        print(e);
-      }
-    }
+    if (PhysicalQualification.enabled || !_registrationReady || token == null || token.isEmpty) return;
+    await _registration.refresh(token: token);
   }
 
   @override
   void saveNotificationToken() async {
-    try {
-      if (Platform.isIOS) {
-        String? apnsToken;
-        for (int i = 0; i < 10; i++) {
-          apnsToken = await _firebaseMessaging.getAPNSToken();
-          if (apnsToken != null) break;
-          await Future.delayed(const Duration(seconds: 1));
-        }
-
-        if (apnsToken == null) {
-          Logger.debug('APNS token not available yet, will retry on refresh');
-          return;
-        }
-      }
-
-      String? token = await _firebaseMessaging.getToken();
-      await saveFcmToken(token);
-    } catch (e) {
-      Logger.debug('Failed to save notification token: $e');
-    } finally {
-      _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
-    }
+    await register();
   }
 
   @override
@@ -172,7 +213,7 @@ class _FCMNotificationService implements NotificationInterface {
   }
 
   @override
-  Future<void> createNotification({
+  Future<bool> createNotification({
     String title = '',
     String body = '',
     int notificationId = 1,
@@ -180,9 +221,10 @@ class _FCMNotificationService implements NotificationInterface {
   }) async {
     var allowed = await _awesomeNotifications.isNotificationAllowed();
     Logger.debug('createNotification: $allowed');
-    if (!allowed) return;
+    if (!allowed) return false;
     Logger.debug('createNotification ~ Creating notification: $title');
     showNotification(id: notificationId, title: title, body: body, wakeUpScreen: true, payload: payload);
+    return true;
   }
 
   @override
@@ -194,17 +236,19 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   Future<void> listenForMessages() async {
+    if (PhysicalQualification.enabled) return;
+    if (_messageListenersInstalled) return;
+    _messageListenersInstalled = true;
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;
 
       // Plugin
       if (data.isNotEmpty) {
-        final Map<String, String> payload = <String, String>{};
-        final navigateTo = data['navigate_to'];
-        if (navigateTo != null && navigateTo.toString().isNotEmpty) {
-          payload['navigate_to'] = navigateTo.toString();
-        }
+        final Map<String, String> payload = <String, String>{
+          for (final entry in data.entries)
+            if (entry.value != null) entry.key: '${entry.value}',
+        };
 
         // Handle action item data messages
         final messageType = data['type'];
@@ -240,10 +284,22 @@ class _FCMNotificationService implements NotificationInterface {
         if (notificationType == 'plugin' || notificationType == 'daily_summary') {
           data['from_integration'] = data['from_integration'] == 'true';
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
+          if (notificationType == 'daily_summary') announceRecapArrived();
         }
+
+        // Click-to-talk / chat answers: BigText + navigate_to payload (#4375).
+        // Keep ServerMessage emission above so in-app consumers still receive it.
+        // Match the legacy foreground path: suppress shade noise while Omi speaks.
+        if (ChatAnswerNotificationHandler.isChatAnswerData(data) && !OmiVoicePlaybackService.instance.isSpeaking) {
+          ChatAnswerNotificationHandler.handle(data, channel.channelKey!, isAppInForeground: true);
+          return;
+        }
+
         if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
           if (!OmiVoicePlaybackService.instance.isSpeaking) {
-            _showForegroundNotification(noti: noti, payload: payload);
+            final route = payload['navigate_to'] ?? '';
+            final layout = route.startsWith('/chat/') ? NotificationLayout.BigText : NotificationLayout.Default;
+            _showForegroundNotification(noti: noti, layout: layout, payload: payload);
           }
         }
         return;
@@ -257,6 +313,31 @@ class _FCMNotificationService implements NotificationInterface {
         return;
       }
     });
+
+    Future<void> handleNotificationTap(RemoteMessage? message) async {
+      if (message == null) return;
+      final objectId = _notificationObjectId(message.data);
+      await NotificationUtil.handleFcmDataTap(message.data, objectId: objectId);
+    }
+
+    // Background: app is backgrounded and the user taps a push notification (#5126).
+    FirebaseMessaging.onMessageOpenedApp.listen(handleNotificationTap);
+
+    // Terminated: app was killed and opened via notification tap (#5126).
+    FirebaseMessaging.instance.getInitialMessage().then(handleNotificationTap);
+  }
+
+  RecordReference? _notificationObjectId(Map<String, dynamic> data) {
+    for (final key in const ['conversation_id', 'summary_id', 'message_id']) {
+      final value = data[key];
+      if (value is! String || value.isEmpty) continue;
+      try {
+        return RecordReference.fromId(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 
   final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();

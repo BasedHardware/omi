@@ -1,7 +1,7 @@
 """INV-MEM-1/2/3 — Product memory tier, vector hydration, and canonical fail-closed guards.
 
 Behavioral characterization plus source ratchet (no NEW violations) over memory
-invariant path globs. See docs/product/invariants/memory-*.md.
+invariant path globs. See product/invariants/memory-*.md.
 """
 
 from __future__ import annotations
@@ -12,9 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Set, Tuple
 
-import pytest
 
-from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
@@ -27,14 +25,6 @@ from models.product_memory import (
     is_default_access_eligible,
 )
 from utils.memory.memory_read_api import query_default_product_memory_items
-from utils.memory.v3.control_reader_contract import (
-    V3ControlDecisionReason,
-    V3ControlReadResult,
-    V3ControlReaderRequest,
-    V3ControlRouteFamily,
-    V3ControlState,
-    decide_v3_control_route,
-)
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -47,23 +37,62 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         "user_root",
         "memory_items",
         "memory_operations",
+        # Immutable source-replacement receipts are journal metadata, not a
+        # second product-memory collection or product tier.
+        "memory_source_replacements",
+        # Optional anti-resurrection receipts are content-free, expire after
+        # 30 days, and do not establish another product-memory authority.
+        "memory_deletion_receipts",
+        # Standalone ledger reopen receipts are journal metadata, not a
+        # second product-memory collection or product tier.
+        "memory_ledger_reopens",
+        # JIT feedback and proactivity ledgers are content-free user-history
+        # journals; they are not an additional product-memory tier.
+        "jit_trigger_feedback",
+        "jit_proactivity_events",
+        "jit_proactivity_daily_budgets",
+        "jit_proactivity_candidate_turns",
         "memory_outbox",
         "memory_control_state",
+        # Migration checkpoint under memory_control (not a product-memory tier store).
+        "legacy_canonical_backfill_checkpoint",
+        # Knowledge-ledger cutover proof under memory_control; it is not a
+        # second product-memory collection or authority.
+        "knowledge_ledger_migration_state",
+        # Bounded, owner-pinned prompt receipt under memory_control; canonical
+        # ledger rows remain the only product-memory authority.
+        "knowledge_ledger_prompt_projection",
+        # Content-free proof for writer-mode transition completion; it stores
+        # no product-memory content and establishes no second authority.
+        "knowledge_ledger_writer_transition_receipt",
+        # Operational graph-enrichment sweep cursor under memory_control; it
+        # stores no product-memory records or source content.
+        "historical_graph_enrichment_cursor",
         "memory_apply_control_state",
         "memory_lineage",
+        "memory_historical_overrides",
         "memory_evidence",
+        "memory_graph_assertions",
+        # Existing review surface, now centralized through MemoryCollections.
+        "memory_review_queue",
         "memory_runs",
         "memory_import_runs",
         "memory_import_artifacts",
         "memory_import_candidates",
+        # Daily-sweep source and receipt journals contain bounded candidate
+        # provenance and resumability state, never canonical product memories.
+        "daily_memory_sweep_receipts",
+        "daily_memory_sweep_sources",
+        "daily_memory_sweep_onboarding_sources",
+        "daily_memory_sweep_daily_summary_staged",
+        "daily_memory_sweep_onboarding_staged",
+        "daily_memory_sweep_model_invocations",
         "non_active_memory_routes",
         "short_term_lifecycle_transitions",
         "legacy_fallback",
         "memory_commits",
         "memory_state",
         "memory_state_head",
-        "v3_compatibility_projection_state",
-        "v3_compatibility_projection_items",
         "all_collection_paths",
     }
 )
@@ -145,7 +174,7 @@ def _vector_hit(item: MemoryItem, *, score: float = 0.9) -> SearchVectorHit:
     return SearchVectorHit(
         memory_id=item.memory_id,
         score=score,
-        projection_commit_id="commit_proj",
+        projection_commit_id=item.ledger_commit_id or "commit_proj",
         vector_updated_at=item.updated_at,
         uid=item.uid,
         account_generation=item.account_generation,
@@ -153,50 +182,6 @@ def _vector_hit(item: MemoryItem, *, score: float = 0.9) -> SearchVectorHit:
         source_commit_id=item.source_commit_id,
         content_hash=item.content_hash,
     )
-
-
-def _v3_request(**overrides) -> V3ControlReaderRequest:
-    values = {
-        "uid": "uid-guard",
-        "expected_account_generation": 7,
-        "cursor_memory_read_requested": False,
-        "cursor_secret_config_present": True,
-        "archive_requested": False,
-    }
-    values.update(overrides)
-    return V3ControlReaderRequest(**values)
-
-
-def _v3_state(**overrides) -> V3ControlState:
-    values = {
-        "uid": "uid-guard",
-        "schema_version": 1,
-        "configured_mode": MemoryRolloutMode.read,
-        "persisted_mode": MemoryRolloutMode.read,
-        "effective_mode": MemoryRolloutMode.read,
-        "mode_epoch": 1,
-        "cutover_epoch": 1,
-        "account_generation": 7,
-        "default_memory_grant": True,
-        "archive_allowed": False,
-        "rollout_write_ready": True,
-        "projection_ready": True,
-        "global_read_gate_open": True,
-        "write_convergence_ready": True,
-    }
-    values.update(overrides)
-    return V3ControlState(**values)
-
-
-def _v3_result(**overrides) -> V3ControlReadResult:
-    values = {
-        "cohort_enrolled": True,
-        "source_path": "users/uid-guard/memory_control/state",
-        "state": _v3_state(),
-        "read_error_reason": None,
-    }
-    values.update(overrides)
-    return V3ControlReadResult(**values)
 
 
 _RATchet_PARSE_CACHE: dict[str, ast.Module] = {}
@@ -300,11 +285,63 @@ def _archive_default_read_offenders(path: Path, text: str) -> List[str]:
     offenders: List[str] = []
     lines = text.splitlines()
     archive_line_re = re.compile(r"Memory(?:Tier|Layer)\.archive\b")
+    archive_exclusion_lines: Set[int] = set()
+    tree = ast.parse(text)
+    # The authorized incident policy reclassifies only unresolved historical
+    # Review parking as Short-term. It is not general Archive admission. Match
+    # the complete fence and the sole Short-term result, never a whole function
+    # or an arbitrary comment marker.
+    review_projection_test = ast.parse(
+        "undecided_visible() and item.tier == MemoryLayer.archive "
+        "and (item.promotion or {}).get('route') == 'review'",
+        mode='eval',
+    ).body
+    if rel_path == 'models/product_memory.py':
+        for function in tree.body:
+            if not isinstance(function, ast.FunctionDef) or function.name != 'visible_memory_tier':
+                continue
+            for branch in function.body:
+                if not isinstance(branch, ast.If) or branch.orelse or len(branch.body) != 1:
+                    continue
+                result = branch.body[0]
+                if (
+                    ast.dump(branch.test) == ast.dump(review_projection_test)
+                    and isinstance(result, ast.Return)
+                    and isinstance(result.value, ast.Attribute)
+                    and isinstance(result.value.value, ast.Name)
+                    and result.value.value.id == 'MemoryLayer'
+                    and result.value.attr == 'short_term'
+                ):
+                    archive_exclusion_lines.update(range(branch.test.lineno, branch.test.end_lineno + 1))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If) or len(node.body) != 1:
+            continue
+        if not isinstance(node.body[0], ast.Continue):
+            continue
+        test = node.test
+        if not isinstance(test, ast.Compare) or len(test.ops) != 1 or not isinstance(test.ops[0], ast.Eq):
+            continue
+        if len(test.comparators) != 1:
+            continue
+        left = test.left
+        right = test.comparators[0]
+        if not (
+            isinstance(left, ast.Attribute)
+            and left.attr == "memory_tier"
+            and isinstance(right, ast.Attribute)
+            and isinstance(right.value, ast.Name)
+            and right.value.id in {"MemoryTier", "MemoryLayer"}
+            and right.attr == "archive"
+        ):
+            continue
+        archive_exclusion_lines.add(node.lineno)
 
     for index, line in enumerate(lines, start=1):
         if (rel_path, index) in _ARCHIVE_DEFAULT_READ_LINE_ALLOWLIST:
             continue
         if not archive_line_re.search(line):
+            continue
+        if index in archive_exclusion_lines:
             continue
 
         window_start = max(0, index - 8)
@@ -318,6 +355,29 @@ def _archive_default_read_offenders(path: Path, text: str) -> List[str]:
 
 class TestInvMem1DefaultAccessAndCanonicalCollection:
     """INV-MEM-1: three tiers, default access is short_term + long_term only."""
+
+    def test_only_unresolved_review_parking_projects_short_term_under_the_kill_switch(self, monkeypatch):
+        from models.product_memory import visible_memory_tier
+
+        policy = MemoryAccessPolicy.for_omi_chat()
+        for enabled in ('true', 'false'):
+            monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', enabled)
+            for route in (None, 'promote', 'archive', 'reject', 'review', 'unknown'):
+                item = _item('parked', tier=MemoryTier.archive)
+                item.promotion = {'route': route}
+                visible = enabled == 'true' and route == 'review'
+                assert is_default_access_eligible(item, policy).allowed is visible
+                assert visible_memory_tier(item) == (MemoryTier.short_term if visible else MemoryTier.archive)
+
+    def test_review_reclassification_does_not_authorize_a_wider_archive_guard_exception(self):
+        import inspect
+        from models.product_memory import visible_memory_tier
+
+        source = inspect.getsource(visible_memory_tier)
+        path = BACKEND_DIR / 'models/product_memory.py'
+        assert _archive_default_read_offenders(path, source) == []
+        widened = source.replace("== 'review'", "!= 'review'")
+        assert _archive_default_read_offenders(path, widened)
 
     def test_default_access_policy_allows_short_and_long_term_only(self):
         now = datetime.now(timezone.utc)
@@ -441,27 +501,6 @@ class TestInvMem2VectorHydrationFailClosed:
         assert result.repair_purge_candidates == []
 
 
-class TestInvMem3CanonicalFailClosedNoLegacyFallback:
-    """INV-MEM-3: enrolled read-mode never falls back to legacy on failure."""
-
-    @pytest.mark.parametrize(
-        ("control_result", "expected_reason"),
-        [
-            (_v3_result(state=None), V3ControlDecisionReason.MISSING_CONTROL_DOC),
-            (_v3_result(state=_v3_state(account_generation=6)), V3ControlDecisionReason.STALE_GENERATION),
-            (_v3_result(state=_v3_state(projection_ready=False)), V3ControlDecisionReason.PROJECTION_NOT_READY),
-        ],
-    )
-    def test_enrolled_read_mode_fail_closed_without_legacy_fallback(self, control_result, expected_reason):
-        decision = decide_v3_control_route(_v3_request(), control_result)
-
-        assert decision.route_family == V3ControlRouteFamily.FAIL_CLOSED
-        assert decision.allowed is False
-        assert decision.reason == expected_reason
-        assert decision.fallback_to_legacy_allowed is False
-        assert decision.requires_legacy_reader is False
-
-
 class TestInvMemSourceRatchet:
     """Source ratchet: forbid NEW violations in memory invariant path globs."""
 
@@ -491,3 +530,30 @@ class TestInvMemSourceRatchet:
             text = _file_text(path)
             offenders.extend(_archive_default_read_offenders(path, text))
         assert offenders == [], "INV-MEM-1 forbidden archive in default-read paths:\n" + "\n".join(offenders)
+
+    def test_archive_exclusion_guard_is_recognized_structurally(self):
+        text = """
+def read_default(memories):
+    for memory in memories:
+        if memory.memory_tier == MemoryTier.archive:
+            continue
+"""
+        assert _archive_default_read_offenders(BACKEND_DIR / "utils/memory/example.py", text) == []
+
+    def test_archive_inclusion_remains_a_ratchet_offender(self):
+        text = """
+def read_default(memory):
+    if memory.memory_tier == MemoryTier.archive:
+        return memory
+"""
+        offenders = _archive_default_read_offenders(BACKEND_DIR / "utils/memory/example.py", text)
+        assert offenders == ["utils/memory/example.py:3: archive tier without explicit archive context"]
+
+    def test_archive_added_to_default_result_list_remains_a_ratchet_offender(self):
+        text = """
+def read_default(memory, selected):
+    if memory.memory_tier == MemoryTier.archive:
+        selected.append(memory)
+"""
+        offenders = _archive_default_read_offenders(BACKEND_DIR / "utils/memory/example.py", text)
+        assert offenders == ["utils/memory/example.py:3: archive tier without explicit archive context"]

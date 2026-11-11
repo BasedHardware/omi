@@ -3,25 +3,45 @@
 
 from __future__ import annotations
 
+import ast
+import json
+import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import importlib.util
 from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
+from git_bash import bash_executable, bash_path, native_path_from_bash
 from run_checks import (
+    MAX_CHECK_JOBS,
     VALID_PLATFORMS,
+    _stop,
     Check,
     Manifest,
+    check_jobs,
+    command_for_check,
+    command_for_host,
     detect_platform,
     execute_checks,
+    execute_parallel_checks,
+    head_blob,
+    load_durations,
     load_manifest,
+    resolve_check_selections,
     resolve_checks,
+    resolve_explicit_checks,
+    run_git,
     skipped_platform_checks,
+    trigger_matches,
     validate_manifest,
 )
 
@@ -64,7 +84,159 @@ def registered_script_paths() -> set[str]:
     return {token for check in manifest.checks for token in check.command if token.endswith(".py")}
 
 
+TEST_MODULE_RE = re.compile(r"(?:^|/)test[_-][A-Za-z0-9_.-]*\.py$")
+
+
+def interpreter_invoked_test_modules(command: tuple[str, ...]) -> list[str]:
+    """Test modules a command hands straight to the interpreter.
+
+    Commands that name an explicit runner (`-m pytest`, `-m unittest`) delegate
+    discovery to that runner and are not subject to the self-running contract.
+    """
+    if any(token in {"-m", "pytest", "unittest"} for token in command):
+        return []
+    return [token for token in command if TEST_MODULE_RE.search(token)]
+
+
+def non_self_running_reason(source: str) -> str | None:
+    """Explain why `python3 <module>` would execute no test cases, or None.
+
+    Two shapes execute nothing and still exit 0:
+      * no `__main__` block at all -- a pytest-only module handed to the
+        interpreter defines its functions and exits.
+      * a `__main__` block calling `unittest.main()` in a module with no
+        `TestCase` subclass -- discovery finds nothing to run.
+
+    A script-style module whose `__main__` calls its own `main()` of assertions
+    is self-running and must not be reported.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:  # pragma: no cover - a syntax error fails louder elsewhere
+        return f"could not be parsed: {exc}"
+
+    main_blocks = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and any(
+            isinstance(cmp_, ast.Constant) and cmp_.value == "__main__"
+            for cmp_ in getattr(node.test, "comparators", [])
+        )
+    ]
+    invoking_blocks = [node for node in main_blocks if any(isinstance(inner, ast.Call) for inner in ast.walk(node))]
+    if not invoking_blocks:
+        return "has no __main__ block invoking a test runner, so the interpreter runs no cases"
+
+    delegates_to_unittest = any(
+        isinstance(inner, ast.Attribute) and inner.attr == "main" and getattr(inner.value, "id", "") == "unittest"
+        for block in invoking_blocks
+        for inner in ast.walk(block)
+    )
+    if not delegates_to_unittest:
+        # Script-style: `__main__` calls the module's own assertions directly.
+        return None
+
+    has_test_case = any(
+        isinstance(node, ast.ClassDef)
+        and any(
+            (isinstance(base, ast.Attribute) and base.attr.endswith("TestCase"))
+            or (isinstance(base, ast.Name) and base.id.endswith("TestCase"))
+            for base in node.bases
+        )
+        for node in ast.walk(tree)
+    )
+    if not has_test_case:
+        return "calls unittest.main() with no TestCase subclass, so discovery collects nothing"
+    return None
+
+
 class ManifestContractTests(unittest.TestCase):
+    def test_firestore_guard_reuses_selector_scope_in_both_lanes(self) -> None:
+        trigger_matches('@firestore-index-guard', 'firestore.indexes.json')
+        from select_backend_unit_tests import (
+            FIRESTORE_INDEX_GUARD_CONTROL_PATHS,
+            FIRESTORE_INDEX_GUARD_SCHEMA_PATHS,
+            FIRESTORE_INDEX_GUARD_TESTS,
+            is_firestore_index_guard_path,
+        )
+
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == 'firestore-index-guard')
+        self.assertEqual(check.command, ('python3', 'backend/scripts/run_firestore_index_guard.py'))
+        self.assertFalse(check.requires_pr_body)
+        self.assertEqual(len(FIRESTORE_INDEX_GUARD_TESTS), 7)
+        paths = set(FIRESTORE_INDEX_GUARD_CONTROL_PATHS | FIRESTORE_INDEX_GUARD_SCHEMA_PATHS)
+        paths.update('backend/' + test for test in FIRESTORE_INDEX_GUARD_TESTS)
+        paths.update(
+            {
+                'backend/new_package/new_query.py',
+                'backend/routers/conversations.py',
+                'backend/tests/support/firestore_new_driver.py',
+            }
+        )
+        for path in paths:
+            self.assertTrue(is_firestore_index_guard_path(path), path)
+            for lane in ('local', 'ci'):
+                self.assertIn(check, resolve_checks(manifest, [path], lane, include_pr_body_checks=False), path)
+
+    def test_firestore_guard_is_not_selected_for_docs_or_excluded_sources(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        for path in (
+            'docs/README.md',
+            'backend/AGENTS.md',
+            '.github/agent-docs/firestore-queries-and-indexes.md',
+            'backend/scripts/unrelated.py',
+            'backend/tests/unit/test_unrelated.py',
+            'backend/migrations/unrelated.py',
+            'web/personas-open-source/src/app/page.tsx',
+        ):
+            for lane in ('local', 'ci'):
+                self.assertNotIn('firestore-index-guard', {c.id for c in resolve_checks(manifest, [path], lane)}, path)
+
+    def test_firestore_guard_runner_fails_closed_and_uses_only_shared_test_list(self) -> None:
+        trigger_matches('@firestore-index-guard', 'firestore.indexes.json')
+        import run_firestore_index_guard as runner
+
+        scratch = REPO_ROOT / '.agent-brief'
+        scratch.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as tmp:
+            backend = Path(tmp) / 'backend'
+            backend.mkdir()
+            (backend / '.python-version').write_text('3.11.15')
+            for test in runner.FIRESTORE_INDEX_GUARD_TESTS:
+                path = backend / test
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            with patch.object(runner, 'BACKEND_DIR', backend):
+                with patch.object(runner.subprocess, 'run', side_effect=OSError('uv unavailable')):
+                    output = StringIO()
+                    with redirect_stderr(output):
+                        self.assertEqual(runner.main(), 2)
+                    self.assertIn('environment setup failed', output.getvalue())
+                    self.assertIn(runner.GUIDE, output.getvalue())
+                for status in (0, 1):
+                    with patch.object(
+                        runner.subprocess, 'run', return_value=subprocess.CompletedProcess([], status)
+                    ) as run:
+                        output = StringIO()
+                        with redirect_stderr(output), redirect_stdout(output):
+                            self.assertEqual(runner.main(), status)
+                        args, kwargs = run.call_args
+                        self.assertEqual(args[0], ['bash', 'test.sh'])
+                        self.assertEqual(kwargs['cwd'], backend)
+                        env = kwargs['env']
+                        self.assertEqual(
+                            Path(env['BACKEND_UNIT_TEST_FILE_LIST']).read_text().splitlines(),
+                            list(runner.FIRESTORE_INDEX_GUARD_TESTS),
+                        )
+                        self.assertEqual(env['PYTEST_DISABLE_PLUGIN_AUTOLOAD'], '1')
+                        self.assertEqual(env['BACKEND_PYTEST_MARK_EXPR'], 'not integration')
+                        self.assertEqual(env['BACKEND_FAST_UNIT_FAIL_SECONDS'], 'inf')
+                        if status:
+                            self.assertIn('Declare the required index', output.getvalue())
+                            self.assertIn(runner.GUIDE, output.getvalue())
+
     def test_manifest_is_valid(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         self.assertEqual(validate_manifest(manifest, REPO_ROOT), [])
@@ -93,6 +265,60 @@ class ManifestContractTests(unittest.TestCase):
             validate_manifest(invalid, REPO_ROOT),
         )
 
+    def test_explicit_trigger_path_must_exist(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        missing = ".github/scripts/does-not-exist.py"
+        malformed = Check(
+            first.id,
+            first.command,
+            (*first.triggers, missing),
+            first.lanes,
+            first.reason,
+        )
+        invalid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertIn(
+            f"{first.id}: explicit trigger path does not exist: {missing}",
+            validate_manifest(invalid, REPO_ROOT),
+        )
+
+    def test_explicit_trigger_path_tracked_at_head_satisfies_sparse_worktree(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths, so
+        # a real trigger path can be absent from the working tree. Validation
+        # must accept anything tracked at HEAD, or every sparse checkout fails
+        # pre-push at manifest resolution.
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        tracked_but_sparse = "web/app/Dockerfile"
+        malformed = Check(
+            first.id,
+            first.command,
+            (*first.triggers, tracked_but_sparse),
+            first.lanes,
+            first.reason,
+        )
+        valid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertFalse(any(
+            "explicit trigger path does not exist" in error
+            for error in validate_manifest(valid, REPO_ROOT)
+        ))
+
+    def test_command_path_tracked_at_head_satisfies_sparse_worktree(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        malformed = Check(
+            first.id,
+            ("python3", "mcp/tests/test_date_filters.py"),
+            first.triggers,
+            first.lanes,
+            first.reason,
+        )
+        valid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertFalse(any(
+            "command path does not exist" in error
+            for error in validate_manifest(valid, REPO_ROOT)
+        ))
+
     def test_workflow_checks_are_registered_or_exempt(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         registered = registered_script_paths()
@@ -103,9 +329,119 @@ class ManifestContractTests(unittest.TestCase):
     def test_ci_lane_is_reachable_from_repo_checks(self) -> None:
         workflow = (WORKFLOWS_DIR / "repo-checks.yml").read_text(encoding="utf-8")
         self.assertRegex(workflow, r"run_checks\.py\s+--lane\s+ci")
-        self.assertIn("--skip-pr-body-checks", workflow)
+        # #9744: main pushes must pass a body through --pr-body-file (not
+        # --skip-pr-body-checks). #11835: the body must be the squash commit
+        # message PLUS the live merged PR body, because this repo squashes
+        # with the commit list rather than the PR description.
+        # P18's read-only main health call has no proposed change or PR body.
+        # Only that explicit input may omit metadata; normal main pushes keep it.
+        # The nightly branch may append further nightly-only flags (for example
+        # --keep-going after nightly 39610825548 masked later failures).
+        normal_workflow = re.sub(
+            r"\$\{\{ inputs\.nightly_main_sha != '' && '[^']*--skip-pr-body-checks[^']*' \|\| '' \}\}",
+            "",
+            workflow,
+        )
+        self.assertNotIn("--skip-pr-body-checks", normal_workflow)
+        self.assertRegex(workflow, r"git log -1 --format=%B HEAD")
+        self.assertRegex(workflow, r"pr_metadata\.py")
+        self.assertRegex(workflow, r"--from-commit-body-file")
+        self.assertRegex(workflow, r"--pr-body-file")
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
+
+    def test_nightly_invocations_keep_going(self) -> None:
+        """Nightly must run every selected check; PR and local lanes keep fail-fast.
+
+        A workflow edit that drops --keep-going from any of the three nightly
+        run_checks.py calls returns the nightly to one-red-per-run reporting
+        (39586610411 → 39610825548), so the wiring itself is pinned here.
+        """
+        for name in ("repo-checks.yml", "mobile-app-checks.yml", "desktop-swift-ci.yml"):
+            workflow = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
+            with self.subTest(workflow=name):
+                self.assertIn(
+                    "inputs.nightly_main_sha != '' && "
+                    "'--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going'",
+                    workflow,
+                )
+
+    def test_manifest_test_modules_execute_their_cases(self) -> None:
+        """A registered test command must not be able to pass without running tests.
+
+        `python3 some_test_module.py` exits 0 when the module defines only
+        module-level `def test_*` functions, because `unittest.main()` discovers
+        `TestCase` subclasses. Such a check is green forever without asserting
+        anything, which is indistinguishable from a guard that works.
+        """
+        manifest = load_manifest(MANIFEST_PATH)
+        offenders: list[str] = []
+        for check in manifest.checks:
+            for relative in interpreter_invoked_test_modules(check.command):
+                # Cone-mode sparse checkouts keep out-of-cone paths in the
+                # index without materialising them; read disk first, HEAD blob
+                # second, and only report "does not exist" when neither has it.
+                path = REPO_ROOT / relative
+                source = (
+                    path.read_text(encoding="utf-8") if path.is_file() else head_blob(REPO_ROOT, relative)
+                )
+                if source is None:
+                    offenders.append(f"{check.id}: {relative} does not exist")
+                    continue
+                reason = non_self_running_reason(source)
+                if reason:
+                    offenders.append(f"{check.id}: {relative} {reason}")
+        self.assertEqual(offenders, [], f"manifest test commands that execute no cases: {offenders}")
+
+    def test_pytest_only_module_is_reported_as_non_self_running(self) -> None:
+        """The guard above must fail on the real historical shape it exists to catch."""
+        pytest_only = (
+            "from pathlib import Path\n" "\n" "def test_something(tmp_path: Path) -> None:\n" "    assert True\n"
+        )
+        self.assertIn("has no __main__", non_self_running_reason(pytest_only) or "")
+
+        with_runner = (
+            "import unittest\n"
+            "\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_something(self) -> None:\n"
+            "        self.assertTrue(True)\n"
+            "\n"
+            'if __name__ == "__main__":\n'
+            "    unittest.main()\n"
+        )
+        self.assertIsNone(non_self_running_reason(with_runner))
+
+        no_main = (
+            "import unittest\n"
+            "\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_something(self) -> None:\n"
+            "        self.assertTrue(True)\n"
+        )
+        self.assertIn("has no __main__", non_self_running_reason(no_main) or "")
+
+        unittest_main_without_test_case = (
+            "import unittest\n"
+            "\n"
+            "def test_something() -> None:\n"
+            "    assert True\n"
+            "\n"
+            'if __name__ == "__main__":\n'
+            "    unittest.main()\n"
+        )
+        self.assertIn("no TestCase subclass", non_self_running_reason(unittest_main_without_test_case) or "")
+
+        # Script-style: a module whose __main__ runs its own assertions is fine.
+        script_style = (
+            "def main() -> int:\n"
+            "    assert True\n"
+            "    return 0\n"
+            "\n"
+            'if __name__ == "__main__":\n'
+            "    raise SystemExit(main())\n"
+        )
+        self.assertIsNone(non_self_running_reason(script_style))
 
     def test_unregistered_fake_workflow_check_is_named(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -119,12 +455,552 @@ class ManifestContractTests(unittest.TestCase):
 
 
 class RunnerBehaviorTests(unittest.TestCase):
+    def _prepare_cli_fixture(
+        self,
+        root: Path,
+        checks: list[dict[str, object]],
+        *,
+        changed_files: tuple[str, ...] = ("backend/example.py",),
+        append_trace: bool = True,
+    ) -> tuple[Path, Path]:
+        """Create a tiny committed repo that exercises the real runner CLI."""
+        scripts = root / "checks"
+        scripts.mkdir(parents=True)
+        runs_file = root / "runs.txt"
+        run_markers = root / "run-markers"
+        run_markers.mkdir()
+        manifest_lines = ["checks:"]
+        for spec in checks:
+            check_id = str(spec["id"])
+            script = scripts / f"{check_id}.py"
+            exit_code = int(spec.get("exit_code", 0))
+            trace = (
+                f"Path({json.dumps(str(runs_file))}).open('a', encoding='utf-8').write({json.dumps(check_id + chr(10))})\n"
+                if append_trace
+                else ""
+            )
+            script.write_text(
+                "from pathlib import Path\n"
+                f"Path({json.dumps(str(run_markers / check_id))}).touch()\n"
+                f"{trace}"
+                f"raise SystemExit({exit_code})\n",
+                encoding="utf-8",
+            )
+            triggers = spec.get("triggers", ("backend/**",))
+            manifest_lines.extend(
+                [
+                    f"  - id: {check_id}",
+                    f"    command: [\"python3\", \"checks/{check_id}.py\"]",
+                    f"    triggers: {json.dumps(list(triggers))}",
+                    "    lanes: [\"local\", \"ci\"]",
+                    f"    reason: {spec.get('reason', 'fixture check')}",
+                    f"    requires_pr_body: {'true' if spec.get('requires_pr_body', False) else 'false'}",
+                ]
+            )
+            if spec.get("platforms"):
+                manifest_lines.append(f"    platforms: {json.dumps(list(spec['platforms']))}")
+        manifest = root / ".github/checks-manifest.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text("\n".join(manifest_lines) + "\n", encoding="utf-8")
+        changed = root / "changed-files.txt"
+        changed.write_text("".join(f"{path}\n" for path in changed_files), encoding="utf-8")
+
+        env = os.environ.copy()
+        for key in tuple(env):
+            if key.startswith("GIT_"):
+                del env[key]
+        subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+        subprocess.run(["git", "-C", str(root), "add", "."], check=True, env=env)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "-qm",
+                "fixture",
+            ],
+            check=True,
+            env=env,
+        )
+        return manifest, changed
+
+    def _run_cli(
+        self, root: Path, manifest: Path, changed: Path, *extra: str, jobs: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        runner = REPO_ROOT / ".github/scripts/run_checks.py"
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        if jobs is not None:
+            env["OMI_CHECKS_JOBS"] = jobs
+        return subprocess.run(
+            [
+                sys.executable,
+                str(runner),
+                "--root",
+                str(root),
+                "--manifest",
+                str(manifest),
+                "--changed-files",
+                str(changed),
+                "--base",
+                "HEAD",
+                "--head",
+                "HEAD",
+                "--lane",
+                "ci",
+                "--platform",
+                "linux",
+                *extra,
+            ],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_metadata_only_selects_body_checks_for_matching_path_and_platform(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-linux", "requires_pr_body": True, "platforms": ("linux",)},
+                    {"id": "source-linux"},
+                    {"id": "body-macos", "requires_pr_body": True, "platforms": ("macos",)},
+                    {
+                        "id": "body-unrelated",
+                        "requires_pr_body": True,
+                        "triggers": ("app/**",),
+                    },
+                ],
+            )
+            result = self._run_cli(root, manifest, changed, "--metadata-only", "--list")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("SELECTED body-linux", result.stdout)
+        self.assertNotIn("SELECTED source-linux", result.stdout)
+        self.assertNotIn("SELECTED body-macos", result.stdout)
+        self.assertNotIn("SELECTED body-unrelated", result.stdout)
+
+    def test_metadata_only_runs_all_failures_and_returns_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-first", "requires_pr_body": True, "exit_code": 3},
+                    {"id": "body-second", "requires_pr_body": True, "exit_code": 4},
+                ],
+                append_trace=False,
+            )
+            result = self._run_cli(root, manifest, changed, "--metadata-only")
+            # Shared append traces can lose an entry on Windows. Independent
+            # receipts prove each parallel check ran; serial order tests below
+            # still assert the append trace, and result assertions stay intact.
+            runs = [path.name for path in (root / "run-markers").iterdir()]
+
+        self.assertEqual(result.returncode, 1)
+        # Python checks may run in parallel, so only the set of runs is fixed; the summary stays in manifest order.
+        self.assertEqual(sorted(runs), ["body-first", "body-second"])
+        self.assertIn("<== FAIL body-first", result.stdout)
+        self.assertIn("<== FAIL body-second", result.stdout)
+        self.assertIn("Manifest checks failed: body-first, body-second", result.stderr)
+
+    def test_metadata_only_success_returns_zero_without_running_source_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-pass", "requires_pr_body": True},
+                    {"id": "source-fails", "exit_code": 9},
+                ],
+            )
+            result = self._run_cli(root, manifest, changed, "--metadata-only")
+            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(runs, ["body-pass"])
+        self.assertIn("Manifest checks passed: 1 check(s).", result.stdout)
+
+    def test_default_mode_runs_source_checks_and_remains_fail_fast(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-pass", "requires_pr_body": True},
+                    {"id": "source-fails", "exit_code": 7},
+                    {"id": "source-after-failure", "exit_code": 8},
+                ],
+            )
+            # Serial mode: nothing after the first failure starts. The parallel pool's fail-fast
+            # (cancel running, schedule nothing new) is covered by ParallelRunnerTests.
+            result = self._run_cli(root, manifest, changed, jobs="1")
+            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(runs, ["body-pass", "source-fails"])
+        self.assertIn("Manifest checks failed: source-fails", result.stderr)
+        self.assertNotIn("==> source-after-failure", result.stdout)
+
+    def test_metadata_only_rejects_conflicting_selection_flags(self) -> None:
+        runner = REPO_ROOT / ".github/scripts/run_checks.py"
+        for flags in (("--skip-pr-body-checks",), ("--check-id", "source-check")):
+            with self.subTest(flags=flags):
+                result = subprocess.run(
+                    [sys.executable, str(runner), "--lane", "ci", "--metadata-only", *flags],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--metadata-only cannot combine", result.stderr)
+
+    def test_run_git_decodes_unicode_checkout_path_as_utf8(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "路径 checkout"
+            root.mkdir()
+            env = os.environ.copy()
+            for key in tuple(env):
+                if key.startswith("GIT_"):
+                    del env[key]
+            subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+
+            with patch.dict(os.environ, env, clear=True):
+                resolved = run_git(root, "rev-parse", "--show-toplevel")
+
+        self.assertEqual(Path(resolved).resolve(), root.resolve())
+
+    def test_windows_manifest_interpreters_use_the_active_toolchain(self) -> None:
+        with patch("run_checks.bash_executable", return_value="C:\\Git\\bin\\bash.exe"):
+            self.assertEqual(
+                command_for_host(["bash", "scripts/check.sh"], platform_name="nt"),
+                ["C:\\Git\\bin\\bash.exe", "scripts/check.sh"],
+            )
+        self.assertEqual(
+            command_for_host(
+                ["python3", ".github/scripts/check.py"],
+                platform_name="nt",
+                python_executable="C:\\Python\\python.exe",
+            ),
+            ["C:\\Python\\python.exe", ".github/scripts/check.py"],
+        )
+
+    def test_non_interpreter_and_non_windows_commands_are_unchanged(self) -> None:
+        node_command = ["node", "--test", "test.mjs"]
+        bash_command = ["bash", "scripts/check.sh"]
+
+        self.assertIs(command_for_host(node_command, platform_name="nt"), node_command)
+        self.assertIs(command_for_host(bash_command, platform_name="posix"), bash_command)
+
+    def test_posix_python3_alias_honors_the_selected_interpreter(self) -> None:
+        """A host whose PATH `python3` is Xcode CLT 3.9 must not run manifest
+        checks under it: the alias follows the interpreter that launched
+        run_checks (the dev harness already floor-probed that one)."""
+
+        command = ["python3", ".github/scripts/check.py"]
+        resolved = command_for_host(command, platform_name="posix", python_executable="/path/python3.14")
+        self.assertEqual(resolved, ["/path/python3.14", ".github/scripts/check.py"])
+        # No explicit interpreter: keep the alias untouched (CI hosts, PATH `python3`).
+        self.assertIs(command_for_host(command, platform_name="posix"), command)
+
+    def test_execute_checks_normalizes_the_manifest_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            changed = root / "changed.txt"
+            changed.write_text("example.txt\n", encoding="utf-8")
+            body = root / "body.txt"
+            body.write_text("", encoding="utf-8")
+            check = Check("shell", ("bash", "check.sh"), ("all",), ("ci",), "fixture")
+
+            with (
+                patch("run_checks.command_for_host", return_value=["git-bash.exe", "check.sh"]) as normalize,
+                patch(
+                    "run_checks.subprocess.run",
+                    return_value=subprocess.CompletedProcess(["git-bash.exe", "check.sh"], 0),
+                ) as run,
+                redirect_stdout(StringIO()),
+            ):
+                result = execute_checks(
+                    root,
+                    [check],
+                    changed_files_path=changed,
+                    base="base",
+                    head="HEAD",
+                    pr_body_file=body,
+                )
+
+            self.assertEqual(result, 0)
+            normalize.assert_called_once_with(["bash", "check.sh"], python_executable=sys.executable)
+            run.assert_called_once_with(["git-bash.exe", "check.sh"], cwd=root, check=False)
+
+    def test_execute_checks_stops_at_first_failure_unless_keep_going(self) -> None:
+        """Nightly 39610825548: fail-fast hid a second red behind the first in one job.
+
+        PR and local lanes keep the fast verdict; --keep-going (nightly) runs every
+        selected check and names each failure so one run reports the full set.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            changed = root / "changed.txt"
+            changed.write_text("example.txt\n", encoding="utf-8")
+            body = root / "body.txt"
+            body.write_text("", encoding="utf-8")
+            checks = [
+                Check("first", ("bash", "first.sh"), ("all",), ("ci",), "fixture"),
+                Check("second", ("bash", "second.sh"), ("all",), ("ci",), "fixture"),
+                Check("third", ("bash", "third.sh"), ("all",), ("ci",), "fixture"),
+            ]
+            returncodes = {"first.sh": 1, "second.sh": 0, "third.sh": 1}
+
+            def fake_run(command, cwd, check):
+                return subprocess.CompletedProcess(command, returncodes[command[-1]])
+
+            for keep_going, expected_runs, expected_stderr in (
+                (False, ["first.sh"], "Manifest checks failed: first\n"),
+                (True, ["first.sh", "second.sh", "third.sh"], "Manifest checks failed: first, third\n"),
+            ):
+                with self.subTest(keep_going=keep_going):
+                    stderr = StringIO()
+                    with (
+                        patch("run_checks.command_for_host", side_effect=lambda command, python_executable: command),
+                        patch("run_checks.subprocess.run", side_effect=fake_run) as run,
+                        redirect_stdout(StringIO()),
+                        redirect_stderr(stderr),
+                    ):
+                        result = execute_checks(
+                            root,
+                            checks,
+                            changed_files_path=changed,
+                            base="base",
+                            head="HEAD",
+                            pr_body_file=body,
+                            keep_going=keep_going,
+                        )
+                    self.assertEqual(result, 1)
+                    self.assertEqual([call.args[0][-1] for call in run.call_args_list], expected_runs)
+                    self.assertEqual(stderr.getvalue(), expected_stderr)
+
+    def test_windows_bash_resolution_uses_the_git_install(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            git = git_root / "cmd/git.exe"
+            git.parent.mkdir()
+            git.touch()
+            bash = git_root / "bin/bash.exe"
+            bash.parent.mkdir()
+            bash.touch()
+
+            resolved = bash_executable(
+                platform_name="nt",
+                which=lambda name: str(git) if name == "git" else None,
+            )
+
+            self.assertTrue(Path(resolved).samefile(bash))
+
+    def test_windows_bash_resolution_from_git_hook_exec_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            git = git_root / "mingw64/libexec/git-core/git.exe"
+            git.parent.mkdir(parents=True)
+            git.touch()
+            bash = git_root / "bin/bash.exe"
+            bash.parent.mkdir()
+            bash.touch()
+
+            resolved = bash_executable(
+                platform_name="nt",
+                which=lambda name: str(git) if name == "git" else None,
+            )
+
+            self.assertTrue(Path(resolved).samefile(bash))
+
+    def test_windows_bash_path_is_converted_back_to_native(self) -> None:
+        commands: list[list[str]] = []
+
+        def fake_run(command, **_kwargs):
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout="C:\\Temp\\guard.py\n", stderr="")
+
+        converted = native_path_from_bash(
+            "/tmp/guard.py",
+            "git-bash.exe",
+            platform_name="nt",
+            run=fake_run,
+        )
+
+        self.assertEqual(converted, Path("C:\\Temp\\guard.py"))
+        self.assertEqual(
+            commands,
+            [["git-bash.exe", "-c", 'cygpath -w "$1"', "bash", "/tmp/guard.py"]],
+        )
+
+    def test_windows_native_path_is_converted_for_bash(self) -> None:
+        commands: list[list[str]] = []
+
+        def fake_run(command, **_kwargs):
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout="/c/Temp/body.md\n", stderr="")
+
+        converted = bash_path(
+            Path("C:\\Temp\\body.md"),
+            "git-bash.exe",
+            platform_name="nt",
+            run=fake_run,
+        )
+
+        self.assertEqual(converted, "/c/Temp/body.md")
+        self.assertEqual(
+            commands,
+            [["git-bash.exe", "-c", 'cygpath -u "$1"', "bash", "C:\\Temp\\body.md"]],
+        )
+
+    @unittest.skipIf(os.name == "nt", "requires a POSIX shell")
+    def test_firestore_contention_runner_uses_uv_without_backend_venv(self) -> None:
+        source = REPO_ROOT / "backend/testing/desktop_beta_admission/run.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner = root / "backend/testing/desktop_beta_admission/run.sh"
+            runner.parent.mkdir(parents=True)
+            shutil.copy2(source, runner)
+            (root / "backend/.python-version").write_text("3.11\n", encoding="utf-8")
+            fake_bin = root / "fake-bin"
+            fake_bin.mkdir()
+            capture = root / "node-args.txt"
+            for name, body in {
+                "uv": "#!/bin/sh\nexit 99\n",
+                "node": f"""#!/bin/sh
+case "$1" in
+  -p) echo 22 ;;
+  *emulator_config.mjs) printf '45678 45679\\n' ;;
+  *supervise.mjs) printf '%s\\n' "$@" > "{capture}" ;;
+esac
+""",
+                "java": "#!/bin/sh\necho '    java.version = 21.0.1' >&2\n",
+            }.items():
+                path = fake_bin / name
+                path.write_text(body, encoding="utf-8")
+                path.chmod(0o755)
+
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            # The stub supervisor ignores --cleanup-path and run.sh execs it, so keep mktemp in the sandbox.
+            env["TMPDIR"] = str(root)
+            result = subprocess.run(["bash", str(runner)], text=True, capture_output=True, env=env, check=False)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            captured = capture.read_text(encoding="utf-8")
+            self.assertIn("uv run --no-project", captured)
+            self.assertIn("--cleanup-path", captured)
+
     def test_trigger_matching_selects_only_relevant_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         selected = {check.id for check in resolve_checks(manifest, ["app/lib/widgets/example.dart"], "ci")}
         self.assertIn("brand-ui", selected)
         self.assertNotIn("backend-async-blockers", selected)
         self.assertNotIn("backend-route-policy-baseline", selected)
+
+    def test_manifest_only_trigger_requires_own_entry_change(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml"],
+                "ci",
+                platform="macos",
+                manifest_changed_ids={"backend-deploy-source-admission"},
+            )
+        }
+        self.assertIn("backend-deploy-source-admission", selected)
+        self.assertNotIn("rayban-dat-build-wrapper", selected)
+
+    def test_manifest_only_trigger_without_diff_context_selects_all_manifest_checks(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml"],
+                "ci",
+                platform="macos",
+            )
+        }
+        self.assertIn("rayban-dat-build-wrapper", selected)
+
+    def test_manifest_worktree_edit_selects_only_changed_check_entry(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml"],
+                "local",
+                platform="macos",
+                manifest_changed_ids={"backend-runtime-env-compose"},
+            )
+        }
+        self.assertIn("backend-runtime-env-compose", selected)
+        self.assertNotIn("rayban-dat-build-wrapper", selected)
+
+    def test_posix_contracts_skip_windows_without_dropping_linux_ci(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        expected_by_path = {
+            "app/ios/Podfile": {
+                "rayban-dat-plugin-boundary",
+                "rayban-dat-xcode-graph",
+                "rayban-dat-build-wrapper",
+            },
+        }
+        for path, expected in expected_by_path.items():
+            windows = {check.id for check in resolve_checks(manifest, [path], "ci", platform="windows")}
+            linux = {check.id for check in resolve_checks(manifest, [path], "ci", platform="linux")}
+            self.assertTrue(expected.isdisjoint(windows), path)
+            self.assertTrue(expected <= linux, path)
+
+    def test_shared_windows_entrypoints_route_their_behavioral_contracts(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        expected_by_path = {
+            ".github/workflows/gcp_storage_lifecycle.yml": {"pr-preflight-contract-tests"},
+            "Makefile": {"dev-harness-unit-tests", "setup-pre-push-prerequisites"},
+            "scripts/dev-harness/_resolve_python.sh": {
+                "dev-harness-unit-tests",
+                "desktop-release-process-guards",
+            },
+            "scripts/pre-push-singleflight": {"pr-preflight-contract-tests"},
+            ".github/scripts/preflight_runner.py": {"pr-preflight-contract-tests"},
+            "desktop/macos/scripts/check-e2e-flow-coverage.py": {
+                "desktop-e2e-flow-coverage",
+                "pr-preflight-contract-tests",
+            },
+            ".github/scripts/git_bash.py": {
+                "check-manifest-contract",
+                "desktop-release-process-guards",
+                "desktop-swiftlint-config",
+            },
+        }
+        for path, expected in expected_by_path.items():
+            selected = {check.id for check in resolve_checks(manifest, [path], "ci", platform="macos")}
+            self.assertTrue(expected <= selected, f"{path}: missing {sorted(expected - selected)}")
+
+    def test_root_agents_md_selects_agent_doc_checks(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        # `**/AGENTS.md` does not match the root file under fnmatch/PurePath.match,
+        # so the root guide needs an explicit trigger or a docs-only root edit
+        # skips both the size ratchet and the dead-pointer check.
+        for lane in ("local", "ci"):
+            selected = {check.id for check in resolve_checks(manifest, ["AGENTS.md"], lane)}
+            self.assertIn("agents-md-lean", selected)
+            self.assertIn("agent-doc-references", selected)
 
     def test_backend_route_change_selects_route_policy_baseline_in_both_lanes(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
@@ -139,7 +1015,34 @@ class RunnerBehaviorTests(unittest.TestCase):
             selected = {check.id for check in resolve_checks(manifest, ["app/lib/example.dart"], lane)}
             self.assertIn("failure-class-protocol", selected)
 
-    def test_main_push_excludes_only_pr_body_checks(self) -> None:
+    def test_main_push_includes_pr_body_checks_when_body_supplied(self) -> None:
+        """#9744: main pushes now pass the merge-commit body through
+        --pr-body-file, so body-requiring checks (product-invariants,
+        failure-class-protocol) must run — not be silently skipped."""
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                ["app/lib/example.dart"],
+                "ci",
+                include_pr_body_checks=True,
+            )
+        }
+        self.assertIn("product-invariants", selected)
+        self.assertIn("failure-class-protocol", selected)
+        self.assertIn("diff-hygiene", selected)
+
+    def test_product_invariants_diffs_three_dot_from_base_not_a_changed_files_list(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "product-invariants")
+        self.assertIn("{base}", check.command)
+        self.assertIn("{head}", check.command)
+        self.assertNotIn("{changed_files}", check.command)
+
+    def test_main_push_without_body_still_excludes_pr_body_checks(self) -> None:
+        """Fail-closed: a main push with no body must NOT run body-requiring
+        checks (they would fail on empty text), preserving the old skip."""
         manifest = load_manifest(MANIFEST_PATH)
         selected = {
             check.id
@@ -153,6 +1056,48 @@ class RunnerBehaviorTests(unittest.TestCase):
         self.assertNotIn("product-invariants", selected)
         self.assertNotIn("failure-class-protocol", selected)
         self.assertIn("diff-hygiene", selected)
+
+    def test_every_pr_body_consuming_check_is_excluded_from_post_merge_runs(self) -> None:
+        # Post-merge runs have no PR body, so a check whose escape hatch lives
+        # there would fail on main forever.
+        manifest = load_manifest(MANIFEST_PATH)
+        for check in manifest.checks:
+            if "{pr_body_file}" in check.command:
+                self.assertTrue(
+                    check.requires_pr_body,
+                    f"{check.id} consumes the PR body, so it must declare requires_pr_body: true",
+                )
+
+    def test_line_count_ratchet_receives_pr_body_metadata(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "product-file-line-count-ratchet")
+
+        self.assertTrue(check.requires_pr_body)
+        self.assertIn("{pr_body_file}", check.command)
+        self.assertIn("{target_base}", check.command)
+        self.assertIn("{head}", check.command)
+        selected = resolve_checks(
+            manifest,
+            ["backend/routers/example.py"],
+            "ci",
+            include_pr_body_checks=False,
+        )
+        self.assertNotIn(check, selected)
+        self.assertIn(check, resolve_checks(manifest, ["backend/routers/example.py"], "ci"))
+        self.assertIn(check, resolve_checks(manifest, ["app/lib/pages/chat/page.dart"], "ci"))
+        self.assertIn("app/lib/**/*.dart", check.triggers)
+
+        command = command_for_check(
+            check,
+            changed_files_path=Path("changed.txt"),
+            base="merge-base",
+            target_base="origin/main",
+            head="candidate-head",
+            pr_body_file=Path("body.txt"),
+            skip_changelog=False,
+        )
+        self.assertEqual(command[command.index("--base") + 1], "origin/main")
+        self.assertEqual(command[command.index("--head") + 1], "candidate-head")
 
     def test_backend_datetime_sort_sentinel_ratchet_runs_for_backend_sources(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
@@ -180,6 +1125,147 @@ class RunnerBehaviorTests(unittest.TestCase):
                     pr_body_file=body,
                 )
             self.assertEqual(result, 1)
+
+    def test_release_process_guard_uses_locked_pyyaml_in_every_declared_lane(self) -> None:
+        """The guard must never depend on a runner-global PyYAML install."""
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "desktop-release-process-guards")
+        self.assertEqual(check.command, ("bash", "scripts/run-release-process-guards.sh"))
+        for lane in ("local", "ci"):
+            selected = resolve_checks(manifest, list(check.triggers), lane)
+            self.assertIn(check, selected)
+
+        try:
+            bash = bash_executable()
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
+        runner = REPO_ROOT / check.command[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            copied_runner = root / check.command[1]
+            copied_runner.parent.mkdir(parents=True)
+            shutil.copy2(runner, copied_runner)
+            resolver = root / "scripts/dev-harness/_resolve_python.sh"
+            resolver.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO_ROOT / "scripts/dev-harness/_resolve_python.sh", resolver)
+
+            sync = root / "backend/scripts/sync-python-deps.sh"
+            sync.parent.mkdir(parents=True)
+            python = root / "backend/.venv/bin/python"
+            sync.write_text(
+                f'''#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "{bash_path(python.parent, bash)}"
+cat > "{bash_path(python, bash)}" <<'PYTHON'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == "-c" ]]; then
+  exit 0
+fi
+printf '%s\\n' "$@" > "{bash_path(root / 'guard-args.txt', bash)}"
+PYTHON
+chmod +x "{bash_path(python, bash)}"
+''',
+                encoding="utf-8",
+            )
+            sync.chmod(0o755)
+            guard = root / ".github/scripts/check-release-process-guards.py"
+            guard.parent.mkdir(parents=True, exist_ok=True)
+            guard.write_text("# fixture\n", encoding="utf-8")
+
+            env = os.environ.copy()
+            env["PYTHON"] = "ambient-python-must-not-run"
+            result = subprocess.run(
+                [bash, str(copied_runner)],
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            recorded_guard = (root / "guard-args.txt").read_text(encoding="utf-8").strip()
+            self.assertTrue(
+                native_path_from_bash(recorded_guard, bash).samefile(guard),
+                f"release guard received {recorded_guard!r}, expected {str(guard)!r}",
+            )
+
+        self.assertRegex(
+            (REPO_ROOT / "backend/requirements.txt").read_text(encoding="utf-8"),
+            r"(?im)^pyyaml==6\.0\.1$",
+        )
+        for lock in REPO_ROOT.glob("backend/pylock*.toml"):
+            self.assertRegex(
+                lock.read_text(encoding="utf-8"),
+                r'(?ms)^\[\[packages\]\]\nname = "pyyaml"\nversion = "6\.0\.1"$',
+            )
+
+    def test_runtime_env_compose_uses_locked_pyyaml_in_every_declared_lane(self) -> None:
+        """The compose check must never depend on a runner-global PyYAML install."""
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "backend-runtime-env-compose")
+        self.assertEqual(check.command, ("bash", "backend/scripts/check_runtime_env_compose.sh"))
+        for lane in ("local", "ci"):
+            selected = resolve_checks(manifest, list(check.triggers), lane)
+            self.assertIn(check, selected)
+
+        try:
+            bash = bash_executable()
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
+        runner = REPO_ROOT / check.command[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            copied_runner = root / check.command[1]
+            copied_runner.parent.mkdir(parents=True)
+            shutil.copy2(runner, copied_runner)
+            resolver = root / "scripts/dev-harness/_resolve_python.sh"
+            resolver.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO_ROOT / "scripts/dev-harness/_resolve_python.sh", resolver)
+
+            sync = root / "backend/scripts/sync-python-deps.sh"
+            sync.parent.mkdir(parents=True, exist_ok=True)
+            python = root / "backend/.venv/bin/python"
+            compose = root / "backend/deploy/compose_runtime_env.py"
+            compose.parent.mkdir(parents=True)
+            compose.write_text("# fixture\n", encoding="utf-8")
+            sync.write_text(
+                f'''#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "{bash_path(python.parent, bash)}"
+cat > "{bash_path(python, bash)}" <<'PYTHON'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == "-c" ]]; then
+  exit 0
+fi
+printf '%s\\n' "$@" > "{bash_path(root / 'compose-args.txt', bash)}"
+PYTHON
+chmod +x "{bash_path(python, bash)}"
+''',
+                encoding="utf-8",
+            )
+            sync.chmod(0o755)
+
+            env = os.environ.copy()
+            env["PYTHON"] = "ambient-python-must-not-run"
+            result = subprocess.run(
+                [bash, str(copied_runner)],
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            recorded_lines = (root / "compose-args.txt").read_text(encoding="utf-8").splitlines()
+            self.assertGreaterEqual(len(recorded_lines), 1)
+            recorded_script = native_path_from_bash(recorded_lines[0], bash)
+            self.assertTrue(
+                recorded_script.samefile(compose),
+                f"compose check received {recorded_lines[0]!r}, expected {str(compose)!r}",
+            )
+            self.assertIn("--check", recorded_lines[1:])
 
 
 class PlatformTests(unittest.TestCase):
@@ -217,6 +1303,165 @@ class PlatformTests(unittest.TestCase):
             selected = resolve_checks(manifest, ["any/file"], "ci", platform=plat)
             self.assertEqual([c.id for c in selected], ["portable"])
 
+    def test_exclusive_macos_query_excludes_portable_checks(self):
+        manifest = Manifest(
+            checks=(
+                Check(id="portable", command=("true",), triggers=("all",), lanes=("ci",), reason="portable"),
+                Check(
+                    id="mac-only",
+                    command=("true",),
+                    triggers=("all",),
+                    lanes=("ci",),
+                    reason="macOS",
+                    platforms=("macos",),
+                ),
+            ),
+            exempt=(),
+        )
+        self.assertEqual(
+            [check.id for check in resolve_checks(manifest, ["any/file"], "ci", platform="macos")],
+            ["portable", "mac-only"],
+        )
+        self.assertEqual(
+            [
+                check.id
+                for check in resolve_checks(
+                    manifest,
+                    ["any/file"],
+                    "ci",
+                    platform="macos",
+                    exclusive_platform=True,
+                )
+            ],
+            ["mac-only"],
+        )
+
+    def test_machine_readable_selection_carries_path_and_reason(self):
+        manifest = Manifest(
+            checks=(
+                Check(
+                    id="target",
+                    command=("true",),
+                    triggers=("desktop/macos/**",),
+                    lanes=("ci",),
+                    reason="desktop source changed",
+                ),
+            ),
+            exempt=(),
+        )
+        selections = resolve_check_selections(manifest, ["desktop/macos/Desktop/Sources/App.swift"], "ci")
+        self.assertEqual(len(selections), 1)
+        self.assertEqual(selections[0].check.id, "target")
+        self.assertEqual(selections[0].matched_paths, ("desktop/macos/Desktop/Sources/App.swift",))
+        self.assertEqual(selections[0].check.reason, "desktop source changed")
+
+    def test_globstar_prefix_trigger_matches_repository_root(self):
+        """`**/x` covers depth 0. A root-level file is not a different file type."""
+        for pattern, path in (
+            ("**/*.json", "firebase.json"),
+            ("**/*.yaml", "codemagic.yaml"),
+            ("**/*.swift", "Package.swift"),
+            ("**/Dockerfile*", "Dockerfile"),
+            ("**/AGENTS.md", "AGENTS.md"),
+        ):
+            with self.subTest(pattern=pattern, path=path):
+                self.assertTrue(trigger_matches(pattern, path))
+
+    def test_globstar_prefix_trigger_still_matches_nested_and_rejects_others(self):
+        self.assertTrue(trigger_matches("**/*.json", "backend/config/plan_catalog.json"))
+        self.assertFalse(trigger_matches("**/*.json", "firebase.yaml"))
+        self.assertFalse(trigger_matches("**/AGENTS.md", "AGENTS.md.bak"))
+
+    def test_literal_package_json_does_not_select_nested_copies(self):
+        """Root firebase-tools pins must not wake admission when a web package changes.
+
+        The iOS compile runner executes macOS-exclusive checks and has no backend
+        venv. `web/frontend/package.json` is not the Firestore emulator pin.
+        """
+        self.assertTrue(trigger_matches("package.json", "package.json"))
+        self.assertFalse(trigger_matches("package.json", "web/frontend/package.json"))
+        self.assertFalse(trigger_matches("package-lock.json", "web/frontend/package-lock.json"))
+        self.assertTrue(trigger_matches("**/AGENTS.md", "backend/AGENTS.md"))
+        self.assertFalse(trigger_matches("AGENTS.md", "backend/AGENTS.md"))
+
+        manifest = load_manifest(MANIFEST_PATH)
+        web_share = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                [".github/checks-manifest.yaml", "web/frontend/package.json"],
+                "ci",
+                platform="macos",
+                exclusive_platform=True,
+                manifest_changed_ids={"web-share-http-tests"},
+            )
+        }
+        self.assertNotIn("desktop-beta-admission-firestore-contention", web_share)
+
+        root_pin = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                ["package.json"],
+                "ci",
+                platform="macos",
+                exclusive_platform=True,
+            )
+        }
+        self.assertIn("desktop-beta-admission-firestore-contention", root_pin)
+
+        nested_agents = {check.id for check in resolve_checks(manifest, ["backend/AGENTS.md"], "ci")}
+        self.assertIn("agents-md-lean", nested_agents)
+
+    def test_root_level_source_change_selects_plan_catalog_contract(self):
+        """The Stripe-literal scan walks from the root, so selection must too.
+
+        `plan-catalog-contract` is triggered only by `**/*.<ext>` patterns. Before
+        the leading-`**/` collapse, a production Stripe object ID committed to a
+        root-level source file -- `firebase.json`, `omi.json`, `codemagic.yaml` --
+        changed no path the guard could see, and the exhaustiveness contract it
+        exists to enforce reported success without running.
+        """
+        manifest = load_manifest(MANIFEST_PATH)
+        for path in ("firebase.json", "codemagic.yaml", "Package.swift"):
+            with self.subTest(path=path):
+                selected = {
+                    selection.check.id for selection in resolve_check_selections(manifest, [path], "ci")
+                }
+                self.assertIn("plan-catalog-contract", selected)
+
+    def test_explicit_check_ids_preserve_manifest_commands(self):
+        manifest = Manifest(
+            checks=(
+                Check(
+                    id="portable",
+                    command=("python3", "check.py"),
+                    triggers=("never/**",),
+                    lanes=("ci",),
+                    reason="test",
+                ),
+            ),
+            exempt=(),
+        )
+
+        selections = resolve_explicit_checks(
+            manifest,
+            ["portable"],
+            "ci",
+            include_pr_body_checks=True,
+            platform="windows",
+        )
+
+        self.assertEqual([selection.check.id for selection in selections], ["portable"])
+        with self.assertRaisesRegex(ValueError, "unknown check id"):
+            resolve_explicit_checks(
+                manifest,
+                ["missing"],
+                "ci",
+                include_pr_body_checks=True,
+                platform="windows",
+            )
+
     def test_skipped_platform_checks_reports_macos_on_linux(self):
         manifest = Manifest(
             checks=(
@@ -232,14 +1477,16 @@ class PlatformTests(unittest.TestCase):
     def test_invalid_platform_rejected_by_validation(self):
         manifest = Manifest(
             checks=(
-                Check(
-                    id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("windows",)
-                ),
+                Check(id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("plan9",)),
             ),
             exempt=(),
         )
         errors = validate_manifest(manifest, REPO_ROOT)
         self.assertTrue(any("invalid platforms" in e for e in errors))
+
+    def test_detect_platform_maps_windows(self):
+        with patch("run_checks._platform_mod.system", return_value="Windows"):
+            self.assertEqual(detect_platform(), "windows")
 
     def test_detect_platform_returns_known_value(self):
         plat = detect_platform()
@@ -247,16 +1494,31 @@ class PlatformTests(unittest.TestCase):
 
 
 class DeferredMarkerTests(unittest.TestCase):
+    def test_git_content_reads_are_utf8(self) -> None:
+        module = load_deferred_marker_module()
+        completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        with patch.object(module.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(module.added_lines("origin/main", "fixture.txt"), [])
+            self.assertEqual(module.marker_counts_at_base("origin/main", "fixture.txt"), Counter())
+
+        content_reads = [call for call in run.call_args_list if call.args[0][1] in {"diff", "show"}]
+        self.assertEqual(len(content_reads), 2)
+        for call in content_reads:
+            self.assertEqual(call.kwargs.get("encoding"), "utf-8")
+
     def test_new_marker_requires_tracking_issue(self) -> None:
         module = load_deferred_marker_module()
         marker = "TO" + "DO"
-        with tempfile.TemporaryDirectory(dir=REPO_ROOT, prefix=".manifest-marker-") as tmp:
-            root = Path(tmp)
-            candidate = root / "fixture.txt"
-            changed = root / "changed.txt"
-            relative = candidate.relative_to(REPO_ROOT).as_posix()
-            changed.write_text(f"{relative}\n", encoding="utf-8")
-
+        # The fixture must sit in the repository (the guard diffs repo-relative paths), but as single files, never
+        # a temporary directory: manifest checks now run in parallel, and a directory that vanishes mid-walk
+        # crashes another check's rglob (agents-md-lean FileNotFoundError, 2026-11-01). A vanished file does not,
+        # wherever TMPDIR points.
+        with tempfile.NamedTemporaryFile(dir=REPO_ROOT, prefix=".manifest-marker-", suffix=".txt", delete=False) as handle:
+            candidate = Path(handle.name)
+        with tempfile.NamedTemporaryFile(prefix="manifest-marker-changed-", suffix=".txt", delete=False) as handle:
+            changed = Path(handle.name)
+        try:
+            changed.write_text(f"{candidate.relative_to(REPO_ROOT).as_posix()}\n", encoding="utf-8")
             candidate.write_text(f"// {marker}: missing owner\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 1)
@@ -264,6 +1526,9 @@ class DeferredMarkerTests(unittest.TestCase):
             candidate.write_text(f"// {marker}(#9448): owned follow-up\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 0)
+        finally:
+            candidate.unlink(missing_ok=True)
+            changed.unlink(missing_ok=True)
 
     def test_marker_guard_ignores_product_text_and_reformatted_existing_comments(self) -> None:
         module = load_deferred_marker_module()
@@ -276,6 +1541,302 @@ class DeferredMarkerTests(unittest.TestCase):
             module.new_marker_violations([(88, reformatted)], Counter({signature: 1})),
             [],
         )
+
+
+class ParallelRunnerTests(unittest.TestCase):
+    """shipspeed 2026-11-01: a one-line backend push spent 514 s running 54 python checks one at a time."""
+
+    def run_checks_in(self, root: Path, checks: list[Check], *, jobs: str = "4", keep_going: bool = False):
+        changed = root / "changed.txt"
+        changed.write_text("example.txt\n", encoding="utf-8")
+        body = root / "body.txt"
+        body.write_text("", encoding="utf-8")
+        stdout, stderr = StringIO(), StringIO()
+        with patch.dict(os.environ, {"OMI_CHECKS_JOBS": jobs}), redirect_stdout(stdout), redirect_stderr(stderr):
+            result = execute_checks(
+                root,
+                checks,
+                changed_files_path=changed,
+                base="base",
+                head="HEAD",
+                pr_body_file=body,
+                keep_going=keep_going,
+            )
+        # Child output is relayed byte for byte; Windows children end lines with \r\n.
+        return result, stdout.getvalue().replace("\r\n", "\n"), stderr.getvalue()
+
+    @staticmethod
+    def script(root: Path, name: str, body: str) -> Check:
+        (root / f"{name}.py").write_text(body, encoding="utf-8")
+        return Check(name, ("python3", f"{name}.py"), ("all",), ("ci",), "fixture")
+
+    @staticmethod
+    def rendezvous(name: str, other: str) -> str:
+        # Passes only when the other check is running at the same time.
+        return (
+            "import pathlib, sys, time\n"
+            f"pathlib.Path('{name}.started').touch()\n"
+            "deadline = time.monotonic() + 20\n"
+            f"while not pathlib.Path('{other}.started').exists():\n"
+            "    if time.monotonic() > deadline:\n"
+            "        sys.exit(9)\n"
+            "    time.sleep(0.02)\n"
+            f"print('{name} done')\n"
+        )
+
+    def test_python_checks_run_concurrently_and_print_whole_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                self.script(root, "left", self.rendezvous("left", "right")),
+                self.script(root, "right", self.rendezvous("right", "left")),
+            ]
+            result, stdout, _ = self.run_checks_in(root, checks)
+            self.assertEqual(result, 0)
+            for name in ("left", "right"):
+                self.assertRegex(stdout, rf"==> {name}\n{name} done\n<== PASS {name} \(")
+            self.assertIn("Manifest checks passed: 2 check(s).", stdout)
+
+    def test_first_failure_cancels_running_checks_and_is_printed_last(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                self.script(root, "slow", "import time\ntime.sleep(60)\n"),
+                self.script(root, "bad", "print('broken contract')\nraise SystemExit(3)\n"),
+                self.script(root, "later", "print('ran')\n"),
+            ]
+            started = time.monotonic()
+            result, stdout, stderr = self.run_checks_in(root, checks, jobs="2")
+            self.assertLess(time.monotonic() - started, 30)
+            self.assertEqual(result, 1)
+            self.assertIn("<== CANCELLED slow", stdout)
+            self.assertNotIn("==> later", stdout)
+            # The preflight runner names the failing phase from the last `==> ` line.
+            self.assertEqual([line for line in stdout.splitlines() if line.startswith("==> ")][-1], "==> bad")
+            self.assertIn("Manifest checks failed: bad", stderr)
+
+    def test_checks_finished_by_the_first_failure_keep_their_real_result(self) -> None:
+        """Luna r1 on #24232: a pass or a second failure that finished alongside the first must not read CANCELLED."""
+        self.assert_finished_checks_keep_their_real_result(parent_start_delay=0)
+
+    def test_finished_checks_keep_their_result_when_parent_is_delayed_after_launch(self) -> None:
+        """The readiness handshake survives a parent descheduled during launch."""
+        self.assert_finished_checks_keep_their_real_result(parent_start_delay=0.5)
+
+    def test_completed_results_survive_a_failure_before_the_first_poll(self) -> None:
+        """Exercise an actual early exit without the ready/release sleep hook."""
+        real_popen = subprocess.Popen
+        processes = {}
+        observed_before_poll = []
+        quick = {"bad": "raise SystemExit(3)", "also-bad": "raise SystemExit(4)", "fine": "print('fine')"}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [self.script(root, name, body) for name, body in quick.items()]
+            checks.append(self.script(root, "slow", "import time\ntime.sleep(60)\n"))
+
+            def start(command, *args, **kwargs):
+                process = real_popen(command, *args, **kwargs)
+                name = Path(command[1]).stem if len(command) > 1 else None
+                if name in quick:
+                    processes[name] = process
+                if name in {"bad", "slow"}:
+                    # bad exits before its siblings launch; before returning
+                    # the last launch, all quick exits must already be visible.
+                    required = ("bad",) if name == "bad" else tuple(quick)
+                    deadline = time.monotonic() + 120
+                    while (
+                        not all(key in processes and processes[key].poll() is not None for key in required)
+                        and time.monotonic() < deadline
+                    ):
+                        time.sleep(0.02)
+                    if name == "slow":
+                        observed_before_poll.append(all(processes[key].poll() is not None for key in quick))
+                return process
+
+            with patch("run_checks.subprocess.Popen", start):
+                result, stdout, stderr = self.run_checks_in(root, checks, jobs="4")
+            self.assertEqual(observed_before_poll, [True])
+            self.assertEqual(result, 1)
+            self.assertIn("<== PASS fine", stdout)
+            self.assertIn("<== CANCELLED slow", stdout)
+            self.assertNotIn("CANCELLED fine", stdout)
+            self.assertNotIn("CANCELLED also-bad", stdout)
+            self.assertIn("Manifest checks failed: bad, also-bad", stderr)
+
+    def assert_finished_checks_keep_their_real_result(self, *, parent_start_delay: float) -> None:
+        real_sleep = time.sleep
+        real_popen = subprocess.Popen
+        processes = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            quick = {"bad": "raise SystemExit(3)", "also-bad": "raise SystemExit(4)", "fine": "print('fine')"}
+            checks = [
+                self.script(
+                    root,
+                    name,
+                    "import pathlib, time\n"
+                    f"time.sleep({parent_start_delay if name == 'also-bad' else 0})\n"
+                    f"pathlib.Path('{name}.done').touch()\n"
+                    "deadline = time.monotonic() + 120\n"
+                    "while not pathlib.Path('release').exists() and time.monotonic() < deadline: time.sleep(0.01)\n"
+                    "if not pathlib.Path('release').exists(): raise SystemExit(97)\n"
+                    f"{body}\n",
+                )
+                for name, body in quick.items()
+            ]
+            checks.append(self.script(root, "slow", "import time\ntime.sleep(60)\n"))
+
+            def start(command, *args, **kwargs):
+                process = real_popen(command, *args, **kwargs)
+                name = Path(command[1]).stem if len(command) > 1 else None
+                if name in quick:
+                    processes[name] = process
+                if name == "bad":
+                    # Before the ready/release barrier this lets bad exit before
+                    # the first poll, while also-bad has not written its marker.
+                    real_sleep(parent_start_delay)
+                return process
+
+            def wait_for_quick_checks(_seconds: float) -> None:
+                # No quick child can exit before this first sleep/poll barrier.
+                # Latch readiness, release them together, then observe actual exit.
+                deadline = time.monotonic() + 120  # interpreter startup alone took >30 s at load 140 on m5
+                while not all((root / f"{name}.done").exists() for name in quick) and time.monotonic() < deadline:
+                    real_sleep(0.02)
+                (root / "release").touch()
+                while (
+                    not all(name in processes and processes[name].poll() is not None for name in quick)
+                    and time.monotonic() < deadline
+                ):
+                    real_sleep(0.02)
+                real_sleep(0.5)
+
+            with patch("run_checks.subprocess.Popen", start), patch("run_checks.time.sleep", wait_for_quick_checks):
+                result, stdout, stderr = self.run_checks_in(root, checks, jobs="4")
+            self.assertEqual(result, 1)
+            self.assertIn("<== PASS fine", stdout)
+            self.assertIn("<== CANCELLED slow", stdout)
+            self.assertNotIn("CANCELLED fine", stdout)
+            self.assertNotIn("CANCELLED also-bad", stdout)
+            self.assertIn("Manifest checks failed: bad, also-bad", stderr)
+
+    @unittest.skipIf(os.name == "nt", "exit-status attribution is POSIX-only")
+    def test_stop_keeps_the_status_of_a_check_that_exited_before_the_signal(self) -> None:
+        """Luna r2 on #24232: a check that exits between poll() and the stop keeps its own result."""
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "exited"
+            process = subprocess.Popen(
+                [sys.executable, "-c", f"import pathlib; pathlib.Path({str(marker)!r}).touch(); raise SystemExit(5)"],
+                start_new_session=True,
+            )
+            deadline = time.monotonic() + 120
+            while not marker.exists() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            time.sleep(0.5)  # exited but not yet reaped: Popen.returncode is still None
+            with patch.object(process, "poll", side_effect=[None, None]):
+                stopped = _stop(process)
+            self.assertFalse(stopped)
+            self.assertEqual(process.returncode, 5)
+
+            live = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+            self.assertTrue(_stop(live))
+
+    def test_jobs_override_is_clamped(self) -> None:
+        for raw, expected in (("54", MAX_CHECK_JOBS), ("0", 1), ("3", 3)):
+            with self.subTest(raw=raw), patch.dict(os.environ, {"OMI_CHECKS_JOBS": raw}):
+                self.assertEqual(check_jobs(), expected)
+
+    def test_keep_going_reports_every_failure_in_manifest_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                self.script(root, "first", "raise SystemExit(1)\n"),
+                self.script(root, "second", "print('fine')\n"),
+                self.script(root, "third", "raise SystemExit(1)\n"),
+            ]
+            shell = Check("shell", ("bash", "-c", "exit 1"), ("all",), ("ci",), "fixture")
+            result, stdout, stderr = self.run_checks_in(root, [*checks, shell], keep_going=True)
+            self.assertEqual(result, 1)
+            self.assertIn("<== PASS second", stdout)
+            self.assertIn("Manifest checks failed: first, third, shell", stderr)
+
+    def test_non_python_checks_run_serially_after_the_pool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                Check("shell-first", ("bash", "-c", "echo shell"), ("all",), ("ci",), "fixture"),
+                self.script(root, "py-a", "print('a')\n"),
+                self.script(root, "py-b", "print('b')\n"),
+            ]
+            result, stdout, _ = self.run_checks_in(root, checks)
+            self.assertEqual(result, 0)
+            starts = [line[4:] for line in stdout.splitlines() if line.startswith("==> ")]
+            self.assertEqual(starts[-1], "shell-first")
+            self.assertEqual(sorted(starts[:2]), ["py-a", "py-b"])
+            self.assertIn("Manifest checks passed: 3 check(s).", stdout)
+
+    def test_jobs_one_keeps_the_serial_manifest_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checks = [
+                Check("shell-first", ("bash", "-c", "echo shell"), ("all",), ("ci",), "fixture"),
+                self.script(root, "py-a", "print('a')\n"),
+                self.script(root, "py-b", "print('b')\n"),
+            ]
+            result, stdout, _ = self.run_checks_in(root, checks, jobs="1")
+            self.assertEqual(result, 0)
+            starts = [line[4:] for line in stdout.splitlines() if line.startswith("==> ")]
+            self.assertEqual(starts, ["shell-first", "py-a", "py-b"])
+            self.assertNotIn("python check(s) with", stdout)
+
+    def test_parallel_check_that_writes_a_tracked_file_fails_the_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / "generated.txt").write_text("v1\n", encoding="utf-8")
+            subprocess.run(["git", "add", "generated.txt"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "seed"],
+                cwd=root,
+                check=True,
+            )
+            checks = [
+                self.script(root, "writer", "open('generated.txt', 'w').write('v2\\n')\n"),
+                self.script(root, "reader", "print('ok')\n"),
+            ]
+            result, _, stderr = self.run_checks_in(root, checks)
+            self.assertEqual(result, 1)
+            self.assertIn("parallel checks modified tracked files: generated.txt", stderr)
+
+    def test_slowest_known_check_starts_first_and_durations_are_recorded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            cache = root / ".git" / "omi-preflight" / "check-durations.json"
+            cache.parent.mkdir(parents=True)
+            cache.write_text(json.dumps({"quick": 0.1, "heavy": 90.0}), encoding="utf-8")
+            log_line = "import pathlib\nwith open('starts.log', 'a') as f:\n    f.write('{}\\n')\n"
+            checks = [
+                self.script(root, "quick", log_line.format("quick")),
+                self.script(root, "heavy", log_line.format("heavy")),
+            ]
+            # One worker serializes the pool, so start order is exactly the scheduling order.
+            durations = load_durations(cache)
+            with redirect_stdout(StringIO()):
+                failures = execute_parallel_checks(
+                    root,
+                    checks,
+                    {check.id: [sys.executable, f"{check.id}.py"] for check in checks},
+                    jobs=1,
+                    keep_going=False,
+                    durations=durations,
+                )
+            self.assertEqual(failures, [])
+            self.assertEqual((root / "starts.log").read_text(encoding="utf-8").split(), ["heavy", "quick"])
+            self.assertLess(durations["heavy"], 90.0)
+            result, _, _ = self.run_checks_in(root, checks)
+            self.assertEqual(result, 0)
+            self.assertEqual(set(json.loads(cache.read_text(encoding="utf-8"))), {"quick", "heavy"})
 
 
 if __name__ == "__main__":

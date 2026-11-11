@@ -13,11 +13,16 @@ class MemoryAssistantSettings {
   private let minConfidenceKey = "memoryMinConfidence"
   private let notificationsEnabledKey = "memoryNotificationsEnabled"
   private let excludedAppsKey = "memoryExcludedApps"
+  private let excludedHostsKey = "memoryExcludedHosts"
 
   // MARK: - Default Values
 
   private let defaultEnabled = true
-  private let defaultExtractionInterval: TimeInterval = 600.0  // 10 minutes
+  // 30 minutes. Was 10; memory extraction measured the worst value of any proactive
+  // lane (50.5% of macOS notification volume at 0.240% CTR, ~53 calls per stored
+  // memory), so its default cadence carries a 3x cut. Users can still pick a faster
+  // interval in Settings — 1800 is an existing step on the interval ladder.
+  private let defaultExtractionInterval: TimeInterval = 1800.0
   private let defaultMinConfidence: Double = 0.7
   private let defaultNotificationsEnabled = false
 
@@ -28,7 +33,7 @@ class MemoryAssistantSettings {
 
     CRITICAL CONTEXT:
     • You are extracting memories about the user viewing this screen
-    • Focus on information visible on screen that reveals facts about the user or wisdom they can learn from
+    • Focus on information visible on screen that reveals facts about the user
     • NEVER extract memories about what the user is actively doing right now (that's not a memory, it's current activity)
     • Only extract information that would be valuable to remember long-term
 
@@ -47,38 +52,20 @@ class MemoryAssistantSettings {
     THE CATEGORIZATION TEST (CRITICAL):
     For EVERY potential memory, ask these questions IN ORDER:
 
-    Q1: "Is this wisdom/advice FROM someone else that the user can learn from?"
-        → If YES: This is an INTERESTING memory. Include attribution (who said it).
-        → If NO: Go to Q2.
-
-    Q2: "Is this a fact ABOUT the user - their opinions, realizations, network, or preferences?"
+    Q1: "Is this a fact ABOUT the user - their opinions, realizations, network, or preferences?"
         → If YES: This is a SYSTEM memory.
-        → If NO: Probably should NOT be extracted at all.
+        → If NO: Do NOT extract it.
 
-    NEVER put the user's own realizations or opinions in INTERESTING.
-    INTERESTING is ONLY for external wisdom from others that the user can learn from.
+    Do not extract wisdom, advice, or facts about other people or sources. A separate insight
+    lane owns external wisdom. This lane only admits facts about the primary user.
 
-    INTERESTING MEMORIES (External Wisdom You Can Learn From):
-    These are actionable advice, frameworks, and strategies FROM OTHER PEOPLE/SOURCES visible on screen.
+    SUBJECT ADMISSION (CRITICAL):
+    Only extract a memory when it is established as about the primary user.
+    - subject_scope must be primary_user (not third_party, not artifact)
+    - subject_evidence must be user_authored or addressed_to_user (not rendered_content, not ui_chrome)
+    - contains_credential_or_identifier must be false (no passwords, API keys, account identifiers)
 
-    CRITICAL REQUIREMENTS FOR INTERESTING MEMORIES:
-    1. **Must come from an EXTERNAL source** - not the user's own realization
-    2. **Should include attribution** - who said it, what company/book/article it's from
-    3. **Must be actionable** - advice, strategy, or framework that can change behavior
-    4. **Format**: "Source: actionable insight"
-
-    EXAMPLES OF GOOD INTERESTING MEMORIES (from screenshots):
-    ✅ "Paul Graham (article): startups should do things that don't scale initially"
-    ✅ "Slack message from Sarah: always send meeting agendas 24 hours in advance"
-    ✅ "LinkedIn post by Naval: specific knowledge cannot be taught, must be learned"
-    ✅ "Email from manager: use STAR method for performance reviews"
-    ✅ "Tweet by @pmarca: the best time to raise money is when you don't need it"
-
-    EXAMPLES OF WHAT IS NOT INTERESTING (should be SYSTEM or excluded):
-    ❌ User's own tweet or post (user's OWN content → SYSTEM or exclude)
-    ❌ User's notes or documents they're writing (current activity → exclude)
-    ❌ Generic tips without attribution (no source → exclude)
-    ❌ News headlines (not actionable wisdom → exclude)
+    If you cannot establish those three, return an empty list.
 
     SYSTEM MEMORIES (Facts About the User):
     These are facts ABOUT the user visible from their screen content - their preferences, network, projects, etc.
@@ -146,9 +133,8 @@ class MemoryAssistantSettings {
     • Focus on "who" and "what", not "when"
 
     OUTPUT LIMITS (STRICT - only 1 memory max):
-    • Extract AT MOST 1 memory per screenshot (either system OR interesting, not both)
+    • Extract AT MOST 1 memory per screenshot
     • Pick the SINGLE most valuable memory if multiple candidates exist
-    • INTERESTING memories are RARE - they require EXTERNAL wisdom with ATTRIBUTION
     • Many screenshots will result in 0 memories - this is NORMAL and EXPECTED
     • Better to extract 0 memories than to include low-quality ones
     • DEFAULT TO EMPTY LIST - only extract if the memory is truly exceptional
@@ -189,6 +175,7 @@ class MemoryAssistantSettings {
     set {
       let isCustom = newValue != MemoryAssistantSettings.defaultAnalysisPrompt
       UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
+      SettingsSyncManager.recordLocalPromptOwner("memory", isShippedDefault: !isCustom)
       let previewLength = min(newValue.count, 50)
       let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
       log("Memory analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")
@@ -197,14 +184,24 @@ class MemoryAssistantSettings {
   }
 
   /// Interval between memory extraction analyses in seconds
+  ///
+  /// Non-positive values are refused on write and healed on read, for the reason spelled out on
+  /// `TaskAssistantSettings.extractionInterval`: normalising only on read let the store hold a
+  /// number the app never honoured, and the next push to the account overwrote the account's own
+  /// value with the local default.
   var extractionInterval: TimeInterval {
     get {
-      let value = UserDefaults.standard.double(forKey: extractionIntervalKey)
-      return value > 0 ? value : defaultExtractionInterval
+      let stored = UserDefaults.standard.double(forKey: extractionIntervalKey)
+      guard stored > 0 else {
+        UserDefaults.standard.set(defaultExtractionInterval, forKey: extractionIntervalKey)
+        return defaultExtractionInterval
+      }
+      return stored
     }
     set {
-      UserDefaults.standard.set(newValue, forKey: extractionIntervalKey)
-      log("Memory extraction interval updated to \(newValue) seconds")
+      let interval = newValue > 0 ? newValue : defaultExtractionInterval
+      UserDefaults.standard.set(interval, forKey: extractionIntervalKey)
+      log("Memory extraction interval updated to \(interval) seconds")
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }
@@ -231,6 +228,38 @@ class MemoryAssistantSettings {
     }
   }
 
+  // MARK: - User-Intent Setting Changes (telemetry)
+
+  /// Apply an explicit user-initiated change to one of the two telemetry-gated
+  /// settings (`enabled` / `notifications_enabled`), persisting it and recording
+  /// the bounded `Memory Assistant Setting Changed` event only when the persisted
+  /// value actually changes. Returns `true` when the change was real and the
+  /// event was recorded, `false` when it was a no-op (so callers/tests can tell).
+  ///
+  /// This is the **only** path that emits the activation-denominator event. The
+  /// raw property setters (`isEnabled` / `notificationsEnabled`) are deliberately
+  /// silent so that remote settings sync (`SettingsSyncManager.applyRemoteSettings`),
+  /// migrations/defaults, and programmatic resets cannot create denominator
+  /// events. Call this exclusively from explicit user-intent sites (UI toggles,
+  /// intentional user commands).
+  @discardableResult
+  func applyUserSettingChange(_ setting: MemoryAssistantTelemetry.Setting, value: Bool) -> Bool {
+    let previous: Bool
+    switch setting {
+    case .enabled:
+      previous = isEnabled
+      isEnabled = value
+    case .notificationsEnabled:
+      previous = notificationsEnabled
+      notificationsEnabled = value
+    }
+    guard MemoryAssistantTelemetry.settingChangeIsPersistedChange(oldValue: previous, newValue: value) else {
+      return false
+    }
+    AnalyticsManager.shared.memoryAssistantSettingChanged(setting: setting, value: value)
+    return true
+  }
+
   /// Apps excluded from memory extraction (user's custom list, on top of the shared built-in list)
   var excludedApps: Set<String> {
     get {
@@ -241,6 +270,21 @@ class MemoryAssistantSettings {
     }
     set {
       UserDefaults.standard.set(Array(newValue), forKey: excludedAppsKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Hosts excluded from memory extraction (youtube.com, etc.). App-name exclusion
+  /// cannot express this because the browser is "Google Chrome".
+  var excludedHosts: Set<String> {
+    get {
+      if let saved = UserDefaults.standard.array(forKey: excludedHostsKey) as? [String] {
+        return Set(saved)
+      }
+      return []
+    }
+    set {
+      UserDefaults.standard.set(Array(newValue), forKey: excludedHostsKey)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }
@@ -283,6 +327,7 @@ class MemoryAssistantSettings {
     minConfidence = defaultMinConfidence
     notificationsEnabled = defaultNotificationsEnabled
     excludedApps = []
+    excludedHosts = []
     resetPromptToDefault()
   }
 }

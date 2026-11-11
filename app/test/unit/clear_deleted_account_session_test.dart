@@ -7,9 +7,96 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/auth/clear_deleted_account_session.dart';
+import 'package:omi/services/wals/deleted_account_uids.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('native Siri sign-out fence is durable before Firebase sign-out', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    final order = <String>[];
+    final pending = Completer<void>();
+    final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>(), onSignOut: () => order.add('firebase'));
+    final service = AuthService.forTesting(
+      tokenGateway: gateway,
+      prepareSiriSignOut: () async {
+        order.add('siri-pending');
+        await pending.future;
+      },
+    );
+
+    final signOut = service.signOut();
+    await Future<void>.delayed(Duration.zero);
+    expect(order, ['siri-pending']);
+    pending.complete();
+    await signOut;
+    expect(order, ['siri-pending', 'firebase']);
+  });
+
+  test('account deletion and forced expiry fence Siri before Firebase sign-out', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    for (final reason in [AuthSessionExpirationReason.accountDeleted, AuthSessionExpirationReason.missingToken]) {
+      final order = <String>[];
+      final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>(), onSignOut: () => order.add('firebase'));
+      final service = AuthService.forTesting(
+        tokenGateway: gateway,
+        prepareSiriSignOut: () async => order.add('siri-pending'),
+      );
+      await service.expireSession(AuthSessionExpiredEvent(reason: reason));
+      expect(order, ['siri-pending', 'firebase'], reason: '$reason');
+    }
+  });
+
+  test('provider account switch fences Siri before Firebase sign-out', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    final order = <String>[];
+    final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>(), onSignOut: () => order.add('firebase'));
+    final service = AuthService.forTesting(
+      tokenGateway: gateway,
+      prepareSiriSignOut: () async => order.add('siri-pending'),
+    );
+    await service.signOutForAccountSwitch();
+    expect(order, ['siri-pending', 'firebase']);
+  });
+
+  for (final preparation in ['throws', 'hangs']) {
+    for (final path in ['manual', 'switch', 'expiry', 'delete-account']) {
+      test('$path Firebase sign-out and cleanup finish when Siri preparation $preparation', () async {
+        SharedPreferences.setMockInitialValues({});
+        await SharedPreferencesUtil.init();
+        final order = <String>[];
+        final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>(), onSignOut: () => order.add('firebase'));
+        final service = AuthService.forTesting(
+          tokenGateway: gateway,
+          siriPreparationTimeout: const Duration(milliseconds: 20),
+          prepareSiriSignOut: () async {
+            order.add('siri');
+            if (preparation == 'throws') throw StateError('native preparation failed');
+            await Completer<void>().future;
+          },
+        );
+        final Future<void> operation = switch (path) {
+          'manual' => service.signOut(),
+          'switch' => service.signOutForAccountSwitch(),
+          'expiry' =>
+            service.expireSession(const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken)),
+          _ => clearDeletedAccountSession(
+              authService: service,
+              clearUserState: () => order.add('providers'),
+              clearWal: () async => order.add('wal'),
+              clearPreferences: () async => order.add('preferences'),
+            ),
+        };
+        await operation.timeout(const Duration(seconds: 1));
+        expect(gateway.signOutCalls, 1);
+        expect(order, containsAllInOrder(['siri', 'firebase']));
+        if (path == 'delete-account') expect(order, containsAllInOrder(['firebase', 'wal', 'preferences']));
+      });
+    }
+  }
 
   test('account deletion invalidates late refresh and clears provider state before storage', () async {
     SharedPreferences.setMockInitialValues({'uid': 'user-1', 'authToken': 'old-token'});
@@ -67,13 +154,76 @@ void main() {
     expect(await service.refreshIdToken(), isA<AuthTokenMissingUser>());
     expect(gateway.refreshCalls, 0, reason: 'failed platform sign-out must still leave the old user locally terminal');
   });
+
+  test('account deletion purges that account audio before providers and remembers the uid after the wipe', () async {
+    SharedPreferences.setMockInitialValues({
+      'uid': 'user-1',
+      deletedAccountUidsKey: ['older-account'],
+    });
+    await SharedPreferencesUtil.init();
+    final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>());
+    final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+    final order = <String>[];
+    final previous = await readDeletedAccountUids();
+
+    await clearDeletedAccountSession(
+      authService: service,
+      purgeAccountAudio: () async => order.add('purge'),
+      clearUserState: () => order.add('providers'),
+      clearWal: () async => order.add('wal'),
+      clearPreferences: () async {
+        order.add('preferences');
+        await SharedPreferencesUtil().clear();
+      },
+      rememberDeletedAccount: () async {
+        order.add('remember');
+        await saveDeletedAccountUids(
+          withDeletedAccountUid(previous, 'user-1'),
+        );
+      },
+    );
+
+    expect(order, ['purge', 'providers', 'wal', 'preferences', 'remember']);
+    expect(SharedPreferencesUtil().uid, isEmpty);
+    expect(await readDeletedAccountUids(), ['older-account', 'user-1']);
+  });
+
+  test('a failing audio purge does not block deletion cleanup or the remembered uid', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'user-1'});
+    await SharedPreferencesUtil.init();
+    final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>());
+    final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+    final order = <String>[];
+
+    await clearDeletedAccountSession(
+      authService: service,
+      purgeAccountAudio: () async => throw StateError('disk gone'),
+      clearUserState: () => order.add('providers'),
+      clearWal: () async => order.add('wal'),
+      clearPreferences: () async => order.add('preferences'),
+      rememberDeletedAccount: () async => order.add('remember'),
+    );
+
+    expect(order, ['providers', 'wal', 'preferences', 'remember']);
+    expect(gateway.signOutCalls, 1);
+  });
+
+  test('remembered deleted accounts are deduplicated, newest last and bounded', () {
+    final many = List.generate(maxDeletedAccountUids, (i) => 'u$i');
+    expect(withDeletedAccountUid(['a', 'b'], 'a'), ['b', 'a']);
+    final bounded = withDeletedAccountUid(many, 'new');
+    expect(bounded, hasLength(maxDeletedAccountUids));
+    expect(bounded.first, 'u1');
+    expect(bounded.last, 'new');
+  });
 }
 
 final class _DeletionGateway implements AuthTokenGateway {
-  _DeletionGateway(this.pendingRefresh, {this.failSignOut = false});
+  _DeletionGateway(this.pendingRefresh, {this.failSignOut = false, this.onSignOut});
 
   final Completer<RefreshedAuthToken?> pendingRefresh;
   final bool failSignOut;
+  final void Function()? onSignOut;
   int signOutCalls = 0;
   int refreshCalls = 0;
 
@@ -88,6 +238,7 @@ final class _DeletionGateway implements AuthTokenGateway {
 
   @override
   Future<void> signOut() async {
+    onSignOut?.call();
     signOutCalls++;
     if (failSignOut) throw StateError('Firebase sign-out failed');
   }

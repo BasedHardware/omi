@@ -4,17 +4,39 @@ import XCTest
 
 @MainActor
 final class SuggestedTasksStoreTests: XCTestCase {
-  func testActionPolicyNeverOffersMoreThanThreeChoices() {
-    for state in [
-      SuggestedCardState.ready, .editing, .dismissReasons, .busy,
-    ] {
-      XCTAssertLessThanOrEqual(SuggestedActionPolicy.actions(for: state).count, 3)
+  private static let persistedInvalidationOwners = ["test-owner", "owner-a", "owner-b"]
+
+  private func clearPersistedInvalidations() {
+    for ownerID in Self.persistedInvalidationOwners {
+      UserDefaults.standard.removeObject(
+        forKey: .pendingCanonicalReceiptInvalidation(ownerID: ownerID))
+      UserDefaults.standard.removeObject(
+        forKey: .pendingCanonicalReceiptInvalidationTimestamps(ownerID: ownerID))
     }
-    XCTAssertEqual(SuggestedActionPolicy.actions(for: .ready), [.doNow, .later, .dismiss])
+  }
+
+  override func setUp() async throws {
+    clearPersistedInvalidations()
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+    RewindDatabase.currentUserId = "test-owner"
+  }
+
+  override func tearDown() async throws {
+    clearPersistedInvalidations()
+    AccountCutoverControlManager.shared.resetForTesting()
+    RewindDatabase.currentUserId = nil
+  }
+
+  func testActionPolicyOffersAcceptAndRejectOnlyWhenReady() {
+    XCTAssertEqual(SuggestedActionPolicy.actions(for: .ready), [.doNow, .dismiss])
+    XCTAssertEqual(SuggestedCardAction.doNow.label, "Accept")
+    XCTAssertEqual(SuggestedCardAction.dismiss.label, "Reject")
     XCTAssertEqual(
-      SuggestedActionPolicy.actions(for: .dismissReasons),
-      [.alreadyHandled, .notMine, .notUseful]
-    )
+      SuggestedActionPolicy.actions(for: .ready).map(\.label),
+      ["Accept", "Reject"])
+    XCTAssertEqual(SuggestedActionPolicy.actions(for: .editing), [.saveEdit, .cancelEdit])
+    XCTAssertEqual(SuggestedActionPolicy.actions(for: .busy), [])
   }
 
   func testLoadProjectsOnlyPendingCandidatesWithoutManagedNounLeak() async {
@@ -27,7 +49,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
       taskMutationCandidate(id: "blind-complete"),
       workProposal(id: "proposal"),
     ]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -46,7 +69,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
 
   func testExactRecommendedCandidateCanBeInsertedOutsideThePagedList() async {
     let api = FakeSuggestedTasksClient()
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     let revealed = store.revealCandidateForNavigation(
@@ -65,7 +89,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
         createdAt: "2026-07-\(String(format: "%02d", index))T12:00:00Z"
       )
     }
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     let revealed = store.revealCandidateForNavigation(
@@ -89,7 +114,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
         createdAt: "2026-07-\(String(format: "%02d", index))T12:00:00Z"
       )
     }
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -109,7 +135,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
       candidate(id: "backend-first", status: .pending, createdAt: "2026-07-09T12:00:00Z"),
       candidate(id: "backend-second", status: .pending, createdAt: "2026-07-09T12:00:00.500+00:00"),
     ]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -119,7 +146,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
   func testCandidateList404CalmlyDisablesSuggestedWhileOtherFailuresRemainVisible() async {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
     XCTAssertEqual(store.candidates.map(\.id), ["candidate-1"])
 
@@ -140,7 +168,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
   func testAutomationDumpNeverReturnsCandidateTitles() async throws {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-private", status: .pending)]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
     let result = store.automationDump()
 
@@ -153,7 +182,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
   func testTaskMutationCandidateFailsClosedWithoutAConcreteDiff() async {
     let api = FakeSuggestedTasksClient()
     api.records = [taskMutationCandidate(id: "blind-complete")]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -163,7 +193,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
   func testCandidateInterventionUsesCanonicalBoundedRecommendationDedupeKey() async {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     await store.presented(candidateID: "candidate-1")
@@ -180,6 +211,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       reportAttribution: { events.append($0) }
     )
     await store.load()
@@ -206,7 +238,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let api = FakeSuggestedTasksClient()
     api.workflowMode = .write
     api.records = [candidate(id: "sidecar-only", status: .pending)]
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
 
     await store.load()
 
@@ -218,7 +251,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
     api.acceptedTaskID = "task-1"
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     let taskID = await store.doNow(candidateID: "candidate-1", editedTitle: nil)
@@ -233,7 +267,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
     api.acceptedTaskID = "task-1"
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     _ = await store.doNow(candidateID: "candidate-1", editedTitle: "Send the revised budget")
@@ -246,7 +281,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
     api.failAccept = true
-    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     await store.load()
 
     _ = await store.doNow(candidateID: "candidate-1", editedTitle: nil)
@@ -266,7 +302,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     }
     api.failAccept = true
     var store: SuggestedTasksStore!
-    store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
     api.onAccept = {
       _ = store.revealCandidateForNavigation(self.candidate(id: "candidate-101", status: .pending))
     }
@@ -374,7 +411,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     api.records = [candidate(id: "candidate-1", status: .pending)]
     let persistence = MemorySuppressionStore()
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let first = SuggestedTasksStore(client: api, suppressionStore: persistence, now: { now })
+    let first = SuggestedTasksStore(
+      client: api, suppressionStore: persistence, feedbackOutboxStore: MemoryFeedbackOutboxStore(), now: { now })
     await first.load()
 
     await first.later(candidateID: "candidate-1")
@@ -383,7 +421,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertTrue(api.rejectedCandidateIDs.isEmpty)
     XCTAssertEqual(api.feedback.map(\.action), [.later])
 
-    let reloaded = SuggestedTasksStore(client: api, suppressionStore: persistence, now: { now })
+    let reloaded = SuggestedTasksStore(
+      client: api, suppressionStore: persistence, feedbackOutboxStore: MemoryFeedbackOutboxStore(), now: { now })
     await reloaded.load()
     XCTAssertTrue(reloaded.candidates.isEmpty)
   }
@@ -416,6 +455,7 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(
       client: api,
       suppressionStore: suppression,
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
       now: { currentTime }
     )
     await store.load()
@@ -432,6 +472,51 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertNotEqual(laterKeys[0], laterKeys[1])
   }
 
+  /// `SuggestedFeedbackOutboxDefaults.currentOwnerID()` resolves to
+  /// `UserDefaults.standard[.authUserId]`, which is process-global and shared by every
+  /// suite in the test binary. `dismiss` re-checks owner currency *after* awaiting the
+  /// backend reject, so a store that leaves the feedback outbox on that global owner can
+  /// have the value change underneath it at the suspension point and silently return
+  /// without recording feedback — the store drops the dismissal on the floor.
+  ///
+  /// That is the #12039 flake: `testNotMineAndAlreadyHandledPersistReasonAndResolveCandidate`
+  /// failed in CI with `("nil") is not equal to ("Optional(…not_mine)")` purely because of
+  /// suite ordering. Injecting `MemoryFeedbackOutboxStore` pins the feedback owner to the
+  /// suite, which is what makes these tests order-independent.
+  ///
+  /// The `onReject` hook writes the global key at exactly the awaited moment, so this
+  /// reproduces the hazard deterministically instead of relying on suite order.
+  func testDismissSurvivesAGlobalAuthOwnerFlipAtTheAwaitedRejectPoint() async {
+    let defaults = UserDefaults.standard
+    let restore = defaults.string(forKey: .authUserId)
+    defaults.set("owner-before-flip", forKey: .authUserId)
+    defer {
+      if let restore {
+        defaults.set(restore, forKey: .authUserId)
+      } else {
+        defaults.removeObject(forKey: DefaultsKey.authUserId.rawValue)
+      }
+    }
+
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-owner-flip", status: .pending)]
+    api.onReject = { defaults.set("owner-after-flip", forKey: .authUserId) }
+
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore()
+    )
+    await store.load()
+
+    await store.dismiss(candidateID: "candidate-owner-flip", reason: .not_mine)
+
+    XCTAssertEqual(api.rejectedCandidateIDs, ["candidate-owner-flip"])
+    XCTAssertEqual(
+      api.feedback.last?.reason, .not_mine,
+      "a global auth-owner write must not void feedback for a suite-owned store")
+  }
+
   func testNotMineAndAlreadyHandledPersistReasonAndResolveCandidate() async {
     for reason in [
       OmiAPI.TaskIntelligenceFeedbackReason.not_mine,
@@ -439,7 +524,8 @@ final class SuggestedTasksStoreTests: XCTestCase {
     ] {
       let api = FakeSuggestedTasksClient()
       api.records = [candidate(id: reason.rawValue, status: .pending)]
-      let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+      let store = SuggestedTasksStore(
+        client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
       await store.load()
 
       await store.dismiss(candidateID: reason.rawValue, reason: reason)
@@ -448,6 +534,330 @@ final class SuggestedTasksStoreTests: XCTestCase {
       XCTAssertEqual(api.feedback.last?.reason, reason)
       XCTAssertEqual(api.rejectedCandidateIDs, [reason.rawValue])
     }
+  }
+
+  func testDismissInvalidatesMatchingLocalCanonicalReceiptByCandidateID() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-dismiss-local", status: .pending)]
+    let invalidator = RecordingCanonicalReceiptInvalidator()
+    let pendingInvalidations = MemoryPendingReceiptInvalidationStore()
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
+      receiptInvalidator: invalidator,
+      pendingReceiptInvalidationStore: pendingInvalidations
+    )
+    await store.load()
+
+    await store.dismiss(candidateID: "candidate-dismiss-local", reason: .not_useful)
+
+    XCTAssertEqual(api.rejectedCandidateIDs, ["candidate-dismiss-local"])
+    XCTAssertEqual(invalidator.invalidatedCandidateIDs, ["candidate-dismiss-local"])
+    XCTAssertEqual(invalidator.invalidatedOwnerIDs, ["test-owner"])
+    XCTAssertTrue(pendingInvalidations.load(ownerID: "test-owner").isEmpty)
+    XCTAssertTrue(store.candidates.isEmpty)
+  }
+
+  func testFailedDismissDoesNotInvalidateLocalCanonicalReceipt() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-dismiss-fail", status: .pending)]
+    api.failReject = true
+    let invalidator = RecordingCanonicalReceiptInvalidator()
+    let pendingInvalidations = MemoryPendingReceiptInvalidationStore()
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
+      receiptInvalidator: invalidator,
+      pendingReceiptInvalidationStore: pendingInvalidations
+    )
+    await store.load()
+
+    await store.dismiss(candidateID: "candidate-dismiss-fail", reason: .not_useful)
+
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-dismiss-fail"])
+    XCTAssertTrue(invalidator.invalidatedCandidateIDs.isEmpty)
+    XCTAssertTrue(pendingInvalidations.load(ownerID: "test-owner").isEmpty)
+  }
+
+  func testSameOwnerInvalidatorFailureKeepsCandidateQueued() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-invalidate-fail", status: .pending)]
+    let invalidator = RecordingCanonicalReceiptInvalidator()
+    invalidator.failNext = true
+    let pendingInvalidations = MemoryPendingReceiptInvalidationStore()
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
+      receiptInvalidator: invalidator,
+      pendingReceiptInvalidationStore: pendingInvalidations
+    )
+    await store.load()
+
+    await store.dismiss(candidateID: "candidate-invalidate-fail", reason: .not_useful)
+
+    XCTAssertEqual(api.rejectedCandidateIDs, ["candidate-invalidate-fail"])
+    XCTAssertEqual(invalidator.attemptedCandidateIDs, ["candidate-invalidate-fail"])
+    XCTAssertTrue(invalidator.invalidatedCandidateIDs.isEmpty)
+    XCTAssertEqual(
+      pendingInvalidations.load(ownerID: "test-owner"),
+      ["candidate-invalidate-fail"]
+    )
+  }
+
+  func testPendingInvalidationFailureRemainsQueuedAndDoesNotDropSibling() async {
+    let api = FakeSuggestedTasksClient()
+    let pendingInvalidations = MemoryPendingReceiptInvalidationStore()
+    pendingInvalidations.save(
+      ["candidate-pending-a", "candidate-pending-b"], ownerID: "test-owner")
+    let invalidator = RecordingCanonicalReceiptInvalidator()
+    invalidator.failCandidateIDs = ["candidate-pending-a"]
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
+      receiptInvalidator: invalidator,
+      pendingReceiptInvalidationStore: pendingInvalidations
+    )
+
+    await store.load()
+
+    XCTAssertEqual(invalidator.attemptedCandidateIDs, ["candidate-pending-a"])
+    XCTAssertTrue(invalidator.invalidatedCandidateIDs.isEmpty)
+    XCTAssertEqual(
+      pendingInvalidations.load(ownerID: "test-owner"),
+      ["candidate-pending-a", "candidate-pending-b"]
+    )
+  }
+
+  func testPendingReceiptInvalidationDefaultsExpiresButPreservesEveryLiveRetry() {
+    let suiteName = "SuggestedTasksPendingInvalidation-\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suiteName) else {
+      return XCTFail("Expected an isolated UserDefaults suite")
+    }
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    var currentTime = Date(timeIntervalSince1970: 1_800_000_000)
+    let prefix = "pending-test."
+    let persistence = PendingCanonicalReceiptInvalidationDefaults(
+      defaults: defaults,
+      keyPrefix: prefix,
+      now: { currentTime },
+      retention: 60
+    )
+
+    persistence.save(["candidate-a"], ownerID: "owner-a")
+    XCTAssertEqual(persistence.load(ownerID: "owner-a"), ["candidate-a"])
+
+    currentTime.addTimeInterval(61)
+    XCTAssertTrue(
+      persistence.load(ownerID: "owner-a").isEmpty,
+      "a backend-only zero-match must not retry forever")
+
+    let burst = Set((0..<150).map { "candidate-\($0)" })
+    persistence.save(burst, ownerID: "owner-a")
+    XCTAssertEqual(
+      persistence.load(ownerID: "owner-a"), burst,
+      "live dismissals must not be evicted before a later create-to-mark can terminalize them")
+
+    // The pre-TTL format was never released. Fail closed rather than revive an
+    // unbounded legacy string array with no trustworthy enqueue time.
+    defaults.set(
+      ["legacy-without-timestamp"],
+      forKey: .pendingCanonicalReceiptInvalidation(ownerID: "owner-b", keyPrefix: prefix))
+    XCTAssertTrue(persistence.load(ownerID: "owner-b").isEmpty)
+  }
+
+  func testSuccessfulPerIdPendingCleanupRemovesOnlyThatId() async {
+    let api = FakeSuggestedTasksClient()
+    let pendingInvalidations = MemoryPendingReceiptInvalidationStore()
+    pendingInvalidations.save(
+      ["candidate-pending-a", "candidate-pending-b"], ownerID: "test-owner")
+    let invalidator = RecordingCanonicalReceiptInvalidator()
+    invalidator.failCandidateIDs = ["candidate-pending-b"]
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
+      receiptInvalidator: invalidator,
+      pendingReceiptInvalidationStore: pendingInvalidations
+    )
+
+    await store.load()
+
+    XCTAssertEqual(invalidator.invalidatedCandidateIDs, ["candidate-pending-a"])
+    XCTAssertEqual(
+      pendingInvalidations.load(ownerID: "test-owner"),
+      ["candidate-pending-b"]
+    )
+  }
+
+  func testZeroMatchInvalidationRetainsDurableQueueUntilLaterMatch() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-zero-match", status: .pending)]
+    let invalidator = RecordingCanonicalReceiptInvalidator()
+    invalidator.defaultTerminalizeResult = false
+    let pendingInvalidations = MemoryPendingReceiptInvalidationStore()
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
+      receiptInvalidator: invalidator,
+      pendingReceiptInvalidationStore: pendingInvalidations
+    )
+    await store.load()
+
+    await store.dismiss(candidateID: "candidate-zero-match", reason: .not_useful)
+
+    XCTAssertEqual(api.rejectedCandidateIDs, ["candidate-zero-match"])
+    XCTAssertEqual(invalidator.invalidatedCandidateIDs, ["candidate-zero-match"])
+    XCTAssertEqual(
+      pendingInvalidations.load(ownerID: "test-owner"),
+      ["candidate-zero-match"],
+      "zero-match must not ack; retain for retry after create→mark"
+    )
+
+    // Later load: receipt now exists, invalidate terminalizes, queue clears.
+    invalidator.defaultTerminalizeResult = true
+    api.records = []
+    await store.load()
+
+    XCTAssertEqual(
+      invalidator.attemptedCandidateIDs.filter { $0 == "candidate-zero-match" }.count,
+      2
+    )
+    XCTAssertTrue(pendingInvalidations.load(ownerID: "test-owner").isEmpty)
+  }
+
+  func testPendingZeroMatchLeavesSiblingEligibleAndRetainsSelf() async {
+    let api = FakeSuggestedTasksClient()
+    let pendingInvalidations = MemoryPendingReceiptInvalidationStore()
+    pendingInvalidations.save(
+      ["candidate-pending-a", "candidate-pending-b"], ownerID: "test-owner")
+    let invalidator = RecordingCanonicalReceiptInvalidator()
+    invalidator.terminalizeResults = ["candidate-pending-a": false]
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: MemorySuppressionStore(),
+      feedbackOutboxStore: MemoryFeedbackOutboxStore(),
+      receiptInvalidator: invalidator,
+      pendingReceiptInvalidationStore: pendingInvalidations
+    )
+
+    await store.load()
+
+    XCTAssertEqual(invalidator.attemptedCandidateIDs, ["candidate-pending-a", "candidate-pending-b"])
+    XCTAssertEqual(invalidator.invalidatedCandidateIDs, ["candidate-pending-a", "candidate-pending-b"])
+    XCTAssertEqual(
+      pendingInvalidations.load(ownerID: "test-owner"),
+      ["candidate-pending-a"],
+      "zero-match keeps A; successful B is acknowledged"
+    )
+  }
+
+  func testOwnerFlipDuringAwaitedInvalidationProducesNoForeignWriteAndStaysQueued() async {
+    let api = FakeSuggestedTasksClient()
+    let suppression = MemorySuppressionStore()
+    let outbox = MemoryFeedbackOutboxStore()
+    let pendingInvalidations = MemoryPendingReceiptInvalidationStore()
+    let invalidator = RecordingCanonicalReceiptInvalidator()
+    suppression.ownerID = "owner-a"
+    outbox.ownerID = "owner-a"
+    RewindDatabase.currentUserId = "owner-a"
+    api.records = [candidate(id: "candidate-flip-await", status: .pending)]
+    invalidator.onInvalidate = { _, _ in
+      // Flip Rewind + UI owner while suspended in cleanup — production must not
+      // write B, and the initiating owner's durable queue must retain the id.
+      RewindDatabase.currentUserId = "owner-b"
+      suppression.ownerID = "owner-b"
+      outbox.ownerID = "owner-b"
+    }
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: suppression,
+      feedbackOutboxStore: outbox,
+      receiptInvalidator: invalidator,
+      pendingReceiptInvalidationStore: pendingInvalidations
+    )
+    await store.load()
+
+    await store.dismiss(candidateID: "candidate-flip-await", reason: .not_useful)
+
+    XCTAssertEqual(api.rejectedCandidateIDs, ["candidate-flip-await"])
+    XCTAssertEqual(invalidator.attemptedOwnerIDs, ["owner-a"])
+    XCTAssertEqual(invalidator.invalidatedCandidateIDs, ["candidate-flip-await"])
+    // Success returned, but post-await owner no longer matches — keep queued for A.
+    XCTAssertEqual(
+      pendingInvalidations.load(ownerID: "owner-a"),
+      ["candidate-flip-await"]
+    )
+    XCTAssertTrue(pendingInvalidations.load(ownerID: "owner-b").isEmpty)
+  }
+
+  func testProductionInvalidatorRefusesForeignRewindOwner() async {
+    RewindDatabase.currentUserId = "owner-b"
+    let invalidator = StagedCanonicalCandidateReceiptInvalidator()
+    do {
+      _ = try await invalidator.invalidateLocalReceipt(
+        candidateID: "candidate-foreign", ownerID: "owner-a")
+      XCTFail("expected owner mismatch")
+    } catch let error as CanonicalReceiptInvalidationError {
+      XCTAssertEqual(
+        error, .ownerMismatch(expected: "owner-a", actual: "owner-b"))
+    } catch {
+      XCTFail("unexpected error \(error)")
+    }
+  }
+
+  func testOwnerSwitchDuringRejectStillInvalidatesPriorOwnerReceiptOnReactivation() async {
+    let api = FakeSuggestedTasksClient()
+    let suppression = MemorySuppressionStore()
+    let outbox = MemoryFeedbackOutboxStore()
+    let pendingInvalidations = MemoryPendingReceiptInvalidationStore()
+    let invalidator = RecordingCanonicalReceiptInvalidator()
+    suppression.ownerID = "owner-a"
+    outbox.ownerID = "owner-a"
+    RewindDatabase.currentUserId = "owner-a"
+    api.records = [candidate(id: "candidate-reject-switch", status: .pending)]
+    api.onReject = {
+      suppression.ownerID = "owner-b"
+      outbox.ownerID = "owner-b"
+      RewindDatabase.currentUserId = "owner-b"
+    }
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: suppression,
+      feedbackOutboxStore: outbox,
+      receiptInvalidator: invalidator,
+      pendingReceiptInvalidationStore: pendingInvalidations
+    )
+    await store.load()
+
+    await store.dismiss(candidateID: "candidate-reject-switch", reason: .not_useful)
+
+    // Reject succeeded while the UI/Rewind owner flipped — durable-queue for A,
+    // never attempt a write against B.
+    XCTAssertEqual(api.rejectedCandidateIDs, ["candidate-reject-switch"])
+    XCTAssertTrue(invalidator.attemptedCandidateIDs.isEmpty)
+    XCTAssertEqual(
+      pendingInvalidations.load(ownerID: "owner-a"),
+      ["candidate-reject-switch"]
+    )
+    XCTAssertTrue(pendingInvalidations.load(ownerID: "owner-b").isEmpty)
+    XCTAssertTrue(store.candidates.isEmpty)
+    XCTAssertNil(store.error)
+
+    // Prior-owner reactivation applies the queued cleanup.
+    suppression.ownerID = "owner-a"
+    outbox.ownerID = "owner-a"
+    RewindDatabase.currentUserId = "owner-a"
+    api.records = []
+    await store.load()
+
+    XCTAssertEqual(invalidator.invalidatedCandidateIDs, ["candidate-reject-switch"])
+    XCTAssertEqual(invalidator.invalidatedOwnerIDs, ["owner-a"])
+    XCTAssertTrue(pendingInvalidations.load(ownerID: "owner-a").isEmpty)
   }
 
   func testOwnerSwitchReloadsSuppressionsAndOutboxWithoutCrossAccountRetry() async {
@@ -496,6 +906,37 @@ final class SuggestedTasksStoreTests: XCTestCase {
 
     XCTAssertEqual(api.feedbackAttempts, 1)
     XCTAssertTrue(outbox.entries.isEmpty)
+  }
+
+  func testConcurrentSameOwnerLoadAwaitsInFlightDataInsteadOfNoOp() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-a", status: .pending)]
+    let store = SuggestedTasksStore(
+      client: api, suppressionStore: MemorySuppressionStore(), feedbackOutboxStore: MemoryFeedbackOutboxStore())
+
+    // First same-owner load suspends inside getCandidateWorkflowControl.
+    api.controlSuspensionsRemaining = 1
+    let first = Task { await store.load() }
+    while api.controlRelease == nil { await Task.yield() }
+    let release = api.controlRelease
+
+    // Second same-owner load launched while the first is in flight. It must
+    // AWAIT the in-flight load rather than return a no-op, so by the time it
+    // returns the candidates are populated. The old guard returned immediately,
+    // leaving a dashboard→Suggested navigation reveal to run against empty state.
+    let secondSawData = Task { () -> Bool in
+      await store.load()
+      return store.candidates.map(\.id) == ["candidate-a"]
+    }
+    await Task.yield()
+    release?.resume()
+
+    let sawData = await secondSawData.value
+    await first.value
+
+    XCTAssertTrue(
+      sawData, "A concurrent same-owner load must await the in-flight load's data before returning")
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-a"])
   }
 
   func testOwnerSwitchSupersedesDelayedFailingControlLoadWithoutExposingPriorCards() async {
@@ -702,6 +1143,54 @@ private final class MemorySuppressionStore: SuggestedSuppressionPersisting {
   func load(ownerID: String) -> [String: Date] { valuesByOwner[ownerID] ?? [:] }
   func save(_ suppressions: [String: Date], ownerID: String) {
     valuesByOwner[ownerID] = suppressions
+  }
+}
+
+private final class RecordingCanonicalReceiptInvalidator: CanonicalCandidateReceiptInvalidating,
+  @unchecked Sendable
+{
+  private(set) var attemptedCandidateIDs: [String] = []
+  private(set) var attemptedOwnerIDs: [String] = []
+  private(set) var invalidatedCandidateIDs: [String] = []
+  private(set) var invalidatedOwnerIDs: [String] = []
+  var failNext = false
+  var failCandidateIDs: Set<String> = []
+  /// When set, overrides the default `true` terminalize result for that candidate.
+  var terminalizeResults: [String: Bool] = [:]
+  var defaultTerminalizeResult = true
+  var onInvalidate: (@MainActor (String, String) async throws -> Void)?
+
+  func invalidateLocalReceipt(candidateID: String, ownerID: String) async throws -> Bool {
+    attemptedCandidateIDs.append(candidateID)
+    attemptedOwnerIDs.append(ownerID)
+    if let onInvalidate {
+      try await onInvalidate(candidateID, ownerID)
+    }
+    if failNext || failCandidateIDs.contains(candidateID) {
+      failNext = false
+      throw CanonicalReceiptInvalidationError.ownerMismatch(
+        expected: ownerID, actual: "forced-failure")
+    }
+    invalidatedCandidateIDs.append(candidateID)
+    invalidatedOwnerIDs.append(ownerID)
+    return terminalizeResults[candidateID] ?? defaultTerminalizeResult
+  }
+}
+
+@MainActor
+private final class MemoryPendingReceiptInvalidationStore:
+  PendingCanonicalReceiptInvalidationPersisting
+{
+  private var valuesByOwner: [String: Set<String>] = [:]
+
+  func load(ownerID: String) -> Set<String> { valuesByOwner[ownerID] ?? [] }
+
+  func save(_ candidateIDs: Set<String>, ownerID: String) {
+    if candidateIDs.isEmpty {
+      valuesByOwner.removeValue(forKey: ownerID)
+    } else {
+      valuesByOwner[ownerID] = candidateIDs
+    }
   }
 }
 

@@ -1,6 +1,5 @@
 import OmiTheme
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {
@@ -8,10 +7,6 @@ struct AIResponseView: View {
   @Binding var isLoading: Bool
   let currentMessage: ChatMessage?
   @State private var isQuestionExpanded = false
-  @Binding var followUpText: String
-  @State private var attachments: [ChatAttachment] = []
-  @State private var isDropTargeted = false
-  @FocusState private var isFollowUpFocused: Bool
 
   let userInput: String
   let chatHistory: [FloatingChatExchange]
@@ -20,11 +15,19 @@ struct AIResponseView: View {
 
   var onClearVisibleConversation: (() -> Void)?
   var onEscape: (() -> Void)?
-  var onSendFollowUp: ((String) -> Void)?
-  var onRate: ((String, Int?) -> Void)?
+  /// Typing lives in the main app now — the bar only offers a jump there.
+  var onOpenMainApp: (() -> Void)?
+  var onRate: ((String, Int?, ChatFeedbackReason?) -> Void)?
   var onShareLink: (() async -> String?)?
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Tapping the grounded follow-up chip sends its question as a new user turn
+  /// in this same lane. Nil leaves the chip out entirely rather than rendering
+  /// one that does nothing.
+  var onAskFollowUp: ((String) -> Void)?
+  /// The "or hold ⌥ to ask aloud" hint, named for the shortcut actually bound.
+  /// Nil where push-to-talk is off or unavailable.
+  var followUpVoiceHint: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -54,6 +57,9 @@ struct AIResponseView: View {
         currentContentView
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .overlay(alignment: .bottom) {
+        ChatComposerFade()
+      }
 
       if let shareFeedbackMessage, showShareFeedback {
         shareFeedbackBanner
@@ -69,25 +75,9 @@ struct AIResponseView: View {
     .padding(.top, 0)
     .padding(.bottom, OmiSpacing.lg)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .omiAnimation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
+    .omiAnimation(FloatingBarMotion.inlineFeedback, value: showShareFeedback)
     .onExitCommand {
       onEscape?()
-    }
-    .onAppear {
-      if !isLoading {
-        // Restored conversation: focus follow-up field immediately
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          isFollowUpFocused = true
-        }
-      }
-    }
-    .onChange(of: isLoading) {
-      if !isLoading {
-        // Auto-focus follow-up field when loading finishes
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          isFollowUpFocused = true
-        }
-      }
     }
   }
 
@@ -123,6 +113,25 @@ struct AIResponseView: View {
         return ["thinking", id, text].joined(separator: "\u{1E}")
       case .discoveryCard(let id, let title, let summary, let fullText):
         return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
+      case .questionCard(let id, _, _, _, _, _, _):
+        return ["chatFirstQuestion", id].joined(separator: "\u{1E}")
+      case .taskCard(let id, _):
+        return ["chatFirstTask", id].joined(separator: "\u{1E}")
+      case .goalLink(let id, _, _):
+        return ["chatFirstGoal", id].joined(separator: "\u{1E}")
+      case .captureLink(let id, _, _, _):
+        return ["chatFirstCapture", id].joined(separator: "\u{1E}")
+      case .conversationLink(let id, _, _, _):
+        return ["chatFirstConversation", id].joined(separator: "\u{1E}")
+      case .memoryLink(let id, _, _):
+        return ["chatFirstMemory", id].joined(separator: "\u{1E}")
+      case .memoryReviewCard(let id, _, _, let items):
+        return ["memoryReviewCard", id, String(items.count)].joined(separator: "\u{1E}")
+      case .citation(let id, let reference):
+        return ["citation", id, String(reference.ordinal), reference.sourceID]
+          .joined(separator: "\u{1E}")
+      case .followUp(let id, let text):
+        return ["followUp", id, text].joined(separator: "\u{1E}")
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -164,32 +173,32 @@ struct AIResponseView: View {
           .scaledFont(size: OmiType.body)
           .foregroundColor(.secondary)
       } else {
-        Text("omi says")
+        Text("Omi says")
           .scaledFont(size: OmiType.body)
           .foregroundColor(.secondary)
       }
 
       Spacer()
 
-      if canClearVisibleConversation {
-        HStack(spacing: OmiSpacing.xxs) {
-          Text("esc")
-            .scaledFont(size: OmiType.caption)
+      if canClearVisibleConversation, let onClearVisibleConversation {
+        Button(action: onClearVisibleConversation) {
+          Text("Clear")
+            .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(.secondary)
-            .frame(width: 30, height: 16)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(OmiChrome.stripRadius)
-          Text("to clear")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(.secondary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .frame(height: 20)
+            .background(Capsule().fill(NotchGlass.ink(.w1)))
         }
+        .buttonStyle(.plain)
+        .help("Clear this conversation")
+        .accessibilityLabel("Clear conversation")
       }
     }
   }
 
   // MARK: - Content Blocks Rendering
 
-  /// Renders a ChatMessage's content blocks using the shared components from ChatPage.
+  /// Renders a ChatMessage's content blocks using the shared chat components.
   @ViewBuilder
   private func contentBlocksView(for message: ChatMessage) -> some View {
     if !message.contentBlocks.isEmpty {
@@ -197,13 +206,17 @@ struct AIResponseView: View {
       ForEach(grouped) { group in
         switch group {
         case .text(_, let text):
-          SelectableMarkdown(text: text, sender: .ai)
-            .textSelection(.enabled)
+          OmiMarkdown(text: text, sender: .ai, citations: message.inlineCitationReferences)
+            .environment(\.colorScheme, .dark)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .commentary(_, let text):
+          TurnCommentaryRow(text: text)
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, alignment: .leading)
         case .toolCalls(_, let calls):
           ToolCallsGroup(
             calls: calls,
+            compact: true,
             onOpenAgent: onOpenAgent,
             onOpenAgentRef: onOpenAgentRef
           )
@@ -214,6 +227,33 @@ struct AIResponseView: View {
         case .discoveryCard(_, let title, let summary, let fullText):
           DiscoveryCard(title: title, summary: summary, fullText: fullText)
             .frame(maxWidth: .infinity, alignment: .leading)
+        // The notch projects the same journal as the main window, so it renders
+        // the same interactable cards. Taps route the one shell and summon the
+        // main window (`ChatFirstRichBlockContext.auxiliary`).
+        case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+          if let context = ChatFirstRichBlockContext.floatingSurface {
+            ChatFirstRichBlockGroupView(
+              group: group,
+              messageID: message.id,
+              context: context
+            )
+            .environment(\.colorScheme, .light)
+            .frame(maxWidth: .infinity, alignment: .leading)
+          }
+        // The review card is three controls and an inline editor over stored memories — the
+        // clearest case of a rich control this passive surface does not own.
+        case .memoryReviewCard:
+          EmptyView()
+        case .followUp(_, let question):
+          if let onAskFollowUp {
+            FollowUpChip(
+              question: question,
+              palette: .glass,
+              voiceHint: followUpVoiceHint,
+              action: { onAskFollowUp(question) }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+          }
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider
         ):
@@ -242,8 +282,7 @@ struct AIResponseView: View {
         }
       }
     } else if !message.text.isEmpty {
-      SelectableMarkdown(text: message.text, sender: .ai)
-        .textSelection(.enabled)
+      OmiMarkdown(text: message.text, sender: .ai, citations: message.inlineCitationReferences)
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -290,8 +329,8 @@ struct AIResponseView: View {
   private func messageWithHoverActions(message: ChatMessage) -> some View {
     MessageHoverOverlay(
       message: message,
-      onRate: { [id = message.id] rating in
-        onRate?(id, rating)
+      onRate: { [id = message.id] rating, reason in
+        onRate?(id, rating, reason)
       }
     ) {
       contentBlocksView(for: message)
@@ -307,13 +346,13 @@ struct AIResponseView: View {
         HStack(alignment: .top, spacing: OmiSpacing.sm) {
           Text(exchange.question ?? "")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(.white)
+            .foregroundColor(NotchGlass.primary)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
-        .background(Color.white.opacity(0.1))
+        .background(NotchGlass.ink(.w1))
         .cornerRadius(OmiChrome.elementRadius)
       }
 
@@ -333,7 +372,7 @@ struct AIResponseView: View {
             ScrollView {
               Text(userInput)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(.white)
+                .foregroundColor(NotchGlass.primary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -341,7 +380,7 @@ struct AIResponseView: View {
           } else {
             Text(userInput)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.white)
+              .foregroundColor(NotchGlass.primary)
               .lineLimit(1)
               .truncationMode(.head)
               .textSelection(.enabled)
@@ -361,7 +400,7 @@ struct AIResponseView: View {
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(Color.white.opacity(0.1))
+      .background(NotchGlass.ink(.w1))
       .cornerRadius(OmiChrome.elementRadius)
       .contextMenu {
         Button("Copy") {
@@ -413,12 +452,13 @@ struct AIResponseView: View {
         .padding(.horizontal, OmiSpacing.xxs)
         .padding(.bottom, OmiSpacing.xs)
         .contextMenu {
+          let finalOutput = message.copyableText
           Button("Copy") {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(message.text, forType: .string)
+            NSPasteboard.general.setString(finalOutput, forType: .string)
           }
           Button("Copy Question & Answer") {
-            let combined = "Q: \(userInput)\n\nA: \(message.text)"
+            let combined = "Q: \(userInput)\n\nA: \(finalOutput)"
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(combined, forType: .string)
           }
@@ -439,51 +479,43 @@ struct AIResponseView: View {
   @State private var isSharingLink = false
 
   private var followUpInputView: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      if !attachments.isEmpty {
-        AttachmentPreviewRow(
-          attachments: attachments,
-          onRemove: removeAttachment
-        )
-        .environment(\.colorScheme, .dark)
-      }
-
+    VStack(spacing: 0) {
       HStack(spacing: OmiSpacing.xs) {
+        // `NotchGlass.quiet`, never SwiftUI's `.secondary`. This row is inside the pill, whose ink is
+        // the white-on-black scale (`NotchGlassChrome`); `.secondary` is a semantic label colour that
+        // resolves against whatever colour scheme happens to be in the environment, which is a
+        // different ladder that only *looks* right here because the panel forces `.dark`. One glyph
+        // reading off a second scale is how a surface drifts.
         Button(action: { shareLink() }) {
           Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(showShareFeedback ? .green : .secondary)
+            .foregroundColor(showShareFeedback ? Ink.listeningGreen : NotchGlass.quiet)
         }
         .buttonStyle(.plain)
         .help("Copy share link")
         .disabled(isSharingLink)
 
-        TextField("Ask follow up...", text: $followUpText)
-          .textFieldStyle(.plain)
-          .scaledFont(size: OmiType.body)
+        Button(action: { onOpenMainApp?() }) {
+          HStack(spacing: OmiSpacing.xs) {
+            Text("Continue in Omi")
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(NotchGlass.ink(.w85))
+            Spacer(minLength: 0)
+            Image(systemName: "arrow.up.forward.app")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(NotchGlass.quiet)
+          }
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xs)
-          .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
+          .background(NotchGlass.ink(.w1))
           .cornerRadius(OmiChrome.elementRadius)
-          .focused($isFollowUpFocused)
-          .onSubmit {
-            sendFollowUp()
-          }
-
-        Button(action: { sendFollowUp() }) {
-          Image(systemName: "arrow.up.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(canSendFollowUp ? .white : .secondary)
+          .contentShape(Rectangle())
         }
-        .disabled(!canSendFollowUp)
         .buttonStyle(.plain)
+        .help("Open the Omi app to keep chatting")
       }
+      .chatComposerShell(fill: NotchGlass.fill)
     }
-    .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
-  }
-
-  private var canSendFollowUp: Bool {
-    !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
   }
 
   private var shareFeedbackBanner: some View {
@@ -494,7 +526,7 @@ struct AIResponseView: View {
 
       Text("Share link copied to your clipboard")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(.white)
+        .foregroundColor(NotchGlass.primary)
 
       Spacer(minLength: 0)
     }
@@ -514,9 +546,13 @@ struct AIResponseView: View {
     Task {
       if let url = await onShareLink?() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url, forType: .string)
-        AnalyticsManager.shared.shareAction(category: "floating_bar_share_link")
-        showShareSuccessFeedback()
+        if NSPasteboard.general.setString(url, forType: .string) {
+          if let sid = DesktopBackendEnvironment.shareID(from: url) {
+            AnalyticsManager.shared.shareAction(
+              category: "floating_bar_share_link", properties: ["share_id": sid, "target_app": "copy"])
+          }
+          showShareSuccessFeedback()
+        }
       }
       isSharingLink = false
     }
@@ -536,38 +572,12 @@ struct AIResponseView: View {
       }
     }
     shareFeedbackHideWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
-  }
-
-  private func sendFollowUp() {
-    let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let staged = attachments
-    guard !trimmed.isEmpty || !staged.isEmpty else { return }
-    followUpText = trimmed
-    attachments = []
-    if !staged.isEmpty {
-      FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)
-    }
-    onSendFollowUp?(trimmed)
-  }
-
-  private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
-    ChatAttachmentDropHandler.collectURLs(from: providers) { urls in
-      addAttachmentURLs(urls)
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
+      if !workItem.isCancelled { workItem.perform() }
     }
   }
 
-  private func addAttachmentURLs(_ urls: [URL]) {
-    let remaining = max(0, kMaxChatAttachments - attachments.count)
-    guard remaining > 0 else { return }
-    let staged = urls.prefix(remaining).compactMap(ChatAttachment.from(url:))
-    guard !staged.isEmpty else { return }
-    attachments.append(contentsOf: staged)
-  }
-
-  private func removeAttachment(_ id: String) {
-    attachments.removeAll { $0.id == id }
-  }
 }
 
 // MARK: - Message Hover Overlay
@@ -575,7 +585,7 @@ struct AIResponseView: View {
 /// Overlay that shows action buttons (thumbs up/down, copy, info) on hover over an AI message
 struct MessageHoverOverlay<Content: View>: View {
   let message: ChatMessage
-  let onRate: (Int?) -> Void
+  let onRate: (Int?, ChatFeedbackReason?) -> Void
   @ViewBuilder let content: () -> Content
 
   @State private var isHovered = false
@@ -609,13 +619,13 @@ struct MessageHoverOverlay<Content: View>: View {
         // Show immediately
         hideWorkItem?.cancel()
         hideWorkItem = nil
-        OmiMotion.withGated(.easeInOut(duration: 0.15)) {
+        OmiMotion.withGated(.easeInOut(duration: FloatingBarMotion.hoverFade)) {
           isHovered = true
         }
       } else {
         // Delay hide by 1.5s so user can move cursor to the buttons
         let work = DispatchWorkItem {
-          OmiMotion.withGated(.easeInOut(duration: 0.15)) {
+          OmiMotion.withGated(.easeInOut(duration: FloatingBarMotion.hoverFade)) {
             isHovered = false
           }
         }
@@ -629,7 +639,7 @@ struct MessageHoverOverlay<Content: View>: View {
     // Capture the message's value-type fields once per body evaluation so every
     // button action operates on the exact message the user sees — not whatever
     // `self.message` happens to point to when the click is dispatched.
-    let messageText = message.text
+    let finalOutput = message.copyableText
     let currentRating = message.rating
     return HStack(alignment: .top, spacing: OmiSpacing.xs) {
       Spacer(minLength: 0)
@@ -641,7 +651,10 @@ struct MessageHoverOverlay<Content: View>: View {
             let newRating = currentRating == 1 ? nil : 1
             guard newRating != lastSubmittedRating else { return }
             lastSubmittedRating = newRating
-            onRate(newRating)
+            // The floating bar's hover overlay is too narrow for the reason
+            // chips the main chat window shows, so a voice thumbs-down records
+            // with no reason for now (the report calls that "not captured").
+            onRate(newRating, nil)
             if newRating != nil { showRatingFeedbackBriefly() }
           }) {
             Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
@@ -656,7 +669,10 @@ struct MessageHoverOverlay<Content: View>: View {
             let newRating = currentRating == -1 ? nil : -1
             guard newRating != lastSubmittedRating else { return }
             lastSubmittedRating = newRating
-            onRate(newRating)
+            // The floating bar's hover overlay is too narrow for the reason
+            // chips the main chat window shows, so a voice thumbs-down records
+            // with no reason for now (the report calls that "not captured").
+            onRate(newRating, nil)
             if newRating != nil { showRatingFeedbackBriefly() }
           }) {
             Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
@@ -665,11 +681,19 @@ struct MessageHoverOverlay<Content: View>: View {
           }
           .buttonStyle(.plain)
           .help("Not helpful")
+          // Sync the dedupe shadow to the live rating. The overlay is keyed
+          // `.id(message.id)` so it re-mounts with lastSubmittedRating == nil,
+          // while a restored/history message already carries a rating — without
+          // this, clicking to clear it computes newRating == nil ==
+          // lastSubmittedRating and the guard swallows the tap (rating stuck).
+          .onChange(of: message.rating, initial: true) { _, newValue in
+            lastSubmittedRating = newValue
+          }
 
-          // Copy — captures `messageText` explicitly so we always copy the
+          // Copy — captures `finalOutput` explicitly so we always copy the
           // message this button was drawn for, even if SwiftUI reuses the
           // overlay view across re-renders.
-          Button(action: { [messageText] in copyText(messageText) }) {
+          Button(action: { [finalOutput] in copyText(finalOutput) }) {
             Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
               .scaledFont(size: OmiType.caption)
               .foregroundColor(showCopied ? .green : .secondary)
@@ -682,7 +706,7 @@ struct MessageHoverOverlay<Content: View>: View {
             Button(action: { showInfoPopover.toggle() }) {
               Image(systemName: "info.circle")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(showInfoPopover ? .white : .secondary)
+                .foregroundColor(NotchGlass.controlLabel(isActive: showInfoPopover))
             }
             .buttonStyle(.plain)
             .help("View response context")
@@ -700,7 +724,7 @@ struct MessageHoverOverlay<Content: View>: View {
         }
       }
     }
-    .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+    .omiAnimation(.easeInOut(duration: FloatingBarMotion.stateFade), value: showRatingFeedback)
     .frame(maxWidth: .infinity, alignment: .trailing)
     .onHover { hovering in
       isBarHovered = hovering
@@ -714,7 +738,8 @@ struct MessageHoverOverlay<Content: View>: View {
 
   private func showRatingFeedbackBriefly() {
     showRatingFeedback = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
       showRatingFeedback = false
     }
   }
@@ -724,12 +749,11 @@ struct MessageHoverOverlay<Content: View>: View {
   /// clicking Copy on a historical message writes the correct content to the
   /// pasteboard even when SwiftUI has reused the overlay view across renders.
   private func copyText(_ text: String) {
-    guard !text.isEmpty else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(text, forType: .string)
+    guard OmiClipboard.copy(text) else { return }
     AnalyticsManager.shared.shareAction(category: "floating_bar_response_copy")
     OmiMotion.withGated { showCopied = true }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
       OmiMotion.withGated { showCopied = false }
     }
   }
@@ -737,99 +761,61 @@ struct MessageHoverOverlay<Content: View>: View {
 
 // MARK: - Metadata Popover
 
-/// Developer popover showing full context used to generate an AI response
+/// Developer popover showing observed turn evidence, not a reconstructed prompt.
 struct MessageMetadataPopover: View {
   let metadata: MessageMetadata
 
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        // Header
         Text("Response Context")
           .font(.headline)
           .foregroundColor(.primary)
 
-        // Key info
-        if let model = metadata.model {
-          metadataRow(label: "Model", value: model)
-        }
-        if metadata.hasScreenshot, let size = metadata.screenshotSizeBytes {
-          let kb = size / 1024
-          let base64Chars = (size * 4 + 2) / 3  // base64 expansion
-          metadataRow(label: "Screenshot", value: "1 image (\(kb) KB, ~\(base64Chars / 1024) KB base64)")
-        } else {
-          metadataRow(label: "Screenshot", value: "None")
-        }
-
-        Divider()
-
-        // Context fed into the prompt
-        Text("Context in Prompt")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(.primary)
-        metadataRow(label: "User memories/facts", value: "\(metadata.memoriesCount)")
-        metadataRow(label: "Conversation history turns", value: "\(metadata.conversationTurns)")
-        metadataRow(label: "Tasks", value: "\(metadata.tasksCount)")
-        metadataRow(label: "Goals", value: "\(metadata.goalsCount)")
-        metadataRow(label: "Available tools", value: "\(metadata.availableToolsCount)")
-
-        // Tool calls
         if !metadata.toolNames.isEmpty {
-          Divider()
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Tools used (\(metadata.toolNames.count))")
               .scaledFont(size: OmiType.caption, weight: .semibold)
               .foregroundColor(.primary)
-            ForEach(metadata.toolNames, id: \.self) { tool in
-              Text("  \(tool)")
+            ForEach(Array(metadata.toolNames.enumerated()), id: \.offset) { _, tool in
+              Text(tool)
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(.secondary)
                 .textSelection(.enabled)
             }
-            if metadata.sqlQueryCount > 0 {
-              metadataRow(
-                label: "SQL queries",
-                value: "\(metadata.sqlQueryCount) queries, \(metadata.sqlRowsReturned) rows returned"
-              )
-            }
+          }
+        }
+        if let sql = metadata.sqlSummary {
+          metadataRow(label: "SQL", value: sql)
+        }
+        metadataRow(label: "Screenshot", value: metadata.screenshotSummary)
+
+        if !metadata.sourceOutcomes.isEmpty {
+          Divider()
+          Text("Context admitted")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(.primary)
+          ForEach(metadata.sourceOutcomes) { source in
+            metadataRow(label: source.source, value: source.outcome)
           }
         }
 
-        // Full system prompt — always expanded, scrollable
-        if let prompt = metadata.systemPrompt, !prompt.isEmpty {
-          Divider()
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            HStack {
-              Text("Full System Prompt")
-                .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundColor(.primary)
-              Spacer()
-              Text("\(prompt.count) chars")
-                .scaledFont(size: OmiType.micro)
-                .foregroundColor(.secondary)
-              Button(action: {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(prompt, forType: .string)
-              }) {
-                Image(systemName: "doc.on.doc")
-                  .scaledFont(size: OmiType.micro)
-                  .foregroundColor(.secondary)
-              }
-              .buttonStyle(.plain)
-              .help("Copy prompt")
-            }
-            Text(prompt)
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(.primary)
-              .textSelection(.enabled)
-              .frame(maxWidth: .infinity, alignment: .leading)
-          }
+        if !metadata.modelsSummary.isEmpty {
+          metadataRow(label: "Model", value: metadata.modelsSummary)
+        }
+        if !metadata.providersSummary.isEmpty {
+          metadataRow(label: "Provider", value: metadata.providersSummary)
+        }
+        metadataRow(label: "History", value: metadata.historySummary)
+        metadataRow(label: "Offered", value: metadata.offeredToolsSummary)
+        if !metadata.pathSummary.isEmpty {
+          metadataRow(label: "Path", value: metadata.pathSummary)
         }
       }
       .padding()
-      .frame(width: 450)
+      .frame(width: 420)
     }
-    .frame(width: 450, height: 500)
+    .frame(width: 420, height: 420)
   }
 
   private func metadataRow(label: String, value: String) -> some View {

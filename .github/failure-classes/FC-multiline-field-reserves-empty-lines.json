@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-multiline-field-reserves-empty-lines",
+  "violated_contract": "A text field that should hug one visible line and grow to a second must not reserve its maximum line count, including space reserved by its hint. Empty reserved lines shift the visible text away from a centered leading emoji or icon and make compact forms taller than their content.",
+  "canonical_prevention": "Set minLines to the intended compact height and hintMaxLines to one when maxLines only caps growth. Keep deliberately spacious writing areas at their fixed multiline height. Render the actual row with one and two lines and assert field height and leading glyph alignment.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/conversation_detail_title_alignment_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/conversation_detail/widgets.dart",
+    "app/lib/pages/apps/add_mcp_server_page.dart",
+    "app/lib/pages/conversations/widgets/create_folder_sheet.dart"
+  ],
+  "status": "open"
+}

@@ -46,6 +46,27 @@ final class FloatingBarGeometryTests: XCTestCase {
     )
   }
 
+  func testGlowInflatedRestoreRoundTripPreservesCenterOnlyWithMatchingSize() {
+    let center = NSPoint(x: 700, y: 820)
+    // The restore origin is computed for the glow-INFLATED window (bare 40x14
+    // pill grown by the 22/18 glow outsets → 84x50).
+    let inflated = NSSize(width: 84, height: 50)
+    let origin = FloatingControlBarGeometry.restoreOrigin(center: center, size: inflated)
+
+    // Fixed: snap with the SAME inflated size the origin was computed for →
+    // the recorded center is exactly the original center.
+    XCTAssertEqual(
+      FloatingControlBarGeometry.recordedCenter(afterSnapOrigin: origin, size: inflated),
+      center)
+
+    // Bug: snapping with the bare pill size drifts the recorded center by one
+    // glow outset (22 left, 18 down) — this is what compounded per re-open cycle.
+    let bare = NSSize(width: 40, height: 14)
+    XCTAssertEqual(
+      FloatingControlBarGeometry.recordedCenter(afterSnapOrigin: origin, size: bare),
+      NSPoint(x: center.x - 22, y: center.y - 18))
+  }
+
   func testScreenChangeReconcilesTheFloatingBarPresentationAndFrame() throws {
     // omi-test-quality: source-inspection -- static contract: AppKit delegate callback must retain the reconciliation wiring
     let source = try String(
@@ -379,11 +400,45 @@ final class FloatingBarGeometryTests: XCTestCase {
       ))
   }
 
-  func testNotchHoverMenuKeepsBottomMarginWithoutSubagents() {
+  /// The hover surface used to collapse to nothing without subagents. It now always
+  /// carries the shortcut legend and capture controls, so hovering the notch is never a
+  /// no-op — but it must still be tall enough for the agent rows when there are any.
+  func testNotchHoverMenuAlwaysReservesRoomForTheControlPanel() {
     XCTAssertEqual(
       FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0),
-      FloatingControlBarWindow.notchAgentListRowHeight + FloatingControlBarWindow.notchHoverMenuBottomMargin
+      FloatingControlBarWindow.notchControlPanelHeight
+        + FloatingControlBarWindow.notchHoverMenuBottomMargin
     )
+  }
+
+  /// Spawned agents own the top of the hover surface; the control panel stacks beneath
+  /// them. If the surface stopped growing per agent the panel would be drawn on top of
+  /// the agent rows.
+  func testControlPanelStacksBelowAgentRowsRatherThanOverlappingThem() {
+    XCTAssertEqual(FloatingControlBarWindow.notchControlPanelTopOffset(agentCount: 0), 0)
+
+    for count in 1...8 {
+      let offset = FloatingControlBarWindow.notchControlPanelTopOffset(agentCount: count)
+      XCTAssertEqual(
+        offset,
+        FloatingControlBarWindow.notchAgentListHeight(agentCount: count),
+        "panel must start below all \(count) agent row(s)"
+      )
+      XCTAssertEqual(
+        FloatingControlBarWindow.notchHoverMenuHeight(agentCount: count),
+        offset + FloatingControlBarWindow.notchControlPanelHeight
+          + FloatingControlBarWindow.notchHoverMenuBottomMargin,
+        "surface must be tall enough for the rows plus the whole panel"
+      )
+    }
+  }
+
+  func testNotchHoverMenuGrowsWithEachAdditionalSubagent() {
+    let empty = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0)
+    let one = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 1)
+    let many = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 8)
+    XCTAssertGreaterThan(one, empty)
+    XCTAssertGreaterThan(many, one, "eight agent rows must not be clipped")
   }
 
   func testNotchChromeHeightUsesMeasuredAuxiliaryAreaHeight() {
@@ -440,6 +495,62 @@ final class FloatingBarGeometryTests: XCTestCase {
       ))
   }
 
+  /// Regression: with a conversation open but no expanded response (the "thinking" state), the
+  /// notch window's fixed 430×527 frame accepted clicks everywhere, parking an invisible dead zone
+  /// over the main window's Tasks/Rewind/Apps pills. Whole-window hits belong only to content that
+  /// visibly fills the window: an expanded response panel or a notification card.
+  func testAThinkingConversationDoesNotOwnTheWholeNotchWindow() {
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: true, showingAIResponse: false, hasNotification: false),
+      "thinking without a response panel must keep the content-derived hit region")
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: false, showingAIResponse: false, hasNotification: false))
+    XCTAssertTrue(
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: true, showingAIResponse: true, hasNotification: false))
+    XCTAssertTrue(
+      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
+        showingAIConversation: false, showingAIResponse: false, hasNotification: true))
+  }
+
+  /// Regression: while an expanded response panel or a notification card was showing, the
+  /// whole window frame accepted clicks — including the transparent glow outsets around the
+  /// visible surface. Clicks on other apps landing in that ring were silently swallowed and
+  /// the clicked app never activated (the "dead zone" report). Surface-filling content owns
+  /// exactly the surface: frame minus the horizontal and bottom glow outsets.
+  func testSurfaceFillingContentDoesNotOwnTheTransparentGlowRing() {
+    // Response-panel shaped window: 382×527 surface + 24pt glow on each side and below.
+    let windowSize = NSSize(width: 430, height: 551)
+
+    XCTAssertTrue(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 215, y: 300),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "the visible surface stays interactive")
+    XCTAssertTrue(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 24, y: 24),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "the surface's bottom-left corner is still content (resize grip corner)")
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 12, y: 300),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "left glow ring passes clicks through")
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 424, y: 300),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "right glow ring passes clicks through")
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 215, y: 10),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "glow margin below the surface passes clicks through")
+  }
+
   func testNotchChromeActivationIgnoresHorizontalGlowOutsets() {
     let windowFrame = NSRect(x: 500, y: 800, width: 360, height: 58)
 
@@ -457,5 +568,158 @@ final class FloatingBarGeometryTests: XCTestCase {
         chromeHeight: 17,
         horizontalOutset: 24
       ))
+  }
+
+  func testTransparentPanelIgnoresMouseOutsideItsVisibleHitRegion() {
+    let frame = NSRect(x: 500, y: 800, width: 360, height: 58)
+    let visibleLocalRegion = NSRect(x: 24, y: 24, width: 312, height: 34)
+
+    XCTAssertFalse(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 680, y: 790),
+        windowFrame: frame,
+        isVisible: true,
+        acceptsMouseHit: visibleLocalRegion.contains),
+      "an ordered-in panel stays ready to receive the tracking event when the pointer enters")
+    XCTAssertTrue(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 510, y: 810),
+        windowFrame: frame,
+        isVisible: true,
+        acceptsMouseHit: visibleLocalRegion.contains),
+      "transparent glow margin must pass through to the window underneath")
+    XCTAssertFalse(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 680, y: 840),
+        windowFrame: frame,
+        isVisible: true,
+        acceptsMouseHit: visibleLocalRegion.contains),
+      "visible notch chrome remains interactive")
+    XCTAssertTrue(
+      FloatingBarMouseInterceptionPolicy.shouldIgnoreMouseEvents(
+        mouseLocation: NSPoint(x: 680, y: 840),
+        windowFrame: frame,
+        isVisible: false,
+        acceptsMouseHit: { _ in true }),
+      "an ordered-out panel must never retain event ownership")
+  }
+
+  func testMountedNotificationWinsOverListeningIsland() {
+    let notification = NSSize(width: 508, height: 194)
+    let listening = NSSize(width: 351, height: 58)
+    let idle = NSSize(width: 40, height: 14)
+    let size = FloatingControlBarGeometry.collapsedSurfaceSize(
+      hasMountedNotification: true,
+      isVoiceListening: true,
+      isThinking: false,
+      notificationSize: notification,
+      listeningSize: listening,
+      thinkingSize: listening,
+      idleSize: idle
+    )
+    XCTAssertGreaterThanOrEqual(size.width, notification.width)
+    XCTAssertGreaterThanOrEqual(size.height, notification.height)
+    XCTAssertNotEqual(size, listening)
+  }
+
+  func testPTTReleaseWithMountedCardDoesNotCollapseToListeningIsland() {
+    let notification = NSSize(width: 508, height: 194)
+    let listening = NSSize(width: 351, height: 58)
+    let afterHold = FloatingControlBarGeometry.collapsedSurfaceSize(
+      hasMountedNotification: true,
+      isVoiceListening: true,
+      isThinking: true,
+      notificationSize: notification,
+      listeningSize: listening,
+      thinkingSize: NSSize(width: 351, height: 58),
+      idleSize: NSSize(width: 40, height: 14)
+    )
+    XCTAssertGreaterThanOrEqual(afterHold.width, 508)
+    XCTAssertGreaterThanOrEqual(afterHold.height, 194)
+  }
+
+  func testWindowResizeKeepsNotificationMinimumWhileListening() {
+    let notification = NSSize(width: 508, height: 194)
+    let minimum = FloatingControlBarGeometry.windowResizeMinimumSize(
+      showingAIConversation: false,
+      hasMountedNotification: true,
+      isVoiceListening: true,
+      isHovering: false,
+      usesNotchIsland: true,
+      conversationWidth: 382,
+      notificationSize: notification,
+      listeningWidth: 351,
+      hoverWidth: 224,
+      idleSize: NSSize(width: 40, height: 14)
+    )
+    XCTAssertGreaterThanOrEqual(minimum.width, 508)
+    XCTAssertGreaterThanOrEqual(minimum.height, 194)
+  }
+
+}
+
+// MARK: - Notch top re-anchoring
+
+/// The island hangs from the display top by definition. Auto layout grows the
+/// panel from a pinned bottom-left origin when SwiftUI content has not
+/// finished collapsing, which pushed the chrome above the screen and made the
+/// island "disappear after hovering" until Push-to-Talk resized it back.
+final class NotchTopReanchorTests: XCTestCase {
+  private let screen = NSRect(x: 0, y: 0, width: 2048, height: 1330)
+
+  func testGrowthFromPinnedOriginIsReanchoredToScreenTop() {
+    // The reproduced bug frame: collapse origin kept, menu height restored by
+    // the hosting view's min-size constraint — top edge 240pt offscreen.
+    let grown = NSRect(x: 816, y: 1263, width: 430, height: 307)
+    let anchored = FloatingControlBarGeometry.notchTopReanchoredFrame(
+      frame: grown, screenFrame: screen, isResizable: false, isUserDragging: false, isConversationOpen: false)
+    XCTAssertEqual(anchored, NSRect(x: 809, y: 1023, width: 430, height: 307))
+    XCTAssertEqual(anchored?.maxY, screen.maxY)
+  }
+
+  func testCorrectlyAnchoredFrameIsLeftAlone() {
+    let idle = NSRect(x: 828, y: 1263, width: 392, height: 67)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: idle, screenFrame: screen, isResizable: false, isUserDragging: false, isConversationOpen: false))
+  }
+
+  func testUserControlledWindowsAreNeverFought() {
+    let grown = NSRect(x: 816, y: 900, width: 430, height: 307)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: grown, screenFrame: screen, isResizable: true, isUserDragging: false, isConversationOpen: false),
+      "a resizable conversation panel is the user's to size")
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: grown, screenFrame: screen, isResizable: false, isUserDragging: true, isConversationOpen: false),
+      "a drag in progress must not be yanked back")
+  }
+
+  func testDegenerateScreenIsIgnored() {
+    let grown = NSRect(x: 0, y: 0, width: 430, height: 307)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: grown, screenFrame: .zero, isResizable: false, isUserDragging: false, isConversationOpen: false))
+  }
+
+  func testSubPointDriftIsNotChurned() {
+    let nearlyAnchored = NSRect(x: 828, y: 1262.7, width: 392, height: 67)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: nearlyAnchored, screenFrame: screen, isResizable: false, isUserDragging: false, isConversationOpen: false
+      ),
+      "epsilon keeps AppKit rounding from causing a setFrame loop")
+  }
+
+  func testOpenConversationSurfaceIsNeverFought() {
+    // The Spaces-transition regression: a user-resized chat frame is content,
+    // not chrome — re-anchoring it snaps the user's window to the screen top.
+    let userChatFrame = NSRect(x: 240, y: 420, width: 640, height: 520)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: userChatFrame, screenFrame: screen, isResizable: false, isUserDragging: false,
+        isConversationOpen: true),
+      "an open conversation surface owns its frame")
   }
 }

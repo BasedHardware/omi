@@ -33,7 +33,7 @@ class VersionPrefixedFilenameTests(unittest.TestCase):
         )
 
     def test_allows_grandfathered_legacy_path(self) -> None:
-        self.assertEqual(lint.violations(["backend/scripts/v3_dev_cloud_proof.py"]), [])
+        self.assertEqual(lint.violations(["backend/scripts/v3_f5_real_service_evidence_readiness.py"]), [])
 
     def test_main_reports_issue_for_new_violation(self) -> None:
         output = io.StringIO()

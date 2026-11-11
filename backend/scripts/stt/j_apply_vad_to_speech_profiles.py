@@ -7,7 +7,7 @@ from typing import Any, cast
 from dotenv import load_dotenv
 from pydub import AudioSegment
 
-from utils.stt.vad import apply_vad_for_speech_profile
+from utils.stt.vad import apply_vad_for_speech_profile, VADEmptyError
 
 load_dotenv('../../.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
@@ -25,11 +25,17 @@ def execute():
         file_path = get_profile_audio_if_exists(uid)
         if not file_path:
             return
-        apply_vad_for_speech_profile(file_path)
+
+        try:
+            apply_vad_for_speech_profile(file_path)
+        except VADEmptyError:
+            print('VAD empty for', uid)
+            return
+
         aseg = cast(
             Any, AudioSegment.from_wav(file_path)
         )  # pyright: ignore[reportUnknownMemberType]  # pydub has no type stubs
-        if aseg.duration_seconds < 5 or aseg.duration_seconds > 120:
+        if aseg.duration_seconds < 5 or aseg.duration_seconds > 180:
             print('Invalid duration for', uid)
             return
         upload_profile_audio(file_path, uid)

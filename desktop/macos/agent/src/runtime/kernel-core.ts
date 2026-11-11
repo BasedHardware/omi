@@ -8,7 +8,13 @@ import type {
 import type { ContextSnapshotProjection, OutboundMessage, OutboundMessageDraft } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { generateAgentId } from "./sqlite-store.js";
-import { AdapterRuntimeError, failureFromError, type RuntimeFailure } from "./failures.js";
+import {
+  AdapterRuntimeError,
+  attachWorkerRecycle,
+  failureFromError,
+  workerRecycleDisposition,
+  type RuntimeFailure,
+} from "./failures.js";
 import {
   clearOwnerSurfaceState,
   importLegacyMainChatSessions,
@@ -17,6 +23,7 @@ import {
   type ResolveSurfaceSessionInput,
 } from "./surface-session.js";
 import {
+  conversationIdForOwnedSurfaceSession,
   conversationIdForSession,
 } from "./conversation-turns.js";
 import {
@@ -24,10 +31,20 @@ import {
   inheritContextSnapshotForSession,
   kernelSystemPolicy,
   renderContextSnapshot,
+  renderContextSnapshotForBinding,
+  type ContextDeliveryCursor,
 } from "./context-snapshot.js";
 import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
+import { renderAttachmentsSection } from "./attachment-prompt.js";
+import {
+  materializeExternalSurfaceRunJournal,
+  type ExternalSurfaceJournalChange,
+} from "./external-surface-journal.js";
 import {
   bindProducingJournalTurn,
+  readConversationEvidence,
+  searchJournalConversation,
+  searchConversationEvidence,
   validateProducingJournalTurnAdmission,
 } from "./conversation-journal.js";
 import type {
@@ -69,7 +86,6 @@ import {
   requiresVerifiedContextDispatch,
   bindingMetadata,
   stableHash,
-  stableJsonStringify,
   stableMcpServerConfig,
   stableJsonHash,
   parseJsonObject,
@@ -138,8 +154,34 @@ import type {
   AgentRuntimeKernelOptions,
 } from "./kernel-types.js";
 import { ExternalSurfaceAuthorityError, StaleAdapterBindingError } from "./kernel-types.js";
-import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
+import { AdapterWorkerRecycledError } from "./worker-pool.js";
+import {
+  adapterUsesCloudModelQoSHint,
+  providerBoundaryForAdapter,
+  resolveAdapterWithinBoundary,
+  runRequestedModelIdForSession,
+  shouldRecordServedModelAsRunRequestedId,
+} from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
+
+function runtimeAdapterMetadata(input: ExecuteAgentRunInput, session: AgentSession): Record<string, unknown> {
+  return {
+    ...(input.metadata ?? {}),
+    executionRole: session.executionRole,
+    providerBoundary: session.providerBoundary,
+    // The run's surface, not the session's. One shell means main Chat and the
+    // floating bar project the same conversation, so a session first registered
+    // by the floating bar keeps `surface_kind = floating_chat` while main-Chat
+    // runs execute on it. Every chat-first gate downstream — the pi-mono env,
+    // `effectiveChatFirstCapability`, the tool projection — admits `main_chat`
+    // only, so stamping the session's surface here told them a main-Chat turn
+    // was a floating one and the model was never offered `render_chat_blocks`.
+    surfaceKind: input.surfaceKind || session.surfaceKind,
+    chatFirstUi: input.admittedContextSnapshot?.capabilities.chatFirstUi === true,
+    chatFirstControlGeneration:
+      input.admittedContextSnapshot?.capabilities.chatFirstControlGeneration ?? null,
+  };
+}
 import {
   RunToolCapabilityBroker,
   type AuthorizedRunToolInvocation,
@@ -149,6 +191,7 @@ import {
 import type { ToolInvocationIdentity } from "./tool-invocation-ledger.js";
 import { normalizeOmiToolName } from "./omi-tool-manifest.js";
 import { routeExternalSurfaceTool } from "./external-surface-tool-policy.js";
+import type { ChatFirstCapabilityProjection } from "./chat-first-capability.js";
 import {
   applyExecutionProfileToSession,
   readSessionExecutionProfile,
@@ -163,6 +206,13 @@ interface ActiveExecution {
   sessionId: string;
 }
 
+function externalSurfacePromptIsSynthetic(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== "object") return false;
+  const external = (metadata as Record<string, unknown>).externalSurface;
+  if (!external || typeof external !== "object") return false;
+  return (external as Record<string, unknown>).promptIsSynthetic === true;
+}
+
 export class KernelCore {
   protected readonly store: AgentStore;
   protected readonly registry: AdapterRegistry;
@@ -172,9 +222,31 @@ export class KernelCore {
   protected readonly subscribers = new Set<KernelEventSubscriber>();
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
+  protected readonly contextDeliveryByBinding = new Map<string, ContextDeliveryCursor>();
   protected readonly toolCapabilities: RunToolCapabilityBroker;
+  /**
+   * The one immutable server-derived Main Chat sample for this process, keyed
+   * `ownerId:sessionId`. Process-local only: never back this with SQLite or a
+   * user preference.
+   *
+   * It lives on the base class because *run admission* needs it, not only
+   * session resolution. A run that builds its own context snapshot without it
+   * projects a capability-off tool surface, and the adapter metadata derived
+   * from that snapshot is what decides whether the model is offered
+   * `render_chat_blocks` at all.
+   */
+  protected readonly chatFirstCapabilities = new Map<string, ChatFirstCapabilityProjection>();
   private transactionDepth = 0;
   private pendingSubscriberEvents: AgentEvent[] = [];
+
+  protected chatFirstCapability(
+    sessionId: string,
+    ownerId: string,
+    surfaceKind?: string
+  ): ChatFirstCapabilityProjection | undefined {
+    if (surfaceKind !== "main_chat") return undefined;
+    return this.chatFirstCapabilities.get(`${ownerId}:${sessionId}`);
+  }
 
   constructor(options: AgentRuntimeKernelOptions) {
     this.store = options.store;
@@ -239,6 +311,178 @@ export class KernelCore {
       throw new ExternalSurfaceAuthorityError(decision.code, decision.message);
     }
     return decision;
+  }
+
+  assertLiveRunToolCapability(input: { capabilityRef: string; activeOwnerId: string }) {
+    return this.toolCapabilities.assertLiveCapability(input.capabilityRef, input.activeOwnerId);
+  }
+
+  /**
+   * Parent-kernel dispatch for the chat-first local history tool. The stdio
+   * child only relays its request; this method requires the already-admitted
+   * one-use invocation before it can read the caller's journal.
+   */
+  searchAuthorizedChatHistory(input: {
+    invocation: AuthorizedRunToolInvocation;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: () => string;
+  }) {
+    const { invocation } = input;
+    if (
+      invocation.canonicalToolName !== "search_chat_history"
+      || invocation.surfaceKind !== "main_chat"
+      || invocation.chatFirstUi !== true
+      || !Number.isSafeInteger(invocation.chatFirstControlGeneration)
+      || invocation.tool.executor.kind !== "nodeTool"
+    ) {
+      throw new Error("search_chat_history requires an enabled main-Chat tool capability");
+    }
+    const toolInput = chatHistorySearchToolInput(input.toolInput);
+    const lease = this.acquireRunToolExecutionLease(invocation, input.activeOwnerId);
+    try {
+      lease.assertCurrentAuthority();
+      const session = this.readSession(invocation.sessionId);
+      this.assertSessionOwner(session, invocation.ownerId);
+      if (session.surfaceKind !== "main_chat") {
+        throw new Error("search_chat_history requires the caller's main Chat session");
+      }
+      if (invocation.externalRefKind !== "chat" || !invocation.externalRefId) {
+        throw new Error("search_chat_history requires the caller's canonical Chat reference");
+      }
+      const conversationId = conversationIdForOwnedSurfaceSession(this.store, {
+        ownerId: invocation.ownerId,
+        sessionId: session.sessionId,
+        surfaceKind: "main_chat",
+        externalRefKind: invocation.externalRefKind,
+        externalRefId: invocation.externalRefId,
+      });
+      if (!conversationId) throw new Error("search_chat_history requires an exact canonical Chat conversation");
+      const matches = searchJournalConversation(this.store, {
+        ownerId: invocation.ownerId,
+        conversationId,
+        ...toolInput,
+      });
+      lease.assertCurrentAuthority();
+      return { matches };
+    } finally {
+      lease.release();
+    }
+  }
+
+  /**
+   * Read evidence through the caller's mounted conversation. The model only
+   * supplies stable evidence/turn references; owner and conversation scope
+   * come from the live run capability and exact surface mapping.
+   */
+  readAuthorizedConversationEvidence(input: {
+    invocation: AuthorizedRunToolInvocation;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: () => string;
+  }): Record<string, unknown> {
+    const { invocation } = input;
+    if (
+      invocation.canonicalToolName !== "read_conversation_evidence"
+      || invocation.tool.executor.kind !== "nodeTool"
+    ) {
+      throw new Error("read_conversation_evidence requires a node tool capability");
+    }
+    const toolInput = conversationEvidenceReadToolInput(input.toolInput);
+    const lease = this.acquireRunToolExecutionLease(invocation, input.activeOwnerId);
+    try {
+      lease.assertCurrentAuthority();
+      const session = this.readSession(invocation.sessionId);
+      this.assertSessionOwner(session, invocation.ownerId);
+      const conversationId = this.authorizedConversationId(invocation, session.surfaceKind);
+      if (!conversationId) throw new Error("read_conversation_evidence requires an exact conversation binding");
+      const read = readConversationEvidence(this.store, {
+        ownerId: invocation.ownerId,
+        conversationId,
+        turnId: toolInput.turnId,
+        evidenceId: toolInput.evidenceId,
+        maxChars: Math.min(
+          toolInput.maxChars,
+          invocation.surfaceKind === "realtime_voice" || invocation.surfaceKind === "realtime" ? 5_000 : 12_000,
+        ),
+        offset: toolInput.offset,
+      });
+      lease.assertCurrentAuthority();
+      if (!read) {
+        return {
+          found: false,
+          available: false,
+          readable: false,
+          complete: true,
+          availability: "unavailable",
+          turnId: toolInput.turnId,
+          evidenceId: toolInput.evidenceId,
+        };
+      }
+      // `found` means the stable descriptor was present. `available` is the
+      // descriptor's source availability, while `readable` means this local
+      // mirror actually yielded extracted body content. Keep these separate:
+      // an unavailable/bodyless descriptor must never look like a successful
+      // body read merely because its metadata was found.
+      const readable = read.availability !== "unavailable"
+        && read.extractionCompleteness !== "none"
+        && (read.chunk.length > 0 || read.nextOffset !== null);
+      const { conversationId: _conversationId, ...readResult } = read;
+      return {
+        found: true,
+        readable,
+        ...readResult,
+        available: read.available,
+      };
+    } finally {
+      lease.release();
+    }
+  }
+
+  /** Search evidence through the caller's mounted conversation. */
+  searchAuthorizedConversationEvidence(input: {
+    invocation: AuthorizedRunToolInvocation;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: () => string;
+  }): Record<string, unknown> {
+    const { invocation } = input;
+    if (
+      invocation.canonicalToolName !== "search_conversation_evidence"
+      || invocation.tool.executor.kind !== "nodeTool"
+    ) {
+      throw new Error("search_conversation_evidence requires a node tool capability");
+    }
+    const toolInput = conversationEvidenceSearchToolInput(input.toolInput);
+    const lease = this.acquireRunToolExecutionLease(invocation, input.activeOwnerId);
+    try {
+      lease.assertCurrentAuthority();
+      const session = this.readSession(invocation.sessionId);
+      this.assertSessionOwner(session, invocation.ownerId);
+      const conversationId = this.authorizedConversationId(invocation, session.surfaceKind);
+      if (!conversationId) throw new Error("search_conversation_evidence requires an exact conversation binding");
+      const result = searchConversationEvidence(this.store, {
+        ownerId: invocation.ownerId,
+        conversationId,
+        query: toolInput.query,
+        limit: toolInput.limit,
+        maxChars: invocation.surfaceKind === "realtime_voice" || invocation.surfaceKind === "realtime" ? 280 : 320,
+        offset: toolInput.offset,
+      });
+      lease.assertCurrentAuthority();
+      const { matches, offset, nextOffset, hasMore, scanned } = result;
+      return { matches, offset, nextOffset, hasMore, scanned };
+    } finally {
+      lease.release();
+    }
+  }
+
+  private authorizedConversationId(invocation: AuthorizedRunToolInvocation, surfaceKind: string): string | null {
+    if (!invocation.externalRefKind || !invocation.externalRefId) return null;
+    return conversationIdForOwnedSurfaceSession(this.store, {
+      ownerId: invocation.ownerId,
+      sessionId: invocation.sessionId,
+      surfaceKind,
+      externalRefKind: invocation.externalRefKind,
+      externalRefId: invocation.externalRefId,
+    });
   }
 
   markRunToolInvocationDispatched(invocation: AuthorizedRunToolInvocation): void {
@@ -318,14 +562,27 @@ export class KernelCore {
           throw new ExternalSurfaceAuthorityError("run_terminal", "External surface run is terminal without an attempt");
         }
         attempt = attemptFromRow(latestAttemptRow);
-        return { ownerId, sessionId, turnId, runId: run.runId, attemptId: attempt.attemptId, duplicate };
+        return {
+          ownerId,
+          sessionId,
+          surfaceKind: session.surfaceKind,
+          turnId,
+          runId: run.runId,
+          attemptId: attempt.attemptId,
+          duplicate,
+        };
       }
       const latestAttempt = latestAttemptRow ? attemptFromRow(latestAttemptRow) : undefined;
       if (run.status === "orphaned" || !latestAttempt || TERMINAL_STATUSES.includes(latestAttempt.status)) {
         this.withTransaction(() => {
+          // A recycled run must not carry the previous attempt's answer while it
+          // is queued again: the context snapshot and control list both read
+          // final_text for active runs (#12731).
           this.updateRun(run.runId, {
             status: "queued",
             completedAtMs: null,
+            finalText: null,
+            resultJson: null,
             errorCode: null,
             errorMessage: null,
             updatedAtMs: Date.now(),
@@ -353,7 +610,11 @@ export class KernelCore {
         prompt: input.prompt,
         mode: input.mode,
         metadata: {
-          externalSurface: { authority: "swift_realtime", turnId },
+          externalSurface: {
+            authority: "swift_realtime",
+            turnId,
+            ...(input.promptIsSynthetic === true ? { promptIsSynthetic: true } : {}),
+          },
         },
       });
       run = accepted.run;
@@ -367,7 +628,15 @@ export class KernelCore {
       this.markExternalAttemptRunning(session, attempt);
     }
     this.toolCapabilities.register({ ownerId, sessionId, runId: run.runId, attemptId: attempt.attemptId });
-    return { ownerId, sessionId, turnId, runId: run.runId, attemptId: attempt.attemptId, duplicate };
+    return {
+      ownerId,
+      sessionId,
+      surfaceKind: session.surfaceKind,
+      turnId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      duplicate,
+    };
   }
 
   authorizeExternalSurfaceToolInvocation(input: {
@@ -512,7 +781,14 @@ export class KernelCore {
         : `agent_spawn:${input.invocationId}`,
       pillId,
       ...(producerTurnId ? { producerRunId: run.runId, producerTurnId } : {}),
-      userText: typeof runInput.prompt === "string" ? runInput.prompt : "",
+      // A synthetic authorization prompt drove this run but is not something the
+      // user said. Empty user text makes the journal skip the user row entirely
+      // rather than attributing an internal instruction to the user.
+      userText: externalSurfacePromptIsSynthetic(runMetadata)
+        ? ""
+        : typeof runInput.prompt === "string"
+          ? runInput.prompt
+          : "",
       assistantText: "I started a background agent for that.",
       objective,
       title,
@@ -539,7 +815,33 @@ export class KernelCore {
     const persistedStatus = input.terminalStatus === "completed" ? "succeeded" : input.terminalStatus;
     if (TERMINAL_STATUSES.includes(run.status) || TERMINAL_STATUSES.includes(attempt.status)) {
       if (run.status === persistedStatus && attempt.status === persistedStatus) {
-        return { ...input, duplicate: true };
+        // Wrapped, like the first-completion path below. Until the missing-user-turn
+        // repair landed this branch made a single write, so atomicity was free; it now
+        // restores the question and updates the answer, and a partial failure between
+        // them would leave a half-repaired exchange until some later replay finished
+        // the job. Re-entrancy makes that recoverable rather than corrupting, but
+        // recoverable-by-retry is a weaker property than the first write already has,
+        // and there is no reason for the two paths to differ. `withTransaction` tracks
+        // nesting depth, so this composes with the transactions the journal helpers
+        // open themselves.
+        const journal = run.status === "succeeded"
+          ? this.withTransaction(() => materializeExternalSurfaceRunJournal(this.store, {
+            ownerId: input.ownerId,
+            run,
+            attempt,
+            finalText: run.finalText,
+          }))
+          : { materialized: false, changes: [] as ExternalSurfaceJournalChange[] };
+        // First write wins, so a replayed frame's text is deliberately not
+        // stored. Say so rather than letting the surface read ok and assume it
+        // landed — that silence is the shape of #12731 itself.
+        return {
+          ...input,
+          duplicate: true,
+          finalTextPersisted: false,
+          journalMaterialized: journal.materialized,
+          journalChanges: journal.changes,
+        };
       }
       throw new ExternalSurfaceAuthorityError("run_terminal", "External surface run already has a different terminal state");
     }
@@ -558,18 +860,44 @@ export class KernelCore {
     if (errorCode && !/^[a-z0-9_]{1,64}$/.test(errorCode)) {
       throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface errorCode is invalid");
     }
-    this.withTransaction(() => {
+    if (input.finalText !== undefined && typeof input.finalText !== "string") {
+      throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface finalText must be a string");
+    }
+    // The kernel never observes an external surface's stream, so terminalization is
+    // the only point at which this run's answer can be captured. Persisted for every
+    // terminal status, following the internal adapter path, which likewise stores
+    // whatever text was produced and marks failure through errorCode instead. The
+    // internal path stores "" as-is; here an empty string collapses to null so
+    // "produced no text" reads identically whether the surface omitted the field
+    // or sent "" (#12731).
+    const trimmed = input.finalText?.trim();
+    const finalText = trimmed ? trimmed : null;
+    const journal = this.withTransaction(() => {
       this.finishAttemptAndRun({
         sessionId: input.sessionId,
         runId: input.runId,
         attemptId: input.attemptId,
         status: persistedStatus,
-        finalText: null,
+        finalText,
         errorCode: persistedStatus === "failed" ? errorCode ?? "external_surface_failed" : null,
         errorMessage: persistedStatus === "failed" ? "External surface execution failed" : null,
       });
+      return persistedStatus === "succeeded"
+        ? materializeExternalSurfaceRunJournal(this.store, {
+          ownerId: input.ownerId,
+          run: { ...run, status: persistedStatus, finalText },
+          attempt: { ...attempt, status: persistedStatus },
+          finalText,
+        })
+        : { materialized: false, changes: [] as ExternalSurfaceJournalChange[] };
     });
-    return { ...input, duplicate: false };
+    return {
+      ...input,
+      duplicate: false,
+      finalTextPersisted: finalText !== null,
+      journalMaterialized: journal.materialized,
+      journalChanges: journal.changes,
+    };
   }
 
   private assertExternalRunIdentity(
@@ -713,18 +1041,26 @@ export class KernelCore {
         requestedAdapterId: session.defaultAdapterId,
       });
       const contextSnapshot = input.admittedContextSnapshot
-        ? inheritContextSnapshotForSession(
-            this.store,
-            input.admittedContextSnapshot,
-            session.sessionId,
-            session.ownerId,
-          )
+        ? input.admittedContextSnapshot.sessionId === session.sessionId
+          ? input.admittedContextSnapshot
+          : inheritContextSnapshotForSession(
+              this.store,
+              input.admittedContextSnapshot,
+              session.sessionId,
+              session.ownerId,
+            )
         : buildContextSnapshot(
             this.store,
             session.sessionId,
             session.ownerId,
             Date.now(),
             input.surfaceKind,
+            // Main Chat runs arrive with no client-supplied snapshot, so this
+            // branch builds every one of them. Dropping the capability here
+            // made the run's own snapshot say capability-off however the shell
+            // had resolved it, and that snapshot is what
+            // `runtimeAdapterMetadata` hands the adapter.
+            this.chatFirstCapability(session.sessionId, session.ownerId, input.surfaceKind),
           );
       const expectationCount = [
         input.expectedContextSnapshotVersion,
@@ -771,6 +1107,12 @@ export class KernelCore {
           prompt: input.prompt,
           producingTurnId: input.producingTurnId ?? null,
           metadata: input.metadata ?? {},
+          // The surface this run was admitted for, which is not always the one
+          // its session was first registered under: one shell means main Chat
+          // and the floating bar share a session. Recorded here because the
+          // tool-capability broker has to gate on the run, and the session row
+          // is the wrong authority for that.
+          surfaceKind: input.surfaceKind,
           contextSnapshotVersion: contextSnapshot.version,
           contextSnapshotGeneration: contextSnapshot.snapshotGeneration,
           contextRendererFingerprint: contextSnapshot.rendererFingerprint,
@@ -778,7 +1120,7 @@ export class KernelCore {
           admittedContextSnapshot: contextSnapshot,
         }),
         modelProfile: session.modelProfile,
-        requestedModelId: session.modelProfile,
+        requestedModelId: runRequestedModelIdForSession(session),
         cwd: session.defaultCwd,
       });
       this.appendEvent({
@@ -813,7 +1155,9 @@ export class KernelCore {
       ...input,
       defaultAdapterId: adapterId,
       adapterId,
-      model: accepted.session.modelProfile ?? undefined,
+      model: adapterUsesCloudModelQoSHint(accepted.session)
+        ? (accepted.session.modelProfile ?? undefined)
+        : undefined,
       cwd: accepted.session.defaultCwd ?? undefined,
       systemPrompt: kernelSystemPolicy(
         accepted.session.surfaceKind,
@@ -898,6 +1242,7 @@ export class KernelCore {
       let binding: AdapterBinding;
       let handle: AdapterBindingHandle;
       let bindingResolutionProtectedBindingId: string | null = null;
+      let adapterDispatchStarted = false;
       try {
         assertExecutionAuthority();
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
@@ -992,17 +1337,28 @@ export class KernelCore {
 
       let effectivePrompt = attemptInput.prompt;
       let effectivePromptBlocks = attemptInput.promptBlocks;
+      let nextContextDelivery: ContextDeliveryCursor | undefined;
       if (surfaceRef) {
         const snapshot = attemptInput.admittedContextSnapshot;
         if (!snapshot) throw new Error("Run is missing its admitted context snapshot");
-        const attachments = input.attachments?.length
-          ? `\n\n# Attachments\n${stableJsonStringify(input.attachments)}`
-          : "";
-        effectivePrompt = `${renderContextSnapshot(
-          snapshot,
-          accepted.session.surfaceKind,
-          accepted.session.executionRole,
-        )}${attachments}\n\n# User Message\n${input.prompt}`;
+        const attachments = renderAttachmentsSection(input.attachments);
+        const renderedContext = adapterId === "pi-mono" && handle.bindingId
+          ? renderContextSnapshotForBinding(
+              snapshot,
+              accepted.session.surfaceKind,
+              accepted.session.executionRole,
+              this.contextDeliveryByBinding.get(handle.bindingId),
+            )
+          : {
+              rendered: renderContextSnapshot(
+                snapshot,
+                accepted.session.surfaceKind,
+                accepted.session.executionRole,
+              ),
+              next: undefined,
+            };
+        nextContextDelivery = renderedContext.next;
+        effectivePrompt = `${renderedContext.rendered}${attachments}\n\n# User Message\n${input.prompt}`;
         effectivePromptBlocks = attemptInput.promptBlocks
           ? attemptInput.promptBlocks.map((block) =>
               block.type === "text" ? { ...block, text: effectivePrompt } : block,
@@ -1010,6 +1366,7 @@ export class KernelCore {
           : undefined;
       }
 
+      const servedModelIds = new Set<string>();
       try {
         const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
           assertExecutionAuthority();
@@ -1024,10 +1381,17 @@ export class KernelCore {
             sessionId: accepted.session.sessionId,
           });
           refreshMcpAttemptContext(
-            mcpServersForBinding(input.mcpServers ?? [], accepted.session.sessionId, adapterId, this.runtimeNodeId),
+            mcpServersForBinding(
+              attemptInput.mcpServers ?? [],
+              accepted.session.sessionId,
+              adapterId,
+              this.runtimeNodeId,
+              attemptInput.cwd,
+            ),
             { capabilityRef: toolCapability.capabilityRef },
           );
           this.markAttemptRunning(attempt, binding);
+          adapterDispatchStarted = true;
           return worker.adapter.executeAttempt(
             {
               sessionId: accepted.session.sessionId,
@@ -1037,6 +1401,7 @@ export class KernelCore {
               runId: accepted.run.runId,
               attemptId: attempt.attemptId,
               toolCapabilityRef: toolCapability.capabilityRef,
+              builtInToolPolicy: toolCapability.builtInToolPolicy,
               binding: handle,
               prompt: effectivePromptBlocks ?? [{ type: "text", text: effectivePrompt }],
               mode: input.mode ?? "ask",
@@ -1044,12 +1409,58 @@ export class KernelCore {
               tools: input.tools ?? [],
               metadata: input.metadata,
             },
-            (event) => this.persistAdapterEvent(accepted.session.sessionId, accepted.run.runId, attempt.attemptId, event),
+            (event) => {
+              if (event.type === "model_used") {
+                const served = (event as { model?: unknown }).model;
+                if (typeof served === "string" && served.length > 0) {
+                  servedModelIds.add(served);
+                }
+              }
+              this.persistAdapterEvent(accepted.session.sessionId, accepted.run.runId, attempt.attemptId, event);
+            },
             abortController.signal,
           );
-        });
+        }, adapterId === "pi-mono" ? {
+          recycleWorkerOnError: true,
+          shouldRecycleWorkerOnError: () => (
+            adapterDispatchStarted
+            && !input.authoritySignal?.aborted
+            && !abortController.signal.aborted
+            && this.runStatus(accepted.run.runId) !== "cancelling"
+            && this.readAttempt(attempt.attemptId).status !== "cancelling"
+          ),
+          onWorkerBindingInvalidated: () => {
+            this.markBindingStale(binding, attempt, "pinned_worker_recycled_after_execution_error");
+          },
+          onWorkerRecycled: (_bindingId, outcome, originalError) => {
+            this.appendEvent({
+              sessionId: accepted.session.sessionId,
+              runId: accepted.run.runId,
+              attemptId: attempt.attemptId,
+              type: "worker.recycled",
+              payload: {
+                adapterId,
+                recoveryAction: "worker_recycled",
+                recoveryOutcome: !outcome.stopSucceeded
+                  ? "stop_failed"
+                  : outcome.bindingInvalidationSucceeded
+                    ? "recovered"
+                    : "binding_stale_failed",
+                bindingStalePersisted: outcome.bindingInvalidationSucceeded,
+                retryDisposition: workerRecycleDisposition({
+                  ...outcome,
+                  canRetry: attemptNo < maxAttempts,
+                  originalError,
+                }),
+              },
+            });
+          },
+        } : undefined);
         this.activeExecutions.delete(accepted.run.runId);
         assertExecutionAuthority();
+        if (handle.bindingId && nextContextDelivery) {
+          this.contextDeliveryByBinding.set(handle.bindingId, nextContextDelivery);
+        }
         if (
           (
             this.runStatus(accepted.run.runId) === "cancelling"
@@ -1069,6 +1480,7 @@ export class KernelCore {
             conversationId,
             surfaceKind: surfaceRef?.surfaceKind ?? accepted.session.surfaceKind,
           },
+          [...servedModelIds],
         );
         return { ...completed, completionDeltaArtifacts };
       } catch (error) {
@@ -1088,9 +1500,13 @@ export class KernelCore {
           }
           break;
         }
-        if (isStaleBindingError(error)) {
-          this.markBindingStale(binding, attempt, messageFrom(error));
-          const failure = failureFromError(error, {
+        const workerRecovery = error instanceof AdapterWorkerRecycledError ? error : null;
+        const executionError = workerRecovery?.originalError ?? error;
+        if (isStaleBindingError(executionError)) {
+          if (!workerRecovery?.bindingInvalidationSucceeded) {
+            this.markBindingStale(binding, attempt, messageFrom(executionError));
+          }
+          const failure = failureFromError(executionError, {
             code: "stale_binding",
             source: "adapter_execution",
             adapterId: attempt.adapterId,
@@ -1101,19 +1517,62 @@ export class KernelCore {
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
-        if (await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", attemptNo < maxAttempts)) {
+        if (workerRecovery) {
+          const retryDisposition = workerRecycleDisposition({
+            stopSucceeded: workerRecovery.stopSucceeded,
+            bindingInvalidationSucceeded: workerRecovery.bindingInvalidationSucceeded,
+            canRetry: attemptNo < maxAttempts,
+            originalError: executionError,
+          });
+          if (retryDisposition === "same_turn") {
+            const failure: RuntimeFailure = {
+              ...failureFromError(executionError, {
+                code: "adapter_execution_failed",
+                source: "adapter_execution",
+                adapterId: attempt.adapterId,
+                retryable: true,
+              }),
+              recoveryAction: "worker_recycled",
+              recoveryOutcome: "recovered",
+              retryDisposition: "same_turn",
+            };
+            this.failAttemptBeforeExecution(
+              attempt,
+              "adapter_execution_failed",
+              failure.userMessage,
+              true,
+              failure,
+            );
+            retryReason = "worker_recycled";
+            resumeFromAttemptId = attempt.attemptId;
+            continue;
+          }
+        }
+        if (
+          !workerRecovery
+          && await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", attemptNo < maxAttempts)
+        ) {
           retryReason = "recoverable_error";
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
         const wasCancelling = this.runStatus(accepted.run.runId) === "cancelling";
         const status: AttemptStatus = wasCancelling ? "cancelled" : "failed";
-        const failure = wasCancelling ? null : failureFromError(error, {
-          code: "adapter_execution_failed",
-          source: "adapter_execution",
-          adapterId: attempt.adapterId,
-          retryable: false,
-        });
+        const baseFailure = wasCancelling ? null : failureFromError(
+          workerRecovery?.originalError ?? error,
+          {
+            code: "adapter_execution_failed",
+            source: "adapter_execution",
+            adapterId: attempt.adapterId,
+            retryable: Boolean(workerRecovery),
+          },
+        );
+        const failure = baseFailure && workerRecovery
+          ? attachWorkerRecycle(baseFailure, {
+            stopSucceeded: workerRecovery.stopSucceeded,
+            bindingInvalidationSucceeded: workerRecovery.bindingInvalidationSucceeded,
+          })
+          : baseFailure;
         this.finishAttemptAndRun({
           sessionId: accepted.session.sessionId,
           runId: accepted.run.runId,
@@ -1643,12 +2102,14 @@ export class KernelCore {
         cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? process.cwd(),
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
-        mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
-        metadata: {
-          ...(input.input.metadata ?? {}),
-          executionRole: input.session.executionRole,
-          providerBoundary: input.session.providerBoundary,
-        },
+        mcpServers: mcpServersForBinding(
+          input.input.mcpServers ?? [],
+          input.session.sessionId,
+          input.adapterId,
+          this.runtimeNodeId,
+          input.input.cwd,
+        ),
+        metadata: runtimeAdapterMetadata(input.input, input.session),
       });
       this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
@@ -1703,12 +2164,14 @@ export class KernelCore {
       cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
-      mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
-      metadata: {
-        ...(input.input.metadata ?? {}),
-        executionRole: input.session.executionRole,
-        providerBoundary: input.session.providerBoundary,
-      },
+      mcpServers: mcpServersForBinding(
+        input.input.mcpServers ?? [],
+        input.session.sessionId,
+        input.adapterId,
+        this.runtimeNodeId,
+        input.input.cwd,
+      ),
+      metadata: runtimeAdapterMetadata(input.input, input.session),
     });
     const binding = this.withTransaction(() => {
       this.closeConflictingNativeBinding(
@@ -1797,14 +2260,23 @@ export class KernelCore {
     binding: AdapterBinding,
     result: AdapterAttemptResult,
     turnRecord?: { conversationId: string | null; surfaceKind: string },
+    servedModelIds: string[] = [],
   ): KernelRunResult {
     const status = result.terminalStatus;
     this.withTransaction(() => {
-      this.updateBinding(binding.bindingId, {
+      const bindingPatch: Partial<AdapterBinding> = {
         adapterNativeSessionId: result.adapterSessionId,
         lastUsedAtMs: Date.now(),
         updatedAtMs: Date.now(),
-      });
+      };
+      if (
+        status === "succeeded"
+        && servedModelIds.length > 0
+        && shouldRecordServedModelAsRunRequestedId(session)
+      ) {
+        bindingPatch.modelId = servedModelIds[0] ?? null;
+      }
+      this.updateBinding(binding.bindingId, bindingPatch);
       const emittedArtifacts = result.artifacts ?? [];
       const existingArtifacts = this.readArtifacts({ sessionId: session.sessionId, limit: 500 });
       const runScope = {
@@ -1851,6 +2323,8 @@ export class KernelCore {
         errorCode: status === "failed" ? result.failure?.code ?? "adapter_execution_failed" : null,
         errorMessage: status === "failed" ? result.failure?.userMessage ?? null : null,
         failure: result.failure,
+        session,
+        servedModelIds: status === "succeeded" ? servedModelIds : undefined,
       });
     });
     return {
@@ -1874,7 +2348,10 @@ export class KernelCore {
       return input;
     }
     const requestedCwd = input.cwd ?? session.defaultCwd;
-    if (requestedCwd && !this.artifactStorage.isRootDirectory(requestedCwd)) {
+    // Leaf agents are assigned an isolated Omi artifact directory for every
+    // attempt. A delegated objective or a caller-supplied cwd must not turn
+    // that into a user-visible default such as Desktop.
+    if (session.executionRole !== "leaf" && requestedCwd && !this.artifactStorage.isRootDirectory(requestedCwd)) {
       return input;
     }
     const cwd = this.artifactStorage.prepareRunDirectory({
@@ -1896,6 +2373,8 @@ export class KernelCore {
     errorCode?: string | null;
     errorMessage?: string | null;
     failure?: RuntimeFailure | null;
+    session?: AgentSession;
+    servedModelIds?: string[];
   }): void {
     const now = Date.now();
     const completedStatus = input.status;
@@ -1906,7 +2385,7 @@ export class KernelCore {
       errorMessage: input.errorMessage ?? null,
       updatedAtMs: now,
     });
-    this.updateRun(input.runId, {
+    const runPatch: Partial<AgentRun> = {
       status: completedStatus,
       finalText: input.finalText,
       resultJson: input.result ? JSON.stringify(input.result) : input.failure ? JSON.stringify({ failure: input.failure }) : null,
@@ -1919,7 +2398,16 @@ export class KernelCore {
       costUsd: input.result?.costUsd ?? null,
       completedAtMs: now,
       updatedAtMs: now,
-    });
+    };
+    if (
+      input.session
+      && input.servedModelIds
+      && input.servedModelIds.length > 0
+      && shouldRecordServedModelAsRunRequestedId(input.session)
+    ) {
+      runPatch.requestedModelId = input.servedModelIds[0] ?? null;
+    }
+    this.updateRun(input.runId, runPatch);
     if (completedStatus === "failed" || completedStatus === "cancelled") {
       this.appendEvent({
         sessionId: input.sessionId,
@@ -2093,6 +2581,7 @@ export class KernelCore {
   }
 
   protected markBindingStale(binding: AdapterBinding, attempt: RunAttempt, reason: string): void {
+    this.contextDeliveryByBinding.delete(binding.bindingId);
     const run = this.readRun(attempt.runId);
     this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {
@@ -2111,6 +2600,7 @@ export class KernelCore {
   }
 
   protected markEvictedBindingStale(bindingId: string, reason: string): void {
+    this.contextDeliveryByBinding.delete(bindingId);
     const binding = this.readBinding(bindingId);
     this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {
@@ -2641,6 +3131,80 @@ function requiredExternalIdentity(value: string, field: string): string {
     throw new ExternalSurfaceAuthorityError("invalid_external_request", `External surface ${field} is required`);
   }
   return normalized;
+}
+
+function chatHistorySearchToolInput(input: Record<string, unknown>): {
+  query: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+} {
+  if (typeof input.query !== "string") {
+    throw new Error("search_chat_history requires a query string");
+  }
+  const readOptionalString = (value: unknown, field: string): string | undefined => {
+    if (value === undefined) return undefined;
+    if (typeof value !== "string") throw new Error(`search_chat_history ${field} must be a string`);
+    return value;
+  };
+  if (input.limit !== undefined && (typeof input.limit !== "number" || !Number.isSafeInteger(input.limit))) {
+    throw new Error("search_chat_history limit must be an integer");
+  }
+  return {
+    query: input.query,
+    startDate: readOptionalString(input.start_date, "start_date"),
+    endDate: readOptionalString(input.end_date, "end_date"),
+    ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+  };
+}
+
+function conversationEvidenceReadToolInput(input: Record<string, unknown>): {
+  evidenceId: string;
+  turnId: string;
+  offset: number;
+  maxChars: number;
+} {
+  const required = (value: unknown, field: string): string => {
+    if (typeof value !== "string" || !value.trim() || value.length > 160) {
+      throw new Error(`read_conversation_evidence ${field} must be a bounded string`);
+    }
+    return value.trim();
+  };
+  const boundedInteger = (value: unknown, field: string, fallback: number, min: number, max: number): number => {
+    if (value === undefined) return fallback;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new Error(`read_conversation_evidence ${field} is out of bounds`);
+    }
+    return value;
+  };
+  return {
+    evidenceId: required(input.evidence_id, "evidence_id"),
+    turnId: required(input.turn_id, "turn_id"),
+    offset: boundedInteger(input.offset, "offset", 0, 0, 64 * 1024),
+    maxChars: boundedInteger(input.max_chars, "max_chars", 5_000, 128, 12_000),
+  };
+}
+
+function conversationEvidenceSearchToolInput(input: Record<string, unknown>): {
+  query: string;
+  offset: number;
+  limit: number;
+} {
+  if (typeof input.query !== "string" || !input.query.trim() || input.query.length > 512) {
+    throw new Error("search_conversation_evidence query must be a bounded non-empty string");
+  }
+  const boundedInteger = (value: unknown, field: string, fallback: number, min: number, max: number): number => {
+    if (value === undefined) return fallback;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new Error(`search_conversation_evidence ${field} is out of bounds`);
+    }
+    return value;
+  };
+  return {
+    query: input.query.trim(),
+    offset: boundedInteger(input.offset, "offset", 0, 0, 1_000_000_000),
+    limit: boundedInteger(input.limit, "limit", 10, 1, 20),
+  };
 }
 
 function stableExternalSpawnPillId(invocationId: string): string {

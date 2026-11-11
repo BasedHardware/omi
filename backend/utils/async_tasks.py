@@ -21,6 +21,7 @@ import asyncio
 import logging
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Awaitable, Coroutine, Dict, Generic, Iterable, List, TypeVar, cast
@@ -211,8 +212,10 @@ class WebSocketTaskSupervisor:
             label=self.label,
         )
 
-    async def drain_monitored(self, *, timeout: float, cancel: bool = False) -> int:
-        return await drain_tasks(self._monitored_tasks, timeout=timeout, label=f"{self.label}_bg", cancel=cancel)
+    async def drain_monitored(self, *, timeout: float, cancel: bool = False, deadline: float | None = None) -> int:
+        return await drain_tasks(
+            self._monitored_tasks, timeout=timeout, label=f"{self.label}_bg", cancel=cancel, deadline=deadline
+        )
 
     async def drain_all(self, *, timeout: float, cancel: bool = True) -> int:
         return await drain_tasks(
@@ -266,11 +269,15 @@ async def supervise_tasks(
         done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
 
         exit_result = None
-        for task in done:
-            if task is receive_task:
-                exit_result = SupervisorResult(reason="disconnect", task_name=task.get_name())
-                break
-            if not task.cancelled():
+        if receive_task in done:
+            # The client disconnect owns the exit reason for the round it lands in.
+            # `done` is a set, so scanning it in iteration order let a bg task that
+            # observed the same disconnect report "crash" on ordering luck alone.
+            exit_result = SupervisorResult(reason="disconnect", task_name=receive_task.get_name())
+        else:
+            for task in done:
+                if task.cancelled():
+                    continue
                 try:
                     exc = task.exception()
                 except asyncio.CancelledError:
@@ -302,6 +309,7 @@ async def drain_tasks(
     timeout: float = 30.0,
     label: str = "drain",
     cancel: bool = True,
+    deadline: float | None = None,
 ) -> int:
     """Cancel and wait for tasks to finish within timeout.
 
@@ -316,7 +324,10 @@ async def drain_tasks(
             task.cancel()
 
     with DRAIN_DURATION.labels(label=label).time():
-        done, still_pending = await asyncio.wait(pending, timeout=timeout)
+        done, still_pending = await asyncio.wait(
+            pending,
+            timeout=timeout if deadline is None else max(0.0, min(timeout, deadline - time.monotonic())),
+        )
 
     for task in done:
         if not task.cancelled():
@@ -334,7 +345,9 @@ async def drain_tasks(
         for task in still_pending:
             task.cancel()
         # Bounded wait for cancel acknowledgement — never block indefinitely
-        _, truly_stuck = await asyncio.wait(still_pending, timeout=5.0)
+        _, truly_stuck = await asyncio.wait(
+            still_pending, timeout=5.0 if deadline is None else max(0.0, min(5.0, deadline - time.monotonic()))
+        )
         force_cancelled = len(still_pending)
         if truly_stuck:
             logger.error(

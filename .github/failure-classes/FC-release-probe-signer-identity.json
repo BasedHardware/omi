@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-release-probe-signer-identity",
+  "violated_contract": "A Firebase release probe must sign its custom token with an explicitly selected service account from the same Firebase project as the API key and expected ID-token audience.",
+  "canonical_prevention": "Stage the environment-owned Firebase signer only as owner-readable transient runner material, reject signer-project drift before key use, keep bounded redacted failure classes, and enforce the signer-before-probe-before-traffic ordering in the deployment contract.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_firebase_release_probe_token.py",
+    ".github/scripts/test_check_desktop_backend_release_policy.py"
+  ],
+  "evidence_prs": [
+    10670
+  ],
+  "scope_hints": [
+    ".github/workflows/*desktop_backend*.yml",
+    "backend/scripts/firebase_release_probe_token.py",
+    "backend/tests/unit/test_firebase_release_probe_token.py"
+  ],
+  "status": "open"
+}

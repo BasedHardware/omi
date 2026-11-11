@@ -1,0 +1,7 @@
+{
+  "version": "0.12.143",
+  "date": "2026-07-28",
+  "changes": [
+    "Improved desktop cloud reliability and agent startup"
+  ]
+}

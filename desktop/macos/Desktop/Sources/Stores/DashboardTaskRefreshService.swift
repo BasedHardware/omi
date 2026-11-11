@@ -79,6 +79,21 @@ enum DashboardTaskRefreshService {
       )
       return
     }
+    guard
+      store.canReconcileDashboardServerState(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    else {
+      // This service treats an exact-ID 404 as authority to hard-delete a
+      // local row. The store owns the legacy-recovery boundary, so enforce it
+      // here as well as at callers before any server reconciliation begins.
+      await store.loadDashboardTasks(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+      return
+    }
 
     await store.loadDashboardTasks(
       expectedOwnerID: expectedOwnerID,

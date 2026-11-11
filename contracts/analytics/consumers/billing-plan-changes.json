@@ -1,0 +1,16 @@
+{
+  "id": "billing-plan-changes",
+  "kind": "question",
+  "owner": "Billing",
+  "question": "Which webhook-confirmed paid price changes expand or contract monthly catalog MRR? This query tests presence; production revenue queries must deduplicate by $insert_id and use backend environment rather than a client build.",
+  "query": "contracts/analytics/consumers/billing-plan-changes.sql",
+  "events": [
+    "billingSubscriptionPlanChanged"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero means no observed price changes, or missing webhook analytics delivery; it is not evidence of zero revenue movement."
+}

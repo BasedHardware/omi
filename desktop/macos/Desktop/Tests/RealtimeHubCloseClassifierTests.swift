@@ -1,15 +1,76 @@
+import Network
 import XCTest
 
 @testable import Omi_Computer
 
 final class RealtimeHubCloseClassifierTests: XCTestCase {
+  func testClassifiesTypedPOSIXAddressFailureWithoutParsingLocalizedText() {
+    let systemError = NSError(
+      domain: NSPOSIXErrorDomain,
+      code: Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue),
+      userInfo: [NSLocalizedDescriptionKey: "locale-dependent text"])
+    let failure = RealtimeHubTransportFailure.system(systemError, phase: .receive)
+
+    XCTAssertEqual(failure.kind, .localAddressUnavailable)
+    XCTAssertEqual(failure.systemDomain, "posix")
+    XCTAssertEqual(failure.systemCode, Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue))
+    XCTAssertEqual(
+      RealtimeHubCloseClassifier.category(
+        failure: failure,
+        aliveFor: 1,
+        provider: .gemini),
+      .localAddressUnavailable)
+    XCTAssertTrue(
+      RealtimeHubCloseClassifier.isActionableClose(.localAddressUnavailable))
+  }
+
+  func testProviderErrorDetailIsLocalOnlyWhileCategoryRemainsActionable() {
+    let failure = RealtimeHubTransportFailure.providerError("raw provider payload")
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 1,
+      provider: .gemini)
+    let plan = RealtimeHubFailureReportingPlan.make(
+      failure: failure,
+      category: category,
+      provider: "gemini",
+      aliveFor: 1,
+      activeTurn: true)
+
+    XCTAssertEqual(category, .providerError)
+    XCTAssertTrue(plan.localMessage.contains("raw provider payload"))
+    XCTAssertFalse(plan.boundedErrorMessage.contains("raw provider payload"))
+  }
+
+  func testUnclassifiedProviderCloseReasonNeverEntersBoundedErrorMessage() {
+    let rawReason = "upstream 1011 secret marker"
+    let failure = RealtimeHubTransportFailure.providerClose(code: 1011, reason: rawReason)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 1,
+      provider: .gemini)
+    let plan = RealtimeHubFailureReportingPlan.make(
+      failure: failure,
+      category: category,
+      provider: "gemini",
+      aliveFor: 1,
+      activeTurn: true)
+
+    XCTAssertNil(category)
+    XCTAssertTrue(plan.localMessage.contains(rawReason))
+    XCTAssertEqual(
+      plan.boundedErrorMessage,
+      "RealtimeHub: session error category=unclassified provider=gemini activeTurn=true")
+    XCTAssertFalse(plan.boundedErrorMessage.contains(rawReason))
+  }
+
   func testClassifiesLongLivedWebSocket1008AsExpectedIdleTeardownOnlyWhenIdle() {
     let category = RealtimeHubCloseClassifier.category(
       message: "WebSocket closed (1008)",
       aliveFor: RealtimeHubCloseClassifier.idleTeardownThreshold + 1)
 
     XCTAssertEqual(category, .expectedIdleTeardown)
-    XCTAssertFalse(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+    XCTAssertFalse(RealtimeHubCloseClassifier.isActionableClose(category))
   }
 
   func testClassifiesLongLivedActiveWebSocket1008AsProviderPolicyClose() {
@@ -19,7 +80,7 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
       hasActiveTurn: true)
 
     XCTAssertEqual(category, .providerPolicyCloseFast)
-    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+    XCTAssertTrue(RealtimeHubCloseClassifier.isActionableClose(category))
   }
 
   func testClassifiesOpenAIMaximumDurationAsExpectedSessionRotation() {
@@ -34,7 +95,7 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
         for: category,
         hasActiveTurn: false),
       .rewarmIdleTransport)
-    XCTAssertFalse(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+    XCTAssertFalse(RealtimeHubCloseClassifier.isActionableClose(category))
   }
 
   func testOpenAISessionRotationDuringTurnRequiresReducerOwnedTerminalization() {
@@ -67,7 +128,7 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
       provider: .openai)
 
     XCTAssertEqual(category, .expectedIdleTeardown)
-    XCTAssertFalse(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+    XCTAssertFalse(RealtimeHubCloseClassifier.isActionableClose(category))
   }
 
   func testClassifiesActiveTurnSocketNotConnectedAsReportableError() {
@@ -78,7 +139,7 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
       provider: .openai)
 
     XCTAssertNil(category)
-    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+    XCTAssertTrue(RealtimeHubCloseClassifier.isActionableClose(category))
   }
 
   func testClassifiesFastSocketNotConnectedAsReportableError() {
@@ -88,7 +149,7 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
       provider: .openai)
 
     XCTAssertNil(category)
-    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+    XCTAssertTrue(RealtimeHubCloseClassifier.isActionableClose(category))
   }
 
   func testClassifiesFastWebSocket1008AsProviderPolicyClose() {
@@ -97,7 +158,7 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
       aliveFor: 3)
 
     XCTAssertEqual(category, .providerPolicyCloseFast)
-    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+    XCTAssertTrue(RealtimeHubCloseClassifier.isActionableClose(category))
   }
 
   func testDoesNotClassifyOtherRealtimeErrors() {
@@ -106,7 +167,75 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
       aliveFor: 120)
 
     XCTAssertNil(category)
-    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+    XCTAssertTrue(RealtimeHubCloseClassifier.isActionableClose(category))
+  }
+
+  func testRecordsTypedPOSIXErrnoForNetworkFrameworkFailures() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+
+    XCTAssertEqual(failure.systemDomain, "posix")
+    XCTAssertEqual(failure.systemCode, Int(POSIXErrorCode.ECONNRESET.rawValue))
+  }
+
+  func testClassifiesAgedIdleReceiveResetAsExpectedTeardown() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: RealtimeHubCloseClassifier.idleTeardownThreshold + 1,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .expectedIdleTeardown)
+    XCTAssertFalse(RealtimeHubCloseClassifier.isActionableClose(category))
+  }
+
+  func testClassifiesAgedIdleSendDisconnectAsExpectedTeardown() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ENOTCONN), phase: .send)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 600,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .expectedIdleTeardown)
+  }
+
+  func testClassifiesFastReceiveResetAsReportableTransportError() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 3,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .transportReceive)
+    XCTAssertTrue(RealtimeHubCloseClassifier.isActionableClose(category))
+  }
+
+  func testClassifiesAgedReceiveResetDuringTurnAsReportableTransportError() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 600,
+      hasActiveTurn: true,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .transportReceive)
+    XCTAssertTrue(RealtimeHubCloseClassifier.isActionableClose(category))
+  }
+
+  func testClassifiesAgedIdleNonDisconnectReceiveFailureAsReportableTransportError() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.EHOSTUNREACH), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 600,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .transportReceive)
+    XCTAssertTrue(RealtimeHubCloseClassifier.isActionableClose(category))
   }
 
   func testCredentialClassifierDetectsProviderAuthFailures() {
@@ -132,5 +261,20 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
       provider: .gemini)
 
     XCTAssertEqual(category, .providerQuotaExceeded)
+  }
+
+  func testUsageLimitPopupIsOnlyForQuotaCloseAfterFailoverExhausts() {
+    XCTAssertTrue(
+      RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: .providerQuotaExceeded, failoverStarted: false))
+    XCTAssertFalse(
+      RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: .providerQuotaExceeded, failoverStarted: true))
+    XCTAssertFalse(
+      RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: .expectedIdleTeardown, failoverStarted: false))
+    XCTAssertFalse(
+      RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: .providerPolicyCloseFast, failoverStarted: false))
   }
 }

@@ -69,8 +69,11 @@ def test_fresh_short_term_remains_default_accessible_until_expiry():
     assert decision.audit_metadata['decision_reason'] == 'short_term_fresh'
 
 
-def test_stale_short_term_is_default_excluded_and_requires_lifecycle_decision():
-    item = _short_term_item(captured_at=NOW - timedelta(days=31))
+def test_stored_30_day_expiry_is_clamped_to_48_hours():
+    item = _short_term_item(
+        captured_at=NOW - timedelta(hours=49),
+        expires_at=NOW + timedelta(days=28),
+    )
 
     decision = evaluate_short_term_lifecycle(item, now=NOW)
 
@@ -78,6 +81,20 @@ def test_stale_short_term_is_default_excluded_and_requires_lifecycle_decision():
     assert decision.default_access_allowed is False
     assert decision.requires_lifecycle_decision is True
     assert decision.audit_metadata['decision_reason'] == 'short_term_expired_requires_lifecycle_decision'
+
+
+def test_short_term_under_48_hours_stays_fresh_with_legacy_stamp():
+    item = _short_term_item(
+        captured_at=NOW - timedelta(hours=12),
+        expires_at=NOW + timedelta(days=29),
+    )
+
+    decision = evaluate_short_term_lifecycle(item, now=NOW)
+
+    assert decision.outcome == ShortTermLifecycleOutcome.remain_short_term
+    assert decision.default_access_allowed is True
+    assert decision.requires_lifecycle_decision is False
+    assert decision.audit_metadata['decision_reason'] == 'short_term_fresh'
 
 
 def test_l2_processed_item_routes_to_provided_disposition():

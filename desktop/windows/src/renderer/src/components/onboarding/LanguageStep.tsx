@@ -15,6 +15,7 @@ export function LanguageStep({
   totalSteps,
   initialValue,
   onContinue,
+  onBack,
   aside
 }: LanguageStepProps): React.JSX.Element {
   const [mode, setMode] = useState<'english' | 'other'>(
@@ -30,6 +31,7 @@ export function LanguageStep({
       eyebrow="LANGUAGE"
       title="Pick your language."
       align="left"
+      onBack={onBack}
       aside={aside}
     >
       <div className="flex gap-3">
@@ -38,7 +40,9 @@ export function LanguageStep({
           onClick={() => onContinue('en')}
           className={
             'rounded-xl px-8 py-3 text-sm font-medium ' +
-            (mode === 'english' ? 'bg-white text-black' : 'bg-white/[0.06] text-white/80 hover:bg-white/[0.1]')
+            (mode === 'english'
+              ? 'bg-white text-black'
+              : 'bg-white/[0.06] text-white/80 hover:bg-white/[0.1]')
           }
         >
           English
@@ -48,7 +52,9 @@ export function LanguageStep({
           onClick={() => setMode('other')}
           className={
             'rounded-xl px-8 py-3 text-sm font-medium ' +
-            (mode === 'other' ? 'bg-white text-black' : 'bg-white/[0.06] text-white/80 hover:bg-white/[0.1]')
+            (mode === 'other'
+              ? 'bg-white text-black'
+              : 'bg-white/[0.06] text-white/80 hover:bg-white/[0.1]')
           }
         >
           Other

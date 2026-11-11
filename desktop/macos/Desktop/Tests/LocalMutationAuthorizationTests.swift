@@ -240,7 +240,7 @@ final class LocalMutationAuthorizationTests: XCTestCase {
     let allowQuiescenceToFinish = OwnerTransitionTestGate()
 
     let transition = Task {
-      await fence.performEffectiveOwnerTransition(
+      try await fence.performEffectiveOwnerTransition(
         currentOwner: { probe.owner() },
         plannedNextOwner: { _ in "owner-b" },
         quiescePreviousOwner: { previousOwner, plannedOwner in
@@ -274,7 +274,7 @@ final class LocalMutationAuthorizationTests: XCTestCase {
     XCTAssertEqual(snapshot.events, ["quiesce_started"])
 
     await allowQuiescenceToFinish.open()
-    await transition.value
+    try await transition.value
     try await ownerBMutation.value
 
     snapshot = probe.snapshot()
@@ -286,6 +286,40 @@ final class LocalMutationAuthorizationTests: XCTestCase {
         "quiesce_started", "quiesce_finished", "owner_mutation", "retarget",
         "owner_changed", "mutation_validator",
       ])
+  }
+
+  func testLeaseHeldAcrossQueuedTransitionIsReportedSuperseded() async throws {
+    let fence = EffectiveOwnerTransitionFence()
+    let probe = EffectiveOwnerTransitionProbe()
+
+    let ownerALease = try await fence.acquireMutationLease(validating: { true })
+    let transition = Task {
+      try await fence.performEffectiveOwnerTransition(
+        currentOwner: { probe.owner() },
+        plannedNextOwner: { _ in "owner-b" },
+        quiescePreviousOwner: { _, _ in },
+        transition: { probe.setOwner("owner-b") },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {})
+    }
+    await fence.waitUntilTransitionIsPending()
+
+    // The owner is still A here: the transition is queued behind this lease and
+    // has not published B yet. The lease must still learn that it was superseded.
+    XCTAssertEqual(probe.owner(), "owner-a")
+    let ownerASuperseded = await fence.releaseMutationLease(ownerALease)
+    XCTAssertTrue(
+      ownerASuperseded,
+      "a lease held across a queued owner transition must report as superseded")
+
+    try await transition.value
+    XCTAssertEqual(probe.owner(), "owner-b")
+
+    let ownerBLease = try await fence.acquireMutationLease(validating: { true })
+    let ownerBSuperseded = await fence.releaseMutationLease(ownerBLease)
+    XCTAssertFalse(
+      ownerBSuperseded,
+      "a lease acquired after the transition completed must not report as superseded")
   }
 
   private func assertRevoked(

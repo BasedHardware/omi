@@ -1,11 +1,12 @@
-import type { ListenEvent, TranscriptLine } from '../../../shared/types'
+import type { ListenEvent, LiveStoreOp, TranscriptLine } from '../../../shared/types'
 
 export type LiveStatus = 'idle' | 'connecting' | 'live' | 'error'
 
-// Singleton store for the CURRENT in-progress conversation's live transcript.
-// Both the background ContinuousRecordingHost (writer) and the LiveConversation
-// view (reader) use it, so the live view shows whatever the always-on stream is
-// capturing. Cleared when the backend signals a conversation boundary.
+// Singleton store for the CURRENT in-progress conversation's live transcript. The
+// capture window's mic session writes it (via captureLiveStore, which mirrors each
+// mutation to UI windows as a LiveStoreOp); UI windows apply those with
+// applyRemoteOp and the LiveConversation view reads the result. Cleared when the
+// backend signals a conversation boundary.
 let segments: TranscriptLine[] = []
 let status: LiveStatus = 'idle'
 let errorMsg: string | null = null
@@ -92,6 +93,32 @@ export const liveConversation = {
     savedEmoji = ''
     notify()
   },
+  // Apply a store op broadcast by the capture window (which owns the always-on
+  // mic session). UI windows call this to mirror the capture window's store so the
+  // LiveConversation view shows the live transcript even though the session runs
+  // in another window. Pure w.r.t. the module store — no IPC, so it's unit-tested.
+  applyRemoteOp(op: LiveStoreOp): void {
+    switch (op.op) {
+      case 'reset':
+        this.reset()
+        break
+      case 'status':
+        this.setStatus(op.status, op.error)
+        break
+      case 'append':
+        this.appendLine(op.line)
+        break
+      case 'saved':
+        // Snap the mirror to exactly the saved segments, flagged "saved" (title/
+        // emoji fill in when the UI window's titler resolves via setSavedTopic).
+        segments = op.segments
+        saved = true
+        savedTitle = ''
+        savedEmoji = ''
+        notify()
+        break
+    }
+  },
   subscribe(cb: () => void): () => void {
     subscribers.add(cb)
     return () => {
@@ -122,6 +149,19 @@ export function onFinalizeRequest(cb: () => void): () => void {
   }
 }
 
+// The capture window (renderer #/capture) owns the always-on mic session and its
+// finalize subscriber; every UI window just forwards the request to it.
+function isCaptureWindow(): boolean {
+  return typeof window !== 'undefined' && window.location?.hash?.startsWith('#/capture')
+}
+
 export function requestFinalize(): void {
+  // In a UI window the session lives in the capture window — send the command
+  // (main forwards it). In the capture window, notify the local subscriber (the
+  // running liveMicSession) directly.
+  if (!isCaptureWindow() && typeof window !== 'undefined' && window.omi?.captureCommand) {
+    window.omi.captureCommand({ type: 'live-finalize' })
+    return
+  }
   finalizeSubscribers.forEach((cb) => cb())
 }

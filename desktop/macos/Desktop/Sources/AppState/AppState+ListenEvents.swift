@@ -3,14 +3,106 @@ import Combine
 import SwiftUI
 @preconcurrency import UserNotifications
 
+/// Whether a cloud-published proactive message earns a desktop delivery.
+///
+/// Pure so the decision is testable without a runtime owner, a notification
+/// service, or a live listen socket — the handler previously had no way to
+/// assert "shown here, suppressed there", only that it did not crash.
+///
+/// This deliberately stops at *routing*. Once a message is admitted it goes to
+/// `NotificationService`, which owns the master toggle, the frequency throttle,
+/// the snooze and the presence withholding. Re-deciding any of those here would
+/// give the cloud a second, divergent copy of the user's notification policy,
+/// which is the exact failure this type exists to prevent.
+enum ProactiveListenAdmission {
+  enum Reason: String, Equatable {
+    case emptyMessage
+    case noRuntimeOwner
+  }
+
+  enum Outcome: Equatable {
+    case deliver(title: String, message: String, assistantId: String)
+    case skip(Reason)
+  }
+
+  static let fallbackAssistantID = "proactive-listen"
+
+  static func decide(
+    appID: String,
+    title: String,
+    message: String,
+    hasRuntimeOwner: Bool
+  ) -> Outcome {
+    guard !message.isEmpty else { return .skip(.emptyMessage) }
+    // A stale listen session must not deliver to whoever is signed in now.
+    guard hasRuntimeOwner else { return .skip(.noRuntimeOwner) }
+    return .deliver(
+      title: title,
+      message: message,
+      assistantId: appID.isEmpty ? fallbackAssistantID : appID)
+  }
+}
+
 @MainActor
 extension AppState {
   func handleBackendSegments(_ segments: [TranscriptionService.BackendSegment]) {
-    for segment in segments {
-      guard !segment.text.isEmpty else { continue }
+    var segmentsToPersist = [TranscriptionService.BackendSegment]()
 
-      // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
-      let speakerId = segment.speaker_id ?? 0
+    for incomingSegment in segments {
+      guard !incomingSegment.text.isEmpty else { continue }
+      UpdateInstallActivity.markTranscriptActivity()
+
+      // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0). Keep an
+      // unattributed segment unknown: coercing nil to speaker 0 granted it the
+      // primary-user fallback used by wake word and barge-in admission.
+      let speakerId = incomingSegment.speaker_id ?? -1
+
+      var segment: TranscriptionService.BackendSegment
+      if sttSession.useLocalSTT, let manualPersonId = liveManualSpeakerPersonMap[speakerId] {
+        segment = segmentWithPersonId(incomingSegment, personId: manualPersonId)
+      } else {
+        segment = incomingSegment
+      }
+
+      // Omi speaks into a room Omi is also recording, so ambient capture returns the
+      // assistant's own voice attributed to the primary speaker. Every consumer below
+      // then acts on it as if a person had spoken: barge-in halts the very playback that
+      // produced it (observed live, three times in one six-turn session, which is why a
+      // long answer stops partway), the wake word can be commanded by an answer carrying
+      // the wake phrase, and the conversation record and memory extraction gain speech
+      // nobody said. One guard here, where all of them route through.
+      switch VoicePlaybackEchoPolicy.classify(
+        transcript: segment.text,
+        spokenWords: FloatingBarVoicePlaybackService.shared.recentlySpokenWords
+      ) {
+      case .keep:
+        break
+      case .drop:
+        log("Transcription [ECHO]: dropped Omi's own playback heard back: \(segment.text.prefix(60))")
+        continue
+      case .keepResidue(let spoken):
+        // The user talked over the end of the playback. There is no pause to close the
+        // window on while Omi is speaking, so both land in one segment; keeping only the
+        // part Omi did not say is what lets a barge-in survive.
+        log("Transcription [ECHO]: kept the user's words from a segment Omi spoke over: \(spoken.prefix(60))")
+        segment.text = spoken
+      }
+
+      // Barge-in interruption: if the user speaks while voice playback is active,
+      // halt playback immediately so Omi never talks over the user.
+      if VoiceBargeInPolicy.shouldInterrupt(
+        isUser: segment.is_user,
+        speaker: speakerId,
+        text: segment.text,
+        previouslyHeard: segment.id.flatMap { id in
+          speakerSegments.first(where: { $0.segmentId == id })?.text
+        },
+        isSpeaking: FloatingBarVoicePlaybackService.shared.isSpeaking,
+        spokenWords: FloatingBarVoicePlaybackService.shared.recentlySpokenWords
+      ) {
+        log("Transcription [BARGE-IN]: User spoke mid-playback; interrupting voice output")
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+      }
 
       // Convert backend segment to local SpeakerSegment
       let translations = (segment.translations ?? []).map {
@@ -27,6 +119,8 @@ extension AppState {
         translations: translations
       )
 
+      var wakeWordSegment: SpeakerSegment?
+
       // Upsert: if we already have a segment with this ID, update it; otherwise append
       if let segId = segment.id,
         let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == segId })
@@ -40,16 +134,57 @@ extension AppState {
           updatedSeg.translations = speakerSegments[existingIdx].translations
         }
         speakerSegments[existingIdx] = updatedSeg
+        wakeWordSegment = updatedSeg
         log(
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
+        segmentsToPersist.append(segment)
+      } else if sttSession.useLocalSTT {
+        // Echo dedup is local-STT-only by architecture: only the local engine
+        // runs the two capture lanes (mic + system-audio tap) that produce
+        // cross-lane playback duplicates. Cloud mode mixes mic and system into
+        // one mono stream, so the same playback cannot transcribe twice and
+        // is_user comes from backend diarization — running this dedup there
+        // would risk suppressing real speech with no echo to remove.
+        switch LocalTranscriptionDuplicatePolicy.decision(for: newSeg, existing: speakerSegments) {
+        case .accept:
+          appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+          wakeWordSegment = newSeg
+
+        case .suppressIncoming:
+          log(
+            "Transcript [DEDUP] Suppressed mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
+          )
+
+        case .replaceExisting(let existingSegmentId):
+          guard let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == existingSegmentId }) else {
+            appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+            wakeWordSegment = newSeg
+            break
+          }
+
+          let oldWords = speakerSegments[existingIdx].text.split(separator: " ").count
+          let newWords = newSeg.text.split(separator: " ").count
+          totalWordCount += newWords - oldWords
+
+          var replacement = newSeg
+          replacement.segmentId = existingSegmentId
+          speakerSegments[existingIdx] = replacement
+          wakeWordSegment = replacement
+          segmentsToPersist.append(segmentWithID(segment, id: existingSegmentId))
+          log(
+            "Transcript [DEDUP] Promoted system-audio copy over mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
+          )
+        }
       } else {
-        totalWordCount += newSeg.text.split(separator: " ").count
-        speakerSegments.append(newSeg)
-        totalSegmentCount += 1
-        log(
-          "Transcript [ADD] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
-        )
+        appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+        wakeWordSegment = newSeg
+      }
+
+      // A local mic/system duplicate can be playback echo. Only a segment that
+      // survived that policy may trigger the wake-word command path.
+      if let wakeWordSegment {
+        WakeWordService.shared.observe(wakeWordSegment)
       }
     }
 
@@ -67,12 +202,74 @@ extension AppState {
     LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
 
     // Persist segments to DB for crash safety (upsert by backend segment ID)
-    if let sessionId = currentSessionId {
-      let segmentsToPersist = segments
-      Task {
-        await persistBackendSegmentsToStorage(segmentsToPersist, sessionId: sessionId)
-      }
+    if let sessionId = currentSessionId, !segmentsToPersist.isEmpty {
+      enqueueTranscriptPersistence(segmentsToPersist, sessionId: sessionId)
     }
+  }
+
+  private func appendNewTranscriptSegment(
+    _ newSegment: SpeakerSegment,
+    segment: TranscriptionService.BackendSegment,
+    to segmentsToPersist: inout [TranscriptionService.BackendSegment]
+  ) {
+    totalWordCount += newSegment.text.split(separator: " ").count
+    speakerSegments.append(newSegment)
+    totalSegmentCount += 1
+    captureAttempt?.noteSpeech()
+    segmentsToPersist.append(segment)
+    log(
+      "Transcript [ADD] Speaker \(newSegment.speaker) [\(String(format: "%.1f", newSegment.start))s-\(String(format: "%.1f", newSegment.end))s]: \(segment.text.prefix(80))"
+    )
+  }
+
+  private func segmentWithPersonId(
+    _ segment: TranscriptionService.BackendSegment,
+    personId: String
+  ) -> TranscriptionService.BackendSegment {
+    TranscriptionService.BackendSegment(
+      id: segment.id,
+      text: segment.text,
+      speaker: segment.speaker,
+      speaker_id: segment.speaker_id,
+      is_user: false,
+      person_id: personId,
+      start: segment.start,
+      end: segment.end,
+      translations: segment.translations
+    )
+  }
+
+  private func segmentWithID(
+    _ segment: TranscriptionService.BackendSegment,
+    id: String
+  ) -> TranscriptionService.BackendSegment {
+    TranscriptionService.BackendSegment(
+      id: id,
+      text: segment.text,
+      speaker: segment.speaker,
+      speaker_id: segment.speaker_id,
+      is_user: segment.is_user,
+      person_id: segment.person_id,
+      start: segment.start,
+      end: segment.end,
+      translations: segment.translations
+    )
+  }
+
+  private func enqueueTranscriptPersistence(
+    _ segments: [TranscriptionService.BackendSegment],
+    sessionId: Int64
+  ) {
+    let previous = transcriptPersistenceTail
+    transcriptPersistenceTail = Task { @MainActor [weak self] in
+      await previous?.value
+      guard let self else { return }
+      await self.persistBackendSegmentsToStorage(segments, sessionId: sessionId)
+    }
+  }
+
+  func flushTranscriptPersistence() async {
+    await transcriptPersistenceTail?.value
   }
 
   func persistBackendSegmentsToStorage(
@@ -119,9 +316,15 @@ extension AppState {
       )
     else {
       pendingBackendConversationId = nil
-      if let currentBackendConversationId, currentBackendConversationId != backendId {
-        ignoredRotatedBackendConversationIds.insert(backendId)
-      }
+      // A repeated callback for an already-ignored rollover is harmless. Do
+      // not evict an unrelated guard entry just because that stale callback
+      // arrived again; eviction is reserved for a newly observed rotation.
+      ignoredRotatedBackendConversationIds = DesktopConversationMatchPolicy.rememberingRotatedBackendId(
+        backendId,
+        activeBackendId: currentBackendConversationId,
+        ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds,
+        maxCount: Self.maxIgnoredRotatedBackendConversationIds
+      )
       log("Transcription: Ignoring non-matching backend conversation id \(backendId) for current local session")
       return
     }
@@ -176,6 +379,12 @@ extension AppState {
       return false
     }
     if let recordingSessionId, let lifecycleSequence {
+      if lifecycleSequenceByRecordingSession.count >= Self.maxLifecycleRecordingSessions,
+        lifecycleSequenceByRecordingSession[recordingSessionId] == nil,
+        let evicted = lifecycleSequenceByRecordingSession.keys.first
+      {
+        lifecycleSequenceByRecordingSession.removeValue(forKey: evicted)
+      }
       lifecycleSequenceByRecordingSession[recordingSessionId] = lifecycleSequence
     }
     return true
@@ -252,45 +461,37 @@ extension AppState {
       // Mark DB session as completed so TranscriptionRetryService won't re-upload.
       // Only bind the session captured before rotation; live events may arrive while
       // the next recording is already active.
-      let targetSessionId = finishedSessionId
-      let targetClientConversationId = finishedClientConversationId
-      let targetStartTime = finishedRecordingStartTime
-      let didBindLocalSession: Bool
       let conversationId = event.raw["conversation_id"] as? String ?? memoryId
       guard conversationId == memoryId,
+        let targetIndex = DesktopConversationMatchPolicy.matchingFinishedRecordingIndex(
+          memoryId: memoryId,
+          memory: memory,
+          recordingSessionId: recordingSessionId,
+          pending: pendingFinishedRecordings
+        )
+      else {
+        log("Transcription: Ignoring memory_created \(memoryId); no matching finished local recording")
+        break
+      }
+      let target = pendingFinishedRecordings[targetIndex]
+      guard
         acceptsLifecycleEnvelope(
           event,
           conversationId: conversationId,
           expectedLifecyclePhase: "completed",
-          expectedBackendId: targetClientConversationId
+          expectedBackendId: target.clientConversationId
         )
       else {
         break
       }
-      if !DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
-        memoryId: memoryId,
-        recordingSessionId: recordingSessionId,
-        expectedBackendId: targetClientConversationId
-      ) {
-        log("Transcription: Ignoring stale memory_created \(memoryId) for finished recording")
-        break
-      }
+
       isSavingConversation = false
-      // New desktop sessions carry an exact client-generated recording id, so
-      // they must never fall back to a timestamp guess. Timestamp matching is
-      // retained only for legacy sessions without that identity.
-      let matchesFinishedRecording =
-        targetClientConversationId != nil
-        || DesktopConversationMatchPolicy.memoryEventMatchesFinishedSession(
-          memory, sessionStartedAt: targetStartTime ?? .distantPast)
-      if let sessionId = targetSessionId,
-        memoryId != "?",
-        matchesFinishedRecording
-      {
-        finishedSessionId = nil  // Consume once
-        finishedClientConversationId = nil
-        finishedRecordingStartTime = nil
-        didBindLocalSession = true
+      pendingFinishedRecordings.remove(at: targetIndex)
+      if let recordingSessionId {
+        lifecycleSequenceByRecordingSession.removeValue(forKey: recordingSessionId)
+      }
+
+      if let sessionId = target.sessionId {
         Task {
           do {
             try await TranscriptionStorage.shared.markSessionCompleted(
@@ -302,37 +503,11 @@ extension AppState {
           }
         }
       } else {
-        didBindLocalSession = false
-        if memoryId != "?" {
-          if targetSessionId == nil || targetStartTime == nil {
-            log(
-              "Transcription: Ignoring memory_created \(memoryId); no finished local session is awaiting backend binding"
-            )
-          } else if let sessionId = targetSessionId, let startTime = targetStartTime {
-            if let memoryStartedAt = DesktopConversationMatchPolicy.parseMemoryEventDate(
-              memory?["started_at"] ?? memory?["startedAt"])
-            {
-              let delta = abs(memoryStartedAt.timeIntervalSince(startTime))
-              if delta >= DesktopConversationMatchPolicy.startedAtTolerance {
-                log(
-                  "Transcription: Ignoring memory_created event; started_at delta \(String(format: "%.1f", delta))s exceeds session match tolerance"
-                )
-              }
-            }
-            log(
-              "Transcription: Waiting for API reconciliation before binding memory_created \(memoryId) to local session \(sessionId)"
-            )
-          }
-        }
-      }
-
-      // Track conversation creation — use captured start time for accurate duration after session rotation
-      if didBindLocalSession, let startTime = targetStartTime {
-        let durationSeconds = Int(Date().timeIntervalSince(startTime))
+        log("Transcription: Accepted memory_created \(memoryId) without a durable local session")
         AnalyticsManager.shared.conversationCreated(
           conversationId: memoryId,
-          source: currentConversationSource.rawValue,
-          durationSeconds: durationSeconds
+          source: target.source.rawValue,
+          durationSeconds: max(0, Int(Date().timeIntervalSince(target.startedAt)))
         )
       }
 
@@ -345,16 +520,7 @@ extension AppState {
       }
 
     case "speaker_label_suggestion":
-      let speakerId = event.raw["speaker_id"] as? Int ?? 0
-      let personId = event.raw["person_id"] as? String
-      let personName = event.raw["person_name"] as? String ?? "Unknown"
-      log(
-        "Transcription: Speaker \(speakerId) identified as \(personName) (person_id: \(personId ?? "nil"))"
-      )
-      // Update live speaker-person mapping
-      if let personId = personId {
-        liveSpeakerPersonMap[speakerId] = personId
-      }
+      applyRefactorSpeakerEvent(event.raw)
 
     case "segments_deleted":
       if let segmentIds = event.raw["segment_ids"] as? [String] {
@@ -393,7 +559,7 @@ extension AppState {
       // BYOK users must never be paywalled. The backend exempts them, but a
       // heartbeat/Firestore lag can briefly let this event slip through right
       // after activation — ignore it so we don't kill a BYOK user's capture.
-      if APIKeyService.isByokActive {
+      if APIKeyService.hasTranscriptionBYOK {
         log("Paywall: ignoring freemium threshold — BYOK active locally")
         if isPaywalled { isPaywalled = false }
         break
@@ -405,12 +571,18 @@ extension AppState {
       // confusing and a battery/trust hit. Sticky until next app launch or
       // successful plan reactivation.
       isPaywalled = true
+      // The admission event is fresher than the 60s trial-metadata poll: record
+      // it so `fetchTrialMetadata` cannot immediately clear the flag and let a
+      // persisted-intent restore re-arm capture into another rejection — a
+      // verdict disagreement would otherwise loop stop/start forever (SCA-526).
+      lastPaywallAdmissionStopAt = Date()
       if isTranscribing {
         log("Paywall: stopping transcription (freemium threshold)")
-        stopTranscription()
+        captureAttempt?.noteErrorTerminal()
+        stopTranscription(finalizationReason: .paywall)
       }
       Task { @MainActor in
-        ProactiveAssistantsPlugin.shared.stopMonitoring()
+        ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .paywall)
       }
 
     case "translating":
@@ -471,6 +643,43 @@ extension AppState {
 
     case "photo_described":
       log("Transcription: Photo described event (not used on desktop)")
+
+    case "proactive_message":
+      let appId = event.raw["app_id"] as? String ?? ""
+      let title = event.raw["title"] as? String ?? "Omi"
+      let message = event.raw["message"] as? String ?? ""
+      // The message body is user conversation content; log only its provenance.
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      let admission = ProactiveListenAdmission.decide(
+        appID: appId,
+        title: title,
+        message: message,
+        hasRuntimeOwner: authorizationSnapshot != nil)
+      guard case .deliver(let deliveryTitle, let deliveryMessage, let assistantId) = admission,
+        let authorizationSnapshot
+      else {
+        if case .skip(let reason) = admission {
+          log("Transcription: Dropping proactive_message — \(reason.rawValue)")
+        }
+        break
+      }
+      log("Transcription: Proactive message from \(assistantId)")
+      // Deliver through NotificationService rather than the floating-bar primitive.
+      // A cloud interjection is proactive in exactly the sense the user's controls
+      // mean: routing it here keeps the master toggle, the off-by-default migration,
+      // the frequency throttle, and the snooze/presence withholding on one door,
+      // instead of giving the cloud a path that ignores all of them. It also owns
+      // the spoken delivery (`isProactive: respectFrequency`), so the caller does
+      // not need its own NotificationSpeechOnDelivery.
+      NotificationService.shared.sendNotification(
+        ownerID: authorizationSnapshot.ownerID,
+        title: deliveryTitle,
+        message: deliveryMessage,
+        assistantId: assistantId,
+        sound: .default,
+        respectFrequency: true,
+        authorizationSnapshot: authorizationSnapshot
+      )
 
     default:
       log("Transcription: Unhandled event type: \(event.type)")

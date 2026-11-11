@@ -1,0 +1,616 @@
+{
+  "project": "based-hardware-dev",
+  "lane": "omi:auto:dream-reasoning",
+  "started_at": "2026-10-10T22:15:02.033908+00:00",
+  "fixture_sha256": "1cbad766724d0a01b6069b62e4952d182b031a40a73fbcc53c0437702595ce38",
+  "instructions_sha256": "456a9988737837ea8fb6d6e9f5dd5941d8fd7e41bbadf18cc5a85c5a167a4827",
+  "rows": [
+    {
+      "repeat": 1,
+      "case": "untitled_en",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2114,
+      "latency_ms": 2351,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 1,
+      "case": "untitled_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2132,
+      "latency_ms": 1782,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 1,
+      "case": "clean_bilingual",
+      "error": null,
+      "kept": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2087,
+      "latency_ms": 1149,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 1,
+      "case": "brand_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 1,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2166,
+      "latency_ms": 1705,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 2,
+      "case": "untitled_en",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2115,
+      "latency_ms": 2117,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 2,
+      "case": "untitled_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2123,
+      "latency_ms": 2080,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 2,
+      "case": "clean_bilingual",
+      "error": null,
+      "kept": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2087,
+      "latency_ms": 1193,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 2,
+      "case": "brand_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 1,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2170,
+      "latency_ms": 1630,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 3,
+      "case": "untitled_en",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2114,
+      "latency_ms": 1774,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 3,
+      "case": "untitled_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2133,
+      "latency_ms": 1655,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 3,
+      "case": "clean_bilingual",
+      "error": null,
+      "kept": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2087,
+      "latency_ms": 1193,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 3,
+      "case": "brand_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 1,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2171,
+      "latency_ms": 1684,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 4,
+      "case": "untitled_en",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2111,
+      "latency_ms": 1346,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 4,
+      "case": "untitled_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2132,
+      "latency_ms": 1384,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 4,
+      "case": "clean_bilingual",
+      "error": null,
+      "kept": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2087,
+      "latency_ms": 1599,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 4,
+      "case": "brand_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 1,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2170,
+      "latency_ms": 1627,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 5,
+      "case": "untitled_en",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2119,
+      "latency_ms": 1674,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 5,
+      "case": "untitled_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 1,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2130,
+      "latency_ms": 1654,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 5,
+      "case": "clean_bilingual",
+      "error": null,
+      "kept": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2087,
+      "latency_ms": 1146,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    },
+    {
+      "repeat": 5,
+      "case": "brand_vi",
+      "error": null,
+      "kept": {
+        "edits": 1,
+        "questions": 0,
+        "vocabulary": 1,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "title_proposals": 0,
+      "expected_edit_hit": true,
+      "language_false_positives": 0,
+      "feedback_evidence_overlap": 0,
+      "clean_edits": 0,
+      "tokens": 2168,
+      "latency_ms": 1643,
+      "dropped_invalid": {
+        "edits": 0,
+        "questions": 0,
+        "vocabulary": 0,
+        "frames": 0,
+        "feedback": 0,
+        "slow_tasks": 0
+      },
+      "validation_errors": {}
+    }
+  ],
+  "summary": {
+    "runs": 20,
+    "failed_runs": 0,
+    "kept": {
+      "edits": 15,
+      "questions": 0,
+      "vocabulary": 5,
+      "frames": 0,
+      "feedback": 0,
+      "slow_tasks": 0
+    },
+    "dropped_invalid": {
+      "edits": 0,
+      "questions": 0,
+      "vocabulary": 0,
+      "frames": 0,
+      "feedback": 0,
+      "slow_tasks": 0
+    },
+    "validation_errors": {},
+    "errors_by_type": {},
+    "tokens": 42503,
+    "title_proposals": 10,
+    "language_false_positives": 0,
+    "feedback_evidence_overlap": 0,
+    "targets_met": true
+  }
+}

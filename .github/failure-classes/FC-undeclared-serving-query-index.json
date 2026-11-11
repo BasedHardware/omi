@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "id": "FC-undeclared-serving-query-index",
+  "violated_contract": "A serving Firestore query's required composite index must be declared in the repository index registry; an index that exists only as a hand-created live index (or not at all) leaves the query failing closed with FailedPrecondition in production.",
+  "canonical_prevention": "Execute registered runtime drivers and caller witnesses against the recording Firestore client, require every database and non-database serving query shape to be served and certain by the generated manifest, and validate Firestore's actual planning response with the index oracle. Apply declared indexes through the serialized index workflow; backend deploy readiness blocks until they are READY, and a missing-index alert routes incidents to the registry and runbook. Hand-created indexes are not a prevention mechanism.",
+  "canonical_prevention_artifact": [
+    "backend/tests/support/firestore_shape_recorder.py",
+    "backend/tests/support/firestore_query_driver_registry.py",
+    "backend/tests/support/firestore_query_drivers.py",
+    "backend/tests/support/firestore_index_rules.py",
+    "backend/tests/unit/test_firestore_query_shapes.py",
+    "backend/tests/unit/test_firestore_outside_query_contract.py",
+    "backend/scripts/firestore_index_oracle.py",
+    "backend/scripts/reconcile_firestore_indexes.py",
+    ".github/workflows/gcp_firestore_indexes.yml",
+    ".github/workflows/gcp_backend.yml",
+    ".github/workflows/gcp_backend_auto_dev.yml",
+    ".github/scripts/ensure_firestore_missing_index_alert.py",
+    "backend/docs/runbooks/firestore-missing-index.md"
+  ],
+  "evidence_prs": [
+    10778,
+    10781,
+    19941,
+    19966,
+    19977,
+    19988,
+    20060,
+    20098,
+    20113,
+    20127,
+    20130,
+    20161,
+    20152
+  ],
+  "scope_hints": [
+    "backend/database/**",
+    "firestore.indexes.json"
+  ],
+  "status": "dormant",
+  "dormant_since": "2026-10-01T00:00:00Z"
+}

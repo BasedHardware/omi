@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+
+from config.rollout_cohorts import warm_rollout_cohorts
 from typing import Any, Dict, Optional, cast
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, WebSocketException
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 from firebase_admin.auth import InvalidIdTokenError
 
+from models.geolocation import Geolocation, geolocation_from_private_header
 from routers.listen.contracts import CustomSttMode, ListenRequest
 from routers.listen.runtime import run_listen_session
 from utils.client_device import (
@@ -22,10 +25,56 @@ from utils.client_device import (
     resolve_client_device_from_websocket_auth_message,
 )
 from utils.other import endpoints as auth
+from utils.executors import db_executor, run_blocking
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+_ACCOUNT_DELETION_RECHECK_SECONDS = 30
+
+
+async def _wait_for_account_deletion_recheck() -> None:
+    await asyncio.sleep(_ACCOUNT_DELETION_RECHECK_SECONDS)
+
+
+async def _watch_account_deletion(request: ListenRequest) -> None:
+    """Close an accepted listen socket when its durable owner fence changes."""
+    while True:
+        await _wait_for_account_deletion_recheck()
+        try:
+            await run_blocking(db_executor, auth.enforce_account_deletion_ws_access, request.uid)
+        except WebSocketException as error:
+            request.owner_persistence_blocked.set()
+            try:
+                await request.websocket.close(code=error.code, reason=error.reason)
+            except Exception:
+                pass
+            return
+        except Exception:
+            request.owner_persistence_blocked.set()
+            logger.error('listen deletion fence unavailable uid=%s', request.uid, exc_info=True)
+            try:
+                await request.websocket.close(code=1013, reason='Account deletion state unavailable; retry later')
+            except Exception:
+                pass
+            return
+
+
+async def _run_listen_session_with_deletion_fence(request: ListenRequest) -> None:
+    await warm_rollout_cohorts(request.uid)
+    session = asyncio.create_task(run_listen_session(request), name=f'listen:{request.uid}:session')
+    deletion_watcher = asyncio.create_task(
+        _watch_account_deletion(request),
+        name=f'listen:{request.uid}:deletion-fence',
+    )
+    done, pending = await asyncio.wait((session, deletion_watcher), return_when=asyncio.FIRST_COMPLETED)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    if deletion_watcher in done:
+        await asyncio.gather(deletion_watcher, return_exceptions=True)
+    if session in done:
+        await session
 
 
 async def _stream_handler(
@@ -47,9 +96,15 @@ async def _stream_handler(
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
     client_device_context: Optional[ClientDeviceContext] = None,
+    *,
+    conversation_role: str = 'ambient',
+    geolocation: Optional[Geolocation] = None,
+    speech_profile_redo: bool = False,
+    screen_evidence_pass: bool = False,
+    local_preview: bool = False,
 ) -> None:
     """Compatibility facade for the accepted-socket listen session."""
-    await run_listen_session(
+    await _run_listen_session_with_deletion_fence(
         ListenRequest(
             websocket=websocket,
             uid=uid,
@@ -68,7 +123,12 @@ async def _stream_handler(
             vad_gate_override=vad_gate_override,
             call_id=call_id,
             client_conversation_id=client_conversation_id,
+            conversation_role='meeting' if conversation_role == 'meeting' else 'ambient',
             client_device_context=client_device_context,
+            geolocation=geolocation,
+            speech_profile_redo=speech_profile_redo,
+            screen_evidence_pass=screen_evidence_pass and conversation_role == 'meeting',
+            local_preview=local_preview,
         )
     )
 
@@ -91,6 +151,11 @@ async def _listen(
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
+    conversation_role: str = 'ambient',
+    geolocation: Optional[Geolocation] = None,
+    speech_profile_redo: bool = False,
+    screen_evidence_pass: bool = False,
+    local_preview: bool = False,
 ) -> None:
     try:
         await websocket.accept()
@@ -115,6 +180,11 @@ async def _listen(
         vad_gate_override=vad_gate_override,
         call_id=call_id,
         client_conversation_id=client_conversation_id,
+        conversation_role=conversation_role,
+        geolocation=geolocation,
+        speech_profile_redo=speech_profile_redo,
+        screen_evidence_pass=screen_evidence_pass,
+        local_preview=local_preview,
     )
 
 
@@ -137,7 +207,12 @@ async def listen_handler(
     vad_gate: str = '',
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
+    conversation_role: str = 'ambient',
+    speech_profile_redo: str = 'disabled',
+    screen_evidence: str = 'disabled',
+    local_preview: str = 'disabled',
 ) -> None:
+    geolocation = geolocation_from_private_header(websocket.headers.get('x-omi-conversation-geolocation'))
     await _listen(
         websocket,
         uid,
@@ -156,6 +231,15 @@ async def listen_handler(
         vad_gate_override=vad_gate if vad_gate in ('enabled', 'disabled') else None,
         call_id=call_id,
         client_conversation_id=client_conversation_id,
+        conversation_role=conversation_role,
+        geolocation=geolocation,
+        speech_profile_redo=speech_profile_redo == 'enabled',
+        # The desktop runs a pre-notes screen-evidence pass for this meeting; the
+        # finalizer may wait for it (utils/conversations/meeting_evidence_admission.py).
+        screen_evidence_pass=screen_evidence == 'enabled',
+        # The client renders its own on-device live transcript preview, so it
+        # tolerates a session with no cloud streaming STT (CLOUD_LIVE_STT_MODE).
+        local_preview=local_preview == 'enabled',
     )
 
 
@@ -187,7 +271,10 @@ async def web_listen_handler(
     except WebSocketDisconnect:
         return
     try:
-        uid = auth.get_current_user_uid_from_ws_message(cast(Dict[str, Any], first_message))
+        uid = await auth.get_current_user_uid_from_ws_message(
+            cast(Dict[str, Any], first_message),
+            websocket=websocket,
+        )
     except ValueError as error:
         await websocket.close(code=1008, reason=str(error))
         return
@@ -195,12 +282,17 @@ async def web_listen_handler(
         await websocket.send_json({'type': 'auth_response', 'success': False})
         await websocket.close(code=1008, reason='Invalid token')
         return
+    except WebSocketException as error:
+        await websocket.send_json({'type': 'auth_response', 'success': False})
+        await websocket.close(code=error.code, reason=error.reason)
+        return
     except Exception as error:
         logger.error('web listen auth failed error_type=%s', type(error).__name__)
         await websocket.send_json({'type': 'auth_response', 'success': False})
         await websocket.close(code=1008, reason='Auth error')
         return
     context = resolve_client_device_from_websocket_auth_message(first_message)
+    geolocation = geolocation_from_private_header(websocket.headers.get('x-omi-conversation-geolocation'))
     await websocket.send_json({'type': 'auth_response', 'success': True})
     await _stream_handler(
         websocket,
@@ -218,4 +310,5 @@ async def web_listen_handler(
         call_id=call_id,
         client_conversation_id=client_conversation_id,
         client_device_context=context,
+        geolocation=geolocation,
     )

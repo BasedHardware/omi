@@ -1,0 +1,42 @@
+version: 2
+name: client-telemetry-shadow
+tier: 2
+description: FINOPS-1 — client telemetry shadow transport stays flag-off, persists owner-scoped
+  observations durably, honors the parking window across restart, and never sends owner ids on the wire
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Telemetry/ClientTelemetryFlags.swift
+  - desktop/macos/Desktop/Sources/Telemetry/ClientTelemetryHTTP.swift
+  - desktop/macos/Desktop/Sources/Telemetry/ClientTelemetryModels.swift
+  - desktop/macos/Desktop/Sources/Telemetry/ClientTelemetryParity.swift
+  - desktop/macos/Desktop/Sources/Telemetry/ClientTelemetryShadow.swift
+  - desktop/macos/Desktop/Sources/Telemetry/ClientTelemetryStore.swift
+  - desktop/macos/Desktop/Sources/Telemetry/ClientTelemetryTransport.swift
+  - desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  - desktop/macos/Desktop/Sources/AuthService.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Migration and retirement flags default off in a release bundle
+    bridge.action:
+      name: client_telemetry_flag_snapshot
+    expect:
+      result.detail.transport_shadow_enabled: "false"
+      result.detail.posthog_retirement_enabled: "false"
+      result.detail.retires_infrastructure_posthog: "false"
+
+  - id: S2
+    name: Enqueued observations persist under the current owner and survive a transport reload
+    bridge.action:
+      name: client_telemetry_shadow_probe
+      params:
+        owner_id: "[[MARKER:telemetry-owner]]"
+        population: "physical_shortcut"
+    expect:
+      result.detail.enqueued: "true"
+      result.detail.pending_count: "1"
+      result.detail.reloaded_pending_count: "1"
+      result.detail.wire_contains_owner_id: "false"
+      result.detail.attempt_count_after_reload: "1"

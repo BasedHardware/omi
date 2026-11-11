@@ -1,12 +1,25 @@
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+import logging
+import re
+from datetime import datetime
+from collections.abc import Mapping
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
+import config.speaker_match_scores as match_scores
+import config.owner_recognition_diagnostics as owner_diagnostics
+
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_serializer, model_validator
+
+from models.recorded_span import RecordedClock
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
 from models.chat import Message
+from models.client_processing import ClientProcessing
 from models.conversation_enums import (
+    CategoryEnum,
+    ContentKind,
+    ConversationProcessingState,
     ConversationSource,
     ConversationStatus,
     ConversationVisibility,
@@ -16,19 +29,29 @@ from models.conversation_enums import (
 )
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
+from models.note_claims import compact_claim_projection, current_note_claims
+from pydantic import field_serializer
 from models.other import Person
-from models.structured import Structured
-from models.transcript_segment import TranscriptSegment
+from models.speaker_exclusion import receipt_excluded_speakers
+from models.structured import MeetingType, Structured
+from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
+from utils.capture_evidence import ledger_bound_incomplete
 
 # Only locally-defined symbols are exported. Use canonical modules for moved types:
 #   models.conversation_enums, models.structured, models.audio_file, etc.
 __all__ = [
     'AppResult',
+    'AudioTimelineProvenance',
     'BulkAssignSegmentsRequest',
     'CalendarEventLink',
     'Conversation',
     'ConversationFinalizationStatusResponse',
     'ConversationMutationResponse',
+    'ConversationSyncConflictResponse',
+    'ConversationSyncOperation',
+    'ConversationSyncMutationRequest',
+    'ConversationSyncMutationResponse',
+    'ConversationSyncState',
     'ConversationPostProcessing',
     'CreateConversation',
     'CreateConversationResponse',
@@ -38,7 +61,25 @@ __all__ = [
     'MergeConversationsRequest',
     'MergeConversationsResponse',
     'PluginResult',
+    'ProcessConversationRequest',
     'SearchRequest',
+    'SetConversationStarredOperation',
+    'SetConversationTitleOperation',
+    'TranscriptMatchSnippet',
+    'SharedActionItem',
+    'SharedAppResult',
+    'SharedConversationChatHistoryMessage',
+    'SharedConversationChatRequest',
+    'SharedConversationChatResponse',
+    'SharedConversationResponse',
+    'SharedEvent',
+    'SharedParticipant',
+    'SharedPerson',
+    'SharedPluginResult',
+    'SharedSection',
+    'SharedStructured',
+    'SharedTranscriptSegment',
+    'project_shared_conversation',
     'SetConversationActionItemsStateRequest',
     'SetConversationEventsStateRequest',
     'TestPromptRequest',
@@ -52,6 +93,220 @@ __all__ = [
 class UpdateConversation(BaseModel):
     title: Optional[str] = None
     overview: Optional[str] = None
+
+
+class SharedConversationChatHistoryMessage(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    role: Literal['user', 'assistant']
+    content: str = Field(min_length=1, max_length=2000, strict=True)
+
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError('content must not be blank')
+        return stripped
+
+
+class SharedConversationChatRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    conversation_id: str = Field(min_length=1, max_length=128, strict=True)
+    question: str = Field(min_length=1, max_length=2000, strict=True)
+    history: List[SharedConversationChatHistoryMessage] = Field(max_length=8)
+
+    @field_validator('conversation_id', 'question')
+    @classmethod
+    def validate_non_blank_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError('value must not be blank')
+        return stripped
+
+
+class SharedConversationChatResponse(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    message: str = Field(min_length=1, strict=True)
+    remaining_free_questions: int | None = Field(default=None, ge=0)
+
+
+_EMAIL_RE = re.compile(r'[^\s@]+@[^\s@]+\.[^\s@]+')
+
+
+class SharedActionItem(BaseModel):
+    """Public share projection of an action item."""
+
+    model_config = {'extra': 'ignore'}
+
+    description: str
+    completed: bool = False
+    owner_name: Optional[str] = None
+    due_at: Optional[datetime] = None
+    due_certainty: Optional[Literal['confirmed', 'tentative']] = None
+    context: Optional[str] = None
+
+    @field_validator('owner_name', mode='before')
+    @classmethod
+    def drop_email_shaped_owner(cls, value):
+        # owner_name is a display name. An address here is not a public name.
+        if isinstance(value, str) and _EMAIL_RE.search(value):
+            return None
+        return value
+
+
+class SharedSection(BaseModel):
+    """Public note content linked to the transcript segments on the same share payload."""
+
+    model_config = {'extra': 'ignore'}
+
+    heading: str
+    body_markdown: str
+    kind: Literal['main', 'side_notes'] = 'main'
+    source_segment_ids: List[str] = Field(default_factory=list)
+
+
+class SharedEvent(BaseModel):
+    """Public share projection of a structured event."""
+
+    model_config = {'extra': 'ignore'}
+
+    title: str
+    description: str = ''
+    start: datetime
+    duration: int = 30
+    created: bool = False
+
+
+class SharedParticipant(BaseModel):
+    """Public share projection of a meeting participant — never an email."""
+
+    model_config = {'extra': 'ignore'}
+
+    name: Optional[str] = None
+    organization: Optional[str] = None
+    role: Optional[str] = None
+    is_ai_agent: bool = False
+    source: Optional[Literal['roster', 'transcript']] = None
+
+
+class SharedStructured(BaseModel):
+    """Public share projection of conversation structure."""
+
+    model_config = {'extra': 'ignore'}
+
+    title: str = ''
+    overview: str = ''
+    # NEUTRAL_EMOJI (models.conversation_emoji): a shared row that never carried
+    # an emoji shows the neutral one, not the "unset" brain sentinel.
+    emoji: str = '💬'
+    category: CategoryEnum = CategoryEnum.other
+    sections: List[SharedSection] = Field(default_factory=list)
+    action_items: List[SharedActionItem] = Field(default_factory=list)
+    events: List[SharedEvent] = Field(default_factory=list)
+    meeting_type: Optional[MeetingType] = None
+    participants: List[SharedParticipant] = Field(default_factory=list)
+
+    @model_serializer(mode='wrap')
+    def _omit_unset_rich_fields(self, handler):
+        # Same contract as Structured: rich-only keys absent from the source
+        # document must not materialize as null/[] on the public payload.
+        data = handler(self)
+        for field_name in ('meeting_type', 'participants'):
+            if field_name not in self.model_fields_set:
+                data.pop(field_name, None)
+        return data
+
+    @field_validator('participants', mode='before')
+    @classmethod
+    def drop_unidentifiable_participants(cls, value):
+        # A participant with no public name carries no identifying public
+        # information (emails never leave the private note), so it drops out of
+        # the share projection rather than surfacing as an empty shell.
+        if not isinstance(value, list):
+            return value
+        kept = []
+        for item in value:
+            name = item.get('name') if isinstance(item, Mapping) else getattr(item, 'name', None)
+            if isinstance(name, str) and name.strip():
+                kept.append(item)
+        return kept
+
+
+class SharedTranscriptSegment(BaseModel):
+    """Public share projection of a transcript turn."""
+
+    model_config = {'extra': 'ignore'}
+
+    id: Optional[str] = None
+    text: str
+    original_text: Optional[str] = None
+    speaker: Optional[str] = 'SPEAKER_00'
+    speaker_id: Optional[int] = None
+    is_user: bool
+    person_id: Optional[str] = None
+    start: float
+    end: float
+
+    @model_serializer(mode='wrap')
+    def omit_absent_original(self, handler):
+        data = handler(self)
+        if self.original_text is None:
+            data.pop('original_text', None)
+        return data
+
+
+class SharedAppResult(BaseModel):
+    model_config = {'extra': 'ignore'}
+
+    app_id: Optional[str]
+    content: str
+
+
+class SharedPluginResult(BaseModel):
+    model_config = {'extra': 'ignore'}
+
+    plugin_id: Optional[str]
+    content: str
+
+
+class SharedPerson(BaseModel):
+    """Speaker-label projection for a shared conversation."""
+
+    model_config = {'extra': 'ignore'}
+
+    id: str
+    name: str
+
+
+# Explicit allowlist: do not inherit Conversation and do not extra='allow'.
+# New Conversation fields and stored-document extras must not appear here.
+class SharedConversationResponse(BaseModel):
+    """Public unauthenticated shared-conversation payload. Only declared fields are returned."""
+
+    model_config = {'extra': 'ignore'}
+
+    id: str
+    created_at: datetime
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+    language: Optional[str] = None
+    source: Optional[ConversationSource] = ConversationSource.omi
+    status: Optional[ConversationStatus] = ConversationStatus.completed
+    visibility: ConversationVisibility = ConversationVisibility.private
+    structured: SharedStructured
+    transcript_segments: List[SharedTranscriptSegment] = Field(default_factory=list)
+    apps_results: List[SharedAppResult] = Field(default_factory=list)
+    plugins_results: List[SharedPluginResult] = Field(default_factory=list)
+    people: List[SharedPerson] = Field(default_factory=list)
+
+
+def project_shared_conversation(conversation: 'Conversation', people: List[Person]) -> SharedConversationResponse:
+    payload = conversation.model_dump()
+    payload['people'] = [{'id': person.id, 'name': person.name} for person in people]
+    return SharedConversationResponse.model_validate(payload)
 
 
 # TODO: remove this class when the app is updated to use apps_results
@@ -98,6 +353,20 @@ class ConversationAudioSpan(BaseModel):
     len: float
 
 
+class AudioTimelineProvenance(BaseModel):
+    """Audio-timeline v2 provenance marker on eligible conversation rows.
+
+    Present only on single-channel, server-STT live captures admitted under
+    AUDIO_TIMELINE_V2: both transcript segment offsets and audio chunk starts
+    are projections of one capture sample cursor anchored at the conversation's
+    first accepted audio sample (started_at is that origin, pinned once).
+    Absent on legacy, resumed-v1, multi-channel, custom-STT, sync-merged or
+    mixed-source rows.
+    """
+
+    version: int
+
+
 class ConversationAudio(BaseModel):
     """Stamp for the conversation-level playback artifact (playback/{uid}/{conv}/conversation.mp3).
 
@@ -114,7 +383,92 @@ class ConversationAudio(BaseModel):
     built_at: Optional[datetime] = None
 
 
+class TranscriptMatchSnippet(BaseModel):
+    """Grep-style transcript hit returned on conversation search for seek-to-moment UX."""
+
+    text: str
+    segment_id: Optional[str] = None
+    start: Optional[float] = None
+    end: Optional[float] = None
+    start_ms: Optional[int] = None
+    end_ms: Optional[int] = None
+    speaker_id: Optional[int] = None
+
+
+class CaptureGroupMember(BaseModel):
+    id: str
+    source: Optional[str] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+
+class CaptureGroup(BaseModel):
+    """Conversations from different capture surfaces that recorded one event.
+
+    Server-authored by ``database.capture_groups`` only after the captures are
+    shown to share speech. ``id`` is the event identity and never changes when
+    ``primary_id`` (the longest capture) does. Clients present the group as one
+    row and keep every member reachable.
+    """
+
+    id: str
+    primary_id: str
+    revision: int = 1
+    members: List[CaptureGroupMember] = []
+
+
+class ConversationSpeakers(BaseModel):
+    """Server-authored meaning of this conversation's ``speaker_id`` values.
+
+    ``resolved``: re-diarized from the stored audio, so each ``speaker_id`` is one
+    voice for the whole conversation. ``capture``: one uninterrupted capture
+    diarized it, so capture's ids are that diarization. ``unavailable``: capture
+    restarted its numbering (reconnects, failovers, uploaded chunks) and no
+    stored audio could resolve it, so ids are not people and must not be counted.
+    ``participant_speaker_ids`` lists the voices that spoke enough to count as
+    participants; it is empty when the status is ``unavailable``.
+    """
+
+    status: Literal['resolved', 'capture', 'unavailable']
+    version: int = 1
+    participant_speaker_ids: List[int] = []
+
+
+class CaptureEvidenceMetadata(BaseModel):
+    """Internal S1 receipt. Missing source positions are explicitly unknown."""
+
+    version: Literal[1] = 1
+    capability: Literal['source_position', 'stable_artifact', 'unknown']
+    coverage: Optional[Literal['unknown', 'incomplete', 'mapped']] = None
+    origin: Optional[str] = None
+    reason: Optional[str] = None
+    capture_root: Optional[str] = None
+    channel: Optional[str] = None
+    clock_epoch: Optional[str] = None
+    source_start: Optional[int] = None
+    source_end: Optional[int] = None
+    runs: Optional[List[Dict[str, Any]]] = None
+    receipts: Optional[List[Dict[str, Any]]] = None
+    conflicts: Optional[int] = None
+    proof: Optional[str] = None
+    lifetime: Optional[Dict[str, Any]] = None
+
+
+class RecordAudioPartial(BaseModel):
+    """Available transcript is incomplete; this never certifies a complete seal."""
+
+    version: Literal[1] = 1
+    reason: Literal['tail_lagging', 'budget_limit', 'tail_lost_or_unproven']
+    generation: int = 0
+    applied_generation: int = 0
+
+
 class Conversation(BaseModel):
+    notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
+    notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
+    l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
+    sync_content_revision: Optional[int] = None
+    sync_relevance: Optional[Literal['keep', 'review']] = None
     id: str
     created_at: datetime
     # Firestore's document update time, attached by the database read layer.
@@ -123,11 +477,52 @@ class Conversation(BaseModel):
     updated_at: Optional[datetime] = None
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    capture_timezone: Optional[str] = Field(default=None, max_length=128)
+    recorded_start: Optional[datetime] = None
+    recorded_end: Optional[datetime] = None
+    arrival_at: Optional[datetime] = None
+    clock: Optional[RecordedClock] = None
+    episode_id: Optional[str] = None
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
+    # True when this conversation was transcribed on a third-party (custom STT)
+    # provider, so no Omi transcription credits were consumed. Provenance for
+    # the isolated fair-use lane and the conversation-processing credit gate:
+    # custom-STT still hits LLM/post-processing metering (#7690).
+    uses_custom_stt: bool = False
+    # Server route arbitration; canonical writers preserve the durable value.
+    record_lane_owner: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
+    record_audio_partial: Optional[RecordAudioPartial] = None
+
     structured: Structured
+
+    @field_serializer('structured', mode='wrap')
+    def _serialize_current_note_claims(self, structured, handler):
+        data = handler(structured)
+        if isinstance(data, dict) and isinstance(data.get('note_claims'), list):
+            data['note_claims'] = compact_claim_projection(current_note_claims(data))
+        return data
+
+    # Untrusted client-authored display projection. Sibling of structured, never
+    # inside it or external_data. Display only — never an input to intelligence.
+    client_processing: Optional[ClientProcessing] = None
+    # Why `structured` holds the §1.7 deterministic minimum instead of an
+    # enriched summary. Server-authored; absent on every enriched conversation.
+    # Clients read `client_processing` first — see the enum's docstring.
+    processing_state: Optional[ConversationProcessingState] = None
+    # Server-authored. True only when durable finalization exhausted its retry
+    # budget on a transient provider/parser/worker failure and the row has
+    # transcript or photos, so ``POST /v1/conversations/{id}/reprocess`` can
+    # still produce a summary. ``structured.title`` then holds the
+    # deterministic title. Never set when the model ran and found nothing to
+    # summarize. Successful enrichment clears it. A separate field rather than
+    # a ``processing_state`` value: released clients decode that enum strictly.
+    summary_retryable: Optional[bool] = None
+    # Server-authored Home row contract on list reads (utils/conversations/home_step.py):
+    # ready | transcribing | writing_notes | failed | noise. Omitted when unset.
+    home_step: SkipJsonSchema[Optional[Literal['ready', 'transcribing', 'writing_notes', 'failed', 'noise']]] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -135,21 +530,153 @@ class Conversation(BaseModel):
     audio_files: List[AudioFile] = []
     conversation_audio: Optional[ConversationAudio] = None
     private_cloud_sync_enabled: bool = False
+    # Audio-timeline v2 provenance (absent on legacy and ineligible rows).
+    audio_timeline: Optional[AudioTimelineProvenance] = None
+    # S1 internal receipt is written explicitly at existing persistence seams.
+    capture_evidence: Optional[CaptureEvidenceMetadata] = Field(default=None, exclude=True)
+    # Public coverage projection only; the source-position receipt stays internal.
+    capture_coverage: Optional[Literal['unknown', 'incomplete', 'mapped']] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _project_capture_coverage(cls, data):
+        if isinstance(data, dict):
+            evidence = data.get('capture_evidence')
+            coverage = (
+                evidence.get('coverage') if isinstance(evidence, Mapping) else getattr(evidence, 'coverage', None)
+            )
+            if coverage == 'incomplete' and ledger_bound_incomplete(evidence):
+                # Clients render 'incomplete' as lost audio. A live committed
+                # proof whose only incompleteness is evicted ledger runs
+                # observed no loss, so it must not surface as a partial recording.
+                coverage = 'mapped'
+            if coverage in ('unknown', 'incomplete', 'mapped'):
+                return {**data, 'capture_coverage': coverage}
+        return data
+
+    # Voices whose whole-voice `not_a_person` decision still wins the manual
+    # speaker receipt. Server-authored projection of the internal receipt (the
+    # receipt itself is never serialized): clients use it to reconcile live
+    # exclusions against receipt authority — a partial manual-positive
+    # projection cannot distinguish a range-only label (the exclusion stands)
+    # from a selected-segment superseder (the exclusion is retired), but the
+    # receipt can. Null on conversations without any manual speaker decision.
+    excluded_speakers: Optional[List[int]] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _project_excluded_speakers(cls, data):
+        if isinstance(data, dict) and 'excluded_speakers' not in data:
+            receipt = data.get('manual_speaker_assignments')
+            if isinstance(receipt, Mapping):
+                # Emit the projection whenever a manual receipt exists, empty
+                # set included: a selected-segment superseder or cross-client
+                # restoration that removed the last not_a_person decision must
+                # read as an authoritative `[]`. Leaving it null would make
+                # clients treat the response as an old server without the
+                # projection and fall back to the lossy whole-cluster
+                # heuristic, so the exclusion could never retire locally.
+                return {**data, 'excluded_speakers': receipt_excluded_speakers(receipt)}
+        return data
+
+    # Absent on conversations processed before speakers were resolved: count no ids as people.
+    speaker_resolution: Optional[ConversationSpeakers] = None
+    speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
+
+    owner_recognition_diagnostics: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
+
+    @field_validator('owner_recognition_diagnostics', mode='before')
+    @classmethod
+    def _validate_owner_diagnostics(cls, value):
+        return owner_diagnostics.normalize(value) or None
+
+    @field_validator('speaker_match_scores', mode='before')
+    @classmethod
+    def _validate_match_scores(cls, value):
+        # Some mutation owners return a stored document with a readable
+        # transcript. Without a uid this model must omit, never decrypt, its
+        # optional raw score blob. Covers factory and direct model callers.
+        if value is None:
+            return None
+        try:
+            return match_scores.normalize(value)
+        except Exception:
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+            return None
+
+    @model_validator(mode='after')
+    def _collect_match_scores(self):
+        try:
+            updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
+            if updates:
+                self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
+        except Exception:
+            self.speaker_match_scores = None
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+        return self
+
+    @model_serializer(mode='wrap')
+    def _serialize_match_scores(self, handler, info):
+        data = handler(self)
+        if not self.processing_deferred and 'processing_deferred' not in self.model_fields_set:
+            data.pop('processing_deferred', None)
+        if self.home_step is None:
+            data.pop('home_step', None)
+        if info.mode == 'python' and self.owner_recognition_diagnostics:
+            excluded = info.exclude or ()
+            included = info.include
+            if owner_diagnostics.FIELD not in excluded and (included is None or owner_diagnostics.FIELD in included):
+                data[owner_diagnostics.FIELD] = owner_diagnostics.normalize(self.owner_recognition_diagnostics)
+        if info.mode == 'python' and self.speaker_match_scores is not None:
+            excluded = info.exclude or ()
+            included = info.include
+            if 'speaker_match_scores' not in excluded and (included is None or 'speaker_match_scores' in included):
+                try:
+                    data['speaker_match_scores'] = match_scores.merge(None, self.speaker_match_scores)
+                except Exception:
+                    match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+        return data
+
+    # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
+    # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read
+    # should pay for, so nothing ever populated it and the field was permanently None. A field
+    # that always says nothing is worse than absent on the most widely consumed model in the
+    # product: it tells every client — iOS, Android, web — that a conversation carries its
+    # screenshots inline, when the only way to get them is
+    # GET /v1/conversations/{id}/screenshots. It also pulled ConversationScreenFrameSet into the
+    # mobile Dart schema group, where the generator could not resolve it. Callers that want the
+    # set inline: utils.screen_frames.enforcement.build_frame_set_response.
+    # Per-conversation opt-out of including screenshots in the public shared
+    # note. Default true (David's ruling 2026-08-20) — shared notes include
+    # screenshots unless the owner explicitly turns this off.
+    screenshot_sharing_enabled: bool = True
 
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
 
-    # TODO: plugins_results for backward compatibility with the old memories routes and app
+    # plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
+
+    user_corrections: List[Dict] = Field(default_factory=list)
+    user_overview: Optional[str] = None
+    user_title: SkipJsonSchema[Any] = Field(default=None, exclude=True)  # Read authority only.
 
     external_data: Optional[Dict] = None
     app_id: Optional[str] = None
+    capture_group: Optional[CaptureGroup] = None
+    # Ephemeral server-side context; persistence writes its separate raw field
+    # explicitly and it never becomes a Conversation API/model field.
+    _capture_group_member_context: Optional[Dict[str, Any]] = PrivateAttr(default=None)
 
+    content_kind: Optional[ContentKind] = None
     discarded: bool = False
+    # True for conversations created via an external data import (e.g. Limitless ZIP).
+    # Distinct from source=limitless, which also covers pendant/sync uploads of Limitless audio.
+    imported: bool = False
     visibility: ConversationVisibility = ConversationVisibility.private
     starred: bool = False
 
-    # TODO: processing_memory_id for backward compatibility with the old memories routes and app
+    # processing_memory_id for backward compatibility with the old memories routes and app
     processing_memory_id: Optional[str] = None
 
     processing_conversation_id: Optional[str] = None
@@ -160,8 +687,15 @@ class Conversation(BaseModel):
     # raw transcript with no LLM enrichment yet — enrichment runs on first open
     # (get_conversation_by_id → process_conversation). Cleared once enriched.
     deferred: bool = False
+    # Stored transcripts waiting for an explicit, budgeted backlog choice.
+    processing_deferred: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
+    is_call: Optional[bool] = None
+    call_platform: Optional[str] = None
+    calendar_event_id: Optional[str] = None
+    geolocation_scope: Optional[Literal['owner']] = None
+    other_participants_location: Optional[Literal['remote']] = None
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
 
     # Calendar event link - set when conversation overlaps with a Google Calendar event
@@ -171,7 +705,27 @@ class Conversation(BaseModel):
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
 
+    # Read projection of the authoritative finalization-job meeting receipt.
+    meeting_treatment_eligible: bool = False
+    meeting_treatment_reason: Optional[str] = None
+    meeting_duration_s: Optional[float] = None
+    meeting_dedup_speech_s: Optional[float] = None
+
     def __init__(self, **data):
+        raw_segments = data.get('transcript_segments')
+        conversation_id = data.get('id')
+        if isinstance(raw_segments, list) and conversation_id:
+            normalized_segments = []
+            for index, raw_segment in enumerate(raw_segments):
+                if isinstance(raw_segment, Mapping):
+                    segment = dict(raw_segment)
+                    if not segment.get('id'):
+                        segment['id'] = legacy_conversation_segment_id(conversation_id, index)
+                    normalized_segments.append(segment)
+                else:
+                    normalized_segments.append(raw_segment)
+            data['transcript_segments'] = normalized_segments
+
         super().__init__(**data)
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
@@ -216,7 +770,85 @@ class ConversationMutationResponse(BaseModel):
     conversation: Conversation
 
 
+class SetConversationTitleOperation(BaseModel):
+    """User-owned title mutation carried by the durable sync endpoint."""
+
+    model_config = {'extra': 'forbid'}
+
+    type: Literal['set_title'] = 'set_title'
+    title: str = Field(min_length=1, max_length=256, strict=True)
+
+
+class SetConversationStarredOperation(BaseModel):
+    """User-owned starred mutation carried by the durable sync endpoint."""
+
+    model_config = {'extra': 'forbid'}
+
+    type: Literal['set_starred'] = 'set_starred'
+    starred: bool = Field(strict=True)
+
+
+ConversationSyncOperation = Annotated[
+    Union[SetConversationTitleOperation, SetConversationStarredOperation],
+    Field(discriminator='type'),
+]
+
+
+class ConversationSyncMutationRequest(BaseModel):
+    """One immutable client intent against a known canonical revision."""
+
+    model_config = {'extra': 'forbid'}
+
+    client_mutation_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]*$',
+        strict=True,
+    )
+    base_revision: datetime
+    operation: ConversationSyncOperation
+
+
+class ConversationSyncState(BaseModel):
+    """Compact canonical projection needed to settle an optimistic mutation."""
+
+    revision: datetime
+    title: Optional[str] = None
+    starred: bool = False
+    folder_id: Optional[str] = None
+    visibility: ConversationVisibility = ConversationVisibility.private
+
+
+class ConversationSyncMutationResponse(BaseModel):
+    """Durable response replayed byte-for-byte for one mutation id."""
+
+    status: Literal['ok'] = 'ok'
+    client_mutation_id: str
+    conversation_id: str
+    conversation: ConversationSyncState
+
+
+class ConversationSyncConflictResponse(BaseModel):
+    """Typed immutable conflict recorded for a stale mutation attempt."""
+
+    status: Literal['conflict'] = 'conflict'
+    code: Literal['base_revision_mismatch', 'mutation_id_reused', 'revision_unavailable']
+    client_mutation_id: str
+    conversation_id: str
+    conversation: Optional[ConversationSyncState] = None
+
+
 class CreateConversation(BaseModel):
+    content_kind: SkipJsonSchema[Optional[ContentKind]] = None
+
+    @field_validator('content_kind', mode='before')
+    @classmethod
+    def ignore_client_content_kind(cls, value):
+        # Only the server evidence authority may classify a capture. Assignment
+        # after validation carries that decision through the existing conversion.
+        return None
+
+    capture_timezone: Optional[str] = Field(default=None, max_length=128)
     started_at: datetime
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
@@ -229,11 +861,34 @@ class CreateConversation(BaseModel):
 
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+
+    @field_validator('calendar_meeting_context', mode='before')
+    @classmethod
+    def discard_client_meeting_provenance(cls, value):
+        return CalendarMeetingContext.strip_client_provenance(value)
+
+    @field_validator('external_data', mode='before')
+    @classmethod
+    def discard_nested_meeting_provenance(cls, value):
+        if isinstance(value, dict) and 'calendar_meeting_context' in value:
+            return {
+                **value,
+                'calendar_meeting_context': CalendarMeetingContext.strip_client_provenance(
+                    value['calendar_meeting_context']
+                ),
+            }
+        return value
+
+    folder_id: Optional[str] = None
     is_locked: bool = False
     private_cloud_sync_enabled: bool = False
 
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+    # Capture provenance carried through the normal processing write. Keeping
+    # this on the create model prevents ID-less uploads from assigning role
+    # only after process_conversation has already persisted the row.
+    external_data: Optional[Dict] = None
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
@@ -246,7 +901,37 @@ class CreateConversation(BaseModel):
         return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
 
 
+class ProcessConversationRequest(BaseModel):
+    calendar_meeting_context: Optional[CalendarMeetingContext] = None
+
+    @field_validator('calendar_meeting_context', mode='before')
+    @classmethod
+    def discard_client_provenance(cls, value):
+        return CalendarMeetingContext.strip_client_provenance(value)
+
+    # Unvalidated on purpose: a malformed projection must not 422 a finished recording.
+    # Schema, size caps, and transcript-hash binding run in the handler.
+    client_processing: Optional[Any] = Field(
+        default=None,
+        description=(
+            "Untrusted client-authored display projection. Accepted as a raw payload "
+            "and validated in the handler so a malformed projection cannot 422 a "
+            "finished recording. Hash-bound to the persisted transcript. Display only "
+            "— never an input to intelligence."
+        ),
+    )
+
+
 class ExternalIntegrationCreateConversation(BaseModel):
+    content_kind: SkipJsonSchema[Optional[ContentKind]] = None
+
+    @field_validator('content_kind', mode='before')
+    @classmethod
+    def ignore_client_content_kind(cls, value):
+        # Only the server evidence authority may classify a capture. Assignment
+        # after validation carries that decision through the existing conversion.
+        return None
+
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str
@@ -283,6 +968,9 @@ class ConversationFinalizationStatusResponse(BaseModel):
     retryable: bool
     attempt_count: int
     task_retry_count: int
+    meeting_treatment_eligible: bool = False
+    terminal_outcome: Literal['success', 'failure', 'stale', 'unknown'] = 'unknown'
+    fanout_status: Literal['pending', 'leased', 'completed', 'fenced', 'unknown'] = 'unknown'
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app
@@ -367,3 +1055,25 @@ class MergeConversationsResponse(BaseModel):
     message: str = Field(default="Merge started", description="Status message")
     warning: Optional[str] = Field(default=None, description="Warning message (e.g., large time gaps)")
     conversation_ids: List[str] = Field(description="All conversation IDs being merged")
+    merged_conversation_id: Optional[str] = Field(
+        default=None, description="Stable target ID allocated at admission; the worker may not have created it yet"
+    )
+
+
+class SpeakerAnalytics(BaseModel):
+    speaker: str  # "You", a person's name, or a "Speaker N" diarization label
+    person_id: Optional[str] = None
+    is_user: bool = False
+    talk_seconds: float
+    word_count: int
+    words_per_minute: float
+    talk_share: float  # fraction of total talk time, 0..1
+
+
+class ConversationAnalytics(BaseModel):
+    conversation_id: str
+    total_seconds: float
+    total_words: int
+    words_per_minute: float
+    speaker_count: int
+    speakers: List[SpeakerAnalytics] = []

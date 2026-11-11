@@ -6,11 +6,20 @@ from pathlib import Path
 import subprocess
 import sys
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+import yaml
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = BACKEND_ROOT / 'scripts' / 'preflight-cloud-run-deploy.py'
+
+
+@pytest.fixture(autouse=True)
+def _native_yaml_fixture_loader(monkeypatch):
+    # These tests exercise binding policy; reuse the validator suite's native
+    # safe loader instead of charging a full Python YAML parse to each case.
+    monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
 
 
 def load_preflight():
@@ -20,6 +29,54 @@ def load_preflight():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def test_preflight_script_imports_without_pythonpath() -> None:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), '--help'],
+        cwd=BACKEND_ROOT.parent,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_storage_admission_precedes_all_remote_preflight_work(monkeypatch, environment):
+    preflight = load_preflight()
+    monkeypatch.setattr(preflight, '_cloud_run_service_configs', lambda **kwargs: {'backend': {'env': {}}})
+    operations = [
+        (preflight, 'migrate_legacy_public_bindings'),
+        (preflight, 'check_runtime_bindings'),
+        (preflight, 'check_rendered_secrets'),
+        (preflight.repair_cloud_run_traffic, 'repair_live'),
+    ]
+    calls = []
+    for owner, name in operations:
+        call = Mock()
+        monkeypatch.setattr(owner, name, call)
+        calls.append(call)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT),
+            '--env',
+            environment,
+            '--project',
+            'hermetic-project',
+            '--check-secrets',
+            '--repair-traffic',
+            '--check-runtime-bindings',
+            '--migrate-legacy-public-binding',
+            'backend',
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        preflight.main()
+    assert error.value.code == 2
+    assert all(not call.called for call in calls)
 
 
 def test_check_rendered_secrets_reports_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -35,6 +92,39 @@ def test_check_rendered_secrets_reports_missing(monkeypatch: pytest.MonkeyPatch)
     secret_names = {item.secret_name for item in missing}
     assert 'ENCRYPTION_SECRET' in secret_names
     assert 'GOOGLE_CLIENT_ID' not in secret_names
+
+
+def test_missing_secret_stops_binding_migration_and_traffic_repair(monkeypatch, capsys):
+    preflight = load_preflight()
+    monkeypatch.setattr(preflight, 'validate_voice_transcription_storage', lambda *args: [])
+    monkeypatch.setattr(preflight, '_cloud_run_service_configs', lambda **kwargs: {})
+    monkeypatch.setattr(
+        preflight,
+        'check_rendered_secrets',
+        lambda **kwargs: [preflight.SecretBinding('REQUIRED', 'missing-required-secret', 'latest')],
+    )
+    migration = Mock()
+    repair = Mock()
+    monkeypatch.setattr(preflight, 'migrate_legacy_public_bindings', migration)
+    monkeypatch.setattr(preflight.repair_cloud_run_traffic, 'repair_live', repair)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT),
+            '--env=prod',
+            '--project=based-hardware',
+            '--check-secrets',
+            '--repair-traffic',
+            '--migrate-legacy-public-binding=backend',
+        ],
+    )
+    assert preflight.main() == 1
+    error = capsys.readouterr().err
+    assert 'secret/REQUIRED' in error
+    assert 'missing-required-secret' not in error
+    migration.assert_not_called()
+    repair.assert_not_called()
 
 
 def test_check_rendered_secrets_passes_when_secrets_exist(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -199,7 +289,7 @@ environments:
         }
     }
 
-    with pytest.raises(ValueError, match='exactly one container'):
+    with pytest.raises(ValueError, match='exactly one application container'):
         preflight.check_runtime_bindings(
             services=('backend',),
             env='dev',
@@ -208,6 +298,115 @@ environments:
             manifest_path=manifest,
             runner=lambda _command, **_kwargs: SimpleNamespace(stdout=json.dumps(document)),
         )
+
+
+def test_runtime_binding_check_ignores_the_attached_gmp_metrics_sidecar(tmp_path: Path) -> None:
+    """A service carrying the observability sidecar is still a single-application service.
+
+    Every deploy after the first sidecar attach describes two containers. The
+    sidecar holds none of the runtime bindings these checks read, so counting it
+    would fail a correctly configured service on its second deploy onward.
+    """
+    preflight = load_preflight()
+    manifest = tmp_path / 'runtime_env.yaml'
+    manifest.write_text(
+        """\
+environments:
+  dev:
+    gcp_project: based-hardware-dev
+    cloud_run:
+      services:
+        backend:
+          env:
+            PUBLIC_SETTING:
+              value: public
+""",
+        encoding='utf-8',
+    )
+    document = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {'name': 'backend-1', 'env': [{'name': 'PUBLIC_SETTING', 'value': 'public'}]},
+                        {'name': 'collector', 'env': []},
+                    ]
+                }
+            }
+        }
+    }
+
+    drift = preflight.check_runtime_bindings(
+        services=('backend',),
+        env='dev',
+        project='based-hardware-dev',
+        region='us-central1',
+        manifest_path=manifest,
+        runner=lambda _command, **_kwargs: SimpleNamespace(stdout=json.dumps(document)),
+    )
+
+    assert drift == []
+
+
+def test_legacy_public_binding_migration_ignores_the_attached_gmp_metrics_sidecar(tmp_path: Path) -> None:
+    """The migration reads the application container's legacy secret bindings.
+
+    This runs on production as well as development, so the sidecar must not
+    turn a production deploy into an argument error.
+    """
+    preflight = load_preflight()
+    manifest = tmp_path / 'runtime_env.yaml'
+    manifest.write_text(
+        """\
+environments:
+  dev:
+    gcp_project: based-hardware-dev
+    cloud_run:
+      services:
+        backend:
+          env:
+            PUBLIC_SETTING:
+              value: public
+""",
+        encoding='utf-8',
+    )
+    document = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'name': 'backend-1',
+                            'env': [
+                                {
+                                    'name': 'PUBLIC_SETTING',
+                                    'valueFrom': {'secretKeyRef': {'name': 'PUBLIC_SETTING', 'key': 'latest'}},
+                                }
+                            ],
+                        },
+                        {'name': 'collector', 'env': []},
+                    ]
+                }
+            }
+        }
+    }
+    commands: list[list[str]] = []
+
+    def runner(command: list[str], **_kwargs: object) -> SimpleNamespace:
+        commands.append(command)
+        return SimpleNamespace(stdout=json.dumps(document))
+
+    migrated = preflight.migrate_legacy_public_bindings(
+        services=('backend',),
+        env='dev',
+        project='based-hardware-dev',
+        region='us-central1',
+        manifest_path=manifest,
+        runner=runner,
+    )
+
+    assert migrated == ['backend']
+    assert any('--remove-secrets=PUBLIC_SETTING' in argument for command in commands for argument in command)
 
 
 def test_runtime_binding_check_propagates_gcloud_describe_failure(tmp_path: Path) -> None:
@@ -322,6 +521,45 @@ environments:
             '--format=json',
         ]
     ]
+
+
+def test_runtime_binding_check_accepts_empty_public_literal_on_live_service(tmp_path: Path) -> None:
+    preflight = load_preflight()
+    manifest = tmp_path / 'runtime_env.yaml'
+    manifest.write_text(
+        '''\
+environments:
+  dev:
+    gcp_project: based-hardware-dev
+    cloud_run:
+      services:
+        backend:
+          env:
+            EMPTY_PUBLIC_SETTING:
+              value: ''
+''',
+        encoding='utf-8',
+    )
+
+    def runner(command: list[str], **_kwargs):
+        assert command[:4] == ['gcloud', 'run', 'services', 'describe']
+        # Cloud Run drops `value` from describe output for an empty literal.
+        return SimpleNamespace(
+            stdout=json.dumps(
+                {'spec': {'template': {'spec': {'containers': [{'env': [{'name': 'EMPTY_PUBLIC_SETTING'}]}]}}}}
+            )
+        )
+
+    drift = preflight.check_runtime_bindings(
+        services=('backend',),
+        env='dev',
+        project='based-hardware-dev',
+        region='us-central1',
+        manifest_path=manifest,
+        runner=runner,
+    )
+
+    assert drift == []
 
 
 def test_runtime_binding_check_ignores_undeclared_live_bindings(tmp_path: Path) -> None:
@@ -484,8 +722,6 @@ def test_backend_deploy_workflows_do_not_materialize_an_ignored_service_account_
     workflows = (
         'gcp_backend_pusher_auto_deploy.yml',
         'gcp_llm_gateway.yml',
-        'gcp_memory_maintenance_job.yml',
-        'gcp_memory_maintenance_job_auto_dev.yml',
         'gcp_notifications_job.yml',
     )
 

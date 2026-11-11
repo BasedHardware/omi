@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-first-summary-enjoying-ask.png",
+      "platform": "mobile-ios",
+      "description": "First summary after onboarding: Are you enjoying Omi? (about 7 s in)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-native-rating-sheet-after-yes.png",
+      "platform": "mobile-ios",
+      "description": "After Yes: the native App Store rating sheet",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

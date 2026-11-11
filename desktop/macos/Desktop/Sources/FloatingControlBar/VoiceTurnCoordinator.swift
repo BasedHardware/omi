@@ -98,6 +98,17 @@ final class VoiceTurnCoordinator {
   private var timeline: [VoiceTurnTimelineEntry] = []
   private let timelineLimit: Int
   private var timelineSequence: UInt64 = 0
+  private var turnStartedAt: [VoiceTurnID: ContinuousClock.Instant] = [:]
+  private var turnFullAnswerDurationMs: [VoiceTurnID: Int] = [:]
+  /// Delivery state of the most recent terminal, alongside `model.lastTerminal`.
+  /// The journal funnel reads this so a reply whose audio fully drained before a
+  /// barge-in is sealed as the delivered answer it was, not as a cut-off failure.
+  private(set) var lastTerminalAnswerDelivered = false
+  /// Whether the most recent terminal's provider response finished, alongside
+  /// `model.lastTerminal`. The journal funnel reads this so a reply whose text
+  /// completed but whose spoken delivery was cut is not later re-answered by
+  /// the model as though it had never been given.
+  private(set) var lastTerminalAnswerTextCompleted = false
   private var pendingFacts: [VoiceTurnFact] = []
   private var isDrainingEvents = false
 
@@ -255,12 +266,19 @@ final class VoiceTurnCoordinator {
       lane: lane,
       identity: identity)
     publish(.playbackStartedScoped(turnID: turnID, lease: lease))
-    return activeTurn?.activeLease == lease ? .acquired(lease) : .staleTurn
+    guard activeTurn?.activeLease == lease else { return .staleTurn }
+    if lane != .filler {
+      turnFullAnswerDurationMs.removeValue(forKey: turnID)
+    }
+    return .acquired(lease)
   }
 
   @discardableResult
   func releaseOutput(_ lease: VoiceOutputLease) -> Bool {
     guard activeTurn?.activeLease == lease else { return false }
+    if lease.lane != .filler, let startedAt = turnStartedAt[lease.turnID] {
+      turnFullAnswerDurationMs[lease.turnID] = Self.elapsedMilliseconds(since: startedAt)
+    }
     publish(
       .playbackDrainedScoped(
         turnID: lease.turnID,
@@ -269,8 +287,8 @@ final class VoiceTurnCoordinator {
     return true
   }
 
-  /// Refresh the native-output inactivity watchdog after a successfully
-  /// scheduled PCM chunk. A matching lease is required so delayed audio from a
+  /// Refresh the native-output inactivity watchdog after a PCM buffer is
+  /// physically played. A matching lease is required so delayed audio from a
   /// replaced turn cannot prolong the current response.
   @discardableResult
   func noteOutputProgress(_ lease: VoiceOutputLease) -> Bool {
@@ -283,8 +301,28 @@ final class VoiceTurnCoordinator {
     return activeTurn?.activeLease == lease
   }
 
-  func configure(barState: FloatingControlBarState) {
-    presenter = FloatingControlBarState.PTTBarPresenter(barState: barState)
+  /// True when the turn's full-answer playback has drained. Captured before a
+  /// barge-in terminalizes the turn, because terminal processing consumes the
+  /// per-turn duration this is derived from.
+  func fullAnswerDrained(turnID: VoiceTurnID) -> Bool {
+    turnFullAnswerDurationMs[turnID] != nil
+  }
+
+  /// True when the given (still-active) turn's provider response has finished,
+  /// meaning its accumulated answer text is complete rather than a fragment.
+  func providerResponseFinished(turnID: VoiceTurnID) -> Bool {
+    activeTurn?.id == turnID && activeTurn?.providerFinished == true
+  }
+
+  func configure(
+    barState: FloatingControlBarState,
+    resizeForPTT: @escaping @MainActor (Bool) -> Void = {
+      FloatingControlBarManager.shared.resizeForPTT(expanded: $0)
+    }
+  ) {
+    presenter = FloatingControlBarState.PTTBarPresenter(
+      barState: barState,
+      resizeForPTT: resizeForPTT)
     presenter?.apply(projection)
   }
 
@@ -315,7 +353,15 @@ final class VoiceTurnCoordinator {
     if model.turn?.phase.isTerminal == true {
       publish(.reset)
     }
+    turnStartedAt[id] = ContinuousClock.now
     publish(.start(turnID: id, ownerID: ownerID ?? ownerIDProvider(), intent: intent))
+    if activeTurnID == id {
+      DesktopDiagnosticsManager.shared.recordVoiceTurnStarted(
+        turnID: id.description,
+        intent: intent.rawValue)
+    } else {
+      turnStartedAt.removeValue(forKey: id)
+    }
     return id
   }
 
@@ -453,9 +499,17 @@ final class VoiceTurnCoordinator {
       case .cancelAllDeadlines(let turnID):
         cancelAll(turnID: turnID)
       case .terminal(let terminal):
+        let terminalDurationMs = turnStartedAt.removeValue(forKey: terminal.turnID).map(Self.elapsedMilliseconds)
+        let fullAnswerDurationMs = turnFullAnswerDurationMs.removeValue(forKey: terminal.turnID)
+        lastTerminalAnswerDelivered = fullAnswerDurationMs != nil
+        lastTerminalAnswerTextCompleted = terminal.answerTextCompleted
         DesktopDiagnosticsManager.shared.recordVoiceTurnTerminal(
+          turnID: terminal.turnID.description,
           reason: terminal.reason.rawValue,
           route: Self.routeLabel(terminal.route),
+          intent: model.turn?.intent.rawValue ?? "unknown",
+          durationMs: fullAnswerDurationMs ?? terminalDurationMs,
+          answerDelivered: fullAnswerDurationMs != nil,
           staleEventCount: model.staleEventCount,
           invalidTransitionCount: model.invalidTransitionCount)
         log(
@@ -463,19 +517,11 @@ final class VoiceTurnCoordinator {
             + "reason=\(terminal.reason.rawValue) route=\(Self.routeLabel(terminal.route))")
         effectHandler?(effect)
       case .staleEventDropped(let turnID, let event):
-        DesktopDiagnosticsManager.shared.recordVoiceTurnAnomaly(
-          kind: "stale_event",
-          phase: model.turn.map { Self.phaseLabel($0.phase) } ?? "idle",
-          route: model.turn.map { Self.routeLabel($0.route) } ?? "none")
         log(
           "VoiceTurnCoordinator: dropped stale event turn=\(turnID?.description ?? "none") event=\(event.prefix(160))"
         )
         effectHandler?(effect)
       case .invalidTransition(let turnID, let event, let phase):
-        DesktopDiagnosticsManager.shared.recordVoiceTurnAnomaly(
-          kind: "invalid_transition",
-          phase: phase.map(Self.phaseLabel) ?? "idle",
-          route: model.turn.map { Self.routeLabel($0.route) } ?? "none")
         log(
           "VoiceTurnCoordinator: invalid transition turn=\(turnID?.description ?? "none") "
             + "phase=\(phase.map(Self.phaseLabel) ?? "idle") event=\(event.prefix(160))")
@@ -500,6 +546,14 @@ final class VoiceTurnCoordinator {
       .staleEventDropped, .invalidTransition:
       return nil
     }
+  }
+
+  private static func elapsedMilliseconds(since startedAt: ContinuousClock.Instant) -> Int {
+    let components = (ContinuousClock.now - startedAt).components
+    let milliseconds =
+      Int(components.seconds) * 1_000
+      + Int(components.attoseconds / 1_000_000_000_000_000)
+    return max(0, milliseconds)
   }
 
   private func schedule(turnID: VoiceTurnID, deadline: VoiceTurnDeadline, interval: TimeInterval) {
@@ -579,6 +633,7 @@ final class VoiceTurnCoordinator {
     case .omniSTT: return "omni_stt"
     case .deepgramBatch: return "deepgram_batch"
     case .deepgramLive: return "deepgram_live"
+    case .onDeviceASR: return "on_device_asr"
     }
   }
 

@@ -7,7 +7,7 @@ every page, even page 0 with a limit, returned the wrong items. A user paging th
 soon-due items that were created earlier. Pagination now runs after the sort, so it matches the
 returned order.
 
-``database.action_items`` is import-pure (``database._client.db`` is a lazy proxy that does not
+List reads are hard-capped (``FirestoreReadMode.BOUNDED``). ``database.action_items`` is import-pure (``database._client.db`` is a lazy proxy that does not
 construct a client at import time), so no ``sys.modules`` stubbing is required. The query chain is
 replaced per-test via ``monkeypatch.setattr(action_items, 'db', ...)`` -- the sanctioned Tier-2 seam.
 """
@@ -36,18 +36,28 @@ class _Doc:
 
 
 class _Query:
-    """Firestore query stand-in. stream() returns docs sliced the way Firestore would if offset()/
-    limit() were applied, so the pre-fix code (which paginates on the query) sees a pre-sliced set."""
+    """Firestore query stand-in with completed equality filtering (production semantics)."""
 
-    def __init__(self, docs):
+    def __init__(self, docs, completed=None):
         self._docs = docs
+        self._completed = completed
         self._offset = 0
         self._limit = None
 
     def where(self, *a, **k):
-        return self
+        filt = k.get('filter') if k else None
+        completed = self._completed
+        if filt is not None:
+            field = getattr(filt, 'field_path', None) or getattr(filt, 'field', None)
+            value = getattr(filt, 'value', None)
+            if field == 'completed':
+                completed = value
+        return _Query(self._docs, completed=completed)
 
     def order_by(self, *a, **k):
+        return self
+
+    def select(self, _fields):
         return self
 
     def offset(self, n):
@@ -59,7 +69,11 @@ class _Query:
         return self
 
     def stream(self):
-        d = self._docs[self._offset :]
+        d = list(self._docs)
+        if self._completed is not None:
+            # Firestore equality excludes missing/null completed fields.
+            d = [doc for doc in d if doc._data.get('completed') is self._completed]
+        d = d[self._offset :]
         if self._limit is not None:
             d = d[: self._limit]
         return iter(d)
@@ -148,9 +162,11 @@ def test_list_observes_every_scanned_document(fake_db, monkeypatch):
 
     _ids(fake_db, limit=2)
 
-    assert [(family.value, mode.value, documents) for family, mode, documents in observed] == [
-        ('action_items_list', 'unbounded', 5)
-    ]
+    assert len(observed) == 1
+    family, mode, documents = observed[0]
+    assert family.value == 'action_items_list'
+    assert mode.value == 'bounded'
+    assert documents >= 5
 
 
 @pytest.mark.parametrize(
@@ -163,6 +179,6 @@ def test_list_observes_every_scanned_document(fake_db, monkeypatch):
     ],
 )
 def test_completed_normalized_to_bool(raw, expected_completed, expected_status):
-    out = action_items._prepare_action_item_for_read(dict(raw))
+    out = action_items.prepare_action_item_for_read(dict(raw))
     assert out['completed'] is expected_completed
     assert out['status'] == expected_status

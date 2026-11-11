@@ -8,13 +8,18 @@ from anyio import ClosedResourceError, EndOfStream, WouldBlock
 from fakes.firestore import get_mock_firestore
 
 
-def seed_listen_user(uid: str, *, uses_custom_stt: bool = True):
+def seed_listen_user(uid: str, *, uses_custom_stt: bool = True, single_language_mode: bool = False):
+    """Seed the live-route preference fields explicitly for provider-routing tests."""
+
     get_mock_firestore().collection("users").document(uid).set(
         {
             "id": uid,
             "language": "en",
             "private_cloud_sync_enabled": False,
-            "transcription_preferences": {"uses_custom_stt": uses_custom_stt},
+            "transcription_preferences": {
+                "uses_custom_stt": uses_custom_stt,
+                "single_language_mode": single_language_mode,
+            },
         }
     )
 

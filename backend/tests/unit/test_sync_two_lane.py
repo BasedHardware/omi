@@ -1,24 +1,63 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
+import json
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock
 
+import pytest
+import yaml
 from google.cloud import firestore
 
 from database import sync_ledger, user_usage
+from scripts import render_cloud_run_clone_env
 from scripts.render_cloud_run_clone_env import clone_environment
+from scripts.render_backend_runtime_env import _render_env_vars
 from utils.sync import backfill, capture_manifest, content_id, lanes
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / '.github/actions/deploy-backend-stack/action.yml'
+
+
+def backend_deploy_contract_text(workflow_name: str) -> str:
+    workflow = (REPOSITORY_ROOT / '.github/workflows' / workflow_name).read_text(encoding='utf-8')
+    if './.github/actions/deploy-backend-stack' not in workflow:
+        return workflow
+    return workflow + '\n' + DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
+
+
+def _load_backend_deploy_workflow(workflow_name: str) -> dict[str, Any]:
+    with (REPOSITORY_ROOT / '.github/workflows' / workflow_name).open('r', encoding='utf-8') as handle:
+        loaded = yaml.safe_load(handle)
+    assert isinstance(loaded, dict)
+    return cast(dict[str, Any], loaded)
+
+
+def _backend_deploy_steps(workflow_name: str) -> list[dict[str, Any]]:
+    workflow = _load_backend_deploy_workflow(workflow_name)
+    steps = list(workflow['jobs']['deploy']['steps'])
+    if any('./.github/actions/deploy-backend-stack' in str(step.get('uses', '')) for step in steps):
+        action = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+        assert isinstance(action, dict)
+        composite_steps = action['runs']['steps']
+        assert isinstance(composite_steps, list)
+        return [*steps, *composite_steps]
+    return steps
 
 
 def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     now = 2_000_000_000
     monkeypatch.setenv('SYNC_FRESH_MAX_AGE_SECONDS', '21600')
     monkeypatch.setenv('SYNC_BACKFILL_MAX_AGE_SECONDS', '2592000')
+    monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda name: int(name.split('.')[0]))
 
     fresh = lanes.classify_sync_lane([f'{now - 60}.opus'], client_device_id='device-1', now=now)
     historical = lanes.classify_sync_lane([f'{now - 8 * 86400}.opus'], client_device_id='device-1', now=now)
-    future = lanes.classify_sync_lane([f'{now + 301}.opus'], client_device_id='device-1', now=now)
+    # Phone-clock skew inside the shared tolerance stays trusted fresh audio...
+    skewed = lanes.classify_sync_lane([f'{now + 301}.opus'], client_device_id='device-1', now=now)
+    # ...while stamps beyond it remain untrusted backfill.
+    future = lanes.classify_sync_lane([f'{now + 601}.opus'], client_device_id='device-1', now=now)
     invalid = lanes.classify_sync_lane(['invalid.opus'], client_device_id='device-1', now=now)
     legacy = lanes.classify_sync_lane([f'{now - 60}.opus'], client_device_id=None, now=now)
 
@@ -26,6 +65,9 @@ def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     assert fresh.trust == lanes.CaptureTimeTrust.DEVICE_BOUND
     assert historical.lane == lanes.SyncLane.BACKFILL
     assert historical.reason == 'historical_capture'
+    assert skewed.lane == lanes.SyncLane.FRESH
+    assert skewed.trust is lanes.CaptureTimeTrust.DEVICE_BOUND
+    assert skewed.newest_capture_at <= now
     assert future.lane == lanes.SyncLane.BACKFILL
     assert future.trust == lanes.CaptureTimeTrust.UNTRUSTED
     assert invalid.lane == lanes.SyncLane.BACKFILL
@@ -119,6 +161,82 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
     assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in secrets
 
 
+def _keyed_backend_sync_live() -> dict[str, Any]:
+    return {
+        'spec': {
+            'template': {
+                'spec': {
+                    'serviceAccountName': '208440318997-compute@developer.gserviceaccount.com',
+                    'containers': [
+                        {
+                            'env': [
+                                {'name': 'REDIS_DB_HOST', 'value': '10.0.0.1'},
+                                {'name': 'GOOGLE_APPLICATION_CREDENTIALS', 'value': 'google-credentials.json'},
+                                {
+                                    'name': 'SERVICE_ACCOUNT_JSON',
+                                    'valueFrom': {'secretKeyRef': {'name': 'SERVICE_ACCOUNT_JSON', 'key': '1'}},
+                                },
+                                {
+                                    'name': 'ENCRYPTION_SECRET',
+                                    'valueFrom': {'secretKeyRef': {'name': 'ENCRYPTION_SECRET', 'key': 'latest'}},
+                                },
+                            ]
+                        }
+                    ],
+                }
+            }
+        }
+    }
+
+
+def _backfill_live(service_account: str) -> dict[str, Any]:
+    return {'spec': {'template': {'spec': {'serviceAccountName': service_account, 'containers': [{'env': []}]}}}}
+
+
+def _run_clone_main(tmp_path, monkeypatch, capsys, target: dict[str, Any] | None) -> str:
+    source_path = tmp_path / 'backend-sync-live.json'
+    source_path.write_text(json.dumps(_keyed_backend_sync_live()), encoding='utf-8')
+    argv = ['render_cloud_run_clone_env.py', '--source-json', str(source_path)]
+    if target is not None:
+        target_path = tmp_path / 'backend-sync-backfill-live.json'
+        target_path.write_text(json.dumps(target), encoding='utf-8')
+        argv += ['--target-json', str(target_path)]
+    monkeypatch.setattr('sys.argv', argv)
+    monkeypatch.setenv('ENV_OVERLAY', 'SYNC_TASKS_QUEUE=sync-backfill')
+    monkeypatch.setenv('SECRET_OVERLAY', '')
+    monkeypatch.setenv('REMOVE_ENV_VARS', 'HOSTED_PUSHER_API_URL')
+    assert render_cloud_run_clone_env.main() == 0
+    return capsys.readouterr().out
+
+
+def test_cloud_run_clone_keeps_key_refs_while_worker_runs_as_default_compute(tmp_path, monkeypatch, capsys):
+    out = _run_clone_main(
+        tmp_path, monkeypatch, capsys, _backfill_live('208440318997-compute@developer.gserviceaccount.com')
+    )
+
+    assert 'SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:1' in out
+    assert 'GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json' in out
+    assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in out
+
+
+def test_cloud_run_clone_keeps_key_refs_on_first_deploy_without_live_worker(tmp_path, monkeypatch, capsys):
+    out = _run_clone_main(tmp_path, monkeypatch, capsys, None)
+
+    assert 'SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:1' in out
+
+
+def test_cloud_run_clone_drops_key_refs_when_worker_runs_as_attached_identity(tmp_path, monkeypatch, capsys):
+    out = _run_clone_main(
+        tmp_path, monkeypatch, capsys, _backfill_live('backend-runtime@based-hardware.iam.gserviceaccount.com')
+    )
+
+    assert 'SERVICE_ACCOUNT_JSON' not in out
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in out
+    assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in out
+    assert 'REDIS_DB_HOST=10.0.0.1' in out
+    assert 'SYNC_TASKS_QUEUE=sync-backfill' in out
+
+
 def test_cloud_run_clone_removes_retired_source_env():
     service = {
         'spec': {
@@ -149,31 +267,95 @@ def test_cloud_run_clone_removes_retired_source_env():
     assert 'REDIS_DB_HOST=10.0.0.1' in env_vars
 
 
+def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_overlay():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {
+                                    'name': 'STT_PRERECORDED_MODEL',
+                                    'value': r'modulate-velma-2,parakeet\primary',
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    env_vars, _ = clone_environment(
+        service,
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        '',
+    )
+
+    assert env_vars.splitlines() == [
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        r'STT_PRERECORDED_MODEL=modulate-velma-2\,parakeet\\primary',
+    ]
+
+
 def test_deploy_contract_routes_both_backfill_budget_alerts():
-    action = (Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
+    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    manual = backend_deploy_contract_text('gcp_backend.yml')
+    composite = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
 
     assert 'SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS' in manual
-    assert "provision_budget_alerts: ${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}" in manual
+    assert (
+        "sync_backfill_budget_alerts: ${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}" in manual
+    )
+    assert 'provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}' in composite
     assert 'for THRESHOLD in 70 90' in action
-    assert 'gcloud monitoring policies create' in action
+    assert '.github/scripts/ensure_monitoring_metric_alert_policy.py' in action
+    assert 'reconcile_sync_backfill_alert_policy.py' in action
+    assert 'verify_sync_backfill_alert_policy.py' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
+    assert 'METRIC="sync_backfill_dispatch_abort"' in action
+    assert 'The request was aborted because there was no available instance' in action
+
+
+def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep():
+    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    assert 'sync_backfill_uid_sequencer_scheduler_failure' in action or 'scheduler_${KIND}' in action
+    assert 'resource.labels.job_id=\"sync-backfill-uid-sequencer\"' in action
+    assert 'AttemptFinished' in action
+    assert 'action=sweep_summary outcome=done' in action
+    assert "CONDITION='absent'" in action
+    assert "DURATION='600s'" in action
+
+
+def test_sequencer_scheduler_alerts_page_only_on_sustained_failure():
+    # Live prod policies (set by the alert owner on 2026-10-15/16) wait 10 minutes for
+    # both kinds; the deploy verifier must expect the same, or every prod deploy fails.
+    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    step = action.split('Provision backfill sequencer Scheduler execution alerts', 1)[1]
+    step = step.split('\n    - name:', 1)[0]
+    assert step.count("DURATION='600s'") == 2
+    assert "DURATION='0s'" not in step
+    assert step.count('DURATION_SECONDS=600') == 2
+    assert 'DURATION_SECONDS=0' not in step
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
-    root = Path(__file__).resolve().parents[3]
+    root = REPOSITORY_ROOT
     action = (root / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    manual = (root / '.github/workflows/gcp_backend.yml').read_text()
-    auto_dev = (root / '.github/workflows/gcp_backend_auto_dev.yml').read_text()
+    manual = backend_deploy_contract_text('gcp_backend.yml')
+    auto_dev = backend_deploy_contract_text('gcp_backend_auto_dev.yml')
+    composite = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
 
     for workflow in (manual, auto_dev):
-        assert 'uses: ./.github/actions/sync-backfill-lifecycle' in workflow
+        assert 'uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle' in workflow
         assert 'id: sync-backfill' in workflow
         assert 'mode: worker' in workflow
-        assert 'mode: platform' in workflow
+        assert "'platform' || 'dispatch'" in workflow
         assert '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}' in workflow
         assert '${{ steps.sync-backfill.outputs.revision }}' in workflow
         assert 'provision_sync_ledger_ttl: \'true\'' in workflow
+        assert 'firestore_project_id: ${{ inputs.runtime_gcp_project_id }}' in composite
         assert '--wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}' in workflow
         assert 'gcloud run services update-traffic backend-sync-backfill' in workflow
         assert '--cloud-run-service backend-sync-backfill' in workflow
@@ -181,21 +363,115 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
             '--expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}' in workflow
         )
 
-    assert "provision_budget_alerts: 'false'" in auto_dev
+    assert "default: 'false'" in composite
+    assert 'sync_backfill_budget_alerts:' in composite
     assert 'id: backfill-service' in action
     assert 'id: backfill-runtime' in action
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'render_cloud_run_clone_env.py' in action
-    assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
+    # B4: the worker's queues come from the ops file in prod (sync-backfill only outside prod).
+    assert 'SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}' in action
+    assert 'ops_train.py" render-env --env prod' in action
+    # Dispatch concurrency must stay within max instances x concurrency: offering more
+    # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
+    # back it off, which previously stranded recordings for hours. 2026-10-24
+    # right-sizing (lead's live change 06:06Z): the worker idles at min 0; the
+    # bounded queue backoff absorbs scale-from-zero dispatch latency.
     assert '--min-instances=0' in action
-    assert '--max-instances=4' in action
-    assert '--concurrency=1' in action
+    assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in action
+    assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in action
+    assert '--concurrency=6' in action
+    assert '--cpu=2' in action
+    # margin-20: prod 2Gi (7d max bucket <=1.149GiB at concurrency 6); dev keeps 8Gi.
+    assert "--memory=${{ inputs.project_id == 'based-hardware' && '2Gi' || '8Gi' }}" in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
-    assert 'gcloud tasks queues create sync-backfill' in action
-    assert '--max-concurrent-dispatches=4' in action
+    # Runtime ops owns the cap; both deploy paths preserve it rather than reset it.
+    stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
+    sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
+    assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in sync_step
+    assert 'gcloud tasks queues create "$BACKFILL_QUEUE"' in action
+    # The reconcile step manages the manifest-selected queue (prod: sync-backfill-fresh).
+    reconcile = next(
+        step
+        for step in yaml.safe_load(action)['runs']['steps']
+        if step.get('name') == 'Reconcile bounded sync backfill queue'
+    )
+    assert reconcile['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
+    assert 'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}' in stack
+    assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
+    assert '--max-dispatches-per-second=15' in action
+    assert '--max-backoff=60s' in action
+    # The queue's attempt cap must mirror get_sync_tasks_max_attempts()
+    # (default 5): omitted queue fields keep Google's default of 100, so a
+    # handler-budget deferral chain ended through the 409 would keep retrying
+    # past the preserved run lock and re-run whole-budget pipelines.
+    assert '--max-attempts=5' in action
+    # The fresh lane and the fallback route in _enqueue_sync_job_routed deliver
+    # through the main sync-jobs queue (SYNC_TASKS_QUEUE), so its attempt cap
+    # must be reconciled too — update-only, because the queue's throughput
+    # limits are owned elsewhere. A create branch here would race the owner.
+    assert 'gcloud tasks queues describe sync-jobs' in action
+    assert 'gcloud tasks queues update sync-jobs' in action
+    assert 'gcloud tasks queues create sync-jobs' not in action
+    # The main-queue update must cap attempts without touching throughput
+    # fields another team owns: isolate the update command and assert its
+    # only field is the attempt cap.
+    main_queue_update = action.split('gcloud tasks queues update sync-jobs', 1)[1].split('fi\n', 1)[0]
+    assert '--max-attempts=5' in main_queue_update
+    assert '--max-concurrent-dispatches' not in main_queue_update
+    assert '--max-dispatches-per-second' not in main_queue_update
     assert 'collection-group=sync_content_ledger' in action
     assert "inputs.provision_sync_ledger_ttl == 'true'" in action
+    assert 'firestore_project_id:' in action
+    assert 'FIRESTORE_PROJECT_ID' in action
     assert "inputs.provision_budget_alerts == 'true'" in action
+
+
+def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation():
+    """cloud-run-only deploys keep the bounded lane without IAM/TTL writes."""
+    composite = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+    steps = composite['runs']['steps']
+    lane = next(step for step in steps if step.get('name') == 'Provision sync-backfill lane')
+    assert 'if' not in lane
+    mode = lane['with']['mode']
+    assert "deploy_profile == 'auto-dev'" in mode
+    assert "deploy_targets == 'all'" in mode
+    assert "'platform'" in mode and "'dispatch'" in mode
+
+    lifecycle = yaml.safe_load(
+        (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(encoding='utf-8')
+    )
+    lsteps = {step['name']: step for step in lifecycle['runs']['steps']}
+    iam = lsteps['Bind backend-sync invoker to backfill worker']
+    queue = lsteps['Reconcile bounded sync backfill queue']
+    ttl = lsteps['Provision and verify sync ledger TTL']
+    budget = lsteps['Provision routed backfill budget alerts']
+    abort = lsteps['Provision sync-backfill dispatch-abort alert']
+
+    assert 'dispatch' not in iam['if'] and 'platform' in iam['if']
+    assert 'dispatch' not in ttl['if'] and 'platform' in ttl['if']
+    assert 'dispatch' not in budget['if'] and 'platform' in budget['if']
+    assert 'dispatch' in queue['if'] and 'platform' in queue['if']
+    assert 'dispatch' in abort['if'] and 'platform' in abort['if']
+    assert "provision_budget_alerts == 'true'" in abort['if']
+
+    resolver = next(step for step in lifecycle['runs']['steps'] if step.get('id') == 'live-max-scale')
+    assert 'if' not in resolver  # Also resolve for platform/dispatch, not just the worker deploy.
+    assert lifecycle['runs']['steps'].index(resolver) < lifecycle['runs']['steps'].index(queue)
+    assert queue['env']['BACKFILL_MAX_CONCURRENT_DISPATCHES'] == (
+        '${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}'
+    )
+    run = queue['run']
+    for flag in (
+        '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"',
+        '--max-dispatches-per-second=15',
+        '--min-backoff=5s',
+        '--max-backoff=60s',
+    ):
+        assert run.count(flag) == 2
+    assert 'sync_backfill_dispatch_abort' in abort['run']
+    assert 'THRESHOLD=30' in abort['run'] and 'WINDOW=1800s' in abort['run']
+    assert abort['run'].count('--threshold-value="$THRESHOLD" --alignment-period="$WINDOW"') == 2
 
 
 def test_cloud_run_default_service_lists_include_sync_backfill():
@@ -214,68 +490,80 @@ def test_cloud_run_default_service_lists_include_sync_backfill():
 
 def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_candidates():
     """Static deployment-contract guard for the two P0 rollout boundaries."""
-    root = Path(__file__).resolve().parents[3]
-    manual = (root / '.github/workflows/gcp_backend.yml').read_text()
-    auto_dev = (root / '.github/workflows/gcp_backend_auto_dev.yml').read_text()
+    manual = backend_deploy_contract_text('gcp_backend.yml')
+    auto_dev = backend_deploy_contract_text('gcp_backend_auto_dev.yml')
+    workflow_only = (REPOSITORY_ROOT / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
 
     for workflow in (manual, auto_dev):
         assert 'verify_sync_ledger_fence_transition.py' in workflow
         assert '--desired-mode="$SYNC_LEDGER_FENCE_MODE"' in workflow
-        assert workflow.count("SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}") >= 2
+        assert '--allow-tagged-no-percent-targets' in workflow
+        assert workflow.count('SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}') >= 2
 
-    assert "TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}" in manual
-    assert "format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG)" in manual
+    assert "TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}" in workflow_only
+    assert "format('--tag={0}', inputs.transcription_candidate_tag)" in manual
     assert 'resolve_cloud_run_tagged_url.py' in manual
-    assert 'uses: ./.github/actions/transcription-release-candidate-probe' in manual
+    assert 'uses: ./.deploy-workflow-source/.github/actions/transcription-release-candidate-probe' in manual
     assert 'candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}' in manual
-    assert 'project_id: ${{ vars.GCP_PROJECT_ID }}' in manual
+    assert 'project_id: ${{ inputs.project_id }}' in manual
     assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual
     assert 'Remove passed transcription candidate tag' in manual
     assert 'Remove failed transcription candidate tag' in manual
-    assert (
-        'if: ${{ failure() && steps.deploy-backend.outcome == \'success\''
-        ' && github.event.inputs.environment == \'development\' }}' in manual
-    )
+    assert "inputs.environment == 'development'" in manual
     assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
     )
 
 
-def test_transcription_candidate_gate_is_development_only():
-    """The candidate probe must never gate a production deploy.
-
-    The probe reaches the candidate over a Cloud Run tag URL, which is a run.app
-    URL. Production disables run.app URLs and restricts ingress to internal and
-    load-balancer traffic, so a production tag resolves to no HTTPS endpoint and
-    every production deploy fails at the probe (2026-07-17, run 29574215693).
-    """
-    import yaml
-
-    root = Path(__file__).resolve().parents[3]
-    workflow = yaml.safe_load((root / '.github/workflows/gcp_backend.yml').read_text())
-    steps = workflow['jobs']['deploy']['steps']
+def test_production_cloud_run_only_smokes_the_promoted_serving_api():
+    """Prod Cloud Run promotion rolls back on runner-local serving smoke failure."""
+    steps = _backend_deploy_steps('gcp_backend.yml')
     by_name = {step.get('name'): step for step in steps}
 
-    gate_steps = (
+    public_probe = by_name['Gate backend candidate on known audio']
+    assert public_probe['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
+
+    serving_smoke = by_name['Smoke promoted production serving API']
+    assert serving_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'prod' }}"
+    assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
+    assert '--candidate-api-url https://api.omi.me' in serving_smoke['run']
+    assert 'firebase-production-serving-token' in serving_smoke['run']
+    assert 'FIREBASE_PROBE_TOKEN' not in serving_smoke['run']
+
+    for name in (
         'Resolve transcription candidate URL',
-        'Gate backend candidate on known audio',
         'Remove passed transcription candidate tag',
         'Remove failed transcription candidate tag',
-    )
-    for name in gate_steps:
-        assert name in by_name, f'{name} step is missing'
+    ):
         condition = by_name[name].get('if') or ''
-        assert (
-            "github.event.inputs.environment == 'development'" in condition
-        ), f'{name} must be development-only; a production run cannot resolve a tag URL'
+        assert "inputs.environment == 'development'" in condition
 
-    # The tag itself is only requested for development; production never creates one.
-    deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
-    assert "github.event.inputs.environment == 'development' && format('--tag={0}'" in deploy_flags
+    deploy_flags = by_name['Deploy ${{ inputs.service }} to Cloud Run']['with']['flags']
+    assert "inputs.transcription_candidate_tag != ''" in deploy_flags
+    assert steps.index(by_name['Verify serving backend release vector']) < steps.index(serving_smoke)
+    assert steps.index(serving_smoke) < steps.index(
+        by_name['Restore Cloud Run traffic snapshot after failed promotion']
+    )
+    assert (
+        "steps.smoke-promoted-production-serving-api.outcome == 'failure'"
+        in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
+    )
 
-    # Promotion must not depend on the skipped gate.
-    for name in ('Verify validated revisions are still current', 'Shift Cloud Run traffic to validated revisions'):
-        assert by_name[name].get('if') is None, f'{name} must still run when the gate is skipped'
+    development_smoke = by_name['Smoke What Matters Now datastore query']
+    assert development_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
+    assert development_smoke.get('id') == 'smoke-what-matters-now-datastore-query'
+    assert steps.index(by_name['Verify serving backend release vector']) < steps.index(development_smoke)
+    assert steps.index(development_smoke) < steps.index(
+        by_name['Restore Cloud Run traffic snapshot after failed promotion']
+    )
+    assert (
+        "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'"
+        in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
+    )
+    assert (
+        'gcloud run services describe backend --project=${{ inputs.project_id }}'
+        in by_name['Verify validated revisions are still current']['run']
+    )
 
 
 def test_static_processed_segment_marker_follows_partial_result_checkpoint():
@@ -355,6 +643,7 @@ def test_server_manifest_allows_only_one_content_set_per_conversation(monkeypatc
 
 
 def test_backfill_reservation_maps_user_and_global_caps(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     # Admission caps are opt-in now (Cloud Tasks queue is the pacer); enable them
     # to exercise the user/global cap → reason mapping.
     monkeypatch.setenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'true')
@@ -463,7 +752,24 @@ def test_durable_ledger_replays_completion_and_blocks_recent_duplicate():
     busy = sync_ledger._claim_transaction.to_wrap(_Transaction(), busy_ref, 'new-job', 'backfill', now)
 
     assert completed == {'outcome': 'completed', 'result': completed_result}
-    assert busy == {'outcome': 'busy'}
+    assert busy == {'outcome': 'busy', 'job_id': 'other'}
+
+
+def test_expired_job_can_still_have_a_live_content_owner():
+    # The job result expires at 24h, but the content claim lasts 48h. An
+    # offline client can legitimately get 404 then 409 for the same bytes.
+    from database.sync_jobs import JOB_TTL_SECONDS
+
+    now = datetime.now(timezone.utc)
+    transaction = _Transaction()
+    age_seconds = JOB_TTL_SECONDS + 1
+    assert age_seconds < sync_ledger.CLAIM_STALE_SECONDS
+    owner = _Ref(
+        {'status': 'processing', 'job_id': 'expired-owner', 'updated_at': now - timedelta(seconds=age_seconds)}
+    )
+    claim = sync_ledger._claim_transaction.to_wrap(transaction, owner, 'new-upload', 'fresh', now)
+    assert claim == {'outcome': 'busy', 'job_id': 'expired-owner'}
+    assert transaction.writes == []
 
 
 def test_durable_ledger_side_effect_is_once_only():
@@ -747,26 +1053,39 @@ def test_completion_transaction_accepts_success_and_expected_silence():
 
 
 def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
+    from tests.unit.fixtures.shadow_usage_firestore import Store
+
     transaction = _Transaction()
     marker_ref = _Ref({'status': 'processing'})
-    usage_ref = _Ref()
+    store = Store({'users/uid': {'synthetic': True}})
+    user_ref = store.collection('users').document('uid')
+    usage_ref = user_ref.collection('hourly_usage').document('2026-10-23-15')
+    update = {'id': '2026-10-23-15', 'transcription_seconds': firestore.Increment(5)}
 
     recorded = user_usage._update_hourly_usage_once_transaction.to_wrap(
         transaction,
         marker_ref,
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
     duplicate = user_usage._update_hourly_usage_once_transaction.to_wrap(
         _Transaction(),
         _Ref({'usage_committed_at': datetime.now(timezone.utc)}),
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
 
     assert recorded is True
-    assert len(transaction.writes) == 2
+    assert len(transaction.writes) == 3
     assert transaction.writes[0][1].get('usage_committed_at') is not None
+    assert transaction.writes[1][0] is usage_ref
+    total_ref, total_update, total_merge = transaction.writes[2]
+    assert total_ref.path == 'users/uid/monthly_usage_totals/2026-10'
+    assert total_update['totals']['transcription_seconds'] is update['transcription_seconds']
+    assert total_update['days']['23']['transcription_seconds'] is update['transcription_seconds']
+    assert total_merge is True
     assert duplicate is False
 
 
@@ -811,3 +1130,165 @@ def test_durable_processed_segment_is_not_added_twice():
 
     assert added is True
     assert duplicate is False
+
+
+def test_expired_busy_owner_is_taken_over_before_48h(monkeypatch):
+    now = datetime.now(timezone.utc)
+    ref = _Ref(
+        {
+            'status': 'processing',
+            'job_id': 'expired-owner',
+            'updated_at': now - timedelta(hours=25),
+            'ledger_run_token': 'old-run',
+            'ledger_run_epoch': 1,
+            'processed_segment_ids': ['already-done'],
+        }
+    )
+    transaction = _Transaction()
+    client = MagicMock()
+    client.transaction.return_value = transaction
+    monkeypatch.setattr(sync_ledger, '_ledger_ref', lambda *_: ref)
+    monkeypatch.setattr(sync_ledger, '_claim_transaction', sync_ledger._claim_transaction.to_wrap)
+    read_job = MagicMock(return_value=None)
+    monkeypatch.setattr(sync_ledger, 'get_sync_job', read_job)
+    claim = sync_ledger.claim_sync_content('uid', 'content', 'new-job', 'fresh', firestore_client=client)
+    assert claim == {'outcome': 'owned'}
+    read_job.assert_called_once_with('expired-owner')
+    assert len(transaction.writes) == 1
+    updates = transaction.writes[0][1]
+    assert updates['job_id'] == 'new-job'
+    assert updates['ledger_run_token'] == firestore.DELETE_FIELD
+    assert updates['ledger_run_epoch'] == firestore.DELETE_FIELD
+    assert 'processed_segment_ids' not in updates
+
+
+def test_live_busy_owner_is_not_taken_over(monkeypatch):
+    ref = _Ref({'status': 'processing', 'job_id': 'live-owner', 'updated_at': datetime.now(timezone.utc)})
+    transaction = _Transaction()
+    client = MagicMock()
+    client.transaction.return_value = transaction
+    monkeypatch.setattr(sync_ledger, '_ledger_ref', lambda *_: ref)
+    monkeypatch.setattr(sync_ledger, '_claim_transaction', sync_ledger._claim_transaction.to_wrap)
+    monkeypatch.setattr(sync_ledger, 'get_sync_job', lambda _: {'status': 'processing'})
+    assert sync_ledger.claim_sync_content('uid', 'content', 'new-job', 'fresh', firestore_client=client) == {
+        'outcome': 'busy',
+        'job_id': 'live-owner',
+    }
+    assert transaction.writes == []
+
+
+def test_missing_owner_takeover_preserves_concurrent_owner_and_completion():
+    now = datetime.now(timezone.utc)
+    transaction = _Transaction()
+    changed = _Ref({'status': 'processing', 'job_id': 'new-owner', 'updated_at': now})
+    assert sync_ledger._claim_transaction.to_wrap(
+        transaction, changed, 'candidate', 'fresh', now, missing_owner='expired-owner'
+    ) == {'outcome': 'busy', 'job_id': 'new-owner'}
+    result = {
+        'new_conversation_ids': [],
+        'updated_conversation_ids': [],
+        'total_segments': 1,
+        'failed_segments': 0,
+        'errors': [],
+        'outcome': 'success',
+    }
+    completed = _Ref({'status': 'completed', 'job_id': 'expired-owner', 'result': result})
+    assert sync_ledger._claim_transaction.to_wrap(
+        transaction, completed, 'candidate', 'fresh', now, missing_owner='expired-owner'
+    ) == {'outcome': 'completed', 'result': result}
+    assert transaction.writes == []
+
+
+def test_redis_failure_does_not_authorize_owner_takeover(monkeypatch):
+    import pytest
+
+    transaction = _Transaction()
+    client = MagicMock()
+    client.transaction.return_value = transaction
+    ref = _Ref({'status': 'processing', 'job_id': 'owner', 'updated_at': datetime.now(timezone.utc)})
+    monkeypatch.setattr(sync_ledger, '_ledger_ref', lambda *_: ref)
+    monkeypatch.setattr(sync_ledger, '_claim_transaction', sync_ledger._claim_transaction.to_wrap)
+    monkeypatch.setattr(sync_ledger, 'get_sync_job', MagicMock(side_effect=ConnectionError('Redis unavailable')))
+    with pytest.raises(ConnectionError):
+        sync_ledger.claim_sync_content('uid', 'content', 'new-job', 'fresh', firestore_client=client)
+    assert transaction.writes == []
+
+
+def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
+    manifest = yaml.load((REPOSITORY_ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    env = manifest['environments']['prod']['cloud_run']['services']['backend-sync-backfill']['env']
+    stages = json.loads((REPOSITORY_ROOT / 'config/diarization-cohort-stages.json').read_text())
+    keys = [key for key in stages['A'] if not key.endswith('_UID_ALLOWLIST')]
+    expected = {key: env[key]['value'] for key in keys}
+    assert expected in [{key: values[key] for key in keys} for values in stages.values()]
+    assert all(key not in env for key in stages['A'] if key.endswith('_UID_ALLOWLIST'))
+    action = yaml.load(
+        (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(), Loader=yaml.CSafeLoader
+    )
+    steps = action['runs']['steps']
+    clone_step = next(step for step in steps if step.get('id') == 'backfill-runtime')
+    deploy_step = next(step for step in steps if step.get('id') == 'deploy-backend-sync-backfill')
+    assert '${{ inputs.backfill_env_vars }}' in clone_step['env']['ENV_OVERLAY']
+    assert deploy_step['with']['env_vars'] == '${{ steps.backfill-runtime.outputs.env_vars }}'
+    assert (
+        'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}'
+        in DEPLOY_BACKEND_STACK_ACTION.read_text()
+    )
+    source = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [{'env': [{'name': name, 'value': value} for name, value in stages['A'].items()]}]
+                }
+            }
+        }
+    }
+    cohort_env = {key: env[key] for key in expected}
+    values, _ = clone_environment(source, _render_env_vars(cohort_env), '', clone_step['env']['REMOVE_ENV_VARS'])
+    rendered = dict(line.split('=', 1) for line in values.splitlines())
+    assert {key: rendered[key] for key in expected} == expected
+    # Omitted UID entries survive cloning and Cloud Run env merge unchanged.
+    for key in stages['A']:
+        if key.endswith('_UID_ALLOWLIST'):
+            assert rendered[key] == stages['A'][key]
+    assert not (set(expected) & set(clone_step['env']['REMOVE_ENV_VARS'].split(',')))
+    assert not (set(expected) & set(deploy_step['with']['flags'].split('--remove-env-vars=')[1].split()[0].split(',')))
+
+
+@pytest.mark.parametrize(
+    'manifest_env, expected',
+    [
+        ('SYNC_TASKS_QUEUE=sync-backfill-fresh\nSYNC_BACKFILL_TASKS_QUEUE=sync-backfill-fresh', 'sync-backfill-fresh'),
+        ('REDIS_DB_HOST=10.0.0.2', 'sync-backfill'),
+    ],
+)
+def test_backfill_queue_comes_from_the_manifest_not_a_literal(tmp_path, manifest_env, expected):
+    """10-19 04:52Z: the train re-pointed backfill at the stalled sync-backfill queue on every deploy."""
+
+    import os
+    import subprocess
+
+    action = yaml.safe_load(
+        (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(encoding='utf-8')
+    )
+    steps = {step.get('id'): step for step in action['runs']['steps']}
+    # Queues resolve once in ops-queues (B4): prod reads the ops file (fail-closed, tested in
+    # test_config_train); every other project takes the manifest's values, sync-backfill only as default.
+    queue_step = steps['ops-queues']['run']
+    assert steps['ops-queues']['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
+    script = queue_step.split('if [[', 1)[0] + 'echo "SYNC_BACKFILL_TASKS_QUEUE=${backfill_queue}"'
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env={**os.environ, 'BACKFILL_ENV': manifest_env},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f'SYNC_BACKFILL_TASKS_QUEUE={expected}'
+    assert steps['backfill-service']['env']['BACKFILL_QUEUE'] == '${{ steps.ops-queues.outputs.backfill_queue }}'
+    overlay = steps['backfill-runtime']['env']['ENV_OVERLAY'].splitlines()
+    # The resolved worker queue comes after the manifest overlay, so no literal can override it.
+    assert overlay.index('${{ inputs.backfill_env_vars }}') < overlay.index(
+        'SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}'
+    )
+    assert 'SYNC_TASKS_QUEUE=sync-backfill' not in overlay

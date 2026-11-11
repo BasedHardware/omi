@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-negotiated-hint-as-hard-limit",
+  "violated_contract": "A client-supplied format hint may size a buffer but must never be enforced as a hard limit on a self-describing wire format; the decoder's bound must come from the format's own maximum, so a client whose hint understates its data loses no frames.",
+  "canonical_prevention": "Size decode buffers from the codec's maximum legal unit (opus_decode_capacity() = 120 ms of samples) rather than from the negotiated codec/frame parameter, and cover the mismatch with a regression test that drives the real receive path with an oversized unit.",
+  "evidence_prs": [10701],
+  "scope_hints": ["backend/routers/listen/**", "backend/utils/transcribe_decisions.py"],
+  "status": "open"
+}

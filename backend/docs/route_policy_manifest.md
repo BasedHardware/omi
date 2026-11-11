@@ -15,7 +15,7 @@ The initial manifest covers the primary FastAPI app created in `backend/main.py`
 - Application WebSocket routes: included in inventory and manifest coverage checks
 - FastAPI-generated docs/OpenAPI/Redoc system routes: listed as excluded system routes in generated inventory
 
-Sibling FastAPI services such as `pusher`, `llm_gateway`, `agent-proxy`, `diarizer`, `modal`, and `parakeet` should get their own service ids or manifests later.
+Sibling FastAPI services such as `pusher`, `llm_gateway`, `diarizer`, `modal`, and `parakeet` should get their own service ids or manifests later.
 
 ## Route Identity
 
@@ -83,3 +83,5 @@ On pull requests, CI compares this file with the target branch copy and fails if
 6. Use `review_status: exempt` only with an `exempt_reason`.
 
 Keep declared policy separate from observed evidence. Dependency names, OpenAPI tags, timeout override hints, and endpoint modules are generated to help review, but they are not a substitute for owner-reviewed policy.
+
+`plugin_capability` denotes the opt-in plugin transport's app/account/conversation-scoped HS256 bearer, not a Firebase or Google OIDC token. The audio handler also checks current account, installation and conversation eligibility; see [plugin transport](plugin-transport.md).

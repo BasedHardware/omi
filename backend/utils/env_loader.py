@@ -53,6 +53,31 @@ def is_provider_secret_key(key: str) -> bool:
     return bool(_PROVIDER_SECRET_RE.search(key))
 
 
+def firebase_admin_options(environ: dict[str, str] | None = None) -> dict[str, str] | None:
+    """Return Firebase Admin options for the configured authentication project.
+
+    Dev services intentionally validate production Firebase identities while
+    their Google application credentials continue to select the dev data
+    project. Firebase Admin therefore needs the explicit auth project; Google
+    Cloud clients remain independently owned by ADC.
+    """
+
+    source = os.environ if environ is None else environ
+    # A keyless deployment has no JSON ``project_id`` to fall back on, so the
+    # customer-data pin doubles as the auth project unless one is named.
+    project_id = (source.get("FIREBASE_AUTH_PROJECT_ID", "") or source.get("OMI_CUSTOMER_DATA_PROJECT", "")).strip()
+    # Custom tokens on a keyless identity are signed through IAM signBlob by
+    # this account; it must belong to the Firebase project (a dev-project
+    # runtime identity cannot sign for production Auth on its own behalf).
+    signer = source.get("FIREBASE_SIGNER_SERVICE_ACCOUNT", "").strip()
+    options: dict[str, str] = {}
+    if project_id:
+        options["projectId"] = project_id
+    if signer:
+        options["serviceAccountId"] = signer
+    return options or None
+
+
 def stage_from_env(environ: dict[str, str] | None = None) -> str | None:
     """Return the active stage name, or ``None`` when only ``backend/.env`` applies."""
 
@@ -88,13 +113,15 @@ def stage_env_path(stage: str, base: Path | None = None) -> Path:
     return root / stage_env_filename(stage)
 
 
-_ADC_ENV_KEYS = frozenset({"GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"})
+_AUTH_CREDENTIAL_ENV_KEYS = frozenset(
+    {"FIREBASE_AUTH_CREDENTIALS_PATH", "GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"}
+)
 
 
 def _skip_env_key_for_auth_emulator(key: str) -> bool:
-    """Do not load production ADC when the Auth emulator is active."""
+    """Do not load real Firebase credentials when the Auth emulator is active."""
 
-    if key not in _ADC_ENV_KEYS:
+    if key not in _AUTH_CREDENTIAL_ENV_KEYS:
         return False
     return bool(os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip())
 
@@ -157,5 +184,9 @@ def load_backend_env(base: Path | None = None) -> list[Path]:
         loaded.append(personal)
     elif stage is None:
         load_dotenv(personal)
+
+    if os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip():
+        for credential_key in _AUTH_CREDENTIAL_ENV_KEYS:
+            os.environ.pop(credential_key, None)
 
     return loaded

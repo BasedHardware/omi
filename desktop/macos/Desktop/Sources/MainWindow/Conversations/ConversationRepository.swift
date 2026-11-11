@@ -43,8 +43,9 @@ struct ConversationListQuery: Equatable {
   let starredOnly: Bool
   let date: Date?
   let folderId: String?
+  var includeDiscarded: Bool = false
 
-  var hasFilters: Bool { starredOnly || date != nil || folderId != nil }
+  var hasFilters: Bool { starredOnly || date != nil || folderId != nil || includeDiscarded }
 
   var dateRange: (start: Date?, end: Date?) {
     guard let date else { return (nil, nil) }
@@ -61,6 +62,12 @@ enum ConversationSnapshotSource: Equatable {
   case rollback
 }
 
+enum ConversationRestoreError: LocalizedError {
+  case stillDiscarded
+
+  var errorDescription: String? { "This conversation couldn't be restored. Try again." }
+}
+
 struct ConversationRepositorySnapshot: Equatable {
   let conversations: [ServerConversation]
   let count: Int?
@@ -70,10 +77,11 @@ struct ConversationRepositorySnapshot: Equatable {
 }
 
 protocol ConversationRemoteDataSource: Sendable {
-  func list(query: ConversationListQuery) async throws -> [ServerConversation]
+  func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation
-  func search(text: String) async throws -> [ServerConversation]
+  func search(text: String, includeDiscarded: Bool) async throws -> [ServerConversation]
+  func restore(id: String) async throws -> ServerConversation
   func setStarred(id: String, starred: Bool) async throws -> ServerConversation
   func updateTitle(id: String, title: String) async throws -> ServerConversation
   func moveToFolder(id: String, folderId: String?) async throws -> ServerConversation
@@ -89,6 +97,11 @@ protocol ConversationLocalDataSource: Sendable {
     scope: ConversationCacheWriteScope,
     generation: Int
   ) async throws
+  func storeMany(
+    _ conversations: [ServerConversation],
+    scope: ConversationCacheWriteScope,
+    generation: Int
+  ) async throws
   func delete(
     id: String,
     scope: ConversationCacheWriteScope,
@@ -96,14 +109,22 @@ protocol ConversationLocalDataSource: Sendable {
   ) async throws
 }
 
+extension ConversationLocalDataSource {
+  func storeMany(
+    _ conversations: [ServerConversation], scope: ConversationCacheWriteScope, generation: Int
+  ) async throws {
+    for conversation in conversations { try? await store(conversation, scope: scope, generation: generation) }
+  }
+}
+
 struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
-  func list(query: ConversationListQuery) async throws -> [ServerConversation] {
+  func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation] {
     let range = query.dateRange
     return try await APIClient.shared.getConversations(
-      limit: 50,
-      offset: 0,
+      limit: limit,
+      offset: offset,
       statuses: [.completed, .processing],
-      includeDiscarded: false,
+      includeDiscarded: query.includeDiscarded,
       startDate: range.start,
       endDate: range.end,
       folderId: query.folderId,
@@ -114,7 +135,7 @@ struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
   func count(query: ConversationListQuery) async throws -> Int {
     let range = query.dateRange
     return try await APIClient.shared.getConversationsCount(
-      includeDiscarded: false,
+      includeDiscarded: query.includeDiscarded,
       statuses: [.completed, .processing],
       startDate: range.start,
       endDate: range.end,
@@ -124,16 +145,20 @@ struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
   }
 
   func detail(id: String) async throws -> ServerConversation {
-    try await APIClient.shared.getConversation(id: id)
+    try await APIClient.shared.getConversation(id: id, includeDiscarded: true)
   }
 
-  func search(text: String) async throws -> [ServerConversation] {
+  func search(text: String, includeDiscarded: Bool) async throws -> [ServerConversation] {
     try await APIClient.shared.searchConversations(
       query: text,
       page: 1,
       perPage: 50,
-      includeDiscarded: false
+      includeDiscarded: includeDiscarded
     ).items
+  }
+
+  func restore(id: String) async throws -> ServerConversation {
+    try await APIClient.shared.restoreConversation(conversationId: id)
   }
 
   func setStarred(id: String, starred: Bool) async throws -> ServerConversation {
@@ -159,7 +184,8 @@ struct LiveConversationLocalDataSource: ConversationLocalDataSource {
     return try await TranscriptionStorage.shared.getLocalConversations(
       limit: 50,
       starredOnly: query.starredOnly,
-      folderId: query.folderId
+      folderId: query.folderId,
+      includeDiscarded: query.includeDiscarded
     )
   }
 
@@ -167,7 +193,8 @@ struct LiveConversationLocalDataSource: ConversationLocalDataSource {
     guard query.date == nil else { return 0 }
     return try await TranscriptionStorage.shared.getLocalConversationsCount(
       starredOnly: query.starredOnly,
-      folderId: query.folderId
+      folderId: query.folderId,
+      includeDiscarded: query.includeDiscarded
     )
   }
 
@@ -185,6 +212,20 @@ struct LiveConversationLocalDataSource: ConversationLocalDataSource {
       cacheScope: scope,
       cacheGeneration: generation
     )
+  }
+
+  func storeMany(
+    _ conversations: [ServerConversation], scope: ConversationCacheWriteScope, generation: Int
+  ) async throws {
+    var committed: [String] = []
+    for conversation in conversations {
+      do {
+        _ = try await TranscriptionStorage.shared.syncServerConversation(
+          conversation, cacheScope: scope, cacheGeneration: generation, notifySiri: false)
+        committed.append(conversation.id)
+      } catch { log("Conversation cache sync deferred: \(error.localizedDescription)") }
+    }
+    if scope.isCurrent(generation) { SiriIndexHooks.conversationsChanged(committed) }
   }
 
   func delete(
@@ -254,10 +295,16 @@ final class ConversationRepository {
   private var activeMutationTokens: [String: UUID] = [:]
   private var mutationWaiters: [String: [MutationWaiter]] = [:]
   private var deletionTokens: [String: UUID] = [:]
+  private var confirmedRestores: [String: ServerConversation] = [:]
+  private var confirmedRestoreRevisions: [String: Date] = [:]
   private var currentQuery: ConversationListQuery?
+  private var nextPageOffset = 0
+  private var isLoadingMore = false
 
   private(set) var conversations: [ServerConversation] = []
   private(set) var count: Int?
+  private var isCountAuthoritative = false
+  private(set) var hasMore = false
   private(set) var isLoading = false
   private(set) var error: String?
   var onSnapshot: ((ConversationRepositorySnapshot) -> Void)?
@@ -290,17 +337,33 @@ final class ConversationRepository {
     self.init(remote: LiveConversationRemoteDataSource(), local: LiveConversationLocalDataSource())
   }
 
+  private static let pageSize = 50
+
+  /// `pageSize` is no longer part of the decision: `GET /v1/conversations` post-filters each page
+  /// after Firestore has applied the limit, so a request for 50 answering with 47 is a full page and
+  /// not the last one. Only an empty page — or an authoritative count already reached — ends the
+  /// list. See `ServerPaging`.
+  private static func hasMorePages(loaded: Int, totalCount: Int?, received: Int) -> Bool {
+    ServerPaging.hasMore(received: received, loaded: loaded, total: totalCount)
+  }
+
   func load(query: ConversationListQuery, includeCache: Bool = true) async {
     let session = cacheWriteScope.capture()
+    let previous = conversations
     requestGeneration += 1
     let generation = requestGeneration
     let queryChanged = currentQuery != query
     currentQuery = query
     isLoading = true
     error = nil
+    // A cached count is useful for display but must never suppress a full
+    // server page when the authoritative count request is unavailable.
+    isCountAuthoritative = false
     if queryChanged {
       conversations = []
       count = nil
+      nextPageOffset = 0
+      hasMore = false
       emit(.cache)
     }
 
@@ -311,7 +374,20 @@ final class ConversationRepository {
         if !cached.isEmpty {
           let cachedCount = try? await local.count(query: query)
           guard generation == requestGeneration else { return }
-          conversations = cached
+          // Overlay in-flight optimistic mutations before publishing, mirroring
+          // the server merge path (mergeList → apply). Without this, a load()
+          // that races a pending star/title/folder edit (e.g. the user toggles a
+          // filter mid-mutation) paints the bare cached rows and visually reverts
+          // the edit until the remote call lands.
+          conversations = cached.map { cachedRow in
+            // Local storage predates Home projections. Its omitted field must
+            // not restart a known failed row while the server is unavailable.
+            let projected = ConversationReconciliationPolicy.retainingHomeFailure(
+              server: confirmedRestores[cachedRow.id] ?? cachedRow,
+              current: previous.first { $0.id == cachedRow.id })
+            return ConversationReconciliationPolicy.apply(
+              mutation: pendingMutations[cachedRow.id], to: projected)
+          }
           count = cachedCount
           emit(.cache)
         }
@@ -321,11 +397,12 @@ final class ConversationRepository {
     }
 
     do {
-      async let listTask = remote.list(query: query)
+      async let listTask = remote.list(query: query, offset: 0, limit: Self.pageSize)
       async let countTask = remote.count(query: query)
-      let server = try await listTask
+      let received = try await listTask
       let serverCount = try? await countTask
       guard generation == requestGeneration else { return }
+      let server = received.map(applyingConfirmedRestore)
 
       let result = ConversationReconciliationPolicy.mergeList(
         server: server,
@@ -339,7 +416,16 @@ final class ConversationRepository {
       pendingMutations = result.pendingMutations
       mutationBaselines = mutationBaselines.filter { pendingMutations[$0.key] != nil }
       conversations = result.conversations
-      count = serverCount ?? count
+      if let serverCount {
+        count = serverCount
+        isCountAuthoritative = true
+      }
+      nextPageOffset = server.count
+      hasMore = Self.hasMorePages(
+        loaded: nextPageOffset,
+        totalCount: isCountAuthoritative ? count : nil,
+        received: server.count
+      )
       isLoading = false
       emit(.server)
       await storeInBackground(server, session: session)
@@ -357,12 +443,56 @@ final class ConversationRepository {
     await load(query: query, includeCache: false)
   }
 
-  func search(text: String) async throws -> [ServerConversation] {
+  /// Fetch the next server page without discarding conversations already visible.
+  /// The backend owns each returned row; the existing page order remains stable.
+  func loadMore() async {
+    guard let query = currentQuery, hasMore, !isLoading, !isLoadingMore else { return }
+
+    let session = cacheWriteScope.capture()
+    requestGeneration += 1
+    let generation = requestGeneration
+    let offset = nextPageOffset
+    isLoadingMore = true
+    defer { isLoadingMore = false }
+
+    do {
+      let received = try await remote.list(query: query, offset: offset, limit: Self.pageSize)
+      guard generation == requestGeneration, currentQuery == query else { return }
+      let server = received.map(applyingConfirmedRestore)
+
+      let result = ConversationReconciliationPolicy.mergeList(
+        server: server,
+        current: [],
+        pendingMutations: pendingMutations,
+        pendingMutationTTL: .greatestFiniteMagnitude
+      )
+      for conversation in server where result.pendingMutations[conversation.id] != nil {
+        updateMutationBaseline(id: conversation.id, canonical: conversation)
+      }
+      pendingMutations = result.pendingMutations
+      mutationBaselines = mutationBaselines.filter { pendingMutations[$0.key] != nil }
+      mergeNextPage(result.conversations)
+      nextPageOffset = offset + server.count
+      hasMore = Self.hasMorePages(
+        loaded: nextPageOffset,
+        totalCount: isCountAuthoritative ? count : nil,
+        received: server.count
+      )
+      emit(.server)
+      await storeInBackground(server, session: session)
+    } catch {
+      guard generation == requestGeneration else { return }
+      emit(.server)
+    }
+  }
+
+  func search(text: String, includeDiscarded: Bool = false) async throws -> [ServerConversation] {
     let session = cacheWriteScope.capture()
     searchGeneration += 1
     let generation = searchGeneration
-    let results = try await remote.search(text: text)
+    let received = try await remote.search(text: text, includeDiscarded: includeDiscarded)
     guard generation == searchGeneration else { throw CancellationError() }
+    let results = received.map(applyingConfirmedRestore)
     await storeInBackground(results, session: session)
     return results
   }
@@ -378,15 +508,37 @@ final class ConversationRepository {
     seed: ServerConversation,
     onCached: ((ServerConversation) -> Void)? = nil
   ) async throws -> ServerConversation {
+    try await detail(id: id, fallback: seed, onCached: onCached)
+  }
+
+  /// A detail known only by id — another device's recording of an event, which
+  /// the loaded list may not hold. Same cache-then-revalidate path, but with no
+  /// seed to fall back on a failed fetch with nothing cached throws.
+  func detail(id: String) async throws -> ServerConversation {
+    try await detail(id: id, fallback: nil, onCached: nil)
+  }
+
+  private func detail(
+    id: String,
+    fallback seed: ServerConversation?,
+    onCached: ((ServerConversation) -> Void)?
+  ) async throws -> ServerConversation {
     let session = cacheWriteScope.capture()
+    let projection = conversations.first { $0.id == id } ?? seed
     if let cached = try? await local.detail(id: id) {
       try ensureCurrentSession(session)
-      onCached?(cached)
+      onCached?(
+        ConversationReconciliationPolicy.retainingLoadedTranscript(
+          server: ConversationReconciliationPolicy.retainingHomeFailure(
+            server: confirmedRestores[id] ?? cached, current: projection), current: cached))
     }
 
     do {
-      let server = try await remote.detail(id: id)
+      let received = try await remote.detail(id: id)
       try ensureCurrentSession(session)
+      let server = ConversationReconciliationPolicy.retainingHomeFailure(
+        server: applyingConfirmedRestore(received),
+        current: conversations.first { $0.id == id } ?? projection)
       try? await local.store(server, scope: cacheWriteScope, generation: session)
       try ensureCurrentSession(session)
       if pendingMutations[id] != nil {
@@ -402,10 +554,16 @@ final class ConversationRepository {
       try ensureCurrentSession(session)
       if let cached = try? await local.detail(id: id) {
         try ensureCurrentSession(session)
-        return cached
+        return ConversationReconciliationPolicy.retainingLoadedTranscript(
+          server: ConversationReconciliationPolicy.retainingHomeFailure(
+            server: confirmedRestores[id] ?? cached, current: conversations.first { $0.id == id } ?? projection),
+          current: cached)
       }
       try ensureCurrentSession(session)
-      return seed
+      guard let current = conversations.first(where: { $0.id == id }) ?? confirmedRestores[id] ?? seed else {
+        throw error
+      }
+      return current
     }
   }
 
@@ -423,6 +581,41 @@ final class ConversationRepository {
     }
   }
 
+  /// Restore through the server's explicit keep path. Only publish/cache a
+  /// successful canonical response, fenced to the account that requested it.
+  func restore(id: String) async throws -> ServerConversation {
+    let session = cacheWriteScope.capture()
+    let token = await acquireMutationSlot(id: id)
+    defer { releaseMutationSlot(id: id, token: token) }
+    try ensureCurrentSession(session)
+    let restored = try await remote.restore(id: id)
+    try ensureCurrentSession(session)
+    guard restored.id == id, !restored.discarded, !restored.deleted else {
+      throw ConversationRestoreError.stillDiscarded
+    }
+    confirmedRestores[id] = restored
+    confirmedRestoreRevisions.removeValue(forKey: id)
+    try? await local.store(restored, scope: cacheWriteScope, generation: session)
+    try ensureCurrentSession(session)
+    replaceVisible(restored)
+    emit(.server)
+    return restored
+  }
+
+  /// Replace a conversation in local state with a freshly-fetched server
+  /// version. Used after reprocess so the row sees the new `status` and full
+  /// `structured` payload (not just title), which matters when reprocess
+  /// restarts processing or completes. Unlike ordinary detail reads, this response
+  /// acknowledges recovery even when it omits the list-only `home_step` field.
+  func replace(_ conversation: ServerConversation) {
+    let session = cacheWriteScope.capture()
+    replaceVisible(conversation, preserveHomeFailure: false)
+    emit(.server)
+    Task {
+      try? await local.store(conversation, scope: cacheWriteScope, generation: session)
+    }
+  }
+
   func moveToFolder(id: String, folderId: String?) async throws {
     let operation = MutationOperation.folder(requested: folderId, mutationId: UUID())
     try await mutate(id: id, operation: operation) {
@@ -434,8 +627,14 @@ final class ConversationRepository {
     let removedVisibleRow = conversations.contains { $0.id == id }
     conversations.removeAll { $0.id == id }
     pendingMutations.removeValue(forKey: id)
-    if removedVisibleRow, let count {
-      self.count = max(0, count - 1)
+    if removedVisibleRow {
+      if let count {
+        self.count = max(0, count - 1)
+      }
+      // The server pages by offset; removing a loaded row shifts every
+      // older row up one slot, so the next loadMore() must start one
+      // position earlier or it skips the row that moved into view.
+      nextPageOffset = max(0, nextPageOffset - 1)
     }
     emit(.server)
   }
@@ -474,13 +673,34 @@ final class ConversationRepository {
     mutationWaiters = [:]
     activeMutationTokens = [:]
     deletionTokens = [:]
+    confirmedRestores = [:]
+    confirmedRestoreRevisions = [:]
     conversations = []
     count = nil
+    isCountAuthoritative = false
+    nextPageOffset = 0
+    hasMore = false
+    isLoadingMore = false
     error = nil
     isLoading = false
     pendingMutations = [:]
     mutationBaselines = [:]
     emit(.server)
+  }
+
+  private func mergeNextPage(_ page: [ServerConversation]) {
+    var indexByID = [String: Int]()
+    for (index, conversation) in conversations.enumerated() {
+      indexByID[conversation.id] = index
+    }
+    for conversation in page {
+      if let index = indexByID[conversation.id] {
+        conversations[index] = conversation
+      } else {
+        indexByID[conversation.id] = conversations.count
+        conversations.append(conversation)
+      }
+    }
   }
 
   private func mutate(
@@ -614,12 +834,18 @@ final class ConversationRepository {
     )
   }
 
-  private func replaceVisible(_ conversation: ServerConversation) {
+  private func replaceVisible(_ conversation: ServerConversation, preserveHomeFailure: Bool = true) {
     guard matchesCurrentQuery(conversation) else {
       let removedVisibleRow = conversations.contains { $0.id == conversation.id }
       conversations.removeAll { $0.id == conversation.id }
-      if removedVisibleRow, let count {
-        self.count = max(0, count - 1)
+      if removedVisibleRow {
+        if let count {
+          self.count = max(0, count - 1)
+        }
+        // Same offset shift as `remove(id:)`: a row leaving the current
+        // filter (e.g. unstarring under Starred) vacates a loaded slot,
+        // so the next page must start one position earlier.
+        nextPageOffset = max(0, nextPageOffset - 1)
       }
       return
     }
@@ -631,11 +857,15 @@ final class ConversationRepository {
     {
       return
     }
-    conversations[index] = conversation
+    conversations[index] =
+      preserveHomeFailure
+      ? ConversationReconciliationPolicy.retainingHomeFailure(server: conversation, current: existing)
+      : conversation
   }
 
   private func matchesCurrentQuery(_ conversation: ServerConversation) -> Bool {
     guard let query = currentQuery else { return true }
+    if conversation.deleted || (!query.includeDiscarded && conversation.discarded) { return false }
     if query.starredOnly && !conversation.starred { return false }
     if let folderId = query.folderId, conversation.folderId != folderId { return false }
     if let date = query.date {
@@ -648,10 +878,30 @@ final class ConversationRepository {
     return true
   }
 
-  private func storeInBackground(_ server: [ServerConversation], session: Int) async {
-    for conversation in server {
-      try? await local.store(conversation, scope: cacheWriteScope, generation: session)
+  /// A search index may lag the restore response. Never let an older hidden
+  /// hit undo that confirmed mutation; a newer server decision remains truth.
+  private func applyingConfirmedRestore(_ row: ServerConversation) -> ServerConversation {
+    guard let restored = confirmedRestores[row.id] else { return row }
+    // Reprocess can echo the pre-write revision (or omit it). Learn a revision
+    // floor only from a subsequent visible server row, never from that echo.
+    let newer = row.updatedAt.flatMap { incoming in confirmedRestoreRevisions[row.id].map { incoming > $0 } } ?? false
+    let current = row.updatedAt.map { incoming in restored.updatedAt.map { incoming >= $0 } ?? true } ?? false
+    if row.deleted || (row.discarded && newer) {
+      confirmedRestores.removeValue(forKey: row.id)
+      confirmedRestoreRevisions.removeValue(forKey: row.id)
+      return row
     }
+    if !row.discarded && current {
+      let retained = ConversationReconciliationPolicy.retainingLoadedTranscript(server: row, current: restored)
+      confirmedRestores[row.id] = retained
+      confirmedRestoreRevisions[row.id] = row.updatedAt
+      return retained
+    }
+    return restored
+  }
+
+  private func storeInBackground(_ server: [ServerConversation], session: Int) async {
+    try? await local.storeMany(server, scope: cacheWriteScope, generation: session)
   }
 
   private func emit(_ source: ConversationSnapshotSource) {

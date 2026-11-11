@@ -7,6 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from database.ports.folders import FolderEntity
+
+# Keep the database package real so shared persistence telemetry remains importable.
 _HEAVY_MOCKS = {
     'anthropic': MagicMock(),
     'firebase_admin': MagicMock(),
@@ -15,7 +18,6 @@ _HEAVY_MOCKS = {
     'google.cloud.firestore_v1': MagicMock(),
     'google.cloud.firestore_v1.base_query': MagicMock(),
     'tiktoken': MagicMock(encoding_for_model=MagicMock(return_value=MagicMock())),
-    'database': MagicMock(),
     'database._client': MagicMock(),
     'database.llm_usage': MagicMock(),
 }
@@ -41,6 +43,15 @@ if 'langchain_google_genai' not in sys.modules:
 
     setattr(google_genai_stub, 'ChatGoogleGenerativeAI', ChatGoogleGenerativeAI)
     sys.modules['langchain_google_genai'] = google_genai_stub
+
+if 'langchain_anthropic' not in sys.modules:
+    anthropic_stub = types.ModuleType('langchain_anthropic')
+
+    class ChatAnthropic:
+        pass
+
+    setattr(anthropic_stub, 'ChatAnthropic', ChatAnthropic)
+    sys.modules['langchain_anthropic'] = anthropic_stub
 
 if 'langchain_openai' not in sys.modules:
     openai_stub = types.ModuleType('langchain_openai')
@@ -162,8 +173,8 @@ def test_route_options_keep_provider_quirks_out_of_callsites():
 
 def test_validate_folder_assignment_rejects_unknown_folder_id():
     folders = [
-        {'id': 'default', 'name': 'General', 'is_default': True},
-        {'id': 'work', 'name': 'Work'},
+        FolderEntity(id='default', name='General', is_default=True),
+        FolderEntity(id='work', name='Work'),
     ]
 
     result = validate_folder_assignment(FolderAssignment(folder_id='missing', confidence=0.95), folders, 'default')
@@ -175,8 +186,8 @@ def test_validate_folder_assignment_rejects_unknown_folder_id():
 
 def test_validate_folder_assignment_low_confidence_uses_default():
     folders = [
-        {'id': 'default', 'name': 'General', 'is_default': True},
-        {'id': 'work', 'name': 'Work'},
+        FolderEntity(id='default', name='General', is_default=True),
+        FolderEntity(id='work', name='Work'),
     ]
 
     result = validate_folder_assignment(FolderAssignment(folder_id='work', confidence=0.4), folders, 'default')
@@ -188,8 +199,8 @@ def test_validate_folder_assignment_low_confidence_uses_default():
 
 def test_validate_folder_assignment_accepts_valid_high_confidence():
     folders = [
-        {'id': 'default', 'name': 'General', 'is_default': True},
-        {'id': 'work', 'name': 'Work'},
+        FolderEntity(id='default', name='General', is_default=True),
+        FolderEntity(id='work', name='Work'),
     ]
 
     result = validate_folder_assignment(
@@ -203,5 +214,5 @@ def test_validate_folder_assignment_accepts_valid_high_confidence():
 
 
 def test_default_folder_id_is_extracted_once_for_route_logic():
-    assert get_default_folder_id([{'id': 'a'}, {'id': 'b', 'is_default': True}]) == 'b'
-    assert get_default_folder_id([{'id': 'a'}]) is None
+    assert get_default_folder_id([FolderEntity(id='a'), FolderEntity(id='b', is_default=True)]) == 'b'
+    assert get_default_folder_id([FolderEntity(id='a')]) is None

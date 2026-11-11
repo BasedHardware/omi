@@ -6,7 +6,7 @@ import type { AdapterRegistry } from "./adapter-registry.js";
 
 export const ADAPTER_ACTIVATION_ENV = {
   acp: undefined,
-  "pi-mono": "OMI_AUTH_TOKEN",
+  "pi-mono": "OMI_MODEL_CREDENTIALS",
   hermes: "OMI_HERMES_ADAPTER_COMMAND",
   openclaw: "OMI_OPENCLAW_ADAPTER_COMMAND",
 } as const;
@@ -95,7 +95,7 @@ export function adapterActivationError(adapterId: ProductionAdapterId): string |
   if (adapterId === "hermes" || adapterId === "openclaw") {
     return `${label} is not available. Make sure ${label} is installed first, then try again.`;
   }
-  return `${label} adapter is unavailable.`;
+  return "Omi AI is not available. Sign in and try again.";
 }
 
 export function ensureRegisteredAdapter(

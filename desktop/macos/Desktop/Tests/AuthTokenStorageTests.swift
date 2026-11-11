@@ -247,6 +247,25 @@ final class AuthTokenStorageTests: XCTestCase {
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "user-keychain")
   }
 
+  /// Auth tokens always go through DesktopKeychainStore. That facade uses the
+  /// login keychain on shipped bundles and the developer file store otherwise.
+  func testAuthTokensUseKeychainStorageOnAllBuilds() throws {
+    // omi-test-quality: source-inspection -- static contract: TokenStorageHooks.live
+    // must keep using the DesktopKeychainStore facade on every build; backend
+    // routing is asserted behaviorally in DesktopKeychainStoreRoutingTests.
+    let authSource = try sourceFile("AuthService.swift")
+    XCTAssertTrue(authSource.contains("usesKeychainTokenStorage: { true }"))
+    XCTAssertTrue(authSource.contains("DesktopKeychainStore.string(service: service, account: account)"))
+    XCTAssertTrue(authSource.contains("DesktopKeychainStore.setString(value, service: service, account: account)"))
+    XCTAssertTrue(authSource.contains("DesktopKeychainStore.delete(service: service, account: account)"))
+
+    let storeSource = try sourceFile("DesktopKeychainStore.swift")
+    XCTAssertTrue(storeSource.contains("enum Backend"))
+    XCTAssertTrue(storeSource.contains("case keychain"))
+    XCTAssertTrue(storeSource.contains("case developerFile"))
+    XCTAssertTrue(storeSource.contains("AppBuild.isProductionBundle ? .keychain : .developerFile"))
+  }
+
   /// Regression: the token Keychain store must NOT opt into the data-protection keychain.
   /// That requires a `keychain-access-groups` entitlement this non-sandboxed Developer ID
   /// app doesn't have, so on the signed/notarized build every SecItem write failed with
@@ -349,16 +368,17 @@ final class AuthTokenStorageTests: XCTestCase {
       source.contains("private let keychainService = \"com.omi.client-device-id\""),
       "ClientDeviceService must not hardcode the shared legacy device-id Keychain service")
     // All non-production bundles must stay on UserDefaults (no Keychain prompt risk).
+    // Stable and the side-by-side Omi Beta identity each use their own scoped service.
     XCTAssertTrue(
-      source.contains("productionBundleIdentifier"),
-      "ClientDeviceService must gate Keychain use to the production bundle only")
+      source.contains("productionFamilyBundleIdentifiers"),
+      "ClientDeviceService must gate Keychain use to production-family bundles only")
   }
 
   /// Regression: named-bundle auth seed must NOT write tokens via `security
   /// add-generic-password`. That stamps partition list `apple-tool:` only; the app's
   /// SecItemCopyMatching then shows the login-keychain password sheet even when `-T`
-  /// TrustedApplication is set. Seed UserDefaults tokens and let AuthService migrate
-  /// into Keychain on launch (app-created items get the correct teamid: partition).
+  /// TrustedApplication is set. Developer bundles write the file-backed secret store;
+  /// production-family seed still clears a leftover CLI Keychain item.
   func testAuthSeedScriptDoesNotCLIWriteKeychainTokens() throws {
     let source = try scriptFile("omi-auth-seed.sh")
     // Match a real security invocation, not comments that name the forbidden command.
@@ -368,10 +388,13 @@ final class AuthTokenStorageTests: XCTestCase {
       "omi-auth-seed.sh must not CLI-write Keychain tokens (apple-tool: partition prompts the app)")
     XCTAssertTrue(
       source.contains("delete-generic-password"),
-      "omi-auth-seed.sh must clear any prior CLI-written Keychain item before launch")
+      "omi-auth-seed.sh must still clear a leftover CLI Keychain item for production-family targets")
+    XCTAssertTrue(
+      source.contains("developer-secrets"),
+      "omi-auth-seed.sh must write developer-secrets for non-production targets")
     XCTAssertTrue(
       source.contains("auth_idToken"),
-      "omi-auth-seed.sh must seed auth_idToken into UserDefaults for app-side Keychain migrate")
+      "omi-auth-seed.sh must still seed auth-state and token keys into UserDefaults")
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {
@@ -399,5 +422,9 @@ final class AuthTokenStorageTests: XCTestCase {
     UserDefaults.standard.removeObject(forKey: .authTokenExpiry)
     UserDefaults.standard.removeObject(forKey: .authTokenUserId)
     UserDefaults.standard.removeObject(forKey: .authUserId)
+    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    UserDefaults.standard.removeObject(forKey: .automationOwnerABackup)
+    UserDefaults.standard.removeObject(forKey: .authIsSignedIn)
+    UserDefaults.standard.removeObject(forKey: .authUserEmail)
   }
 }

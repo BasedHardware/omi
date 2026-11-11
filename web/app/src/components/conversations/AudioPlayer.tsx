@@ -240,8 +240,8 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           disabled={isLoading}
           className={cn(
             'w-10 h-10 rounded-full flex items-center justify-center',
-            'bg-purple-primary text-white',
-            'hover:bg-purple-secondary transition-colors',
+            'bg-text-primary text-bg-primary',
+            'hover:bg-text-primary/90 transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed',
             'flex-shrink-0',
           )}
@@ -275,12 +275,12 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
               '[&::-webkit-slider-thumb]:w-3',
               '[&::-webkit-slider-thumb]:h-3',
               '[&::-webkit-slider-thumb]:rounded-full',
-              '[&::-webkit-slider-thumb]:bg-purple-primary',
+              '[&::-webkit-slider-thumb]:bg-text-primary',
               '[&::-webkit-slider-thumb]:cursor-pointer',
               '[&::-moz-range-thumb]:w-3',
               '[&::-moz-range-thumb]:h-3',
               '[&::-moz-range-thumb]:rounded-full',
-              '[&::-moz-range-thumb]:bg-purple-primary',
+              '[&::-moz-range-thumb]:bg-text-primary',
               '[&::-moz-range-thumb]:border-0',
               '[&::-moz-range-thumb]:cursor-pointer',
               'disabled:opacity-50',
@@ -288,7 +288,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             style={{
               background:
                 duration > 0
-                  ? `linear-gradient(to right, var(--purple-primary) ${(currentTime / duration) * 100}%, var(--bg-quaternary) ${(currentTime / duration) * 100}%)`
+                  ? `linear-gradient(to right, var(--text-primary) ${(currentTime / duration) * 100}%, var(--bg-quaternary) ${(currentTime / duration) * 100}%)`
                   : undefined,
             }}
           />
@@ -321,7 +321,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
                     'w-full px-4 py-1.5 text-xs text-left',
                     'hover:bg-bg-tertiary transition-colors',
                     speed === playbackSpeed
-                      ? 'text-purple-primary font-medium'
+                      ? 'text-text-primary font-medium'
                       : 'text-text-secondary',
                   )}
                 >

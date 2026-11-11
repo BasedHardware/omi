@@ -25,6 +25,9 @@ _mock_is_speech = False
 _mock_vad_prob = None  # When set, overrides _mock_is_speech for exact probability control
 
 import numpy as np
+import utils.stt.vad_gate as vad_gate_module
+
+from utils.metrics import OMI_VAD_GATE_AUDIO_SECONDS_TOTAL, OMI_VAD_GATE_SESSIONS_TOTAL
 
 
 def _mock_run_vad_window(window, state, context):
@@ -410,6 +413,20 @@ class TestVADStreamingGate:
         _set_vad_speech(True)
         out = gate.process_audio(chunk, time.time())
         assert out.audio_to_send == chunk
+
+    def test_mixed_vad_windows_are_reported_partial(self):
+        gate = self._make_gate(mode='shadow')
+        decisions = iter((0.9, 0.1))
+
+        def score(_window, state, context):
+            return next(decisions), state, context
+
+        with patch.object(vad_gate_module, 'run_vad_window', side_effect=score):
+            gate.process_audio(_make_pcm(64), time.time(), start_sample=0)
+
+        assert gate.classify_capture_speech(0, 1024) == 'partial'
+        # Chunk granularity cannot prove that either half is all speech.
+        assert gate.classify_capture_speech(512, 1024) == 'partial'
 
     def test_metrics(self):
         """Gate should track speech/silence/finalize counts."""
@@ -1127,6 +1144,22 @@ class TestActivateMode:
         assert remapped > 35.0, f"Remapped {remapped} is too early"
 
 
+class TestVadSecondsCounter:
+    def test_sub_window_call_still_counts_inference_seconds(self, monkeypatch):
+        from utils.observability.listen_loop import VAD_INFERENCE_SECONDS_TOTAL, VAD_WINDOWS_TOTAL
+
+        monkeypatch.delenv('LISTEN_LOOP_METRICS_ENABLED', raising=False)
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
+
+        def total(metric):
+            return next(s.value for f in metric.collect() for s in f.samples if s.name.endswith('_total'))
+
+        seconds, windows = total(VAD_INFERENCE_SECONDS_TOTAL), total(VAD_WINDOWS_TOTAL)
+        gate._run_vad(_make_pcm(10))  # 160 samples < one 512-sample window
+        assert total(VAD_WINDOWS_TOTAL) == windows
+        assert total(VAD_INFERENCE_SECONDS_TOTAL) > seconds
+
+
 class TestCostMetrics:
     """Tests for bytes_sent/bytes_skipped tracking."""
 
@@ -1201,6 +1234,41 @@ class TestCostMetrics:
         metrics = gate.get_metrics()
         assert metrics['bytes_sent'] == len(chunk)
         assert metrics['bytes_skipped'] == 0
+
+    @pytest.mark.parametrize('mode', ['active', 'shadow'])
+    def test_prometheus_audio_and_session_counters_match_byte_accounting(self, mode):
+        """Prometheus seconds should match the gate's sent/skipped byte semantics."""
+        sent_counter = OMI_VAD_GATE_AUDIO_SECONDS_TOTAL.labels(outcome='sent', mode=mode)
+        skipped_counter = OMI_VAD_GATE_AUDIO_SECONDS_TOTAL.labels(outcome='skipped', mode=mode)
+        session_counter = OMI_VAD_GATE_SESSIONS_TOTAL.labels(mode=mode)
+        sent_before = sent_counter._value.get()
+        skipped_before = skipped_counter._value.get()
+        sessions_before = session_counter._value.get()
+
+        gate = self._make_gate(mode=mode)
+        assert session_counter._value.get() == sessions_before + 1
+
+        chunk = _make_pcm(30)
+        t = 1000.0
+        _set_vad_speech(False)
+        for i in range(20):
+            gate.process_audio(chunk, t + i * 0.03)
+        if mode == 'active':
+            assert skipped_counter._value.get() > skipped_before
+        else:
+            assert sent_counter._value.get() > sent_before
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(chunk, t + 0.60 + i * 0.03)
+
+        metrics = gate.get_metrics()
+        bytes_per_second = gate.sample_rate * gate.channels * 2
+        sent_seconds = sent_counter._value.get() - sent_before
+        skipped_seconds = skipped_counter._value.get() - skipped_before
+
+        assert sent_seconds == pytest.approx(metrics['bytes_sent'] / bytes_per_second)
+        assert skipped_seconds == pytest.approx(metrics['bytes_skipped'] / bytes_per_second)
+        assert sent_seconds + skipped_seconds == pytest.approx(metrics['bytes_received'] / bytes_per_second)
 
 
 class TestStructuredMetricsLog:
@@ -1295,8 +1363,21 @@ class TestOnnxStateAndConcurrency:
                 assert errors[i] is None, f'Caller {i} got error: {errors[i]}'
                 assert results[i] is not None, f'Caller {i} got no result (deadlock?)'
 
+            # Calibrate the bound on this machine: under heavy CPU contention even bare
+            # sleeping threads take multiples of sleep_sec, so a fixed bound reports
+            # serialization that the gate did not cause.
+            baseline_threads = [threading.Thread(target=time.sleep, args=(sleep_sec,)) for _ in range(num_callers)]
+            baseline_start = time.perf_counter()
+            for t in baseline_threads:
+                t.start()
+            for t in baseline_threads:
+                t.join(timeout=10)
+            baseline = time.perf_counter() - baseline_start
+
             # ONNX is truly concurrent (no pool), so all should complete in ~1x sleep time
-            assert elapsed < sleep_sec * 3, f'Took {elapsed:.3f}s — unexpected serialization'
+            assert elapsed < max(
+                sleep_sec * 3, baseline * 1.5
+            ), f'Took {elapsed:.3f}s against a {baseline:.3f}s bare-thread baseline — unexpected serialization'
 
 
 @pytest.mark.slow
@@ -1386,12 +1467,27 @@ class TestSpeechThreshold:
         with patch('utils.stt.vad_gate.VAD_GATE_SPEECH_THRESHOLD', 0.3):
             gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
             assert gate._speech_threshold == 0.3
+            assert gate._continue_threshold == 0.3
 
     def test_threshold_from_env_high(self):
         """High threshold should require stronger speech signal."""
         with patch('utils.stt.vad_gate.VAD_GATE_SPEECH_THRESHOLD', 0.8):
             gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
             assert gate._speech_threshold == 0.8
+            assert gate._continue_threshold == 0.8
+
+    def test_constructor_threshold_overrides_module_default(self):
+        gate = VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode='active',
+            speech_threshold=0.5,
+            continue_threshold=0.35,
+            hangover_ms=300,
+        )
+        assert gate._speech_threshold == 0.5
+        assert gate._continue_threshold == 0.35
+        assert gate._hangover_ms == 300
 
     def test_threshold_boundary_exact(self):
         """Probability exactly equal to threshold should NOT trigger speech (strict >)."""
@@ -1416,6 +1512,92 @@ class TestSpeechThreshold:
         out = gate.process_audio(_make_pcm(40), t)
         assert gate._state == GateState.SPEECH
         assert len(out.audio_to_send) > 0
+
+
+class TestHysteresis:
+    """Start vs continue thresholds: quiet far-field must continue once started."""
+
+    def _windowed_gate(self):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode='active',
+            speech_threshold=0.5,
+            continue_threshold=0.35,
+            hangover_ms=300,
+        )
+
+    def test_default_gate_has_no_hysteresis(self):
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
+        assert gate._speech_threshold == 0.65
+        assert gate._continue_threshold == 0.65
+        assert gate._hangover_ms == 4000
+
+    def test_continue_threshold_cannot_exceed_start(self):
+        gate = VADStreamingGate(
+            sample_rate=16000, channels=1, mode='active', speech_threshold=0.5, continue_threshold=0.8
+        )
+        assert gate._continue_threshold == 0.5
+
+    def test_quiet_frame_does_not_start_speech(self):
+        gate = self._windowed_gate()
+        _set_vad_prob(0.40)
+        out = gate.process_audio(_make_pcm(40), 1000.0)
+        assert gate._state == GateState.SILENCE
+        assert out.audio_to_send == b''
+        assert out.is_speech is False
+
+    def test_once_started_quiet_frame_continues(self):
+        gate = self._windowed_gate()
+        _set_vad_prob(0.51)
+        out = gate.process_audio(_make_pcm(40), 1000.0)
+        assert gate._state == GateState.SPEECH
+        assert len(out.audio_to_send) > 0
+        _set_vad_prob(0.40)
+        out = gate.process_audio(_make_pcm(40), 1000.04)
+        assert out.is_speech is True
+        assert gate._state == GateState.SPEECH
+        assert len(out.audio_to_send) > 0
+
+    def test_hangover_resumes_on_continue_threshold(self):
+        gate = self._windowed_gate()
+        _set_vad_prob(0.90)
+        gate.process_audio(_make_pcm(40), 1000.0)
+        _set_vad_prob(0.10)
+        out = gate.process_audio(_make_pcm(40), 1000.04)
+        assert out.state == GateState.HANGOVER
+        _set_vad_prob(0.40)
+        out = gate.process_audio(_make_pcm(40), 1000.08)
+        assert out.state == GateState.SPEECH
+        assert out.is_speech is True
+        assert len(out.audio_to_send) > 0
+
+    def test_below_continue_in_silence_never_admits(self):
+        gate = self._windowed_gate()
+        _set_vad_prob(0.34)
+        sent = 0
+        t = 1000.0
+        for i in range(50):
+            out = gate.process_audio(_make_pcm(40), t + i * 0.04)
+            sent += len(out.audio_to_send)
+        assert sent == 0
+        assert gate._state == GateState.SILENCE
+
+    def test_score_pcm_drives_vad_original_is_forwarded(self):
+        gate = self._windowed_gate()
+        seen: list[bytes] = []
+
+        def _capture(data: bytes) -> bool:
+            seen.append(data)
+            return True
+
+        gate._run_vad = _capture  # type: ignore[method-assign]
+        original = _make_pcm_with_amplitude(40, 0.05)
+        score = _make_pcm_with_amplitude(40, 0.4)
+        assert original != score
+        out = gate.process_audio(original, 1000.0, score)
+        assert seen == [score]
+        assert original in out.audio_to_send
 
 
 class TestTimeBasedPreRoll:
@@ -2152,3 +2334,62 @@ class TestGatedSTTSocketPassthroughMode:
 
         mock_conn.send.assert_called_once_with(audio)
         mock_conn.finalize.assert_called_once()
+
+
+class TestMisalignedChunks:
+    """A chunk that ends mid-frame must not disable the gate (prod: 11 sessions/24h)."""
+
+    def _make_gate(self, channels=1):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=channels,
+            mode='active',
+            uid='test',
+            session_id='test',
+        )
+
+    def test_odd_length_chunk_keeps_gate_active(self):
+        """np.frombuffer used to raise on a partial sample, failing the session open."""
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate = self._make_gate()
+        gated = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        gated.send(_make_pcm(30) + b'\x00', wall_time=1.0)
+
+        assert gated.is_gated
+        assert gate.mode == 'active'
+
+    def test_split_frame_keeps_sample_alignment(self):
+        """A frame split across two chunks must reach VAD as the same samples."""
+        pcm = struct.pack('<1600h', *[(i % 2000) - 1000 for i in range(1600)])
+        windows_whole: list[np.ndarray] = []
+        windows_split: list[np.ndarray] = []
+
+        def _record(into):
+            def _run(window, state, context):
+                into.append(np.array(window))
+                return 0.1, state, context
+
+            return _run
+
+        with patch('utils.stt.vad_gate.run_vad_window', side_effect=_record(windows_whole)):
+            self._make_gate().process_audio(pcm, 1.0)
+        with patch('utils.stt.vad_gate.run_vad_window', side_effect=_record(windows_split)):
+            gate = self._make_gate()
+            gate.process_audio(pcm[:513], 1.0)
+            gate.process_audio(pcm[513:], 1.03)
+
+        assert len(windows_split) == len(windows_whole) > 0
+        for split, whole in zip(windows_split, windows_whole):
+            assert np.array_equal(split, whole)
+
+    def test_stereo_partial_frame_is_carried(self):
+        """Stereo frames are 4 bytes; a 2-byte tail must not reach audioop.tomono."""
+        gate = self._make_gate(channels=2)
+        pcm = _make_pcm(30, channels=2)
+
+        gate.process_audio(pcm[:-2], 1.0)
+        out = gate.process_audio(pcm[-2:], 1.03)
+
+        assert out is not None

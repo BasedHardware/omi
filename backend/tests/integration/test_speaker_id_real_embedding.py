@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 import pytest
-import requests
+import httpx
 import websockets
 
 # Service endpoints
@@ -92,10 +92,11 @@ def generate_tone_pcm16(freq=440, duration_s=3.0, sample_rate=16000, amplitude=8
     return samples.tobytes()
 
 
-def extract_real_embedding(wav_bytes):
+async def extract_real_embedding(wav_bytes):
     """Call the REAL embedding API to get a 512-d vector."""
     files = {'file': ('test.wav', wav_bytes, 'audio/wav')}
-    resp = requests.post(f"{EMBEDDING_URL}/v2/embedding", files=files, timeout=60)
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(f"{EMBEDDING_URL}/v2/embedding", files=files, timeout=60)
     resp.raise_for_status()
     result = resp.json()
     if isinstance(result, list):
@@ -221,10 +222,11 @@ def check_services():
 
 
 @pytest.fixture(scope="module")
-def embedding_api_healthy(check_embedding_api):
+async def embedding_api_healthy(check_embedding_api):
     """Verify embedding API is accessible and returns valid embeddings."""
     try:
-        resp = requests.get(f"{EMBEDDING_URL}/health", timeout=5)
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{EMBEDDING_URL}/health", timeout=5)
         if resp.status_code != 200:
             pytest.skip("Embedding API health check failed")
     except Exception:
@@ -234,15 +236,17 @@ def embedding_api_healthy(check_embedding_api):
 # ─── Test: Real Embedding API Basics ────────────────────────────────────────
 
 
+@pytest.mark.asyncio
 class TestRealEmbeddingApi:
     """Verify the embedding API works correctly before testing the pipeline."""
 
-    def test_health_check(self, embedding_api_healthy):
+    async def test_health_check(self, embedding_api_healthy):
         """Embedding API health endpoint returns 200."""
-        resp = requests.get(f"{EMBEDDING_URL}/health", timeout=5)
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{EMBEDDING_URL}/health", timeout=5)
         assert resp.status_code == 200
 
-    def test_extract_embedding_from_speech(self, embedding_api_healthy):
+    async def test_extract_embedding_from_speech(self, embedding_api_healthy):
         """Real speech audio produces a valid embedding vector."""
         audio_result = load_test_audio_pcm16(seconds=5)
         if not audio_result:
@@ -250,14 +254,14 @@ class TestRealEmbeddingApi:
         pcm_data, sr = audio_result
         wav_bytes = pcm_to_wav_bytes(pcm_data, sr)
 
-        embedding = extract_real_embedding(wav_bytes)
+        embedding = await extract_real_embedding(wav_bytes)
         # Dev diarizer uses wespeaker-voxceleb-resnet34-LM which outputs 256-d
         assert embedding.shape[0] == 1, f"Expected batch dim 1, got {embedding.shape}"
         assert embedding.shape[1] >= 128, f"Embedding too small: {embedding.shape}"
         # Should be non-zero
         assert np.linalg.norm(embedding) > 0
 
-    def test_same_audio_produces_consistent_embedding(self, embedding_api_healthy):
+    async def test_same_audio_produces_consistent_embedding(self, embedding_api_healthy):
         """Same audio extracted twice produces identical embeddings."""
         audio_result = load_test_audio_pcm16(seconds=3)
         if not audio_result:
@@ -265,8 +269,8 @@ class TestRealEmbeddingApi:
         pcm_data, sr = audio_result
         wav_bytes = pcm_to_wav_bytes(pcm_data, sr)
 
-        emb1 = extract_real_embedding(wav_bytes)
-        emb2 = extract_real_embedding(wav_bytes)
+        emb1 = await extract_real_embedding(wav_bytes)
+        emb2 = await extract_real_embedding(wav_bytes)
 
         # Should be identical (deterministic model)
         from utils.stt.speaker_embedding import compare_embeddings
@@ -274,7 +278,7 @@ class TestRealEmbeddingApi:
         distance = compare_embeddings(emb1, emb2)
         assert distance < 0.001, f"Same audio produced different embeddings: distance={distance}"
 
-    def test_different_audio_produces_different_embedding(self, embedding_api_healthy):
+    async def test_different_audio_produces_different_embedding(self, embedding_api_healthy):
         """Different audio produces different embeddings."""
         audio_result = load_test_audio_pcm16(seconds=5)
         if not audio_result:
@@ -288,8 +292,8 @@ class TestRealEmbeddingApi:
         wav1 = pcm_to_wav_bytes(pcm_data[:half], sr)
         wav2 = pcm_to_wav_bytes(pcm_data[half:], sr)
 
-        emb1 = extract_real_embedding(wav1)
-        emb2 = extract_real_embedding(wav2)
+        emb1 = await extract_real_embedding(wav1)
+        emb2 = await extract_real_embedding(wav2)
 
         from utils.stt.speaker_embedding import compare_embeddings
 
@@ -298,22 +302,23 @@ class TestRealEmbeddingApi:
         # Same speaker in test audio, so expect distance < threshold
         assert distance > 0, "Different audio segments should have some distance"
 
-    def test_tone_produces_embedding(self, embedding_api_healthy):
+    async def test_tone_produces_embedding(self, embedding_api_healthy):
         """Synthetic tone audio also produces an embedding (model handles any audio)."""
         tone = generate_tone_pcm16(freq=440, duration_s=3.0)
         wav_bytes = pcm_to_wav_bytes(tone)
 
-        embedding = extract_real_embedding(wav_bytes)
+        embedding = await extract_real_embedding(wav_bytes)
         assert embedding.shape[0] == 1 and embedding.shape[1] >= 128
 
-    def test_short_audio_rejected(self, embedding_api_healthy):
+    async def test_short_audio_rejected(self, embedding_api_healthy):
         """Audio shorter than MIN_EMBEDDING_AUDIO_DURATION is rejected."""
         # Generate 0.1 seconds of audio (below 0.5s minimum)
         short_tone = generate_tone_pcm16(freq=440, duration_s=0.1)
         wav_bytes = pcm_to_wav_bytes(short_tone)
 
         files = {'file': ('short.wav', wav_bytes, 'audio/wav')}
-        resp = requests.post(f"{EMBEDDING_URL}/v2/embedding", files=files, timeout=30)
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{EMBEDDING_URL}/v2/embedding", files=files, timeout=30)
         # 422 = clean rejection (issue #4572 fix), 500 = crash on too-short audio (pre-fix)
         assert resp.status_code in (422, 500), f"Expected 422 or 500 for short audio, got {resp.status_code}"
 
@@ -343,7 +348,7 @@ class TestRealEmbeddingPipeline:
                 pytest.skip("Test WAV not available")
             pcm_data, sr = audio_result
             wav_bytes = pcm_to_wav_bytes(pcm_data, sr)
-            real_embedding = extract_real_embedding(wav_bytes)
+            real_embedding = await extract_real_embedding(wav_bytes)
             embedding_list = real_embedding.flatten().tolist()
 
             # Step 2: Store in Firestore
@@ -396,7 +401,7 @@ class TestRealEmbeddingPipeline:
             # Extract embedding from a pure TONE (not speech)
             tone = generate_tone_pcm16(freq=440, duration_s=5.0)
             wav_bytes = pcm_to_wav_bytes(tone)
-            tone_embedding = extract_real_embedding(wav_bytes)
+            tone_embedding = await extract_real_embedding(wav_bytes)
             embedding_list = tone_embedding.flatten().tolist()
 
             ensure_private_cloud_sync(DEV_UID, True)
@@ -442,7 +447,7 @@ class TestRealEmbeddingPipeline:
                 pytest.skip("Test WAV not available")
             pcm_data, sr = audio_result
             wav_bytes = pcm_to_wav_bytes(pcm_data, sr)
-            real_embedding = extract_real_embedding(wav_bytes)
+            real_embedding = await extract_real_embedding(wav_bytes)
 
             ensure_private_cloud_sync(DEV_UID, True)
             seed_person_with_embedding(
@@ -486,7 +491,7 @@ class TestRealEmbeddingChaos:
                 pytest.skip("Test WAV not available")
             pcm_data, sr = audio_result
             wav_bytes = pcm_to_wav_bytes(pcm_data, sr)
-            real_embedding = extract_real_embedding(wav_bytes)
+            real_embedding = await extract_real_embedding(wav_bytes)
 
             ensure_private_cloud_sync(DEV_UID, True)
             seed_person_with_embedding(
@@ -525,7 +530,7 @@ class TestRealEmbeddingChaos:
                 pytest.skip("Test WAV not available")
             pcm_data, sr = audio_result
             wav_bytes = pcm_to_wav_bytes(pcm_data, sr)
-            speech_emb = extract_real_embedding(wav_bytes)
+            speech_emb = await extract_real_embedding(wav_bytes)
 
             pid1 = str(uuid.uuid4())
             person_ids.append(pid1)
@@ -534,7 +539,7 @@ class TestRealEmbeddingChaos:
             # Person 2: tone embedding (should NOT match speech)
             tone = generate_tone_pcm16(freq=440, duration_s=5.0)
             tone_wav = pcm_to_wav_bytes(tone)
-            tone_emb = extract_real_embedding(tone_wav)
+            tone_emb = await extract_real_embedding(tone_wav)
 
             pid2 = str(uuid.uuid4())
             person_ids.append(pid2)
@@ -543,7 +548,7 @@ class TestRealEmbeddingChaos:
             # Person 3: different tone embedding
             tone2 = generate_tone_pcm16(freq=880, duration_s=5.0)
             tone2_wav = pcm_to_wav_bytes(tone2)
-            tone2_emb = extract_real_embedding(tone2_wav)
+            tone2_emb = await extract_real_embedding(tone2_wav)
 
             pid3 = str(uuid.uuid4())
             person_ids.append(pid3)

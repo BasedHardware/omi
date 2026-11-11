@@ -4,8 +4,8 @@
 # LIVE suites (this script) cover bridge/LLM continuity on a named bundle.
 # HERMETIC INV-6 write-path rules (stage/promote single-writer, floating snapshot
 # alias, open-by-id hydrate, viewport SoT) live in Swift unit tests gated by
-# agent-logic-harness.sh + gauntlet --self-check. See AGENTS.md →
-# "Live gauntlet vs hermetic INV-6 coverage".
+# agent-logic-harness.sh + gauntlet --self-check. See
+# docs/chat-continuity-write-path.md → "Live gauntlet vs hermetic INV-6 coverage".
 #
 # Drives a named omi-* bundle through:
 #   0. (non-prod) clear kernel main_chat turns to avoid stale model-visible history
@@ -41,6 +41,7 @@
 #   ./scripts/agent-continuity-gauntlet.sh --suite prompts       # fast typed-only prompt probes (P1-P4, including live public-web)
 #   ./scripts/agent-continuity-gauntlet.sh --suite continuity    # steps 1-3 only (includes PTT)
 #   ./scripts/agent-continuity-gauntlet.sh --suite agents        # exact voice-memory authority + agent probes
+#   ./scripts/agent-continuity-gauntlet.sh --suite evidence     # real speech + visual evidence journeys
 #   ./scripts/agent-continuity-gauntlet.sh --suite resilience    # startup/resilience probes (R1-R4)
 #   ./scripts/agent-continuity-gauntlet.sh --suite all           # core + prompt + resilience probes
 #   OMI_AUTOMATION_PORT=47778 ./scripts/agent-continuity-gauntlet.sh --bundle-id com.omi.omi-gauntlet

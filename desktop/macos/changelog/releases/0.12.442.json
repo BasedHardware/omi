@@ -1,0 +1,7 @@
+{
+  "version": "0.12.442",
+  "date": "2026-10-04",
+  "changes": [
+    "Clarified which custom keys cover AI features versus transcription and show the current transcription allowance in macOS settings"
+  ]
+}

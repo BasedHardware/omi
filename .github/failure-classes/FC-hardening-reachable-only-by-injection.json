@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "FC-hardening-reachable-only-by-injection",
+  "violated_contract": "A change that hardens a path must be reachable on the path the shipped app takes, and something must assert that it is. Proving the hardened type behaves correctly when a test constructs it does not prove production constructs it. If the production entrypoint still builds the unhardened default, an outage ships as an empty account, a fence never runs, or a composer never fires, while the suite stays green.",
+  "canonical_prevention": "The production entrypoint must construct the hardened object, and a test must fail if it goes back to the unhardened default. Import reachability is not execution: the dead-code ratchet walks import/export/part and never asks whether the function is called, so an unused import satisfies it. The guard is a test that reads the production entrypoint and injects a fault through the production factory, not through a test-only composer. App/test/unit/c3_production_wiring_test.dart and app/test/unit/c3_action_items_production_wiring_test.dart fail if main.dart constructs ConversationProvider() or ActionItemsProvider() and they inject 503 through createProductionConversationProvider / createProductionActionItemsProvider onto the real pages.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/c3_production_wiring_test.dart",
+    "app/test/unit/c3_action_items_production_wiring_test.dart"
+  ],
+  "evidence_prs": [
+    14403,
+    14409
+  ],
+  "scope_hints": [
+    "app/lib/main.dart",
+    "app/lib/providers/conversation_provider.dart",
+    "app/lib/providers/action_items_provider.dart",
+    "app/integration_test/journeys/support/hermetic_boot.dart",
+    "app/lib/backend/http/**"
+  ],
+  "status": "open"
+}

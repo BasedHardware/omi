@@ -1,0 +1,10 @@
+{
+  "version": "26.6",
+  "build": "17F113",
+  "app_path": "/Applications/Xcode_26.6.app",
+  "evidence": {
+    "github_actions": "Required macos-26 image: Xcode 26.6 (17F113) at /Applications/Xcode_26.6.app; https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md",
+    "advisory_and_release": "Advisory xcode-27 image and Codemagic mac_mini_m4 27.0 edge image: Xcode 27.0 (27A266a); https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md ; https://docs.codemagic.io/specs-macos/xcode-27-0/"
+  },
+  "notes": "Required desktop Swift and iOS compile CI pin. Siri compiles out under Swift 6.3/Xcode 26.6; the advisory Xcode 27 job and Codemagic desktop/iOS release workflows intentionally use Xcode 27.0 to compile and ship Siri metadata. Required jobs must never depend on the preview xcode-27 runner pool."
+}

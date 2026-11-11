@@ -1,0 +1,10 @@
+{
+  "version": "0.12.188",
+  "date": "2026-08-18",
+  "changes": [
+    "Improved internal Gemini usage reporting so AI capacity and costs can be tracked by workload without collecting request content",
+    "Conversation summaries now show the selected summarization app's output (e.g. General Summary) as the main summary, with a picker to switch apps and set your default — falling back to Omi's own summary when no app result is available",
+    "Improved the efficiency of automatic task extraction without changing which tasks are captured",
+    "Capped very large window captures so high-resolution external displays send smaller images to the assistant"
+  ]
+}

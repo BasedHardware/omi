@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { Metadata } from 'next';
+import { getOmiPlatformDeepLink } from '@/src/lib/conversation-share-platform-link.mjs';
 
 export const metadata: Metadata = {
   title: 'Your 2025 Wrapped | Omi',
@@ -9,6 +10,10 @@ export const metadata: Metadata = {
     title: 'Your 2025 Wrapped | Omi',
     description: 'See your personalized Omi Wrapped for 2025.',
     type: 'website',
+  },
+  other: {
+    'apple-itunes-app': 'app-id=6502156163',
+    'google-play-app': 'app-id=com.friend.ios',
   },
 };
 
@@ -27,6 +32,7 @@ export default async function WrappedPage() {
   const userAgent = (await headers()).get('user-agent') || '';
   const isMobile = isMobileDevice(userAgent);
   const appStoreLink = getAppStoreLink(userAgent);
+  const openInOmiHref = getOmiPlatformDeepLink(userAgent, 'wrapped');
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#0B0F17] px-4 text-center">
@@ -36,14 +42,17 @@ export default async function WrappedPage() {
       </p>
 
       {isMobile ? (
-        <>
+        <div className="flex flex-col gap-4">
           <a
-            href={appStoreLink}
-            className="mb-4 rounded-xl bg-white px-8 py-4 text-lg font-semibold text-[#0B0F17] transition-all duration-300 hover:bg-gray-200"
+            href={openInOmiHref}
+            className="rounded-xl bg-white px-8 py-4 text-lg font-semibold text-[#0B0F17] transition-all duration-300 hover:bg-gray-200"
           >
-            Get the Omi App
+            Open in Omi
           </a>
-        </>
+          <a href={appStoreLink} className="text-gray-400 underline hover:text-white">
+            Don&apos;t have the app? Download here
+          </a>
+        </div>
       ) : (
         <>
           <p className="mb-6 text-gray-400">

@@ -62,8 +62,94 @@ export interface UserUsageResponse {
 }
 
 // Subscription details
+export const CATALOG_PLAN_IDS = [
+  'basic',
+  'plus',
+  'unlimited',
+  'unlimited_v2',
+  'operator',
+  'architect',
+] as const;
+
+export type CatalogPlanId = (typeof CATALOG_PLAN_IDS)[number];
+
+// `pro` is the retained wire alias for the Architect catalog identity. Keep
+// the raw value on decoded plans so a round trip never silently rewrites a
+// persisted or echoed wire value.
+const WIRE_PLAN_ALIASES: Readonly<Record<string, CatalogPlanId>> = {
+  pro: 'architect',
+};
+
+export interface KnownPlanIdentity {
+  kind: 'known';
+  id: CatalogPlanId;
+  raw: string;
+}
+
+export interface UnknownPlanIdentity {
+  kind: 'unknown';
+  raw: string | null;
+}
+
+export type PlanIdentity = KnownPlanIdentity | UnknownPlanIdentity;
+
+const PAID_CATALOG_PLAN_IDS: ReadonlySet<CatalogPlanId> = new Set([
+  'plus',
+  'unlimited',
+  'unlimited_v2',
+  'operator',
+  'architect',
+]);
+
+/** Decode a plan without throwing or replacing an unrecognized value. */
+export function decodePlan(value: unknown): PlanIdentity {
+  if (typeof value !== 'string' || value.length === 0) {
+    return { kind: 'unknown', raw: null };
+  }
+
+  if ((CATALOG_PLAN_IDS as readonly string[]).includes(value)) {
+    return { kind: 'known', id: value as CatalogPlanId, raw: value };
+  }
+
+  const aliasedPlan = Object.prototype.hasOwnProperty.call(WIRE_PLAN_ALIASES, value)
+    ? WIRE_PLAN_ALIASES[value]
+    : undefined;
+  if (aliasedPlan) {
+    return { kind: 'known', id: aliasedPlan, raw: value };
+  }
+
+  return { kind: 'unknown', raw: value };
+}
+
+/** Re-encode a decoded plan, preserving aliases and future wire values. */
+export function encodePlan(plan: PlanIdentity): string | null {
+  return plan.raw;
+}
+
+/** Only catalog identities with declared paid status can grant paid UI. */
+export function planGrantsPaidCapability(plan: PlanIdentity): boolean {
+  return plan.kind === 'known' && PAID_CATALOG_PLAN_IDS.has(plan.id);
+}
+
+export function planDisplayName(plan: PlanIdentity): string {
+  if (plan.kind === 'unknown') return 'Plan unavailable';
+
+  switch (plan.id) {
+    case 'basic':
+      return 'Free';
+    case 'operator':
+      return 'Operator';
+    case 'unlimited':
+      return 'Neo';
+    case 'unlimited_v2':
+      return 'Omi Pro';
+    default:
+      return plan.id.charAt(0).toUpperCase() + plan.id.slice(1);
+  }
+}
+
 export interface Subscription {
-  plan: 'basic' | 'unlimited';
+  plan?: string | null;
   status: 'active' | 'inactive';
   current_period_end?: number;
   stripe_subscription_id?: string;
@@ -124,10 +210,17 @@ export interface AllUsageData {
 }
 
 export interface UserSubscription {
+  // Keep the raw wire value for callers and round trips. `plan_identity` is
+  // the lossless, capability-safe interpretation of this value.
   plan: string;
+  plan_identity?: PlanIdentity;
   status: string;
   is_unlimited: boolean;
+  // Server-resolved legacy monthly allowance; zero means no transcription cap.
+  transcription_seconds_used?: number;
+  transcription_seconds_limit?: number;
   current_period_end?: number;
+  stripe_subscription_id?: string;
   cancel_at_period_end?: boolean;
   current_price_id?: string;
   features?: string[];
@@ -136,8 +229,11 @@ export interface UserSubscription {
 // Pricing option for a plan (matches backend PricingOption)
 export interface PricingOption {
   id: string;
+  plan_id?: string;
   title: string;
   description?: string;
+  subtitle?: string;
+  eyebrow?: string;
   price_string: string;
   interval?: string;
   unit_amount?: number;
@@ -146,7 +242,7 @@ export interface PricingOption {
 
 // Response from available-plans endpoint (matches backend AvailablePlansResponse)
 export interface AvailablePlansResponse {
-  plans: PricingOption[];  // Backend returns flat list of PricingOption, not nested SubscriptionPlan
+  plans: PricingOption[]; // Backend returns flat list of PricingOption, not nested SubscriptionPlan
 }
 
 // Response from checkout-session endpoint
@@ -179,6 +275,14 @@ export interface UpgradeSubscriptionResponse {
   scheduled_start?: number;
 }
 
+export interface RedeemCodeResponse {
+  status: string;
+  percent_off?: number | null;
+  amount_off?: number | null;
+  currency?: string | null;
+  applies_at?: number | null;
+}
+
 export interface Person {
   id: string;
   name: string;
@@ -199,8 +303,8 @@ export interface Integration {
 
 export interface DeveloperApiKey {
   id: string;
-  key_prefix: string;  // For existing keys, only prefix is returned
-  key?: string;        // Full key only returned when creating
+  key_prefix: string; // For existing keys, only prefix is returned
+  key?: string; // Full key only returned when creating
   name: string;
   created_at: string;
   last_used_at?: string;
@@ -215,15 +319,17 @@ export const API_KEY_SCOPES = [
   { id: 'memories:write', label: 'Memories', type: 'write' },
   { id: 'action_items:read', label: 'Action Items', type: 'read' },
   { id: 'action_items:write', label: 'Action Items', type: 'write' },
+  { id: 'goals:read', label: 'Goals', type: 'read' },
+  { id: 'goals:write', label: 'Goals', type: 'write' },
 ] as const;
 
-export type ApiKeyScope = typeof API_KEY_SCOPES[number]['id'];
+export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]['id'];
 
 // MCP API Key types
 export interface McpApiKey {
   id: string;
   key_prefix: string;
-  key?: string;  // Full key only returned when creating
+  key?: string; // Full key only returned when creating
   name: string;
   created_at: string;
   last_used_at?: string;
@@ -246,6 +352,10 @@ export const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'de', name: 'German' },
   { code: 'it', name: 'Italian' },
   { code: 'pt', name: 'Portuguese' },
+  // Regional variants, matching the mobile app and desktop lists, so an account
+  // set to Brazilian Portuguese elsewhere still renders here (#7461).
+  { code: 'pt-BR', name: 'Portuguese (Brazil)' },
+  { code: 'pt-PT', name: 'Portuguese (Portugal)' },
   { code: 'nl', name: 'Dutch' },
   { code: 'pl', name: 'Polish' },
   { code: 'ru', name: 'Russian' },

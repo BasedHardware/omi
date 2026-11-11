@@ -1,0 +1,7 @@
+{
+  "version": "0.12.243",
+  "date": "2026-08-30",
+  "changes": [
+    "Startup timing is measured and reported again, from real process start, and no longer calls every clean launch a crash"
+  ]
+}

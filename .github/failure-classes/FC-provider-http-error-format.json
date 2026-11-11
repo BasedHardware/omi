@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-provider-http-error-format",
+  "violated_contract": "An Omi-owned adapter must surface provider HTTP failures with an explicit, stable HTTP status signal; dependency-specific error wording must not silently change the downstream product or qualification contract.",
+  "canonical_prevention": "Normalize dependency HTTP error wording at the adapter boundary while preserving the provider detail, and drive the real terminal provider-event seam with behavioral contract coverage.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/agent/tests/pi-mono-adapter.test.ts"
+  ],
+  "evidence_prs": [
+    10251
+  ],
+  "scope_hints": [
+    "desktop/macos/agent/src/adapters/**",
+    "desktop/macos/agent/tests/*adapter*.test.ts"
+  ],
+  "status": "open"
+}

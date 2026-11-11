@@ -15,6 +15,13 @@ struct TaskChatOwnerLease: Equatable, Sendable {
   var ownerID: String { authorizationSnapshot.ownerID }
 }
 
+/// Historical recovery is display state only. It never grants producing-turn
+/// authority or rewrites the failed turn when a thread is reopened.
+struct TaskChatProviderRecovery: Equatable, Sendable {
+  let adapterID: String
+  let failure: AgentRuntimeFailure
+}
+
 enum TaskChatTerminalDisposition: Equatable {
   case succeeded
   case failed
@@ -96,6 +103,18 @@ struct TaskChatProducingRunProjection: Equatable {
 /// Task-scoped UI projected over one kernel-owned workstream conversation.
 @MainActor
 class TaskChatState: ObservableObject {
+  typealias LoadProviderRecoveryOperation =
+    @MainActor (
+      _ workstreamId: String,
+      _ workspacePath: String,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async throws -> TaskChatProviderRecovery?
+  typealias UseOmiAIOperation =
+    @MainActor (
+      _ workstreamId: String,
+      _ workspacePath: String,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async throws -> Void
   typealias AttachJournalEventsOperation = (
     _ workstreamId: String,
     _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
@@ -114,6 +133,29 @@ class TaskChatState: ObservableObject {
     _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     _ turns: [KernelJournalTurnWrite]
   ) async throws -> AgentRuntimeProcess.JournalOperationResult
+  typealias QueryOperation = (
+    _ prompt: String,
+    _ workstreamId: String,
+    _ producingTurnId: String,
+    _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> AgentBridge.QueryResult
+  typealias UpdateJournalMessageOperation =
+    @MainActor (
+      _ workstreamId: String,
+      _ ownerID: String,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+      _ message: ChatMessage,
+      _ status: KernelJournalTurnStatus?
+    ) async throws -> KernelJournalTurn
+  typealias TerminalizeJournalMessageOperation =
+    @MainActor (
+      _ workstreamId: String,
+      _ ownerID: String,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+      _ message: ChatMessage,
+      _ producingRunId: String,
+      _ producingAttemptId: String
+    ) async throws -> KernelJournalTurn
 
   let workstreamId: String
   @Published private(set) var activeTaskId: String
@@ -132,6 +174,8 @@ class TaskChatState: ObservableObject {
     }
   }
   @Published var errorMessage: String?
+  @Published private(set) var failedAdapterID: String?
+  @Published private(set) var isSwitchingProvider = false
   @Published var chatMode: ChatMode = .act
   /// Monotonic token that increments each time the local user sends a message
   /// in this task chat. ChatMessagesView observes this for turn anchoring.
@@ -161,6 +205,12 @@ class TaskChatState: ObservableObject {
   private let attachJournalEventsOperation: AttachJournalEventsOperation
   private let listJournalTurnsOperation: ListJournalTurnsOperation
   private let recordJournalExchangeOperation: RecordJournalExchangeOperation
+  private let queryOperation: QueryOperation?
+  private let updateJournalMessageOperation: UpdateJournalMessageOperation
+  private let terminalizeJournalMessageOperation: TerminalizeJournalMessageOperation
+  private let useOmiAIOperation: UseOmiAIOperation
+  private let loadProviderRecoveryOperation: LoadProviderRecoveryOperation
+  private let providerPreference: @MainActor () -> String?
   private var ownerGeneration: UInt64 = 0
   private var isOwnerInvalidated = false
 
@@ -180,7 +230,15 @@ class TaskChatState: ObservableObject {
     },
     attachJournalEventsOperation: AttachJournalEventsOperation? = nil,
     listJournalTurnsOperation: ListJournalTurnsOperation? = nil,
-    recordJournalExchangeOperation: RecordJournalExchangeOperation? = nil
+    recordJournalExchangeOperation: RecordJournalExchangeOperation? = nil,
+    queryOperation: QueryOperation? = nil,
+    updateJournalMessageOperation: UpdateJournalMessageOperation? = nil,
+    terminalizeJournalMessageOperation: TerminalizeJournalMessageOperation? = nil,
+    providerPreference: @escaping @MainActor () -> String? = {
+      UserDefaults.standard.string(forKey: .chatBridgeMode)
+    },
+    useOmiAIOperation: UseOmiAIOperation? = nil,
+    loadProviderRecoveryOperation: LoadProviderRecoveryOperation? = nil
   ) {
     let ownerID = Self.normalizedOwnerID(ownerIDProvider()) ?? ""
     self.activeTaskId = taskId
@@ -221,6 +279,40 @@ class TaskChatState: ObservableObject {
           turns: turns
         )
       }
+    self.queryOperation = queryOperation
+    self.providerPreference = providerPreference
+    self.loadProviderRecoveryOperation = loadProviderRecoveryOperation ?? Self.loadProviderRecovery
+    self.useOmiAIOperation =
+      useOmiAIOperation ?? { workstreamId, workspacePath, authorizationSnapshot in
+        _ = try await TaskChatRuntime.useOmiAI(
+          workstreamId: workstreamId,
+          workspacePath: workspacePath,
+          authorizationSnapshot: authorizationSnapshot
+        )
+      }
+    self.updateJournalMessageOperation =
+      updateJournalMessageOperation ?? {
+        workstreamId, ownerID, authorizationSnapshot, message, status in
+        try await TaskChatRuntime.updateJournalMessage(
+          workstreamId: workstreamId,
+          ownerID: ownerID,
+          authorizationSnapshot: authorizationSnapshot,
+          message: message,
+          status: status
+        )
+      }
+    self.terminalizeJournalMessageOperation =
+      terminalizeJournalMessageOperation ?? {
+        workstreamId, ownerID, authorizationSnapshot, message, producingRunId, producingAttemptId in
+        try await TaskChatRuntime.terminalizeJournalMessage(
+          workstreamId: workstreamId,
+          ownerID: ownerID,
+          authorizationSnapshot: authorizationSnapshot,
+          message: message,
+          producingRunId: producingRunId,
+          producingAttemptId: producingAttemptId
+        )
+      }
     self.draftText = ChatDraftStore.shared.text(
       for: .taskChat(workstreamId),
       ownerID: ownerID
@@ -258,6 +350,8 @@ class TaskChatState: ObservableObject {
     isSending = false
     isStopping = false
     errorMessage = nil
+    failedAdapterID = nil
+    isSwitchingProvider = false
     draftText = ""
     onQueryCompleted = nil
     onAuthRequired = nil
@@ -326,6 +420,8 @@ class TaskChatState: ObservableObject {
       observeRuntimeProjectionFailures()
       await refreshJournal(reset: true, lease: lease)
       guard isCurrent(lease) else { return }
+      await restoreProviderRecovery(lease: lease)
+      guard isCurrent(lease) else { return }
       surfaceCurrentRuntimeFailureIfNeeded()
       log("TaskChatState[\(workstreamId)]: Loaded \(messages.count) kernel journal messages")
     } catch {
@@ -334,6 +430,92 @@ class TaskChatState: ObservableObject {
         log("TaskChatState[\(workstreamId)]: journal load failed (code=journal_load_failed)")
       }
     }
+  }
+
+  private func restoreProviderRecovery(lease: TaskChatOwnerLease) async {
+    guard !isSending, errorMessage == nil else { return }
+    let sendGeneration = localSendToken.generation
+    do {
+      let recovery = try await loadProviderRecoveryOperation(workstreamId, workspacePath, lease.authorizationSnapshot)
+      guard isCurrent(lease), !isSending, errorMessage == nil, localSendToken.generation == sendGeneration,
+        let recovery, recovery.adapterID == AgentAdapterId.acp.rawValue
+      else { return }
+      errorMessage = AgentFailureTranscriptFormatter.userFacingFailure(
+        for: BridgeError.agentRuntimeFailure(recovery.failure))
+      failedAdapterID = recovery.adapterID
+    } catch {
+      if isCurrent(lease) {
+        log("TaskChatState[\(workstreamId)]: provider recovery read failed (code=provider_recovery_read_failed)")
+      }
+    }
+  }
+
+  private static func loadProviderRecovery(
+    workstreamId: String,
+    workspacePath: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> TaskChatProviderRecovery? {
+    let session = try await TaskChatRuntime.prepareSession(
+      workstreamId: workstreamId,
+      workspacePath: workspacePath,
+      authorizationSnapshot: authorizationSnapshot
+    )
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw LocalMutationAuthorizationError.revoked
+    }
+    guard session.profile.adapterId == AgentAdapterId.acp.rawValue else { return nil }
+    let raw = try await TaskChatRuntime.controlTool(
+      name: "list_agent_sessions",
+      input: ["sessionId": session.sessionId, "surfaceKind": "workstream", "limit": 1],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw LocalMutationAuthorizationError.revoked
+    }
+    return providerRecovery(
+      from: raw,
+      session: session,
+      workstreamID: workstreamId,
+      ownerID: authorizationSnapshot.ownerID
+    )
+  }
+
+  static func providerRecovery(
+    from raw: String,
+    session: AgentSurfaceSession,
+    workstreamID: String,
+    ownerID: String
+  ) -> TaskChatProviderRecovery? {
+    guard session.profile.adapterId == AgentAdapterId.acp.rawValue,
+      let data = raw.data(using: .utf8),
+      let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      payload["ok"] as? Bool == true,
+      let summaries = payload["sessions"] as? [[String: Any]],
+      let summary = summaries.first(where: {
+        let candidate = $0["session"] as? [String: Any]
+        return candidate?["sessionId"] as? String == session.sessionId
+          && candidate?["ownerId"] as? String == ownerID
+          && candidate?["surfaceKind"] as? String == "workstream"
+          && candidate?["externalRefKind"] as? String == "workstream"
+          && candidate?["externalRefId"] as? String == workstreamID
+          && candidate?["defaultAdapterId"] as? String == session.profile.adapterId
+          && candidate?["executionProfileGeneration"] as? Int == session.profile.profileGeneration
+      }),
+      summary["activeRun"] is NSNull,
+      let run = summary["latestRun"] as? [String: Any],
+      let runID = run["runId"] as? String, !runID.isEmpty,
+      run["sessionId"] as? String == session.sessionId,
+      run["profileGeneration"] as? Int == session.profile.profileGeneration,
+      let statusText = run["status"] as? String,
+      let status = AgentRunProjectionStatus.fromWire(statusText),
+      status == .failed || status == .timedOut || status == .orphaned
+    else { return nil }
+    let failure = AgentRuntimeFailure(
+      code: run["errorCode"] as? String ?? "agent_execution_failed",
+      userMessage: run["errorMessage"] as? String ?? "Agent failed",
+      adapterId: session.profile.adapterId
+    )
+    return TaskChatProviderRecovery(adapterID: session.profile.adapterId, failure: failure)
   }
 
   private func refreshJournal(
@@ -458,12 +640,12 @@ class TaskChatState: ObservableObject {
     journalUpdateTasks[messageId] = Task { @MainActor [weak self] in
       _ = await previous?.value
       guard let self, self.isCurrent(lease) else { return }
-      _ = try? await TaskChatRuntime.updateJournalMessage(
-        workstreamId: self.workstreamId,
-        ownerID: lease.ownerID,
-        authorizationSnapshot: lease.authorizationSnapshot,
-        message: message,
-        status: status
+      _ = try? await self.updateJournalMessageOperation(
+        self.workstreamId,
+        lease.ownerID,
+        lease.authorizationSnapshot,
+        message,
+        status
       )
     }
   }
@@ -479,13 +661,13 @@ class TaskChatState: ObservableObject {
     guard let message = messages.first(where: { $0.id == messageId }) else {
       throw BridgeError.agentError("Producing task-chat turn is unavailable")
     }
-    let turn = try await TaskChatRuntime.terminalizeJournalMessage(
-      workstreamId: workstreamId,
-      ownerID: lease.ownerID,
-      authorizationSnapshot: lease.authorizationSnapshot,
-      message: message,
-      producingRunId: producingRunId,
-      producingAttemptId: producingAttemptId
+    let turn = try await terminalizeJournalMessageOperation(
+      workstreamId,
+      lease.ownerID,
+      lease.authorizationSnapshot,
+      message,
+      producingRunId,
+      producingAttemptId
     )
     guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
     guard turn.turnId == messageId,
@@ -512,12 +694,12 @@ class TaskChatState: ObservableObject {
     guard isCurrent(lease),
       let message = messages.first(where: { $0.id == messageId })
     else { return }
-    if let turn = try? await TaskChatRuntime.updateJournalMessage(
-      workstreamId: workstreamId,
-      ownerID: lease.ownerID,
-      authorizationSnapshot: lease.authorizationSnapshot,
-      message: message,
-      status: .failed
+    if let turn = try? await updateJournalMessageOperation(
+      workstreamId,
+      lease.ownerID,
+      lease.authorizationSnapshot,
+      message,
+      .failed
     ), isCurrent(lease) {
       projectJournalTurn(turn)
     }
@@ -527,10 +709,39 @@ class TaskChatState: ObservableObject {
 
   // MARK: - Send Message
 
-  func sendMessage(_ text: String, taskContext: String? = nil) async {
+  var canUseOmiAI: Bool {
+    guard hasCurrentOwner, errorMessage != nil, failedAdapterID == AgentAdapterId.acp.rawValue else { return false }
+    let mode = ChatProvider.BridgeMode(rawValue: providerPreference() ?? "piMono") ?? .piMono
+    return mode == .piMono || mode == .omiAI
+  }
+
+  func useOmiAI() async {
+    guard canUseOmiAI, !isSending, !isSwitchingProvider, let lease = captureOwnerLease() else { return }
+    isSwitchingProvider = true
+    defer { if isCurrent(lease) { isSwitchingProvider = false } }
+    do {
+      try await useOmiAIOperation(workstreamId, workspacePath, lease.authorizationSnapshot)
+      guard isCurrent(lease) else { return }
+      errorMessage = nil
+      failedAdapterID = nil
+      OmiToastCenter.shared.confirm("Thread now uses Omi AI")
+    } catch {
+      guard isCurrent(lease) else { return }
+      errorMessage = "Could not switch this thread to Omi AI. Reopen the task and try again."
+      logError("TaskChatState: explicit provider change failed", error: error)
+    }
+  }
+
+  func sendMessage(
+    _ text: String,
+    taskContext: String? = nil,
+    onAccepted: (@MainActor () -> Void)? = nil,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)? = nil
+  ) async {
     guard let lease = captureOwnerLease() else { return }
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedText.isEmpty else { return }
+    guard !isSwitchingProvider else { return }
     guard !isSending else {
       log("TaskChatState[\(workstreamId)]: sendMessage called while already sending, ignoring")
       return
@@ -538,6 +749,7 @@ class TaskChatState: ObservableObject {
 
     isSending = true
     errorMessage = nil
+    failedAdapterID = nil
 
     let continuityKey = UUID().uuidString
     let createdAt = Date()
@@ -596,11 +808,31 @@ class TaskChatState: ObservableObject {
       return
     }
     guard isCurrent(lease) else { return }
+    // Telemetry starts only after atomic journal admission. Constructing
+    // earlier made admission failure emit `question_answered` with no
+    // matching `question_asked`. The admitted client attempt ID then joins
+    // success, failure, cancel, and supersession.
+    let telemetryAttempt = ChatQueryTelemetryAttempt(
+      attemptId: continuityKey,
+      surface: ChatProvider.chatTelemetrySurface(
+        turnOwner: .taskChat(workstreamId),
+        isOnboarding: false,
+        systemPromptStyle: .main
+      ),
+      harness: Self.telemetryHarness(),
+      runtimeSurface: AgentSurfaceReference.workstream(workstreamId: workstreamId).surfaceKind,
+      inputLength: trimmedText.count
+    )
     // Signal local send only after both canonical rows are accepted.
     localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
     if draftText == text { draftText = "" }
     activeAssistantMessageId = aiMessageId
     producingRunProjection.begin(assistantMessageID: aiMessageId)
+    ChatProvider.notifyAccepted(
+      telemetryAttempt: telemetryAttempt,
+      onAccepted: onAccepted,
+      onAcceptedWithAttemptID: onAcceptedWithAttemptID
+    )
 
     do {
       let textDeltaHandler: @Sendable (String) -> Void = { [weak self] delta in
@@ -637,22 +869,20 @@ class TaskChatState: ObservableObject {
         }
       }
 
-      let queryResult = try await TaskChatRuntime.query(
+      let queryResult = try await runQuery(
         prompt: trimmedText,
-        workstreamId: workstreamId,
         producingTurnId: aiMessageId,
-        workspacePath: workspacePath,
-        mode: chatMode.rawValue,
         taskContext: taskContext,
         authorizationSnapshot: lease.authorizationSnapshot,
         onTextDelta: textDeltaHandler,
         onToolActivity: toolActivityHandler,
         onThinkingDelta: thinkingDeltaHandler,
-        onToolResultDisplay: toolResultDisplayHandler,
-        onAuthRequired: onAuthRequired ?? { _, _ in },
-        onAuthSuccess: onAuthSuccess ?? {}
+        onToolResultDisplay: toolResultDisplayHandler
       )
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else {
+        telemetryAttempt.finish(stopReason: .superseded)
+        return
+      }
 
       guard
         producingRunProjection.bindResult(
@@ -673,7 +903,9 @@ class TaskChatState: ObservableObject {
       if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
         if terminalDisposition != .succeeded {
           let failureText =
-            queryResult.failure?.displayMessage
+            queryResult.failure.map {
+              AgentFailureTranscriptFormatter.userFacingFailure(for: BridgeError.agentRuntimeFailure($0))
+            }
             ?? (terminalDisposition == .cancelled
               ? "Agent cancelled"
               : terminalDisposition == .invalid
@@ -693,7 +925,17 @@ class TaskChatState: ObservableObject {
           completeRemainingToolCalls(messageId: aiMessageId)
         }
       }
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else {
+        telemetryAttempt.finish(stopReason: .superseded, partialResponse: hasPartialResponse(aiMessageId))
+        return
+      }
+
+      finishQueryTelemetry(
+        telemetryAttempt,
+        disposition: terminalDisposition,
+        queryResult: queryResult,
+        assistantMessageID: aiMessageId
+      )
 
       let terminalTurn = try await terminalizeJournalMessage(
         messageId: aiMessageId,
@@ -709,9 +951,13 @@ class TaskChatState: ObservableObject {
 
       log("TaskChatState[\(workstreamId)]: response complete (cost=$\(queryResult.costUsd))")
       if !canonicalSucceeded {
+        failedAdapterID = queryResult.failure?.adapterId
         let failureText =
           AgentRuntimeStatusStore.shared.projection(for: .workstream(workstreamId: workstreamId))
           .flatMap(AgentFailureTranscriptFormatter.errorText(for:))
+          ?? queryResult.failure.map {
+            AgentFailureTranscriptFormatter.userFacingFailure(for: BridgeError.agentRuntimeFailure($0))
+          }
           ?? (terminalDisposition == .cancelled
             ? "Agent cancelled"
             : terminalDisposition == .invalid
@@ -723,7 +969,13 @@ class TaskChatState: ObservableObject {
         guard isCurrent(lease) else { return }
       }
     } catch {
-      guard isCurrent(lease) else { return }
+      if !isCurrent(lease) {
+        telemetryAttempt.finish(
+          stopReason: .superseded,
+          partialResponse: hasPartialResponse(aiMessageId)
+        )
+        return
+      }
       streamingBuffer.cancelPendingFlush()
       flushStreamingBuffer()
 
@@ -739,7 +991,9 @@ class TaskChatState: ObservableObject {
           messages[index].isStreaming = false
         } else {
           if !failedByUserStop {
-            Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
+            Self.applyFailureTextIfNeeded(
+              to: &messages[index],
+              errorDescription: AgentFailureTranscriptFormatter.taskQueryFailure(for: error))
           }
           messages[index].isStreaming = false
           completeRemainingToolCalls(
@@ -749,10 +1003,17 @@ class TaskChatState: ObservableObject {
         }
       }
 
+      telemetryAttempt.finish(
+        error: error,
+        partialResponse: hasPartialResponse(aiMessageId)
+      )
       await failUnboundJournalMessage(messageId: aiMessageId, lease: lease)
 
       if !failedByUserStop {
-        errorMessage = error.localizedDescription
+        errorMessage = AgentFailureTranscriptFormatter.taskQueryFailure(for: error)
+        if let bridgeError = error as? BridgeError, case .agentRuntimeFailure(let failure) = bridgeError {
+          failedAdapterID = failure.adapterId
+        }
       }
       logError("TaskChatState[\(workstreamId)]: query failed", error: error)
     }
@@ -762,6 +1023,81 @@ class TaskChatState: ObservableObject {
     producingRunProjection.clear()
     isSending = false
     isStopping = false
+  }
+
+  private func runQuery(
+    prompt: String,
+    producingTurnId: String,
+    taskContext: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    onTextDelta: @escaping AgentBridge.TextDeltaHandler,
+    onToolActivity: @escaping AgentBridge.ToolActivityHandler,
+    onThinkingDelta: @escaping AgentBridge.ThinkingDeltaHandler,
+    onToolResultDisplay: @escaping AgentBridge.ToolResultDisplayHandler
+  ) async throws -> AgentBridge.QueryResult {
+    if let queryOperation {
+      return try await queryOperation(prompt, workstreamId, producingTurnId, authorizationSnapshot)
+    }
+    return try await TaskChatRuntime.query(
+      prompt: prompt,
+      workstreamId: workstreamId,
+      producingTurnId: producingTurnId,
+      workspacePath: workspacePath,
+      mode: chatMode.rawValue,
+      taskContext: taskContext,
+      authorizationSnapshot: authorizationSnapshot,
+      onTextDelta: onTextDelta,
+      onToolActivity: onToolActivity,
+      onThinkingDelta: onThinkingDelta,
+      onToolResultDisplay: onToolResultDisplay,
+      onAuthRequired: onAuthRequired ?? { _, _ in },
+      onAuthSuccess: onAuthSuccess ?? {}
+    )
+  }
+
+  private func finishQueryTelemetry(
+    _ telemetryAttempt: ChatQueryTelemetryAttempt,
+    disposition: TaskChatTerminalDisposition,
+    queryResult: AgentBridge.QueryResult,
+    assistantMessageID: String
+  ) {
+    let responseLength =
+      messages.first(where: { $0.id == assistantMessageID })?.text.count ?? queryResult.text.count
+    let partialResponse = hasPartialResponse(assistantMessageID)
+    switch disposition {
+    case .succeeded:
+      telemetryAttempt.complete(
+        metrics: ChatQueryCompletionMetrics(
+          toolCallCount: 0,
+          toolNames: [],
+          costUsd: queryResult.costUsd,
+          responseLength: responseLength,
+          screenToolRequested: false,
+          screenToolSucceeded: false,
+          screenToolApprovalRequired: false,
+          screenToolFailureCodes: [],
+          runtimeRunId: queryResult.runId,
+          runtimeAttemptId: queryResult.attemptId
+        )
+      )
+    case .cancelled:
+      telemetryAttempt.cancel(reason: .userStop, partialResponse: partialResponse)
+    case .failed:
+      telemetryAttempt.fail(errorClass: .agentRuntime, partialResponse: partialResponse)
+    case .invalid:
+      telemetryAttempt.fail(errorClass: .agentError, partialResponse: partialResponse)
+    }
+  }
+
+  private func hasPartialResponse(_ assistantMessageID: String) -> Bool {
+    guard let message = messages.first(where: { $0.id == assistantMessageID }) else { return false }
+    return !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || !message.contentBlocks.isEmpty
+  }
+
+  private static func telemetryHarness() -> String {
+    let preference = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
+    return ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: preference) ?? .piMono)
   }
 
   // MARK: - Failure Formatting
@@ -826,6 +1162,7 @@ class TaskChatState: ObservableObject {
 
     requestJournalRefreshForRuntimeFailure(producingMessageID: producingMessageID)
     errorMessage = errorText
+    failedAdapterID = projection.failure?.adapterId
   }
 
   private func observeRuntimeProjectionFailures() {

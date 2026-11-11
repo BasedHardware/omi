@@ -61,6 +61,7 @@ dependency_exists_in_bundle() {
     "$EXECUTABLE_DIR"
     "$CONTENTS_DIR/Resources"
     "$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle"
+    "$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources"
     "$CONTENTS_DIR/Resources/agent"
     "$CONTENTS_DIR/Resources/pi-mono-extension"
   )
@@ -111,7 +112,7 @@ resolve_rpath_dependency() {
   local resolved_rpath
   local resolved_dep
 
-  for rpath in "${candidate_rpaths[@]}"; do
+  for rpath in "${candidate_rpaths[@]+${candidate_rpaths[@]}}"; do
     case "$rpath" in
       @executable_path/*|@loader_path/*)
         resolved_rpath="$(resolve_token_path "$rpath" "$binary")" || continue
@@ -231,7 +232,11 @@ done < <(
     -print0
 )
 
-node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/node"
+node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+resource_bundle="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle"
+if [[ ! -f "$resource_bundle/Contents/Resources/ffmpeg" && ! -f "$resource_bundle/ffmpeg" ]]; then
+  report_error "bundled ffmpeg is missing from both SwiftPM resource layouts: $resource_bundle"
+fi
 if [[ -x "$node_bin" ]]; then
   "$node_bin" --version >/dev/null 2>&1 || report_error "bundled node failed runtime probe: $node_bin"
   codesign --verify --verbose=1 "$node_bin" >/dev/null 2>&1 || report_error "bundled node failed codesign verification: $node_bin"

@@ -1,6 +1,14 @@
 name: Repo Checks
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: main
   pull_request:
@@ -12,8 +20,28 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: repo-checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Metadata events (edited/labeled/unlabeled) and code events (push/synchronize)
+  # run disjoint job sets: `metadata-preflight` for the former, `changes`/`hygiene`
+  # for the latter. Sharing one cancel-in-progress group let a PR-title/body edit
+  # cancel an in-flight code run it shares no work with, and cancelled jobs render
+  # as red "fail" checks on the PR — flaky red with no code cause. Key the group by
+  # lane so newer-cancels-older still holds within each lane, but never across them.
+  # Within a lane, only PR runs cancel in progress: a newer main push replaces the
+  # pending code run instead of cancelling the running one, so the newest main SHA
+  # still gets a complete deterministic-check run.
+  group: repo-checks-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action) && 'metadata' || 'code' }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches
+  # from github.com intermittently stop receiving data for 7-10 minutes before
+  # the connection resets (Backend Hermetic E2E run 39435458398 spent 498 s in
+  # "Checkout code" and hit its 10-minute cap). With these set, git aborts any
+  # transfer that stays under 1 KB/s for 60 s, and actions/checkout retries the
+  # fetch (its built-in 3 attempts); a healthy depth-1 fetch takes ~20 s.
+  # Applies to every git network call in the workflow, including script steps.
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   metadata-preflight:
@@ -24,28 +52,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version-file: backend/.python-version
 
-      # The preflight can select uv-backed checks (e.g. backend-route-policy-baseline
-      # runs the OpenAPI runner) whenever a PR touches backend routes, so this job
-      # needs uv just like the sibling Hygiene job.
-      - name: Set up uv
-        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
-        with:
-          enable-cache: true
-          cache-dependency-glob: backend/openapi-requirements.txt
-
+      # Metadata edits reuse the source verdict from Hygiene. These manifest
+      # checks consume only Python stdlib + Git; do not install code-test tools.
       - name: Run current PR metadata preflight
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          scripts/pr-preflight \
-            --base "${{ github.event.pull_request.base.sha }}" \
+          # The PR event payload's base-branch SHA field is frozen at whatever PR
+          # event last delivered it; a metadata-only edited/labeled/unlabeled event
+          # days later can carry a value main has long since moved past. actions/checkout
+          # already fetched origin/${{ github.base_ref }} live (fetch-depth: 0
+          # above), so diff against that instead of the stale payload field.
+          scripts/pr-preflight --metadata-only \
+            --base "origin/${{ github.base_ref }}" \
             --repository "${{ github.repository }}" \
             --pr-number "${{ github.event.pull_request.number }}"
 
@@ -55,17 +87,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changes.outputs.diff_base }}
-      has_arb: ${{ steps.changes.outputs.has_arb }}
-      has_dart: ${{ steps.changes.outputs.has_dart }}
-      has_firmware: ${{ steps.changes.outputs.has_firmware }}
-      has_format: ${{ steps.changes.outputs.has_format }}
-      has_python: ${{ steps.changes.outputs.has_python }}
-      has_workflows: ${{ steps.changes.outputs.has_workflows }}
+      has_arb: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_arb) }}
+      has_dart: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_dart) }}
+      has_firmware: ${{ inputs.nightly_main_sha != '' && 'false' || steps.changes.outputs.has_firmware }}
+      has_format: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_format) }}
+      has_python: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_python) }}
+      has_workflows: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_workflows) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Detect changed paths
         id: changes
@@ -80,7 +118,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -90,22 +134,34 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # See the metadata-preflight job: an exact version keeps the action from
+          # fetching the astral-sh/versions manifest to resolve "latest".
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
 
+      - name: Install runtime environment validator dependency
+        run: uv pip install --system pyyaml==6.0.1
+
+      - name: Set up Java for manifest-selected Firestore checks
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Bun for manifest-selected web/app checks
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
       - name: Save changed files
         run: |
-          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          if [ -n "${{ inputs.nightly_main_sha }}" ]; then
+            cp /tmp/nightly-all-files.txt /tmp/changed-files.txt
+          else
+            scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          fi
           cat /tmp/changed-files.txt
-
-      - name: Test package architecture map guardrail
-        run: python3 .github/scripts/test_check_package_architecture_maps.py
-
-      - name: Test product invariant PR-body checker
-        run: python3 .github/scripts/test_check_product_invariants.py
-
-      - name: Test PR preflight contracts
-        run: python3 .github/scripts/test_pr_preflight.py
 
       - name: Run shared PR contract preflight
         if: github.event_name == 'pull_request'
@@ -120,19 +176,30 @@ jobs:
 
       - name: Run deterministic check manifest on main pushes
         if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
-
-      - name: Test brand UI ratchet helper
-        run: python3 .github/scripts/test_check_brand_ui.py
+        env:
+          PR_BODY_FILE: /tmp/main-push-commit-body.txt
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # On main pushes there is no PR event payload. #10965 / #9744 pass
+          # the merge-commit body through --pr-body-file so product-invariants
+          # and failure-class-protocol still run. That is necessary but not
+          # sufficient here: this repo squashes with the commit list, not the
+          # PR description, so INV-* citations that already made PR Hygiene
+          # green disappear on the main push (see #11835). Recover the live
+          # (#NNNN) PR body and append it. Fail-closed is preserved: a direct
+          # push with no PR number still uses only the commit message.
+          git log -1 --format=%B HEAD > /tmp/main-push-commit-message.txt
+          python3 .github/scripts/pr_metadata.py \
+            --repository "${{ github.repository }}" \
+            --from-commit-body-file /tmp/main-push-commit-message.txt \
+            --output "$PR_BODY_FILE"
+          python3 .github/scripts/run_checks.py --lane ci \
+            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going' || '' }} \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --pr-body-file "$PR_BODY_FILE"
 
       - name: Check typed error flow-control ratchet
         run: python3 .github/scripts/check_isinstance_return_ratchet.py
-
-      - name: Test lifecycle header checker
-        run: python3 .github/scripts/test_check_lifecycle_headers.py
-
-      - name: Test version-prefixed filename lint
-        run: python3 .github/scripts/test_check_version_prefixed_filenames.py
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
@@ -143,20 +210,8 @@ jobs:
       - name: Check deployment concurrency policy
         run: python3 .github/scripts/check-deployment-concurrency.py
 
-      - name: Check desktop release terminology
-        run: python3 .github/scripts/check-desktop-release-terminology.py
-
-      - name: Test desktop qualification metadata writer
-        run: python3 desktop/macos/scripts/release-keyvalue.py self-test
-
-      - name: Test desktop release promotion gate
-        run: python3 .github/scripts/test_check_desktop_release_promotion.py
-
-      - name: Test automatic desktop beta candidate gate
-        run: python3 .github/scripts/test_check_desktop_auto_beta_candidate.py
-
       - name: Check release process guards
-        run: python3 .github/scripts/check-release-process-guards.py
+        run: bash scripts/run-release-process-guards.sh
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'
@@ -176,18 +231,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Save changed files
         run: |
-          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          if [ -n "${{ inputs.nightly_main_sha }}" ]; then
+            cp /tmp/nightly-all-files.txt /tmp/changed-files.txt
+          else
+            scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          fi
           cat /tmp/changed-files.txt
+
+      - name: Set up uv for Python formatting
+        if: needs.changes.outputs.has_python == 'true'
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          version: "0.11.13"
+          enable-cache: true
 
       - name: Setup Flutter
         if: needs.changes.outputs.has_dart == 'true'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Keep formatter output reproducible across runner images and local hooks.
+          flutter-version: 3.44.5
           cache: true
 
       - name: Resolve Flutter dependencies for formatting
@@ -200,20 +274,23 @@ jobs:
         run: |
           FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
+            echo "$FILES" | xargs "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" format --line-length 120 --set-exit-if-changed --output=none
           fi
 
       - name: Check Python formatting
-        if: needs.changes.outputs.has_python == 'true'
+        # Nightly 39610825548: the dart step failed first and this step never
+        # ran, masking four unformatted files run 1 could not report.
+        if: ${{ !cancelled() && needs.changes.outputs.has_python == 'true' }}
         run: |
-          pip install -q black
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
+            echo "$FILES" | xargs scripts/backend-python-format --check
           fi
 
       - name: Check ARB formatting
-        if: needs.changes.outputs.has_arb == 'true'
+        # Same masking hole as the Python step (Luna P2, PR 23064 round 1): a
+        # dart-format failure must not hide ARB findings from the same nightly.
+        if: ${{ !cancelled() && needs.changes.outputs.has_arb == 'true' }}
         run: |
           FILES=$(grep '\.arb$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           failed=0
@@ -244,7 +321,15 @@ jobs:
       - name: Check C/C++ formatting
         if: needs.changes.outputs.has_firmware == 'true'
         run: |
+          # Pin clang-format to the version pre-commit uses. ubuntu-latest moved to
+          # ubuntu-26.04, whose clang-format adds a space before compound-literal
+          # braces that clang-format 18 removes, so the runner image must not decide.
+          CLANG_FORMAT_VENV="$RUNNER_TEMP/clang-format-18"
+          python3 -m venv "$CLANG_FORMAT_VENV"
+          "$CLANG_FORMAT_VENV/bin/pip" install --quiet clang-format==18.1.8
+          CLANG_FORMAT="$CLANG_FORMAT_VENV/bin/clang-format"
+          "$CLANG_FORMAT" --version
           FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs clang-format --dry-run --Werror
+            echo "$FILES" | xargs "$CLANG_FORMAT" --dry-run --Werror
           fi

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-replace-reissues-delivered-identity",
+  "violated_contract": "A writer that replaces a record set by deleting and recreating it must keep the identity of every record that survives the replace when an external side effect is deduplicated by that identity. Conversation reprocess deleted every task and recreated the same tasks under fresh document ids; task-app delivery skips a task only when its own id carries the exported marker, so every reprocess (smart-merge survivor refresh, user reprocess, sync update, server recovery) created the unchanged tasks again in the user's Todoist/Asana/ClickUp/Google Tasks and pushed them to Apple Reminders again. Nothing fails: each write and each delivery succeeds on its own terms.",
+  "canonical_prevention": "Before the delete, pair the new records with the prior set by an exact identity rule scoped to the owning parent (never fuzzy, never across parents), reuse the prior document id and carry the delivery marker forward, leave already-delivered records out of delivery, and queue delivery only after the rest of the replace persisted so a retried replace cannot deliver twice. Keep an end-to-end test that runs the real writer and real delivery against a fake store and task app, replaces twice and N times, injects a failure between delivery and persistence, and counts external creates.",
+  "canonical_prevention_artifact": [
+    "backend/utils/conversations/action_item_identity.py",
+    "backend/tests/unit/test_action_item_identity_reprocess.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/process_conversation.py",
+    "backend/utils/conversations/action_item_identity.py",
+    "backend/utils/task_sync.py"
+  ],
+  "status": "open"
+}

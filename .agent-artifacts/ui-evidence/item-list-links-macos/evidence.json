@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-item-list-light.png",
+      "platform": "desktop-macos",
+      "description": "Item-list sheet, light: conversation, task, memory, unavailable, completed task. Offscreen NSHostingView render of the shipped ItemLinkListSheet with fixture rows (not a live app capture)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-item-list-dark.png",
+      "platform": "desktop-macos",
+      "description": "Item-list sheet, dark. Offscreen NSHostingView render of the shipped ItemLinkListSheet with fixture rows (not a live app capture)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-desktop-macos-item-list-loading.png",
+      "platform": "desktop-macos",
+      "description": "Item-list sheet loading state. Offscreen NSHostingView render of the shipped ItemLinkListSheet with fixture rows (not a live app capture)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-desktop-macos-item-list-empty.png",
+      "platform": "desktop-macos",
+      "description": "Item-list sheet empty state. Offscreen NSHostingView render of the shipped ItemLinkListSheet with fixture rows (not a live app capture)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

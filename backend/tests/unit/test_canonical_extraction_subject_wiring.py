@@ -5,9 +5,7 @@ from __future__ import annotations
 import os
 import importlib
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from unittest.mock import patch
-
 import pytest
 
 os.environ.setdefault(
@@ -19,14 +17,17 @@ from database.entities import USER_ENTITY_ID
 from models.memories import Memory, MemoryCategory, MemoryDB, SubjectAttribution
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier
-from utils.memory.canonical_memory_adapter import read_canonical_memories, write_canonical_extraction_memory
+from utils.memory.canonical_memory_adapter import (
+    extraction_memory_id,
+    read_canonical_memories,
+    write_canonical_extraction_memory,
+    write_canonical_external_memory,
+)
 from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
-from utils.memory.canonical_activation import CanonicalWriteDecision
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
-from utils.memory.required_promotion import required_promotion_payload
+from utils.memory.required_promotion import required_processing_payload
 from utils.client_device import DeviceScopeRequest
-from tests.unit.test_ws_i_write_convergence import _FakeDb, _trusted_account_generation
+from tests.unit.fixtures.canonical_memory_fakes import _FakeDb, _trusted_account_generation
 
 
 def _refresh_canonical_runtime() -> None:
@@ -36,6 +37,7 @@ def _refresh_canonical_runtime() -> None:
         {
             "read_canonical_memories": canonical_adapter.read_canonical_memories,
             "write_canonical_extraction_memory": canonical_adapter.write_canonical_extraction_memory,
+            "write_canonical_external_memory": canonical_adapter.write_canonical_external_memory,
             "extract_kg_for_promoted_memory": kg_promotion.extract_kg_for_promoted_memory,
         }
     )
@@ -107,11 +109,7 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
 
     db = _FakeDb(_control_seed(uid))
     service = MemoryService(db_client=db)
-    with patch(
-        "utils.memory.memory_service.canonical_write_decision",
-        return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
-    ):
-        service.write(uid, payload)
+    service.write(uid, payload)
 
     items = read_canonical_memories(uid, db_client=db)
     assert len(items) == 1
@@ -121,7 +119,52 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
     assert stored["arguments"] == {"location": "San Francisco"}
 
 
-def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_account):
+def test_memory_service_write_round_trips_locked_state(monkeypatch_trusted_account):
+    uid = "uid-lock-wire"
+    memory_db = MemoryDB.from_memory(
+        Memory(content="Locked canonical secret", category=MemoryCategory.interesting),
+        uid,
+        "conv-lock-wire",
+        False,
+    )
+    memory_db.id = "mem_lock_wire"
+    memory_db.memory_tier = MemoryTier.short_term
+    memory_db.is_locked = True
+    db = _FakeDb(_control_seed(uid))
+    service = MemoryService(db_client=db)
+
+    service.write(uid, memory_db.model_dump(mode="json"))
+
+    stored = db.docs[f"users/{uid}/memory_items/{memory_db.id}"]
+    assert stored["promotion"]["is_locked"] is True
+    canonical = read_canonical_memories(uid, db_client=db)
+    assert len(canonical) == 1
+    assert canonical[0].is_locked is True
+
+
+def test_extraction_memory_id_is_deterministic_and_partitions_non_user_subjects():
+    identity = {
+        "uid": "uid-subject-id",
+        "source_id": "conv-subject-id",
+        "content": "Prefers tea",
+    }
+
+    alice_id = extraction_memory_id(**identity, subject_entity_id="person:alice")
+    bob_id = extraction_memory_id(**identity, subject_entity_id="person:bob")
+
+    assert alice_id == extraction_memory_id(**identity, subject_entity_id="person:alice")
+    assert alice_id != bob_id
+    assert extraction_memory_id(**identity, subject_entity_id=USER_ENTITY_ID) == extraction_memory_id(**identity)
+
+
+def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_account, monkeypatch):
+    from utils.memory.promotion_flex import PromotionFlexDeferred
+
+    def defer_normalization(*args, **kwargs):
+        # Provenance is independent of the external normalization service.
+        raise PromotionFlexDeferred('synthetic model unavailable')
+
+    monkeypatch.setattr('utils.memory.required_intake.normalize', defer_normalization)
     uid = "uid-manual-device-wire"
     device_id = "macos_a1b2c3d4"
     memory_db = MemoryDB.from_memory(
@@ -135,14 +178,10 @@ def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_
     db = _FakeDb(_control_seed(uid))
     service = MemoryService(db_client=db)
 
-    with patch(
-        "utils.memory.memory_service.canonical_write_decision",
-        return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
-    ):
-        service.write(
-            uid,
-            required_promotion_payload(memory_db.model_dump(mode="json"), source_surface="v3_manual"),
-        )
+    service.write(
+        uid,
+        required_processing_payload(memory_db.model_dump(mode="json"), source_surface="v3_manual"),
+    )
 
     current_device = read_canonical_memories(
         uid,
@@ -175,11 +214,7 @@ def test_write_mode_rollout_doc_does_not_collide_with_apply_control_state(monkey
     db = _FakeDb({f"users/{uid}/memory_control/state": _rollout_control_doc(uid)})
     service = MemoryService(db_client=db)
 
-    with patch(
-        "utils.memory.memory_service.canonical_write_decision",
-        return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
-    ):
-        service.write(uid, payload)
+    service.write(uid, payload)
 
     apply_control = db.docs[f"users/{uid}/memory_state/apply_control"]
     rollout_control = db.docs[f"users/{uid}/memory_control/state"]
@@ -230,7 +265,7 @@ def test_kg_promotion_uses_stored_subject_entity_id(monkeypatch_trusted_account)
         kg_extracted=False,
     )
     with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_kg_promotion.ensure_canonical_apply_control_state"),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [{}], "edges": []},
@@ -281,3 +316,259 @@ def test_write_canonical_extraction_memory_threads_explicit_triple_fields(monkey
     assert stored["subject_entity_id"] == USER_ENTITY_ID
     assert stored["predicate"] == "prefers"
     assert stored["arguments"] == {"thing": "dark mode"}
+
+
+def test_extraction_write_does_not_default_third_party_to_primary_user(monkeypatch_trusted_account, monkeypatch):
+    uid = "uid-scope"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    payload = {
+        "id": "mem_third_party",
+        "uid": uid,
+        "content": "Sam is a teammate on the launch",
+        "conversation_id": "conv-scope",
+        "subject_attribution": "third_party",
+        "memory_tier": MemoryTier.short_term.value,
+        "created_at": now,
+        "updated_at": now,
+        "evidence": [
+            {
+                "evidence_id": "ev-scope",
+                "source_id": "conv-scope",
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "extractor_id": "test",
+                "extractor_version": "v1",
+                "artifact_ref": {},
+                "capture_confidence": 0.5,
+                "independence_group": "conv-scope",
+                "redaction_status": "active",
+                "created_at": now,
+            }
+        ],
+    }
+    write_canonical_extraction_memory(uid, payload, db_client=db)
+    stored = db.docs[f"users/{uid}/memory_items/mem_third_party"]
+    assert stored["subject_scope"] == "third_party"
+
+
+def test_extraction_write_stores_named_date_valid_to_from_invalid_at(monkeypatch_trusted_account, monkeypatch):
+    uid = "uid-valid-to"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    valid_to = datetime(2026, 12, 15, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    payload = {
+        "id": "mem_named_date",
+        "uid": uid,
+        "content": "Ship the launch on Friday",
+        "conversation_id": "conv-valid-to",
+        "subject_attribution": "user",
+        "invalid_at": valid_to,
+        "memory_tier": MemoryTier.short_term.value,
+        "created_at": now,
+        "updated_at": now,
+        "evidence": [
+            {
+                "evidence_id": "ev-valid-to",
+                "source_id": "conv-valid-to",
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "extractor_id": "test",
+                "extractor_version": "v1",
+                "artifact_ref": {},
+                "capture_confidence": 0.5,
+                "independence_group": "conv-valid-to",
+                "redaction_status": "active",
+                "created_at": now,
+            }
+        ],
+    }
+    write_canonical_extraction_memory(uid, payload, db_client=db)
+    stored = db.docs[f"users/{uid}/memory_items/mem_named_date"]
+    assert stored["subject_scope"] == "primary_user"
+    assert stored["valid_to"] == valid_to
+
+
+def test_extraction_write_preserves_explicit_third_party_attribution(monkeypatch_trusted_account):
+    uid = "uid-third-party"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    payload = {
+        "id": "mem_third_party",
+        "uid": uid,
+        "content": "Sam is a teammate on the launch",
+        "conversation_id": "conv-third-party",
+        "subject_attribution": "third_party",
+        "memory_tier": MemoryTier.short_term.value,
+        "created_at": now,
+        "updated_at": now,
+        "evidence": [
+            {
+                "evidence_id": "ev-off",
+                "source_id": "conv-third-party",
+                "source_type": "conversation",
+                "source_signal": "transcription",
+                "extractor_id": "test",
+                "extractor_version": "v1",
+                "artifact_ref": {},
+                "capture_confidence": 0.5,
+                "independence_group": "conv-third-party",
+                "redaction_status": "active",
+                "created_at": now,
+            }
+        ],
+    }
+    write_canonical_extraction_memory(uid, payload, db_client=db)
+    stored = db.docs[f"users/{uid}/memory_items/mem_third_party"]
+    assert stored["subject_scope"] == "third_party"
+
+
+def _evidence(source_id: str, now: datetime, *, source_type: str = "conversation") -> dict:
+    return {
+        "evidence_id": f"ev-{source_id}",
+        "source_id": source_id,
+        "source_type": source_type,
+        "source_signal": "transcription" if source_type == "conversation" else "integration",
+        "extractor_id": "test",
+        "extractor_version": "v1",
+        "artifact_ref": {},
+        "capture_confidence": 0.5,
+        "independence_group": source_id,
+        "redaction_status": "active",
+        "created_at": now,
+    }
+
+
+def test_automated_api_create_without_attribution_does_not_claim_user_ownership(monkeypatch_trusted_account):
+    uid = "uid-api-scope"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    write_canonical_external_memory(
+        uid,
+        {
+            "id": "mem_api",
+            "uid": uid,
+            "content": "I prefer dark mode",
+            "created_at": now,
+            "updated_at": now,
+            "evidence": [_evidence("external:mem_api", now, source_type="api")],
+        },
+        db_client=db,
+    )
+    stored = db.docs[f"users/{uid}/memory_items/mem_api"]
+    assert stored["subject_scope"] == "third_party"
+
+
+def test_x_post_legacy_assumption_does_not_establish_user_ownership(monkeypatch_trusted_account):
+    uid = "uid-x-scope"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    write_canonical_external_memory(
+        uid,
+        {
+            "id": "mem_x",
+            "uid": uid,
+            "content": "Posted about the launch",
+            "subject_attribution": "legacy_assumed",
+            "created_at": now,
+            "updated_at": now,
+            "evidence": [_evidence("integration:x", now, source_type="integration:x")],
+        },
+        db_client=db,
+    )
+    stored = db.docs[f"users/{uid}/memory_items/mem_x"]
+    assert stored["subject_scope"] == "third_party"
+
+
+def test_conversation_about_user_name_is_primary_user(monkeypatch_trusted_account, monkeypatch):
+    uid = "uid-about-user"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    write_canonical_extraction_memory(
+        uid,
+        {
+            "id": "mem_david",
+            "uid": uid,
+            "content": "David prefers dark mode",
+            "conversation_id": "conv-david",
+            "about": "David",
+            "user_name": "David Zheng",
+            "subject_attribution": "unknown",
+            "memory_tier": MemoryTier.short_term.value,
+            "created_at": now,
+            "updated_at": now,
+            "evidence": [_evidence("conv-david", now)],
+        },
+        db_client=db,
+    )
+    stored = db.docs[f"users/{uid}/memory_items/mem_david"]
+    assert stored["subject_scope"] == "primary_user"
+
+
+def test_conversation_about_other_person_is_third_party(monkeypatch_trusted_account, monkeypatch):
+    uid = "uid-about-sam"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    write_canonical_extraction_memory(
+        uid,
+        {
+            "id": "mem_sam",
+            "uid": uid,
+            "content": "Sam is a teammate on the launch",
+            "conversation_id": "conv-sam",
+            "about": "Sam",
+            "user_name": "David Zheng",
+            "subject_attribution": "third_party",
+            "memory_tier": MemoryTier.short_term.value,
+            "created_at": now,
+            "updated_at": now,
+            "evidence": [_evidence("conv-sam", now)],
+        },
+        db_client=db,
+    )
+    stored = db.docs[f"users/{uid}/memory_items/mem_sam"]
+    assert stored["subject_scope"] == "third_party"
+
+
+def test_extractor_media_screen_is_stored_as_third_party(monkeypatch_trusted_account, monkeypatch):
+    uid = "uid-media"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    write_canonical_extraction_memory(
+        uid,
+        {
+            "id": "mem_media",
+            "uid": uid,
+            "content": "Watched a YouTube video about rust",
+            "conversation_id": "conv-media",
+            "subject_scope": "media_screen",
+            "memory_tier": MemoryTier.short_term.value,
+            "created_at": now,
+            "updated_at": now,
+            "evidence": [_evidence("conv-media", now)],
+        },
+        db_client=db,
+    )
+    stored = db.docs[f"users/{uid}/memory_items/mem_media"]
+    assert stored["subject_scope"] == "third_party"
+
+
+def test_automated_api_create_persists_without_belief_admission(monkeypatch_trusted_account):
+    uid = "uid-api-defer"
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db = _FakeDb(_control_seed(uid))
+    write_canonical_external_memory(
+        uid,
+        {
+            "id": "mem_api_defer",
+            "uid": uid,
+            "content": "I prefer dark mode",
+            "created_at": now,
+            "updated_at": now,
+            "evidence": [_evidence("external:mem_api_defer", now, source_type="api")],
+        },
+        db_client=db,
+    )
+    stored = db.docs[f"users/{uid}/memory_items/mem_api_defer"]
+    assert stored["content"] == "I prefer dark mode"
+    assert stored["subject_scope"] == "third_party"

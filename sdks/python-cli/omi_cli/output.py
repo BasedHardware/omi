@@ -16,12 +16,14 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date
+from pathlib import Path, PurePath, PureWindowsPath
 from typing import Any, Iterable, Mapping, Optional, Sequence
+from uuid import UUID
 
 from rich.console import Console
-from rich.markup import escape
 from rich.table import Table
+from rich.text import Text
 
 
 def _no_color_env() -> bool:
@@ -72,12 +74,12 @@ class Renderer:
             return
 
         if isinstance(data, list):
-            self._emit_table(data, columns=columns, title=title)
+            self._emit_table(coalesce_rows(data), columns=columns, title=title)
         elif isinstance(data, Mapping):
             self._emit_mapping(data, title=title)
         else:
             # Scalars or anything else — just print.
-            self._stdout.print(data)
+            self._stdout.print(Text(data) if isinstance(data, str) else data)
 
     def _emit_json(self, data: Any) -> None:
         # Use sys.stdout directly to avoid Rich coloring/wrapping the JSON.
@@ -96,22 +98,22 @@ class Renderer:
             self._stdout.print("[dim](no results)[/dim]")
             return
 
-        # Pick columns. Caller-supplied wins; otherwise use the keys of the first row.
-        cols = list(columns) if columns else list(rows[0].keys())
+        # Explicit columns win; inferred columns preserve keys from every row.
+        cols = list(columns) if columns else list(dict.fromkeys(key for row in rows for key in row))
 
-        table = Table(title=title, show_lines=False, header_style="bold")
+        table = Table(title=Text(title) if title is not None else None, show_lines=False, header_style="bold")
         for col in cols:
-            table.add_column(col)
+            table.add_column(Text(col, style="bold"))
         for row in rows:
-            table.add_row(*[_stringify(row.get(c)) for c in cols])
+            table.add_row(*[Text(_stringify(row.get(c))) for c in cols])
         self._stdout.print(table)
 
     def _emit_mapping(self, mapping: Mapping[str, Any], *, title: Optional[str]) -> None:
-        table = Table(title=title, show_header=False, show_lines=False, box=None)
+        table = Table(title=Text(title) if title is not None else None, show_header=False, show_lines=False, box=None)
         table.add_column("field", style="bold")
         table.add_column("value")
         for k, v in mapping.items():
-            table.add_row(k, _stringify(v))
+            table.add_row(Text(k), Text(_stringify(v)))
         self._stdout.print(table)
 
     # ------------------------------------------------------------------
@@ -145,18 +147,25 @@ class Renderer:
             sys.stderr.write(json.dumps(payload) + "\n")
             sys.stderr.flush()
         else:
-            line = f"[red]✗[/red] {message}"
+            # Error text can include server responses and user input. Apply
+            # our decoration to Text spans, without parsing that data as markup.
+            line = Text()
+            line.append("✗", style="red")
+            line.append(f" {message}")
             if detail:
-                line += f"\n  [dim]{detail}[/dim]"
+                line.append(f"\n  {detail}", style="dim")
             if extra:
                 for key, value in extra.items():
-                    line += f"\n  [dim]{escape(str(key))}: {escape(_stringify(value))}[/dim]"
+                    line.append(f"\n  {key}: {_stringify(value)}", style="dim")
             self._stderr.print(line)
 
     def debug(self, message: str) -> None:
         if not self.verbose:
             return
-        self._stderr.print(f"[dim][debug][/dim] {message}")
+        line = Text()
+        line.append("[debug]", style="dim")
+        line.append(f" {message}")
+        self._stderr.print(line)
 
 
 def _stringify(v: Any) -> str:
@@ -164,8 +173,10 @@ def _stringify(v: Any) -> str:
         return ""
     if isinstance(v, bool):
         return "✓" if v else "✗"
-    if isinstance(v, (datetime,)):
+    if isinstance(v, date):
         return v.isoformat()
+    if isinstance(v, (set, frozenset)):
+        return ", ".join(sorted(_stringify(x) for x in v))
     if isinstance(v, (list, tuple)):
         return ", ".join(_stringify(x) for x in v)
     if isinstance(v, Mapping):
@@ -174,8 +185,23 @@ def _stringify(v: Any) -> str:
 
 
 def _json_default(v: Any) -> Any:
-    if isinstance(v, datetime):
+    if isinstance(v, date):
         return v.isoformat()
+    # Path check must precede PureWindowsPath: on Windows, Path is a PureWindowsPath
+    # subclass. JSON is machine-readable output, so portable Path values always use
+    # forward slashes; an explicit Windows-path flavor keeps its native string.
+    if isinstance(v, Path):
+        return v.as_posix()
+    if isinstance(v, PureWindowsPath):
+        return str(v)
+    if isinstance(v, PurePath):
+        return v.as_posix()
+    if isinstance(v, UUID):
+        return str(v)
+    if isinstance(v, (set, frozenset)):
+        # Sort by serialized value while leaving members for the JSON encoder.
+        # Pretty text would turn booleans, numbers and tuples into strings.
+        return sorted(v, key=lambda x: json.dumps(x, default=_json_default, sort_keys=True))
     if hasattr(v, "model_dump"):  # pydantic v2
         return v.model_dump()
     if hasattr(v, "dict"):  # pydantic v1 fallback

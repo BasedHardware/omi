@@ -268,6 +268,13 @@ class ShortcutSettings: ObservableObject {
     }
   }
 
+  /// PTT is observed system-wide. A bare character would start a voice turn whenever the user types
+  /// that character in another app, so every PTT binding needs at least one modifier. Modifier-only
+  /// presets (Option, Fn, Control, or Right Command) remain valid.
+  static func isSafePushToTalkShortcut(_ shortcut: KeyboardShortcut) -> Bool {
+    !shortcut.modifiers.isEmpty
+  }
+
   static let askOmiCommandOShortcut = KeyboardShortcut(keyCode: 31, keyDisplay: "O", modifiers: .command)
   static let askOmiCommandReturnShortcut = KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: .command)
   static let askOmiCommandShiftReturnShortcut = KeyboardShortcut(
@@ -276,9 +283,20 @@ class ShortcutSettings: ObservableObject {
     modifiers: [.command, .shift]
   )
   static let askOmiCommandJShortcut = KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command)
+  /// The app's own always-on summon chord (`GlobalShortcutManager.registerSummonHotkey`), also
+  /// offered as an Ask-Omi binding. It is the only offered chord that takes nothing from anywhere
+  /// else: ⌘O is File ▸ Open everywhere, and Option-based combos collide with push-to-talk.
+  static let askOmiControlCommandOShortcut = KeyboardShortcut(
+    keyCode: 31, keyDisplay: "O", modifiers: [.control, .command])
+  // ⌃⌥O stays defined as an alternative users can bind, but is not the default or a preset.
+  static let askOmiControlOptionOShortcut = KeyboardShortcut(
+    keyCode: 31, keyDisplay: "O", modifiers: [.control, .option])
   static let defaultAskOmiShortcut = askOmiCommandOShortcut
 
+  /// The same chords onboarding offers, in the same order, plus two more. A chord picked during
+  /// onboarding must never show up in Settings as "Custom".
   static let askOmiPresets: [KeyboardShortcut] = [
+    askOmiControlCommandOShortcut,
     askOmiCommandOShortcut,
     askOmiCommandReturnShortcut,
     askOmiCommandShiftReturnShortcut,
@@ -301,15 +319,35 @@ class ShortcutSettings: ObservableObject {
   @Published var askOmiShortcut: KeyboardShortcut {
     didSet {
       persistShortcut(askOmiShortcut, forKey: Self.askOmiShortcutDefaultsKey)
-      NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
+      postAskOmiShortcutChangedIfNeeded()
     }
   }
 
   @Published var askOmiEnabled: Bool {
     didSet {
       UserDefaults.standard.set(askOmiEnabled, forKey: "shortcut_askOmiEnabled")
+      postAskOmiShortcutChangedIfNeeded()
+    }
+  }
+
+  @Published var floatingBarNotificationPreviewsEnabled: Bool {
+    didSet {
+      UserDefaults.standard.set(
+        floatingBarNotificationPreviewsEnabled, forKey: .floatingBarNotificationPreviewsEnabled)
+    }
+  }
+
+  /// Keeps the registration owner from observing a half-applied Ask Omi selection.
+  /// The individual published values still update for SwiftUI, but the hotkey owner
+  /// receives one notification only after both persisted values are final.
+  func updateAskOmiRegistration(enabled: Bool, shortcut: KeyboardShortcut) {
+    isUpdatingAskOmiRegistration = true
+    defer {
+      isUpdatingAskOmiRegistration = false
       NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
     }
+    askOmiShortcut = shortcut
+    askOmiEnabled = enabled
   }
 
   @Published var pttEnabled: Bool {
@@ -337,6 +375,66 @@ class ShortcutSettings: ObservableObject {
     didSet { UserDefaults.standard.set(pttMuteSystemAudio, forKey: "shortcut_pttMuteSystemAudio") }
   }
 
+  /// Silent Type: dictation still types into the focused app, but the turn is
+  /// never written to the chat transcript, so what you type by voice stays out
+  /// of Omi's chat context. Off by default — dictations are journaled as usual.
+  @Published var silentTypeEnabled: Bool {
+    didSet { UserDefaults.standard.set(silentTypeEnabled, forKey: .shortcutSilentTypeEnabled) }
+  }
+
+  /// The persisted read behind `silentTypeEnabled`'s initial value — what a
+  /// fresh process restores at launch. Split out of `private init` so a test
+  /// can exercise the decode itself: a same-process write followed by a read
+  /// only exercises the `didSet` writer, never this restore path. Absent key
+  /// reads false — Silent Type ships off.
+  static func persistedSilentTypeEnabled(from defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey: .shortcutSilentTypeEnabled) as? Bool ?? false
+  }
+
+  /// Ignore dictation apps: while Wispr Flow, superwhisper, or macOS Dictation holds the
+  /// microphone and no call app does, ambient capture replaces its own mic contribution with
+  /// silence for exactly that window, so a dictation never becomes a conversation. On by
+  /// default — see `DictationMicSuppressionPolicy`.
+  @Published var ambientIgnoresDictationApps: Bool {
+    didSet {
+      UserDefaults.standard.set(ambientIgnoresDictationApps, forKey: .transcriptionIgnoreDictationApps)
+    }
+  }
+
+  /// The persisted read behind `ambientIgnoresDictationApps`'s initial value. Absent key reads
+  /// true — the feature ships on.
+  static func persistedAmbientIgnoresDictationApps(from defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey: .transcriptionIgnoreDictationApps) as? Bool ?? true
+  }
+
+  /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
+  /// selected specifically for push-to-talk, independent of the macOS default input.
+  /// The one microphone choice, shared by transcription and push-to-talk.
+  ///
+  /// Push-to-talk used to carry its own picker in Shortcuts settings, so a user could
+  /// select a microphone in one place and still be recorded by another. There is one
+  /// physical microphone; there is now one setting, the transcription one.
+  static var unifiedMicrophoneUID: String {
+    migratePTTMicrophoneChoiceIfNeeded()
+    return UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+  }
+
+  /// Carry a PTT-only choice into the shared setting once, so unifying does not silently
+  /// discard a microphone the user deliberately picked.
+  static func migratePTTMicrophoneChoiceIfNeeded() {
+    let defaults = UserDefaults.standard
+    guard !defaults.bool(forKey: .shortcutPTTMicrophoneMergedIntoPreferred) else { return }
+    defaults.set(true, forKey: .shortcutPTTMicrophoneMergedIntoPreferred)
+    let legacy = defaults.string(forKey: DefaultsKey.shortcutPTTInputDeviceUID.rawValue) ?? ""
+    let current = defaults.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+    guard !legacy.isEmpty, current.isEmpty else { return }
+    defaults.set(legacy, forKey: AudioCaptureService.preferredInputUIDDefaultsKey)
+  }
+
+  @Published var pttInputDeviceUID: String {
+    didSet { UserDefaults.standard.set(pttInputDeviceUID, forKey: .shortcutPTTInputDeviceUID) }
+  }
+
   /// Selected AI model for Ask Omi.
   @Published var selectedModel: String {
     didSet { UserDefaults.standard.set(selectedModel, forKey: "shortcut_selectedModel") }
@@ -360,6 +458,19 @@ class ShortcutSettings: ObservableObject {
 
   @Published var pttTranscriptionMode: PTTTranscriptionMode {
     didSet { UserDefaults.standard.set(pttTranscriptionMode.rawValue, forKey: "shortcut_pttTranscriptionMode") }
+  }
+
+  /// Transient, never-persisted override for the onboarding voice demo, which
+  /// forces `.live` only while its step is on screen. Persisting the forced
+  /// mode (as the demo used to, via `pttTranscriptionMode`'s didSet) meant a
+  /// quit/crash mid-step permanently corrupted the user's saved PTT mode.
+  /// Consumers read `effectivePTTTranscriptionMode`, not the stored property.
+  @Published var pttTranscriptionModeDemoOverride: PTTTranscriptionMode?
+
+  /// The PTT transcription mode in effect: the demo override when present,
+  /// otherwise the user's persisted preference.
+  var effectivePTTTranscriptionMode: PTTTranscriptionMode {
+    pttTranscriptionModeDemoOverride ?? pttTranscriptionMode
   }
 
   /// When true, the floating bar can be repositioned by dragging. Off by default.
@@ -402,110 +513,6 @@ class ShortcutSettings: ObservableObject {
     return "Maximum"
   }
 
-  /// A selectable voice for floating-bar replies.
-  struct VoiceOption: Identifiable, Equatable, Sendable {
-    enum Gender: String, Sendable {
-      case female
-      case male
-    }
-
-    enum Provider: String, Sendable {
-      case localSystem
-      case openAI
-    }
-
-    let id: String
-    let name: String
-    let gender: Gender
-    let description: String
-    let provider: Provider
-    let openAIVoice: String?
-    let openAIInstructions: String?
-    let preferredSystemVoiceIdentifiers: [String]
-    let preferredSystemVoiceNames: [String]
-
-    var isLocalSystem: Bool {
-      provider == .localSystem
-    }
-
-    var isOpenAI: Bool {
-      provider == .openAI
-    }
-  }
-
-  static let openAIShimmerVoiceID = "openai:shimmer"
-  static let openAIOnyxVoiceID = "openai:onyx"
-
-  /// Curated OpenAI voices available from the voice picker.
-  static let availableVoices: [VoiceOption] = [
-    VoiceOption(
-      id: openAIOnyxVoiceID,
-      name: "Onyx",
-      gender: .male,
-      description: "OpenAI, deep, grounded",
-      provider: .openAI,
-      openAIVoice: "onyx",
-      openAIInstructions:
-        "Speak in a deep, natural, grounded voice with calm confidence and smooth pacing.",
-      preferredSystemVoiceIdentifiers: [],
-      preferredSystemVoiceNames: []
-    ),
-    VoiceOption(
-      id: openAIShimmerVoiceID,
-      name: "Shimmer",
-      gender: .female,
-      description: "OpenAI, warm human, cheap",
-      provider: .openAI,
-      openAIVoice: "shimmer",
-      openAIInstructions:
-        "Speak naturally in a warm, relaxed adult tone. Keep it conversational, calm, and human without sounding exaggerated.",
-      preferredSystemVoiceIdentifiers: [],
-      preferredSystemVoiceNames: []
-    ),
-    VoiceOption(
-      id: "openai:coral",
-      name: "Coral",
-      gender: .female,
-      description: "OpenAI, bright, expressive",
-      provider: .openAI,
-      openAIVoice: "coral",
-      openAIInstructions:
-        "Speak naturally in a warm, expressive human tone with smooth pacing and light emotional color.",
-      preferredSystemVoiceIdentifiers: [],
-      preferredSystemVoiceNames: []
-    ),
-    VoiceOption(
-      id: "openai:nova",
-      name: "Nova",
-      gender: .female,
-      description: "OpenAI, clear, friendly",
-      provider: .openAI,
-      openAIVoice: "nova",
-      openAIInstructions:
-        "Speak in a natural, friendly, confident tone with clear articulation and relaxed pacing.",
-      preferredSystemVoiceIdentifiers: [],
-      preferredSystemVoiceNames: []
-    ),
-  ]
-
-  static let defaultVoiceID = openAIShimmerVoiceID
-
-  static func voiceOption(for id: String) -> VoiceOption {
-    availableVoices.first(where: { $0.id == id })
-      ?? availableVoices.first(where: { $0.id == defaultVoiceID })
-      ?? availableVoices[0]
-  }
-
-  /// Selected voice ID for floating-bar TTS replies.
-  @Published var selectedVoiceID: String {
-    didSet {
-      guard selectedVoiceID != oldValue else { return }
-      UserDefaults.standard.set(selectedVoiceID, forKey: "shortcut_selectedVoiceID")
-      FloatingBarVoicePlaybackService.shared.playVoiceSample(voiceID: selectedVoiceID)
-      FloatingBarVoicePlaybackService.shared.prewarmBackgroundAgentKickoffPhrases()
-    }
-  }
-
   var hasAnyFloatingBarVoiceAnswersEnabled: Bool {
     true
   }
@@ -522,16 +529,39 @@ class ShortcutSettings: ObservableObject {
     !Self.pttPresets.contains(pttShortcut)
   }
 
-  private static let askOmiShortcutDefaultsKey = "shortcut_askOmiKey"
-  private static let pttShortcutDefaultsKey = "shortcut_pttKey"
+  private var isUpdatingAskOmiRegistration = false
+
+  private func postAskOmiShortcutChangedIfNeeded() {
+    guard !isUpdatingAskOmiRegistration else { return }
+    NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
+  }
+
+  static let askOmiShortcutDefaultsKey = "shortcut_askOmiKey"
+  static let pttShortcutDefaultsKey = "shortcut_pttKey"
+
+  /// Reuse persisted (including legacy) choices when setup resumes; an unset key needs a recommendation.
+  static func savedOnboardingShortcut(isTalk: Bool, defaults: UserDefaults = .standard) -> KeyboardShortcut? {
+    let saved = loadShortcut(
+      forKey: isTalk ? pttShortcutDefaultsKey : askOmiShortcutDefaultsKey,
+      legacyMapper: isTalk ? legacyPTTShortcut : legacyAskOmiShortcut,
+      defaults: defaults
+    )
+    return saved.flatMap { isSafePushToTalkShortcut($0) ? $0 : nil }
+  }
 
   private init() {
+    let restoredPTT = Self.loadShortcut(
+      forKey: Self.pttShortcutDefaultsKey,
+      legacyMapper: Self.legacyPTTShortcut
+    )
     self.pttShortcut =
-      Self.loadShortcut(
-        forKey: Self.pttShortcutDefaultsKey,
-        legacyMapper: Self.legacyPTTShortcut
-      ) ?? Self.pttPresets[0]
+      restoredPTT.flatMap { Self.isSafePushToTalkShortcut($0) ? $0 : nil }
+      ?? Self.pttPresets[0]
 
+    // A saved ⌘O binding is honored as-is — no ⌘O → ⌃⌥O migration. It does register and it does
+    // fire globally; what it also does is consume ⌘O before any other app sees it. That is a cost
+    // to disclose at the point of choosing (see `openShortcutOptions`), not to silently rewrite
+    // out from under someone who deliberately picked it.
     self.askOmiShortcut =
       Self.loadShortcut(
         forKey: Self.askOmiShortcutDefaultsKey,
@@ -539,11 +569,16 @@ class ShortcutSettings: ObservableObject {
       ) ?? Self.defaultAskOmiShortcut
 
     self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
+    self.floatingBarNotificationPreviewsEnabled =
+      UserDefaults.standard.object(forKey: .floatingBarNotificationPreviewsEnabled) as? Bool ?? true
     self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
     self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
     self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
     self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
     self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
+    self.silentTypeEnabled = Self.persistedSilentTypeEnabled()
+    self.ambientIgnoresDictationApps = Self.persistedAmbientIgnoresDictationApps()
+    self.pttInputDeviceUID = UserDefaults.standard.string(forKey: .shortcutPTTInputDeviceUID) ?? ""
     self.selectedModel = ModelQoS.Claude.sanitizedSelection(
       UserDefaults.standard.string(forKey: "shortcut_selectedModel")
     )
@@ -558,12 +593,6 @@ class ShortcutSettings: ObservableObject {
     self.floatingBarTypedQuestionVoiceAnswersEnabled =
       UserDefaults.standard.object(forKey: "shortcut_floatingBarTypedQuestionVoiceAnswersEnabled") as? Bool ?? false
     self.voicePlaybackSpeed = UserDefaults.standard.object(forKey: "shortcut_voicePlaybackSpeed") as? Float ?? 1.4
-    let storedVoiceID = UserDefaults.standard.string(forKey: "shortcut_selectedVoiceID") ?? Self.defaultVoiceID
-    let validVoiceID =
-      Self.availableVoices.contains(where: { $0.id == storedVoiceID })
-      ? storedVoiceID
-      : Self.defaultVoiceID
-    self.selectedVoiceID = validVoiceID
 
     NotificationCenter.default.addObserver(forName: .modelTierDidChange, object: nil, queue: .main) { [weak self] _ in
       Task { @MainActor [weak self] in
@@ -574,6 +603,7 @@ class ShortcutSettings: ObservableObject {
 
     Task { @MainActor in
       FloatingBarVoicePlaybackService.shared.prewarmBackgroundAgentKickoffPhrases()
+      FloatingBarVoicePlaybackService.shared.prewarmRealtimeSlowToolAcknowledgementPhrases()
     }
   }
 
@@ -585,9 +615,9 @@ class ShortcutSettings: ObservableObject {
 
   private static func loadShortcut(
     forKey key: String,
-    legacyMapper: (String) -> KeyboardShortcut?
+    legacyMapper: (String) -> KeyboardShortcut?,
+    defaults: UserDefaults = .standard
   ) -> KeyboardShortcut? {
-    let defaults = UserDefaults.standard
     if let data = defaults.data(forKey: key),
       let decoded = try? JSONDecoder().decode(KeyboardShortcut.self, from: data)
     {

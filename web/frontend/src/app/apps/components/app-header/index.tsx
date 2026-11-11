@@ -81,7 +81,7 @@ export function AppHeader({ plugin }: AppHeaderProps) {
           {/* Store Buttons */}
           <div className="mt-6 flex items-center gap-4">
             <a
-              href="https://apps.apple.com/app/id123456789"
+              href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-10 items-center gap-2 rounded-lg bg-[#1A1F2E] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#242938]"
@@ -96,7 +96,7 @@ export function AppHeader({ plugin }: AppHeaderProps) {
               <span>App Store</span>
             </a>
             <a
-              href="https://play.google.com/store/apps/details?id=com.omi.app"
+              href="https://play.google.com/store/apps/details?id=com.friend.ios"
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-10 items-center gap-2 rounded-lg bg-[#1A1F2E] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#242938]"

@@ -12,6 +12,12 @@ _KNOWN_PROVIDERS = {
     PrerecordedSTTService.DEEPGRAM,
     PrerecordedSTTService.MODULATE,
     PrerecordedSTTService.PARAKEET,
+    # Live-path provider tokens (config.stt_provider_policy). The live socket
+    # and failover paths label failures with these; omitting them laundered
+    # every soniox and deepgram_cloud terminal failure to provider='unknown'
+    # in omi_live_stt_terminal_failures_total.
+    'soniox',
+    'deepgram_cloud',
 }
 
 _PUBLIC_FAILURES: dict[TranscriptionOutcome, tuple[int, str, str]] = {
@@ -24,6 +30,11 @@ _PUBLIC_FAILURES: dict[TranscriptionOutcome, tuple[int, str, str]] = {
     TranscriptionOutcome.UPSTREAM_ERROR: (
         502,
         'stt_upstream_error',
+        'The transcription provider could not complete the request.',
+    ),
+    TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED: (
+        502,
+        'stt_provider_budget_exhausted',
         'The transcription provider could not complete the request.',
     ),
     TranscriptionOutcome.CONFIG_ERROR: (
@@ -75,11 +86,20 @@ class TranscriptionFailure(RuntimeError):
         super().__init__(public_message)
 
     def as_detail(self) -> dict[str, Any]:
-        """Safe, machine-readable HTTP/SSE payload."""
+        """Safe, machine-readable HTTP/SSE payload.
+
+        The released app-client decoders reject unknown ``outcome`` values, so
+        server-only outcomes map onto their public counterpart here; the
+        ``error`` code keeps the precision (``stt_provider_budget_exhausted``).
+        """
 
         return {
             'error': self.error_code,
-            'outcome': self.outcome.value,
+            'outcome': (
+                TranscriptionOutcome.UPSTREAM_ERROR.value
+                if self.outcome is TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED
+                else self.outcome.value
+            ),
             'provider': self.provider,
             'retryable': self.retryable,
             'message': self.public_message,
@@ -121,6 +141,25 @@ def failure_from_exception(error: BaseException, *, provider: str | None = None)
             retryable=False,
         )
     return TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider)
+
+
+def is_destructive_operation_in_progress(error: BaseException) -> bool:
+    '''True when a transient account-level destructive-op fence is in the chain.'''
+
+    # Match by type name so Cloud Tasks tests (MagicMock `database`) and the
+    # real legal-hold fence both stay identifiable without an issubclass guard
+    # pyright rejects as always-true.
+    return any(type(item).__name__ == 'DestructiveOperationInProgress' for item in _exception_chain(error))
+
+
+def sync_failure_from_exception(error: BaseException, *, provider: str | None = None) -> TranscriptionFailure:
+    '''Map a sync-job exception without collapsing a transient fence to generic STT failure.'''
+
+    if is_destructive_operation_in_progress(error):
+        failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider, retryable=True)
+        failure.error_code = 'destructive_operation_in_progress'
+        return failure
+    return failure_from_exception(error, provider=provider)
 
 
 def empty_unexpected_failure(provider: str | None = None) -> TranscriptionFailure:

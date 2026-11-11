@@ -4,7 +4,7 @@ Wire shapes for ``/memory/admin/*`` routes. Source of truth for the memory
 admin response schema; routers/utils construct dicts matching these fields.
 """
 
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,9 +30,7 @@ class ReadRolloutConsumerObservability(BaseModel):
     consumer: str = Field(description='Memory consumer (mcp, developer_api, omi_chat).')
     enabled: bool = Field(description='Whether default memory reads are enabled for this consumer.')
     reason: str = Field(description='Effective reason (fallback_reason when present, else the decision reason).')
-    read_decision: str = Field(
-        description='Server read decision value (USE_MEMORY / SHADOW_ONLY / USE_LEGACY_SAFE / DENY_MEMORY).'
-    )
+    read_decision: str = Field(description='Server read decision value (USE_MEMORY or DENY_MEMORY).')
     mode: str = Field(description='Rollout capabilities mode value.')
     memory_reads_enabled: bool = Field(description='Whether memory reads are enabled by capabilities.')
     legacy_reads_authoritative: bool = Field(description='Whether legacy reads remain authoritative.')
@@ -41,64 +39,6 @@ class ReadRolloutConsumerObservability(BaseModel):
     archive_capability: bool = Field(description='Persisted Archive capability flag for the consumer.')
     fallback_reason: Optional[str] = Field(default=None, description='Fallback reason when reads are not enabled.')
     capabilities: ReadRolloutCapabilities = Field(description='Raw rollout capability flags.')
-
-
-class ReadRolloutAuditEvent(BaseModel):
-    """One per-consumer default-read rollout decision audit event."""
-
-    uid: str = Field(description='User id the decision was evaluated for.')
-    source_path: str = Field(description='Firestore source path of the rollout state doc.')
-    consumer: str = Field(description='Memory consumer.')
-    enabled: bool = Field(description='Whether default memory reads are enabled.')
-    outcome: str = Field(description='Outcome label: "enabled" or "fallback".')
-    read_decision: str = Field(description='Server read decision value.')
-    fallback_reason: Optional[str] = Field(default=None, description='Fallback reason, if any.')
-    default_memory_grant: bool = Field(description='Whether the app holds the default-memory grant.')
-    memory_reads_enabled: bool = Field(description='Whether memory reads are enabled by capabilities.')
-    archive_default_visible: bool = Field(description='Always false.')
-    archive_capability: bool = Field(description='Persisted Archive capability flag for the consumer.')
-
-
-class ReadRolloutTotalCounters(BaseModel):
-    """Aggregate enabled/fallback decision counts across all consumers."""
-
-    enabled: int = Field(description='Number of consumers with default reads enabled.')
-    fallback: int = Field(description='Number of consumers in fallback.')
-
-
-class ReadRolloutConsumerCounters(BaseModel):
-    """Enabled/fallback decision counts for one consumer."""
-
-    enabled: int = Field(description='Count of enabled decisions for this consumer.')
-    fallback: int = Field(description='Count of fallback decisions for this consumer.')
-    fallback_reasons: Dict[str, int] = Field(description='Fallback reason -> count map for this consumer.')
-
-
-class ReadRolloutDecisionCounters(BaseModel):
-    """Aggregated rollout decision counters."""
-
-    total: ReadRolloutTotalCounters = Field(description='Aggregate counts across all consumers.')
-    by_consumer: Dict[str, ReadRolloutConsumerCounters] = Field(
-        description='Per-consumer counts keyed by consumer name.'
-    )
-
-
-class MemoryReadRolloutObservabilityReport(BaseModel):
-    """Admin observability report for one user's default-read rollout decisions.
-
-    Returned by ``GET /memory/admin/users/{uid}/read-rollout-decision``.
-    """
-
-    uid: str = Field(description='User id the rollout decision was inspected for.')
-    source_path: str = Field(description='Firestore source path of the rollout state doc.')
-    archive_default_visible: bool = Field(description='Always false; Archive is never default-visible.')
-    archive_capability: bool = Field(description='Always false at the report level.')
-    decision_audit_events: List[ReadRolloutAuditEvent] = Field(description='Per-consumer decision audit events.')
-    decision_counters: ReadRolloutDecisionCounters = Field(description='Aggregated enabled/fallback decision counters.')
-    decision_metrics_prometheus: str = Field(description='Low-cardinality Prometheus text rendering of the counters.')
-    consumers: Dict[str, ReadRolloutConsumerObservability] = Field(
-        description='Per-consumer observability keyed by consumer name.'
-    )
 
 
 class ShortTermLifecycleRunResponse(BaseModel):

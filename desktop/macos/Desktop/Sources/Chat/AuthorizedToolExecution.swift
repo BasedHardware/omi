@@ -48,6 +48,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     case invalidRetryPolicy
     case invalidPolicyRecovery
     case inputHashMismatch
+    case invalidChatFirstCapability
     case ownerChangedDuringExecution
 
     var code: String {
@@ -59,6 +60,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
       case .invalidRetryPolicy: return "invalid_execution_retry_policy"
       case .invalidPolicyRecovery: return "invalid_execution_policy_recovery"
       case .inputHashMismatch: return "authorized_execution_input_hash_mismatch"
+      case .invalidChatFirstCapability: return "authorized_execution_chat_first_capability_mismatch"
       case .ownerChangedDuringExecution: return "authorized_execution_owner_changed"
       }
     }
@@ -74,6 +76,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
   let manifestDigest: String
   let daemonBootEpoch: String
   let executionGeneration: Int
+  let capabilityRef: String
   let canonicalToolName: String
   let input: [String: Any]
   let inputHash: String
@@ -88,6 +91,21 @@ struct AuthorizedToolExecution: @unchecked Sendable {
   let precedingAssistantText: String?
   let runMode: String
   let chatMode: String?
+  let chatFirstControlGeneration: Int?
+
+  /// Typed chat has no push-to-talk invocation. `web_search` on those surfaces
+  /// is the public-web lane in ChatToolExecutor. The manifest default stays
+  /// `realtimeHub` for voice, which is the only caller that carries the envelope.
+  static func executorForAuthorizedSurface(
+    tool: GeneratedSwiftTool,
+    surfaceKind: String,
+    manifestExecutor: GeneratedSwiftToolExecutor
+  ) -> GeneratedSwiftToolExecutor {
+    if tool == .webSearch, surfaceKind == "main_chat" || surfaceKind == "floating_chat" {
+      return .chatToolExecutor
+    }
+    return manifestExecutor
+  }
 
   static func parse(
     _ payload: [String: Any],
@@ -107,19 +125,39 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     guard currentOwnerID == ownerID else {
       throw Rejection.wrongOwner
     }
+    let requestedToolName = try requiredString("toolName")
+    guard let resolvedTool = GeneratedToolExecutors.resolve(requestedToolName),
+      let manifestExecutor = GeneratedToolExecutors.executorByTool[resolvedTool]
+    else {
+      throw Rejection.unsupportedExecutor
+    }
     let manifestVersion = payload["manifestVersion"] as? Int ?? 0
     guard manifestVersion == GeneratedToolExecutors.manifestVersion else {
       throw Rejection.staleManifest
     }
-    let manifestDigest = try requiredString("manifestDigest")
-    guard manifestDigest == GeneratedToolExecutors.manifestDigest else {
-      throw Rejection.staleManifest
+    let surfaceKind = try requiredString("surfaceKind")
+    let executor = executorForAuthorizedSurface(
+      tool: resolvedTool,
+      surfaceKind: surfaceKind,
+      manifestExecutor: manifestExecutor)
+    let chatFirstControlGeneration = payload["chatFirstControlGeneration"] as? Int
+    // Validate chat-first capability before manifest digest selection so an
+    // invalid capability surfaces as .invalidChatFirstCapability rather than
+    // a misleading .staleManifest from the subsequent digest comparison.
+    if let chatFirstControlGeneration {
+      guard surfaceKind == "main_chat", chatFirstControlGeneration >= 0 else {
+        throw Rejection.invalidChatFirstCapability
+      }
+    } else if resolvedTool == .renderChatBlocks {
+      throw Rejection.invalidChatFirstCapability
     }
-    let requestedToolName = try requiredString("toolName")
-    guard let resolvedTool = GeneratedToolExecutors.resolve(requestedToolName),
-      let executor = GeneratedToolExecutors.executorByTool[resolvedTool]
-    else {
-      throw Rejection.unsupportedExecutor
+    let manifestDigest = try requiredString("manifestDigest")
+    let expectedManifestDigest =
+      surfaceKind == "main_chat" && chatFirstControlGeneration != nil
+      ? GeneratedToolExecutors.chatFirstManifestDigest
+      : GeneratedToolExecutors.manifestDigest
+    guard manifestDigest == expectedManifestDigest else {
+      throw Rejection.staleManifest
     }
     guard
       let effectClass = EffectClass(rawValue: try requiredString("effectClass")),
@@ -170,6 +208,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
       manifestDigest: manifestDigest,
       daemonBootEpoch: try requiredString("daemonBootEpoch"),
       executionGeneration: executionGeneration,
+      capabilityRef: try requiredString("capabilityRef"),
       canonicalToolName: resolvedTool.rawValue,
       input: input,
       inputHash: expectedInputHash,
@@ -177,13 +216,14 @@ struct AuthorizedToolExecution: @unchecked Sendable {
       retryPolicy: retryPolicy,
       policyRecovery: policyRecovery,
       executor: executor,
-      surfaceKind: try requiredString("surfaceKind"),
+      surfaceKind: surfaceKind,
       externalRefKind: payload["externalRefKind"] as? String,
       externalRefID: payload["externalRefId"] as? String,
       originatingUserText: payload["originatingUserText"] as? String ?? "",
       precedingAssistantText: payload["precedingAssistantText"] as? String,
       runMode: runMode,
-      chatMode: payload["chatMode"] as? String)
+      chatMode: payload["chatMode"] as? String,
+      chatFirstControlGeneration: chatFirstControlGeneration)
   }
 
   static func inputHash(for input: [String: Any]) throws -> String {
@@ -192,7 +232,10 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     }
     let canonical = try JSONSerialization.data(
       withJSONObject: input,
-      options: [.sortedKeys])
+      // Node's JSON.stringify leaves forward slashes unescaped. Match that
+      // byte-for-byte so natural tool arguments containing paths, URLs, or
+      // phrases such as "memories/conversations" keep their kernel hash.
+      options: [.sortedKeys, .withoutEscapingSlashes])
     let digest = SHA256.hash(data: canonical)
       .map { String(format: "%02x", $0) }
       .joined()

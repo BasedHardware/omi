@@ -1,0 +1,9 @@
+# Historical direct-execution shape from the #9943 failure, repaired in #9945.
+name: probe interpreter historical failure
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |-
+          backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project test-project

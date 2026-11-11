@@ -1,0 +1,7 @@
+{
+  "version": "0.12.200",
+  "date": "2026-08-21",
+  "changes": [
+    "Added an optional referral link as the final onboarding step and kept onboarding completion scoped to each signed-in account"
+  ]
+}

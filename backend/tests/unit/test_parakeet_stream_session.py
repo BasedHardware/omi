@@ -54,6 +54,7 @@ def _stream_handler_module():
     mock_transcribe._gpu_worker = None
     mock_transcribe.INFERENCE_MODE = "nemo"
     mock_transcribe.has_builtin_embedding = MagicMock(return_value=False)
+    mock_transcribe.report_gpu_inference_error = MagicMock(return_value=False)
     mock_transcribe.wav_bytes_to_waveform = _mock_wav_bytes_to_waveform
 
     _langdetect = types.ModuleType('langdetect')
@@ -151,6 +152,30 @@ class TestCosineDistance:
         assert sh.cosine_distance is speaker_math.cosine_distance
 
 
+class TestRNNTWarmup:
+    def test_fatal_cuda_error_aborts_startup(self):
+        fatal_error = RuntimeError("CUDA error: operation not permitted when stream is capturing")
+        model = MagicMock()
+        model.decoding.decoding.decoding_computer = object()
+
+        with patch.object(sh, '_asr_model', model), patch.object(
+            sh, '_NemoRNNTStreamingDecoder', side_effect=fatal_error
+        ), patch.object(sh, 'report_gpu_inference_error', return_value=True) as report:
+            with pytest.raises(RuntimeError, match="stream is capturing"):
+                sh.warmup_rnnt_decoder()
+
+        report.assert_called_once_with(fatal_error)
+
+    def test_nonfatal_error_keeps_startup_available(self):
+        model = MagicMock()
+        model.decoding.decoding.decoding_computer = object()
+
+        with patch.object(sh, '_asr_model', model), patch.object(
+            sh, '_NemoRNNTStreamingDecoder', side_effect=RuntimeError("temporary decoder failure")
+        ), patch.object(sh, 'report_gpu_inference_error', return_value=False):
+            sh.warmup_rnnt_decoder()
+
+
 class TestStreamSessionFeed:
 
     def test_silence_produces_no_segments(self):
@@ -230,6 +255,30 @@ class TestStreamSessionRNNTStreaming:
         assert session._streaming_text == "hello world"
         assert session._asr_audio_buf == bytearray()
 
+    def test_fatal_cuda_decode_reports_and_closes_instead_of_falling_back(self):
+        class AcceleratorError(RuntimeError):
+            pass
+
+        session = sh.StreamSession(sample_rate=16000)
+        fatal_error = AcceleratorError("CUDA stream capture failed")
+        with patch.object(session, '_streaming_enabled', return_value=True), patch.object(
+            session, '_drain_streaming_asr_sync', side_effect=fatal_error
+        ), patch.object(sh, 'report_gpu_inference_error', return_value=True) as report:
+            with pytest.raises(AcceleratorError):
+                asyncio.run(session._drain_streaming_asr(force=True))
+
+        report.assert_called_once_with(fatal_error)
+        assert session._streaming_failed is False
+
+    def test_nonfatal_decode_error_keeps_batch_fallback(self):
+        session = sh.StreamSession(sample_rate=16000)
+        with patch.object(session, '_streaming_enabled', return_value=True), patch.object(
+            session, '_drain_streaming_asr_sync', side_effect=RuntimeError("temporary decode failure")
+        ), patch.object(sh, 'report_gpu_inference_error', return_value=False):
+            asyncio.run(session._drain_streaming_asr(force=True))
+
+        assert session._streaming_failed is True
+
     def test_streaming_utterance_does_not_call_batch_transcribe_when_text_not_ready(self):
         session = sh.StreamSession(sample_rate=16000)
         session._pending_audio = bytearray(_make_pcm(1.0))
@@ -292,6 +341,35 @@ class TestStreamSessionSpeaker:
         with patch.object(session, '_get_embedding', return_value=None):
             result = session._assign_speaker(_make_pcm(1.0), 0.0, 1.0)
         assert result == "SPEAKER_0"
+
+    def test_clustering_merges_to_nearest_after_eight_speakers(self):
+        session = sh.StreamSession(sample_rate=16000)
+        embeddings = iter(np.eye(9, dtype=np.float32))
+
+        with patch.object(session, '_get_embedding', side_effect=lambda _wav: next(embeddings)):
+            assigned = [session._assign_speaker(_make_pcm(1.0), 0.0, 1.0) for _ in range(9)]
+
+        assert assigned[:8] == [f"SPEAKER_{index}" for index in range(8)]
+        assert assigned[8] == "SPEAKER_0"
+        assert len(session._spk_centroids) == 8
+
+    def test_cap_merge_keeps_the_winning_centroid_undrifted(self):
+        # The standalone Parakeet image mirrors the backend clustering policy;
+        # its tests pin the mirror. A cap-forced merge must not feed the missed
+        # embedding into the winning centroid's running mean, or the ninth
+        # speaker drags the first speaker's centroid toward itself and chains
+        # further misattributions.
+        session = sh.StreamSession(sample_rate=16000)
+        embeddings = [np.eye(9, dtype=np.float32)[index] for index in range(9)]
+        stream = iter(embeddings + [embeddings[0]])
+
+        with patch.object(session, '_get_embedding', side_effect=lambda _wav: next(stream)):
+            assigned = [session._assign_speaker(_make_pcm(1.0), 0.0, 1.0) for _ in range(9)]
+            again = session._assign_speaker(_make_pcm(1.0), 0.0, 1.0)
+
+        assert assigned[8] == "SPEAKER_0"
+        np.testing.assert_array_equal(np.asarray(session._spk_centroids[0]).reshape(-1), embeddings[0])
+        assert again == "SPEAKER_0"
 
 
 class TestStreamSessionVADParams:

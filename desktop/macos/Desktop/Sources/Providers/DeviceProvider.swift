@@ -92,6 +92,8 @@ final class DeviceProvider: ObservableObject {
     static let pairedDeviceId = "pairedDeviceId"
     static let pairedDeviceName = "pairedDeviceName"
     static let pairedDeviceType = "pairedDeviceType"
+    static let analyticsPairedDeviceIds = "analyticsPairedDeviceIds"
+    static let analyticsFirstPairedAt = "analyticsFirstPairedAt"
   }
 
   // MARK: - Initialization
@@ -111,6 +113,9 @@ final class DeviceProvider: ObservableObject {
     autoReconnectEnabled: Bool = true
   ) {
     let persistedDevice = Self.loadPairedDevice(from: userDefaults)
+    if let persistedDevice {
+      Self.seedPairingAnalyticsState(for: persistedDevice, in: userDefaults)
+    }
     let coordinator = DeviceSessionCoordinator(
       pairedDevice: persistedDevice,
       connectionFactory: connectionFactory,
@@ -141,6 +146,10 @@ final class DeviceProvider: ObservableObject {
       self?.startDiscovery(timeout: 5)
     }
     coordinator.onSessionEnded = { [weak self] in
+      // Authoritative disconnect telemetry: one event per ended session.
+      // Unpair of an already-disconnected device does not fire this callback,
+      // so it cannot emit a phantom Device Disconnected.
+      AnalyticsManager.shared.deviceDisconnected()
       self?.resetSessionPresentation()
     }
     coordinator.onFallDetected = { [weak self] data in
@@ -224,6 +233,42 @@ final class DeviceProvider: ObservableObject {
     }
   }
 
+  private static func seedPairingAnalyticsState(
+    for device: BtDevice,
+    in userDefaults: UserDefaults
+  ) {
+    guard userDefaults.stringArray(forKey: UserDefaultsKeys.analyticsPairedDeviceIds) == nil else {
+      return
+    }
+    userDefaults.set([device.id], forKey: UserDefaultsKeys.analyticsPairedDeviceIds)
+  }
+
+  private func recordPairingAnalytics(for device: BtDevice) {
+    var pairedDeviceIds = Set(
+      userDefaults.stringArray(forKey: UserDefaultsKeys.analyticsPairedDeviceIds) ?? [])
+    let isNewPair = pairedDeviceIds.insert(device.id).inserted
+    let isFirstPair = isNewPair && pairedDeviceIds.count == 1
+    var firstPairedAt = userDefaults.object(forKey: UserDefaultsKeys.analyticsFirstPairedAt) as? Date
+
+    if isNewPair {
+      userDefaults.set(
+        pairedDeviceIds.sorted(),
+        forKey: UserDefaultsKeys.analyticsPairedDeviceIds
+      )
+      if isFirstPair {
+        firstPairedAt = Date()
+        userDefaults.set(firstPairedAt, forKey: UserDefaultsKeys.analyticsFirstPairedAt)
+      }
+    }
+
+    AnalyticsManager.shared.devicePairingReady(
+      device: device,
+      isNewPair: isNewPair,
+      isFirstPair: isFirstPair,
+      firstPairedAt: firstPairedAt
+    )
+  }
+
   // MARK: - Discovery
 
   /// Start scanning for devices
@@ -271,6 +316,7 @@ final class DeviceProvider: ObservableObject {
 
       // Save as paired device
       savePairedDevice(connection.device)
+      recordPairingAnalytics(for: connection.device)
 
       // Start battery monitoring
       await startBatteryMonitoring(connection: connection, generation: generation)
@@ -290,8 +336,7 @@ final class DeviceProvider: ObservableObject {
 
       logger.info("Connected to \(device.displayName)")
 
-      // TODO: Track analytics when AnalyticsManager supports device events
-      // AnalyticsManager.shared.deviceConnected(deviceType: device.type.rawValue, deviceName: device.name)
+      AnalyticsManager.shared.deviceConnected(device: device)
 
     } catch DeviceSessionCoordinatorError.connectionAlreadyActive {
       logger.debug("Ignored duplicate connection request for \(device.displayName)")
@@ -318,13 +363,22 @@ final class DeviceProvider: ObservableObject {
   /// Unpair the current device (disconnect and clear pairing)
   func unpair() async {
     await sessionCoordinator.unpair()
-    resetSessionPresentation()
+    // Unpair is an intentional teardown: do not arm (and cancel any pending)
+    // "device disconnected — please reconnect" notification, which would be
+    // misleading for a device the user deliberately removed.
+    resetSessionPresentation(scheduleReconnectNotification: false)
     savePairedDevice(nil)
 
     logger.info("Unpaired device")
   }
 
-  private func resetSessionPresentation() {
+  /// Test seam: whether a "please reconnect" disconnect notification is armed.
+  var hasScheduledDisconnectNotification: Bool { disconnectNotificationTimer != nil }
+
+  /// - Parameter scheduleReconnectNotification: arm the reconnect prompt (true
+  ///   for an unexpected disconnect) or cancel any pending one (false for an
+  ///   intentional unpair).
+  private func resetSessionPresentation(scheduleReconnectNotification: Bool = true) {
     // Cancel battery monitoring
     batterySubscription?.cancel()
     batterySubscription = nil
@@ -334,11 +388,12 @@ final class DeviceProvider: ObservableObject {
     hasFirmwareUpdate = false
     hasLowBatteryAlerted = false
 
-    // TODO: Track analytics when AnalyticsManager supports device events
-    // AnalyticsManager.shared.deviceDisconnected()
-
-    // Schedule disconnect notification
-    scheduleDisconnectNotification()
+    if scheduleReconnectNotification {
+      scheduleDisconnectNotification()
+    } else {
+      disconnectNotificationTimer?.invalidate()
+      disconnectNotificationTimer = nil
+    }
   }
 
   // MARK: - Auto-Reconnection
@@ -397,7 +452,7 @@ final class DeviceProvider: ObservableObject {
     // Send low battery notification
     let content = UNMutableNotificationContent()
     content.title = "Low Battery Alert"
-    content.body = "Your omi device is running low on battery. Time for a recharge! 🔋"
+    content.body = "Your Omi device is running low on battery. Time for a recharge! 🔋"
     content.sound = .default
 
     let request = UNNotificationRequest(
@@ -497,8 +552,8 @@ final class DeviceProvider: ObservableObject {
 
   private func sendDisconnectNotification() {
     let content = UNMutableNotificationContent()
-    content.title = "Your omi Device Disconnected"
-    content.body = "Please reconnect to continue using your omi."
+    content.title = "Your Omi Device Disconnected"
+    content.body = "Please reconnect to continue using your Omi."
     content.sound = .default
 
     let request = UNNotificationRequest(
@@ -515,7 +570,7 @@ final class DeviceProvider: ObservableObject {
 
     let content = UNMutableNotificationContent()
     content.title = "Fall Detected"
-    content.body = "A potential fall was detected by your omi device."
+    content.body = "A potential fall was detected by your Omi device."
     content.sound = .default
 
     let request = UNNotificationRequest(

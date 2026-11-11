@@ -1,0 +1,7 @@
+{
+  "version": "0.12.193",
+  "date": "2026-08-21",
+  "changes": [
+    "Chat tells you when a failure is ours. When Omi's AI service did not respond, the transcript used to say \"Omi couldn't answer this one. Try sending it again\" — which reads as though your message was the problem, so people retried into a failure that could not succeed. It now says the AI service didn't respond and that it is on our side, not your message"
+  ]
+}

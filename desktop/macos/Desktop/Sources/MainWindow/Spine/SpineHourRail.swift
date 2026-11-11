@@ -1,0 +1,299 @@
+//
+//  SpineHourRail.swift — the day as a shape you can aim at.
+//
+//  Twenty-four bars, one per hour, **late night at the top and midnight at the bottom**. That is the
+//  whole point of the file. The spine is newest-first, so an *ascending* rail beside it — the
+//  obvious way to draw a day — would put 6 AM at the top of a column whose top row is 11 PM, and the
+//  two would disagree about which way time runs. That mismatch is the thing most timeline UIs ship,
+//  and it is why nobody trusts the scrubber next to their feed.
+//
+//  The highlight tracks the hour of the **topmost visible row**, not a fraction of the scroll. Scroll
+//  percentage is a lie about a list whose rows are different heights: a day of one conversation and a
+//  day of forty occupy the same rail at the same speed. Reading the row that is actually under the
+//  header means the marker says the hour you are looking at, which is the only thing it could
+//  usefully say.
+//
+
+import AppKit
+import OmiTheme
+import SwiftUI
+
+struct SpineHourRail: View {
+  /// One entry per hour, indexed 0…23, each 0…1 against the day's own busiest hour.
+  let density: [Double]
+  /// The hour under the top of the list, or nil before anything has been read.
+  let currentHour: Int?
+  /// The headline: how much screen capture the day being read holds, or `nil` while that day's index
+  /// is still being read. `nil` is not zero — see `headlineCaption`.
+  let momentCount: Int?
+  /// Which day all of the above is about — "Today", "Yesterday", "Wednesday 6 August". Printed as
+  /// the headline's scope line; see `headlineScope`.
+  let dayTitle: String
+  /// The footer: what else that day held.
+  let conversationCount: Int
+
+  /// **The order the bars are drawn in, and the whole point of this file:** latest hour first, so
+  /// the rail runs the same direction as the newest-first list beside it. A value rather than a
+  /// `stride` buried in a `ForEach`, because it is the one thing here a test can hold.
+  nonisolated static let renderedHours: [Int] = Array(stride(from: 23, through: 0, by: -1))
+
+  /// **The width every line in this column has to live inside.**
+  ///
+  /// A named value rather than a literal in the `frame`, because a literal in one place and prose
+  /// about it in another is precisely how the scope line broke: the comment reasoned that the widest
+  /// day the formatter could emit was "Wednesday 6 August 2025" at 153 pt, so the line fit. The
+  /// formatter's actual widest is "Wednesday 30 September 2026" at 183 pt, and 1,808 of the 10,234
+  /// forms it can produce were over the column and wrapping. `headlineScope` measures against this
+  /// constant now, so the fit is enforced rather than asserted from an example someone picked.
+  nonisolated static let contentWidth: CGFloat = 154
+
+  /// One point of the column held back from the fit test.
+  ///
+  /// `Text` lays out with SwiftUI's typesetter and this measures with `NSString.size`; they agree to
+  /// well under a point, but a form measuring *exactly* the column width is a coin flip on whether
+  /// it wraps, and 665 day forms land within 4 pt of that edge. A point of margin costs 132 extra
+  /// shortened forms out of 10,234 and removes the coin flip.
+  private nonisolated static let scopeFitBudget: CGFloat = contentWidth - 1
+
+  /// Labelled hours. Four is enough to orient without turning the rail into an axis.
+  private static let labelledHours: Set<Int> = [0, 6, 12, 18]
+
+  /// A bar this fraction of the peak or more is drawn heavier. Not a hue — the rail is one ink at
+  /// two weights, like every other ranking in this system.
+  private static let hotThreshold = 0.6
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      // Number, noun, day — "0 screen moments, Yesterday", read straight down. **The day goes last,
+      // and that is a fix rather than a preference:** see `headlineScope`.
+      VStack(alignment: .leading, spacing: 2) {
+        Text(Self.headlineNumber(momentCount))
+          .inkStyle(.stepHeadline, color: Ink.primary)
+          .lineLimit(1)
+          .minimumScaleFactor(0.6)
+        Text(Self.headlineCaption(momentCount))
+          .inkStyle(.statusLabel, color: Ink.secondary)
+        if let scope = Self.headlineScope(dayTitle) {
+          Text(scope)
+            .inkStyle(.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+
+      bars
+
+      if let footer = Self.footer(conversationCount: conversationCount) {
+        Text(footer)
+          .inkStyle(.statusLabel, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .frame(width: Self.contentWidth, alignment: .leading)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 16)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(
+      Text(
+        Self.readAloud(
+          momentCount: momentCount,
+          dayTitle: dayTitle,
+          conversationCount: conversationCount,
+          currentHour: currentHour)))
+  }
+
+  /// **The rail counts one day of screen capture; the panel's corner counts the whole account.**
+  /// Both used to end in "moments captured", 200 points apart, so a day with no capture read as
+  /// "0 moments captured" beside "446 moments captured" and looked like the rail had failed rather
+  /// than like a quiet day.
+  ///
+  /// **The first fix renamed the noun — "screen moments" here, "moments" there — and it did not
+  /// work.** The same reader looked at the same two numbers again and asked what each one was
+  /// supposed to show. A different noun only tells you the counters are *not the same* if you read
+  /// both, hold them side by side across the width of the window, and infer the scope neither one
+  /// states. Nothing on the rail said "one day" and nothing in the corner said "everything", so the
+  /// gap between `0` and `798` still read as a contradiction.
+  ///
+  /// So the rule is not "name the thing counted", it is **each counter states its own scope in its
+  /// own words, and is legible alone.** `headlineScope` prints the day this number belongs to —
+  /// "Today", "Yesterday", "Wednesday 6 August" — in the same tight group as the number it scopes.
+  /// It comes from `dayTitle` rather than the literal word "today", because the rail follows the
+  /// topmost visible row and describes whatever day that is. Do not go back to a scope-free
+  /// caption: that is this defect, twice.
+  ///
+  /// The other half of the original defect was the number itself. Screen days are read lazily,
+  /// three at a time, and a day that has not been read yet is indistinguishable in the store from a
+  /// day with nothing on it — so the rail printed a confident `0` for a day it had not looked at,
+  /// beside a five-figure account total. `nil` now means "not read yet" and says so; `0` means the
+  /// read came back empty, which is a claim the rail is entitled to make. A scope line must never
+  /// launder that distinction into a confident zero.
+  ///
+  /// `nonisolated` for the same reason `renderedHours` is: this is copy to read, not chrome to draw
+  /// with.
+  nonisolated static func headlineCaption(_ count: Int?) -> String {
+    guard let count else { return "counting screen moments" }
+    return count == 1 ? "screen moment" : "screen moments"
+  }
+
+  /// The day the headline number belongs to — the rail's half of "state your own scope".
+  ///
+  /// **It sits under the caption, not over the number, and that placement is load-bearing.** The
+  /// results list beside the rail pins its own day header, `day.title.uppercased()`, and that band
+  /// starts within a few points of the rail's first baseline. With the scope on top, Home drew
+  /// "Yesterday" and "YESTERDAY" side by side on one baseline about 120 pt apart: one day name, in
+  /// two cases, twice. Under the caption the group reads "0 / screen moments / Yesterday" — the
+  /// number still arrives inside its own explanation, 2 pt from the noun and 12 pt from the bars,
+  /// while nothing of the rail's shares a baseline with the header. Do not move it back above the
+  /// number, and do not answer a future collision by deleting the day word: that is the defect this
+  /// whole line exists to fix, and it has now been fixed twice.
+  ///
+  /// It gets its own line rather than riding along with the noun because the day is not always a
+  /// short word: at the rail's real content width of 154 pt, "screen moments today" fits at 129 pt
+  /// of SF Pro 12 but "screen moments Wednesday 6 August" is nearly twice the column.
+  ///
+  /// **And on its own line it still has to fit, which it did not.** `SpineFormat.day` emits
+  /// `EEEE d MMMM yyyy` for a day outside the current year, and its widest output —
+  /// "Wednesday 30 September 2026", 183 pt — overhangs the column by 29 pt. 1,808 of the 10,234
+  /// forms it can produce were over `contentWidth` and wrapping to two lines, which under the
+  /// caption orphans "Wednesday 30" directly above the bars, where a bare number-and-word line
+  /// reads as another count. So when the full title does not fit, the **weekday is dropped**: it is
+  /// the one word carrying nothing the rest of the line does not already say, the date alone
+  /// identifies the day completely, and the list header two inches to the right is still printing
+  /// the day in full. That takes the widest scope this can render to 118 pt.
+  ///
+  /// Measured, not assumed. The last version of this line reasoned about width from a hand-picked
+  /// date and was wrong by 30 pt; picking a better example would leave the same mistake available
+  /// to the next format change.
+  ///
+  /// `nil` when there is no day yet: an empty account has no scope to claim, and inventing one
+  /// would be the confident-zero mistake in a second place.
+  nonisolated static func headlineScope(_ dayTitle: String) -> String? {
+    let trimmed = dayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    guard scopeWidth(trimmed) > scopeFitBudget else { return trimmed }
+
+    let words = trimmed.split(separator: " ")
+    guard words.count > 1 else { return trimmed }
+    let withoutWeekday = words.dropFirst().joined(separator: " ")
+    // Only if it actually bought a fitting line. A form no shortening can save keeps its full text
+    // and wraps — a wrapped day is bad, a silently wrong day is worse.
+    return scopeWidth(withoutWeekday) <= scopeFitBudget ? withoutWeekday : trimmed
+  }
+
+  /// The width `statusLabel` — the role both of the rail's secondary lines use — draws `text` at.
+  ///
+  /// Resolved through `InkFonts.role`, the same path `.inkStyle(.statusLabel, …)` takes, so the
+  /// measurement cannot drift from the drawing if that role's size or face ever moves.
+  nonisolated static func scopeWidth(_ text: String) -> CGFloat {
+    let metrics = InkFonts.role(size: InkType.statusLabel.size, weight: .regular).metrics
+    return (text as NSString).size(withAttributes: [.font: metrics]).width
+  }
+
+  /// An em dash rather than a `0` for the uncounted case: a placeholder that cannot be misread as a
+  /// measurement.
+  nonisolated static func headlineNumber(_ count: Int?) -> String {
+    guard let count else { return "—" }
+    return SpineFormat.number(count)
+  }
+
+  /// What else the day held. **The day's name used to lead this line** — "Today · 6 conversations"
+  /// — which is where the rail's only scope word lived, twenty-four bars below the number it was
+  /// supposed to scope. It has moved up to `headlineScope`; repeating it here would put "Today" on
+  /// the rail twice, and a scope stated twice is a scope nobody reads once.
+  ///
+  /// `nil` rather than an empty string when the day holds no conversations, so the rail drops the
+  /// line instead of drawing a blank one and speaking a sentence with a hole in it.
+  nonisolated static func footer(conversationCount: Int) -> String? {
+    guard conversationCount > 0 else { return nil }
+    return SpineFormat.plural(conversationCount, "conversation", "conversations")
+  }
+
+  /// The whole rail as one spoken sentence, because the whole rail is one accessibility element.
+  ///
+  /// It has to say everything that is drawn, and it does — but **the scope leads here while it
+  /// trails on screen, deliberately.** The written scope moved under the caption to get off the
+  /// list header's baseline (see `headlineScope`); speech has no baselines to collide on, and no
+  /// grouping either. A listener gets one linear sentence with no way to glance back, so the scope
+  /// has to frame the number before the number arrives — "Today: 0 screen moments", not a number
+  /// that turns out three clauses later to have been about a particular day. Reordering this to
+  /// match the stack would trade a real gain in speech for a cosmetic symmetry.
+  ///
+  /// This matters most for exactly the reader the original defect was worst for: comparing two
+  /// counters across the width of the window, which the written rail wrongly asked for, was never
+  /// available to them at all.
+  nonisolated static func readAloud(
+    momentCount: Int?,
+    dayTitle: String,
+    conversationCount: Int,
+    currentHour: Int?
+  ) -> String {
+    // The em dash is a visual placeholder; spoken, it has to be the sentence it stands for.
+    let count =
+      momentCount == nil
+      ? "Counting screen moments"
+      : "\(headlineNumber(momentCount)) \(headlineCaption(momentCount))"
+    var text = headlineScope(dayTitle).map { "\($0): \(count)." } ?? "\(count)."
+    if let footer = footer(conversationCount: conversationCount) { text += " \(footer)." }
+    if let currentHour { text += " Reading \(SpineFormat.hourLabel(currentHour))." }
+    return text
+  }
+
+  /// The bars themselves, drawn 23 → 0 top to bottom.
+  private var bars: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      ForEach(Self.renderedHours, id: \.self) { hour in
+        SpineHourBar(
+          hour: hour,
+          weight: density.indices.contains(hour) ? density[hour] : 0,
+          isHot: (density.indices.contains(hour) ? density[hour] : 0) >= Self.hotThreshold,
+          isCurrent: hour == currentHour,
+          label: Self.labelledHours.contains(hour) ? SpineFormat.hourLabel(hour) : nil
+        )
+        .frame(maxHeight: .infinity)
+      }
+    }
+    .frame(maxHeight: .infinity)
+  }
+}
+
+/// One hour.
+struct SpineHourBar: View {
+  let hour: Int
+  let weight: Double
+  let isHot: Bool
+  let isCurrent: Bool
+  let label: String?
+
+  /// The shortest a bar is ever drawn. An hour with nothing in it is still an hour, and a gap in the
+  /// column would read as the rail having ended.
+  private static let minimumWidth: CGFloat = 14
+  private static let maximumExtra: CGFloat = 78
+
+  /// The hour being read, when it is not one of the four the rail labels anyway.
+  ///
+  /// **The marker is the bar itself, not a band behind it.** A full-width wash across the current
+  /// row was the first attempt and it read as a stray scrollbar — a long dark rule among short pale
+  /// pills looks like chrome that escaped, not like "you are here". Now the current hour is simply
+  /// the darkest bar with its hour named beside it: one object getting heavier, which is how every
+  /// other ranking in this system is drawn, and unmistakably part of the rail.
+  private var caption: String? {
+    if let label { return label }
+    return isCurrent ? SpineFormat.hourLabel(hour) : nil
+  }
+
+  var body: some View {
+    HStack(spacing: 7) {
+      Capsule()
+        .fill(Ink.primary.opacity(isCurrent ? 0.85 : (isHot ? 0.42 : 0.2)))
+        .frame(width: Self.minimumWidth + CGFloat(weight) * Self.maximumExtra, height: isCurrent ? 6 : 5)
+      if let caption {
+        Text(caption)
+          .font(.system(size: 9, weight: isCurrent ? .semibold : .regular))
+          .tracking(0.6)
+          .foregroundStyle(isCurrent ? Ink.primary : Ink.secondary)
+          .lineLimit(1)
+          .fixedSize()
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}

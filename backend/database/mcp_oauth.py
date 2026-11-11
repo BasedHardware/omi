@@ -2,8 +2,10 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, cast
@@ -11,35 +13,75 @@ import re
 from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
+from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ServiceUnavailable
 
-from database._client import db
+from config.mcp_scopes import CONNECTOR_ACCESS_REGISTRY
+from config.mcp_client_ids import is_url_form_client_id
+from config.mcp_resource_urls import canonical_mcp_resource_url, legacy_mcp_resource_url, mcp_resource_urls_match
+import database.mcp_cache_integrity as mcp_cache_integrity
+import database.mcp_client_metadata as mcp_client_metadata
+import database.mcp_token_cache as mcp_token_cache
+from database._client import data_plane_db as db
+from database._client import is_expired_transaction_error
+from database.mcp_auth_read import mcp_auth_read
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.memory_app_key_grants import (
+    APP_KEY_MEMORY_GRANT_DOC_ID,
+    APP_KEY_MEMORY_GRANTS_COLLECTION,
+    MCP_CONSUMER,
+    build_app_key_scope_grant_contract_state,
+)
+from utils.mcp_scopes import MCP_SUPPORTED_SCOPES
 
-MCP_RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", "https://api.omi.me/v1/mcp/sse")
+PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp"
+# Omi Beta intentionally serves MCP data from dev while retaining the production
+# OAuth authority and its production Firestore grants.
+BETA_MCP_RESOURCE_URL = "https://api.omiapi.com/v1/mcp"
+# Deployed environments may still pass a ``/sse``-suffixed resource URL; the
+# module always exposes the canonical form so metadata and validation stay
+# consistent regardless of config age.
+MCP_RESOURCE_URL = canonical_mcp_resource_url(os.getenv("MCP_RESOURCE_URL", PRODUCTION_MCP_RESOURCE_URL))
+MCP_LEGACY_RESOURCE_URL = legacy_mcp_resource_url(MCP_RESOURCE_URL)
+
 DEFAULT_CLIENT_ID = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_ID", "omi-chatgpt-prod")
 DEFAULT_CLIENT_NAME = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_NAME", "ChatGPT")
 DEFAULT_CLAUDE_CLIENT_ID = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_ID", "omi-claude-prod")
 DEFAULT_CLAUDE_CLIENT_NAME = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_NAME", "Claude")
 DEFAULT_PUBLIC_CLIENT_ID = os.getenv("MCP_OAUTH_PUBLIC_CLIENT_ID", "omi-mcp-public")
 DEFAULT_PUBLIC_CLIENT_NAME = os.getenv("MCP_OAUTH_PUBLIC_CLIENT_NAME", "Omi MCP Public")
-SUPPORTED_SCOPES = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
+SUPPORTED_SCOPES = MCP_SUPPORTED_SCOPES
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "3600"))
 AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
+MCP_OAUTH_REPLAY_GRACE_SECONDS = int(os.getenv("MCP_OAUTH_REPLAY_GRACE_SECONDS", "120"))
+# Grace bounds the WINDOW of benign concurrent replays; this bounds the COUNT.
+# A replayed refresh token may mint at most this many replacement pairs before
+# the grant is treated as hostile and revoked (replay replay-detection).
+MCP_OAUTH_REPLAY_REISSUE_LIMIT = int(os.getenv("MCP_OAUTH_REPLAY_REISSUE_LIMIT", "2"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
-PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
+PUBLIC_CHATGPT_CLIENT_IDS = set(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["client_ids"])
+# Read scopes the first-party ChatGPT directory experience assumes a ChatGPT
+# grant carries (served to clients by the connector-access contract). ChatGPT's
+# directory authorization flow requests only ``memories.read``, which would
+# leave every grant below this floor and the app's screens permanently showing
+# "Needs more access", so narrow explicit requests from these clients are
+# widened to the floor at scope-normalization time.
+CHATGPT_READ_SCOPE_FLOOR = frozenset(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["required_scopes"])
+PRODUCTION_CROSS_PLANE_CLIENT_IDS = {"omi-chatgpt-prod", "omi-claude-prod"}
 CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX = "https://chatgpt.com/connector/oauth/"
 CLAUDE_CONNECTOR_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
+
+
+class AccountDeletionAccessBlocked(RuntimeError):
+    """Raised when an OAuth write loses the deletion-admission race."""
+
+
+class RefreshRotationUnavailable(RuntimeError):
+    """Refresh rotation exhausted its transient Firestore retry budget."""
+
+
+logger = logging.getLogger(__name__)
 
 
 # --- OAuth token document contracts (Firestore write-path shapes) ------------
@@ -255,12 +297,21 @@ def _finalize_client(client: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any
     """Apply built-in provider defaults to configured and generated clients."""
     if not client:
         return None
-    if client.get("id") not in PUBLIC_CHATGPT_CLIENT_IDS:
-        return client
-    prefixes: List[str] = list(client.get("allowed_redirect_uri_prefixes") or [])
-    if CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX not in prefixes:
-        prefixes.append(CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX)
-    return {**client, "allowed_redirect_uri_prefixes": prefixes}
+    finalized = dict(client)
+    client_id = finalized.get("id")
+    if client_id in PUBLIC_CHATGPT_CLIENT_IDS:
+        prefixes: List[str] = list(finalized.get("allowed_redirect_uri_prefixes") or [])
+        if CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX not in prefixes:
+            prefixes.append(CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX)
+        finalized["allowed_redirect_uri_prefixes"] = prefixes
+    if client_id in PRODUCTION_CROSS_PLANE_CLIENT_IDS and mcp_resource_urls_match(
+        MCP_RESOURCE_URL, PRODUCTION_MCP_RESOURCE_URL
+    ):
+        resources = _csv_values(finalized.get("allowed_resources")) or [MCP_RESOURCE_URL]
+        if not any(mcp_resource_urls_match(BETA_MCP_RESOURCE_URL, allowed) for allowed in resources):
+            resources.append(BETA_MCP_RESOURCE_URL)
+        finalized["allowed_resources"] = resources
+    return finalized
 
 
 def _default_public_client() -> Optional[Dict[str, Any]]:
@@ -281,6 +332,14 @@ def _default_public_client() -> Optional[Dict[str, Any]]:
 
 
 def get_client(client_id: str) -> Optional[Dict[str, Any]]:
+    # URL-form client ids are Client ID Metadata Document URLs (CIMD). They
+    # contain '/', so they can never be Firestore document ids — resolve them
+    # through the metadata-document path before the registry lookup.
+    if is_url_form_client_id(client_id):
+        url_client = mcp_client_metadata.get_url_client(client_id)
+        if url_client is not None:
+            url_client["allowed_resources"] = [MCP_RESOURCE_URL]
+        return _finalize_client(url_client)
     client: Optional[Dict[str, Any]] = None
     doc = db.collection("mcp_oauth_clients").document(client_id).get()
     if doc.exists:
@@ -377,15 +436,47 @@ def validate_redirect_uri(client: Dict[str, Any], redirect_uri: str) -> bool:
 
 
 def validate_resource(client: Dict[str, Any], resource: str) -> bool:
-    return resource in set(client.get("allowed_resources") or [])
+    return any(mcp_resource_urls_match(allowed, resource) for allowed in list(client.get("allowed_resources") or []))
+
+
+def client_id_is_first_party_chatgpt(client_id: object) -> bool:
+    """True for the first-party ChatGPT directory client ids (prod and dev)."""
+    return isinstance(client_id, str) and client_id in PUBLIC_CHATGPT_CLIENT_IDS
+
+
+def implied_client_scopes(client_id: object) -> frozenset[str]:
+    """Scopes every grant held by ``client_id`` carries, regardless of what it requested.
+
+    First-party ChatGPT grants carry the standard read floor. Grants approved
+    before the floor existed (memories.read only) are upgraded on their next
+    refresh by ``rotate_refresh_token``, so raising the floor here upgrades
+    every live ChatGPT grant within one access-token lifetime, with no
+    reconnect. Write and opt-in scopes are never implied.
+    """
+    if client_id_is_first_party_chatgpt(client_id):
+        return CHATGPT_READ_SCOPE_FLOOR.intersection(SUPPORTED_SCOPES)
+    return frozenset()
 
 
 def normalize_scopes(scope: Optional[str], client: Optional[Dict[str, Any]] = None) -> List[str]:
     allowed = set((client or {}).get("allowed_scopes") or SUPPORTED_SCOPES).intersection(SUPPORTED_SCOPES)
     requested = [item for item in (scope or "").split(" ") if item]
-    scopes = requested or ["memories.read"]
-    if any(item not in allowed for item in scopes):
+    # An omitted scope parameter grants the intersection of the client's
+    # allowed READ scopes — write scopes are only ever granted on an explicit
+    # request the user sees on the consent screen.
+    scopes = requested or sorted(item for item in allowed if item.endswith(".read"))
+    if not scopes or any(item not in allowed for item in scopes):
         raise ValueError("Unsupported scope requested")
+    # First-party ChatGPT directory clients request only ``memories.read`` while
+    # the Connect-an-Agent screens and the hosted tool registry expect the
+    # standard read set (conversations, action items, goals), so every
+    # authorization from these clients carries the read floor regardless of how
+    # narrow the request was: the user approves the widened list on the consent
+    # screen, and re-connecting can actually upgrade an older narrow grant.
+    # Write and opt-in scopes are never implied here — only an explicit request
+    # seen at consent grants those.
+    if client_id_is_first_party_chatgpt((client or {}).get("id", "")):
+        scopes = sorted(set(scopes) | (set(allowed) & CHATGPT_READ_SCOPE_FLOOR))
     return sorted(set(scopes))
 
 
@@ -400,15 +491,12 @@ def validate_pkce_challenge(code_challenge: Optional[str], code_challenge_method
     return bool(code_challenge) and code_challenge_method == "S256" and bool(PKCE_ALLOWED_RE.fullmatch(code_challenge))
 
 
-def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
-    deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
-    now = _now()
-    ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
-    doc = ref.get()
+def _grant_write(
+    uid: str, client_id: str, resource: str, scopes: List[str], *, ref: Any, doc: Any, now: datetime
+) -> Tuple[Any, Dict[str, Any], Dict[str, Any]]:
     existing: Dict[str, Any] = _typed_doc(doc) if doc.exists else {}
     if existing and (existing.get("revoked_at") or existing.get("status") == "revoked"):
-        ref = db.collection("mcp_oauth_grants").document(f"{deterministic_grant_id}:{uuid.uuid4()}")
-        doc = ref.get()
+        ref = db.collection("mcp_oauth_grants").document(f"{ref.id}:{uuid.uuid4()}")
         existing = {}
     existing_scopes = set(existing.get("scopes") or [])
     merged_scopes = sorted(existing_scopes.union(scopes))
@@ -423,10 +511,190 @@ def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List
         "revoked_at": None,
         "status": "active",
     }
-    if not doc.exists:
+    if not existing:
         data["created_at"] = now
+    return ref, existing, data
+
+
+def _oauth_memory_grant_ref(uid: str) -> Any:
+    return db.collection(f"users/{uid}/{APP_KEY_MEMORY_GRANTS_COLLECTION}").document(APP_KEY_MEMORY_GRANT_DOC_ID)
+
+
+def _oauth_memory_grant_contract(grant: Dict[str, Any]) -> Dict[str, Any]:
+    scopes = [scope for scope in grant.get("scopes") or [] if scope in {"memories.read", "memories.write"}]
+    return build_app_key_scope_grant_contract_state(
+        consumer=MCP_CONSUMER,
+        app_id=cast(str, grant["client_id"]),
+        key_id=cast(str, grant["id"]),
+        scopes=scopes,
+        default_read="memories.read" in scopes,
+        archive_read=False,
+        write="memories.write" in scopes,
+        enabled=True,
+    )
+
+
+def _oauth_memory_grant_entry_is_absent(state: object, grant: Dict[str, Any]) -> bool:
+    current = state
+    for field in (
+        "grants",
+        MCP_CONSUMER,
+        "apps",
+        grant["client_id"],
+        "keys",
+        grant["id"],
+    ):
+        if not isinstance(current, dict):
+            return False
+        if field not in current:
+            return True
+        current = current[field]
+    return False
+
+
+def _oauth_memory_grant_entry(state: object, grant: Dict[str, Any]) -> Any:
+    current = state
+    for field in (
+        "grants",
+        MCP_CONSUMER,
+        "apps",
+        grant["client_id"],
+        "keys",
+        grant["id"],
+    ):
+        if not isinstance(current, dict) or field not in current:
+            return None
+        current = current[field]
+    return current
+
+
+def _widen_enabled_memory_grant(entry: object, grant: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Union newly consented memory capabilities onto an enabled grant entry.
+
+    A later consent that adds ``memories.read`` or ``memories.write`` must update
+    the persisted capability flags. Disabled entries are left untouched so a
+    re-consent cannot re-enable a control-plane disable, and ``archive_read``
+    is never granted from this path.
+    """
+    if not isinstance(entry, dict) or entry.get("enabled") is not True:
+        return None
+    existing_scopes = entry.get("scopes")
+    if (
+        not isinstance(existing_scopes, list)
+        or not all(isinstance(scope, str) and scope for scope in existing_scopes)
+        or not isinstance(entry.get("default_read"), bool)
+        or not isinstance(entry.get("write"), bool)
+    ):
+        return None
+    desired = [scope for scope in grant.get("scopes") or [] if scope in {"memories.read", "memories.write"}]
+    merged_scopes = sorted(set(existing_scopes).union(desired))
+    default_read = entry["default_read"] or "memories.read" in desired
+    write = entry["write"] or "memories.write" in desired
+    if set(merged_scopes) == set(existing_scopes) and default_read == entry["default_read"] and write == entry["write"]:
+        return None
+    return {"scopes": merged_scopes, "default_read": default_read, "write": write}
+
+
+def _memory_grant_fields_patch(grant: Dict[str, Any], fields: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "grants": {
+            MCP_CONSUMER: {
+                "apps": {
+                    grant["client_id"]: {
+                        "keys": {
+                            grant["id"]: fields,
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+def _create_oauth_memory_grant_if_absent(
+    transaction: Any, grant_ref: Any, snapshot: Any, grant: Dict[str, Any], *, widen: bool = False
+) -> bool:
+    if getattr(snapshot, "exists", False):
+        state: object = snapshot.to_dict()
+        if not _oauth_memory_grant_entry_is_absent(state, grant):
+            # Token validation backfill must not rewrite an existing control-plane
+            # entry. Only an explicit consent may widen an enabled grant.
+            if not widen:
+                return False
+            patch = _widen_enabled_memory_grant(_oauth_memory_grant_entry(state, grant), grant)
+            if patch is None:
+                return False
+            # Merge only the widened fields so ``enabled`` and ``archive_read`` stay as stored.
+            transaction.set(grant_ref, _memory_grant_fields_patch(grant, patch), merge=True)
+            return True
+    transaction.set(grant_ref, _oauth_memory_grant_contract(grant), merge=True)
+    return True
+
+
+def _ensure_oauth_memory_grant(grant: Dict[str, Any]) -> bool:
+    """Create a missing OAuth memory grant without changing control-plane state."""
+    grant_ref = _oauth_memory_grant_ref(cast(str, grant["uid"]))
+    transaction = db.transaction()
+
+    @_typed_transactional
+    def _create(transaction: Any) -> bool:
+        snapshot = grant_ref.get(transaction=transaction)
+        return _create_oauth_memory_grant_if_absent(transaction, grant_ref, snapshot, grant)
+
+    return _create(transaction)
+
+
+def _grant_document_id(uid: str, client_id: str, resource: str) -> str:
+    # URL-form (CIMD) client ids contain '/' and are invalid Firestore document
+    # ids, so only that component is hashed; preregistered client grant ids are
+    # byte-for-byte unchanged.
+    client_component = hash_secret(client_id) if is_url_form_client_id(client_id) else client_id
+    return f"{uid}:{client_component}:{hash_secret(legacy_mcp_resource_url(resource))[:16]}"
+
+
+def _grant_is_revoked(grant: Dict[str, Any]) -> bool:
+    return bool(grant.get("revoked_at") or grant.get("status") == "revoked")
+
+
+def _grant_recency_key(grant: Dict[str, Any]) -> Any:
+    return grant.get("updated_at") or grant.get("created_at") or datetime.min.replace(tzinfo=timezone.utc)
+
+
+def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
+    deterministic_grant_id = _grant_document_id(uid, client_id, resource)
+    now = _now()
+    ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
+    ref, existing, data = _grant_write(uid, client_id, resource, scopes, ref=ref, doc=ref.get(), now=now)
     ref.set(data, merge=True)
-    return {**existing, **data}
+    grant = {**existing, **data}
+    _ensure_oauth_memory_grant(grant)
+    return grant
+
+
+def _authorization_code_write(
+    uid: str,
+    grant_id: str,
+    client_id: str,
+    redirect_uri: str,
+    resource: str,
+    scopes: List[str],
+    code_challenge: str,
+    *,
+    now: datetime,
+) -> Dict[str, Any]:
+    return {
+        "uid": uid,
+        "grant_id": grant_id,
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "resource": resource,
+        "scopes": scopes,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "created_at": now,
+        "expires_at": now + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
+        "consumed_at": None,
+    }
 
 
 def issue_authorization_code(
@@ -441,21 +709,61 @@ def issue_authorization_code(
     raw_code = "omi_code_" + secrets.token_urlsafe(32)
     now = _now()
     db.collection("mcp_oauth_authorization_codes").document(hash_secret(raw_code)).set(
-        {
-            "uid": uid,
-            "grant_id": grant_id,
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "resource": resource,
-            "scopes": scopes,
-            "code_challenge": code_challenge,
-            "code_challenge_method": "S256",
-            "created_at": now,
-            "expires_at": now + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
-            "consumed_at": None,
-        }
+        _authorization_code_write(uid, grant_id, client_id, redirect_uri, resource, scopes, code_challenge, now=now)
     )
     return raw_code
+
+
+def create_grant_and_authorization_code_if_allowed(
+    uid: str,
+    client_id: str,
+    redirect_uri: str,
+    resource: str,
+    scopes: List[str],
+    code_challenge: str,
+) -> Tuple[Dict[str, Any], str]:
+    """Atomically fence deletion admission with both OAuth consent writes."""
+    deterministic_grant_id = _grant_document_id(uid, client_id, resource)
+    deletion_ref = db.collection("account_deletions").document(uid)
+    grant_ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
+    raw_code = "omi_code_" + secrets.token_urlsafe(32)
+    code_ref = db.collection("mcp_oauth_authorization_codes").document(hash_secret(raw_code))
+    transaction = db.transaction()
+
+    @_typed_transactional
+    def _create(transaction: Any) -> Tuple[Dict[str, Any], str]:
+        deletion_doc = deletion_ref.get(transaction=transaction)
+        deletion_data = _typed_doc(deletion_doc) if deletion_doc.exists else {}
+        deletion_status = normalize_account_deletion_status(
+            marker_exists=deletion_doc.exists,
+            raw_status=deletion_data.get("wipe_status"),
+        )
+        if account_deletion_blocks_access(deletion_status):
+            raise AccountDeletionAccessBlocked(deletion_status or "unknown")
+
+        now = _now()
+        grant_doc = grant_ref.get(transaction=transaction)
+        current_grant_ref, existing, grant_data = _grant_write(
+            uid, client_id, resource, scopes, ref=grant_ref, doc=grant_doc, now=now
+        )
+        memory_grant_ref = _oauth_memory_grant_ref(uid)
+        memory_grant_doc = memory_grant_ref.get(transaction=transaction)
+        code_data = _authorization_code_write(
+            uid,
+            current_grant_ref.id,
+            client_id,
+            redirect_uri,
+            resource,
+            scopes,
+            code_challenge,
+            now=now,
+        )
+        transaction.set(current_grant_ref, grant_data, merge=True)
+        _create_oauth_memory_grant_if_absent(transaction, memory_grant_ref, memory_grant_doc, grant_data, widen=True)
+        transaction.set(code_ref, code_data)
+        return {**existing, **grant_data}, raw_code
+
+    return _create(transaction)
 
 
 def consume_authorization_code(
@@ -480,7 +788,7 @@ def consume_authorization_code(
         if (
             data.get("client_id") != client_id
             or data.get("redirect_uri") != redirect_uri
-            or data.get("resource") != resource
+            or not mcp_resource_urls_match(data.get("resource"), resource)
         ):
             return None
         try:
@@ -501,7 +809,7 @@ def exchange_authorization_code_for_tokens(
     code: str,
     client_id: str,
     redirect_uri: str,
-    resource: str,
+    resource: Optional[str],
     code_verifier: str,
 ) -> Optional[Dict[str, Any]]:
     code_ref = db.collection("mcp_oauth_authorization_codes").document(hash_secret(code))
@@ -519,7 +827,10 @@ def exchange_authorization_code_for_tokens(
         if (
             code_data.get("client_id") != client_id
             or code_data.get("redirect_uri") != redirect_uri
-            or code_data.get("resource") != resource
+            # RFC 8707: an omitted resource indicator keeps the audience the code
+            # was bound to at consent; only an explicit value must match it,
+            # in canonical or legacy ``/sse`` form.
+            or (resource is not None and not mcp_resource_urls_match(code_data.get("resource"), resource))
         ):
             return None
         try:
@@ -624,48 +935,182 @@ def _token_pair_response(access_token: str, refresh_token: str, scopes: List[str
 
 
 def get_active_grant(grant_id: str) -> Optional[Dict[str, Any]]:
-    doc = db.collection("mcp_oauth_grants").document(grant_id).get()
+    if not grant_id.strip():
+        return None
+    doc = mcp_auth_read(db.collection("mcp_oauth_grants").document(grant_id))
     if not doc.exists:
         return None
     data: Dict[str, Any] = _typed_doc(doc)
     if data.get("revoked_at") or data.get("status") == "revoked":
         return None
-    data.setdefault("id", grant_id)
     return data
 
 
-def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -> Optional[Dict[str, Any]]:
-    doc = db.collection("mcp_oauth_access_tokens").document(hash_secret(access_token)).get()
-    if not doc.exists:
+def _valid_oauth_scopes(value: object) -> Optional[List[str]]:
+    if not isinstance(value, list) or not value:
         return None
-    data: Dict[str, Any] = _typed_doc(doc)
-    expires_at = data.get("expires_at")
-    if data.get("revoked_at") or data.get("resource") != resource or (expires_at and expires_at <= _now()):
+    scopes = cast(List[Any], value)
+    if any(not isinstance(scope, str) or not scope or scope not in SUPPORTED_SCOPES for scope in scopes):
         return None
-    grant = get_active_grant(cast(str, data.get("grant_id")))
-    if not grant:
+    if len(scopes) != len(set(scopes)):
         return None
-    db.collection("mcp_oauth_grants").document(data["grant_id"]).set({"last_used_at": _now()}, merge=True)
+    return cast(List[str], scopes)
+
+
+def _nonempty_string(data: Dict[str, Any], field: str) -> Optional[str]:
+    value = data.get(field)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _is_unexpired(value: object, now: datetime) -> bool:
+    if not isinstance(value, datetime):
+        return False
+    try:
+        return value > now
+    except (TypeError, ValueError):
+        return False
+
+
+def _validated_access_token_identity(
+    data: Dict[str, Any], grant: Dict[str, Any], resource: str, *, now: datetime
+) -> Optional[Dict[str, Any]]:
+    uid = _nonempty_string(data, "uid")
+    client_id = _nonempty_string(data, "client_id")
+    grant_id = _nonempty_string(data, "grant_id")
+    token_resource = _nonempty_string(data, "resource")
+    token_scopes = _valid_oauth_scopes(data.get("scopes"))
+    grant_uid = _nonempty_string(grant, "uid")
+    grant_client_id = _nonempty_string(grant, "client_id")
+    persisted_grant_id = _nonempty_string(grant, "id")
+    grant_resource = _nonempty_string(grant, "resource")
+    grant_scopes = _valid_oauth_scopes(grant.get("scopes"))
+    grant_expires_at = grant.get("expires_at")
+    if (
+        uid is None
+        or client_id is None
+        or grant_id is None
+        or token_resource is None
+        or token_scopes is None
+        or grant_uid is None
+        or grant_client_id is None
+        or persisted_grant_id is None
+        or grant_resource is None
+        or grant_scopes is None
+        or "revoked_at" not in data
+        or data.get("revoked_at") is not None
+        or not _is_unexpired(data.get("expires_at"), now)
+        or grant.get("status") != "active"
+        or "revoked_at" not in grant
+        or grant.get("revoked_at") is not None
+        or (grant_expires_at is not None and not _is_unexpired(grant_expires_at, now))
+        # Tokens bound to the legacy /sse audience keep working on both endpoint
+        # paths; the token and grant resources must still be the same audience.
+        or not mcp_resource_urls_match(token_resource, resource)
+        or uid != grant_uid
+        or client_id != grant_client_id
+        or grant_id != persisted_grant_id
+        or token_resource != grant_resource
+        or not set(token_scopes).issubset(grant_scopes)
+    ):
+        return None
     return {
-        "uid": data.get("uid"),
+        "uid": uid,
         "auth_type": "oauth",
-        "client_id": data.get("client_id"),
-        "resource": data.get("resource"),
-        "scopes": data.get("scopes") or [],
-        "grant_id": data.get("grant_id"),
+        "client_id": client_id,
+        "resource": token_resource,
+        "scopes": token_scopes,
+        "grant_id": grant_id,
     }
 
 
+def _record_grant_last_used(grant_id: str) -> None:
+    db.collection("mcp_oauth_grants").document(grant_id).set({"last_used_at": _now()}, merge=True)
+
+
+def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -> Optional[Dict[str, Any]]:
+    if not mcp_cache_integrity.integrity_available():
+        # Unsigned cache data can never be trusted — still fail closed.
+        raise mcp_token_cache.McpTokenStoreUnavailable("MCP OAuth token cache signing secret unavailable")
+    cache_ok = True
+    try:
+        cached = mcp_token_cache.read_access_token(access_token, resource)
+    except mcp_token_cache.McpTokenStoreUnavailable:
+        # Redis outage: Firestore is authoritative, so validation degrades to
+        # the uncached path — cache read, revocation marker, last-used
+        # throttle, and the last_used_at write itself are all skipped while
+        # the Firestore grant decides (a write per validated request would be
+        # ~150k+ extra Firestore writes/day during a sustained outage).
+        # Marker-first revoke ordering shrinks the stale-accept window to
+        # Firestore commit latency but does not eliminate it: a marker written
+        # just before an in-flight Firestore revoke is unreadable during this
+        # outage, so that grant can validate briefly until the write commits.
+        cache_ok = False
+        cached = None
+        logger.warning("MCP OAuth token cache unavailable; validating against Firestore only")
+    if cached is not None:
+        # A cache hit performs zero Firestore work — no token read, no memory
+        # grant, and no last_used_at write.
+        return cached
+    doc = mcp_auth_read(db.collection("mcp_oauth_access_tokens").document(hash_secret(access_token)))
+    if not doc.exists:
+        return None
+    data: Dict[str, Any] = _typed_doc(doc)
+    grant_id = _nonempty_string(data, "grant_id")
+    if grant_id is None:
+        return None
+    if cache_ok:
+        try:
+            # The revocation marker is written BEFORE the Firestore revoke, so
+            # it also catches a grant whose revoke write is still in flight.
+            if mcp_token_cache.grant_revocation_marker_exists(grant_id):
+                return None
+        except mcp_token_cache.McpTokenStoreUnavailable:
+            cache_ok = False
+            logger.warning("MCP OAuth revocation marker unavailable; validating against Firestore only")
+    grant = get_active_grant(grant_id)
+    if not grant:
+        return None
+    identity = _validated_access_token_identity(data, grant, resource, now=_now())
+    if identity is None:
+        return None
+    _ensure_oauth_memory_grant(grant)
+    if cache_ok:
+        try:
+            expires_at = data.get("expires_at")
+            if isinstance(expires_at, datetime):
+                mcp_token_cache.fill_access_token(
+                    access_token, identity, expires_at.timestamp(), index_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS
+                )
+            # A revoke that landed during the Firestore reads or the fill must
+            # deny this request too — the marker is re-checked before crediting.
+            if mcp_token_cache.grant_revocation_marker_exists(grant_id):
+                return None
+            if mcp_token_cache.claim_last_used_write(access_token):
+                _record_grant_last_used(grant_id)
+        except mcp_token_cache.McpTokenStoreUnavailable:
+            cache_ok = False
+            logger.warning("MCP OAuth token cache became unavailable mid-validation; serving Firestore result")
+    return identity
+
+
 def rotate_refresh_token(
-    refresh_token: str, client_id: str, resource: str, scope: Optional[str] = None
+    refresh_token: str,
+    client_id: str,
+    resource: Optional[str],
+    scope: Optional[str] = None,
+    *,
+    on_outcome: Optional[Callable[[str], None]] = None,
 ) -> Optional[Dict[str, Any]]:
+    """Rotate atomically; report a committed outcome without coupling to metrics."""
     ref = db.collection("mcp_oauth_refresh_tokens").document(hash_secret(refresh_token))
-    transaction = db.transaction()
     replay_grant_id: Optional[str] = None
+    grace_grant_id: Optional[str] = None
 
     @_typed_transactional
     def _rotate(transaction: Any) -> Optional[Dict[str, Any]]:
-        nonlocal replay_grant_id
+        nonlocal replay_grant_id, grace_grant_id
+        # A failed commit must not leak its outcome into the next attempt.
+        replay_grant_id = grace_grant_id = None
         doc = ref.get(transaction=transaction)
         if not doc.exists:
             return None
@@ -677,7 +1122,10 @@ def rotate_refresh_token(
         grant: Optional[Dict[str, Any]] = _typed_doc(grant_doc) if grant_doc.exists else None
         if (
             data.get("client_id") != client_id
-            or data.get("resource") != resource
+            # RFC 8707: an omitted resource indicator keeps the token family's
+            # stored audience; only an explicit value must match it, in
+            # canonical or legacy ``/sse`` form.
+            or (resource is not None and not mcp_resource_urls_match(data.get("resource"), resource))
             or data.get("revoked_at")
             or (expires_at and expires_at <= now)
             or not grant
@@ -686,19 +1134,43 @@ def rotate_refresh_token(
         ):
             return None
         grant.setdefault("id", data.get("grant_id"))
+        replay_grace = False
         if data.get("used_at") or data.get("replaced_by"):
-            replay_grant_id = data.get("grant_id")
-            transaction.set(grant_ref, {"revoked_at": now, "status": "revoked", "replay_detected": True}, merge=True)
-            transaction.set(ref, {"replay_detected_at": now, "revoked_at": now}, merge=True)
-            return None
+            used_at = data.get("used_at")
+            replay_grace = (
+                isinstance(used_at, datetime) and 0 <= (now - used_at).total_seconds() <= MCP_OAUTH_REPLAY_GRACE_SECONDS
+            )
+            if replay_grace and int(data.get("replay_reissue_count") or 0) >= MCP_OAUTH_REPLAY_REISSUE_LIMIT:
+                # The window bounds duration; this bound caps how many durable
+                # pairs one replayed token can mint before the grant is treated
+                # as hostile and revoked.
+                replay_grace = False
+            if not replay_grace:
+                replay_grant_id = data.get("grant_id")
+                # Record intent only. Revoke AFTER the mandatory Redis marker
+                # so an outage cannot leave a cached token on a revoked grant.
+                transaction.set(ref, {"replay_detected_at": now}, merge=True)
+                return None
+        # Server-side scope upgrade: a grant from a client with implied scopes
+        # (first-party ChatGPT's read floor) that predates them gains them here,
+        # on the grant and on the rotated token family, so older narrow grants
+        # get the full read set without the user reconnecting.
+        implied = implied_client_scopes(client_id)
+        family_scopes = set(data.get("scopes") or []) | implied
+        grant_scopes = set(grant.get("scopes") or [])
         try:
             requested_scopes: List[str] = (
-                normalize_scopes(scope, {"allowed_scopes": data.get("scopes")}) if scope else data.get("scopes") or []
+                normalize_scopes(scope, {"allowed_scopes": sorted(family_scopes)}) if scope else sorted(family_scopes)
             )
         except ValueError:
             return None
-        if not set(requested_scopes).issubset(set(data.get("scopes") or [])):
+        requested_scopes = sorted(set(requested_scopes) | implied)
+        if not set(requested_scopes).issubset(family_scopes):
             return None
+        if not implied.issubset(grant_scopes):
+            upgraded_grant_scopes = sorted(grant_scopes | implied)
+            grant["scopes"] = upgraded_grant_scopes
+            transaction.set(grant_ref, {"scopes": upgraded_grant_scopes, "scopes_upgraded_at": now}, merge=True)
         (
             access_token,
             new_refresh_token,
@@ -710,18 +1182,75 @@ def rotate_refresh_token(
         ) = _build_token_pair_writes(grant, requested_scopes, data.get("token_family_id"))
         transaction.set(access_ref, access_data)
         transaction.set(refresh_ref, refresh_data)
-        transaction.update(ref, {"used_at": now, "replaced_by": hash_secret(new_refresh_token)})
+        if replay_grace:
+            # Keep the original used_at: repeated reissues never extend grace.
+            # Increment the per-source-token reissue count in the same
+            # transaction so concurrent replays cannot each stay under the cap.
+            transaction.set(
+                ref,
+                {"replayed_at": now, "replay_reissue_count": int(data.get("replay_reissue_count") or 0) + 1},
+                merge=True,
+            )
+            grace_grant_id = data.get("grant_id")
+        else:
+            transaction.update(ref, {"used_at": now, "replaced_by": hash_secret(new_refresh_token)})
         transaction.set(grant_ref, {"last_used_at": now}, merge=True)
         return _token_pair_response(access_token, new_refresh_token, requested_scopes)
 
-    token_pair: Optional[Dict[str, Any]] = _rotate(transaction)
+    # Typed-unbound fix: every loop exit either breaks with a result or re-raises,
+    # so None can never actually flow out of the retry loop.
+    token_pair: Optional[Dict[str, Any]] = None
+    for attempt in range(3):
+        try:
+            # Disable the SDK's same-transaction Aborted retries; this boundary
+            # owns the three-attempt budget and always starts a fresh object.
+            token_pair = _rotate(db.transaction(max_attempts=1))
+            break
+        except (InvalidArgument, Aborted, ServiceUnavailable, DeadlineExceeded, ValueError) as error:
+            # Firestore wraps exhausted Aborted commits in ValueError.
+            transient = error.__cause__ if isinstance(error, ValueError) else error
+            if not (
+                (transient is not None and is_expired_transaction_error(transient))
+                or isinstance(transient, (Aborted, ServiceUnavailable, DeadlineExceeded))
+            ):
+                raise
+            if attempt == 2:
+                raise RefreshRotationUnavailable("MCP OAuth refresh rotation unavailable") from error
+            logger.warning(
+                "MCP OAuth refresh rotation retry attempt=%d error=%s", attempt + 1, type(transient).__name__
+            )
+            time.sleep((0.1, 0.3)[attempt])
+    outcome = "rotated" if token_pair else "invalid"
     if replay_grant_id:
+        # Grant document ids embed uid and client ids can embed account data;
+        # log stable hashes for correlation without identifying material.
+        logger.warning(
+            "MCP OAuth refresh replay revoke client_id=%s grant_id=%s",
+            hash_secret(str(client_id))[:16],
+            hash_secret(replay_grant_id)[:16],
+        )
         revoke_grant(replay_grant_id, replay_detected=True)
+        outcome = "replay_revoked"
+    elif grace_grant_id:
+        logger.warning(
+            "MCP OAuth refresh replay grace reissue client_id=%s grant_id=%s",
+            hash_secret(str(client_id))[:16],
+            hash_secret(grace_grant_id)[:16],
+        )
+        outcome = "replay_grace_reissued"
+    if on_outcome is not None:
+        on_outcome(outcome)
     return token_pair
 
 
 def revoke_grant(grant_id: str, replay_detected: bool = False) -> None:
     now = _now()
+    # Marker + cache purge happen BEFORE the Firestore write and are
+    # mandatory: if Redis cannot take the marker, the revoke fails closed —
+    # no success is reported while a stale cached token could be served once
+    # Redis recovers. A marker written before a later purge failure still
+    # blocks every cached entry for the grant.
+    mcp_token_cache.invalidate_grant(grant_id, marker_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS)
     db.collection("mcp_oauth_grants").document(grant_id).set(
         {"revoked_at": now, "status": "revoked", "replay_detected": replay_detected}, merge=True
     )
@@ -738,13 +1267,24 @@ def list_user_grants(uid: str) -> List[Dict[str, Any]]:
         data: Dict[str, Any] = _typed_doc(doc)
         data.setdefault("id", doc.id)
         grants.append(data)
-    grants.sort(
-        key=lambda grant: grant.get("updated_at")
-        or grant.get("created_at")
-        or datetime.min.replace(tzinfo=timezone.utc),
-        reverse=True,
-    )
-    return grants
+    grants.sort(key=_grant_recency_key, reverse=True)
+    deduped: List[Dict[str, Any]] = []
+    seen_indexes: Dict[Tuple[str, str], int] = {}
+    for grant in grants:
+        key = (
+            str(grant.get("client_id") or ""),
+            legacy_mcp_resource_url(str(grant.get("resource") or "")),
+        )
+        existing_index = seen_indexes.get(key)
+        if existing_index is None:
+            seen_indexes[key] = len(deduped)
+            deduped.append(grant)
+            continue
+        current = deduped[existing_index]
+        if _grant_is_revoked(current) and not _grant_is_revoked(grant):
+            deduped[existing_index] = grant
+    deduped.sort(key=_grant_recency_key, reverse=True)
+    return deduped
 
 
 def revoke_user_grant(uid: str, grant_id: str) -> bool:
@@ -754,5 +1294,30 @@ def revoke_user_grant(uid: str, grant_id: str) -> bool:
     data: Dict[str, Any] = _typed_doc(doc)
     if data.get("uid") != uid:
         return False
-    revoke_grant(grant_id)
+    equivalents = []
+    for candidate in db.collection("mcp_oauth_grants").where("uid", "==", uid).stream():
+        candidate_data: Dict[str, Any] = _typed_doc(candidate)
+        if (
+            candidate_data.get("client_id") == data.get("client_id")
+            and mcp_resource_urls_match(candidate_data.get("resource"), data.get("resource"))
+            and not _grant_is_revoked(candidate_data)
+        ):
+            equivalents.append(candidate.id)
+    for equivalent_id in equivalents:
+        revoke_grant(equivalent_id)
     return True
+
+
+def delete_user_oauth_credentials(uid: str) -> None:
+    """Revoke and remove every OAuth credential and authorization code for a user."""
+    grants = list(db.collection("mcp_oauth_grants").where("uid", "==", uid).stream())
+    for grant in grants:
+        grant_id = grant.id
+        revoke_grant(grant_id)
+        for collection_name in ("mcp_oauth_access_tokens", "mcp_oauth_refresh_tokens"):
+            for token in db.collection(collection_name).where("grant_id", "==", grant_id).stream():
+                token.reference.delete()
+        grant.reference.delete()
+    codes = list(db.collection("mcp_oauth_authorization_codes").where("uid", "==", uid).stream())
+    for code in codes:
+        code.reference.delete()

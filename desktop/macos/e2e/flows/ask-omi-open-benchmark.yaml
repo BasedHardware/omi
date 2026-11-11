@@ -1,8 +1,15 @@
-version: 1
+version: 2
 name: ask-omi-open-benchmark
 tier: 3
-description: Repeated cursor-free Ask Omi open timing for the floating pill.
+description: Repeated cursor-free Ask Omi input-feedback gate for the chat-first main-window composer.
 app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationAskOmiActions.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
 preconditions:
   - automation_bridge_ready
 
@@ -17,6 +24,10 @@ steps:
     bridge.action:
       name: open_ask_omi
       reset: true
+    expect:
+      result.detail.target: "main_chat"
+      result.detail.elapsedMs:
+        max: 100
     wait:
       state.askOmiOpen: true
 
@@ -30,6 +41,10 @@ steps:
     bridge.action:
       name: open_ask_omi
       reset: true
+    expect:
+      result.detail.target: "main_chat"
+      result.detail.elapsedMs:
+        max: 100
     wait:
       state.askOmiOpen: true
 
@@ -43,6 +58,10 @@ steps:
     bridge.action:
       name: open_ask_omi
       reset: true
+    expect:
+      result.detail.target: "main_chat"
+      result.detail.elapsedMs:
+        max: 100
     wait:
       state.askOmiOpen: true
 
@@ -50,7 +69,7 @@ steps:
     name: Capture Ask Omi Visual
     visual.export:
       name: ask-omi-open
-      target: floating
+      target: main
 
   - id: S8
     name: Assert Ask Omi State

@@ -1,0 +1,5316 @@
+{
+  "description": "Glance board for user-facing feature health. A 99% color is used only where the denominator is something that should have worked for the user and success means they got it. Pendant sockets, finalization-job success, blended gateway requests, and cloud push-to-talk are shown without that bar: those numbers are not 'the user got the result'. Drill-down rows ship collapsed so the first paint stays inside the 30s monitor proxy budget. Daily recaps are generation in the last 3 hours, not delivery, and ignore the time picker. Sync histograms reach Conversation shape only after backend-sync joins the Cloud Run exporter; that row uses Cloud Logging of omi_sync_intake meanwhile.",
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Omi TV: growth and revenue",
+      "tooltip": "Growth, activation, retention, revenue and cost, in the admin dashboard.",
+      "type": "link",
+      "url": "https://admin.omi.me/dashboard"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Feature health — user result where we can measure it",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Not a user outcome. Share of accepted pendant listen sockets that delivered at least one audio byte. The rest closed before any audio (reconnects). Same rate on iOS and Android. Do not chase 99% here. A user who was not sending audio did not fail to get a recording.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "noValue": "no traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": 63,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__range])) or 0 * sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Pendant sockets that sent audio",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Hourly trend of the tile above over the selected time range. The window equals the query step, so each sample is read once. Dashed lines mark the same amber and green thresholds as the tile. Longer history is in the graph rows; Prometheus keeps 10 days.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "hidden",
+            "axisSoftMax": 100,
+            "axisSoftMin": 90,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": 3600000,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "id": 80,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(100 * (sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__interval])) or 0 * sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__interval]))) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__interval]))) >= 0",
+          "refId": "A",
+          "range": true,
+          "legendFormat": "Pendant sockets that sent audio"
+        }
+      ],
+      "title": "",
+      "transparent": true,
+      "type": "timeseries",
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 0,
+        "y": 4
+      },
+      "maxDataPoints": 24
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Share of sockets that had audio and were not closed by a projection-queue wait or an application error. This is the live session dying while the user was capturing. It is not proof the recording was lost: an unacknowledged tail is closed 1011 on purpose so the client can replay it. Control-only sockets (no audio frames) are excluded. Empty means no audio-bearing closes.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (sum(increase(pusher_socket_closed_total{job=\"pusher-metrics\",frames_seen=\"audio\",reason!~\"queue_wait_timeout|application_error\"}[$__range])) or 0 * sum(increase(pusher_socket_closed_total{job=\"pusher-metrics\",frames_seen=\"audio\"}[$__range]))) / (sum(increase(pusher_socket_closed_total{job=\"pusher-metrics\",frames_seen=\"audio\"}[$__range])) > 0)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Live audio session kept",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Hourly trend of the tile above over the selected time range. The window equals the query step, so each sample is read once. Dashed lines mark the same amber and green thresholds as the tile. Longer history is in the graph rows; Prometheus keeps 10 days.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "hidden",
+            "axisSoftMax": 100,
+            "axisSoftMin": 90,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": 3600000,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "id": 81,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(100 * (sum(increase(pusher_socket_closed_total{job=\"pusher-metrics\",frames_seen=\"audio\",reason!~\"queue_wait_timeout|application_error\"}[$__interval])) or 0 * sum(increase(pusher_socket_closed_total{job=\"pusher-metrics\",frames_seen=\"audio\"}[$__interval]))) / sum(increase(pusher_socket_closed_total{job=\"pusher-metrics\",frames_seen=\"audio\"}[$__interval]))) >= 0",
+          "refId": "A",
+          "range": true,
+          "legendFormat": "Live audio session kept"
+        }
+      ],
+      "title": "",
+      "transparent": true,
+      "type": "timeseries",
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 6,
+        "y": 4
+      },
+      "maxDataPoints": 24
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Not 'the user got the recording'. Success / (success + failure) of the finalization job. A failure dead-letters the job and still writes the conversation completed and visible; the summary may be missing and marked retryable. Do not add the dead-letter gauge to this rate: the same event increments both. Stale is fences and discards, not a lost recording. This panel measures live finalization on job=pusher-metrics only; sync on cloud-run-application-metrics is excluded. The two emitters are not deduplicated and must not be blended into a unique-finalization rate. A seconds-scale median with a tens-of-minutes tail is a tail delay, not the typical case.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))) / (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range])) > 0)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Finalization job succeeded",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Hourly trend of the tile above over the selected time range. The window equals the query step, so each sample is read once. Dashed lines mark the same amber and green thresholds as the tile. Longer history is in the graph rows; Prometheus keeps 10 days. Live finalization only (job=pusher-metrics); Cloud Run sync events are excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "hidden",
+            "axisSoftMax": 100,
+            "axisSoftMin": 90,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": 3600000,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "id": 82,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(100 * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+          "refId": "A",
+          "range": true,
+          "legendFormat": "Finalization job succeeded"
+        }
+      ],
+      "title": "",
+      "transparent": true,
+      "type": "timeseries",
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 12,
+        "y": 4
+      },
+      "maxDataPoints": 24
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "Not what the user received, and not the dashboard time range. Generated / (generated + failed) in the last 3 hours. Failed excludes DailySummaryDeliveryError: the recap was generated and the push did not land. A phone that never registered a token cannot be delivered to. Green at 98%, red under 90%. Reads 'no recaps due' when nobody needed a recap.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 98
+              }
+            ]
+          },
+          "unit": "percent",
+          "max": 100,
+          "noValue": "no recaps due"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "hideTimeOverride": true,
+      "id": 73,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "100 * (sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[3h])) or vector(0)) / (((sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[3h])) or vector(0)) + (sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[3h])) or vector(0))) > 0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
+          }
+        }
+      ],
+      "timeFrom": "1h",
+      "title": "Recap generation (last 3h)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "Hourly trend of the tile above over the selected time range: generated / (generated + failed) in 1h windows, read from Cloud Monitoring log-based metrics. Empty hours are gaps. Dashed lines mark the same amber and green thresholds as the tile.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "hidden",
+            "axisSoftMax": 100,
+            "axisSoftMin": 90,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": 3600000,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 98
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "id": 83,
+      "interval": "1h",
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "100 * (sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[1h])) or vector(0)) / (((sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[1h])) or vector(0)) + (sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[1h])) or vector(0))) > 0)",
+            "projectName": "based-hardware",
+            "step": "1h"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
+          },
+          "range": true,
+          "legendFormat": "Recap generation (last 3h)"
+        }
+      ],
+      "title": "",
+      "transparent": true,
+      "type": "timeseries",
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 18,
+        "y": 4
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "User outcome: the server chat_response journey produced an answer. Success / (success + failure). This is not desktop or mobile chat transport. HTTP 4xx on desktop chat (upstream_rejected) is a rejected request, not a missed answer, and is not in this rate. First token on the gateway is a separate latency panel. No settled traffic reads 'not measured', not 0%.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 0,
+        "y": 6
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (sum(rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__range]))) / (sum(rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__range])) > 0)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Chat answer",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Hourly trend of the tile above over the selected time range. The window equals the query step, so each sample is read once. Dashed lines mark the same amber and green thresholds as the tile. Longer history is in the graph rows; Prometheus keeps 10 days.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "hidden",
+            "axisSoftMax": 100,
+            "axisSoftMin": 90,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": 3600000,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "id": 84,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(100 * (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+          "refId": "A",
+          "range": true,
+          "legendFormat": "Chat answer"
+        }
+      ],
+      "title": "",
+      "transparent": true,
+      "type": "timeseries",
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 0,
+        "y": 9
+      },
+      "maxDataPoints": 24
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Not a user outcome. All llm-gateway-metrics requests, volume-weighted. Embeddings and the chat model hide a bad model; read Gateway requests by model before calling this healthy. Restricted to job=llm-gateway-metrics so a heavy unfiltered query cannot time out and render as no traffic. A failed or empty query reads 'not measured', which is not zero traffic.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 6,
+        "y": 6
+      },
+      "id": 20,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (sum(rate(llm_gateway_requests_total{job=\"llm-gateway-metrics\",outcome=\"success\"}[$__range])) or 0 * sum(rate(llm_gateway_requests_total{job=\"llm-gateway-metrics\"}[$__range]))) / (sum(rate(llm_gateway_requests_total{job=\"llm-gateway-metrics\"}[$__range])) > 0)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Gateway requests",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Hourly trend of the tile above over the selected time range. The window equals the query step, so each sample is read once. Dashed lines mark the same amber and green thresholds as the tile. Longer history is in the graph rows; Prometheus keeps 10 days.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "hidden",
+            "axisSoftMax": 100,
+            "axisSoftMin": 90,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": 3600000,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "id": 85,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(100 * (sum(increase(llm_gateway_requests_total{job=\"llm-gateway-metrics\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(llm_gateway_requests_total{job=\"llm-gateway-metrics\"}[$__interval]))) / sum(increase(llm_gateway_requests_total{job=\"llm-gateway-metrics\"}[$__interval]))) >= 0",
+          "refId": "A",
+          "range": true,
+          "legendFormat": "Gateway requests"
+        }
+      ],
+      "title": "",
+      "transparent": true,
+      "type": "timeseries",
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 6,
+        "y": 9
+      },
+      "maxDataPoints": 24
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Not proof that push-to-talk works or is down. Settled cloud realtime_voice attempts only. The on-device realtime-hub lane does not hit this endpoint. Cancelled attempts are excluded. No settled success or failure reads 'not measured', which means unobserved, not a product outage. Production evidence (2026-11-07) has no realtime_voice journey: not measured. No mapping to another journey is confirmed.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 12,
+        "y": 6
+      },
+      "id": 36,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range]))) / (sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range])) > 0)",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Cloud PTT transport",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Hourly trend of the tile above over the selected time range. The window equals the query step, so each sample is read once. Dashed lines mark the same amber and green thresholds as the tile. Longer history is in the graph rows; Prometheus keeps 10 days. Production evidence (2026-11-07) has no realtime_voice journey: not measured. No mapping to another journey is confirmed.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "hidden",
+            "axisSoftMax": 100,
+            "axisSoftMin": 90,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": 3600000,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "id": 86,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(100 * (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__interval]))) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+          "refId": "A",
+          "range": true,
+          "legendFormat": "Cloud PTT transport"
+        }
+      ],
+      "title": "",
+      "transparent": true,
+      "type": "timeseries",
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 12,
+        "y": 9
+      },
+      "maxDataPoints": 24
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Not 'the user found the conversation'. Successful summary-vector writes divided by successes plus errors. Skips (too short, stale, no structured summary, discarded) are excluded on purpose and are not failed searches. No attempted writes reads 'no traffic'.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "noValue": "no traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 6
+      },
+      "id": 70,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (sum(rate(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__range]))) / sum(rate(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__range]))",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "title": "Index write succeeded",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Hourly trend of the tile above over the selected time range. The window equals the query step, so each sample is read once. Dashed lines mark the same amber and green thresholds as the tile. Longer history is in the graph rows; Prometheus keeps 10 days.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "hidden",
+            "axisSoftMax": 100,
+            "axisSoftMin": 90,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": 3600000,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "id": 87,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(100 * (sum(increase(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__interval]))) / sum(increase(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__interval]))) >= 0",
+          "range": true,
+          "legendFormat": "Index write succeeded"
+        }
+      ],
+      "title": "",
+      "transparent": true,
+      "type": "timeseries",
+      "gridPos": {
+        "h": 2,
+        "w": 6,
+        "x": 18,
+        "y": 9
+      },
+      "maxDataPoints": 24
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "id": 27,
+      "panels": [],
+      "title": "Is anything stuck?",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Oldest queued or leased finalization job: system-owned work only. Jobs waiting for user BYOK reconnect have a separate informational age gauge and do not page. Replicated per process; aggregate with max(). blocked_byok is excluded by the summary producer; user-side credential waits are not system-caused age. Read it with Queued: a low queue with a steadily climbing age is one stuck job or a few, while a growing queue is a backlog.",
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "not reporting",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 900
+              },
+              {
+                "color": "red",
+                "value": 3600
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Queued"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 0,
+        "y": 12
+      },
+      "id": 30,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "text": {
+          "titleSize": 11,
+          "valueSize": 20
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(listen_finalization_oldest_nonterminal_age_seconds)",
+          "instant": true,
+          "refId": "A",
+          "legendFormat": "Oldest"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(listen_finalization_jobs{status=\"queued\"})",
+          "instant": true,
+          "refId": "B",
+          "legendFormat": "Queued"
+        }
+      ],
+      "title": "Oldest job",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "New durable dead-letter jobs over the selected range, estimated from the change in the global Firestore projection (max across replicas before delta, sampled each minute). This survives pod restarts and includes events before a new pod is first scraped, unlike the per-process counter. The projection generation starts 2026-07-25; older jobs are not backfilled. Includes exhausted retries and abandoned BYOK credential waits. Dead-letter jobs are not a count of lost conversations: some already finalized inline, and BYOK abandonment preserves the conversation. Delta extrapolates range edges; short ranges or missing summary samples can be blank. A telemetry gap is not zero. A missing current summary or no successful summary in 15 minutes suppresses the stat.",
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "not reporting",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 4,
+        "y": 12
+      },
+      "id": 31,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(clamp_min(delta((max(listen_finalization_jobs{status=\"dead_letter\"}))[$__range:1m]), 0)) and on() (time() - max(listen_finalization_summary_last_success_timestamp_seconds) < 900)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Dead letters",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Recorded stale capture_finalization terminals in the last 3 hours: count and percentage of all capture terminal events recorded in those 3 hours (success, failure, cancelled and stale). Stale includes deliberate discard, account-cutover and newer-lifecycle fences; it does not establish a missing conversation outcome or lost capture. These events are excluded from the Voice capture success-rate denominator. This is a terminal-event window, not a cohort of captures started in the window or an accepted-minus-terminal backlog. No samples in the window stays blank; this historical window does not prove current reporter health. Live finalization only (job=pusher-metrics), matching the headline; Cloud Run sync events are excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Terminal share"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 8,
+        "y": 12
+      },
+      "id": 78,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "text": {
+          "titleSize": 11,
+          "valueSize": 22
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"stale\"}[3h]))",
+          "instant": true,
+          "refId": "A",
+          "legendFormat": "Lifecycle/discard fences"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"stale\"}[3h])) / (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[3h])) > 0)",
+          "instant": true,
+          "refId": "B",
+          "legendFormat": "Terminal share"
+        }
+      ],
+      "title": "Capture stale (3h)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Non-zero means the pusher breaker has tripped. A blank panel means no replica published this series at all: that is \"the reporter is gone\", not \"the value is zero\", and the two must never render the same.",
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "not reporting",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 12,
+        "y": 12
+      },
+      "id": 29,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(pusher_circuit_breaker_state)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Pusher breaker",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "1 when the gateway has tripped its breaker; requests are being shed. A blank panel means no replica published this series at all: that is \"the reporter is gone\", not \"the value is zero\", and the two must never render the same.",
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "not reporting",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 12
+      },
+      "id": 21,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(llm_gateway_circuit_open)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "AI circuit",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "How many of the three journeys emitted anything in the dashboard's selected time range. A journey that stops reporting looks identical to a journey with no failures, which is the failure mode omi-journey-signal-dead exists to catch. Owner-scoped: chat_response on cloud-run-application-metrics; pusher_session and live capture_finalization on pusher-metrics. Cloud Run sync finalization is excluded; these are event windows, not unique captures.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 3,
+          "min": 0,
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 12
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(count by (journey) ((increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[$__range])) > 0)) or (0 * sum((increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[$__range]))))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Journeys (of 3)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 89,
+      "panels": [],
+      "title": "Did users stay?",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "New subscriptions started over the selected time range. Counts are webhook deliveries, which Stripe may retry — this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth. Missing subscription telemetry reads not measured; a missing event is zero only while subscription counters report.",
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 0,
+        "y": 16
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total[$__range])))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "New subscriptions",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "The leading churn indicator: the moment a user set cancel_at_period_end, before the subscription actually ends. Counts are webhook deliveries, which Stripe may retry — this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth. Missing subscription telemetry reads not measured; a missing event is zero only while subscription counters report.",
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 6,
+        "y": 16
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_requested\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total[$__range])))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Cancellation requests",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Win-backs: a user who requested cancellation and then reverted it. Counts are webhook deliveries, which Stripe may retry — this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth. Missing subscription telemetry reads not measured; a missing event is zero only while subscription counters report.",
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 12,
+        "y": 16
+      },
+      "id": 15,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_reverted\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total[$__range])))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Saves",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Created minus ended over the selected time range. `ended` lags the decision to leave by up to a month, so this is a trailing net, not a real-time one. Counts are webhook deliveries, which Stripe may retry — this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth. Missing subscription telemetry reads not measured; a missing event is zero only while subscription counters report.",
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 16
+      },
+      "id": 14,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range])) or (0 * sum(increase(omi_subscription_events_total[$__range])))) - round(sum(increase(omi_subscription_events_total{event=\"ended\"}[$__range])) or (0 * sum(increase(omi_subscription_events_total[$__range]))))",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Net change",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 93,
+      "title": "Home value — rows the user could see",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Average of each user's peak settled Home row count that UTC day. A row is a conversation, episode, processing item, or local recording the default Home list showed — not a date header, and not a search or folder. Empty homes count as 0. Mobile reports it. Pod-local: a user who opens Home on two backend pods can be counted twice. Until a build with this report is in the field, the tile reads not measured.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "noValue": "not measured",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 0,
+        "y": 20
+      },
+      "id": 94,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_home_rows_user_day_sum_total[$__range])) / sum(increase(omi_home_rows_user_day_count_total[$__range])) and sum(increase(omi_home_rows_user_day_count_total[$__range])) > 0",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Home rows / user / day",
+      "type": "stat"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 43,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Every settled attempt, split by how it ended. Stacked so total throughput and the failure share read together. Owner-scoped: chat_response on cloud-run-application-metrics; pusher_session and live capture_finalization on pusher-metrics. Cloud Run sync finalization is excluded; these are event windows, not unique captures.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 23
+          },
+          "id": 6,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (journey,outcome) ((rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m])))",
+              "legendFormat": "{{journey}} · {{outcome}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Terminal outcomes by journey",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "A persistent gap between accepted and settled means attempts are being started and never resolved — the post-200 failure shape. Owner-scoped: chat_response on cloud-run-application-metrics; pusher_session and live capture_finalization on pusher-metrics. Cloud Run sync finalization is excluded; these are event windows, not unique captures.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 23
+          },
+          "id": 7,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (journey) ((rate(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m])))",
+              "legendFormat": "accepted · {{journey}}",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (journey) ((rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m])))",
+              "legendFormat": "settled · {{journey}}",
+              "refId": "B"
+            }
+          ],
+          "title": "Accepted vs settled",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Stale terminal-event rate, excluded from the success + failure headline. For capture_finalization this includes deliberate discard, account-cutover and newer-lifecycle fences; stale alone is not evidence of a missing or lost conversation. Other journeys use their own stale semantics. Owner-scoped: chat_response on cloud-run-application-metrics; pusher_session and live capture_finalization on pusher-metrics. Cloud Run sync finalization is excluded; these are event windows, not unique captures.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 31
+          },
+          "id": 8,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (journey) ((rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"stale\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=\"stale\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"stale\"}[5m])))",
+              "legendFormat": "{{journey}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Stale terminal events by journey",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "95th percentile time from accepted to terminal, per journey. Owner-scoped: chat_response on cloud-run-application-metrics; pusher_session and live capture_finalization on pusher-metrics. Cloud Run sync finalization is excluded; these are event windows, not unique captures.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 38
+          },
+          "id": 9,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le,journey) ((rate(omi_journey_latency_seconds_bucket{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_latency_seconds_bucket{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_latency_seconds_bucket{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m]))))",
+              "legendFormat": "{{journey}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Journey latency p95",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Feature health — graphs",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 44,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Live capture sessions currently connected.",
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 0,
+            "y": 24
+          },
+          "id": 28,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(pusher_active_ws_connections)",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Active WS connections",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Jobs that have not reached a terminal state. max(), not sum(): this is one global Firestore-derived value that every backend-listen replica republishes, so sum() multiplies it by the replica count. dead_letter is deliberately excluded — it is a cumulative all-time total that only ever rises, not a backlog (see the dead-letter panel for its rate). Undercount: the projection generation starts 2026-07-25 and is not backfilled, so jobs created before that date are not in these numbers.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 6,
+            "y": 24
+          },
+          "id": 32,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max by (status) (listen_finalization_jobs{status=~\"queued|leased|blocked_byok\"})",
+              "instant": false,
+              "legendFormat": "{{status}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Unfinished finalization jobs",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Dead letters are the destructive terminal. The retries series is structurally zero on the live-capture lane: LISTEN_FINALIZATION_RETRIES_TOTAL is only incremented by the Cloud Tasks worker, and inline pusher retries are not counted — a flat retries line is not evidence of health.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 14,
+            "y": 24
+          },
+          "id": 33,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(listen_finalization_retries_total[5m]))",
+              "legendFormat": "retries (Cloud Tasks lane only — never rises on live capture)",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(listen_finalization_dead_letter_total[5m]))",
+              "legendFormat": "dead letters",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (outcome) (rate(omi_capture_finalization_reconciliations_total[5m]))",
+              "legendFormat": "reconciliation · {{outcome}}",
+              "refId": "C"
+            }
+          ],
+          "title": "Retries, dead letters, reconciliations",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Durable terminal outcomes newly recorded in each 30m window. `stale` means the job was fenced — a discard or a newer lifecycle generation won before fanout — not an error, and it runs at roughly the same rate as success. `failure` is the dead-lettered path and is normally flat at zero; any sustained non-zero value here is captures being given up on.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 32
+          },
+          "id": 34,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=\"success\"}))[30m:]), 0))",
+              "instant": false,
+              "legendFormat": "success",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=\"stale\"}))[30m:]), 0))",
+              "instant": false,
+              "legendFormat": "stale (fenced)",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=\"failure\"}))[30m:]), 0))",
+              "instant": false,
+              "legendFormat": "failure (dead-lettered)",
+              "range": true,
+              "refId": "C"
+            }
+          ],
+          "title": "How finalizations settle (30m)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Persisted finalization failures per interval by bounded reason and service. Generic exceptions are reason=processing. reason=stale is a lost lifecycle or fan-out race, not a missing conversation. in-cluster means the pusher and listen scrape, which has no service label.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".* processing$"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".* provider$"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".* stale$"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "text",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 14,
+            "x": 8,
+            "y": 32
+          },
+          "id": 90,
+          "interval": "15m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (service_name, reason) (label_replace(increase(omi_capture_finalization_failures_total[$__interval]), \"service_name\", \"in-cluster\", \"service_name\", \"\")) > 0",
+              "legendFormat": "{{service_name}} {{reason}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Capture failures by reason",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Capture pipeline — audio in, conversation out",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 61,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Pendant is a capture source, not a client_kind. Live listen admissions over the selected range; not unique users. Offline pendant capture arrives through the WAL/sync path, which never enters the finalization journey and whose service is not scraped by Prometheus, so this row covers live listen sessions only.",
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "no traffic",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 25
+          },
+          "id": 62,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "round(sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range])))",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Pendant sessions accepted",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Pendant is a capture source, not a client_kind. Session admission rate by client_platform, with phone microphone source for contrast.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 25
+          },
+          "id": 64,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (client_platform) (rate(omi_listen_accepted_total{transcription_source=\"omi\"}[5m]))",
+              "refId": "A",
+              "legendFormat": "omi / {{client_platform}}"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (client_platform) (rate(omi_listen_accepted_total{transcription_source=\"phone\"}[5m]))",
+              "refId": "B",
+              "legendFormat": "phone / {{client_platform}}"
+            }
+          ],
+          "title": "Live sessions by platform — pendant vs phone",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Pendant capture — source=omi",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 45,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Wall-clock duration (finished_at - started_at) at first durable completed persist. Live / desktop / import / integration are scraped today (backend-listen, pusher, Cloud Run backend + desktop-backend). Sync is emitted from Cloud Run backend-sync, which Prometheus does not scrape — that series is empty until the exporter allowlist grows; use the Cloud Logging panel beside this graph. A 09-19-shaped live incident is a p50 collapse toward tens of seconds. Healthy sync first chunks are ~60s, so sync p50 dropping toward ~11s is the fragment tell, not the <2min share.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 26
+          },
+          "id": 46,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.10, sum by (source, le) (rate(omi_conversation_duration_seconds_bucket[5m])))",
+              "legendFormat": "{{source}} p10",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.50, sum by (source, le) (rate(omi_conversation_duration_seconds_bucket[5m])))",
+              "legendFormat": "{{source}} p50",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.90, sum by (source, le) (rate(omi_conversation_duration_seconds_bucket[5m])))",
+              "legendFormat": "{{source}} p90",
+              "refId": "C"
+            }
+          ],
+          "title": "Conversation length p10 / p50 / p90 by source",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Share of first-completed conversations shorter than 2 minutes, by source. This is the live fragmentation graph: a healthy live p50 of minutes would make a 09-19-shaped live day jump toward 100%. For sync, healthy WAL first chunks are already ~60s, so this line stays high even when assignment is healthy — read p50 and the Cloud Logging created-vs-merged panel instead. Sync Prometheus series are empty until backend-sync is scraped.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "max": 100,
+              "min": 0,
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 26
+          },
+          "id": 47,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "100 * sum by (source) (rate(omi_conversation_duration_seconds_bucket{le=\"120.0\"}[5m])) / sum by (source) (rate(omi_conversation_duration_seconds_count[5m]))",
+              "legendFormat": "{{source}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Short conversations (< 2 min) by source",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "description": "Sync intake created vs merged, read from Cloud Logging of backend-sync `omi_sync_intake outcome=created|merged`. This is the signal that works today: Prometheus `omi_sync_intake_total` is dark because backend-sync is not in the Cloud Run metrics exporter allowlist (backend + desktop-backend only). Same query as alert omi-sync-intake-fragmented. A 09-19-shaped day is created share approaching 1.0 (one conversation per WAL chunk). Grafana log volume in this panel is the graph; the rows are the raw lines.",
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 26
+          },
+          "id": 48,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": false,
+            "showCommonLabels": false,
+            "showLabels": false,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": false
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "googlecloud-logging-datasource",
+                "uid": "deuxlwt1d569sb"
+              },
+              "projectId": "based-hardware",
+              "queryText": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend-sync\" AND (textPayload:\"omi_sync_intake outcome=\" OR jsonPayload.message:\"omi_sync_intake outcome=\")",
+              "refId": "A"
+            }
+          ],
+          "title": "Sync intake created vs merged (Cloud Logging — works today)",
+          "type": "logs"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Counts first completed persist per conversation. backend-sync is not scraped, so sync-source completions are missing. Do not read omi_product_event_total{event=\"conversation_created\"}: from-segments double-counts. Rolling 24-hour volume, not unique users or calendar-day counts.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 34
+          },
+          "id": 49,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (source) (increase(omi_conversation_duration_seconds_count[$__range]))",
+              "refId": "A",
+              "legendFormat": "{{source}}"
+            }
+          ],
+          "title": "Conversations per day (completed, by source)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Rolling one-hour share of all relevance decisions that ended in discard for backend, backend-sync, backend-sync-backfill, and backend-integration, split by service and trigger. Evaluated at the dashboard end time; move the time range to compare before and after PR #23963. Sync-service rows appear after the metrics-egress workflow applies the sync exporter values; allow for its 10-minute collection interval.",
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 1,
+              "max": 100,
+              "min": 0,
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 24,
+            "x": 0,
+            "y": 42
+          },
+          "id": 77,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "(100 * (sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\",verdict=\"discard\"}[1h])) or on (service_name, trigger) (0 * sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[1h])))) / sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[1h]))) and on (service_name, trigger) (sum by (service_name, trigger) (increase(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[1h])) > 0)",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Rolling 1h discard share by service / trigger",
+          "type": "table"
+        }
+      ],
+      "title": "Conversation shape — whole conversations vs fragments",
+      "type": "row"
+    },
+    {
+      "id": 65,
+      "type": "row",
+      "title": "Daily recaps — generation and delivery job health",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "panels": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "description": "Current-day recaps persisted in the last 24 hours (backfill excluded). Red at zero: a day with no recap generated is a total feature outage, whatever the job's own exit status says. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 27
+          },
+          "hideTimeOverride": true,
+          "id": 74,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "A",
+              "promQLQuery": {
+                "expr": "sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[24h])) or vector(0)",
+                "projectName": "based-hardware",
+                "step": "5m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
+              }
+            }
+          ],
+          "timeFrom": "1h",
+          "title": "Daily recaps generated (24h)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "description": "Recipients whose recap generation failed or exceeded the per-user budget in the last 3 hours, counted per cohort pass (a recipient retried four times in an hour counts four times). Delivery-only failures are excluded. Orange from 10, red from 20 (the alert gate). Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 10
+                  },
+                  {
+                    "color": "red",
+                    "value": 20
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 27
+          },
+          "hideTimeOverride": true,
+          "id": 75,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "A",
+              "promQLQuery": {
+                "expr": "sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[3h])) or vector(0)",
+                "projectName": "based-hardware",
+                "step": "5m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
+              }
+            }
+          ],
+          "timeFrom": "1h",
+          "title": "Recap generation failures (3h)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "description": "daily_summary_job_summary lines in the last hour. The notifications job runs every 15 minutes, so 4 is healthy; fewer means the Scheduler, the job, or its run lock stopped a pass. Counts passes, not success: a pass in which every recipient failed still counts here. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 2
+                  },
+                  {
+                    "color": "green",
+                    "value": 3
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 27
+          },
+          "hideTimeOverride": true,
+          "id": 76,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "A",
+              "promQLQuery": {
+                "expr": "sum(increase(logging_googleapis_com:user_daily_summary_job_heartbeat_missing{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[1h])) or vector(0)",
+                "projectName": "based-hardware",
+                "step": "5m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
+              }
+            }
+          ],
+          "timeFrom": "1h",
+          "title": "Recap job passes (1h, expect 4)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "description": "Current-day recaps generated, and recipient failures by reason and exception class, per 15-minute bucket. Failures are counted per cohort pass, so one persistently failing recipient adds up to four per hour; DailySummaryDeliveryError means the recap was generated but no device accepted the push. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "displayName": "${__field.labels.outcome}"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 31
+          },
+          "id": 66,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "A",
+              "promQLQuery": {
+                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[15m])), \"outcome\", \"generated\", \"\", \"\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
+              }
+            },
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "B",
+              "promQLQuery": {
+                "expr": "label_replace(sum by (error_type) (increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",reason=\"generation_error\"}[15m])), \"outcome\", \"failed: $1\", \"error_type\", \"(.+)\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
+              }
+            },
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "C",
+              "promQLQuery": {
+                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",reason=\"user_budget_exceeded\"}[15m])), \"outcome\", \"timed out (user budget)\", \"\", \"\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
+              }
+            }
+          ],
+          "title": "Recap outcomes per 15 minutes",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "description": "Job passes (daily_summary_job_summary) and passes that ended with complete=False, per 15-minute bucket. Incomplete is not by itself an outage: a single persistently failing recipient keeps every pass incomplete until its cohort ages out. Read it with the outcome graph. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "displayName": "${__field.labels.outcome}"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 31
+          },
+          "id": 67,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "A",
+              "promQLQuery": {
+                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_job_heartbeat_missing{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[15m])), \"outcome\", \"passes\", \"\", \"\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
+              }
+            },
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "B",
+              "promQLQuery": {
+                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_cohort_incomplete{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[15m])), \"outcome\", \"incomplete\", \"\", \"\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              },
+              "timeSeriesList": {
+                "projectName": "based-hardware"
+              }
+            }
+          ],
+          "title": "Cohort passes: all vs incomplete",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Saved cohort age observed at tick start, before age-out. A fresh tick records zero; the red line marks the 7200-second abandonment bound. Prometheus path (notifications-job GMP sidecar -> Cloud Monitoring -> cloud-run-application-metrics). It stays empty while the job's runtime identity lacks roles/monitoring.metricWriter: the sidecar's exports are rejected with PermissionDenied (measured 2026-10-12).",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 7200
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 39
+          },
+          "id": 68,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(omi_daily_summary_resumed_cohort_age_seconds)",
+              "legendFormat": "Cohort age",
+              "instant": false,
+              "range": true
+            }
+          ],
+          "title": "Resumed cohort age",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Latest maximum saved-cohort age observed at tick start. Red at 7200 seconds; an abandonment tick retains its diagnostic age until a fresh tick records zero. Prometheus path (notifications-job GMP sidecar -> Cloud Monitoring -> cloud-run-application-metrics). It stays empty while the job's runtime identity lacks roles/monitoring.metricWriter: the sidecar's exports are rejected with PermissionDenied (measured 2026-10-12).",
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 7200
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 39
+          },
+          "id": 69,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(omi_daily_summary_resumed_cohort_age_seconds)",
+              "legendFormat": "Cohort age",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "title": "Cohort age now",
+          "type": "stat"
+        }
+      ]
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "id": 19,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Time to first byte on streamed responses — what the user actually waits through before text appears.",
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "no streams",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 2
+                  },
+                  {
+                    "color": "red",
+                    "value": 5
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 28
+          },
+          "id": 22,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(llm_gateway_stream_ttfb_seconds_bucket[$__range])))",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Stream TTFB p95",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Requests refused before reaching a provider. This counter has no series until the first rejection, so a rejection-free window is empty. The 0 is supplied by llm_gateway_config_info, which every gateway pod publishes at startup: if the gateway stops reporting the panel goes blank instead of showing a green 0.",
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "gateway not reporting",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 28
+          },
+          "id": 23,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "round(sum(increase(llm_gateway_request_rejections_total[$__range]))) or (max(llm_gateway_config_info) * 0)",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Rejections",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 28
+          },
+          "id": 24,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (model,outcome) (rate(llm_gateway_requests_total[5m]))",
+              "legendFormat": "{{model}} · {{outcome}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Gateway requests by model",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 36
+          },
+          "id": 25,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le,model) (rate(llm_gateway_request_latency_seconds_bucket[5m])))",
+              "legendFormat": "{{model}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Gateway latency p95 by model",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Empty is the healthy state here.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 44
+          },
+          "id": 26,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (api_surface,error_class) (rate(llm_gateway_request_rejections_total[5m]))",
+              "legendFormat": "{{api_surface}} · {{error_class}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Rejections by class",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Failed requests per second by lane, largest ten. A lane that fails on low traffic barely shows here, so read this with the error rate panel. Reads a recording rule, so it lags about 5 minutes.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 51
+          },
+          "id": 91,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "topk(10, sum by (lane_id) (lane_outcome:llm_gateway_requests:rate5m_offset5m{outcome=\"error\"}) > 0)",
+              "legendFormat": "{{lane_id}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Gateway errors by lane",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Share of each lane's requests that failed, for lanes above about 1 request a minute, highest ten. Reads a recording rule, so it lags about 5 minutes.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 51
+          },
+          "id": 92,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "topk(10, 100 * sum by (lane_id) (lane_outcome:llm_gateway_requests:rate5m_offset5m{outcome=\"error\"}) / (sum by (lane_id) (lane_outcome:llm_gateway_requests:rate5m_offset5m) > 0.0167) > 0)",
+              "legendFormat": "{{lane_id}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Gateway error rate by lane",
+          "type": "timeseries"
+        }
+      ],
+      "title": "AI responses — the LLM gateway behind chat and extraction",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "id": 35,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Accepted PTT transport attempts in the selected range (voice WebSocket admissions). Acceptance and terminal counters are event rates — never subtract them to infer backlog. Production evidence (2026-11-07) has no realtime_voice journey: not measured. No mapping to another journey is confirmed.",
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 29
+          },
+          "id": 37,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "round(sum(increase(omi_client_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[$__range])))",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "PTT attempts",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "p95 elapsed time from accepted attempt to successful terminal outcome. The duration histogram is deliberately not segmented by client kind. Production evidence (2026-11-07) has no realtime_voice journey: not measured. No mapping to another journey is confirmed.",
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 10
+                  },
+                  {
+                    "color": "red",
+                    "value": 30
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 29
+          },
+          "id": 38,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(omi_client_journey_duration_seconds_bucket{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range])))",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "PTT duration p95 (success)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Bounded issue detail recorded on failed or degraded PTT attempts in the selected range. Class breakdown is in the panel below. Production evidence (2026-11-07) has no realtime_voice journey: not measured. No mapping to another journey is confirmed.",
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 50
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 29
+          },
+          "id": 39,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "round(sum(increase(omi_client_journey_issues_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[$__range])))",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "PTT issues",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Every settled PTT transport attempt, split by how it ended. 'degraded' means a fallback path still delivered; it is excluded from the headline success rate but visible here. Production evidence (2026-11-07) has no realtime_voice journey: not measured. No mapping to another journey is confirmed.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 33
+          },
+          "id": 40,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (outcome) (rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[5m]))",
+              "refId": "A",
+              "legendFormat": "{{outcome}}"
+            }
+          ],
+          "title": "PTT terminal outcomes",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Bounded issue classes behind failed/degraded PTT attempts (provider errors, timeouts, empty answers, quota caps, …). Production evidence (2026-11-07) has no realtime_voice journey: not measured. No mapping to another journey is confirmed.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 33
+          },
+          "id": 41,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (issue_class) (rate(omi_client_journey_issues_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[5m]))",
+              "refId": "A",
+              "legendFormat": "{{issue_class}}"
+            }
+          ],
+          "title": "PTT issues by class",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Accepted attempts split by bounded client kind. Expected to be dominated by desktop_macos; anything else appearing here is a client-attribution finding, not noise. Production evidence (2026-11-07) has no realtime_voice journey: not measured. No mapping to another journey is confirmed.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 33
+          },
+          "id": 42,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (client_kind) (rate(omi_client_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[5m]))",
+              "refId": "A",
+              "legendFormat": "{{client_kind}}"
+            }
+          ],
+          "title": "PTT attempts by client kind",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Push-to-talk (desktop realtime voice) — transport health",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 50,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Settled success / (success + failure) over the selected range; excludes cancelled, degraded and unknown. Transport/outcome health, not answer quality.",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0,
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 95
+                  },
+                  {
+                    "color": "green",
+                    "value": 99
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 30
+          },
+          "id": 51,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "100 * sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=~\"success|failure\"}[$__range])) > 0)",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Live transcription transport success",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Settled success / (success + failure) over the selected range; excludes cancelled, degraded and unknown. Transport/outcome health, not answer quality. Durable terminals on pusher; accepts are shown separately and cannot be subtracted to infer backlog.",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0,
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 95
+                  },
+                  {
+                    "color": "green",
+                    "value": 99
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 30
+          },
+          "id": 52,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "100 * sum(increase(omi_client_journey_terminal_total{job=\"pusher-metrics\",journey=\"conversation_finalization\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"pusher-metrics\",journey=\"conversation_finalization\",outcome=~\"success|failure\"}[$__range])) > 0)",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Conversation finalization settle success",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Settled success / (success + failure) over the selected range; excludes cancelled, degraded and unknown. Transport/outcome health, not answer quality.",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0,
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 95
+                  },
+                  {
+                    "color": "green",
+                    "value": 99
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 30
+          },
+          "id": 53,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"mobile_chat\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"mobile_chat\",outcome=~\"success|failure\"}[$__range])) > 0)",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Mobile chat transport success",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Settled success / (success + failure) over the selected range; excludes cancelled, degraded and unknown. Transport/outcome health, not answer quality.",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0,
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 95
+                  },
+                  {
+                    "color": "green",
+                    "value": 99
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 30
+          },
+          "id": 54,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_chat\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_chat\",outcome=~\"success|failure\"}[$__range])) > 0)",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Desktop chat transport success",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Settled success / (success + failure) over the selected range; excludes cancelled, degraded and unknown. Transport/outcome health, not answer quality. Degraded share of all outcomes is shown beside this stat (about 28% in the audit window).",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0,
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 95
+                  },
+                  {
+                    "color": "green",
+                    "value": 99
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 34
+          },
+          "id": 55,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=\"success\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=~\"success|failure\"}[$__range])) > 0)",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Desktop proactivity success (success + failure)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Degraded / all settled outcomes, including success, failure, cancelled and unknown. Fallbacks delivered an outcome but are excluded from the success + failure stat; about 28% in the audit window.",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0,
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 10
+                  },
+                  {
+                    "color": "red",
+                    "value": 30
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 34
+          },
+          "id": 56,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=\"degraded\"}[$__range])) / (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\"}[$__range])) > 0)",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Desktop proactivity degraded share",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "New durable finalization intents admitted on listen + Cloud Run; terminals settle on pusher. Independent event totals, not a cohort conversion rate. Sync does not enter this finalization path.",
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 34
+          },
+          "id": 57,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "round(sum(increase(omi_client_journey_accepted_total{job=~\"backend-listen-metrics|cloud-run-application-metrics\",journey=\"conversation_finalization\"}[$__range])))",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Conversation finalization accepted",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Distinct client journeys with acceptance traffic in the selected range, across emitting jobs. Eight instrumented journey names; unknown is a sink, not a ninth product journey.",
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 34
+          },
+          "id": 58,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "count(count by (journey) (increase(omi_client_journey_accepted_total[$__range]) > 0)) or (0 * sum(increase(omi_client_journey_accepted_total[$__range])))",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Client journeys reporting (of 8)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Unknown attribution among live transcription + finalization accepts: missing X-App-Platform (with no usable User-Agent) and self-heal accepting without client_kind. This measures attribution coverage, not feature failure.",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0,
+              "noValue": "not measured",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 10
+                  },
+                  {
+                    "color": "red",
+                    "value": 30
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 38
+          },
+          "id": 59,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "100 * sum(increase(omi_client_journey_accepted_total{journey=~\"live_transcription|conversation_finalization\",client_kind=\"unknown\"}[$__range])) / (sum(increase(omi_client_journey_accepted_total{journey=~\"live_transcription|conversation_finalization\"}[$__range])) > 0)",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Capture unknown-kind share",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Low-volume, tool-gated retrieval outcomes (about 50 accepts / 7 days in the audit); not a headline success stat.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 38
+          },
+          "id": 60,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (outcome) (rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"memory_retrieval\"}[5m]))",
+              "refId": "A",
+              "legendFormat": "{{outcome}}"
+            }
+          ],
+          "title": "Memory retrieval — tool-gated volume",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Terminal failure, degraded and unknown events by journey, outcome and closed reason enum. Success and cancellation carry reason=none. Historical series from emitters predating the reason label are shown as legacy_unlabeled; this is a dashboard-only constant, not a new emitted reason. A reporting journey can still fail: read this breakdown alongside Client journeys reporting.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 42
+          },
+          "id": 79,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (journey, outcome, reason) (rate(omi_client_journey_terminal_total{outcome=~\"failure|degraded|unknown\",reason!=\"\"}[5m])) or sum by (journey, outcome, reason) (label_replace(rate(omi_client_journey_terminal_total{outcome=~\"failure|degraded|unknown\",reason=\"\"}[5m]), \"reason\", \"legacy_unlabeled\", \"journey\", \".*\"))",
+              "refId": "A",
+              "legendFormat": "{{journey}} / {{outcome}} / {{reason}}"
+            }
+          ],
+          "title": "Client journey issues by reason and outcome",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Client journeys — did the user get an outcome?",
+      "type": "row"
+    },
+    {
+      "id": 72,
+      "type": "row",
+      "title": "Conversation search freshness",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Retrieval path outcomes per second, aggregated across all processes and scrape jobs (including idle zero-export children). Degraded marks unavailable indexes/errors; empty marks a successful search with no matches.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 31
+          },
+          "id": 71,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (path, outcome) (rate(omi_chat_search_tool_outcomes_total[5m]))",
+              "legendFormat": "{{path}} / {{outcome}}",
+              "instant": false,
+              "range": true
+            }
+          ],
+          "title": "Chat search paths and outcomes",
+          "type": "timeseries"
+        }
+      ]
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 10,
+      "panels": [
+        {
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 32
+          },
+          "id": 11,
+          "options": {
+            "content": "**Rates and deltas, not levels.** This row tracks subscription *events* (created, cancellation requested/reverted, ended, payment failed) as they happen. It does not show absolute MRR/ARR or active-subscription counts — those levels live on the **[Omi TV](https://admin.omi.me/dashboard)** board (see the dashboard links menu), sourced live from Stripe. `cancellation_requested` is the leading indicator — the moment a user decided to leave. `ended` is lagging, up to a month later. `payment_failed` is involuntary churn, operationally distinct from voluntary cancellation. Counts are webhook deliveries, which Stripe may retry — this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth.",
+            "mode": "markdown"
+          },
+          "title": "",
+          "transparent": true,
+          "type": "text"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "All subscription lifecycle events by type. Placed directly under Feature health so lifecycle shifts can be read against the same window as journey/gateway/capture health above. Counts are webhook deliveries, which Stripe may retry — this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 35
+          },
+          "id": 16,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (event) (rate(omi_subscription_events_total[5m]))",
+              "legendFormat": "{{event}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Lifecycle events over time",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Separates voluntary churn (ended after a cancellation request) from involuntary churn (payment_failed / payment_disputed). Different problems, different owners. Counts are webhook deliveries, which Stripe may retry — this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth. `reason` is Stripe cancellation_details.reason and is only ever populated on `ended`; `payment_failed` is involuntary by construction and always carries reason=\"none\".",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 43
+          },
+          "id": 17,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (event, reason) (rate(omi_subscription_events_total{event=~\"ended|payment_failed\"}[5m]))",
+              "legendFormat": "{{event}} · {{reason}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Cancellations by reason (voluntary vs involuntary)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Where the leading churn signal is concentrated by plan tier. Counts are webhook deliveries, which Stripe may retry — this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 43
+          },
+          "id": 18,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (plan) (rate(omi_subscription_events_total{event=\"cancellation_requested\"}[5m]))",
+              "legendFormat": "{{plan}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Cancellation requests by plan",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Subscription lifecycle — did the user stay?",
+      "type": "row"
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 41,
+  "tags": [
+    "omi",
+    "core-features",
+    "production"
+  ],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Omi Core Features",
+  "uid": "omi-core-features",
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m",
+      "1h"
+    ]
+  }
+}

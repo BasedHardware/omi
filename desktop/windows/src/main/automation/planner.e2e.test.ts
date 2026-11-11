@@ -34,8 +34,7 @@ import { parseMessagesSse } from '../../renderer/src/lib/messagesSse'
 import type { AutomationPlan, UiSnapshot } from '../../shared/types'
 
 const TOKEN = process.env.AUTOMATION_E2E_TOKEN ?? ''
-const INSTRUCTION =
-  process.env.AUTOMATION_E2E_INSTRUCTION ?? "type 'hello world' into the document"
+const INSTRUCTION = process.env.AUTOMATION_E2E_INSTRUCTION ?? "type 'hello world' into the document"
 const TARGET_PROC = process.env.AUTOMATION_E2E_TARGET_PROC ?? 'notepad'
 const EXECUTE = process.env.AUTOMATION_E2E_EXECUTE === '1'
 // Token-free execution check: run a hand-built plan through the real helper to
@@ -48,7 +47,7 @@ const EXEC = process.env.AUTOMATION_E2E_EXEC === '1'
 const EXEC_MARKER = 'OmiKbd-Verify!@2026'
 const DESKTOP_BASE =
   process.env.VITE_OMI_DESKTOP_API_BASE ?? 'https://desktop-backend-hhibjajaja-uc.a.run.app'
-const AGENT_MODEL = 'claude-haiku-4-5-20251001'
+const AGENT_MODEL = 'omi-structured'
 const HELPER = join(
   process.cwd(),
   'resources',
@@ -152,7 +151,9 @@ describe.skipIf(!TOKEN)('automation planner e2e', () => {
       expect(snap.ok).toBe(true)
 
       // 2. Intent gate — the free keyword pre-filter should flag our instruction.
-      console.log(`\n=== INTENT === "${INSTRUCTION}" → looksLikeAction=${looksLikeAction(INSTRUCTION)}`)
+      console.log(
+        `\n=== INTENT === "${INSTRUCTION}" → looksLikeAction=${looksLikeAction(INSTRUCTION)}`
+      )
       expect(looksLikeAction(INSTRUCTION)).toBe(true)
 
       // 3. Plan — the real LLM round-trip producing a structured plan.
@@ -175,7 +176,9 @@ describe.skipIf(!TOKEN)('automation planner e2e', () => {
         for (let i = 0; i < result.plan.steps.length; i++) {
           const json = await helper.request(OP_STEP, result.plan.steps[i])
           const r = JSON.parse(json) as { ok: boolean; message?: string }
-          console.log(`step ${i} (${result.plan.steps[i].type}): ${r.ok ? 'ok' : 'FAILED ' + r.message}`)
+          console.log(
+            `step ${i} (${result.plan.steps[i].type}): ${r.ok ? 'ok' : 'FAILED ' + r.message}`
+          )
           expect(r.ok).toBe(true)
         }
       }
@@ -223,10 +226,14 @@ describe.skipIf(!EXEC)('automation execution e2e (no LLM)', () => {
       execSync(
         `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=[System.Windows.Forms.SystemInformation]::VirtualScreen; $bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height; $g=[System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $bmp.Save((Join-Path $env:TEMP 'omi-exec-proof.png')); $g.Dispose(); $bmp.Dispose()"`
       )
-      console.log(`\n=== PROOF === screenshot saved to %TEMP%\\omi-exec-proof.png (look for ${EXEC_MARKER})`)
+      console.log(
+        `\n=== PROOF === screenshot saved to %TEMP%\\omi-exec-proof.png (look for ${EXEC_MARKER})`
+      )
 
       // Re-snapshot: best-effort log of the title (carries Notepad's first line).
-      const after = JSON.parse(await helper.request(OP_SNAPSHOT, { windowHandle: handle })) as UiSnapshot
+      const after = JSON.parse(
+        await helper.request(OP_SNAPSHOT, { windowHandle: handle })
+      ) as UiSnapshot
       if (after.ok) console.log(`=== POST-EXEC TITLE === ${after.window.title}`)
     } finally {
       helper.dispose()
@@ -244,7 +251,9 @@ describe.skipIf(!SNAP)('automation snapshot characterization (no LLM)', () => {
     const handle = process.env.AUTOMATION_E2E_HANDLE || resolveTargetHandle(TARGET_PROC)
     const helper = new HelperClient()
     try {
-      const snap = JSON.parse(await helper.request(OP_SNAPSHOT, { windowHandle: handle })) as UiSnapshot
+      const snap = JSON.parse(
+        await helper.request(OP_SNAPSHOT, { windowHandle: handle })
+      ) as UiSnapshot
       if (!snap.ok) throw new Error(`snapshot failed: ${snap.message}`)
       type N = (typeof snap.elements)[number]
       let count = 0
@@ -253,7 +262,9 @@ describe.skipIf(!SNAP)('automation snapshot characterization (no LLM)', () => {
         for (const el of els) {
           count++
           if (sample.length < 40) {
-            sample.push(`${'  '.repeat(depth)}${el.ref} [${el.controlType}] "${el.name}" {${el.patterns.join(',')}}`)
+            sample.push(
+              `${'  '.repeat(depth)}${el.ref} [${el.controlType}] "${el.name}" {${el.patterns.join(',')}}`
+            )
           }
           if (el.children) walk(el.children, depth + 1)
         }

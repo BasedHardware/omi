@@ -35,3 +35,22 @@ def test_tolerates_missing_callback():
 
 def test_empty():
     assert Message.deserialize_many_safe([]) == []
+
+
+def test_projects_legacy_metadata_blocks_to_first_class_wire_field():
+    record = _valid('legacy-rich-card')
+    record['metadata'] = '{"content_blocks":[{"type":"conversationLink","summary":"Weekly planning"}]}'
+
+    message = Message(**record)
+
+    assert message.content_blocks == [{'type': 'conversationLink', 'summary': 'Weekly planning'}]
+
+
+def test_first_class_blocks_override_legacy_metadata_shape():
+    record = _valid('first-class-rich-card')
+    record['content_blocks'] = [{'type': 'conversationLink', 'summary': 'Current'}]
+    record['metadata'] = '{"content_blocks":[{"type":"conversationLink","summary":"Legacy"}]}'
+
+    message = Message(**record)
+
+    assert message.content_blocks == [{'type': 'conversationLink', 'summary': 'Current'}]

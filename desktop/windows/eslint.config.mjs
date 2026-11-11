@@ -6,7 +6,17 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out'] },
+  {
+    ignores: [
+      '**/node_modules',
+      '**/dist',
+      '**/out',
+      // Session scratch (gitignored) and vendored VAD runtime assets (copied by
+      // scripts/copy-vad-assets.mjs) — not shipped source.
+      '.playwright-mcp',
+      'src/renderer/public/vad'
+    ]
+  },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],
@@ -39,10 +49,34 @@ export default defineConfig(
   },
   {
     // Diagnostic scripts and test files don't benefit from explicit return-type
-    // annotations; the strictness is noise there.
-    files: ['scripts/**/*.{ts,js,mjs,cjs}', '**/*.test.{ts,tsx,mjs}'],
+    // annotations; the strictness is noise there. Shipped `.mjs` entry points
+    // (e.g. src/main/agentKernel/omi-mcp-entry.mjs) are plain JavaScript run
+    // verbatim by Node — they cannot carry a TS return-type annotation at all,
+    // so the rule is unsatisfiable there, not merely noisy.
+    files: [
+      'scripts/**/*.{ts,js,mjs,cjs}',
+      'tests/**/*.{ts,js,mjs,cjs}',
+      'src/**/*.{mjs,cjs}',
+      '**/*.test.{ts,tsx,mjs}'
+    ],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off'
+    }
+  },
+  {
+    // Honor the `_`-prefix convention for intentionally-unused bindings
+    // (discarded destructures, placeholder mock/callback params) so the linter
+    // stays green without scattered one-off disables.
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_'
+        }
+      ]
     }
   },
   eslintConfigPrettier

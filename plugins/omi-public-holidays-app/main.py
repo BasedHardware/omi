@@ -6,6 +6,7 @@ supported country codes through the public Nager.Date API.
 """
 
 import json
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
@@ -19,6 +20,44 @@ from pydantic import BaseModel, Field, field_validator
 NAGER_BASE_URL = "https://date.nager.at/api/v3"
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_ITEMS = 20
+
+
+def _current_utc_year() -> int:
+    return datetime.now(timezone.utc).year
+
+
+def _normalize_year(value: Any) -> int:
+    if value is None or value == "":
+        return _current_utc_year()
+    if isinstance(value, bool):
+        raise ValueError("year must be an integer, not a boolean")
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return _current_utc_year()
+        if not value.lstrip("-").isdigit():
+            raise ValueError("year must be an integer")
+        value = int(value)
+    if not isinstance(value, int):
+        raise ValueError("year must be an integer")
+    return value
+
+
+def _normalize_limit(value: Any, default: int = MAX_ITEMS) -> int:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        raise ValueError("limit must be an integer, not a boolean")
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return default
+        if not value.isdigit():
+            raise ValueError("limit must be a positive integer")
+        value = int(value)
+    if not isinstance(value, int):
+        raise ValueError("limit must be an integer")
+    return value
 
 
 @asynccontextmanager
@@ -45,76 +84,141 @@ class ChatToolResponse(BaseModel):
 
 class HolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    year: int = Field(..., ge=1970, le=2100)
-    limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
+    year: int = Field(default=None, ge=1970, le=2100, validate_default=True)
+    limit: int = Field(default=None, ge=1, le=MAX_ITEMS, validate_default=True)
 
-    @field_validator("country_code")
+    @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
+
+    @field_validator("year", mode="before")
+    @classmethod
+    def normalize_year(cls, value: Any) -> int:
+        return _normalize_year(value)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value)
+
+NEXT_HOLIDAY_DEFAULT_LIMIT = 8
 
 
 class NextHolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    limit: int = Field(default=8, ge=1, le=MAX_ITEMS)
+    limit: int = Field(default=None, ge=1, le=MAX_ITEMS, validate_default=True)
 
-    @field_validator("country_code")
+    @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value, default=NEXT_HOLIDAY_DEFAULT_LIMIT)
 
 class LongWeekendRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    year: int = Field(..., ge=1970, le=2100)
-    limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
+    year: int = Field(default=None, ge=1970, le=2100, validate_default=True)
+    limit: int = Field(default=None, ge=1, le=MAX_ITEMS, validate_default=True)
 
-    @field_validator("country_code")
+    @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
 
+    @field_validator("year", mode="before")
+    @classmethod
+    def normalize_year(cls, value: Any) -> int:
+        return _normalize_year(value)
 
-def _normalize_country_code(value: str) -> str:
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value)
+
+def _normalize_country_code(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ValueError("country_code must be a 2-letter code, such as US or DE")
     code = value.strip().upper()
     if len(code) != 2 or not code.isalpha():
         raise ValueError("country_code must be a 2-letter code, such as US or DE")
     return code
 
 
-def _format_list(values: list[str] | None) -> str:
-    if not values:
+def _format_list(values: Any) -> str:
+    if not isinstance(values, list):
         return "all regions"
-    visible = values[:5]
+    visible = [str(value) for value in values[:5] if value is not None]
+    if not visible:
+        return "all regions"
     suffix = "" if len(values) <= 5 else f" +{len(values) - 5} more"
     return ", ".join(visible) + suffix
 
 
-def _format_holiday(holiday: dict[str, Any]) -> str:
+def _format_holiday(holiday: Any) -> str:
+    if not isinstance(holiday, dict):
+        return "- Unknown holiday"
     regional = "global" if holiday.get("global") else _format_list(holiday.get("counties"))
-    types = ", ".join(holiday.get("types") or [])
+    raw_types = holiday.get("types")
+    if isinstance(raw_types, list):
+        types = ", ".join(str(value) for value in raw_types if value is not None)
+    elif raw_types:
+        types = str(raw_types)
+    else:
+        types = ""
     type_text = f"; {types}" if types else ""
-    local_name = holiday.get("localName")
-    name = holiday.get("name")
-    display_name = name if name == local_name or not local_name else f"{name} / {local_name}"
-    return f"- {holiday.get('date')}: {display_name} ({regional}{type_text})"
+    local_name = str(holiday.get("localName")) if holiday.get("localName") else ""
+    name = str(holiday.get("name")) if holiday.get("name") else "Unnamed holiday"
+    display_name = name if not local_name or name == local_name else f"{name} / {local_name}"
+    date = str(holiday.get("date")) if holiday.get("date") else "unknown date"
+    return f"- {date}: {display_name} ({regional}{type_text})"
 
 
-def _format_long_weekend(item: dict[str, Any]) -> str:
+def _format_long_weekend(item: Any) -> str:
+    if not isinstance(item, dict):
+        return "- Unknown long weekend"
     raw_bridge_days = item.get("bridgeDays")
     bridge_days = raw_bridge_days if isinstance(raw_bridge_days, list) else []
-    if bridge_days:
-        bridge_text = f"; bridge day: {', '.join(bridge_days)}"
+    bridge_values = [str(value) for value in bridge_days if value is not None]
+    if bridge_values:
+        bridge_text = f"; bridge day: {', '.join(bridge_values)}"
     elif item.get("needBridgeDay"):
         bridge_text = "; bridge day needed"
     else:
         bridge_text = "; no bridge day needed"
-    return f"- {item.get('startDate')} to {item.get('endDate')}: {item.get('dayCount')} days{bridge_text}"
+    start_date = str(item.get("startDate")) if item.get("startDate") else "unknown start"
+    end_date = str(item.get("endDate")) if item.get("endDate") else "unknown end"
+    day_count = str(item.get("dayCount")) if item.get("dayCount") is not None else "unknown"
+    return f"- {start_date} to {end_date}: {day_count} days{bridge_text}"
+
+
+class UpstreamRejectedRequest(Exception):
+    """Nager.Date rejected the country code (404) or the year (400)."""
+
+    def __init__(self, status_code: int):
+        super().__init__(status_code)
+        self.status_code = status_code
+
+
+def _rejected_request_error(exc: UpstreamRejectedRequest, country_code: str, year: Optional[int] = None) -> str:
+    if exc.status_code == 404:
+        return f"unknown country code {country_code}; call list_supported_countries for valid codes"
+    if year is not None:
+        return f"the public holidays API does not support year {year} for {country_code}"
+    return f"the public holidays API rejected the request for {country_code}"
 
 
 async def _request_json(path: str) -> Any:
-    client: httpx.AsyncClient = app.state.http_client
+    client = getattr(app.state, "http_client", None)
+    if client is None or getattr(client, "is_closed", False):
+        client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
+        app.state.http_client = client
     response = await client.get(f"{NAGER_BASE_URL}{path}")
+    if response.status_code in (400, 404):
+        raise UpstreamRejectedRequest(response.status_code)
     response.raise_for_status()
     if response.status_code == 204 or not response.content:
         return []
@@ -156,7 +260,12 @@ async def health() -> dict[str, str]:
 @app.get("/.well-known/omi-tools.json")
 async def omi_tools() -> dict[str, Any]:
     country_schema = {"type": "string", "description": "ISO 3166-1 alpha-2 country code, such as US or DE."}
-    year_schema = {"type": "integer", "minimum": 1970, "maximum": 2100}
+    year_schema = {
+        "type": "integer",
+        "minimum": 1970,
+        "maximum": 2100,
+        "description": "Calendar year. Defaults to the current UTC year when omitted.",
+    }
     limit_schema = {"type": "integer", "minimum": 1, "maximum": MAX_ITEMS, "default": MAX_ITEMS}
     return {
         "schema_version": "1.0",
@@ -171,7 +280,7 @@ async def omi_tools() -> dict[str, Any]:
                 "parameters": {
                     "type": "object",
                     "properties": {"country_code": country_schema, "year": year_schema, "limit": limit_schema},
-                    "required": ["country_code", "year"],
+                    "required": ["country_code"],
                 },
             },
             {
@@ -183,7 +292,7 @@ async def omi_tools() -> dict[str, Any]:
                     "type": "object",
                     "properties": {
                         "country_code": country_schema,
-                        "limit": {"type": "integer", "minimum": 1, "maximum": MAX_ITEMS, "default": 8},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": MAX_ITEMS, "default": NEXT_HOLIDAY_DEFAULT_LIMIT},
                     },
                     "required": ["country_code"],
                 },
@@ -196,7 +305,7 @@ async def omi_tools() -> dict[str, Any]:
                 "parameters": {
                     "type": "object",
                     "properties": {"country_code": country_schema, "year": year_schema, "limit": limit_schema},
-                    "required": ["country_code", "year"],
+                    "required": ["country_code"],
                 },
             },
             {
@@ -216,11 +325,15 @@ async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
         holidays = await _request_json(f"/PublicHolidays/{request.year}/{request.country_code}")
         if not holidays:
             return ChatToolResponse(error=f"no holidays returned for {request.country_code} in {request.year}")
+        if not isinstance(holidays, list):
+            return ChatToolResponse(error=f"holiday lookup returned invalid data for {request.country_code} in {request.year}")
         lines = [f"Public holidays for {request.country_code} in {request.year}:"]
         lines.extend(_format_holiday(item) for item in holidays[: request.limit])
         if len(holidays) > request.limit:
             lines.append(f"... {len(holidays) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
+    except UpstreamRejectedRequest as exc:
+        return ChatToolResponse(error=_rejected_request_error(exc, request.country_code, request.year))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"holiday lookup failed: {exc}")
 
@@ -231,11 +344,15 @@ async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolRespo
         holidays = await _request_json(f"/NextPublicHolidays/{request.country_code}")
         if not holidays:
             return ChatToolResponse(error=f"no upcoming holidays returned for {request.country_code}")
+        if not isinstance(holidays, list):
+            return ChatToolResponse(error=f"upcoming holiday lookup returned invalid data for {request.country_code}")
         lines = [f"Upcoming public holidays for {request.country_code}:"]
         lines.extend(_format_holiday(item) for item in holidays[: request.limit])
         if len(holidays) > request.limit:
             lines.append(f"... {len(holidays) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
+    except UpstreamRejectedRequest as exc:
+        return ChatToolResponse(error=_rejected_request_error(exc, request.country_code))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"upcoming holiday lookup failed: {exc}")
 
@@ -246,11 +363,15 @@ async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
         weekends = await _request_json(f"/LongWeekend/{request.year}/{request.country_code}")
         if not weekends:
             return ChatToolResponse(error=f"no long weekends returned for {request.country_code} in {request.year}")
+        if not isinstance(weekends, list):
+            return ChatToolResponse(error=f"long-weekend lookup returned invalid data for {request.country_code} in {request.year}")
         lines = [f"Long weekends for {request.country_code} in {request.year}:"]
         lines.extend(_format_long_weekend(item) for item in weekends[: request.limit])
         if len(weekends) > request.limit:
             lines.append(f"... {len(weekends) - request.limit} more")
         return ChatToolResponse(result="\n".join(lines))
+    except UpstreamRejectedRequest as exc:
+        return ChatToolResponse(error=_rejected_request_error(exc, request.country_code, request.year))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"long-weekend lookup failed: {exc}")
 
@@ -263,7 +384,20 @@ async def list_supported_countries() -> ChatToolResponse:
             return ChatToolResponse(error="country list request returned no countries")
         lines = ["Supported countries:"]
         for item in countries:
-            lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
+            if not isinstance(item, dict):
+                continue
+            code = item.get("countryCode")
+            name = item.get("name")
+            if not isinstance(code, str) or not code.strip():
+                continue
+            if not isinstance(name, str) or not name.strip():
+                continue
+            lines.append(f"- {code}: {name}")
+        if len(lines) == 1:
+            return ChatToolResponse(error="country list request returned no valid entries")
         return ChatToolResponse(result="\n".join(lines))
+    except UpstreamRejectedRequest:
+        return ChatToolResponse(error="country list request was rejected by the public holidays API")
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"country list request failed: {exc}")
+

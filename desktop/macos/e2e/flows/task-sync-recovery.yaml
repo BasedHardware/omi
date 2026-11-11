@@ -1,0 +1,24 @@
+version: 2
+name: task-sync-recovery
+tier: manual
+description: Headless production retry and HTTP-serialization regressions; no UI or live-backend claim
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/Stores/UnsyncedTaskCreateProjection.swift
+  - desktop/macos/Desktop/Sources/Stores/UnsyncedTaskSyncOperations.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+TaskCatalog.swift
+preconditions: []
+
+steps:
+  - id: S1
+    name: Run the actual retry and HTTP boundary without a UI
+    do: "From desktop/macos run ./scripts/dev-feedback.py --once swift 'TasksStoreUnsyncedSyncTests|UnsyncedTaskCreateProjectionTests|UnsyncedTaskCreateHTTPTests|APIClientCreateActionItemCompletedTests|TasksStoreOwnerBoundaryTests'. Require a nonzero selected-test count and zero failures. The tests inject isolated storage effects and URLProtocol; do not point them at a customer database or live backend."
+
+  - id: S2
+    name: Inspect preservation and failure evidence
+    do: "Confirm the HTTP tests invoke TasksStore.retryUnsyncedItems and the production APIClient writer: one full-field POST from the fresh row, false/absent fields omitted, accepted receipt acknowledged, rejected create unacknowledged. Confirm malformed projections and missing/deleted/already-linked rows remain out of the create path."
+
+  - id: S3
+    name: Confirm owner and session revocation
+    do: "Require owner-switch and same-UID reauthentication tests to reject stale continuation at both admission checks, the pending/current reads and create receipt. Keep the existing owner-boundary suite green. These are deterministic headless regressions, not a signed-app or native UI smoke."

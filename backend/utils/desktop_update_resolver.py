@@ -66,7 +66,7 @@ def _validate_cached_release(value: Any, platform: str, channel: str) -> dict[st
 
 
 def _record_success(platform: str, channel: str, source: str, release: dict[str, Any]) -> None:
-    DESKTOP_UPDATE_RESOLUTION_TOTAL.labels(platform=platform, channel=channel, source=source).inc()
+    DESKTOP_UPDATE_RESOLUTION_TOTAL.labels(platform=platform, channel=channel, source=source, app_build='unknown').inc()
     DESKTOP_UPDATE_FEED_VALID.labels(platform=platform, channel=channel).set(1)
     pointer_age = _timestamp_age_seconds(release["pointer"].get("updated_at"))
     if pointer_age is not None:

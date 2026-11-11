@@ -4,8 +4,13 @@ tier: fault
 description: Main chat surfaces a structured error when the Python backend returns HTTP 5xx (omi-fault-inject)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Chat/AgentModelCredentials.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeFailure.swift
+  - desktop/macos/agent/src/runtime/failures.ts
   - desktop/macos/scripts/omi-fault-inject.sh
 preconditions:
   - automation_bridge_ready
@@ -20,12 +25,12 @@ steps:
       result.detail.reset: "true"
 
   - id: S2
-    name: Navigate to Chat
+    name: Navigate to Home, which is the chat surface
     bridge.navigate:
       target: chat
       activateApp: false
     wait:
-      state.selectedTabIndex: 2
+      state.chatFirstRoute: chat
 
   - id: S3
     name: Send chat query against fault backend
@@ -45,13 +50,15 @@ steps:
         pollMs: "500"
 
   - id: S5
-    name: Assert surfaced error (not silent no-op)
+    name: Assert injected backend 5xx surfaced (not bridge unavailable)
     bridge.action:
       name: main_chat_snapshot
       params:
         limit: "8"
     expect:
       result.detail.has_error: "true"
+      result.detail.error_message:
+        contains: "HTTP 500"
 
   - id: S6
     name: Logs clean

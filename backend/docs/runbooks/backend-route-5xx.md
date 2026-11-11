@@ -1,0 +1,109 @@
+# Backend single-route 5xx alert
+
+The production backend deploy provisions the `backend_route_5xx` Cloud
+Logging counter and the "Backend single-route 5xx regression" Cloud
+Monitoring alert in `based-hardware`. The counter matches Cloud Run request
+log entries for the `backend` service with `httpRequest.status` in
+[500, 600), and the alert fires when one route family exceeds **60 errors
+inside a rolling 3600-second window for 600 consecutive seconds**. It routes
+through `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS`. Notifications fire
+when an incident opens (`alertStrategy.notificationPrompts` is `OPENED`
+only); closure is visible in the Cloud Monitoring console, not by email.
+
+Route identity is `method` + `route`. `route` is extracted by
+`^https?://[^/?#]+((?:/v[0-9]+)?(?:/[a-z][a-z_-]*){1,3})(?:/|[?#]|$)`: an
+optional version segment (`/v1`, `/v3`) followed by up to three complete
+path segments made only of lowercase letters, `_` and `-`. Capture stops
+before the first segment that does not match — digits, uppercase letters
+and encoded punctuation end the family, and a partial segment is never
+captured. Status codes and revisions are summed; methods and families are
+not. Examples:
+
+- `GET /v1/users/people?include_stats=true` → `GET` + `/v1/users/people`
+- `POST /v1/conversations/abc123/reprocess` → `POST` + `/v1/conversations`:
+  the conversation ID is invalid as a segment, so reprocess merges into
+  the parent family
+- `POST /v1/conversations/from-segments` → `POST` +
+  `/v1/conversations/from-segments`: all three segments are valid, so it
+  stays a separate family
+- `GET /v1/a/b/c/d` → `GET` + `/v1/a/b/c` (depth is truncated to three
+  segments, not emptied)
+
+## Cardinality limitation
+
+The shape bound is not a strict finite cap. Most real ID shapes end the
+capture before the ID segment: server-generated UUIDv4-shaped IDs
+contain a version digit, and ULIDs and mixed-case/digit-bearing
+Firestore-style IDs do not match a complete lowercase segment. The
+alphabet alone is still no exclusion guarantee: `goal_` + hex IDs need
+not contain a digit, so an all-letter one like `goal_abcdefabcdef`
+passes as the third segment under `/v1/goals`, and lowercase slugs like
+`/v2/desktop/previews/feature-branch` form complete families. Arbitrary
+malformed lowercase paths produce families too, so worst-case label
+count is bounded by traffic shape, not by a fixed route list.
+
+## Why these numbers
+
+- The 2026-10-02 People regression returned 504 on ~30% of calls at 70-90
+  per hour. That is a sustained rate above ~60 errors/hour, which is still
+  the floor: more than 60 errors in a rolling 60-minute window, held for
+  10 minutes. Measured chronic per-15-minute averages sit far below:
+  `/v1/dev/user/memories` 2.75, `/v1/dev/user/goals` 2.55, `/v3/memories`
+  1.29 POST / 1.66 GET (methods group separately, so the combined 283 does
+  not stack), `/v1/conversations` 1.43 at the 137 reported parent calls
+  ("or more" gives no upper bound), `/v1/conversations/from-segments` 1.14
+  as its own family (reprocess at 0.29 merges into the parent),
+  `/v2/voice-message/transcribe` 0.39, `/memory/search` 0.15. No measured
+  chronic average pages continuously, but unmeasured parent-family volume
+  or bursts could — the threshold intentionally has no exemptions so
+  unseen routes still page.
+- The original 15-in-15-minutes rule paged a People-style onset in
+  ≈21-24 minutes. It also flapped: short 16-26 error blips (once 66) on
+  `POST /v3/memories`, `POST`/`DELETE /v1/conversations`, and
+  `GET /v1/proactivity/feed` opened for 2-8 minutes then resolved; and
+  from ~2026-10-06 10:10 UTC, `POST /v1/conversations/from-segments`
+  produced 97-135 5xx per 15 minutes every hour (~100x its 1.14 chronic
+  average). Each burst opened an incident that resolved in 25-39 minutes
+  as the 15-minute window drained, then reopened — ~15-17 incidents/day
+  plus RESOLVED emails. The from-segments 5xx is a real ongoing failure
+  and needs a separate fix; this window only stops the re-page cycle.
+- A 60-minute rolling sum at threshold 60 keeps the same ~60/hour floor.
+  Isolated blips stay under 60/window. An hourly from-segments burst
+  keeps the hour above 60, so one incident stays open until the
+  endpoint is fixed. `notificationPrompts` is `["OPENED"]` so recovery
+  does not email.
+- Trade-off: a steady People-style 70-90 errors/hour now pages ≈50-61
+  minutes after onset instead of ≈21-24 minutes (still inside the
+  four-hour blind spot the alert was built for). Hard outages (hundreds
+  of errors/hour) still page in ≈15-20 minutes.
+
+## Respond to an alert
+
+1. Find the affected method and route family in the `backend` Cloud Run
+   request logs. The alert names a family, which can be a parent of the
+   failing route — reprocess pages as `POST /v1/conversations`, and slugs
+   or all-letter IDs can appear in the family itself — so read the full
+   request path in the logs. Pay special attention to platform 504s: a
+   504 generated by the Cloud Run platform can appear in request logs
+   without any application ERROR log, so check platform logs and upstream
+   latency/timeouts too, not only app errors.
+2. Compare the onset timestamp with the deploy/rollout history and with
+   the route's dependency timeouts (Firestore reads, downstream services)
+   to identify what changed.
+
+Re-deploying does not churn the alert: the provisioner reconciles
+read-before-write, writes nothing when the metric filter/extractors and
+managed policy fields already match (including `notificationPrompts`),
+and carries over the existing condition's resource name when it does
+update — unchanged deploys never restart the 600-second dwell. Create
+uses `gcloud monitoring policies create` flags, which cannot set
+`alertStrategy`; the post-create describe then updates in place when
+`notificationPrompts` is missing so the live policy matches the JSON.
+
+To roll the threshold and window back, revert the policy JSON and
+re-run the prod backend deploy. Reverting `alertStrategy` out of the
+file does **not** restore CLOSED notifications by itself: either set
+`notificationPrompts` to `["OPENED", "CLOSED"]` in the JSON (the drift
+check then enforces it) or edit that field on the live policy after
+deploy. Do not rename the policy; the provisioner looks it up by
+display name.

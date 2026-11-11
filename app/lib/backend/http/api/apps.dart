@@ -2,12 +2,17 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/http_pool_manager.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as wire;
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/env/env.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -52,8 +57,10 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
 }) async {
   final url = '${Env.apiBaseUrl}v2/apps?offset=$offset&limit=$limit&include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
+  if (response == null || response.statusCode != 200 || response.body.isEmpty) {
+    throw Exception('Failed to load the app catalog');
+  }
   try {
-    if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
     final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
 
     final List<Map<String, dynamic>> parsed = [];
@@ -73,7 +80,7 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return [];
+    rethrow;
   }
 }
 
@@ -177,6 +184,27 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
   }
 }
 
+Future<ApiResult<wire.GeneratedAppSearchResponse>> retrieveInstalledChatApps({
+  int offset = 0,
+  int limit = 100,
+  ApiSend? send,
+}) {
+  return executeApi<wire.GeneratedAppSearchResponse>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v2/apps/search?installed_apps=true&offset=$offset&limit=$limit',
+      method: 'GET',
+    ),
+    // Reject scalar and list bodies before generated decoding so malformed
+    // success replies stay classified as response format errors.
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return wire.GeneratedAppSearchResponse.fromJson(decoded);
+      throw const FormatException('Expected a JSON object for the app search response');
+    },
+    send: send,
+  );
+}
+
 Future<List<App>> retrievePopularApps() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/popular', headers: {}, body: '', method: 'GET');
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
@@ -199,17 +227,54 @@ Future<List<App>> retrievePopularApps() async {
 
 Future<List<String>> getEnabledAppsServer() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/enabled', headers: {}, body: '', method: 'GET');
+  if (response == null || response.statusCode != 200) throw Exception('Failed to load enabled apps');
   try {
-    if (response == null || response.statusCode != 200) return [];
     return wire.GeneratedEnabledAppsResponse.fromJsonList(jsonDecode(response.body) as List<dynamic>).items;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return [];
+    rethrow;
   }
 }
 
-Future<bool> enableAppServer(String appId) async {
+/// Re-enable an app the backend auto-disabled after webhook failures.
+///
+/// The re-enable branch reads an unset-exclusive payload, so `disabled` has to
+/// be sent explicitly or the request is a silent no-op. The endpoint re-checks
+/// every configured URL and rejects with the specific reason, which is the
+/// whole point of the call — it names the URL to fix — so it is returned
+/// rather than collapsed into a bool.
+Future<(bool, String)> reEnableAppServer(String appId) async {
+  try {
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/$appId',
+      files: [],
+      fileFieldName: 'file',
+      fields: {
+        'app_data': jsonEncode({'id': appId, 'disabled': false})
+      },
+      method: 'PATCH',
+    );
+    if (response.statusCode == 200) {
+      return (true, '');
+    }
+    Logger.debug('Failed to re-enable app. Status code: ${response.statusCode}');
+    if (response.body.isNotEmpty) {
+      final error = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return (false, error.detail is String ? error.detail as String : '');
+    }
+    return (false, '');
+  } catch (e, stackTrace) {
+    Logger.debug('An error occurred reEnableAppServer: $e');
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return (false, '');
+  }
+}
+
+/// Returns whether the install succeeded, plus the backend's reason when it did
+/// not. The reason was previously dropped, so a disabled app was indistinguishable
+/// from an incomplete setup and the caller sent the user to setup instructions.
+Future<(bool, String)> enableAppServer(String appId) async {
   try {
     var response = await makeApiCall(
       url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',
@@ -217,14 +282,26 @@ Future<bool> enableAppServer(String appId) async {
       method: 'POST',
       body: '',
     );
-    if (response == null || response.statusCode != 200) return false;
+    if (response == null) return (false, '');
+    if (response.statusCode != 200) {
+      String detail = '';
+      if (response.body.isNotEmpty) {
+        try {
+          final error = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+          if (error.detail is String) detail = error.detail as String;
+        } catch (_) {
+          // A non-JSON body (proxy/gateway error) carries no usable reason.
+        }
+      }
+      return (false, detail);
+    }
     Logger.debug('enableAppServer: $appId ${response.body}');
     final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.status == 'ok';
+    return (data.status == 'ok', '');
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return false;
+    return (false, '');
   }
 }
 
@@ -323,26 +400,50 @@ Future<String> getAppMarkdown(String appMarkdownPath) async {
   return response?.body ?? '';
 }
 
-Future<bool> isAppSetupCompleted(String? url) async {
-  if (url == null || url.isEmpty) return true;
-  Logger.debug('isAppSetupCompleted: $url');
-  var response = await makeApiCall(
-    url: '$url?uid=${SharedPreferencesUtil().uid}',
-    method: 'GET',
-    headers: {},
-    body: '',
+String appSetupUrlWithUid(String url, String uid) {
+  final hashIndex = url.indexOf('#');
+  final head = hashIndex < 0 ? url : url.substring(0, hashIndex);
+  final fragment = hashIndex < 0 ? '' : url.substring(hashIndex);
+  final uidParam = 'uid=${Uri.encodeQueryComponent(uid)}';
+  final queryIndex = head.indexOf('?');
+  if (queryIndex < 0) return '$head?$uidParam$fragment';
+  final kept =
+      head.substring(queryIndex + 1).split('&').where((pair) => pair.isNotEmpty && pair.split('=').first != 'uid');
+  return '${head.substring(0, queryIndex)}?${[...kept, uidParam].join('&')}$fragment';
+}
+
+enum AppSetupStatus { completed, pending, notRequired }
+
+Future<ApiResult<AppSetupStatus>> getAppSetupStatus(String? url, {ApiSend? send, String? uid}) {
+  if (url == null || url.isEmpty) return Future.value(const ApiSuccess(AppSetupStatus.notRequired));
+  final target = Uri.tryParse(url);
+  final omi = send == null ? Uri.tryParse(Env.apiBaseUrl ?? '') : null;
+  final isOmiOrigin = target != null &&
+      omi != null &&
+      omi.host.isNotEmpty &&
+      target.scheme == omi.scheme &&
+      target.host == omi.host &&
+      target.port == omi.port;
+  // Plugin capabilities are the vendor authority. Never forward Omi's Firebase
+  // bearer token, refresh the Omi session on a vendor 401, or log signed URLs.
+  final ApiSend? transport = send ??
+      (isOmiOrigin
+          ? null
+          : (request) => HttpPoolManager.instance.send(() => http.Request(request.method, Uri.parse(request.url)),
+              timeout: const Duration(seconds: 15), retries: 0));
+  final account = uid ?? SharedPreferencesUtil().uid;
+  return executeApi(
+    canSend: send == null ? () => SharedPreferencesUtil().uid == account : null,
+    request: ApiRequest(url: appSetupUrlWithUid(url, account), method: 'GET'),
+    send: transport,
+    decode: (body) {
+      final data = jsonDecode(body);
+      if (data is! Map || data['is_setup_completed'] is! bool) {
+        throw const FormatException('Invalid setup status');
+      }
+      return data['is_setup_completed'] == true ? AppSetupStatus.completed : AppSetupStatus.pending;
+    },
   );
-  try {
-    final data = jsonDecode(response?.body ?? '{}') as Map<String, dynamic>;
-    Logger.debug(data);
-    return data['is_setup_completed'] ?? false;
-  } on FormatException catch (e) {
-    Logger.debug('Response not a valid json: $e');
-    return false;
-  } catch (e) {
-    Logger.debug('Error triggering request at endpoint: $e');
-    return false;
-  }
 }
 
 Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> appData) async {
@@ -488,13 +589,13 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/$appId', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return null;
-    log('getAppDetailsServer: ${response.body}');
+    Logger.debug('getAppDetailsServer: ${response.statusCode}');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     wire.GeneratedApp.fromJson(data);
     return data;
   } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    Logger.debug('getAppDetailsServer decode failed: ${e.runtimeType}');
+    PlatformManager.instance.crashReporter.reportCrash(StateError('App details decode failed'), stackTrace);
     return null;
   }
 }
@@ -639,7 +740,8 @@ Future<List<AppApiKey>> listApiKeysServer(String appId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/$appId/keys', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return [];
-    log('listApiKeysServer: ${response.body}');
+    // The key schema carries an optional `secret`; never echo the body into logs.
+    Logger.debug('listApiKeysServer: ${response.statusCode}');
     return (jsonDecode(response.body) as List)
         .map((item) => wire.GeneratedAppApiKeyResponse.fromJson(item as Map<String, dynamic>))
         .map(AppApiKey.fromGenerated)
@@ -657,7 +759,8 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
     if (response == null || response.statusCode != 200) {
       throw Exception('Failed to create apps API key');
     }
-    log('createApiKeyServer: ${response.body}');
+    // The body holds the newly generated key secret; log only the status.
+    Logger.debug('createApiKeyServer: ${response.statusCode}');
     return wire.GeneratedAppApiKeyResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -686,27 +789,58 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
   }
 }
 
-Future<bool> migrateAppOwnerId(String oldId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=$oldId',
-    headers: {},
-    body: '',
-    method: 'POST',
-  );
+Future<bool> migrateAppOwnerId(
+  String oldId,
+  String sourceToken, {
+  required AuthSessionSnapshot destination,
+  AuthService? authService,
+  Future<http.StreamedResponse> Function(http.Request request)? sendStreaming,
+}) async {
+  final service = authService ?? AuthService.instance;
   try {
-    if (response == null || response.statusCode != 200) return false;
-    log('migrateAppOwnerId: ${response.body}');
+    final streamed = await makeRawApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=${Uri.encodeQueryComponent(oldId)}',
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'source_token': sourceToken}),
+      method: 'POST',
+      sessionSnapshot: destination,
+      authService: service,
+      sendStreaming: sendStreaming,
+    );
+    final response = await http.Response.fromStream(streamed);
+    if (!service.isSessionSnapshotCurrent(destination) || response.statusCode != 200) return false;
     final data = wire.GeneratedAppMigrationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return data.status == 'ok';
   } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    if (service.isSessionSnapshotCurrent(destination)) {
+      Logger.debug(e.toString());
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    }
     return false;
   }
 }
 
 /// Add an MCP server as a private app with chat tools.
 /// Returns {app_id, requires_oauth, auth_url?, tools_count?, tool_names?}
+/// Fresh OAuth authorization for an existing MCP registration. The original URL's state
+/// is single-use and expires, so an explicit retry needs a new one. Null on any failure.
+Future<String?> authorizeMcpServer(String appId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/${Uri.encodeComponent(appId)}/mcp/authorize',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  // The body carries a state token; log only the status.
+  Logger.debug('authorizeMcpServer: ${response?.statusCode}');
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    return wire.GeneratedMcpAuthorizeResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).authUrl;
+  } catch (_) {
+    return null;
+  }
+}
+
 Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {String? description}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/mcp',
@@ -720,7 +854,8 @@ Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {Strin
   );
   try {
     if (response == null) return null;
-    Logger.debug('addMcpServer: ${response.statusCode} ${response.body}');
+    // The body can carry an OAuth `auth_url` with its state token; log only the status.
+    Logger.debug('addMcpServer: ${response.statusCode}');
     if (response.statusCode == 200) {
       return wire.GeneratedMcpAddServerResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     }

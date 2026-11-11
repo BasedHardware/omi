@@ -10,7 +10,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   OMI_TOOL_MANIFEST_DIGEST,
+  OMI_CHAT_FIRST_TOOL_MANIFEST_DIGEST,
   OMI_TOOL_MANIFEST_VERSION,
+  allOmiToolManifest,
   omiToolManifest,
 } from "../dist/runtime/omi-tool-manifest.js";
 
@@ -99,7 +101,7 @@ function validateManifest() {
   const names = new Set();
   const aliases = new Map();
 
-  for (const tool of omiToolManifest) {
+  for (const tool of allOmiToolManifest) {
     if (tool.intendedForAgents !== false && !tool.surfaces?.length) {
       throw new Error(`Tool ${tool.name} is missing surfaces`);
     }
@@ -196,6 +198,8 @@ function realtimeTools() {
     "get_agent_run",
     "cancel_agent_run",
     "inspect_agent_artifacts",
+    "read_tool_output",
+    "search_tool_output",
     "update_agent_artifact_lifecycle",
     "spawn_agent",
     "set_desktop_attention_override",
@@ -237,6 +241,17 @@ function realtimeTools() {
       if (!aliasSurfaces.includes("realtime_voice")) continue;
       if (!shouldExpose(tool)) continue;
       push(alias, tool);
+    }
+  }
+
+  const truncatableRealtimeTools = omiToolManifest.filter(
+    (tool) => shouldExpose(tool) && tool.resultContract?.budgets?.realtime_voice,
+  );
+  if (truncatableRealtimeTools.length > 0) {
+    for (const drillIn of ["read_tool_output", "search_tool_output"]) {
+      if (!entries.some((entry) => entry.exposedName === drillIn)) {
+        throw new Error(`Realtime exposes truncatable tools but is missing ${drillIn}`);
+      }
     }
   }
   return entries;
@@ -485,7 +500,7 @@ function swiftToolCaseName(name) {
 }
 
 function generateExecutorsSwift() {
-  const swiftTools = omiToolManifest.filter((tool) => tool.executor.kind === "swiftTool");
+  const swiftTools = allOmiToolManifest.filter((tool) => tool.executor.kind === "swiftTool");
   const enumCases = swiftTools
     .map((tool) => `  case ${swiftToolCaseName(tool.name)} = "${tool.name}"`)
     .join("\n");
@@ -527,6 +542,7 @@ enum GeneratedSwiftToolExecutor: String {
 enum GeneratedToolExecutors {
   static let manifestVersion = ${OMI_TOOL_MANIFEST_VERSION}
   static let manifestDigest = ${JSON.stringify(OMI_TOOL_MANIFEST_DIGEST)}
+  static let chatFirstManifestDigest = ${JSON.stringify(OMI_CHAT_FIRST_TOOL_MANIFEST_DIGEST)}
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
 ${aliasMapEntries.join(",\n")}

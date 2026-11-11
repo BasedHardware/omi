@@ -1,0 +1,8 @@
+{
+  "version": "0.12.180",
+  "date": "2026-08-16",
+  "changes": [
+    "Show the model's pre-tool commentary as live progress on the tool rail, then drop it with the chips so only the final answer remains",
+    "Fixed chat source citations so numbered markers and kind-only labels such as [memory] stay tappable and open the matching conversation, memory, task, or Rewind moment"
+  ]
+}

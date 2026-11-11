@@ -3,6 +3,8 @@ Goal tracking API endpoints.
 Handles user goals with AI-powered suggestions and advice.
 """
 
+from utils.generated_compute import require_generated_compute
+
 import uuid
 from typing import Annotated, Optional, List
 
@@ -12,6 +14,7 @@ from pydantic import BaseModel, Field
 from database import goals as goals_db
 from utils.other import endpoints as auth
 from utils.request_validation import HistoryDays
+from utils.subscription import enforce_chat_quota
 from utils.goals_response import normalize_goal_history_entry, normalize_goal_response
 from utils.llm.goals import (
     suggest_goal as suggest_goal_llm,
@@ -33,6 +36,7 @@ from models.goal import (
 )
 from models.workstream import GoalDetailProjection
 import database.workstreams as workstreams_db
+from routers.canonical_task_access import require_canonical_task_user
 
 router = APIRouter()
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
@@ -57,6 +61,16 @@ def get_all_goals(
     return [normalize_goal_response(goal) for goal in goals]
 
 
+@router.get('/v1/goals/canonical/list', tags=['goals'], response_model=List[GoalResponse])
+def get_canonical_goals(
+    include_ended: bool = Query(False),
+    uid: str = Depends(require_canonical_task_user),
+) -> List[dict]:
+    """List goals through the generation-fenced universal task system."""
+    goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
+    return [normalize_goal_response(goal) for goal in goals]
+
+
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Create a durable goal without changing any other goal's focus or lifecycle."""
@@ -76,7 +90,7 @@ def create_canonical_goal(
     goal: GoalCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     """Create a generation-scoped canonical goal with safe retry semantics."""
 
@@ -96,6 +110,8 @@ def create_canonical_goal(
 def _raise_goal_store_error(exc: Exception) -> None:
     if isinstance(exc, goals_db.GoalNotFoundError):
         raise HTTPException(status_code=404, detail='Goal not found') from exc
+    if isinstance(exc, goals_db.GoalValidationError):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if isinstance(exc, goals_db.GoalConflictError):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     raise exc
@@ -107,7 +123,7 @@ def focus_goal(
     request: GoalFocusRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     try:
         goal = goals_db.focus_goal(
@@ -129,17 +145,16 @@ def unfocus_goal(
     goal_id: str,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     try:
-        return normalize_goal_response(
-            goals_db.unfocus_goal(
-                uid,
-                goal_id,
-                idempotency_key=idempotency_key,
-                account_generation=account_generation,
-            )
+        goal = goals_db.unfocus_goal(
+            uid,
+            goal_id,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
         )
+        return normalize_goal_response(goal)
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
@@ -151,7 +166,7 @@ def transition_goal_lifecycle(
     request: GoalLifecycleRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     try:
         goal = goals_db.transition_goal_lifecycle(
@@ -169,7 +184,7 @@ def transition_goal_lifecycle(
 
 
 @router.get('/v1/goals/{goal_id}/detail', tags=['goals'], response_model=GoalDetailProjection)
-def get_goal_detail(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> GoalDetailProjection:
+def get_goal_detail(goal_id: str, uid: str = Depends(require_canonical_task_user)) -> GoalDetailProjection:
     try:
         return workstreams_db.get_goal_detail(uid, goal_id)
     except workstreams_db.WorkstreamNotFoundError as exc:
@@ -182,16 +197,17 @@ def append_goal_progress_event(
     request: GoalProgressEventCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> GoalProgressEvent:
     try:
-        return goals_db.append_goal_progress_event(
+        event = goals_db.append_goal_progress_event(
             uid,
             goal_id,
             request,
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
+        return event
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
@@ -201,7 +217,7 @@ def append_goal_progress_event(
 def list_goal_progress_events(
     goal_id: str,
     limit: int = Query(100, ge=1, le=500),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> list[GoalProgressEvent]:
     return goals_db.list_goal_progress_events(uid, goal_id, limit=limit)
 
@@ -210,12 +226,13 @@ def list_goal_progress_events(
 def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Update an existing goal."""
     update_data = updates.model_dump(exclude_unset=True)
-
     if not update_data:
         raise HTTPException(status_code=400, detail="No updates provided")
-
-    updated_goal = goals_db.update_goal(uid, goal_id, update_data)
-
+    try:
+        updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
@@ -225,7 +242,7 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
 @router.patch('/v1/goals/{goal_id}/progress', tags=['goals'], response_model=GoalResponse)
 def update_goal_progress(
     goal_id: str,
-    current_value: float = Query(..., description="New progress value"),
+    current_value: float = Query(..., description="New progress value", allow_inf_nan=False),
     uid: str = Depends(auth.get_current_user_uid),
 ) -> dict:
     """Update the progress value of a goal."""
@@ -259,6 +276,7 @@ def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> 
 @router.get('/v1/goals/suggest', tags=['goals'], response_model=GoalSuggestionResponse)
 def suggest_goal(uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:suggest"))) -> dict:
     """Generate an AI-suggested goal based on user's memories and conversations."""
+    require_generated_compute(uid, 'goals')
     return suggest_goal_llm(uid)
 
 
@@ -267,6 +285,7 @@ def get_goal_advice(
     goal_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> dict:
     """Get AI-generated actionable advice for achieving a goal."""
+    require_generated_compute(uid, 'goals_advice')
     try:
         advice = get_goal_advice_llm(uid, goal_id)
         return {'advice': advice}
@@ -280,10 +299,13 @@ def get_current_goal_advice(
 ) -> dict:
     """Get AI-generated advice for the current active goal."""
     goal = goals_db.get_user_goal(uid)
-    if not goal:
+    if not goal or not goal.get('id'):
         return {'advice': 'Set a goal to get personalized advice!'}
 
-    return get_goal_advice(goal['id'], uid)
+    try:
+        return get_goal_advice(goal_id=goal['id'], uid=uid)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Goal not found")
 
 
 class ProgressExtractRequest(BaseModel):
@@ -310,11 +332,15 @@ class ProgressExtractResponse(BaseModel):
 def extract_and_update_progress(
     request: ProgressExtractRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:extract")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ) -> dict:
     """
     Extract goal progress from conversation/chat text and update if found.
     Uses LLM to understand context and extract numeric progress.
     """
+    require_generated_compute(uid, 'goals')
+    # User-initiated LLM extraction — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     result = extract_and_update_goal_progress(uid, request.text)
     if result is None:
         return {'updated': False, 'reason': 'No active goal'}
@@ -329,10 +355,26 @@ def extract_and_update_progress(
                     'goal_title': u.get('goal_title'),
                     'previous_value': u.get('old_value'),
                     'new_value': u.get('new_value'),
-                    'reasoning': u.get('reasoning', ''),
+                    'reasoning': str(u.get('reasoning') or ''),
                 }
                 for u in updates
             ],
         }
 
     return {'updated': False, 'reason': result.get('message', 'No progress found in text')}
+
+
+# Declared after the static /v1/goals/* routes (/all, /suggest, /advice, /extract-progress) so
+# those match first and are not captured as a goal_id.
+@router.get('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalResponse)
+def get_goal_by_id(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> dict:
+    """Fetch a single goal by id.
+
+    The list routes cap how many goals are returned, and update/delete/progress/history/advice
+    already address a goal by id, so this exposes the matching read for one goal (404 if it does
+    not exist or belongs to another user).
+    """
+    goal = goals_db.get_goal_by_id(uid, goal_id)
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return normalize_goal_response(goal)

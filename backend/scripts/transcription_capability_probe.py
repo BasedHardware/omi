@@ -49,6 +49,7 @@ class ProbeConfig:
     manifest_path: Path
     api_url: str | None
     bearer_token: str | None
+    cloud_run_identity_token: str | None
     timeout_seconds: float
 
 
@@ -114,6 +115,7 @@ def config_from_args(args: argparse.Namespace) -> ProbeConfig:
         manifest_path=args.manifest_path,
         api_url=api_url.rstrip('/') if api_url else None,
         bearer_token=_read_bearer_token(args.bearer_token_file),
+        cloud_run_identity_token=_read_bearer_token(args.cloud_run_identity_token_file),
         timeout_seconds=args.timeout_seconds,
     )
 
@@ -261,6 +263,11 @@ def _probe_full_route(
                 'Accept': 'application/json',
                 'Authorization': f'Bearer {config.bearer_token}',
                 'Content-Type': content_type,
+                **(
+                    {'X-Serverless-Authorization': f'Bearer {config.cloud_run_identity_token}'}
+                    if config.cloud_run_identity_token
+                    else {}
+                ),
             },
         ),
         config.timeout_seconds,
@@ -314,6 +321,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument('--fixture-path', type=Path, default=DEFAULT_FIXTURE_PATH)
     parser.add_argument('--manifest-path', type=Path, default=DEFAULT_MANIFEST_PATH)
     parser.add_argument('--bearer-token-file', type=Path, required=True)
+    parser.add_argument('--cloud-run-identity-token-file', type=Path)
     parser.add_argument('--timeout-seconds', type=float, default=30.0)
     parser.add_argument('--json-only', action='store_true', help='Emit only the redacted machine-readable report.')
     return parser.parse_args(argv)

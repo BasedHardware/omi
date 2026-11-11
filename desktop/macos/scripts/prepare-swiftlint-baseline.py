@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
 
 
@@ -26,7 +26,8 @@ def _current_file_url(file_url: str, desktop_dir: Path) -> str:
     if parsed.scheme != "file" or parsed.netloc not in {"", "localhost"}:
         raise ValueError(f"baseline location is not a local file URL: {file_url!r}")
 
-    source_path = Path(unquote(parsed.path))
+    # SwiftLint emits baseline URLs on macOS, even when CI validates them elsewhere.
+    source_path = PurePosixPath(unquote(parsed.path))
     if not source_path.is_absolute():
         raise ValueError(f"baseline location is not an absolute path: {file_url!r}")
 

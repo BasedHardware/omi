@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-fixture-mock-signature-drift",
+  "violated_contract": "A test fixture that monkeypatches a production function must match the production call signature. On 2026-09-18, #14513 changed free_tier_local_processing_enabled to take (uid) but left 0-arg lambdas in test_free_tier_entrypoint_matrix.py, so 174 entrypoint-matrix cases raised TypeError at the mock boundary and Backend unit shard 4/4 went red on every open PR.",
+  "canonical_prevention": "When a PR changes a mocked function's signature, grep the test tree for its monkeypatch sites in the same PR and update each lambda/fixture to accept the new arity; arg-tolerant lambdas (*args) are the minimal durable form for flag-style returns.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_free_tier_entrypoint_matrix.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/tests/unit/**",
+    "backend/utils/conversations/process_conversation.py"
+  ],
+  "status": "open"
+}

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
 from google.cloud import firestore
+
 from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
@@ -26,7 +27,7 @@ from models.task_recommendation import (
     SnapshotReceipt,
     WhatMattersNowProjection,
 )
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -87,17 +88,15 @@ def _control_ref(uid: str, *, firestore_client: Any = None):
 
 def _validate_generation(
     snapshot: Any,
-    account_generation: int,
     *,
-    allowed_modes: set[TaskWorkflowMode] | None = None,
+    uid: str,
+    account_generation: int,
 ) -> None:
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise RecommendationGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in (allowed_modes or {TaskWorkflowMode.read}):
-        raise RecommendationGenerationMismatchError('task intelligence mode changed')
 
 
 def _without_generation(payload: dict[str, Any]) -> dict[str, Any]:
@@ -190,7 +189,9 @@ def create_intervention(
     @firestore.transactional
     def apply(write_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         existing = ref.get(transaction=write_transaction)
         if not existing.exists:
@@ -233,7 +234,9 @@ def save_projection(
     @firestore.transactional
     def publish(write_transaction: Any) -> tuple[WhatMattersNowProjection, bool]:
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         current_snapshot = projection_ref.get(transaction=write_transaction)
         if current_snapshot.exists:
@@ -328,7 +331,9 @@ def get_projection(
     @firestore.transactional
     def read(read_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=read_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=read_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         return ref.get(transaction=read_transaction)
 
@@ -384,7 +389,9 @@ def get_decisions(
     @firestore.transactional
     def read(read_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=read_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=read_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         return ref.get(transaction=read_transaction)
 
@@ -441,7 +448,9 @@ def get_evaluation_projection(
     @firestore.transactional
     def read(read_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=read_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=read_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         return ref.get(transaction=read_transaction)
 
@@ -489,7 +498,9 @@ def create_feedback(
     def apply(write_transaction):
         nonlocal attribution_chain_id, dedupe_key, record, payload
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         if request.intervention_id is not None:
             intervention_ref = user_ref.collection(INTERVENTIONS_COLLECTION).document(request.intervention_id)
@@ -601,7 +612,9 @@ def link_feedback_completion_candidate(
     @firestore.transactional
     def apply(write_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         snapshot = ref.get(transaction=write_transaction)
         payload = _snapshot_dict(snapshot)
@@ -711,7 +724,9 @@ def create_outcome(
     @firestore.transactional
     def apply(write_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction), account_generation
+            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
+            uid=uid,
+            account_generation=account_generation,
         )
         existing = ref.get(transaction=write_transaction)
         if not existing.exists:
@@ -758,8 +773,8 @@ def replace_context_snapshot(
     def apply(write_transaction):
         _validate_generation(
             _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
-            account_generation,
-            allowed_modes={TaskWorkflowMode.shadow, TaskWorkflowMode.write, TaskWorkflowMode.read},
+            uid=uid,
+            account_generation=account_generation,
         )
         prior_receipt = receipt_ref.get(transaction=write_transaction)
         if prior_receipt.exists:
@@ -865,8 +880,8 @@ def replace_open_loop_snapshot(
     def apply(write_transaction):
         _validate_generation(
             _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
-            account_generation,
-            allowed_modes={TaskWorkflowMode.shadow, TaskWorkflowMode.write, TaskWorkflowMode.read},
+            uid=uid,
+            account_generation=account_generation,
         )
         prior_receipt = receipt_ref.get(transaction=write_transaction)
         if prior_receipt.exists:

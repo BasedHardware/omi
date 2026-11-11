@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-live-stt-first-text-unbounded-empty-window",
+  "violated_contract": "A live STT leg that has accepted speech but has not emitted text must not hold the user through repeated empty decodes without a bounded switch to a replacement provider.",
+  "canonical_prevention": "Bound the first-text wait from first VAD speech and the consecutive speech-containing empty POST count. Fail the leg through the existing capture-positioned replay path, exclude the failed provider for the session, and test both triggers, disarming after text, and replay without duplicate emission.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/parakeet_window.py",
+    "backend/tests/unit/test_parakeet_window_live.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/parakeet_window.py",
+    "backend/routers/listen/receiver.py"
+  ],
+  "status": "open"
+}

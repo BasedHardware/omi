@@ -1,7 +1,8 @@
+{{- if not .Values.internalOnly }}
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
-  name: parakeet-backend-config
+  name: {{ .Values.service.backendConfigName | default "parakeet-backend-config" }}
 spec:
   timeoutSec: 120
   connectionDraining:
@@ -13,17 +14,37 @@ spec:
     type: HTTP
     requestPath: /health  # Ensure this path returns 200 OK
 ---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "parakeet.fullname" . }}
   labels:
     {{- include "parakeet.labels" . | nindent 4 }}
+  {{- if not .Values.internalOnly }}
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
-    cloud.google.com/backend-config: '{"default": "parakeet-backend-config"}'  # Link to BackendConfig
+    cloud.google.com/backend-config: '{"default": "{{ .Values.service.backendConfigName | default "parakeet-backend-config" }}"}'  # Link to BackendConfig
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "parakeet.selectorLabels" . | nindent 4 }}
+---
+# DNS returns each ready GPU pod, so listen can check the entire batch pool.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "parakeet.fullname" . }}-headless
+  labels:
+    {{- include "parakeet.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
   ports:
     - port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.port }}

@@ -1,9 +1,22 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/wals/wal.dart';
+import 'package:omi/utils/firmware_update_battery.dart';
+import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
@@ -15,10 +28,24 @@ class _TestConnectivityPlatform extends ConnectivityPlatform {
   Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
 }
 
+class _RetryInfoDevice extends BtDevice {
+  _RetryInfoDevice() : super(id: 'retry-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+
+  String resolvedFirmware = '';
+  int reads = 0;
+
+  @override
+  Future<BtDevice> getDeviceInfo(DeviceConnection? conn) async {
+    reads++;
+    return copyWith(firmwareRevision: resolvedFirmware);
+  }
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
     ConnectivityPlatform.instance = _TestConnectivityPlatform();
     try {
       await ServiceManager.init();
@@ -27,12 +54,267 @@ void main() {
     }
   });
 
+  tearDown(AnalyticsManager.resetForTesting);
+
+  for (final firmware in ['1.0.2', '3.0.16', '3.0.21']) {
+    test('empty firmware retries device info and updates WAL routing when $firmware resolves', () async {
+      final provider = DeviceProvider();
+      addTearDown(provider.dispose);
+      final device = _RetryInfoDevice();
+      provider.connectedDevice = device;
+      provider.pairedDevice = device.copyWith(firmwareRevision: '');
+      final syncs = ServiceManager.instance().wal.getSyncs();
+      addTearDown(() => syncs.setDevice(null));
+      syncs.setDevice(device, firmwareVersion: '');
+
+      await provider.getDeviceInfo();
+      expect(device.reads, 1, reason: 'an empty read must not be cached as known');
+      expect(provider.pairedDevice?.firmwareRevision, isEmpty);
+      device.resolvedFirmware = firmware;
+      await provider.getDeviceInfo();
+      expect(device.reads, 2);
+      expect(provider.pairedDevice?.firmwareRevision, firmware);
+      await provider.getDeviceInfo();
+      expect(device.reads, 2, reason: 'a successful read keeps the existing cache behavior');
+
+      final phantom = Wal(
+          timerStart: 1704067200,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          device: device.id,
+          fileNum: 1);
+      syncs.sdcard.testWals = [phantom];
+      expect(await syncs.getMissingWals(), firmware == '3.0.21' ? isNot(contains(phantom)) : contains(phantom));
+    });
+  }
+
+  test('missing transport cannot publish persisted metadata as a fresh DIS observation', () async {
+    final provider = DeviceProvider(deviceInfoConnectionLoader: (_) async => null);
+    addTearDown(provider.dispose);
+    final device = _RetryInfoDevice()..firmwareRevision = '3.1.0';
+    provider.connectedDevice = device;
+    provider.pairedDevice = device;
+    final observations = <String>[];
+    final subscription = provider.firmwareRevisions.listen((reading) => observations.add(reading.version));
+    addTearDown(subscription.cancel);
+    await provider.getDeviceInfo(forceRefresh: true);
+    expect(device.reads, 0);
+    expect(provider.pairedDevice!.firmwareRevision, 'Unknown');
+    expect(observations, isEmpty);
+  });
+
+  test('reconnect bypasses cached pairing revision and publishes a fresh same-device DIS read', () async {
+    final provider = DeviceProvider(deviceInfoConnectionLoader: (_) async => _InfoConnection());
+    addTearDown(provider.dispose);
+    final device = _RetryInfoDevice()..resolvedFirmware = '3.1.0';
+    await provider.setConnectedDevice(device);
+    expect(device.reads, 1);
+    final observations = <String>[];
+    final subscription = provider.firmwareRevisions.listen((reading) => observations.add(reading.version));
+    addTearDown(subscription.cancel);
+    await provider.setConnectedDevice(null);
+    device.firmwareRevision = '3.1.0'; // discovery/persistence still reports the old version
+    device.resolvedFirmware = '3.2.0';
+    await provider.setConnectedDevice(device);
+    expect(device.reads, 2);
+    expect(provider.pairedDevice!.firmwareRevision, '3.2.0');
+    expect(observations, ['3.2.0']);
+  });
+
+  test('onboarding connection emits Device Connected exactly once', () async {
+    final analytics = _TestAnalyticsAdapter();
+    AnalyticsManager.configure(analytics);
+    await AnalyticsManager.init();
+    SharedPreferencesUtil().uid = 'test-user';
+    AnalyticsManager().identify();
+    final provider = DeviceProvider();
+    addTearDown(provider.dispose);
+    final device = BtDevice(
+      id: 'AA:AA:AA:AA:AA:01',
+      name: 'User-renamed device',
+      type: DeviceType.fieldy,
+      rssi: -50,
+      firmwareRevision: '3.0.20',
+      serialNumber: 'OMI-SERIAL-001',
+    );
+
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(device);
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(analytics.events.where((event) => event == 'Device Connected'), hasLength(1));
+    final connectedProperties = analytics.eventProperties[analytics.events.indexOf('Device Connected')];
+    expect(connectedProperties.containsKey('id'), isFalse);
+    expect(connectedProperties.containsKey('name'), isFalse);
+    expect(connectedProperties.containsKey('serialNumber'), isFalse);
+    expect(connectedProperties['type'], 'fieldy');
+    expect(connectedProperties['device_vendor'], 'fieldlabs');
+    expect(connectedProperties['hardware_family'], 'fieldy');
+    expect(
+      connectedProperties['transport_device_id'],
+      sha256.convert(utf8.encode(device.id)).toString().substring(0, 16),
+    );
+    expect(connectedProperties['transport_id_stability'], 'platform_dependent');
+    expect(
+      connectedProperties['hardware_id'],
+      sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16),
+    );
+    expect(connectedProperties['hardware_id_kind'], 'manufacturer_serial');
+    expect(connectedProperties['hardware_id_stable'], isTrue);
+    expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
+    expect(analytics.personProperties.any((properties) => properties['hardware_family'] == 'fieldy'), isTrue);
+  });
+
+  test('find device coalesces overlapping provider requests', () async {
+    final completion = Completer<bool>();
+    var runnerCalls = 0;
+    final provider = DeviceProvider(
+      findDeviceRunner: (_) {
+        runnerCalls++;
+        return completion.future;
+      },
+    );
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
+    provider.isConnected = true;
+
+    final first = provider.findDevice();
+    final second = provider.findDevice();
+
+    expect(identical(first, second), isTrue);
+    expect(runnerCalls, 1);
+
+    completion.complete(true);
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+
+    expect(await provider.findDevice(), isTrue);
+    expect(runnerCalls, 2);
+  });
+
+  test('find device rejects OmiGlass devices before invoking the runner', () async {
+    var runnerCalls = 0;
+    final provider = DeviceProvider(
+      findDeviceRunner: (_) async {
+        runnerCalls++;
+        return true;
+      },
+    );
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'glass-1', name: 'OmiGlass', type: DeviceType.omi, rssi: -40);
+    provider.isConnected = true;
+
+    expect(await provider.findDevice(), isFalse);
+    expect(runnerCalls, 0);
+  });
+
+  test('Device Paired is deduped by user and device while connections recur', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'user-a'});
+    await SharedPreferencesUtil.init();
+    final analytics = _TestAnalyticsAdapter();
+    AnalyticsManager.configure(analytics);
+    await AnalyticsManager.init();
+    AnalyticsManager().identify();
+    final provider = DeviceProvider();
+    addTearDown(provider.dispose);
+    final device = BtDevice(
+      id: 'AA:AA:AA:AA:AA:02',
+      name: 'Omi',
+      type: DeviceType.omi,
+      rssi: -50,
+      firmwareRevision: '3.0.20',
+    );
+
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(null);
+    await provider.setConnectedDevice(device);
+    await AnalyticsManager.flushPending(force: true);
+    SharedPreferencesUtil().uid = 'user-b';
+    AnalyticsManager().bindIdentity('user-b');
+    AnalyticsManager().identify();
+    await provider.setConnectedDevice(null);
+    await provider.setConnectedDevice(device);
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(analytics.events.where((event) => event == 'Device Paired'), hasLength(2));
+    expect(analytics.events.where((event) => event == 'Device Connected'), hasLength(3));
+    final pairedProperties = [
+      for (var i = 0; i < analytics.events.length; i++)
+        if (analytics.events[i] == 'Device Paired') analytics.eventProperties[i],
+    ];
+    expect(pairedProperties.first, containsPair('hardware_id_kind', 'unavailable'));
+    expect(pairedProperties.first, containsPair('hardware_id_stable', false));
+    for (final uid in ['user-a', 'user-b']) {
+      expect(analytics.personPropertiesByUser[uid]?['has_paired_device'], isTrue);
+      expect(DateTime.tryParse(analytics.personPropertiesByUser[uid]?['first_paired_at'] as String), isNotNull);
+    }
+  });
+
+  test('non-null to null transition emits one truthful Device Session Ended', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'session-user'});
+    await SharedPreferencesUtil.init();
+    final analytics = _TestAnalyticsAdapter();
+    AnalyticsManager.configure(analytics);
+    await AnalyticsManager.init();
+    final provider = DeviceProvider(
+      deviceInfoConnectionLoader: (_) async => _InfoConnection(),
+      bleDiagnosticsLoader: (_) async => BleDeviceDiagnostics(
+        disconnectHistory: [
+          BleDisconnectEvent(
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+            reason: 'connection_timeout',
+            reasonCode: 8,
+            isManual: false,
+            eventType: 'disconnect',
+            lastRssi: -82,
+            connectionDurationMs: 1250,
+            appState: 'foreground',
+            timeToReconnectMs: 0,
+            rssiTrend: 'falling',
+          ),
+        ],
+        nativeBackgroundBytesConsumed: 0,
+        nativeBackgroundPacketsConsumed: 0,
+        reconnectionCount: 0,
+        connectedAt: 0,
+        failToConnectCount: 0,
+      ),
+    );
+    addTearDown(provider.dispose);
+    final device = _RetryInfoDevice()
+      ..modelNumber = 'Omi DevKit 2'
+      ..resolvedFirmware = '3.0.20';
+
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(null);
+    await provider.setConnectedDevice(null);
+    await AnalyticsManager.flushPending(force: true);
+
+    final sessionEvents = [
+      for (var i = 0; i < analytics.events.length; i++)
+        if (analytics.events[i] == 'Device Session Ended') analytics.eventProperties[i],
+    ];
+    expect(sessionEvents, hasLength(1));
+    expect(sessionEvents.single, containsPair('duration_seconds', 1.25));
+    expect(sessionEvents.single, containsPair('reason', 'connection_timeout'));
+    expect(sessionEvents.single, containsPair('hci_reason_code', 8));
+    expect(sessionEvents.single, containsPair('device_vendor', 'omi'));
+    expect(sessionEvents.single, containsPair('hardware_family', 'omi_devkit'));
+    expect(sessionEvents.single, containsPair('model', 'Omi DevKit 2'));
+    expect(sessionEvents.single, containsPair('firmware_revision', '3.0.20'));
+    expect(sessionEvents.single, isNot(contains('reconnect_attempt_count')));
+  });
+
   group('battery throttling', () {
     late DeviceProvider provider;
     late int notifyCount;
 
     setUp(() {
       provider = DeviceProvider();
+      addTearDown(provider.dispose);
       notifyCount = 0;
       provider.addListener(() => notifyCount++);
     });
@@ -43,6 +325,47 @@ void main() {
       expect(result, true);
       expect(notifyCount, 1);
       expect(provider.batteryLevel, 50);
+    });
+
+    test('disconnect clears cached battery and charging before the debounce runs', () {
+      final device = BtDevice(id: 'battery-pendant', name: 'Omi', type: DeviceType.omi, rssi: -50);
+      provider.connectedDevice = device;
+      provider.pairedDevice = device;
+      provider.setIsConnected(true);
+      provider.updateBatteryLevelForTesting(80);
+      provider.isCharging = true;
+
+      provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+
+      expect(provider.batteryLevel, -1);
+      expect(provider.isCharging, isFalse);
+      expect(canStartFirmwareUpdate(batteryLevel: provider.batteryLevel, isCharging: provider.isCharging), isFalse);
+      provider.setIsConnected(true);
+      expect(provider.batteryLevel, -1, reason: 'Reconnect cannot revive the previous link reading');
+      expect(provider.updateBatteryLevelForTesting(80), isTrue, reason: 'A fresh same-level sample must publish');
+    });
+
+    test('disconnect of another device leaves the current battery reading intact', () {
+      provider.connectedDevice = BtDevice(id: 'battery-pendant', name: 'Omi', type: DeviceType.omi, rssi: -50);
+      provider.updateBatteryLevelForTesting(80);
+      provider.onDeviceConnectionStateChanged('other-pendant', DeviceConnectionState.disconnected);
+      expect(provider.batteryLevel, 80);
+    });
+
+    for (final (from, to) in [(29, 30), (30, 29)]) {
+      test('notifies on a one-point firmware threshold crossing $from to $to', () {
+        final now = DateTime(2026, 11, 3);
+        provider.updateBatteryLevelForTesting(from, now: now);
+        expect(provider.updateBatteryLevelForTesting(to, now: now.add(const Duration(seconds: 1))), isTrue);
+        expect(notifyCount, 2);
+      });
+    }
+
+    test('zero to unknown publishes a warning-state change despite a one-point delta', () {
+      final now = DateTime(2026, 11, 3);
+      provider.updateBatteryLevelForTesting(0, now: now);
+      expect(provider.updateBatteryLevelForTesting(-1, now: now.add(const Duration(seconds: 1))), isTrue);
+      expect(notifyCount, 2);
     });
 
     test('does not notify for small changes (<5%) within 15 minutes', () {
@@ -228,4 +551,54 @@ void main() {
       expect(flag2, true, reason: 'Exactly 20% should not reset flag (needs > 20)');
     });
   });
+}
+
+class _TestAnalyticsAdapter implements AnalyticsAdapter {
+  final List<String> events = [];
+  final List<Map<String, Object>> eventProperties = [];
+  final List<Map<String, Object>> personProperties = [];
+  final Map<String, Map<String, Object>> personPropertiesByUser = {};
+
+  @override
+  bool get isInitialized => true;
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  void track({required String eventName, Map<String, Object>? properties}) {
+    events.add(eventName);
+    eventProperties.add(properties ?? {});
+  }
+
+  @override
+  void alias({required String newUserId}) {}
+
+  @override
+  void identify({required String userId, Map<String, Object>? userProperties}) {
+    if (userProperties != null) {
+      personProperties.add(userProperties);
+      personPropertiesByUser.putIfAbsent(userId, () => {}).addAll(userProperties);
+    }
+  }
+
+  @override
+  void setInteractionContext({String? screenName, required String target}) {}
+
+  @override
+  void registerSuperProperties(Map<String, Object> properties) {}
+
+  @override
+  void enable() {}
+
+  @override
+  void disable() {}
+
+  @override
+  void reset() {}
+}
+
+class _InfoConnection implements DeviceConnection {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

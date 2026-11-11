@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -20,14 +22,6 @@ from typing import Iterable
 from . import config, providers, safety, memory_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
-SERVICE_PORTS = {
-    "firestore": config.FIRESTORE_PORT,
-    "auth": config.AUTH_PORT,
-    "redis": config.REDIS_PORT,
-    "typesense": config.TYPESENSE_PORT,
-    "backend": config.BACKEND_PORT,
-    "desktop-backend": config.DESKTOP_BACKEND_PORT,
-}
 
 
 def _now() -> str:
@@ -39,7 +33,12 @@ def _repo_root() -> Path:
 
 
 def _marker(cfg: config.HarnessConfig, service: str) -> str:
-    return f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+    token = os.environ.get("OMI_HARNESS_OWNERSHIP_TOKEN", "").strip()
+    return (
+        f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}:{token}"
+        if token
+        else f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+    )
 
 
 def _load_json(path: Path, default: dict[str, object]) -> dict[str, object]:
@@ -98,7 +97,63 @@ def _service_record(cfg: config.HarnessConfig, service: str) -> dict[str, object
     return None
 
 
+def _native_typesense_binary() -> str | None:
+    override = os.environ.get("OMI_TYPESENSE_SERVER_BIN", "").strip()
+    if override:
+        binary = Path(override)
+        if not binary.is_file():
+            raise SystemExit(f"OMI_TYPESENSE_SERVER_BIN points to a missing binary: {override}")
+        if not os.access(binary, os.X_OK):
+            raise SystemExit(
+                f"OMI_TYPESENSE_SERVER_BIN points to a file that is not executable: {override}; "
+                "make it executable (for example, chmod +x on macOS/Linux) or choose another binary"
+            )
+        return override
+    return shutil.which("typesense-server")
+
+
+@functools.lru_cache(maxsize=1)
+def _docker_daemon_healthy() -> bool:
+    """A docker CLI without a responding daemon must not win auto-detection."""
+    if not shutil.which("docker"):
+        return False
+    try:
+        probe = subprocess.run(
+            ["docker", "info"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0
+
+
+def typesense_runtime() -> str:
+    """How the harness runs Typesense: "docker" (historical default) or "native".
+
+    OMI_TYPESENSE_RUNTIME pins the choice; unset, a healthy Docker daemon wins,
+    then a native typesense-server binary (so Docker-less or broken-Docker
+    machines — ephemeral CI Macs, minimal runners — still run the hermetic
+    stack), and a docker CLI without either keeps the historical docker error
+    ownership. Resolution is announced at `up` so evidence logs record the mode.
+    """
+    explicit = os.environ.get("OMI_TYPESENSE_RUNTIME", "").strip().lower()
+    if explicit:
+        if explicit not in ("docker", "native"):
+            raise SystemExit(f"OMI_TYPESENSE_RUNTIME must be 'docker' or 'native', got {explicit!r}")
+        return explicit
+    if _docker_daemon_healthy():
+        return "docker"
+    if _native_typesense_binary():
+        return "native"
+    return "docker"
+
+
 def _typesense_container_running(cfg: config.HarnessConfig) -> bool:
+    if typesense_runtime() != "docker":
+        return False
     result = subprocess.run(
         [
             "docker",
@@ -127,19 +182,46 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
     if service == "auth":
         return _http_ok(f"http://{cfg.auth_host}/")
     if service == "typesense":
-        url = f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections"
+        url = f"http://127.0.0.1:{cfg.typesense_port}/collections"
         headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
         ok, detail = _http_ok(url, headers=headers)
         if ok:
             return True, detail
-        if not _typesense_container_running(cfg):
+        if typesense_runtime() == "docker" and not _typesense_container_running(cfg):
             return False, "container-not-running"
         return False, detail
     if service == "backend":
         return _http_ok(f"{cfg.backend_url}/docs")
+    if service == "llm-gateway":
+        return _http_ok(f"{cfg.llm_gateway_url}/health")
     if service == "desktop-backend":
         return _http_ok(f"{cfg.desktop_backend_url}/health")
     return False, f"unknown service {service!r}"
+
+
+def _status_health_label(
+    cfg: config.HarnessConfig,
+    service: str,
+    *,
+    alive: bool,
+    port: int,
+) -> str:
+    """Report the same HTTP/auth health checks as startup wait, with a degraded label.
+
+    Port-open alone is not healthy for HTTP services. When the owned process is
+    still alive and the port accepts TCP but the authenticated/HTTP probe fails,
+    surface ``degraded (...)`` so manual QA can tell a wedged service from a
+    clean stop.
+    """
+    ok, detail = _service_health(cfg, service)
+    if ok:
+        return detail
+    port_listening = bool(port) and _port_open("127.0.0.1", port)
+    if alive and port_listening:
+        return f"degraded ({detail})"
+    if port and not port_listening:
+        return "port-closed"
+    return detail
 
 
 def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -> None:
@@ -147,6 +229,7 @@ def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -
     service = str(record.get("service"))
     if not safety.process_exists(pid):
         return
+    descendants = safety.descendant_pids(pid)
     try:
         safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
         _signal_owned_process_group(pid, service)
@@ -163,6 +246,7 @@ def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -
             os.killpg(pid, signal.SIGTERM)
         except (ProcessLookupError, PermissionError):
             pass
+    _reap_detached_port_holders(record, descendants)
     remaining = [entry for entry in _process_records(cfg) if entry.get("service") != service]
     _save_manifests(cfg, remaining)
 
@@ -208,21 +292,117 @@ def _python_importable(module: str) -> bool:
     )
 
 
+# firebase-tools refuses to start the emulators on a JDK older than 21
+# ("firebase-tools no longer supports Java version before 21"), so the harness
+# rejects it at prereq time instead of failing firestore/auth health checks.
+FIREBASE_EMULATORS_MIN_JAVA_MAJOR = 21
+
+
+def _java_major_version() -> int | None:
+    """Major JDK version `java -version` reports, or None when unusable.
+
+    macOS ships a stub at /usr/bin/java that is always present and exits 1 with
+    "Unable to locate a Java Runtime" when no JDK is installed, so a PATH lookup
+    passes on every Mac. Running the binary and parsing its version line is the
+    only check that distinguishes the stub from a real runtime — and reports the
+    version firebase-tools would otherwise reject only at emulator start.
+    """
+    if not _which("java"):
+        return None
+    try:
+        proc = subprocess.run(["java", "-version"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    match = re.search(r'version "([0-9][0-9._]*)', proc.stderr)
+    if not match:
+        return None
+    parts = match.group(1).split(".")  # "21.0.1" → 21; legacy "1.8.0_191" → 8
+    if parts[0] == "1" and len(parts) > 1:
+        return int(parts[1])
+    return int(parts[0])
+
+
+def _node_major_version() -> int | None:
+    try:
+        result = subprocess.run(
+            ["node", "--version"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10, text=True
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    match = re.match(r"v(\d+)", result.stdout.strip())
+    return int(match.group(1)) if match else None
+
+
+def _minimum_node_major_for_firebase_tools(repo_root: Path) -> int | None:
+    """Read the minimum Node major version pinned firebase-tools declares via `engines.node`.
+
+    package-lock.json is the source of truth for the resolved firebase-tools version (see
+    package.json); its `engines.node` range (e.g. ">=20.0.0 || >=22.0.0 || >=24.0.0") lists
+    the lowest major first, so the lowest `>=N` bound is the minimum this repo requires.
+    """
+    try:
+        data = json.loads((repo_root / "package-lock.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    node_range = data.get("packages", {}).get("node_modules/firebase-tools", {}).get("engines", {}).get("node")
+    if not node_range:
+        return None
+    majors = [int(major) for major in re.findall(r">=\s*(\d+)", node_range)]
+    return min(majors) if majors else None
+
+
 def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]]:
     missing: list[str] = []
     warnings: list[str] = []
     if not _which("node"):
         missing.append("node (required by Firebase emulator CLI)")
+    else:
+        node_major = _node_major_version()
+        min_major = _minimum_node_major_for_firebase_tools(cfg.repo_root)
+        if node_major is not None and min_major is not None and node_major < min_major:
+            missing.append(
+                f"node >= {min_major} (found v{node_major}; required by the pinned firebase-tools "
+                "version in package-lock.json)"
+            )
     if not (_which("firebase") or _which("npx")):
         missing.append(
             "firebase-tools CLI or npx (install with npm install, npm install -g firebase-tools, or use npx)"
         )
-    if not _which("java"):
-        missing.append("java runtime (required by Firestore emulator)")
+    java_major = _java_major_version()
+    if java_major is None:
+        missing.append(
+            "java runtime (required by the Firestore and Auth emulators; "
+            "install one with `brew install --cask temurin` or from https://adoptium.net)"
+        )
+    elif java_major < FIREBASE_EMULATORS_MIN_JAVA_MAJOR:
+        missing.append(
+            f"java {java_major} is too old for the Firebase emulators (firebase-tools requires "
+            f"Java {FIREBASE_EMULATORS_MIN_JAVA_MAJOR}+; install e.g. `brew install openjdk@21` "
+            "and put it first on PATH)"
+        )
     if not _which("redis-server"):
         missing.append("redis-server (required for local Redis on loopback)")
-    if not _which("docker"):
-        missing.append("docker (required for local Typesense on loopback)")
+    runtime = typesense_runtime()
+    if runtime == "docker":
+        if not _which("docker"):
+            missing.append(
+                "docker (required for local Typesense on loopback; "
+                "or install typesense-server and set OMI_TYPESENSE_RUNTIME=native)"
+            )
+        elif not _docker_daemon_healthy():
+            missing.append(
+                "docker daemon (docker CLI present but `docker info` failed; "
+                "start Docker/colima or install typesense-server for OMI_TYPESENSE_RUNTIME=native)"
+            )
+    elif not _native_typesense_binary():
+        missing.append(
+            f"typesense-server {config.TYPESENSE_PINNED_VERSION} "
+            "(required for OMI_TYPESENSE_RUNTIME=native; set OMI_TYPESENSE_SERVER_BIN or add to PATH)"
+        )
     if not (cfg.repo_root / "firebase.json").is_file():
         missing.append("firebase.json at repo root")
     if not (cfg.repo_root / "firestore.rules").is_file():
@@ -232,9 +412,7 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
     if not (cfg.repo_root / "backend" / "main.py").is_file():
         missing.append("backend/main.py")
     if not _python_importable("uvicorn"):
-        missing.append("Python package uvicorn (install backend requirements before starting backend)")
-    if not _which("cargo"):
-        missing.append("cargo (required to build the Rust desktop backend)")
+        missing.append("Python package uvicorn (run: make lane-backend)")
     provider_report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
     missing.extend(provider_report.missing)
     warnings.extend(provider_report.warnings)
@@ -254,9 +432,12 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"firestore_emulator: {cfg.firestore_host}")
     print(f"firebase_auth_emulator: {cfg.auth_host}")
     print(f"redis: {cfg.redis_host}:{cfg.redis_port}")
-    print(f"typesense: 127.0.0.1:{config.TYPESENSE_PORT}")
+    print(f"typesense: 127.0.0.1:{cfg.typesense_port}")
+    print(f"llm_gateway: {cfg.llm_gateway_url}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
+    if cfg.dev_bind_host != "127.0.0.1":
+        print(f"dev_bind_host: {cfg.dev_bind_host} (set via {config.DEV_BIND_HOST_ENV} or {config.APP_DEV_HOST_ENV})")
 
 
 def print_provider_status(cfg: config.HarnessConfig) -> providers.ProviderPreflight:
@@ -330,7 +511,7 @@ def build_session_summary(cfg: config.HarnessConfig, provider_report: providers.
         "firestore": cfg.firestore_host,
         "firebase_auth": cfg.auth_host,
         "redis": f"{cfg.redis_host}:{cfg.redis_port}",
-        "typesense": f"127.0.0.1:{config.TYPESENSE_PORT}",
+        "typesense": f"127.0.0.1:{cfg.typesense_port}",
         "backend": cfg.backend_url,
         "desktop_backend": cfg.desktop_backend_url,
     }
@@ -414,6 +595,13 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _prepend_pythonpath(env: dict[str, str], *entries: Path) -> None:
+    values = [str(path) for path in entries]
+    if existing := env.get("PYTHONPATH"):
+        values.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(values)
+
+
 def _start_process(
     cfg: config.HarnessConfig,
     service: str,
@@ -438,11 +626,10 @@ def _start_process(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = log_path.open("ab")
     child_env = config.child_env_for(cfg) if env is None else env
-    child_env["PYTHONPATH"] = f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{child_env.get('PYTHONPATH', '')}"
+    python_paths = [cfg.repo_root / "scripts" / "dev-harness"]
     if service == "backend":
-        child_env["PYTHONPATH"] = (
-            f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{cfg.repo_root / 'backend'}:{child_env.get('PYTHONPATH', '')}"
-        )
+        python_paths.append(cfg.repo_root / "backend")
+    _prepend_pythonpath(child_env, *python_paths)
     supervised = [
         sys.executable,
         "-m",
@@ -462,6 +649,7 @@ def _start_process(
         {
             "service": service,
             "pid": proc.pid,
+            "process_group": proc.pid,
             "port": port,
             "endpoint": f"127.0.0.1:{port}",
             "log": str(log_path),
@@ -474,48 +662,41 @@ def _start_process(
     print(f"{service}: started pid={proc.pid} log={log_path}")
 
 
-def _desktop_backend_dir(cfg: config.HarnessConfig) -> Path:
-    return cfg.repo_root / "desktop" / "macos" / "Backend-Rust"
-
-
-def _ensure_desktop_backend_binary(cfg: config.HarnessConfig) -> Path:
-    backend_dir = _desktop_backend_dir(cfg)
-    release = os.environ.get("OMI_DESKTOP_BACKEND_RELEASE", "").strip() in {"1", "true", "yes"}
-    profile = "release" if release else "debug"
-    binary = backend_dir / "target" / profile / "omi-desktop-backend"
-    stale_markers = ("src", "Cargo.toml", "Cargo.lock")
-
-    def _is_stale(marker: str) -> bool:
-        path = backend_dir / marker
-        if not path.exists():
-            return False
-        if path.is_file():
-            return path.stat().st_mtime > binary.stat().st_mtime
-        newer = subprocess.run(
-            ["find", str(path), "-newer", str(binary)],
-            cwd=backend_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            check=False,
-        )
-        return bool(newer.stdout.strip())
-
-    if binary.is_file() and not any(_is_stale(marker) for marker in stale_markers):
-        return binary
-    build_cmd = ["cargo", "build"]
-    if release:
-        build_cmd.append("--release")
-    print(f"desktop-backend: building ({' '.join(build_cmd)})...")
-    subprocess.run(build_cmd, cwd=backend_dir, check=True)
-    return binary
-
-
 def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
-    base = ["firebase"] if _which("firebase") else ["npx", "firebase-tools"]
+    config_path = cfg.layout.services_dir / "firebase" / "firebase.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        payload = json.loads((cfg.repo_root / "firebase.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Cannot load firebase.json for harness: {exc}") from exc
+    emulators = payload.setdefault("emulators", {})
+    for name, port in (("firestore", cfg.firestore_port), ("auth", cfg.auth_port)):
+        emulator = emulators.setdefault(name, {})
+        # The Auth emulator is what a physical device's Firebase SDK connects to
+        # directly (not through the backend), so it must bind wherever the
+        # backend does for device reachability to work at all (#11774).
+        emulator["host"] = cfg.dev_bind_host
+        emulator["port"] = port
+    firestore = payload.setdefault("firestore", {})
+    firestore["rules"] = str(cfg.repo_root / "firestore.rules")
+    firestore["indexes"] = str(cfg.repo_root / "firestore.indexes.json")
+    _write_json(config_path, payload)
+    # Always invoke the exact repo-pinned CLI through npx. A globally installed
+    # Firebase CLI can silently drift from package.json (and commonly runs under an
+    # unsupported Node version), leaving the detached emulator stuck until health
+    # checks time out. `--yes` prevents an install prompt and `--prefix` scopes
+    # resolution to this checkout instead of global state.
+    package = _load_json(cfg.repo_root / "package.json", {})
+    dev_dependencies = package.get("devDependencies", {})
+    pinned = dev_dependencies.get("firebase-tools") if isinstance(dev_dependencies, dict) else None
+    if not isinstance(pinned, str) or not pinned or any(marker in pinned for marker in ("^", "~", "*", ">", "<")):
+        raise RuntimeError("package.json must pin an exact firebase-tools version")
+    base = ["npx", "--prefix", str(cfg.repo_root), "--yes", f"firebase-tools@{pinned}"]
     return [
         *base,
         "emulators:start",
+        "--config",
+        str(config_path),
         "--only",
         "firestore,auth",
         "--project",
@@ -532,6 +713,8 @@ def _typesense_container_name(cfg: config.HarnessConfig) -> str:
 
 
 def _remove_stale_typesense_container(cfg: config.HarnessConfig) -> None:
+    if typesense_runtime() != "docker":
+        return
     container = _typesense_container_name(cfg)
     subprocess.run(
         ["docker", "rm", "-f", container],
@@ -544,6 +727,25 @@ def _remove_stale_typesense_container(cfg: config.HarnessConfig) -> None:
 def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
     typesense_dir = cfg.layout.services_dir / "typesense"
     typesense_dir.mkdir(parents=True, exist_ok=True)
+    if typesense_runtime() == "native":
+        binary = _native_typesense_binary()
+        if not binary:
+            raise SystemExit(
+                "OMI_TYPESENSE_RUNTIME=native requires typesense-server on PATH "
+                f"(expected {config.TYPESENSE_PINNED_VERSION}) or OMI_TYPESENSE_SERVER_BIN"
+            )
+        return [
+            binary,
+            "--data-dir",
+            str(typesense_dir),
+            "--api-address",
+            "127.0.0.1",
+            "--api-port",
+            str(cfg.typesense_port),
+            "--api-key",
+            config.LOCAL_TYPESENSE_API_KEY,
+            "--enable-cors",
+        ]
     return [
         "docker",
         "run",
@@ -551,10 +753,10 @@ def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
         "--name",
         _typesense_container_name(cfg),
         "-p",
-        f"127.0.0.1:{config.TYPESENSE_PORT}:{config.TYPESENSE_PORT}",
+        f"127.0.0.1:{cfg.typesense_port}:{config.TYPESENSE_CONTAINER_PORT}",
         "-v",
         f"{typesense_dir}:/data",
-        "typesense/typesense:27.1",
+        f"typesense/typesense:{config.TYPESENSE_PINNED_VERSION}",
         "--data-dir",
         "/data",
         "--api-key",
@@ -563,7 +765,15 @@ def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
     ]
 
 
-def _start_services(cfg: config.HarnessConfig) -> None:
+# Infrastructure services (firestore, auth, redis, typesense) start first so the
+# Python backend can connect to them immediately on boot.  The brief settle delay
+# prevents a port-binding race on resource-constrained runners (e.g. M1 Studio
+# under qualification load) where the backend starts before the emulator has
+# finished binding its port.
+_INFRA_SETTLE_DELAY = 2.0
+
+
+def _start_infrastructure(cfg: config.HarnessConfig) -> None:
     cfg.layout.logs_dir.mkdir(parents=True, exist_ok=True)
     _start_process(
         cfg,
@@ -571,7 +781,7 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         _firebase_command(cfg),
         cwd=cfg.repo_root,
         log_name="firebase-emulators.log",
-        port=config.FIRESTORE_PORT,
+        port=cfg.firestore_port,
     )
     redis_dir = cfg.layout.services_dir / "redis"
     redis_dir.mkdir(parents=True, exist_ok=True)
@@ -595,6 +805,7 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         log_name="redis.log",
         port=cfg.redis_port,
     )
+    print(f"typesense runtime: {typesense_runtime()}")
     _remove_stale_typesense_container(cfg)
     _start_process(
         cfg,
@@ -602,53 +813,154 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         _typesense_command(cfg),
         cwd=cfg.repo_root,
         log_name="typesense.log",
-        port=config.TYPESENSE_PORT,
+        port=cfg.typesense_port,
+    )
+
+
+def _start_app_services(cfg: config.HarnessConfig) -> None:
+    """Start the isolated gateway, backend, and desktop-backend."""
+    _start_process(
+        cfg,
+        "llm-gateway",
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "llm_gateway.main:app",
+            "--host",
+            cfg.dev_bind_host,
+            "--port",
+            str(cfg.llm_gateway_port),
+        ],
+        cwd=cfg.repo_root / "backend",
+        log_name="llm-gateway.log",
+        port=cfg.llm_gateway_port,
     )
     _start_process(
         cfg,
         "backend",
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(config.BACKEND_PORT)],
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", cfg.dev_bind_host, "--port", str(cfg.backend_port)],
         cwd=cfg.repo_root / "backend",
         log_name="backend.log",
-        port=config.BACKEND_PORT,
+        port=cfg.backend_port,
     )
-    desktop_binary = _ensure_desktop_backend_binary(cfg)
     _start_process(
         cfg,
         "desktop-backend",
-        [str(desktop_binary)],
-        cwd=_desktop_backend_dir(cfg),
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "desktop_backend:app",
+            "--host",
+            cfg.dev_bind_host,
+            "--port",
+            str(cfg.desktop_backend_port),
+        ],
+        cwd=cfg.repo_root / "backend",
         log_name="desktop-backend.log",
-        port=config.DESKTOP_BACKEND_PORT,
+        port=cfg.desktop_backend_port,
         env=config.desktop_backend_child_env_for(cfg),
     )
 
 
-def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 45.0) -> list[str]:
+def _start_services(cfg: config.HarnessConfig) -> None:
+    _start_infrastructure(cfg)
+    # Give infrastructure services a brief head start so the Python backend can
+    # bind connections to Redis, Firestore, and Typesense immediately on boot.
+    # Without this, on a loaded runner the backend may retry connections during
+    # its startup window, extending boot time beyond the health-check deadline.
+    time.sleep(_INFRA_SETTLE_DELAY)
+    _start_app_services(cfg)
+
+
+# Per-service health-check deadlines (seconds).  The Python backend needs the
+# longest window: it imports heavy ML/NLP modules and initialises connections to
+# every infrastructure service.  On an M1 Studio runner under qualification load,
+# 45 s (the old flat deadline shared across *all* services) is not enough.
+_HEALTH_TIMEOUTS: dict[str, float] = {
+    "firestore": 45.0,
+    # The combined Firebase process can report Firestore ready before Auth has
+    # finished its cold startup on the qualification runner.
+    "auth": 90.0,
+    "typesense": 45.0,
+    "backend": 180.0,
+    "llm-gateway": 60.0,
+    "desktop-backend": 60.0,
+    "redis": 30.0,
+}
+
+
+def _wait_health(
+    cfg: config.HarnessConfig,
+    *,
+    timeout: float | None = None,
+) -> list[str]:
+    """Wait for all harness services to become healthy.
+
+    Each service has its own deadline (see ``_HEALTH_TIMEOUTS``) measured from
+    the moment the wait begins.  If a recorded process dies before its deadline,
+    the service is marked unhealthy immediately instead of polling uselessly.
+    Pass ``timeout`` to override the backend deadline for backwards-compat callers.
+    """
     typesense_headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
     checks = {
         "firestore": (f"http://{cfg.firestore_host}/", None),
         "auth": (f"http://{cfg.auth_host}/", None),
-        "typesense": (f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections", typesense_headers),
+        "typesense": (f"http://127.0.0.1:{cfg.typesense_port}/collections", typesense_headers),
         "backend": (f"{cfg.backend_url}/docs", None),
+        "llm-gateway": (f"{cfg.llm_gateway_url}/health", None),
         "desktop-backend": (f"{cfg.desktop_backend_url}/health", None),
+        "redis": (None, None),  # port-based check
     }
     pending = dict(checks)
-    deadline = time.time() + timeout
+    start = time.time()
+    # Per-service deadlines; ``timeout`` overrides the backend deadline only.
+    deadlines: dict[str, float] = {}
+    for service in pending:
+        base = _HEALTH_TIMEOUTS.get(service, 45.0)
+        if timeout is not None and service == "backend":
+            base = timeout
+        deadlines[service] = start + base
     failures: dict[str, str] = {}
-    while pending and time.time() < deadline:
+    process_records = {r["service"]: r for r in _process_records(cfg)}
+    while pending:
+        now = time.time()
+        # Expire services whose per-service deadline has passed.
+        for service in list(pending):
+            if now >= deadlines[service]:
+                url = pending[service][0]
+                endpoint = url or f"127.0.0.1:{cfg.redis_port}"
+                failures[service] = f"not healthy after {deadlines[service] - start:.0f}s at {endpoint}"
+                pending.pop(service)
+        if not pending:
+            break
         for service, (url, headers) in list(pending.items()):
+            # Fail fast if the process died — no point polling a dead service.
+            record = process_records.get(service)
+            if record:
+                pid_val = int(record.get("pid", -1))
+                if not safety.process_exists(pid_val):
+                    failures[service] = f"process exited (pid={pid_val}); check log: {record.get('log', '?')}"
+                    pending.pop(service)
+                    print(f"{service}: {failures[service]}")
+                    continue
+            if service == "redis":
+                if _port_open("127.0.0.1", cfg.redis_port):
+                    print("redis: healthy (port-open)")
+                    pending.pop(service)
+                    failures.pop(service, None)
+                continue
             ok, detail = _http_ok(url, headers=headers)
             if ok:
                 print(f"{service}: healthy ({detail})")
                 pending.pop(service)
+                failures.pop(service, None)
             else:
                 failures[service] = detail
         if pending:
             time.sleep(0.75)
-    for service, (url, _) in pending.items():
-        failures.setdefault(service, f"not healthy at {url}")
-    return [f"{service}: {failures.get(service, 'unknown failure')}" for service in pending]
+    return [f"{service}: {detail}" for service, detail in failures.items()]
 
 
 def cmd_up(args: argparse.Namespace) -> int:
@@ -689,7 +1001,7 @@ def cmd_up(args: argparse.Namespace) -> int:
                 "firestore": cfg.firestore_host,
                 "auth": cfg.auth_host,
                 "redis": f"{cfg.redis_host}:{cfg.redis_port}",
-                "typesense": f"127.0.0.1:{config.TYPESENSE_PORT}",
+                "typesense": f"127.0.0.1:{cfg.typesense_port}",
                 "backend": cfg.backend_url,
                 "desktop_backend": cfg.desktop_backend_url,
             },
@@ -759,11 +1071,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     for record in records:
         pid = int(record.get("pid", -1))
         alive = safety.process_exists(pid)
-        health = "not checked"
         service = str(record.get("service"))
         port = int(record.get("port", 0) or 0)
-        if port:
-            health = "port-open" if _port_open("127.0.0.1", port) else "port-closed"
+        health = _status_health_label(cfg, service, alive=alive, port=port)
         print(f"  - {service}: pid={pid} alive={alive} {health} log={record.get('log')}")
     return 0
 
@@ -790,8 +1100,51 @@ def _signal_owned_process_group(pid: int, service: str) -> None:
         raise safety.SafetyError(f"Cannot signal process group {pid}: {exc}") from exc
 
 
+def _reap_detached_port_holders(record: dict[str, object], descendants: tuple[int, ...]) -> None:
+    """Stop a detached child that survived the group signal and still owns the service port.
+
+    Ownership is proven twice over: the PID was a descendant of the manifest-validated
+    supervisor before any signal was sent, and it is still holding the port this service
+    recorded. Anything else on the port is left alone.
+    """
+
+    service = str(record.get("service"))
+    port = int(record.get("port", 0) or 0)
+    if port <= 0 or not descendants:
+        return
+    try:
+        holders = safety.listening_pids(port)
+    except safety.SafetyError as exc:
+        print(f"{service}: cannot inspect port {port} after stop: {exc}")
+        return
+    owned = [pid for pid in holders if pid in descendants]
+    for pid in holders:
+        if pid not in descendants:
+            print(f"{service}: port {port} held by unowned pid {pid}; leaving it for safety inspection")
+    for pid in owned:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            print(f"{service}: sent SIGTERM to detached child {pid} still holding port {port}")
+        except (ProcessLookupError, PermissionError) as exc:
+            print(f"{service}: cannot stop detached child {pid} on port {port}: {exc}")
+    deadline = time.time() + 5
+    while time.time() < deadline and any(safety.process_exists(pid) for pid in owned):
+        time.sleep(0.25)
+    for pid in owned:
+        if not safety.process_exists(pid):
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+            print(f"{service}: sent SIGKILL to detached child {pid} still holding port {port}")
+        except (ProcessLookupError, PermissionError) as exc:
+            print(f"{service}: detached child {pid} still holds port {port}: {exc}")
+
+
 def _stop_owned(cfg: config.HarnessConfig) -> None:
     records = _process_records(cfg)
+    # Capture the tree while the supervisors are alive; detached children (the
+    # Firestore emulator JVM) are unreachable through the process group.
+    descendants = {int(record.get("pid", -1)): safety.descendant_pids(int(record.get("pid", -1))) for record in records}
     for record in records:
         pid = int(record.get("pid", -1))
         service = str(record.get("service"))
@@ -822,6 +1175,7 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
         pid = int(record.get("pid", -1))
         if safety.process_exists(pid):
             print(f"{record.get('service')}: still running pid={pid}; leaving it for safety inspection")
+        _reap_detached_port_holders(record, descendants.get(pid, ()))
     _save_manifests(cfg, records)
 
 

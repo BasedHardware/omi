@@ -1,0 +1,108 @@
+{
+  "cases": [
+    {
+      "name": "missing policy defaults to unmuted when legacy flags are absent",
+      "policy": null,
+      "deviceMuted": false,
+      "batchMuted": false,
+      "expectedMuted": false,
+      "expectedRevision": 0
+    },
+    {
+      "name": "missing policy preserves legacy device mute",
+      "policy": null,
+      "deviceMuted": true,
+      "batchMuted": false,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    },
+    {
+      "name": "missing policy preserves legacy batch mute",
+      "policy": null,
+      "deviceMuted": false,
+      "batchMuted": true,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    },
+    {
+      "name": "missing policy combines legacy mute flags conservatively",
+      "policy": null,
+      "deviceMuted": true,
+      "batchMuted": true,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    },
+    {
+      "name": "valid unmuted policy",
+      "policy": "{\"version\":1,\"revision\":0,\"muted\":false}",
+      "deviceMuted": true,
+      "batchMuted": true,
+      "expectedMuted": false,
+      "expectedRevision": 0
+    },
+    {
+      "name": "valid muted policy with revision",
+      "policy": "{\"version\":1,\"revision\":7,\"muted\":true}",
+      "deviceMuted": false,
+      "batchMuted": false,
+      "expectedMuted": true,
+      "expectedRevision": 7
+    },
+    {
+      "name": "malformed JSON fails closed",
+      "policy": "not-json",
+      "deviceMuted": false,
+      "batchMuted": false,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    },
+    {
+      "name": "unsupported version fails closed",
+      "policy": "{\"version\":2,\"revision\":9,\"muted\":false}",
+      "deviceMuted": false,
+      "batchMuted": false,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    },
+    {
+      "name": "numeric muted value fails strict parsing",
+      "policy": "{\"version\":1,\"revision\":1,\"muted\":1}",
+      "deviceMuted": false,
+      "batchMuted": false,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    },
+    {
+      "name": "fractional revision fails strict parsing",
+      "policy": "{\"version\":1,\"revision\":1.0,\"muted\":false}",
+      "deviceMuted": false,
+      "batchMuted": false,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    },
+    {
+      "name": "negative revision fails strict parsing",
+      "policy": "{\"version\":1,\"revision\":-1,\"muted\":true}",
+      "deviceMuted": false,
+      "batchMuted": false,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    },
+    {
+      "name": "unknown field fails strict parsing",
+      "policy": "{\"version\":1,\"revision\":1,\"muted\":false,\"extra\":true}",
+      "deviceMuted": false,
+      "batchMuted": false,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    },
+    {
+      "name": "missing field fails strict parsing",
+      "policy": "{\"version\":1,\"revision\":1}",
+      "deviceMuted": false,
+      "batchMuted": false,
+      "expectedMuted": true,
+      "expectedRevision": 0
+    }
+  ]
+}

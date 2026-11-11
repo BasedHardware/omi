@@ -11,12 +11,16 @@ from models.memory_contracts import deterministic_contract_id
 
 class MemoryOperationType(str, Enum):
     source_candidate = "source_candidate"
+    source_replacement = "source_replacement"
     synthesis = "synthesis"
     long_term_apply = "long_term_apply"
+    user_mutation = "user_mutation"
     archive_transition = "archive_transition"
     projection_sync = "projection_sync"
     vector_sync = "vector_sync"
+    graph_enrichment = "graph_enrichment"
     deletion = "deletion"
+    ledger_mutation = "ledger_mutation"
 
 
 class MemoryOperationStatus(str, Enum):
@@ -36,6 +40,46 @@ _TERMINAL_STATUSES = {
 }
 
 
+class MemoryLedgerReopenReceipt(BaseModel):
+    """Atomic source-to-tail receipt for standalone ledger reopening.
+
+    This is journal metadata, not a second memory authority.  One receipt is
+    keyed by the closed source memory id so concurrent requests with different
+    client operation UUIDs cannot create multiple current tails.
+    """
+
+    schema_version: str = "memory_ledger_reopen_receipt.v1"
+    uid: str
+    source_memory_id: str
+    replacement_memory_id: str
+    operation_id: str
+    account_generation: int
+    source_generation: int
+    source_item_revision: int
+    source_content_hash: str
+    committed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator(
+        "uid",
+        "source_memory_id",
+        "replacement_memory_id",
+        "operation_id",
+        "source_content_hash",
+    )
+    @classmethod
+    def validate_required_nonblank(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("reopen receipt identifiers must not be blank")
+        return value
+
+    @field_validator("account_generation", "source_generation", "source_item_revision")
+    @classmethod
+    def validate_nonnegative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("reopen receipt generations and revisions must be nonnegative")
+        return value
+
+
 class OperationLogicalPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -44,6 +88,14 @@ class OperationLogicalPayload(BaseModel):
     target_memory_id: Optional[str] = None
     result_status: Optional[str] = None
     supersedes: List[str] = Field(default_factory=list)
+    subject_entity_id: Optional[str] = None
+    predicate: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    target_tier: Optional[str] = None
+    target_visibility: Optional[str] = None
+    target_user_asserted: Optional[bool] = None
+    clear_graph_assertion: Optional[bool] = None
+    mutation_metadata: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def canonical(self) -> Dict[str, Any]:
@@ -55,7 +107,21 @@ def _coerce_logical_payload(value: OperationLogicalPayload | Dict[str, Any]) -> 
         return value
     known = {
         key: value[key]
-        for key in ["decision", "memory_text", "target_memory_id", "result_status", "supersedes"]
+        for key in [
+            "decision",
+            "memory_text",
+            "target_memory_id",
+            "result_status",
+            "supersedes",
+            "subject_entity_id",
+            "predicate",
+            "arguments",
+            "target_tier",
+            "target_visibility",
+            "target_user_asserted",
+            "clear_graph_assertion",
+            "mutation_metadata",
+        ]
         if key in value
     }
     metadata = {key: val for key, val in value.items() if key not in known}
@@ -236,7 +302,7 @@ class MemoryOperation(BaseModel):
     def _transition(self, *, status: MemoryOperationStatus, **updates: Any) -> "MemoryOperation":
         if self.status in _TERMINAL_STATUSES:
             raise ValueError(f"cannot transition terminal operation from {self.status.value}")
-        data = self.dict()
+        data = self.model_dump(mode="python")
         data.update(updates)
         data["status"] = status
         data["updated_at"] = datetime.now(timezone.utc)
@@ -271,6 +337,7 @@ class MemoryOperation(BaseModel):
 
 
 __all__ = [
+    "MemoryLedgerReopenReceipt",
     "MemoryOperation",
     "MemoryOperationStatus",
     "MemoryOperationType",

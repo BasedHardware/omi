@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 const rapidApiKey = process.env.RAPIDAPI_KEY;
 const rapidApiHost = process.env.RAPIDAPI_HOST;
 const linkedinApiKey = process.env.LINKEDIN_API_KEY;
-const linkedinApiHost = process.env.LINKEDIN_API_HOST;
+const linkedinRapidApiHost = process.env.LINKEDIN_RAPIDAPI_HOST;
 const firebaseApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
 const MAX_USERNAME_LENGTH = 64;
@@ -115,8 +115,8 @@ export async function GET(req: Request) {
       username,
     )}`;
   } else if (provider === 'linkedin-profile') {
-    headers = rapidApiHeaders(linkedinApiKey, linkedinApiHost);
-    upstreamUrl = `https://${linkedinApiHost}/profile-data-connection-count-posts?username=${encodeURIComponent(
+    headers = rapidApiHeaders(linkedinApiKey, linkedinRapidApiHost);
+    upstreamUrl = `https://${linkedinRapidApiHost}/profile-data-connection-count-posts?username=${encodeURIComponent(
       username,
     )}`;
   } else {

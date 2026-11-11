@@ -1,34 +1,23 @@
-"""Canonical vector metadata builders and parsers (WS-G7).
-
-Neutral builders serve the canonical-cohort memory path. Legacy ``build_memory_*`` builders
-remain for the disabled repair adapter path.
-"""
+"""Canonical provider identity, vector metadata builders, and parsers (WS-G7)."""
 
 from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional, cast
+from typing import Any, Collection, Dict, Optional, cast
 
 from models.memory_search_gateway import SearchDecision, SearchVectorHit
-from models.product_memory import MemoryTier, MemoryItem
+from models.knowledge_ledger_search import (
+    LEDGER_INDEX_VERSION,
+    LEDGER_SEARCH_KINDS,
+    build_ledger_index_metadata,
+    validate_ledger_kinds,
+)
+from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryTier, MemoryItem
 
 MEMORY_VECTOR_SCHEMA_VERSION = 1
-MEMORY_VECTOR_ID_PREFIX = "memvec"
-
-# Neutral canonical-memory vector schema (prod greenfield — no legacy metadata on canonical path).
-RESTRICTED_SENSITIVITY_LABELS = {
-    "credential",
-    "secret",
-    "financial",
-    "health",
-    "intimate",
-    "minor",
-    "minors",
-    "workplace_confidential",
-    "identity_authentication",
-}
+CANONICAL_MEMORY_PROVIDER_ID_PREFIX = "memproj"
 
 
 @dataclass(frozen=True)
@@ -45,11 +34,33 @@ class ParsedMemoryVectorHit:
     reason: str
 
 
-def deterministic_memory_vector_id(uid: str, memory_id: str, tier: MemoryTier | str, item_revision: int) -> str:
-    """Return a memory-only vector ID that cannot collide with legacy ``{uid}-{memory_id}`` IDs."""
-    tier_value = tier.value if isinstance(tier, MemoryTier) else str(tier)
-    payload = f"{uid}\0{memory_id}\0{tier_value}\0{int(item_revision)}".encode("utf-8")
-    return f"{MEMORY_VECTOR_ID_PREFIX}:{hashlib.sha256(payload).hexdigest()}"
+def canonical_memory_provider_id(uid: str, memory_id: str) -> str:
+    """Return the sole external-provider identity for one user's canonical memory."""
+    if not uid.strip():
+        raise ValueError("uid is required")
+    if not memory_id.strip():
+        raise ValueError("memory_id is required")
+    payload = f"{uid}\0{memory_id}".encode("utf-8")
+    return f"{CANONICAL_MEMORY_PROVIDER_ID_PREFIX}:{hashlib.sha256(payload).hexdigest()}"
+
+
+def build_canonical_memory_vector_delete_filter(
+    uid: str,
+    memory_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Fence vector cleanup to one user and optional canonical memory.
+
+    The filter intentionally does not require the current schema marker:
+    account/privacy cleanup must also remove legacy and partially migrated rows.
+    """
+    if not uid.strip():
+        raise ValueError("uid is required")
+    clauses: list[Dict[str, Any]] = [{"uid": {"$eq": uid}}]
+    if memory_id is not None:
+        if not memory_id.strip():
+            raise ValueError("memory_id is required")
+        clauses.append({"memory_id": {"$eq": memory_id}})
+    return {"$and": clauses}
 
 
 def _shared_memory_vector_metadata_fields(
@@ -93,15 +104,17 @@ def build_memory_vector_metadata(
     projection_commit_id: str,
     vector_updated_at: datetime,
 ) -> Dict[str, Any]:
-    """Neutral metadata for canonical-cohort Pinecone vectors (``memory_layer``, ``memory_schema_version``)."""
+    """Neutral metadata for universal canonical vectors (``memory_layer``, ``memory_schema_version``)."""
     shared = _shared_memory_vector_metadata_fields(
         item, projection_commit_id=projection_commit_id, vector_updated_at=vector_updated_at
     )
-    return {
+    metadata = {
         "memory_schema_version": MEMORY_VECTOR_SCHEMA_VERSION,
         "memory_layer": item.tier.value,
         **shared,
     }
+    metadata.update(build_ledger_index_metadata(item))
+    return metadata
 
 
 def strip_null_metadata_values(metadata: Dict[str, Any]) -> Dict[str, Any]:
@@ -113,6 +126,22 @@ def build_default_memory_vector_filter(uid: str) -> Dict[str, Any]:
     return _base_memory_vector_filter(
         uid, {"memory_layer": {"$in": [MemoryTier.short_term.value, MemoryTier.long_term.value]}}
     )
+
+
+def build_ledger_memory_vector_filter(uid: str, kinds: Collection[str] = LEDGER_SEARCH_KINDS) -> Dict[str, Any]:
+    """Build a provider filter for open, versioned ledger rows only."""
+
+    parsed_kinds = validate_ledger_kinds(kinds)
+    result = build_default_memory_vector_filter(uid)
+    result["$and"].extend(
+        [
+            {"ledger_index_version": {"$eq": LEDGER_INDEX_VERSION}},
+            {"ledger_schema_version": {"$eq": "knowledge_ledger.v1"}},
+            {"ledger_row_state": {"$eq": "open"}},
+            {"ledger_kind": {"$in": sorted(parsed_kinds)}},
+        ]
+    )
+    return result
 
 
 def build_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
@@ -239,15 +268,17 @@ def _parse_timestamp(value: str) -> datetime:
 
 
 __all__ = [
+    "CANONICAL_MEMORY_PROVIDER_ID_PREFIX",
     "MEMORY_VECTOR_SCHEMA_VERSION",
-    "MEMORY_VECTOR_ID_PREFIX",
     "RESTRICTED_SENSITIVITY_LABELS",
     "ParsedMemoryVectorHit",
     "ParsedVectorHit",
     "build_archive_memory_vector_filter",
+    "build_canonical_memory_vector_delete_filter",
     "build_default_memory_vector_filter",
+    "build_ledger_memory_vector_filter",
     "build_memory_vector_metadata",
-    "deterministic_memory_vector_id",
+    "canonical_memory_provider_id",
     "parse_memory_search_vector_hit",
     "parse_search_vector_hit",
     "strip_null_metadata_values",

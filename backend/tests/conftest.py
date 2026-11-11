@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 import os
+import subprocess
 import sys
 from pathlib import Path
 import time
@@ -16,21 +17,42 @@ os.environ.setdefault(
     'ENCRYPTION_SECRET',
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
+# Product tests exercise the normal universal write-enabled deployment. Tests
+# for the global incident fence override this explicitly to ``off``.
+os.environ.setdefault('MEMORY_ENABLED', 'on')
+# The episode composer schedules background threads on close/finalize; tests that exercise it
+# enable it explicitly (tests/unit/test_episode_composer.py), so other episode tests stay hermetic.
+os.environ.setdefault('EPISODE_COMPOSER', 'off')
 
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.
 os.environ.setdefault('OPENAI_API_KEY', 'fake-key-for-hermetic-tests')
+os.environ.setdefault('PERPLEXITY_API_KEY', 'fake-key-for-hermetic-tests')
+# The gateway readiness check requires the managed systemone provider key.
+os.environ.setdefault('OPENROUTER_API_KEY', 'fake-key-for-hermetic-tests')
 
 # Some unit tests exercise token counting. Stub tiktoken before any test
 # triggers an encoding lookup, avoiding a download in hermetic CI.
 if 'tiktoken' not in sys.modules:
     _tiktoken_stub = ModuleType('tiktoken')
-    _tiktoken_stub.encoding_for_model = lambda model: type('Encoding', (), {'encode': lambda self, text: list(text)})()
+    _Encoding = type('Encoding', (), {'encode': lambda self, text: list(text)})
+    _Encoding.encode_ordinary = _Encoding.encode  # Match tiktoken's token-counting API without downloads.
+    _tiktoken_stub.encoding_for_model = lambda model: _Encoding()
     sys.modules['tiktoken'] = _tiktoken_stub
 
-from testing.hermetic_network import block_outbound_network
+from testing.hermetic_network import block_local_redis, block_outbound_network
+
+
+@pytest.fixture
+def luna_model() -> str:
+    """Canonical Luna model id. Backend tests use this instead of a versioned literal."""
+    from utils.llm.model_config import LUNA_MODEL
+
+    return LUNA_MODEL
+
 
 _network_guard = None
+_redis_guard = None
 _test_file_durations = defaultdict(float)
 _test_item_durations = defaultdict(float)
 _test_item_cpu = defaultdict(float)
@@ -42,6 +64,14 @@ _UNIT_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'routers',
 )
 _FAST_UNIT_ALLOWLIST = BACKEND_DIR / 'tests' / 'fast_unit_duration_allowlist.txt'
+_ACCOUNT_DELETION_AUTHORITY_TESTS = {
+    'tests/unit/test_account_deletion_auth_fence.py',
+    'tests/unit/test_account_deletion_marker_memo.py',
+    'tests/unit/test_conversation_quiet_finalization.py',
+    'tests/unit/test_firestore_read_site_attribution.py',
+    'tests/unit/test_fsr_s4_caches.py',
+    'tests/unit/test_privacy_ttl_cache.py',
+}
 
 
 def _env_enabled(name, default='1'):
@@ -71,6 +101,39 @@ def _read_duration_allowlist():
     return entries
 
 
+def _stub_unrelated_account_deletion_reads(item):
+    """Keep unrelated unit tests hermetic while worker fences default to active users.
+
+    The production predicate intentionally fails closed when its data-plane marker
+    cannot be read. Most tests exercise unrelated worker behavior with fake UIDs,
+    so they must not accidentally reach Firestore. Fence and marker-reader tests use
+    explicit status fakes and are left untouched.
+    """
+    test_file = _backend_relative(item.path)
+    if not _is_unit_test_path(item.path) or test_file in _ACCOUNT_DELETION_AUTHORITY_TESTS:
+        return []
+
+    originals = []
+    seen = set()
+    for module in tuple(sys.modules.values()):
+        namespace = getattr(module, '__dict__', None)
+        if namespace is None:
+            continue
+        predicate = namespace.get('account_deletion_blocks_user_work')
+        if getattr(predicate, '__module__', None) != 'database.account_deletion_marker':
+            continue
+        function_globals = getattr(predicate, '__globals__', None)
+        if function_globals is None or id(function_globals) in seen:
+            continue
+        status_reader = function_globals.get('get_user_deletion_wipe_status')
+        if not callable(status_reader):
+            continue
+        seen.add(id(function_globals))
+        originals.append((function_globals, status_reader))
+        function_globals['get_user_deletion_wipe_status'] = lambda _uid, **_kwargs: None
+    return originals
+
+
 def pytest_sessionstart(session):
     global _network_guard
     _network_guard = block_outbound_network()
@@ -85,6 +148,16 @@ def pytest_collection_finish(session):
             test_file = _backend_relative(item.path)
             if test_file is not None:
                 _collected_unit_files.add(test_file)
+    # Unit roots are hermetic by contract (CI runs them with no Redis at all),
+    # so a session that collects only unit-root files must not reach a Redis
+    # that happens to listen on the developer machine: rate-limited routes
+    # would consume real ``rl:*`` quota for fixed test uids, and that state
+    # persists across runs for the policy window. Sessions that also collect
+    # integration/e2e files keep real service access.
+    global _redis_guard
+    if session.items and all(_is_unit_test_path(item.path) for item in session.items):
+        _redis_guard = block_local_redis()
+        _redis_guard.__enter__()
 
 
 def pytest_runtest_logreport(report):
@@ -100,26 +173,83 @@ def pytest_runtest_logreport(report):
 def pytest_runtest_call(item):
     """Measure per-test CPU time (call phase only) for the duration guard.
 
-    CPU time (``time.process_time``) is load-independent: a test that does X ms of work
-    reads ~X ms whether the machine is idle or running many sibling pytest processes, so a
-    hard limit is deterministic (unlike wall-clock ``report.duration``, which inflates under
-    parallel contention). Only the *call* phase is measured so that shared class/file setup
+    CPU time (``time.process_time``) is far less load-sensitive than wall-clock
+    ``report.duration``, but it is not load-independent: contention stall cycles are charged
+    to the process, so identical work reads ~2x higher CPU when the file-isolated runner
+    saturates the machine. The blocking budget therefore has to keep headroom over the warn
+    target (see ``test.sh``) rather than sit just above it. Only the *call* phase is measured
+    so that shared class/file setup
     (FastAPI app / TestClient construction, per-process module import) — which file-isolated
     runs charge once to the first test — is not misattributed as a per-test regression. The
     advisory timing summary still reports wall-clock for visibility.
     """
+    originals = _stub_unrelated_account_deletion_reads(item)
     start = time.process_time()
-    yield
+    try:
+        yield
+    finally:
+        for function_globals, status_reader in originals:
+            function_globals['get_user_deletion_wipe_status'] = status_reader
     if _is_unit_test_path(item.path):
         _test_item_cpu[item.nodeid] += time.process_time() - start
 
 
+_xdist_duration_failures = []
+
+# Contract with backend/test.sh: the runner's parallel partition is one pytest process
+# for many files, so it recovers per-file failures by reading pytest's short summary.
+# A duration-guard failure never appears there (the tests themselves passed), which
+# would leave the runner's rerun list empty. Emitting this marker keeps "the suite told
+# me exactly which file to re-run" true for the guard too. test.sh greps for the prefix.
+_FAILED_FILE_MARKER = 'BACKEND-UNIT-FAILED-FILE'
+
+
+def _report_failed_files(terminalreporter, offenders):
+    if terminalreporter is None:
+        return
+    for test_id in sorted({str(test_id).split('::', 1)[0] for test_id, _ in offenders}):
+        terminalreporter.line(f'{_FAILED_FILE_MARKER} {test_id}')
+
+
 def pytest_sessionfinish(session, exitstatus):
-    global _network_guard
-    _enforce_fast_unit_duration_guard(session)
+    global _network_guard, _redis_guard
+    failures = _enforce_fast_unit_duration_guard(session)
+    # Under xdist the guard runs inside a worker, and a worker's ``session.exitstatus``
+    # is discarded by the controller -- the run's status comes from test outcomes alone.
+    # Without this handoff the fast-unit duration budget would stop blocking the moment
+    # the runner batched files into a parallel session: a gate that silently stops
+    # gating. Workers ship their offenders over ``workeroutput``; the controller
+    # collects them in ``pytest_testnodedown`` and fails the session itself.
+    workeroutput = getattr(session.config, 'workeroutput', None)
+    if workeroutput is not None:
+        workeroutput['backend_fast_unit_duration_failures'] = list(failures)
+    elif _xdist_duration_failures:
+        terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
+        if terminalreporter is not None:
+            terminalreporter.section('Backend fast unit duration guard failures (CPU time, parallel workers)')
+            for test_id, seconds in sorted(_xdist_duration_failures, key=lambda item: item[1], reverse=True):
+                terminalreporter.line(f'{seconds:7.2f}s  {test_id}')
+            terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
+            _report_failed_files(terminalreporter, _xdist_duration_failures)
+        session.exitstatus = 1
+    if _redis_guard is not None:
+        _redis_guard.__exit__(None, None, None)
+        _redis_guard = None
     if _network_guard is not None:
         _network_guard.__exit__(None, None, None)
         _network_guard = None
+
+
+try:  # pragma: no cover - depends on whether pytest-xdist is installed
+    import xdist  # noqa: F401
+except ImportError:  # pytest rejects unknown ``pytest_*`` hook names, so only define it
+    pass  # when the plugin that owns the hook is actually present.
+else:
+
+    def pytest_testnodedown(node, error):
+        output = getattr(node, 'workeroutput', None) or {}
+        for entry in output.get('backend_fast_unit_duration_failures', ()):
+            _xdist_duration_failures.append((entry[0], entry[1]))
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
@@ -148,21 +278,29 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         terminalreporter.line(f'{time.perf_counter() - session_start:7.2f}s  total pytest session wall time')
 
 
+_GUARD_CONFIG_ERROR = [('fast unit duration guard configuration error', 0.0)]
+
+
 def _enforce_fast_unit_duration_guard(session):
+    """Fail the session on per-test CPU budget overruns; return the offenders.
+
+    The return value is what lets the guard survive xdist: a worker's exitstatus is
+    thrown away, so ``pytest_sessionfinish`` ships these entries to the controller.
+    """
     raw_warn_limit = os.environ.get('BACKEND_FAST_UNIT_WARN_SECONDS')
     raw_fail_limit = os.environ.get('BACKEND_FAST_UNIT_FAIL_SECONDS')
     if (not raw_warn_limit and not raw_fail_limit) or not _collected_unit_files:
-        return
+        return []
 
     terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
     warn_limit = _parse_fast_unit_limit(raw_warn_limit, 'BACKEND_FAST_UNIT_WARN_SECONDS', terminalreporter)
     fail_limit = _parse_fast_unit_limit(raw_fail_limit, 'BACKEND_FAST_UNIT_FAIL_SECONDS', terminalreporter)
     if warn_limit is None and raw_warn_limit:
         session.exitstatus = 1
-        return
+        return list(_GUARD_CONFIG_ERROR)
     if fail_limit is None and raw_fail_limit:
         session.exitstatus = 1
-        return
+        return list(_GUARD_CONFIG_ERROR)
 
     if warn_limit is None:
         warn_limit = fail_limit
@@ -174,12 +312,14 @@ def _enforce_fast_unit_duration_guard(session):
                 'BACKEND_FAST_UNIT_FAIL_SECONDS must be greater than or equal to ' 'BACKEND_FAST_UNIT_WARN_SECONDS.'
             )
         session.exitstatus = 1
-        return
+        return list(_GUARD_CONFIG_ERROR)
 
-    # The guard measures per-test CPU time (``_test_item_cpu``), not wall-clock. CPU time is
-    # load-independent: a test that does X ms of work reads ~X ms whether the machine is idle or
-    # running many sibling pytest processes, whereas wall-clock ``report.duration`` inflates
-    # unpredictably under parallel contention and makes a hard limit flake. Sleep/wait-based
+    # The guard measures per-test CPU time (``_test_item_cpu``), not wall-clock, because
+    # wall-clock inflates unpredictably under parallel contention. CPU time is the better
+    # signal but not an immune one: it still inflated ~2x on a saturated host, so the budget
+    # relies on headroom rather than on the measurement being exact. A calibration probe
+    # cannot correct for this -- a cache-resident CPU loop does not inflate at all, so the
+    # inflation is memory-bound and workload-specific. Sleep/wait-based
     # slowness (real asyncio sleeps, network, stress) is excluded from the PR unit lane via
     # ``slow``/``integration`` markers, so CPU time is the right signal here. The advisory
     # timing summary in pytest_terminal_summary still reports wall-clock for visibility.
@@ -209,7 +349,7 @@ def _enforce_fast_unit_duration_guard(session):
         if fail_limit is not None and seconds > fail_limit and not _duration_allowlisted(test_id, allowlist)
     ]
     if not warning_offenders and not failure_offenders:
-        return
+        return []
 
     if terminalreporter is not None:
         if warning_offenders:
@@ -225,8 +365,10 @@ def _enforce_fast_unit_duration_guard(session):
             + (f', fail limit = {fail_limit:.2f}s.)' if fail_limit is not None else '.)')
         )
         terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
+        _report_failed_files(terminalreporter, failure_offenders)
     if failure_offenders:
         session.exitstatus = 1
+    return failure_offenders
 
 
 def _parse_fast_unit_limit(raw_value, name, terminalreporter):
@@ -244,3 +386,11 @@ def _parse_fast_unit_limit(raw_value, name, terminalreporter):
 def _duration_allowlisted(test_id, allowlist):
     test_file = test_id.split('::', 1)[0]
     return test_id in allowlist or test_file in allowlist
+
+
+@pytest.fixture
+def isolated_git_env(monkeypatch):
+    """Keep disposable Git repositories independent of a hook's caller."""
+    local_vars = subprocess.check_output(['git', 'rev-parse', '--local-env-vars'], text=True).split()
+    for name in [*local_vars, 'GIT_NAMESPACE']:
+        monkeypatch.delenv(name, raising=False)

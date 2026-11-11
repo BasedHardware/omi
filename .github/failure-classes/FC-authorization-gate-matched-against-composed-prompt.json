@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-authorization-gate-matched-against-composed-prompt",
+  "violated_contract": "A policy that authorizes an effect from the current user turn must match against the user's typed text, never against a machine-composed envelope that embeds it. The desktop runtime prefixes every run input with a clock preamble (\"# Current Time\\n<iso> (<tz>)\\n\\n\"), and the explicit-memory-save intent matchers recognized a remember/save command only at the start of the prompt or after [.!?,;] punctuation — so a typed \"remember that my favorite color is red\" arrived behind the preamble's closing ')' and blank line, failed every command pattern, and was rejected with memory_save_not_authorized before any Swift or backend execution. The gate stayed fail-closed for the wrong reason: the authority evidence was present in the turn but invisible to a matcher anchored on the wrong string. Any gate that consumes a runtime-assembled prompt inherits this failure mode whenever the assembly prefix changes shape.",
+  "canonical_prevention": "At the entry of every intent or authority predicate that consumes a run input, strip the known machine-generated preamble — exactly that prefix and nothing else, so any other leading text is still treated as user text — in both the Node policy and its Swift lockstep twin, then run the fail-closed guards (negation, question, passive mention, third-party command) on the raw turn. A preamble-only prompt with no user text must still reject. Keep the exact preamble reproduction plus preamble-prefixed negative, question, third-party, and bare-preamble cases in the shared intent corpus consumed by both suites, so neither implementation can accept the envelope as authority or drift apart on it.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/agent/tests/fixtures/memory-save-intent-corpus.json",
+    "desktop/macos/agent/tests/external-surface-authority.test.ts",
+    "desktop/macos/Desktop/Tests/ChatToolExecutorCreateMemoryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/agent/src/runtime/external-surface-tool-policy.ts",
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift"
+  ],
+  "status": "open"
+}

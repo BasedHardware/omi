@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-empty-recording.png",
+      "platform": "mobile-ios",
+      "description": "Light Home empty state after a short phone recording produced no conversation",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "002-mobile-android-empty-recording.png",
+      "platform": "mobile-android",
+      "description": "Light Home empty state after a short phone recording produced no conversation",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "003-mobile-ios-discarded-only.png",
+      "platform": "mobile-ios",
+      "description": "Light Home empty state when the only conversation was discarded",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "004-mobile-android-discarded-only.png",
+      "platform": "mobile-android",
+      "description": "Light Home empty state when the only conversation was discarded",
+      "captured_by": "agent",
+      "source": "manual"
+    }
+  ]
+}

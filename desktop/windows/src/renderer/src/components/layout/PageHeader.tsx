@@ -43,8 +43,8 @@ export function PageHeader(props: {
   }
 
   return (
-    <header className="relative z-10 shrink-0 px-6 py-6 lg:px-10 lg:py-7">
-      <div className="panel-header flex items-center justify-between gap-4">
+    <header className="relative z-10 shrink-0 px-6 pt-3 pb-4 lg:px-10 lg:pt-4 lg:pb-5">
+      <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {onBack && (
             <button

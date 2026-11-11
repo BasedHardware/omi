@@ -1,0 +1,7 @@
+{
+  "version": "0.12.183",
+  "date": "2026-08-17",
+  "changes": [
+    "Proactive notifications now surface timely connections to your open and overdue tasks instead of staying silent, and no longer discard facts that lack a ticket number or a name."
+  ]
+}

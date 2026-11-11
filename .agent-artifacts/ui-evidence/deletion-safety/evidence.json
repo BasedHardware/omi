@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-a-held-dark.png",
+      "platform": "mobile-ios",
+      "description": "a held dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-a-held-light.png",
+      "platform": "mobile-ios",
+      "description": "a held light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-a-immediate-dark.png",
+      "platform": "mobile-ios",
+      "description": "a immediate dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-a-immediate-light.png",
+      "platform": "mobile-ios",
+      "description": "a immediate light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-a-none-dark.png",
+      "platform": "mobile-ios",
+      "description": "a none dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-a-none-light.png",
+      "platform": "mobile-ios",
+      "description": "a none light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-a-phone-only-dark.png",
+      "platform": "mobile-ios",
+      "description": "a phone only dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-a-phone-only-light.png",
+      "platform": "mobile-ios",
+      "description": "a phone only light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-a-server-only-dark.png",
+      "platform": "mobile-ios",
+      "description": "a server only dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-a-server-only-light.png",
+      "platform": "mobile-ios",
+      "description": "a server only light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-b-pause-dark.png",
+      "platform": "mobile-ios",
+      "description": "b pause dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-b-pause-light.png",
+      "platform": "mobile-ios",
+      "description": "b pause light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-feedback-dark.png",
+      "platform": "mobile-ios",
+      "description": "feedback dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-ios-feedback-light.png",
+      "platform": "mobile-ios",
+      "description": "feedback light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-ios-finish-deleting-dark.png",
+      "platform": "mobile-ios",
+      "description": "finish deleting dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-ios-finish-deleting-light.png",
+      "platform": "mobile-ios",
+      "description": "finish deleting light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-ios-reason-dark.png",
+      "platform": "mobile-ios",
+      "description": "reason dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-ios-reason-light.png",
+      "platform": "mobile-ios",
+      "description": "reason light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-ios-restore-dark.png",
+      "platform": "mobile-ios",
+      "description": "restore dark",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-ios-restore-light.png",
+      "platform": "mobile-ios",
+      "description": "restore light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

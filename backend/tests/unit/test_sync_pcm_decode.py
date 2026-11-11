@@ -14,6 +14,8 @@ import pytest
 # --- Stubs to isolate from heavy deps ---
 # Use MagicMock for modules where specific names are imported (auto-creates attributes).
 # Use ModuleType only for modules imported as a whole without specific attribute access at import time.
+# Keep the real utils.other namespace so pure transitive helpers remain importable;
+# only its heavyweight storage/endpoints leaves need stubs.
 _stub_modules = [
     'database._client',
     'database.redis_db',
@@ -31,7 +33,6 @@ _stub_modules = [
     'models.transcript_segment',
     'utils.conversations.factory',
     'utils.conversations.process_conversation',
-    'utils.other',
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.encryption',
@@ -151,6 +152,7 @@ _ensure_attrs(
         'get_sync_tasks_max_attempts',
         'is_audio_merge_dispatch_enabled',
         'is_cloud_tasks_dispatch_enabled',
+        'verify_audio_merge_cloud_tasks_oidc',
         'verify_cloud_tasks_oidc',
     ],
 )
@@ -190,7 +192,7 @@ _ensure_attrs('utils.speaker_assignment', ['process_speaker_assigned_segments'])
 _ensure_attrs('utils.speaker_identification', ['detect_speaker_from_text'])
 _ensure_attrs(
     'utils.stt.speaker_embedding',
-    ['extract_embedding_from_bytes', 'compare_embeddings', 'SPEAKER_MATCH_THRESHOLD'],
+    ['extract_embedding_from_bytes', 'compare_embeddings', 'speaker_embedding_configured', 'SPEAKER_MATCH_THRESHOLD'],
 )
 _ensure_attrs('utils.subscription', ['has_transcription_credits'])
 _ensure_attrs('pydub', ['AudioSegment'])
@@ -201,7 +203,7 @@ if not hasattr(sys.modules.setdefault('google.cloud', MagicMock()), 'tasks_v2'):
 
 _remove_python_multipart_stub = _install_python_multipart_stub()
 try:
-    from utils.sync.files import _is_pcm_codec, decode_pcm_file_to_wav, decode_files_to_wav
+    from utils.sync.files import _is_pcm_codec, decode_pcm_file_to_wav, decode_files_to_wav, get_wav_duration
 finally:
     if _remove_python_multipart_stub:
         sys.modules.pop('python_multipart', None)
@@ -280,7 +282,7 @@ class TestDecodePcmFileToWav:
             result = decode_pcm_file_to_wav(bin_path, wav_path)
             assert result is False
 
-    def test_truncated_frame_rejects_valid_prefix(self):
+    def test_truncated_frame_keeps_valid_prefix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -293,10 +295,10 @@ class TestDecodePcmFileToWav:
                 f.write(bytes([0] * 100))  # But only 100 bytes
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
-    def test_suspicious_frame_length_rejects_valid_prefix(self):
+    def test_suspicious_frame_length_keeps_valid_prefix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -308,8 +310,8 @@ class TestDecodePcmFileToWav:
                 f.write(struct.pack('<I', 999999))  # Suspicious length > 65536
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
     def test_frame_length_boundary_65536_accepted(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -327,7 +329,7 @@ class TestDecodePcmFileToWav:
             with wave.open(wav_path, 'rb') as wf:
                 assert wf.getnframes() == 65536 // 2  # 16-bit samples = 2 bytes each
 
-    def test_frame_length_boundary_65537_rejected(self):
+    def test_frame_length_boundary_65537_stops_before_read(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -339,10 +341,10 @@ class TestDecodePcmFileToWav:
                 f.write(struct.pack('<I', 65537))  # Just over 65536 limit
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
-    def test_zero_length_frame_stops(self):
+    def test_zero_length_frame_keeps_valid_prefix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -354,10 +356,10 @@ class TestDecodePcmFileToWav:
                 f.write(struct.pack('<I', 0))  # Zero-length frame
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
-    def test_truncated_length_header_handled(self):
+    def test_truncated_length_header_keeps_valid_prefix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = os.path.join(tmpdir, 'test.bin')
             wav_path = os.path.join(tmpdir, 'test.wav')
@@ -369,8 +371,8 @@ class TestDecodePcmFileToWav:
                 f.write(bytes([0x40, 0x01]))  # Truncated length header
 
             result = decode_pcm_file_to_wav(bin_path, wav_path)
-            assert result is False
-            assert not os.path.exists(wav_path)
+            assert result is True
+            assert get_wav_duration(wav_path) > 0
 
     def test_nonexistent_file_returns_false(self):
         result = decode_pcm_file_to_wav('/nonexistent/path.bin', '/nonexistent/out.wav')
@@ -489,3 +491,19 @@ class TestDecodeFilesToWavPcmRouting:
         assert _is_pcm_codec('audio_omi_opus_fs320_16000_2_fs320_1710000000.bin') is False
         assert _is_pcm_codec('audio_omi_aac_16000_1_fs160_1710000000.bin') is False
         assert _is_pcm_codec('audio_omi_lc3_16000_1_fs160_1710000000.bin') is False
+
+
+def test_pcm_tmpfs_full_propagates_capacity_pressure_instead_of_invalid_audio(tmp_path, monkeypatch):
+    import errno
+    from utils.sync import files
+    from utils.sync.input_limits import BackfillStoragePressure
+
+    raw = tmp_path / 'audio.bin'
+    raw.write_bytes(struct.pack('<I', 320) + b'\0' * 320)
+
+    def full_volume(*args, **kwargs):
+        raise OSError(errno.ENOSPC, 'synthetic tmpfs full')
+
+    monkeypatch.setattr(files.sync_playback, 'pcm_to_wav', full_volume)
+    with pytest.raises(BackfillStoragePressure):
+        files.decode_pcm_file_to_wav(str(raw), str(tmp_path / 'audio.wav'))

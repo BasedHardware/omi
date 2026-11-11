@@ -1,3 +1,7 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams } from '@tschk/moonshine-next/navigation';
 import {
   findAppById,
   getAppsV2,
@@ -8,18 +12,103 @@ import { CompactPluginCard } from '@/components/marketplace/plugin-card/CompactP
 import { CategoryBreadcrumb } from '@/components/marketplace/CategoryBreadcrumb';
 import { BreadcrumbJsonLd, SoftwareAppJsonLd } from '@/components/seo/JsonLd';
 import { Calendar, User, FolderOpen, Puzzle, ArrowRight, DollarSign } from 'lucide-react';
-import { Metadata } from 'next';
-import Image from 'next/image';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import Image from '@tschk/moonshine-next/image';
+import Link from '@tschk/moonshine-next/link';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
+/**
+ * moonshine emits its own `<head>` and has no per-route metadata hook — its own
+ * adopt check rejects `generateMetadata` with "Moonshine emits its own <head>",
+ * and both `renderPage` and `renderSpaShell` in `@tschk/moonshine-react` build
+ * a head of module preloads only. These routes also compile to `spa` mode, so
+ * nothing about them is server-rendered. Writing the tags from the client after
+ * the app loads is therefore the whole of what this runtime allows; crawlers
+ * that execute JS pick them up, ones that do not see only the shell.
+ */
+export function applyAppDetailMetadata(app: {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  image?: string;
+}): () => void {
+  if (typeof document === 'undefined') return () => {};
+  const previousTitle = document.title;
+  const restorers: Array<() => void> = [];
+  const title = `${app.name} - ${formatCategoryName(app.category)} App`;
+  const description = `${app.description} Available on Omi, the AI-powered wearable platform.`;
+  document.title = title;
+  const url = `${window.location.origin}/apps/${app.id}`;
 
-// ISR configuration
-export const revalidate = 300; // Revalidate every 5 minutes
-export const dynamicParams = true; // Allow non-pre-rendered app pages
+  const setMeta = (selector: string, attr: string, key: string, content: string) => {
+    let el = document.head.querySelector<HTMLMetaElement>(selector);
+    const existed = Boolean(el);
+    const previousContent = el?.getAttribute('content');
+    if (!el) {
+      el = document.createElement('meta');
+      el.setAttribute(attr, key);
+      document.head.appendChild(el);
+    }
+    el.setAttribute('content', content);
+    restorers.push(() => {
+      if (!existed) {
+        el?.remove();
+      } else if (previousContent == null) {
+        el?.removeAttribute('content');
+      } else {
+        el?.setAttribute('content', previousContent);
+      }
+    });
+  };
+
+  setMeta('meta[name="description"]', 'name', 'description', description);
+  setMeta('meta[property="og:title"]', 'property', 'og:title', title);
+  setMeta(
+    'meta[property="og:description"]',
+    'property',
+    'og:description',
+    app.description,
+  );
+  setMeta('meta[property="og:url"]', 'property', 'og:url', url);
+  if (app.image) {
+    setMeta('meta[property="og:image"]', 'property', 'og:image', app.image);
+  }
+  setMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary_large_image');
+  setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', title);
+  setMeta(
+    'meta[name="twitter:description"]',
+    'name',
+    'twitter:description',
+    app.description,
+  );
+  if (app.image) {
+    setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', app.image);
+  }
+
+  let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  const canonicalExisted = Boolean(canonical);
+  const previousCanonical = canonical?.getAttribute('href');
+  if (!canonical) {
+    canonical = document.createElement('link');
+    canonical.rel = 'canonical';
+    document.head.appendChild(canonical);
+  }
+  canonical.href = url;
+  restorers.push(() => {
+    if (!canonicalExisted) {
+      canonical?.remove();
+    } else if (previousCanonical == null) {
+      canonical?.removeAttribute('href');
+    } else {
+      canonical?.setAttribute('href', previousCanonical);
+    }
+  });
+
+  return () => {
+    document.title = previousTitle;
+    for (const restore of restorers.reverse()) restore();
+  };
+}
 
 // Helper function to format category name
 const formatCategoryName = (category: string): string => {
@@ -42,74 +131,65 @@ function formatDate(dateString: string | null | undefined): string | null {
   });
 }
 
-// Pre-render only popular apps at build time
-export async function generateStaticParams() {
-  const { groups } = await getAppsV2();
-  const popularGroup = groups.find((g) => g.capability.id === 'popular');
-  return popularGroup?.data.map((app) => ({ id: app.id })) || [];
-}
+export default function PluginDetailPage() {
+  const { id = '' } = useParams();
+  const [plugin, setPlugin] = useState<Awaited<ReturnType<typeof findAppById>>>(null);
+  const [relatedApps, setRelatedApps] = useState<ReturnType<typeof transformToPlugin>[]>(
+    [],
+  );
+  const [loaded, setLoaded] = useState(false);
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { id } = await params;
-  const plugin = await findAppById(id);
-
-  if (!plugin) {
-    return {
-      title: 'App Not Found',
-      description: 'The requested app could not be found.',
+  useEffect(() => {
+    let active = true;
+    let restoreMetadata: (() => void) | undefined;
+    // Get v2 apps to find related ones
+    Promise.all([findAppById(id), getAppsV2(true)]).then(([app, response]) => {
+      if (!active) return;
+      setPlugin(app);
+      if (app) {
+        restoreMetadata = applyAppDetailMetadata(app);
+        // Flatten all apps from groups
+        const rawPlugins: V2AppData[] = response.groups.flatMap((group) => group.data);
+        // Get related apps based on category
+        setRelatedApps(
+          rawPlugins
+            .map(transformToPlugin)
+            .filter(
+              (candidate) =>
+                candidate.category === app.category && candidate.id !== app.id,
+            )
+            .slice(0, 6),
+        );
+      }
+      setLoaded(true);
+    });
+    return () => {
+      active = false;
+      restoreMetadata?.();
     };
-  }
+  }, [id]);
 
-  const categoryName = formatCategoryName(plugin.category);
-  const title = `${plugin.name} - ${categoryName} App`;
-  const description = `${plugin.description} Available on Omi, the AI-powered wearable platform.`;
-  const ogImage = plugin.image || '/og-apps.png';
-
-  return {
-    title,
-    description,
-    alternates: {
-      canonical: `/apps/${id}`,
-    },
-    openGraph: {
-      title,
-      description: plugin.description,
-      url: `/apps/${id}`,
-      images: [{ url: ogImage, width: 1200, height: 630, alt: plugin.name }],
-      type: 'website',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description: plugin.description,
-      images: [ogImage],
-    },
-  };
-}
-
-export default async function PluginDetailPage({ params }: Props) {
-  const { id } = await params;
-  const plugin = await findAppById(id);
-
+  if (!loaded) return <div className="min-h-screen bg-[#0B0F17]" />;
+  // An unknown id used to be a 404. moonshine's `notFound()` throws, and a
+  // client route has no boundary to catch it, so the reachable equivalent is a
+  // rendered not-found state with a way back to the marketplace.
   if (!plugin) {
-    notFound();
+    return (
+      <div
+        data-testid="app-not-found"
+        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0B0F17] px-6 text-center"
+      >
+        <h1 className="text-3xl font-bold text-white">App not found</h1>
+        <p className="text-gray-400">We couldn&apos;t find an app with the id “{id}”.</p>
+        <Link
+          href="/apps"
+          className="rounded-xl bg-[#6C8EEF] px-6 py-3 text-base font-medium text-white transition-all hover:bg-[#5A7DE8]"
+        >
+          Browse the App Store
+        </Link>
+      </div>
+    );
   }
-
-  // Get v2 apps to find related ones
-  const { groups } = await getAppsV2(true); // include_reviews=true to get ratings for related apps
-
-  // Flatten all apps from groups
-  const rawPlugins: V2AppData[] = [];
-  for (const group of groups) {
-    rawPlugins.push(...group.data);
-  }
-
-  const allPlugins = rawPlugins.map(transformToPlugin);
-
-  // Get related apps based on category
-  const relatedApps = allPlugins
-    .filter((p) => p.category === plugin.category && p.id !== plugin.id)
-    .slice(0, 6);
 
   const categoryName = formatCategoryName(plugin.category);
   const capabilities = plugin.capabilities || [];
@@ -345,3 +425,5 @@ export default async function PluginDetailPage({ params }: Props) {
     </div>
   );
 }
+
+registerMoonshineRoute('/apps/:id', PluginDetailPage, 'public');

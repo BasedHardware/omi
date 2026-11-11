@@ -1,0 +1,16 @@
+{
+  "permanent_bucket_env_var": "BUCKET_FRAME_REQUESTS",
+  "temporary_bucket_env_var": "BUCKET_FRAME_REQUESTS_TEMPORARY",
+  "conversation_attachment_policy": "conversation_lifetime",
+  "allowed_locations": ["US", "US-CENTRAL1"],
+  "uniform_bucket_level_access": true,
+  "public_access_prevention": "enforced",
+  "encryption_at_rest": "google_managed_or_cmek",
+  "lifecycle": {
+    "expires_objects": false
+  },
+  "temporary_lifecycle": {
+    "delete_age_days": 6,
+    "soft_delete_retention_seconds": 0
+  }
+}

@@ -16,7 +16,7 @@ enum ConnectorImportOperations {
 
   enum Outcome {
     case success(SyncResult, message: String)
-    case failure(message: String)
+    case failure(message: String, failureClass: IntegrationConnectTelemetry.ErrorClass? = nil)
   }
 
   @MainActor
@@ -41,18 +41,73 @@ enum ConnectorImportOperations {
     source: OnboardingMemoryLogSource
   ) -> Outcome {
     switch result {
-    case .imported(let memories, _):
+    case .imported(let memories, let failed, _):
+      let message =
+        failed > 0
+        ? "Imported \(memories.formatted()) memories from \(source.displayName); \(failed.formatted()) couldn't be saved. Import again to retry them."
+        : "Imported \(memories.formatted()) memories from \(source.displayName)."
       return .success(
         SyncResult(sourceCount: nil, memoryCount: memories, newItems: memories),
-        message: "Imported \(memories.formatted()) memories from \(source.displayName)."
+        message: message
       )
     case .noDurableMemories:
+      // Not a connect failure — the parse succeeded but produced nothing
+      // durable. Surfaces UI guidance as a failure but carries a distinct
+      // bounded class so analytics can exclude it from the connect-failure rate.
       return .failure(
         message: "No durable memories found in that text. "
-          + "Make sure you pasted \(source.displayName)'s full response, then import again."
+          + "Make sure you pasted \(source.displayName)'s full response, then import again.",
+        failureClass: .noContent
       )
-    case .failed:
-      return .failure(message: "The import couldn't run. Try again.")
+    case .failed(let failure):
+      return memoryLogFailureOutcome(failure)
+    }
+  }
+
+  private static func memoryLogFailureOutcome(
+    _ failure: OnboardingMemoryLogImportService.ImportFailure
+  ) -> Outcome {
+    switch failure {
+    case .authentication:
+      return .failure(
+        message: "Your session expired. Sign in again, then retry the import.",
+        failureClass: .authentication)
+    case .planRequired:
+      return .failure(
+        message: "Memory extraction isn't available on your current plan.",
+        failureClass: .authorizationDenied)
+    case .rateLimited:
+      return .failure(
+        message: "Too many memory imports are running. Wait a minute, then try again.",
+        failureClass: .rateLimit)
+    case .network:
+      return .failure(
+        message: "Omi couldn't reach the memory service. Check your connection, then try again.",
+        failureClass: .network)
+    case .timeout:
+      return .failure(
+        message: "Memory extraction took too long. Try the import again.",
+        failureClass: .timeout)
+    case .server:
+      return .failure(
+        message: "Omi's memory service is temporarily unavailable. Try again shortly.",
+        failureClass: .server)
+    case .invalidResponse:
+      return .failure(
+        message: "Omi couldn't read the extracted memories. Try the import again.",
+        failureClass: .invalidResponse)
+    case .requestRejected:
+      return .failure(
+        message: "The memory service rejected this import. Check the pasted text, then try again.",
+        failureClass: .invalidResponse)
+    case .saveFailed:
+      return .failure(
+        message: "Memories were extracted, but Omi couldn't save them. Check your connection, then try again.",
+        failureClass: .unknown)
+    case .fixtureUnavailable:
+      return .failure(
+        message: "This import test is only available in development builds.",
+        failureClass: .configuration)
     }
   }
 
@@ -61,7 +116,8 @@ enum ConnectorImportOperations {
     do {
       let emails = try await GmailReaderService.shared.readRecentEmails(
         maxResults: 300,
-        query: "newer_than:365d"
+        query: "newer_than:365d",
+        userInitiated: true
       )
       progress.update(
         title: "Importing Gmail history",
@@ -74,8 +130,56 @@ enum ConnectorImportOperations {
         SyncResult(sourceCount: emails.count, memoryCount: memoryCount, newItems: emails.count),
         message: "Imported \(emails.count.formatted()) emails and saved \(memoryCount.formatted()) memories."
       )
+    } catch let error as GmailReaderError {
+      return .failure(message: error.localizedDescription, failureClass: Self.failureClass(for: error))
     } catch {
-      return .failure(message: error.localizedDescription)
+      return .failure(
+        message: error.localizedDescription,
+        failureClass: IntegrationConnectTelemetry.ErrorClass.fromMessage(error.localizedDescription))
+    }
+  }
+
+  /// Revoke the shared Google Calendar grant. A missing grant is already the
+  /// desired end state, so DELETE 404 is idempotent success rather than an
+  /// error that strands a locally connected import card.
+  @MainActor
+  static func disconnectCalendar(
+    performDelete: @escaping @MainActor () async throws -> Void
+  ) async -> Outcome {
+    do {
+      try await performDelete()
+      return calendarDisconnectSuccess()
+    } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
+      return calendarDisconnectSuccess()
+    } catch {
+      return .failure(
+        message: "Couldn't disconnect Google Calendar. Check your connection and try again.",
+        failureClass: calendarDisconnectFailureClass(error))
+    }
+  }
+
+  private static func calendarDisconnectSuccess() -> Outcome {
+    .success(
+      SyncResult(sourceCount: nil, memoryCount: nil, newItems: nil),
+      message: "Google Calendar disconnected. Imported memories remain in Omi."
+    )
+  }
+
+  private static func calendarDisconnectFailureClass(_ error: Error) -> IntegrationConnectTelemetry.ErrorClass {
+    if let urlError = error as? URLError {
+      return urlError.code == .timedOut ? .timeout : .network
+    }
+    guard case APIError.httpError(let statusCode, _) = error else {
+      return IntegrationConnectTelemetry.ErrorClass.fromMessage(error.localizedDescription)
+    }
+    switch statusCode {
+    case 401: return .authentication
+    case 403: return .authorizationDenied
+    case 408: return .timeout
+    case 409: return .conflict
+    case 429: return .rateLimit
+    case 500...599: return .server
+    default: return .unknown
     }
   }
 
@@ -182,28 +286,131 @@ enum ConnectorImportOperations {
     return "omi-computer"
   }
 
+  /// Maps the connector-native Gmail error to the closed telemetry class.
+  /// Pure and bounded — the enum is the sanitized form; no message text leaks.
+  private static func failureClass(for error: GmailReaderError) -> IntegrationConnectTelemetry.ErrorClass {
+    switch error {
+    case .noBrowserFound: return .noBrowser
+    case .noGmailCookies, .notSignedIn: return .notSignedIn
+    case .sessionExpired, .authFailed: return .sessionExpired
+    case .cookieDecryptionFailed: return .decryptFailed
+    case .networkError: return .network
+    case .pythonNotFound: return .unknown
+    }
+  }
+
+  /// Maps the connector-native Calendar error to the closed telemetry class.
+  /// Includes the `configuration` class (invalid/missing API key) that is
+  /// otherwise invisible to telemetry — a real cold-launch ops blind spot.
+  private static func failureClass(for error: CalendarReaderError) -> IntegrationConnectTelemetry.ErrorClass {
+    switch error {
+    case .noBrowserFound: return .noBrowser
+    case .notSignedIn: return .notSignedIn
+    case .sessionExpired: return .sessionExpired
+    case .cookieDecryptionFailed: return .decryptFailed
+    case .configurationError: return .configuration
+    case .networkError: return .network
+    case .pythonNotFound: return .unknown
+    }
+  }
+
   @MainActor
   static func importCalendar(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
     do {
       let events = try await CalendarReaderService.shared.readEvents(
         daysBack: 365,
         daysForward: 30,
-        maxResults: 500
+        maxResults: 500,
+        userInitiated: true
       )
+      return await saveCalendarEvents(events, progress: progress)
+    } catch let error as CalendarReaderError {
+      // Every `CalendarReaderError` means the browser-cookie reader found no
+      // usable Google session on this machine, and `readEvents` only reaches it
+      // when the account has no OAuth grant either. Both sources are exhausted,
+      // so "try again" is not advice — nothing about the machine has changed.
+      // Google's own consent screen is the one path that does not depend on
+      // which browser is installed or whether its cookies can be decrypted.
+      return await connectCalendarViaOAuth(progress: progress, cookieFailure: error)
+    } catch {
+      return .failure(
+        message: error.localizedDescription,
+        failureClass: IntegrationConnectTelemetry.ErrorClass.fromMessage(error.localizedDescription))
+    }
+  }
+
+  /// Backend-mediated Google OAuth, same shape as `connectX`: open the consent
+  /// URL, poll until the grant lands, then read through it.
+  @MainActor
+  private static func connectCalendarViaOAuth(
+    progress: ConnectorImportRunner.ProgressSink,
+    cookieFailure: CalendarReaderError
+  ) async -> Outcome {
+    let authURL: URL
+    do {
+      authURL = try await APIClient.shared.googleCalendarOAuthURL()
+    } catch {
+      // Server-side OAuth is unavailable, so the cookie reader's own diagnosis
+      // is still the most actionable thing the user can be told.
+      return .failure(
+        message: cookieFailure.localizedDescription,
+        failureClass: Self.failureClass(for: cookieFailure))
+    }
+
+    guard NSWorkspace.shared.open(authURL) else {
+      return .failure(
+        message: "Couldn't open the Google sign-in page. Check your default browser, then try again.",
+        failureClass: .noBrowser)
+    }
+
+    progress.update(
+      title: "Waiting for Google sign-in",
+      detail: "Approve calendar access in your browser. This window updates automatically."
+    )
+
+    for _ in 0..<60 {
+      try? await Task.sleep(for: .seconds(2))
+      guard await CalendarReaderService.shared.hasGoogleGrant() else { continue }
       progress.update(
         title: "Importing calendar events",
-        detail: "Saving events as memories and generating action-oriented summaries."
+        detail: "Reading past events and upcoming commitments for memory extraction."
       )
-      let rawImport = await CalendarReaderService.shared.saveAsMemories(events: events, limit: 200)
-      let synthesis = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
-      let memoryCount = rawImport.saved + synthesis.memories
-      return .success(
-        SyncResult(sourceCount: events.count, memoryCount: memoryCount, newItems: events.count),
-        message: "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
-      )
-    } catch {
-      return .failure(message: error.localizedDescription)
+      do {
+        let events =
+          try await CalendarReaderService.shared.readEventsViaGrant(
+            daysBack: 365,
+            daysForward: 30,
+            maxResults: 500
+          ) ?? []
+        return await saveCalendarEvents(events, progress: progress)
+      } catch {
+        return .failure(
+          message: "Connected to Google, but reading your calendar failed. Try Sync now.",
+          failureClass: IntegrationConnectTelemetry.ErrorClass.fromMessage(error.localizedDescription))
+      }
     }
+
+    return .failure(
+      message: "Didn't hear back from Google. If you approved access, try again.",
+      failureClass: .notSignedIn)
+  }
+
+  @MainActor
+  private static func saveCalendarEvents(
+    _ events: [CalendarEvent],
+    progress: ConnectorImportRunner.ProgressSink
+  ) async -> Outcome {
+    progress.update(
+      title: "Importing calendar events",
+      detail: "Saving events as memories and generating action-oriented summaries."
+    )
+    let rawImport = await CalendarReaderService.shared.saveAsMemories(events: events, limit: 200)
+    let synthesis = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
+    let memoryCount = rawImport.saved + synthesis.memories
+    return .success(
+      SyncResult(sourceCount: events.count, memoryCount: memoryCount, newItems: events.count),
+      message: "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
+    )
   }
 
   @MainActor
@@ -235,7 +442,10 @@ enum ConnectorImportOperations {
       title: "Importing Apple Notes",
       detail: "Reading recent notes and turning useful content into memories."
     )
-    let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+    let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+      maxResults: 250,
+      userInitiated: true
+    )
     let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
     let synthesis = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
     let memoryCount = rawImport.saved + synthesis.memories

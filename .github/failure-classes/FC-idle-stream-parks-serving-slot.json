@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-idle-stream-parks-serving-slot",
+  "violated_contract": "A serving endpoint must not hold a request slot open for a stream that carries no protocol value; every long-lived response must either deliver data the connected client consumes or terminate immediately, because parked idle streams spend the service's bounded concurrency budget and starve real requests while CPU sits idle.",
+  "canonical_prevention": "When a transport makes a long-lived response optional, return the spec-mandated immediate refusal (405 for MCP Streamable HTTP GET) instead of an idle keepalive stream, and assert with a contract test that the endpoint cannot answer with an unbounded stream.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_mcp_sse_get_no_stream.py"
+  ],
+  "evidence_prs": [
+    11557
+  ],
+  "scope_hints": [
+    "backend/**"
+  ],
+  "status": "open"
+}

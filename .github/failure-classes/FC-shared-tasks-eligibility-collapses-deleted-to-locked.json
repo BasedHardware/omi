@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-shared-tasks-eligibility-collapses-deleted-to-locked",
+  "violated_contract": "When verifying shared task eligibility, missing or deleted task documents must not be treated as locked behind a paywall; non-existent resources must return 404 rather than 402 Payment Required.",
+  "canonical_prevention": "Distinguish existing documents from missing ones before checking entitlement/lock flags, and ensure failure during creation safely rolls back one-time acceptance tokens.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_shared_action_items.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/action_items.py"
+  ],
+  "status": "open"
+}

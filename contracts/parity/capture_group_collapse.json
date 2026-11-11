@@ -1,0 +1,50 @@
+{
+  "$comment": "One list row per recorded event (BasedHardware/omi#17281). The backend groups captures of one real-world event from different surfaces (desktop, pendant, phone) into a `capture_group`, identical on every member, only after confirming shared speech. Clients collapse the rows they have LOADED (paging offsets still count server rows): the representative is the member whose id equals the group's `primary_id` when it is loaded, otherwise the first loaded member in list order; every other loaded member of that group is hidden behind it. A member whose group has no other loaded member is shown as itself, so grouping can hide a duplicate but never a conversation. Rows without a group are never touched. `rows` is the loaded list in display order; `group` names a group from `groups`; `expected_ids` is the collapsed list in order.",
+  "groups": {
+    "meeting": { "primary_id": "desktop", "members": ["desktop", "pendant-1", "pendant-2"] },
+    "call": { "primary_id": "phone-call", "members": ["phone-call", "watch-call"] }
+  },
+  "cases": [
+    {
+      "name": "collapses_to_primary_in_list_order",
+      "rows": [
+        { "id": "pendant-2", "group": "meeting" },
+        { "id": "other" },
+        { "id": "desktop", "group": "meeting" },
+        { "id": "pendant-1", "group": "meeting" }
+      ],
+      "expected_ids": ["other", "desktop"]
+    },
+    {
+      "name": "unloaded_primary_falls_back_to_first_loaded_member",
+      "rows": [
+        { "id": "pendant-1", "group": "meeting" },
+        { "id": "pendant-2", "group": "meeting" }
+      ],
+      "expected_ids": ["pendant-1"]
+    },
+    {
+      "name": "lone_loaded_member_is_never_hidden",
+      "rows": [
+        { "id": "pendant-1", "group": "meeting" },
+        { "id": "other" }
+      ],
+      "expected_ids": ["pendant-1", "other"]
+    },
+    {
+      "name": "groups_collapse_independently",
+      "rows": [
+        { "id": "watch-call", "group": "call" },
+        { "id": "pendant-1", "group": "meeting" },
+        { "id": "phone-call", "group": "call" },
+        { "id": "desktop", "group": "meeting" }
+      ],
+      "expected_ids": ["phone-call", "desktop"]
+    },
+    {
+      "name": "ungrouped_list_is_unchanged",
+      "rows": [{ "id": "a" }, { "id": "b" }, { "id": "c" }],
+      "expected_ids": ["a", "b", "c"]
+    }
+  ]
+}

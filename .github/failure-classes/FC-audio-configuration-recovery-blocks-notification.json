@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-audio-configuration-recovery-blocks-notification",
+  "violated_contract": "An AVAudioEngine configuration notification must not synchronously rebuild or restart the audio graph on the notification callback, and a queued recovery must not override an explicit playback stop.",
+  "canonical_prevention": "Defer and coalesce AVAudioEngine configuration recovery through DeferredConfigurationRecovery, which serializes pending state and invalidates queued work when playback stops.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/StreamingPCMPlaybackQueueTests.swift"
+  ],
+  "evidence_prs": [11450],
+  "scope_hints": ["desktop/macos/Desktop/Sources/FloatingControlBar/StreamingPCMPlayer.swift"],
+  "status": "open"
+}

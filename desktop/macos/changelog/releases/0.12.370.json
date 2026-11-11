@@ -1,0 +1,8 @@
+{
+  "version": "0.12.370",
+  "date": "2026-09-20",
+  "changes": [
+    "Conversations summarized on your Mac now say so",
+    "A conversation with no summary explains why instead of showing a blank space"
+  ]
+}

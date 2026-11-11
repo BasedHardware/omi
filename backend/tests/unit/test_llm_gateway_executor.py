@@ -1,23 +1,50 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from functools import cache
+
 import pytest
 
+import llm_gateway.gateway.executor as executor
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
 from llm_gateway.gateway.credentials import build_byok_credential_context, build_omi_managed_credential_context
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
     GatewayCredentialFailureError,
+    GatewayInvalidRequestError,
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
+    GatewayProviderRequestRejectedError,
 )
-from llm_gateway.gateway.accounting import AttemptTrace
-from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, selected_serving_route_artifact_id
-from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure, fake_success_response
-from llm_gateway.gateway.resolver import resolve_chat_completion_route
-from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutPolicy, RolloutStage
+from llm_gateway.gateway.accounting import AttemptTrace, ProviderResponseMetadata
+from llm_gateway.gateway.executor import (
+    ProviderRegistry,
+    execute_chat_completion,
+    execute_embedding,
+    provider_429_backoff_seconds,
+    provider_request_for,
+    selected_serving_route_artifact_id,
+)
+from llm_gateway.gateway.providers import (
+    FakeChatCompletionProvider,
+    ProviderFailure,
+    ProviderResponse,
+    fake_success_response,
+)
+from llm_gateway.gateway.resolver import resolve_chat_completion_route, resolve_embedding_route
+from utils.llm.model_config import LUNA_MODEL
+from llm_gateway.gateway.schemas import (
+    CredentialMode,
+    FailureClass,
+    ProviderRef,
+    RolloutPolicy,
+    RolloutStage,
+    RouteServingClass,
+)
 
 LANE_ID = 'omi:auto:chat-structured'
+CHAT_AGENT_LANE_ID = 'omi:auto:chat-agent'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
 LKG_ROUTE = 'route.chat_structured.2026_06_20.001'
 
@@ -39,10 +66,14 @@ async def test_executor_success_uses_active_primary_and_exposes_lane_model():
     assert result.response['choices'][0]['message']['content'] == '{"answer":"primary"}'
     assert result.selected_route_artifact_id == ACTIVE_ROUTE
     assert result.selected_provider == 'openai'
-    assert result.selected_model == 'gpt-5.4-nano'
+    assert result.selected_model == LUNA_MODEL
     assert not result.fallback_used
+    assert result.fallback_reason is None
+    assert result.fallback_from_route_artifact_id is None
+    assert result.fallback_to_route_artifact_id is None
     assert not result.used_lkg
-    assert provider.calls[0].request['model'] == 'gpt-5.4-nano'
+    assert result.route_serving_class == RouteServingClass.ACTIVE
+    assert provider.calls[0].request['model'] == LUNA_MODEL
     assert provider.calls[0].request['stream'] is False
 
 
@@ -61,8 +92,131 @@ async def test_executor_forwards_prompt_parser_request_without_response_format()
         ProviderRegistry({'openai': provider}),
     )
 
-    assert provider.calls[0].request['model'] == 'gpt-5.4-nano'
+    assert provider.calls[0].request['model'] == LUNA_MODEL
     assert 'response_format' not in provider.calls[0].request
+
+
+def test_chat_agent_provider_request_includes_omi_luna_personality():
+    config = gateway_config()
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [
+            {'role': 'system', 'content': 'Use the user context.'},
+            {'role': 'user', 'content': 'Hello.'},
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+
+    system_message = provider_request['messages'][0]
+    assert system_message['role'] == 'system'
+    assert system_message['content'].startswith('You are Omi, a warm and perceptive personal assistant.')
+    assert system_message['content'].endswith('Use the user context.')
+    assert provider_request['messages'][1] == {'role': 'user', 'content': 'Hello.'}
+
+
+def test_chat_agent_personality_preserves_array_system_text():
+    config = gateway_config()
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [
+            {'role': 'system', 'content': [{'type': 'text', 'text': 'Use the user context.'}]},
+            {'role': 'user', 'content': 'Hello.'},
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+
+    system_message = provider_request['messages'][0]
+    assert system_message['role'] == 'system'
+    assert system_message['content'][0]['type'] == 'text'
+    assert system_message['content'][0]['text'].startswith('You are Omi, a warm and perceptive personal assistant.')
+    assert system_message['content'][1:] == [{'type': 'text', 'text': 'Use the user context.'}]
+
+
+def test_chat_agent_tools_force_reasoning_effort_none_for_luna_chat_completions():
+    """Luna chat completions force reasoning_effort=none when function tools are present."""
+    config = gateway_config()
+    # Mutate the serving route the way a bad override would: medium effort + tools.
+    route = config.route_artifacts['route.chat_agent.model_config.001']
+    config.route_artifacts['route.chat_agent.model_config.001'] = route.model_copy(
+        update={'provider_options': {**dict(route.provider_options), 'reasoning_effort': 'medium', 'temperature': 0.7}}
+    )
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [
+            {'role': 'system', 'content': 'Use tools when needed.'},
+            {'role': 'user', 'content': 'What did I say about coffee?'},
+        ],
+        'tools': [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'get_memories_tool',
+                    'description': 'Get memories',
+                    'parameters': {'type': 'object', 'properties': {'query': {'type': 'string'}}},
+                },
+            }
+        ],
+        'tool_choice': 'auto',
+    }
+    resolved = resolve_chat_completion_route(config, request)
+
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+
+    assert provider_request['model'] == LUNA_MODEL
+    assert provider_request['tools']
+    assert provider_request.get('reasoning_effort') == 'none'
+    assert 'temperature' not in provider_request
+
+
+def test_chat_agent_default_route_reasoning_effort_is_none():
+    config = gateway_config()
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [{'role': 'user', 'content': 'Hello.'}],
+        'tools': [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'get_memories_tool',
+                    'description': 'Get memories',
+                    'parameters': {'type': 'object', 'properties': {}},
+                },
+            }
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+    assert provider_request.get('reasoning_effort') == 'none'
+
+
+def test_gpt56_tools_strip_bool_temperature():
+    """True==1 must not bypass the temperature sanitize (OpenAI rejects non-default)."""
+    config = gateway_config()
+    route = config.route_artifacts['route.chat_agent.model_config.001']
+    config.route_artifacts['route.chat_agent.model_config.001'] = route.model_copy(
+        update={'provider_options': {**dict(route.provider_options), 'temperature': True}}
+    )
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [{'role': 'user', 'content': 'hi'}],
+        'tools': [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'get_memories_tool',
+                    'description': 'Get memories',
+                    'parameters': {'type': 'object', 'properties': {}},
+                },
+            }
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+    assert 'temperature' not in provider_request
 
 
 @pytest.mark.asyncio
@@ -73,10 +227,14 @@ async def test_executor_uses_lkg_route_provider_options_when_active_is_shadow():
             'rollout': RolloutPolicy(stage=RolloutStage.SHADOW, percent=0),
         }
     )
-    lkg_route = (
-        load_gateway_config(prod_mode=True)
-        .route_artifacts[LKG_ROUTE]
-        .model_copy(update={'provider_options': {'temperature': 0.1}})
+    # Use a non-gpt-5.6 LKG primary so temperature is a meaningful provider option
+    # (gpt-5.6* only accepts the default temperature and strips other values).
+    lkg_base = gateway_config().route_artifacts[LKG_ROUTE]
+    lkg_route = lkg_base.model_copy(
+        update={
+            'primary': ProviderRef(provider='openai', model='gpt-4.1-mini'),
+            'provider_options': {'temperature': 0.1},
+        }
     )
     config = config_with_routes(active_route, lkg_route)
     resolved = resolve_chat_completion_route(config, valid_request())
@@ -135,16 +293,40 @@ async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
     )
 
     # Primary tried 3 times (max_attempts), then fallback once
-    assert [call.model for call in provider.calls] == ['gpt-5.4-nano', 'gpt-5.4-nano', 'gpt-5.4-nano', 'gpt-4o-mini']
+    assert [call.model for call in provider.calls] == [LUNA_MODEL, LUNA_MODEL, LUNA_MODEL, 'gpt-4o-mini']
     assert result.response['choices'][0]['message']['content'] == '{"answer":"fallback"}'
+
+
+@pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_executor_retries_with_only_the_remaining_request_deadline(monkeypatch):
+    active_route = active_route_with_fallbacks([])
+    active_route = active_route.model_copy(
+        update={
+            'retry': type(active_route.retry)(max_attempts=2),
+            'timeouts': active_route.timeouts.model_copy(update={'request_ms': 100}),
+        }
+    )
+    resolved = resolve_chat_completion_route(config_with_active_route(active_route), valid_request())
+    clock = iter([0.0, 0.0, 0.075])
+    monkeypatch.setattr(executor, 'monotonic', lambda: next(clock), raising=False)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            fake_success_response(active_route.primary),
+        ]
+    )
+
+    await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    assert [call.timeout_ms for call in provider.calls] == [100, 25]
 
 
 @pytest.mark.asyncio
 async def test_executor_attempt_trace_retains_each_retry_and_fallback() -> None:
     fallback_ref = ProviderRef(provider='openai', model='gpt-4o-mini')
-    route = active_route_with_fallbacks([fallback_ref]).model_copy(
-        update={'retry': type(load_gateway_config().route_artifacts[ACTIVE_ROUTE].retry)(max_attempts=2)}
-    )
+    route = active_route_with_fallbacks([fallback_ref])
+    route = route.model_copy(update={'retry': type(route.retry)(max_attempts=2)})
     resolved = resolve_chat_completion_route(config_with_active_route(route), valid_request())
     provider = FakeChatCompletionProvider(
         [
@@ -171,6 +353,7 @@ async def test_executor_attempt_trace_retains_each_retry_and_fallback() -> None:
     [
         (FailureClass.INVALID_CONFIG, GatewayInvalidRouteConfigError),
         (FailureClass.CAPABILITY_MISMATCH, GatewayCapabilityMismatchError),
+        (FailureClass.PROVIDER_INVALID_REQUEST, GatewayProviderRequestRejectedError),
         (FailureClass.BYOK_AUTH, GatewayCredentialFailureError),
         (FailureClass.BYOK_QUOTA, GatewayCredentialFailureError),
         (FailureClass.BYOK_RATE_LIMIT, GatewayCredentialFailureError),
@@ -179,7 +362,7 @@ async def test_executor_attempt_trace_retains_each_retry_and_fallback() -> None:
 async def test_executor_does_not_retry_terminal_provider_failures(failure_class, error_type):
     config = config_with_active_route(
         active_route_with_fallbacks([]).model_copy(
-            update={'retry': type(load_gateway_config().route_artifacts[ACTIVE_ROUTE].retry)(max_attempts=3)}
+            update={'retry': type(gateway_config().route_artifacts[ACTIVE_ROUTE].retry)(max_attempts=3)}
         )
     )
     resolved = resolve_chat_completion_route(config, valid_request())
@@ -227,8 +410,42 @@ async def test_executor_uses_active_route_fallback_for_policy_allowed_failures(f
     assert result.selected_model == 'gpt-4o-mini'
     assert result.fallback_used
     assert result.fallback_reason == failure_class
+    assert result.fallback_from_route_artifact_id == ACTIVE_ROUTE
+    assert result.fallback_to_route_artifact_id == ACTIVE_ROUTE
     assert not result.used_lkg
-    assert [call.model for call in provider.calls] == ['gpt-5.4-nano', 'gpt-4o-mini']
+    assert result.route_serving_class == RouteServingClass.ACTUAL_FALLBACK
+    assert [call.model for call in provider.calls] == [LUNA_MODEL, 'gpt-4o-mini']
+
+
+@pytest.mark.asyncio
+async def test_executor_identical_provider_model_retry_is_not_actual_fallback():
+    """A within-route fallback to the same provider+model is a retry, not a
+    distinct provider/route failover, and must not be classified as
+    ACTUAL_FALLBACK — per the PR behavioral contract that actual fallback
+    requires a *subsequent provider/route* success."""
+    identical_ref = ProviderRef(provider='openai', model=LUNA_MODEL)
+    config = config_with_active_route(active_route_with_fallbacks([identical_ref]))
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            fake_success_response(identical_ref, content='{"answer":"retry"}'),
+        ]
+    )
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert result.selected_model == LUNA_MODEL
+    assert not result.fallback_used
+    assert result.fallback_reason is None
+    assert result.fallback_from_route_artifact_id is None
+    assert result.fallback_to_route_artifact_id is None
+    assert result.route_serving_class == RouteServingClass.ACTIVE
+    assert [call.model for call in provider.calls] == [LUNA_MODEL, LUNA_MODEL]
 
 
 @pytest.mark.asyncio
@@ -237,6 +454,7 @@ async def test_executor_uses_active_route_fallback_for_policy_allowed_failures(f
     [
         (FailureClass.INVALID_CONFIG, GatewayInvalidRouteConfigError),
         (FailureClass.CAPABILITY_MISMATCH, GatewayCapabilityMismatchError),
+        (FailureClass.PROVIDER_INVALID_REQUEST, GatewayProviderRequestRejectedError),
         (FailureClass.BYOK_AUTH, GatewayCredentialFailureError),
         (FailureClass.BYOK_QUOTA, GatewayCredentialFailureError),
         (FailureClass.BYOK_RATE_LIMIT, GatewayCredentialFailureError),
@@ -279,11 +497,14 @@ async def test_executor_uses_lkg_only_when_active_route_policy_allows():
 
     assert result.response['model'] == LANE_ID
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'gpt-5.4-nano'
+    assert result.selected_model == LUNA_MODEL
     assert result.fallback_used
     assert result.fallback_reason == FailureClass.TIMEOUT_BEFORE_OUTPUT
+    assert result.fallback_from_route_artifact_id == ACTIVE_ROUTE
+    assert result.fallback_to_route_artifact_id == LKG_ROUTE
     assert result.used_lkg
-    assert [call.model for call in provider.calls] == ['gpt-5.4-nano', 'gpt-5.4-nano']
+    assert result.route_serving_class == RouteServingClass.ACTUAL_FALLBACK
+    assert [call.model for call in provider.calls] == [LUNA_MODEL, LUNA_MODEL]
 
 
 @pytest.mark.asyncio
@@ -310,6 +531,28 @@ async def test_executor_does_not_use_lkg_when_active_route_policy_rejects_failur
 
     assert exc_info.value.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
     assert len(provider.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_executor_remains_error_when_active_and_lkg_routes_both_fail():
+    config = config_with_active_route(active_route_with_fallbacks([]))
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID),
+        ]
+    )
+
+    with pytest.raises(GatewayProviderFailureError) as exc_info:
+        await execute_chat_completion(
+            resolved,
+            omi_credentials(),
+            ProviderRegistry({'openai': provider}),
+        )
+
+    assert exc_info.value.failure_class == FailureClass.PROVIDER_5XX_OMI_PAID
+    assert [call.model for call in provider.calls] == [LUNA_MODEL, LUNA_MODEL]
 
 
 @pytest.mark.asyncio
@@ -340,11 +583,7 @@ async def test_byok_missing_key_and_unsupported_provider_fail_without_fallback_o
             'primary': ProviderRef(provider='anthropic', model='claude-test'),
         }
     )
-    lkg_route = (
-        load_gateway_config(prod_mode=True)
-        .route_artifacts[LKG_ROUTE]
-        .model_copy(update={'credential_policy': byok_policy()})
-    )
+    lkg_route = gateway_config().route_artifacts[LKG_ROUTE].model_copy(update={'credential_policy': byok_policy()})
     config = config_with_routes(active_route, lkg_route)
     resolved = resolve_chat_completion_route(config, valid_request())
 
@@ -373,11 +612,7 @@ async def test_byok_missing_key_and_unsupported_provider_fail_without_fallback_o
 async def test_raw_byok_key_is_not_in_provider_error_repr_or_dump():
     raw_key = 'sk-test-secret-should-not-appear'
     active_route = active_route_with_fallbacks([]).model_copy(update={'credential_policy': byok_policy()})
-    lkg_route = (
-        load_gateway_config(prod_mode=True)
-        .route_artifacts[LKG_ROUTE]
-        .model_copy(update={'credential_policy': byok_policy()})
-    )
+    lkg_route = gateway_config().route_artifacts[LKG_ROUTE].model_copy(update={'credential_policy': byok_policy()})
     config = config_with_routes(active_route, lkg_route)
     resolved = resolve_chat_completion_route(config, valid_request())
     provider = FakeChatCompletionProvider(
@@ -407,7 +642,7 @@ async def test_shadow_active_route_serves_lkg_not_active():
     config = config_with_active_route(shadow_route)
     resolved = resolve_chat_completion_route(config, valid_request())
 
-    # Provider should be called with the gateway LKG model (gpt-5.4-nano).
+    # Provider should be called with the gateway LKG model (gpt-x-luna).
     # The gateway route is intentionally independent from legacy chat extraction.
     provider = FakeChatCompletionProvider(
         [fake_success_response(resolved.last_known_good_route.primary, content='{"answer":"lkg"}')]
@@ -420,9 +655,14 @@ async def test_shadow_active_route_serves_lkg_not_active():
     )
 
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'gpt-5.4-nano'
+    assert result.selected_model == LUNA_MODEL
     assert result.used_lkg
-    assert provider.calls[0].request['model'] == 'gpt-5.4-nano'
+    assert not result.fallback_used
+    assert result.fallback_reason is None
+    assert result.fallback_from_route_artifact_id is None
+    assert result.fallback_to_route_artifact_id is None
+    assert result.route_serving_class == RouteServingClass.LKG
+    assert provider.calls[0].request['model'] == LUNA_MODEL
     assert selected_serving_route_artifact_id(resolved) == LKG_ROUTE
 
 
@@ -447,7 +687,7 @@ async def test_disabled_active_route_serves_lkg_not_active():
     )
 
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'gpt-5.4-nano'
+    assert result.selected_model == LUNA_MODEL
     assert result.used_lkg
 
 
@@ -535,6 +775,379 @@ async def test_canary_route_at_100_percent_serves_active():
 
     assert result.selected_route_artifact_id == ACTIVE_ROUTE
     assert not result.used_lkg
+    assert not result.fallback_used
+    assert result.route_serving_class == RouteServingClass.CANARY
+
+
+def test_provider_429_backoff_grows_exponentially_and_caps():
+    delays = [
+        provider_429_backoff_seconds(
+            attempt=attempt,
+            retry_after_seconds=None,
+            remaining_budget_seconds=1_000,
+            random_uniform=lambda _low, _high: 0.0,
+        )
+        for attempt in range(1, 8)
+    ]
+
+    assert delays == [2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0]
+
+
+def test_provider_429_backoff_jitter_stays_inside_half_base():
+    base = executor.PROVIDER_429_BACKOFF_BASE_SECONDS
+    high = provider_429_backoff_seconds(
+        attempt=2,
+        retry_after_seconds=None,
+        remaining_budget_seconds=1_000,
+        random_uniform=lambda _low, high: high,
+    )
+    low = provider_429_backoff_seconds(
+        attempt=2,
+        retry_after_seconds=None,
+        remaining_budget_seconds=1_000,
+        random_uniform=lambda low, _high: low,
+    )
+
+    assert low == base * 2
+    assert high == base * 2 + base / 2
+    for _ in range(40):
+        delay = provider_429_backoff_seconds(
+            attempt=1,
+            retry_after_seconds=None,
+            remaining_budget_seconds=1_000,
+        )
+        assert base <= delay <= base + base / 2
+
+
+def test_provider_429_backoff_honors_retry_after_and_deadline():
+    assert provider_429_backoff_seconds(attempt=1, retry_after_seconds=15, remaining_budget_seconds=100) == 15
+    assert provider_429_backoff_seconds(attempt=1, retry_after_seconds=120, remaining_budget_seconds=100) == 60
+    assert provider_429_backoff_seconds(attempt=1, retry_after_seconds=30, remaining_budget_seconds=3) == 3
+    assert provider_429_backoff_seconds(attempt=1, retry_after_seconds=15, remaining_budget_seconds=0) == 0
+
+
+class _FrozenClock:
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def _install_retry_clock(monkeypatch):
+    clock = _FrozenClock()
+    slept: list[float] = []
+
+    async def sleeper(seconds: float) -> None:
+        slept.append(seconds)
+        clock.t += seconds
+
+    monkeypatch.setattr(executor, 'monotonic', clock)
+    monkeypatch.setattr(executor, 'sleep_for_provider_retry', sleeper)
+    return slept
+
+
+def _route_with_attempts(max_attempts: int, request_ms: int = 120_000):
+    route = active_route_with_fallbacks([]).model_copy(
+        update={
+            'retry': type(active_route_with_fallbacks([]).retry)(max_attempts=max_attempts),
+            'timeouts': active_route_with_fallbacks([]).timeouts.model_copy(update={'request_ms': request_ms}),
+        }
+    )
+    return resolve_chat_completion_route(config_with_active_route(route), valid_request())
+
+
+@pytest.mark.asyncio
+async def test_executor_429_retry_honors_retry_after_and_stays_accounted(monkeypatch):
+    resolved = _route_with_attempts(2)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=7),
+            fake_success_response(resolved.active_route.primary, content='{"answer":"retried"}'),
+        ]
+    )
+    trace = AttemptTrace()
+    slept = _install_retry_clock(monkeypatch)
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+        attempt_trace=trace,
+    )
+
+    assert slept == [7]
+    assert [attempt.outcome for attempt in trace.attempts] == ['error', 'success']
+    assert [attempt.retry_ordinal for attempt in trace.attempts] == [1, 2]
+    assert [attempt.configured_model for attempt in trace.attempts] == [LUNA_MODEL, LUNA_MODEL]
+    assert trace.attempts[0].error_class == FailureClass.PROVIDER_429_OMI_PAID.value
+    assert not result.fallback_used
+    assert result.fallback_reason is None
+    assert result.response['choices'][0]['message']['content'] == '{"answer":"retried"}'
+
+
+@pytest.mark.asyncio
+async def test_executor_429_backoff_uses_exponential_delay_inside_deadline(monkeypatch):
+    resolved = _route_with_attempts(3, request_ms=3_000)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID),
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID),
+            fake_success_response(resolved.active_route.primary),
+        ]
+    )
+    monkeypatch.setattr(executor.random, 'uniform', lambda _low, _high: 0.0)
+    slept = _install_retry_clock(monkeypatch)
+
+    with pytest.raises(GatewayProviderFailureError, match='deadline exhausted'):
+        await execute_chat_completion(
+            resolved,
+            omi_credentials(),
+            ProviderRegistry({'openai': provider}),
+            attempt_trace=AttemptTrace(),
+        )
+
+    # First sleep is base*2**0 = 2s. The 3s route budget then caps the next pause,
+    # and the following attempt finds the deadline already spent.
+    assert slept == [2.0, 1.0]
+    assert len(provider.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_executor_non_429_retries_do_not_sleep(monkeypatch):
+    resolved = _route_with_attempts(2)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID),
+            fake_success_response(resolved.active_route.primary),
+        ]
+    )
+    slept = _install_retry_clock(monkeypatch)
+
+    await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    assert slept == []
+    assert len(provider.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_embedding_429_retry_sleeps_and_stays_on_the_same_provider(monkeypatch):
+    config = gateway_config()
+    resolved = resolve_embedding_route(config, {'model': 'omi:auto:openai-embeddings', 'input': 'hello'})
+    route = resolved.route.model_copy(update={'retry': type(resolved.route.retry)(max_attempts=2)})
+    resolved = replace(resolved, route=route)
+    calls: list[str] = []
+
+    class _EmbeddingProvider:
+        async def create_embedding(self, request, *, provider_ref, credentials, timeout_ms):
+            del request, credentials, timeout_ms
+            calls.append(provider_ref.model)
+            if len(calls) == 1:
+                raise ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=4)
+            return ProviderResponse(
+                response={
+                    'object': 'list',
+                    'data': [{'object': 'embedding', 'embedding': [0.25], 'index': 0}],
+                    'model': provider_ref.model,
+                    'usage': {'prompt_tokens': 1, 'total_tokens': 1},
+                },
+                accounting=ProviderResponseMetadata(),
+            )
+
+    trace = AttemptTrace()
+    slept = _install_retry_clock(monkeypatch)
+    result = await execute_embedding(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({resolved.route.primary.provider: _EmbeddingProvider()}),
+        attempt_trace=trace,
+    )
+
+    assert slept == [4]
+    assert calls == [resolved.route.primary.model, resolved.route.primary.model]
+    assert [attempt.retry_ordinal for attempt in trace.attempts] == [1, 2]
+    assert [attempt.outcome for attempt in trace.attempts] == ['error', 'success']
+    assert result['data'][0]['embedding'] == [0.25]
+
+
+def test_flex_first_default_lanes_and_kill_switch(monkeypatch):
+    monkeypatch.delenv(executor.FLEX_FIRST_LANES_ENV_VAR, raising=False)
+    assert executor.flex_first_lanes() == {'omi:auto:conv-structure', 'omi:auto:memory-l1'}
+    for off in ('off', '', 'none', 'false', '0'):
+        monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, off)
+        assert executor.flex_first_lanes() == frozenset()
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, f' {LANE_ID} , omi:auto:goals ')
+    assert executor.flex_first_lanes() == {LANE_ID, 'omi:auto:goals'}
+
+
+def test_flex_first_timeout_leaves_standard_above_its_p99_inside_the_60s_caller(monkeypatch):
+    monkeypatch.delenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, raising=False)
+    # 7d Standard p99 (2026-11-01): conv-structure 35.9s, memory-l1 18.8s; callers time out at 60s.
+    caller_ms = 60_000
+    for lane_id, standard_p99_ms in (('omi:auto:conv-structure', 35_900), ('omi:auto:memory-l1', 18_800)):
+        assert caller_ms - executor.flex_first_timeout_ms(lane_id, 120_000) > standard_p99_ms + 5_000
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 120_000) == 15_000
+    assert executor.flex_first_timeout_ms('omi:auto:memory-l1', 120_000) == 10_000
+    assert executor.flex_first_timeout_ms(LANE_ID, 120_000) == executor.DEFAULT_FLEX_FIRST_TIMEOUT_MS
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 20_000) == 10_000
+    monkeypatch.setenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, '5000')
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 120_000) == 5_000
+    monkeypatch.setenv(executor.FLEX_FIRST_TIMEOUT_MS_ENV_VAR, 'junk')
+    assert executor.flex_first_timeout_ms('omi:auto:conv-structure', 120_000) == 15_000
+
+
+@pytest.mark.asyncio
+async def test_flex_first_success_sends_flex_once(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+    trace = AttemptTrace()
+    _install_retry_clock(monkeypatch)
+
+    result = await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), attempt_trace=trace
+    )
+
+    assert len(provider.calls) == 1
+    assert provider.calls[0].request['service_tier'] == 'flex'
+    assert provider.calls[0].timeout_ms == executor.DEFAULT_FLEX_FIRST_TIMEOUT_MS
+    assert [attempt.retry_ordinal for attempt in trace.attempts] == [1]
+    assert not result.fallback_used
+
+
+@pytest.mark.parametrize(
+    'failure_class',
+    [
+        FailureClass.PROVIDER_429_OMI_PAID,
+        FailureClass.TIMEOUT_BEFORE_OUTPUT,
+        FailureClass.PROVIDER_5XX_OMI_PAID,
+        FailureClass.PROVIDER_INVALID_REQUEST,
+    ],
+)
+@pytest.mark.asyncio
+async def test_flex_first_failure_falls_back_to_standard_without_backoff(monkeypatch, failure_class):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(failure_class, retry_after_seconds=30),
+            fake_success_response(resolved.active_route.primary, content='{"answer":"standard"}'),
+        ]
+    )
+    trace = AttemptTrace()
+    slept = _install_retry_clock(monkeypatch)
+
+    result = await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), attempt_trace=trace
+    )
+
+    assert slept == []
+    assert len(provider.calls) == 2
+    assert provider.calls[0].request['service_tier'] == 'flex'
+    assert 'service_tier' not in provider.calls[1].request
+    # Standard keeps the whole remaining route budget, not the Flex cap.
+    assert provider.calls[1].timeout_ms == 120_000
+    assert [attempt.retry_ordinal for attempt in trace.attempts] == [1, 2]
+    assert [attempt.outcome for attempt in trace.attempts] == ['error', 'success']
+    assert result.response['choices'][0]['message']['content'] == '{"answer":"standard"}'
+
+
+@pytest.mark.asyncio
+async def test_flex_first_keeps_every_configured_standard_attempt(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(2)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID),
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=3),
+            fake_success_response(resolved.active_route.primary),
+        ]
+    )
+    slept = _install_retry_clock(monkeypatch)
+
+    await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    # Flex 429: no pause. Standard attempt 1 of 2 429s: the normal Retry-After pause.
+    assert slept == [3]
+    assert [call.request.get('service_tier') for call in provider.calls] == ['flex', None, None]
+
+
+@pytest.mark.asyncio
+async def test_flex_first_standard_failure_still_surfaces(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    provider = FakeChatCompletionProvider(
+        [ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID), ProviderFailure(FailureClass.PROVIDER_INVALID_REQUEST)]
+    )
+    _install_retry_clock(monkeypatch)
+
+    # The Standard error is what the caller sees (not the Flex 429), with no LKG fallback.
+    with pytest.raises(GatewayProviderRequestRejectedError):
+        await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+    assert len(provider.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_flex_first_not_repeated_on_lkg_fallback(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID),
+            ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID),
+            fake_success_response(resolved.active_route.primary, content='{"answer":"lkg"}'),
+        ]
+    )
+    _install_retry_clock(monkeypatch)
+
+    result = await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    assert result.used_lkg
+    assert [call.request.get('service_tier') for call in provider.calls] == ['flex', None, None]
+
+
+@pytest.mark.asyncio
+async def test_flex_first_skipped_when_off_or_lane_not_listed(monkeypatch):
+    resolved = _route_with_attempts(1)
+    for value in ('off', 'omi:auto:conv-structure'):
+        monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, value)
+        provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+        await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+        assert len(provider.calls) == 1
+        assert 'service_tier' not in provider.calls[0].request
+
+
+@pytest.mark.asyncio
+async def test_flex_first_skipped_for_byok_and_attempt_budgets(monkeypatch):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    route = resolved.active_route
+    credentials = omi_credentials()
+    assert executor._flex_first_applies(resolved, route, route.primary, credentials, None)
+    assert not executor._flex_first_applies(resolved, route, route.primary, credentials, 1)
+    byok = credentials.model_copy(update={'mode': CredentialMode.BYOK})
+    assert not executor._flex_first_applies(resolved, route, route.primary, byok, None)
+    other_provider = route.primary.model_copy(update={'provider': 'gemini'})
+    assert not executor._flex_first_applies(resolved, route, other_provider, credentials, None)
+
+
+@pytest.mark.parametrize(
+    'extra',
+    [
+        {'tools': [{'type': 'function', 'function': {'name': 'lookup', 'parameters': {'type': 'object'}}}]},
+        {'service_tier': 'flex'},
+    ],
+)
+@pytest.mark.asyncio
+async def test_flex_first_skipped_for_tool_turns_and_caller_service_tier(monkeypatch, extra):
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, LANE_ID)
+    resolved = _route_with_attempts(1)
+    request = resolved.validated_request
+    resolved = replace(
+        resolved, validated_request=replace(request, forwarded_params={**request.forwarded_params, **extra})
+    )
+    route = resolved.active_route
+    assert not executor._flex_first_applies(resolved, route, route.primary, omi_credentials(), None)
 
 
 def valid_request(**overrides):
@@ -562,8 +1175,14 @@ def omi_credentials():
     return build_omi_managed_credential_context(ServiceCaller(name='backend'))
 
 
+@cache
+def gateway_config() -> GatewayConfig:
+    """Load the immutable checked-in gateway config once per test module."""
+    return load_gateway_config(prod_mode=True)
+
+
 def active_route_with_fallbacks(fallbacks: list[ProviderRef]):
-    active_route = load_gateway_config(prod_mode=True).route_artifacts[ACTIVE_ROUTE]
+    active_route = gateway_config().route_artifacts[ACTIVE_ROUTE]
     return active_route.model_copy(update={'fallbacks': fallbacks, **_active_rollout_kwargs(active_route)})
 
 
@@ -573,12 +1192,12 @@ def _active_rollout_kwargs(active_route):
 
 
 def config_with_active_route(active_route):
-    base = load_gateway_config(prod_mode=True)
+    base = gateway_config()
     return config_with_routes(active_route, base.route_artifacts[LKG_ROUTE])
 
 
 def config_with_routes(active_route, lkg_route):
-    base = load_gateway_config(prod_mode=True)
+    base = gateway_config()
     route_artifacts = dict(base.route_artifacts)
     route_artifacts[ACTIVE_ROUTE] = active_route
     route_artifacts[LKG_ROUTE] = lkg_route
@@ -592,8 +1211,4 @@ def config_with_routes(active_route, lkg_route):
 
 
 def byok_policy():
-    return (
-        load_gateway_config(prod_mode=True)
-        .lanes[LANE_ID]
-        .credential_policy.model_copy(update={'mode': CredentialMode.BYOK})
-    )
+    return gateway_config().lanes[LANE_ID].credential_policy.model_copy(update={'mode': CredentialMode.BYOK})

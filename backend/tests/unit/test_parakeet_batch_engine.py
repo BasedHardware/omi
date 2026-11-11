@@ -3,10 +3,14 @@ import os
 import sys
 import tempfile
 import time
+import wave
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import numpy as np
+import soundfile as sf
 
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 os.environ.setdefault("PARAKEET_DEVICE", "cpu")
@@ -63,7 +67,9 @@ def _parakeet_modules():
             _g["WorkItem"] = gpu_worker.WorkItem
             _g["WorkType"] = gpu_worker.WorkType
             _g["BatchEngine"] = batch_engine.BatchEngine
+            _g["PendingRequest"] = batch_engine.PendingRequest
             _g["QueueFullError"] = batch_engine.QueueFullError
+            _g["QueueTimeoutError"] = batch_engine.QueueTimeoutError
             _g["_unlink_safe"] = batch_engine._unlink_safe
             yield
     finally:
@@ -91,6 +97,132 @@ def _make_mock_gpu_worker(results_fn=None):
 
     worker.submit.side_effect = submit
     return worker
+
+
+def test_live_lane_precedes_backfill_and_unmarked_defaults_to_backfill():
+    engine = BatchEngine(_make_mock_gpu_worker(), max_batch_size=2)
+    loop = asyncio.new_event_loop()
+    try:
+        engine._pending = [
+            PendingRequest('/tmp/old.wav', True, loop.create_future()),
+            PendingRequest('/tmp/live-a.wav', True, loop.create_future(), lane='live'),
+            PendingRequest('/tmp/live-b.wav', True, loop.create_future(), lane='live'),
+        ]
+        assert [r.audio_path for r in engine._select_batch()] == ['/tmp/live-a.wav', '/tmp/live-b.wav']
+        snapshot = engine.pressure_snapshot()
+        assert snapshot['pending_requests'] == 3
+        assert snapshot['live_pending_requests'] == 2
+        assert snapshot['backfill_pending_requests'] == 1
+    finally:
+        loop.close()
+
+
+def test_aged_backfill_gets_one_turn_after_four_live_batches():
+    engine = BatchEngine(_make_mock_gpu_worker(), max_batch_size=2, starvation_timeout_sec=5)
+    loop = asyncio.new_event_loop()
+    try:
+        old = PendingRequest('/tmp/old.wav', True, loop.create_future(), submitted_at=time.monotonic() - 10)
+        engine._pending = [old] + [
+            PendingRequest(f'/tmp/live-{i}.wav', True, loop.create_future(), lane='live') for i in range(10)
+        ]
+        for _ in range(4):
+            assert all(r.lane == 'live' for r in engine._select_batch())
+        assert engine._select_batch() == [old]
+        assert all(r.lane == 'live' for r in engine._select_batch())
+    finally:
+        loop.close()
+
+
+def test_packing_never_dispatches_aged_backfill_before_queued_live():
+    engine = BatchEngine(_make_mock_gpu_worker(), max_batch_size=8, max_inflight=1, packing=True)
+    loop = asyncio.new_event_loop()
+    try:
+        old = PendingRequest('/tmp/old.wav', True, loop.create_future(), submitted_at=time.monotonic() - 60)
+        live = PendingRequest('/tmp/live.wav', True, loop.create_future(), lane='live')
+        engine._pending = [old, live]
+        for _ in range(10):
+            assert engine._select_batch() == [live]
+        engine._pending = [old, PendingRequest('/tmp/other.wav', True, loop.create_future())]
+        assert engine._select_batch() == [old]
+    finally:
+        loop.close()
+
+
+def test_packing_rejects_multiple_gpu_batches_inflight():
+    with pytest.raises(ValueError, match='MAX_INFLIGHT=1'):
+        BatchEngine(_make_mock_gpu_worker(), packing=True, max_inflight=2)
+
+
+@pytest.mark.asyncio
+async def test_packing_cannot_bypass_quantum_bound(monkeypatch):
+    engine = BatchEngine(_make_mock_gpu_worker(), packing=True, max_inflight=1)
+    await engine.start()
+    try:
+        for duration in (None, 120.001):
+            monkeypatch.setattr(engine, '_get_audio_duration', lambda _path: duration)
+            with pytest.raises(ValueError, match='<=120s'):
+                await engine.submit('/tmp/oversized.wav')
+        assert not engine._pending
+    finally:
+        await engine.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('seconds', [30, 120])
+async def test_v2_short_pcm16_submit_audio_preserves_original_path_and_subtype(tmp_path, seconds):
+    bounded = load_module_fresh('bounded_audio', str(_PARAKEET_DIR / 'bounded_audio.py'))
+    source = tmp_path / 'v2-upload.wav'
+    sf.write(source, np.linspace(-0.8, 0.8, seconds * 16000, dtype=np.float32), 16000, subtype='PCM_16')
+    seen = []
+
+    def infer(payload):
+        assert payload['audio_paths'] == [str(source)]
+        assert sf.info(payload['audio_paths'][0]).subtype == 'PCM_16'
+        seen.extend(payload['audio_paths'])
+        return [{'text': 'short turn', 'timestamp': {}}]
+
+    engine = BatchEngine(_make_mock_gpu_worker(infer), max_batch_size=1, max_inflight=1, packing=True)
+    await engine.start()
+    try:
+        with ThreadPoolExecutor(1) as pool:
+            # Match v2: packing backfill, default owns_file=False for later diarization.
+            result = await bounded.submit_audio(engine, str(source), pool, packing=True)
+        assert result['text'] == 'short turn'
+        assert seen == [str(source)]
+        assert source.exists() and sf.info(source).subtype == 'PCM_16'
+        assert list(tmp_path.iterdir()) == [source]
+    finally:
+        await engine.stop()
+
+
+@pytest.mark.asyncio
+async def test_split_float_quanta_pass_real_batch_engine_duration_reader(tmp_path):
+    bounded = load_module_fresh('bounded_audio', str(_PARAKEET_DIR / 'bounded_audio.py'))
+    source = tmp_path / 'v2-long-upload.wav'
+    sf.write(source, np.zeros(121 * 8000, dtype=np.float32), 8000, subtype='PCM_16')
+    durations = []
+
+    def infer(payload):
+        (path,) = payload['audio_paths']
+        assert path != str(source)
+        assert sf.info(path).subtype == 'FLOAT'
+        with pytest.raises(wave.Error, match='unknown format'):
+            with wave.open(path):
+                pass
+        # Exercise the real soundfile fallback, also used by submit's admission check.
+        durations.append(BatchEngine._get_audio_duration(path))
+        return [{'text': 'quantum', 'timestamp': {}}]
+
+    engine = BatchEngine(_make_mock_gpu_worker(infer), max_batch_size=1, max_inflight=1, packing=True)
+    await engine.start()
+    try:
+        with ThreadPoolExecutor(1) as pool:
+            result = await bounded.submit_audio(engine, str(source), pool, packing=True)
+        assert durations == [120.0, 1.0]
+        assert result['text'] == 'quantum quantum'
+        assert list(tmp_path.iterdir()) == [source]
+    finally:
+        await engine.stop()
 
 
 class TestBatchEngineSubmit:
@@ -157,7 +289,9 @@ class TestBatchEngineQueueFull:
             async def run():
                 await engine.start()
                 try:
-                    engine._pending = [MagicMock() for _ in range(2)]
+                    engine._pending = [
+                        PendingRequest(f"/tmp/held-{i}.wav", True, loop.create_future()) for i in range(2)
+                    ]
                     with pytest.raises(QueueFullError):
                         await engine.submit("/tmp/overflow.wav", owns_file=False)
                     assert engine._metrics["rejected_requests"] == 1
@@ -998,3 +1132,317 @@ class TestUnlinkSafe:
 
     def test_unlink_nonexistent(self):
         _unlink_safe("/tmp/does-not-exist-12345.wav")
+
+
+class TestQueueDeadlineAndCancellation:
+    def test_cancelled_queued_requests_pruned_and_owned_files_removed(self):
+        gpu = _make_mock_gpu_worker()
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=10.0, max_inflight=1, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                    owned = f.name
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                    unowned = f.name
+                try:
+                    t1 = asyncio.ensure_future(engine.submit(owned, owns_file=True, lane='live'))
+                    t2 = asyncio.ensure_future(engine.submit(unowned, owns_file=False, lane='live'))
+                    for _ in range(100):
+                        await asyncio.sleep(0)
+                        if len(engine._pending) == 2:
+                            break
+                    assert len(engine._pending) == 2
+                    t1.cancel()
+                    t2.cancel()
+                    results = await asyncio.gather(t1, t2, return_exceptions=True)
+                    assert all(isinstance(r, asyncio.CancelledError) for r in results)
+                    assert engine.pressure_snapshot()['pending_requests'] == 0
+                    assert len(engine._pending) == 0
+                    assert not os.path.exists(owned)
+                    assert os.path.exists(unowned)
+                    assert not gpu.submit.called
+                finally:
+                    if os.path.exists(unowned):
+                        os.unlink(unowned)
+                    engine._pending = []
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_expired_live_request_fails_typed_while_inflight_full(self):
+        hanging = []
+
+        def submit_hang(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            hanging.append(fut)
+            item.inference_seconds = 0.01
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = submit_hang
+        engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.002, max_inflight=1, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                blocker = asyncio.ensure_future(engine.submit("/tmp/block.wav", owns_file=False, lane='live'))
+                for _ in range(100):
+                    await asyncio.sleep(0.005)
+                    if gpu.submit.called:
+                        break
+                assert gpu.submit.called
+                assert engine._batches_inflight == 1
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                    owned = f.name
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                    unowned = f.name
+                deadline = loop.time() + 0.02
+                started = time.monotonic()
+                try:
+                    with pytest.raises(QueueTimeoutError):
+                        await engine.submit(owned, owns_file=True, lane='live', queue_deadline=deadline)
+                    with pytest.raises(QueueTimeoutError):
+                        await engine.submit(unowned, owns_file=False, lane='live', queue_deadline=loop.time() + 0.02)
+                    assert time.monotonic() - started < 2
+                    assert not os.path.exists(owned)
+                    assert os.path.exists(unowned)
+                    assert engine.pressure_snapshot()['pending_requests'] == 0
+                finally:
+                    if os.path.exists(unowned):
+                        os.unlink(unowned)
+                    for fut in hanging:
+                        if not fut.done():
+                            fut.set_result([{"text": "ok"}])
+                    await asyncio.wait_for(blocker, timeout=5)
+                    await engine.stop()
+
+                assert gpu.submit.call_count == 1
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_flush_after_semaphore_wait_dispatches_only_survivors(self):
+        dispatched = []
+        first_fut = []
+
+        def mock_submit(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            dispatched.append(payload)
+            if len(dispatched) == 1:
+                first_fut.append(fut)
+            else:
+                loop.call_soon(fut.set_result, [{"text": "ok"} for _ in range(payload["batch_size"])])
+            item.inference_seconds = 0.01
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=0.002, max_inflight=1, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                blocker = asyncio.ensure_future(engine.submit("/tmp/block.wav", owns_file=False, lane='live'))
+                for _ in range(100):
+                    await asyncio.sleep(0.005)
+                    if first_fut:
+                        break
+                assert first_fut
+
+                t_cancel = asyncio.ensure_future(engine.submit("/tmp/cancel.wav", owns_file=False, lane='live'))
+                t_expire = asyncio.ensure_future(
+                    engine.submit("/tmp/expire.wav", owns_file=False, lane='live', queue_deadline=loop.time() + 0.02)
+                )
+                t_keep = asyncio.ensure_future(engine.submit("/tmp/keep.wav", owns_file=False, lane='live'))
+                for _ in range(100):
+                    await asyncio.sleep(0)
+                    if len(engine._pending) == 3:
+                        break
+                assert len(engine._pending) == 3
+
+                t_cancel.cancel()
+                await asyncio.gather(t_cancel, return_exceptions=True)
+                with pytest.raises(QueueTimeoutError):
+                    await asyncio.wait_for(t_expire, timeout=5)
+
+                first_fut[0].set_result([{"text": "ok"}])
+                assert (await asyncio.wait_for(blocker, timeout=5))["text"] == "ok"
+                assert (await asyncio.wait_for(t_keep, timeout=5))["text"] == "ok"
+                await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+        assert len(dispatched) == 2
+        assert dispatched[1]["audio_paths"] == ["/tmp/keep.wav"]
+
+    def test_queue_capacity_reclaimed_by_pruned_dead_requests(self):
+        gpu = _make_mock_gpu_worker()
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=0.002, max_queue_depth=1, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    dead = loop.create_future()
+                    dead.cancel()
+                    engine._pending.append(PendingRequest("/tmp/dead.wav", True, dead, owns_file=False, lane='live'))
+                    assert len(engine._pending) == 1
+                    result = await asyncio.wait_for(engine.submit("/tmp/next.wav", owns_file=False), timeout=5)
+                    assert result["text"] == "ok:/tmp/next.wav"
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_cancel_after_gpu_dispatch_retains_file_until_batch_finishes(self):
+        gpu_futs = []
+
+        def submit_hang(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            gpu_futs.append(fut)
+            item.inference_seconds = 0.01
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = submit_hang
+        engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.002, max_inflight=1, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                    path = f.name
+                try:
+                    task = asyncio.ensure_future(engine.submit(path, owns_file=True, lane='live'))
+                    for _ in range(100):
+                        await asyncio.sleep(0.005)
+                        if gpu.submit.called:
+                            break
+                    assert gpu.submit.called
+                    task.cancel()
+                    results = await asyncio.gather(task, return_exceptions=True)
+                    assert isinstance(results[0], asyncio.CancelledError)
+                    assert os.path.exists(path), "dispatched file must survive caller cancellation"
+                    gpu_futs[0].set_result([{"text": "ok"}])
+                    for _ in range(100):
+                        await asyncio.sleep(0)
+                        if not os.path.exists(path):
+                            break
+                    assert not os.path.exists(path)
+                finally:
+                    if os.path.exists(path):
+                        os.unlink(path)
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_empty_filtered_queue_leaves_fairness_counter_and_gpu_untouched(self):
+        gpu = _make_mock_gpu_worker()
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=10.0, max_inflight=1, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    dead = []
+                    for i in range(3):
+                        fut = loop.create_future()
+                        fut.cancel()
+                        dead.append(PendingRequest(f"/tmp/dead-{i}.wav", True, fut, owns_file=False, lane='live'))
+                    engine._pending = dead
+                    await engine._flush_batch()
+                    assert engine._pending == []
+                    assert engine._live_batches_since_backfill == 0
+                    assert not gpu.submit.called
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_already_expired_deadline_rejects_before_enqueue(self):
+        gpu = _make_mock_gpu_worker()
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=10.0, max_inflight=1, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                    path = f.name
+                try:
+                    with pytest.raises(QueueTimeoutError):
+                        await engine.submit(path, owns_file=True, lane='live', queue_deadline=loop.time() - 0.001)
+                    assert not os.path.exists(path)
+                    assert engine._pending == []
+                    assert engine._metrics["total_requests"] == 0
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_invalid_deadline_usage_cleans_owned_path(self):
+        gpu = _make_mock_gpu_worker()
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=10.0, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                paths = []
+                for _ in range(3):
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                        paths.append(f.name)
+                owned_lane, unowned_lane, owned_nan = paths
+                try:
+                    with pytest.raises(ValueError):
+                        await engine.submit(owned_lane, owns_file=True, lane='backfill', queue_deadline=loop.time() + 1)
+                    assert not os.path.exists(owned_lane)
+                    with pytest.raises(ValueError):
+                        await engine.submit(
+                            unowned_lane, owns_file=False, lane='backfill', queue_deadline=loop.time() + 1
+                        )
+                    assert os.path.exists(unowned_lane)
+                    with pytest.raises(ValueError):
+                        await engine.submit(owned_nan, owns_file=True, lane='live', queue_deadline=float('nan'))
+                    assert not os.path.exists(owned_nan)
+                    assert engine._metrics["total_requests"] == 0
+                finally:
+                    if os.path.exists(unowned_lane):
+                        os.unlink(unowned_lane)
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()

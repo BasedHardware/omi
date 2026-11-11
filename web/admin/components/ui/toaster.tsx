@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from "@/hooks/use-toast";
 import {
   Toast,
   ToastClose,
@@ -8,27 +8,30 @@ import {
   ToastProvider,
   ToastTitle,
   ToastViewport,
-} from '@/components/ui/toast';
+} from "@/components/ui/toast";
 
+/**
+ * Renders the toasts queued by `useToast()`. Without this mounted, every
+ * `toast(...)` call in the dashboard is a no-op the user never sees — which is
+ * how "Add new person" could fail with a 404 and look like nothing happened.
+ */
 export function Toaster() {
   const { toasts } = useToast();
 
   return (
     <ToastProvider>
-      {toasts.map(function ({ id, title, description, action, ...props }) {
-        return (
-          <Toast key={id} {...props}>
-            <div className="grid gap-1">
-              {title && <ToastTitle>{title}</ToastTitle>}
-              {description && (
-                <ToastDescription>{description}</ToastDescription>
-              )}
-            </div>
-            {action}
-            <ToastClose />
-          </Toast>
-        );
-      })}
+      {toasts.map(({ id, title, description, action, ...props }) => (
+        <Toast key={id} {...props}>
+          <div className="grid gap-1">
+            {title ? <ToastTitle>{title}</ToastTitle> : null}
+            {description ? (
+              <ToastDescription>{description}</ToastDescription>
+            ) : null}
+          </div>
+          {action}
+          <ToastClose />
+        </Toast>
+      ))}
       <ToastViewport />
     </ToastProvider>
   );

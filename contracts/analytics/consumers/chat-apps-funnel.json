@@ -1,0 +1,19 @@
+{
+  "id": "chat-apps-funnel",
+  "kind": "question",
+  "owner": "Messaging channels",
+  "question": "Of the people who start connecting a chat app from the Omi app, how many finish linking, how many later disconnect, and how many ask to be told when WhatsApp arrives, per channel, namespace and build? Link success is confirmed by the app seeing the new link; the server's link records remain the authority.",
+  "query": "contracts/analytics/consumers/chat-apps-funnel.sql",
+  "events": [
+    "chatAppConnectStarted",
+    "chatAppConnected",
+    "chatAppDisconnected",
+    "chatAppWaitlistJoined"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero events is expected while the mobile-chat-apps flag is off for the namespace; check the flag's rollout before calling the funnel broken."
+}

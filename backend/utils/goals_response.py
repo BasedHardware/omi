@@ -1,5 +1,9 @@
 from datetime import datetime, timezone
 
+from pydantic import ValidationError
+
+from utils.log_sanitizer import sanitize, sanitize_validation_error
+
 
 def parse_response_datetime(value, fallback: datetime) -> datetime:
     if isinstance(value, datetime):
@@ -60,7 +64,12 @@ def normalize_goal_response(goal: dict) -> dict:
     normalized['title'] = str(normalized.get('title') or '')
     normalized['desired_outcome'] = str(normalized.get('desired_outcome') or normalized['title'])
     normalized['why_it_matters'] = normalized.get('why_it_matters')
-    normalized['success_criteria'] = list(normalized.get('success_criteria') or [])
+    success_criteria = normalized.get('success_criteria')
+    if success_criteria is None:
+        success_criteria = []
+    elif not isinstance(success_criteria, list):
+        raise ValueError('success_criteria must be a list')
+    normalized['success_criteria'] = list(success_criteria)
     status = normalized.get('status')
     if status not in {'background', 'focused', 'paused', 'achieved', 'abandoned'}:
         status = 'background' if response_bool(normalized.get('is_active', True), True) else 'abandoned'
@@ -97,3 +106,40 @@ def normalize_goal_history_entry(entry: dict) -> dict:
     normalized['value'] = response_float(normalized.get('value'), 0)
     normalized['recorded_at'] = parse_response_datetime(normalized.get('recorded_at'), datetime.now(timezone.utc))
     return normalized
+
+
+def list_developer_goals(
+    uid: str, *, limit: int, include_inactive: bool, goals_db, response_model, logger
+) -> list[dict]:
+    """Fetch, normalize, and validate developer goal rows at the router boundary."""
+    try:
+        if include_inactive:
+            # Pass the clamp down so the response honours the documented limit. The bound is
+            # applied after the in-Python newest-first sort rather than at the query, because a
+            # Firestore order_by('created_at') would silently exclude legacy goals that lack the
+            # field; see get_all_goals.
+            goals = goals_db.get_all_goals(uid, include_inactive=True, limit=limit)
+        else:
+            goals = goals_db.get_user_goals(uid, limit=limit)
+    except Exception as exc:
+        logger.error(
+            'Developer goals list failed path=/v1/dev/user/goals uid=%s limit=%s include_inactive=%s error_type=%s',
+            uid,
+            limit,
+            include_inactive,
+            type(exc).__name__,
+        )
+        raise
+    validated_goals = []
+    for goal in goals:
+        try:
+            validated_goals.append(response_model.model_validate(normalize_goal_response(goal)).model_dump(mode='json'))
+        except (AttributeError, TypeError, ValidationError, ValueError) as exc:
+            goal_id = (goal.get('id') or goal.get('goal_id')) if isinstance(goal, dict) else 'unknown'
+            details = sanitize_validation_error(exc) if isinstance(exc, ValidationError) else type(exc).__name__
+            logger.warning(
+                'Skipping malformed goal in Developer API goal list goal_id=%s errors=%s',
+                sanitize(goal_id),
+                details,
+            )
+    return validated_goals

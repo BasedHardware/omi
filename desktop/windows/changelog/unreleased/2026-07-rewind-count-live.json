@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "The screenshot count now updates live while recording, instead of freezing after the app has been open a while."
+  ]
+}

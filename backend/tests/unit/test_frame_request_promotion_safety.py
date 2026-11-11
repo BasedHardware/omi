@@ -1,0 +1,312 @@
+from datetime import datetime, timezone
+from io import BytesIO
+from unittest.mock import MagicMock
+
+import pytest
+from fastapi import HTTPException, UploadFile
+from PIL import Image
+
+from database.frame_requests import attach_frame_request_to_conversation
+from models.frame_request import FrameRequest, FrameRequestCleanupState, FrameRequestPromotion, FrameRequestState
+from routers import frame_requests
+from utils.retrieval import frame_request_authority
+
+
+async def _allow(_uid: str, _generation: int, **_kwargs) -> None:
+    return None
+
+
+def _request(state: FrameRequestState) -> FrameRequest:
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    return FrameRequest(
+        request_id="frame-1",
+        uid="user-1",
+        device_id="desktop-1",
+        account_generation=3,
+        dedupe_key="opaque",
+        conversation_id="conversation-1",
+        screenshot_id="42",
+        state=state,
+        created_at=now,
+        expires_at=now if state == FrameRequestState.attached else now.replace(day=25),
+        storage_id="storage-1",
+        byte_count=1024,
+        content_type="image/jpeg",
+        cleanup_state=(
+            FrameRequestCleanupState.permanent
+            if state == FrameRequestState.attached
+            else FrameRequestCleanupState.pending
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_attached_retry_is_idempotent_and_never_cleans_permanent_evidence(monkeypatch):
+    request = _request(FrameRequestState.attached)
+    acknowledged = []
+    monkeypatch.setattr(frame_requests, "_authorize", _allow)
+    monkeypatch.setattr(frame_requests, "get_frame_request", lambda uid, request_id: request)
+    monkeypatch.setattr(
+        frame_requests,
+        "acknowledge_frame_storage_cleanup",
+        lambda uid, storage_id: acknowledged.append((uid, storage_id)),
+    )
+    monkeypatch.setattr(
+        frame_requests,
+        "delete_frame_request_pixels",
+        lambda *args: pytest.fail("permanent pixels must not be deleted on retry"),
+    )
+
+    result = await frame_requests.promote_frame_request(
+        "frame-1",
+        FrameRequestPromotion(device_id="desktop-1", account_generation=3, conversation_id="conversation-1"),
+        uid="user-1",
+    )
+
+    assert result.request.state == FrameRequestState.attached
+    assert acknowledged == [("user-1", "storage-1")]
+
+
+def test_image_decoder_accepts_only_bounded_jpeg_png_and_webp(monkeypatch):
+    for image_format, content_type in (("JPEG", "image/jpeg"), ("PNG", "image/png"), ("WEBP", "image/webp")):
+        payload = BytesIO()
+        Image.new("RGB", (2, 2), color="white").save(payload, format=image_format)
+        assert frame_requests._validated_image_content_type(payload.getvalue()) == content_type
+
+    with pytest.raises(HTTPException) as invalid:
+        frame_requests._validated_image_content_type(b"not-an-image")
+    assert invalid.value.status_code == 415
+
+    class OversizedImage:
+        format = "PNG"
+        size = (5001, 5001)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def verify(self):
+            return None
+
+    monkeypatch.setattr(frame_requests.Image, "open", lambda *_args: OversizedImage())
+    with pytest.raises(HTTPException) as oversized:
+        frame_requests._validated_image_content_type(b"header")
+    assert oversized.value.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_state_commit_leaves_object_retryable(monkeypatch):
+    request = _request(FrameRequestState.uploaded)
+    monkeypatch.setattr(frame_requests, "_authorize", _allow)
+    monkeypatch.setattr(frame_requests, "get_frame_request", lambda uid, request_id: request)
+    monkeypatch.setattr(
+        frame_requests,
+        "attach_frame_request_to_conversation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("commit outcome unknown")),
+    )
+    monkeypatch.setattr(frame_requests, "reserve_frame_promotion_copy", lambda *args: None)
+    monkeypatch.setattr(frame_requests, "reserve_frame_storage_cleanup", lambda *args: None)
+    monkeypatch.setattr(frame_requests, "copy_frame_request_pixels_to_permanent", lambda *args: None)
+    monkeypatch.setattr(
+        frame_requests,
+        "delete_frame_request_pixels",
+        lambda *args: pytest.fail("ambiguous commit must not delete the object"),
+    )
+
+    with pytest.raises(RuntimeError, match="commit outcome unknown"):
+        await frame_requests.promote_frame_request(
+            "frame-1",
+            FrameRequestPromotion(device_id="desktop-1", account_generation=3, conversation_id="conversation-1"),
+            uid="user-1",
+        )
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_upload_commit_reconciles_without_deleting_object(monkeypatch):
+    request = _request(FrameRequestState.uploaded)
+    uploaded_storage_id = ""
+    monkeypatch.setattr(frame_requests, "_authorize", _allow)
+    monkeypatch.setattr(frame_requests, "upload_frame_request_pixels", lambda *args: None)
+
+    async def run_blocking(_executor, function, *args, **kwargs):
+        if function is frame_requests.upload_frame_request_pixels:
+            nonlocal uploaded_storage_id
+            uploaded_storage_id = args[1]
+            return None
+        if function is frame_requests.transition_frame_request:
+            raise RuntimeError("commit outcome unknown")
+        if function is frame_requests.reconcile_ambiguous_frame_upload:
+            return request.model_copy(update={"storage_id": uploaded_storage_id})
+        raise AssertionError(function)
+
+    monkeypatch.setattr(frame_requests, "run_blocking", run_blocking)
+    monkeypatch.setattr(
+        frame_requests,
+        "delete_frame_request_pixels",
+        lambda *args: pytest.fail("ambiguous upload must not delete an object"),
+    )
+
+    image = BytesIO()
+    Image.new("RGB", (2, 2), color="white").save(image, format="JPEG")
+    image.seek(0)
+    result = await frame_requests.upload_frame_request(
+        "frame-1",
+        device_id="desktop-1",
+        account_generation=3,
+        file=UploadFile(filename="frame.jpg", file=image, headers={"content-type": "image/jpeg"}),
+        uid="user-1",
+    )
+    assert result.request.state == FrameRequestState.uploaded
+
+
+@pytest.mark.asyncio
+async def test_upload_rechecks_authority_after_canonicalization_before_gcs(monkeypatch):
+    authority_checks = []
+    canonicalized = False
+
+    async def authorize(_uid, _generation, **kwargs):
+        authority_checks.append((canonicalized, kwargs))
+        if canonicalized:
+            raise HTTPException(status_code=503, detail="frame_requests_unavailable")
+
+    def canonicalize(payload):
+        nonlocal canonicalized
+        canonicalized = True
+        return payload
+
+    monkeypatch.setattr(frame_requests, "_authorize", authorize)
+    monkeypatch.setattr(frame_requests, "_canonicalize_frame_image", canonicalize)
+    monkeypatch.setattr(
+        frame_requests,
+        "upload_frame_request_pixels",
+        lambda *_args, **_kwargs: pytest.fail("revoked upload must not reach GCS"),
+    )
+
+    image = BytesIO()
+    Image.new("RGB", (2, 2), color="white").save(image, format="JPEG")
+    image.seek(0)
+    with pytest.raises(HTTPException) as error:
+        await frame_requests.upload_frame_request(
+            "frame-1",
+            device_id="desktop-1",
+            account_generation=3,
+            file=UploadFile(filename="frame.jpg", file=image, headers={"content-type": "image/jpeg"}),
+            uid="user-1",
+        )
+
+    assert error.value.status_code == 503
+    assert authority_checks == [
+        (False, {}),
+        (True, {}),
+    ]
+
+
+class _FakeSnapshot:
+    def __init__(self, data, exists=True, doc_id="id-1", path="users/u/doc/id"):
+        self._data = data
+        self.exists = exists
+        self.id = doc_id
+        self.reference = MagicMock()
+        self.reference.path = path
+
+    def to_dict(self):
+        return self._data
+
+
+def test_attach_frame_request_rejects_soft_deleted_conversation_tombstone():
+    uid = "user-1"
+    request_id = "frame-1"
+    device_id = "desktop-1"
+    account_generation = 3
+    conversation_id = "conversation-1"
+    permanent_storage_id = "permanent-1"
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+
+    client = MagicMock()
+    tx = MagicMock()
+    client.transaction.return_value = tx
+
+    req_snap = _FakeSnapshot(
+        {
+            "uid": uid,
+            "request_id": request_id,
+            "device_id": device_id,
+            "account_generation": account_generation,
+            "dedupe_key": "opaque",
+            "conversation_id": conversation_id,
+            "screenshot_id": "42",
+            "state": FrameRequestState.uploaded.value,
+            "created_at": now,
+            "expires_at": now,
+            "storage_id": "storage-1",
+            "byte_count": 1024,
+            "content_type": "image/jpeg",
+            "cleanup_state": "pending",
+        },
+        exists=True,
+        doc_id=request_id,
+        path=f"users/{uid}/frame_requests/{request_id}",
+    )
+    conv_snap = _FakeSnapshot(
+        {"id": conversation_id, "deleted": True, "data_protection_level": "standard"},
+        exists=True,
+        doc_id=conversation_id,
+        path=f"users/{uid}/conversations/{conversation_id}",
+    )
+
+    req_doc = MagicMock()
+    req_doc.get.return_value = req_snap
+    conv_doc = MagicMock()
+    conv_doc.get.return_value = conv_snap
+
+    user_doc = MagicMock()
+
+    def user_doc_collection(name):
+        if name == "frame_requests":
+            return MagicMock(document=lambda _id: req_doc)
+        if name == "conversations":
+            return MagicMock(document=lambda _id: conv_doc)
+        return MagicMock()
+
+    user_doc.collection.side_effect = user_doc_collection
+    client.collection.side_effect = lambda name: (
+        MagicMock(document=lambda _id: user_doc) if name == "users" else MagicMock()
+    )
+
+    with pytest.raises(KeyError, match="conversation not found"):
+        attach_frame_request_to_conversation(
+            uid,
+            request_id,
+            device_id=device_id,
+            account_generation=account_generation,
+            conversation_id=conversation_id,
+            permanent_storage_id=permanent_storage_id,
+            now=now,
+            firestore_client=client,
+        )
+
+
+@pytest.mark.asyncio
+async def test_promote_frame_request_maps_tombstone_rejection_to_404(monkeypatch):
+    request = _request(FrameRequestState.uploaded)
+    monkeypatch.setattr(frame_requests, "_authorize", _allow)
+    monkeypatch.setattr(frame_requests, "get_frame_request", lambda uid, request_id: request)
+    monkeypatch.setattr(frame_requests, "reserve_frame_promotion_copy", lambda *args: None)
+    monkeypatch.setattr(frame_requests, "reserve_frame_storage_cleanup", lambda *args: None)
+    monkeypatch.setattr(frame_requests, "copy_frame_request_pixels_to_permanent", lambda *args: None)
+
+    def attach_tombstone_fail(*args, **kwargs):
+        raise KeyError("conversation not found")
+
+    monkeypatch.setattr(frame_requests, "attach_frame_request_to_conversation", attach_tombstone_fail)
+
+    with pytest.raises(HTTPException) as exc:
+        await frame_requests.promote_frame_request(
+            "frame-1",
+            FrameRequestPromotion(device_id="desktop-1", account_generation=3, conversation_id="conversation-1"),
+            uid="user-1",
+        )
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "frame_request_not_found"

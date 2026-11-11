@@ -25,12 +25,29 @@ def _scan_source(scanner: ModuleType, tmp_path: Path, source: str):
     return source_path, scanner.scan_dirs([str(tmp_path)])
 
 
-def _scan_agent_proxy_source(scanner: ModuleType, tmp_path: Path, source: str):
-    service_dir = tmp_path / "backend" / "agent-proxy"
+def _scan_service_source(scanner: ModuleType, tmp_path: Path, source: str):
+    service_dir = tmp_path / "backend" / "routers"
     service_dir.mkdir(parents=True)
-    source_path = service_dir / "main.py"
+    source_path = service_dir / "service.py"
     source_path.write_text(textwrap.dedent(source), encoding="utf-8")
     return source_path, scanner.scan_dirs([str(service_dir)])
+
+
+def test_scan_dirs_reads_source_as_utf8(scanner, tmp_path, monkeypatch):
+    source_path = tmp_path / "unicode_source.py"
+    source_path.write_text('"""Unicode source - snowman: \u2603."""\n', encoding="utf-8")
+    real_open = open
+    opened = []
+
+    def tracked_open(path, *args, **kwargs):
+        opened.append((path, kwargs.get("encoding")))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", tracked_open)
+
+    scanner.scan_dirs([str(tmp_path)])
+
+    assert opened == [(str(source_path), "utf-8")]
 
 
 def test_direct_local_sync_wrapper_is_reported_at_async_call_site(scanner, tmp_path):
@@ -192,53 +209,8 @@ def test_direct_credentials_refresh_is_reported_as_sync_network_io(scanner, tmp_
     assert finding["network_io"] == [{"line": 3, "call": "creds.refresh() [sync HTTP]"}]
 
 
-def test_agent_proxy_transitive_credentials_refresh_is_selected(scanner, tmp_path):
-    source_path, results = _scan_agent_proxy_source(
-        scanner,
-        tmp_path,
-        """
-        import asyncio
-
-        def _refresh_credentials():
-            creds.refresh(request)
-
-        def _get_gce_access_token():
-            _refresh_credentials()
-            return creds.token
-
-        async def _check_gce_status():
-            await asyncio.sleep(0)
-            return _get_gce_access_token()
-        """,
-    )
-
-    finding = results["async_helpers_with_blocking"][0]
-    call = finding["network_io"][0]
-    assert finding["file"] == str(source_path)
-    assert call["call"] == "_get_gce_access_token() -> _refresh_credentials() -> creds.refresh() [sync HTTP]"
-    assert call["via"] == ["_get_gce_access_token", "_refresh_credentials"]
-
-
-def test_agent_proxy_credentials_refresh_passed_to_run_blocking_is_safe(scanner, tmp_path):
-    _source_path, results = _scan_agent_proxy_source(
-        scanner,
-        tmp_path,
-        """
-        def _get_gce_access_token():
-            creds.refresh(request)
-            return creds.token
-
-        async def _check_gce_status():
-            return await run_blocking(critical_executor, _get_gce_access_token)
-        """,
-    )
-
-    assert results["high_network_io"] == []
-    assert results["async_helpers_with_blocking"] == []
-
-
 def test_firebase_auth_and_firestore_helpers_are_detected_transitively(scanner, tmp_path):
-    _source_path, results = _scan_agent_proxy_source(
+    _source_path, results = _scan_service_source(
         scanner,
         tmp_path,
         """
@@ -264,7 +236,7 @@ def test_firebase_auth_and_firestore_helpers_are_detected_transitively(scanner, 
 
 
 def test_firebase_auth_and_firestore_helpers_are_safe_on_owned_executors(scanner, tmp_path):
-    _source_path, results = _scan_agent_proxy_source(
+    _source_path, results = _scan_service_source(
         scanner,
         tmp_path,
         """
@@ -354,18 +326,18 @@ def test_sync_app_and_subscription_imports_are_db_blockers_with_aliases(scanner,
         tmp_path,
         """
         from utils.apps import get_available_apps as load_apps
-        from utils.subscription import is_trial_paywalled
+        from utils.subscription import get_remaining_transcription_seconds
 
         async def realtime_coordinator(uid, source):
             await checkpoint()
-            if is_trial_paywalled(uid, source):
+            if get_remaining_transcription_seconds(uid, source):
                 return []
             return load_apps(uid)
         """,
     )
 
     finding = results["async_helpers_with_blocking"][0]
-    assert {call["call"] for call in finding["db_calls"]} == {"is_trial_paywalled", "load_apps"}
+    assert {call["call"] for call in finding["db_calls"]} == {"get_remaining_transcription_seconds", "load_apps"}
 
 
 def test_sync_notification_import_is_detected_through_local_helper(scanner, tmp_path):
@@ -396,11 +368,11 @@ def test_app_boundaries_are_clean_on_owned_executor_and_async_notification_seam(
         tmp_path,
         """
         from utils.apps import get_available_apps
-        from utils.subscription import is_trial_paywalled
+        from utils.subscription import get_remaining_transcription_seconds
         from utils.notifications import send_notification_async
 
         async def realtime_coordinator(uid, source):
-            if await run_blocking(db_executor, is_trial_paywalled, uid, source):
+            if await run_blocking(db_executor, get_remaining_transcription_seconds, uid, source):
                 return []
             apps = await run_blocking(db_executor, get_available_apps, uid)
             await send_notification_async(uid, "App says", "hello")
@@ -518,28 +490,6 @@ def test_dependency_module_async_without_await_is_structural_finding(scanner, tm
     assert results["no_await_should_be_def"][0]["endpoint"] == "pure_dependency"
 
 
-def test_changed_scope_preserves_hyphenated_agent_proxy_path(scanner, monkeypatch):
-    diff = """\
-diff --git a/backend/agent-proxy/main.py b/backend/agent-proxy/main.py
---- a/backend/agent-proxy/main.py
-+++ b/backend/agent-proxy/main.py
-@@ -8,0 +9 @@ async def _check_gce_status():
-+    creds.refresh(request)
-"""
-    captured = {}
-
-    def fake_run(cmd, **kwargs):
-        captured["cmd"] = cmd
-        return SimpleNamespace(stdout=diff)
-
-    monkeypatch.setattr(scanner.subprocess, "run", fake_run)
-
-    scope = scanner.changed_scope("origin/main", ["backend/agent-proxy"])
-
-    assert captured["cmd"][-2:] == ["--", "backend/agent-proxy"]
-    assert scope["ranges"] == {"backend/agent-proxy/main.py": [(9, 9)]}
-
-
 def test_diff_scope_includes_changed_transitive_helper_lines(scanner, tmp_path):
     source_path, results = _scan_source(
         scanner,
@@ -559,8 +509,318 @@ def test_diff_scope_includes_changed_transitive_helper_lines(scanner, tmp_path):
     finding = results["medium_file_io"][0]
     sink_line = finding["calls"][0]["sink_line"]
     scope = {
-        "ranges": {str(source_path): [(sink_line, sink_line)]},
+        "ranges": {scanner._normalize_path(str(source_path)): [(sink_line, sink_line)]},
         "import_changed_files": set(),
     }
 
     assert scanner.finding_in_changed_scope(finding, scope)
+
+
+def test_async_for_consumption_is_not_a_structural_finding(scanner, tmp_path):
+    """An endpoint that drives an async generator suspends and cannot become `def`."""
+    source_path = tmp_path / "streaming_consumer.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            @router.get("/stream")
+            async def consume_stream():
+                async for chunk in produce():
+                    continue
+                return "done"
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"] == []
+
+
+def test_async_with_is_not_a_structural_finding(scanner, tmp_path):
+    source_path = tmp_path / "context_consumer.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            @router.get("/context")
+            async def use_context():
+                async with acquire() as handle:
+                    return handle
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"] == []
+
+
+def test_awaited_async_db_accessor_is_not_blocking(scanner, tmp_path):
+    """`await`ing an async accessor from database.* yields to the loop, so it is not blocking.
+
+    The scanner classified every `database.*` import called inside an `async def` as a sync DB
+    call without checking whether it was awaited. That made a correct fix — routing the
+    proactive dispatcher onto the publisher's shared Redis client via the async accessor —
+    fail the push gate, with no allowlist or inline waiver to say otherwise.
+    """
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from database.redis_db import get_async_redis_client
+
+        async def dispatcher():
+            client = await get_async_redis_client()
+            return client
+        """,
+    )
+
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_unawaited_sync_db_call_is_still_blocking(scanner, tmp_path):
+    """The guard must not widen: the same import called without `await` still blocks."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from database.redis_db import get_redis_client
+
+        async def dispatcher():
+            client = get_redis_client()
+            return client
+        """,
+    )
+
+    assert len(results["async_helpers_with_blocking"]) == 1
+
+
+def test_coroutines_handed_to_asyncio_are_not_blocking(scanner, tmp_path):
+    """Awaiting through asyncio is the same handoff as `await`, so it is not blocking either.
+
+    `_awaited_call_ids` only sees a call that is the direct operand of an `await`. Awaiting two
+    accessors at once, or one with a deadline, means writing `asyncio.gather(...)`,
+    `asyncio.create_task(...)` or `asyncio.wait_for(...)`, and the inner call stops being that
+    operand — so the same async accessor the previous fix cleared was reported again the moment
+    a second one was awaited beside it.
+    """
+    for form in (
+        "await asyncio.gather(get_async_redis_client(), get_async_cache_client())",
+        "await asyncio.wait_for(get_async_redis_client(), timeout=5)",
+        "await asyncio.wait([get_async_redis_client(), get_async_cache_client()])",
+        "await asyncio.create_task(get_async_redis_client())",
+        "await asyncio.shield(get_async_redis_client())",
+    ):
+        _source_path, results = _scan_source(
+            scanner,
+            tmp_path,
+            f"""
+            import asyncio
+
+            from database.redis_db import get_async_cache_client, get_async_redis_client
+
+            async def dispatcher():
+                return {form}
+            """,
+        )
+
+        assert results["async_helpers_with_blocking"] == [], form
+
+
+def test_task_group_create_task_is_not_blocking(scanner, tmp_path):
+    """A TaskGroup drives its argument on the event loop exactly as `asyncio.create_task` does."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_async_redis_client
+
+        async def dispatcher():
+            async with asyncio.TaskGroup() as group:
+                group.create_task(get_async_redis_client())
+        """,
+    )
+
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_a_sync_db_call_beside_a_handoff_on_one_line_is_still_blocking(scanner, tmp_path):
+    """The skip stays keyed on the call node: only the handed-off half of a line is cleared."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_async_redis_client, get_redis_client
+
+        async def dispatcher():
+            return await asyncio.gather(get_async_redis_client()), get_redis_client()
+        """,
+    )
+
+    assert [call["call"] for finding in results["async_helpers_with_blocking"] for call in finding["db_calls"]] == [
+        "get_redis_client"
+    ]
+
+
+def test_a_call_asyncio_never_receives_is_still_blocking(scanner, tmp_path):
+    """The guard must not widen: importing asyncio near a sync DB call does not clear it."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_redis_client
+
+        async def dispatcher():
+            await asyncio.sleep(1)
+            return get_redis_client()
+        """,
+    )
+
+    assert len(results["async_helpers_with_blocking"]) == 1
+
+
+@pytest.fixture
+def database_context_source(tmp_path):
+    database_dir = tmp_path / 'database'
+    database_dir.mkdir()
+    (database_dir / 'scopes.py').write_text(
+        textwrap.dedent('''\
+            from contextlib import contextmanager as cm
+            import contextlib as contexts
+            from database.users import get_user
+
+            @cm
+            def memo_scope(uid):
+                yield {}
+
+            @contexts.contextmanager
+            def other_scope(uid):
+                yield {}
+
+            def read_user(uid):
+                return get_user(uid)
+
+            @cm
+            def blocking_scope(uid):
+                yield read_user(uid)
+
+            @cm
+            def blocking_exit_scope(uid):
+                try:
+                    yield
+                finally:
+                    read_user(uid)
+
+            def not_a_context_manager(uid):
+                return object()
+            '''),
+        encoding='utf-8',
+    )
+
+
+@pytest.mark.parametrize('export', ['memo_scope', 'other_scope'])
+def test_database_context_manager_with_target_is_not_blocking(scanner, tmp_path, database_context_source, export):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        f'''
+        from database.scopes import {export} as scope
+
+        async def helper(uid):
+            with scope(uid):
+                await checkpoint()
+        ''',
+    )
+    assert results['async_helpers_with_blocking'] == []
+    assert results['mixed_await_sync_db'] == []
+
+
+@pytest.mark.parametrize(
+    'export', ['memo_scope', 'not_a_context_manager', 'unknown_scope', 'blocking_scope', 'blocking_exit_scope']
+)
+def test_plain_database_call_remains_blocking(scanner, tmp_path, database_context_source, export):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        f'''
+        from database.scopes import {export}
+
+        async def helper(uid):
+            await checkpoint()
+            return {export}(uid)
+        ''',
+    )
+    assert [call['call'] for finding in results['async_helpers_with_blocking'] for call in finding['db_calls']] == [
+        export
+    ]
+
+
+@pytest.mark.parametrize('export', ['not_a_context_manager', 'unknown_scope', 'blocking_scope', 'blocking_exit_scope'])
+def test_unproven_or_blocking_with_target_stays_blocking(scanner, tmp_path, database_context_source, export):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        f'''
+        from database.scopes import {export}
+
+        async def helper(uid):
+            with {export}(uid):
+                await checkpoint()
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_missing_database_source_is_not_exempt(scanner, tmp_path):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.missing import scope
+
+        async def helper(uid):
+            with scope(uid):
+                await checkpoint()
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_context_exemption_does_not_hide_calls_in_arguments_or_body(scanner, tmp_path, database_context_source):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.scopes import memo_scope
+        from database.users import get_user
+
+        async def helper(uid):
+            with memo_scope(get_user(uid)):
+                await checkpoint()
+                memo_scope(uid)
+        ''',
+    )
+    calls = results['async_helpers_with_blocking'][0]['db_calls']
+    assert {call['call'] for call in calls} == {'get_user', 'memo_scope'}
+    assert len(calls) == 2
+
+
+def test_context_exemption_does_not_hide_blocking_calls_in_with_body(scanner, tmp_path, database_context_source):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.scopes import memo_scope
+        from database.users import get_user
+
+        @router.get('/user')
+        async def endpoint(uid):
+            with memo_scope(uid):
+                await checkpoint()
+                return get_user(uid)
+        ''',
+    )
+    assert [call['call'] for finding in results['mixed_await_sync_db'] for call in finding['db_calls']] == ['get_user']

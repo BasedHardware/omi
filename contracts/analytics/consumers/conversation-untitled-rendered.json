@@ -1,0 +1,16 @@
+{
+  "id": "conversation-untitled-rendered",
+  "kind": "question",
+  "owner": "Mobile product",
+  "question": "Do conversation surfaces still receive kept rows with neither a server title nor transcript text? The app now renders a localized recording date/time for this event; older builds rendered Untitled Conversation. Compare within a build, not across the wording change.",
+  "query": "contracts/analytics/consumers/conversation-untitled-rendered.sql",
+  "events": [
+    "conversationUntitledRendered"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero is the goal alongside conversation-list traffic in the same namespace/build. This is a bounded rendering signal, once per conversation and surface per app session, not a count of newly created empty-title rows. Age buckets describe the recording creation date, not the time a finalization failed."
+}

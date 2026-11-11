@@ -1,0 +1,179 @@
+{
+  "lane": "onb-m-firstcapture",
+  "viewport_logical": [
+    393,
+    852
+  ],
+  "pixel_ratio": 3,
+  "theme": "light",
+  "fonts": "Real SF Pro Display and SDK Roboto; explicit themed controls",
+  "source": "app/test/widgets/first_capture_test.dart",
+  "command": "FIRST_CAPTURE_RENDER=1 flutter test --no-pub test/widgets/first_capture_test.dart",
+  "fixtures": "Hermetic phone IO; real ConnectDevicePage with inert BLE providers; synthetic conversation",
+  "limits": "Widget rendering; no physical-device, production API, BLE, or Watch end-to-end acceptance.",
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-first-capture-choice.png",
+      "platform": "mobile-ios",
+      "description": "iOS first capture: choice",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-first-capture-recording-5s.png",
+      "platform": "mobile-ios",
+      "description": "iOS first capture: recording-5s",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-first-capture-recording-30s.png",
+      "platform": "mobile-ios",
+      "description": "iOS first capture: recording-30s",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-first-capture-processing.png",
+      "platform": "mobile-ios",
+      "description": "iOS first capture: processing",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-first-capture-result.png",
+      "platform": "mobile-ios",
+      "description": "iOS first capture: result",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-first-capture-empty.png",
+      "platform": "mobile-ios",
+      "description": "iOS first capture: empty",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-first-capture-omi-handoff.png",
+      "platform": "mobile-ios",
+      "description": "iOS first capture: omi-handoff",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-first-capture-watch-instructions.png",
+      "platform": "mobile-ios",
+      "description": "iOS first capture: watch-instructions",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-android-first-capture-choice.png",
+      "platform": "mobile-android",
+      "description": "android first capture: choice",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-android-first-capture-recording-5s.png",
+      "platform": "mobile-android",
+      "description": "android first capture: recording-5s",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-android-first-capture-recording-30s.png",
+      "platform": "mobile-android",
+      "description": "android first capture: recording-30s",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-android-first-capture-processing.png",
+      "platform": "mobile-android",
+      "description": "android first capture: processing",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-android-first-capture-result.png",
+      "platform": "mobile-android",
+      "description": "android first capture: result",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-android-first-capture-empty.png",
+      "platform": "mobile-android",
+      "description": "android first capture: empty",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-android-first-capture-omi-handoff.png",
+      "platform": "mobile-android",
+      "description": "android first capture: omi-handoff",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-ios-first-capture-delayed.png",
+      "platform": "mobile-ios",
+      "description": "016-mobile-ios-first-capture-delayed",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-android-first-capture-delayed.png",
+      "platform": "mobile-android",
+      "description": "017-mobile-android-first-capture-delayed",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-ios-first-capture-short-warning.png",
+      "platform": "mobile-ios",
+      "description": "018-mobile-ios-first-capture-short-warning",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-android-first-capture-short-warning.png",
+      "platform": "mobile-android",
+      "description": "019-mobile-android-first-capture-short-warning",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-ios-first-capture-back-confirmation.png",
+      "platform": "mobile-ios",
+      "description": "020-mobile-ios-first-capture-back-confirmation",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-android-first-capture-back-confirmation.png",
+      "platform": "mobile-android",
+      "description": "021-mobile-android-first-capture-back-confirmation",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "022-mobile-ios-first-capture-omi-failure.png",
+      "platform": "mobile-ios",
+      "description": "ios pairing failure retains Connect and How to Pair",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-mobile-android-first-capture-omi-failure.png",
+      "platform": "mobile-android",
+      "description": "android pairing failure retains Connect and How to Pair",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ],
+  "review_revision": "Thumb-zone actions; terminal-only empty explanation; iOS App Shortcuts tip on result"
+}

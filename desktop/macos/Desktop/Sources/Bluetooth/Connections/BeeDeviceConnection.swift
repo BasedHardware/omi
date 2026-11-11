@@ -105,7 +105,7 @@ final class BeeDeviceConnection: BaseDeviceConnection {
     audioSubscription = Task { [weak self] in
       do {
         for try await data in stream {
-          if let frame = self?.processAudioPacket(Array(data)) {
+          for frame in self?.processAudioPacket(Array(data)) ?? [] {
             self?.audioStreamController.yield(Data(frame))
           }
         }
@@ -148,12 +148,24 @@ final class BeeDeviceConnection: BaseDeviceConnection {
 
   // MARK: - Audio Processing
 
-  /// Process AAC audio packet with ADTS framing
-  func processAudioPacket(_ data: [UInt8]) -> [UInt8]? {
-    guard data.count >= 2 else { return nil }
+  /// Process AAC audio packet with ADTS framing.
+  ///
+  /// Drains **every** complete ADTS frame the notification completed, not just
+  /// the first. A single notification can carry (or complete, after resync)
+  /// more than one frame; returning only the first left the rest buffered until
+  /// the next notification arrived — shifting all subsequent audio ~64ms/frame
+  /// late and discarding any surplus complete frames on stop. A genuinely
+  /// partial trailing frame still stays buffered (nextADTSFrame returns nil),
+  /// so it is completed by the next notification as before.
+  func processAudioPacket(_ data: [UInt8]) -> [[UInt8]] {
+    guard data.count >= 2 else { return [] }
 
     audioBuffer.append(contentsOf: data.dropFirst(2))
-    return Self.nextADTSFrame(from: &audioBuffer)
+    var frames: [[UInt8]] = []
+    while let frame = Self.nextADTSFrame(from: &audioBuffer) {
+      frames.append(frame)
+    }
+    return frames
   }
 
   /// Pop the next complete ADTS/AAC frame from `buffer`, skipping leading

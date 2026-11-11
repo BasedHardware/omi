@@ -1,3 +1,8 @@
+// The settings sidebar: section navigation plus its search model.
+//
+// Search is metadata-driven (keywords per SettingsSection) rather than
+// text-matching the views, so a settings row stays discoverable by concept even
+// when its on-screen title does not contain the search term.
 import OmiTheme
 import SwiftUI
 
@@ -13,51 +18,49 @@ struct SettingsSearchItem: Identifiable {
   let settingId: String
 
   var breadcrumb: String {
-    return section.rawValue
+    section.displayTitle
   }
 
   static let allSearchableItems: [SettingsSearchItem] = [
     // General
     SettingsSearchItem(
-      name: "Rewind", subtitle: "Screen capture and audio recording",
-      keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
-      section: .general, icon: "gearshape", settingId: "general.rewind"),
-    SettingsSearchItem(
-      name: "System Audio", subtitle: "When to record audio from other apps",
-      keywords: [
-        "system audio", "meeting", "zoom", "google meet", "teams", "call", "capture", "recording",
-        "speaker",
-      ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
-    SettingsSearchItem(
-      name: "Notifications", subtitle: "Proactive alerts and status",
-      keywords: ["alerts", "notify"], section: .general, icon: "gearshape",
+      name: "Notifications", subtitle: "macOS permission and banner status",
+      keywords: ["alerts", "notify", "banners", "system settings", "permission"], section: .general,
+      icon: "gearshape",
       settingId: "general.notifications"),
     SettingsSearchItem(
-      name: "Ask omi", subtitle: "Show or hide the floating chat bar",
-      keywords: ["floating bar", "chat bar"], section: .general, icon: "gearshape",
-      settingId: "general.askomi"),
+      name: "Interface Sounds", subtitle: "Sounds when an answer finishes or a card appears",
+      keywords: ["sound", "sounds", "audio", "chime", "mute", "silence", "effects"],
+      section: .general, icon: "speaker.wave.2", settingId: "general.interfacesounds"),
     SettingsSearchItem(
       name: "Font Size", subtitle: "Adjust text size across the app",
       keywords: ["text size", "zoom", "scale", "reset"], section: .general, icon: "gearshape",
       settingId: "general.fontsize"),
     SettingsSearchItem(
       name: "Reset Window Size", subtitle: "Restore the default window dimensions",
-      keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape",
-      settingId: "general.resetwindow"),
+      keywords: ["resize", "window", "default size"], section: .general, icon: "macwindow",
+      settingId: "general.window"),
+    SettingsSearchItem(
+      name: "Transparency", subtitle: "How see-through Omi's windows are",
+      keywords: ["glass", "transparent", "opacity", "opaque", "blur", "see-through", "translucent"],
+      section: .general, icon: "circle.lefthalf.filled", settingId: "general.transparency"),
 
     // Rewind
     SettingsSearchItem(
-      name: "Rewind", subtitle: "Browse your screen history",
-      keywords: ["screen history", "screenshots", "recording"], section: .rewind,
-      icon: "clock.arrow.circlepath", settingId: "rewind.rewind"),
+      name: "Rewind", subtitle: "How long screen history is kept",
+      keywords: ["screen history", "screenshots", "recording", "retention"], section: .rewind,
+      icon: "clock.arrow.circlepath", settingId: "rewind.retention"),
     SettingsSearchItem(
       name: "Screen Capture", subtitle: "Toggle screen capture on or off",
       keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"],
-      section: .rewind, icon: "rectangle.dashed.badge.record", settingId: "rewind.screencapture"),
+      section: .general, icon: "rectangle.dashed.badge.record", settingId: "general.screencapture"),
     SettingsSearchItem(
-      name: "Audio Recording", subtitle: "Toggle audio recording and transcription",
-      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .rewind,
-      icon: "mic.fill", settingId: "rewind.audiorecording"),
+      name: "Audio Recording", subtitle: "Off, Always On, or Only Meetings",
+      keywords: [
+        "audio", "microphone", "recording", "transcription", "mic", "meeting", "zoom", "google meet",
+        "teams", "call", "system audio",
+      ], section: .general,
+      icon: "mic.fill", settingId: "general.audiorecording"),
     SettingsSearchItem(
       name: "Storage", subtitle: "View frame count and disk usage",
       keywords: ["frames", "storage", "disk", "space", "gb"], section: .rewind,
@@ -74,12 +77,16 @@ struct SettingsSearchItem: Identifiable {
       name: "Data Retention", subtitle: "How long to keep screen recordings",
       keywords: ["retention", "storage", "delete old", "keep data"], section: .rewind,
       icon: "clock.arrow.circlepath", settingId: "rewind.retention"),
+    SettingsSearchItem(
+      name: "Meeting Screenshots", subtitle: "Add screenshots of what was on screen to meeting notes",
+      keywords: ["meeting", "screenshots", "notes", "banner", "photos"], section: .rewind,
+      icon: "photo.on.rectangle.angled", settingId: "rewind.meetingnotescreenshots"),
 
     // Transcription
     SettingsSearchItem(
       name: "Transcription Settings", subtitle: "Configure speech-to-text options",
       keywords: ["language", "vocabulary", "speech"], section: .transcription, icon: "waveform",
-      settingId: "transcription.settings"),
+      settingId: "transcription.languagemode"),
     SettingsSearchItem(
       name: "Language Mode", subtitle: "Choose single or multi-language transcription",
       keywords: ["language", "multilingual", "single language"], section: .transcription,
@@ -99,6 +106,17 @@ struct SettingsSearchItem: Identifiable {
       name: "Local VAD Gate", subtitle: "Skip silence to reduce transcription cost",
       keywords: ["vad", "silence", "gate", "cost", "deepgram"], section: .transcription,
       icon: "waveform", settingId: "transcription.vadgate"),
+    SettingsSearchItem(
+      name: "Silent Type", subtitle: "Keeps what you dictate with Omi Type out of the chat",
+      keywords: ["silent", "type", "dictation", "voice typing", "private", "chat context"],
+      section: .transcription,
+      icon: "keyboard", settingId: "transcription.silenttype"),
+    SettingsSearchItem(
+      name: "Ignore Dictation Apps",
+      subtitle: "Stop listening while Wispr Flow, superwhisper, or macOS Dictation uses the mic",
+      keywords: ["dictation", "wispr", "superwhisper", "noise", "mute", "conversations"],
+      section: .transcription,
+      icon: "mic.slash", settingId: "transcription.ignoredictationapps"),
 
     // Notifications
     SettingsSearchItem(
@@ -106,13 +124,9 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["daily summary", "frequency", "alerts"], section: .notifications, icon: "bell",
       settingId: "notifications.settings"),
     SettingsSearchItem(
-      name: "Notification Frequency", subtitle: "How often to receive notifications",
+      name: "Notification Frequency", subtitle: "How many proactive suggestions Omi sends",
       keywords: ["frequency", "how often", "interval"], section: .notifications, icon: "bell",
       settingId: "notifications.frequency"),
-    SettingsSearchItem(
-      name: "Focus Notifications", subtitle: "Show notification on focus changes",
-      keywords: ["focus", "distraction", "notify focus"], section: .notifications, icon: "bell",
-      settingId: "notifications.focus"),
     SettingsSearchItem(
       name: "Task Notifications",
       subtitle: "Allow interruptions when a task needs attention",
@@ -120,20 +134,37 @@ struct SettingsSearchItem: Identifiable {
       section: .notifications, icon: "bell",
       settingId: "notifications.task"),
     SettingsSearchItem(
-      name: "Insight Notifications", subtitle: "Show notification when an insight is generated",
-      keywords: ["insight", "insights", "notify insight"], section: .notifications, icon: "bell",
-      settingId: "notifications.insight"),
-    SettingsSearchItem(
       name: "Memory Notifications", subtitle: "Show notification when a memory is extracted",
       keywords: ["memory", "facts", "notify memory"], section: .notifications, icon: "bell",
       settingId: "notifications.memory"),
+    SettingsSearchItem(
+      name: "Integration Notifications",
+      subtitle: "Occasionally offer to connect an app Omi can use — Gmail, Notion, ChatGPT",
+      keywords: ["integration", "suggestions", "connect", "gmail", "notion", "nudge"],
+      section: .notifications, icon: "bell",
+      settingId: "notifications.integrationsuggestions"),
+    SettingsSearchItem(
+      name: "Connect an Agent",
+      subtitle: "Setup prompts plus MCP and Developer API keys for Claude, ChatGPT, Codex, Cursor",
+      keywords: [
+        "agent", "mcp", "api key", "developer", "claude", "chatgpt", "codex", "cursor", "openclaw",
+        "hermes",
+      ],
+      section: .advanced, icon: "point.3.connected.trianglepath.dotted",
+      settingId: "advanced.connectagent"),
+    SettingsSearchItem(
+      name: "Reset Integration Suggestions",
+      subtitle: "Clear every integration's suggestion history so Omi can offer them again",
+      keywords: ["reset", "integration", "suggestions", "history", "again"],
+      section: .advanced, icon: "wrench.and.screwdriver",
+      settingId: "advanced.troubleshooting.resetintegrationsuggestions"),
     SettingsSearchItem(
       name: "Daily Summary",
       subtitle: "Receive a daily summary of your conversations and activities",
       keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, icon: "bell",
       settingId: "notifications.dailysummary"),
     SettingsSearchItem(
-      name: "Summary Time", subtitle: "When to send your daily summary",
+      name: "Summary Time", subtitle: "When to send your daily summary (hour only)",
       keywords: ["time", "schedule", "when", "hour"], section: .notifications, icon: "bell",
       settingId: "notifications.summarytime"),
 
@@ -144,19 +175,19 @@ struct SettingsSearchItem: Identifiable {
       icon: "lock.shield", settingId: "privacy.privacy"),
     SettingsSearchItem(
       name: "Store Recordings",
-      subtitle: "Allow omi to store audio recordings of your conversations",
+      subtitle: "Allow Omi to store audio recordings of your conversations",
       keywords: ["store", "save recordings", "audio storage"], section: .privacy,
       icon: "lock.shield", settingId: "privacy.storerecordings"),
     SettingsSearchItem(
-      name: "Private Cloud Sync", subtitle: "Sync your data securely to your private cloud storage",
+      name: "Private Cloud Sync", subtitle: "Upload your recordings to your own cloud storage",
       keywords: ["cloud", "sync", "private cloud"], section: .privacy, icon: "lock.shield",
-      settingId: "privacy.cloudsync"),
+      settingId: "privacy.storerecordings"),
     SettingsSearchItem(
       name: "Encryption", subtitle: "Server-side encryption for your data",
       keywords: ["encrypt", "security", "end to end"], section: .privacy, icon: "lock.shield",
       settingId: "privacy.encryption"),
     SettingsSearchItem(
-      name: "What We Track", subtitle: "View analytics and telemetry data we collect",
+      name: "What We Track", subtitle: "See the usage data Omi collects",
       keywords: ["tracking", "analytics", "telemetry", "data collection"], section: .privacy,
       icon: "lock.shield", settingId: "privacy.tracking"),
 
@@ -165,23 +196,29 @@ struct SettingsSearchItem: Identifiable {
       name: "Account", subtitle: "Your profile and email", keywords: ["profile", "email"],
       section: .account, icon: "person.circle", settingId: "account.account"),
     SettingsSearchItem(
-      name: "Sign Out", subtitle: "Sign out of your omi account",
+      name: "Sign Out", subtitle: "Sign out of your Omi account",
       keywords: ["sign out", "log out", "logout", "signout"], section: .account,
       icon: "person.circle", settingId: "account.signout"),
 
     // Plan and Usage
     SettingsSearchItem(
       name: "Plan and Usage", subtitle: "Subscription status and usage limits",
-      keywords: ["subscription", "billing", "plan", "usage", "stripe", "architect", "unlimited"],
+      keywords: ["subscription", "billing", "plan", "usage", "stripe", "omi pro", "pro"],
       section: .planUsage, icon: "creditcard", settingId: "planusage.overview"),
     SettingsSearchItem(
       name: "Current Plan", subtitle: "See your current subscription and renewal status",
       keywords: ["current plan", "renewal", "billing"], section: .planUsage, icon: "creditcard",
       settingId: "planusage.current"),
     SettingsSearchItem(
-      name: "Upgrade Plan", subtitle: "Buy Operator or Architect",
-      keywords: ["upgrade", "buy", "pricing", "checkout", "architect", "operator", "unlimited"], section: .planUsage,
+      name: "Upgrade Plan", subtitle: "Buy Omi Pro",
+      keywords: ["upgrade", "buy", "pricing", "checkout", "omi pro", "pro"], section: .planUsage,
       icon: "creditcard", settingId: "planusage.purchase"),
+
+    // Referral
+    SettingsSearchItem(
+      name: "Refer a Friend", subtitle: "Share one free month of Omi Pro",
+      keywords: ["refer", "referral", "friend", "gift", "free month", "share link"],
+      section: .referral, icon: "gift", settingId: "referral.link"),
 
     // About
     SettingsSearchItem(
@@ -198,17 +235,13 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["auto install", "automatic install", "download updates", "install updates"],
       section: .about, icon: "info.circle", settingId: "about.autoinstall"),
     SettingsSearchItem(
-      name: "Update Channel", subtitle: "Choose between stable and beta update channels",
-      keywords: ["channel", "beta", "stable", "release channel"], section: .about,
+      name: "Omi Beta", subtitle: "Install the separate Omi Beta app beside this one",
+      keywords: ["channel", "beta", "stable", "release channel", "omi beta"], section: .about,
       icon: "info.circle", settingId: "about.channel"),
     SettingsSearchItem(
       name: "Version Info", subtitle: "Current app version and build number",
       keywords: ["version", "build", "app version", "build number"], section: .about,
       icon: "info.circle", settingId: "about.version"),
-    SettingsSearchItem(
-      name: "Report an Issue", subtitle: "Help us improve omi",
-      keywords: ["bug", "feedback", "report", "issue"], section: .about, icon: "info.circle",
-      settingId: "about.reportissue"),
 
     // Advanced subsections
     SettingsSearchItem(
@@ -224,7 +257,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["statistics", "conversations", "usage"], section: .advanced, icon: "chart.bar",
       settingId: "advanced.stats"),
     SettingsSearchItem(
-      name: "AI Provider", subtitle: "Choose between your omi account and Claude for desktop chat",
+      name: "AI Provider", subtitle: "Choose between your Omi account and Claude for desktop chat",
       keywords: ["provider", "agent sdk", "claude code", "acp", "bridge mode"], section: .advanced,
       icon: "cpu", settingId: "aichat.provider"),
     SettingsSearchItem(
@@ -251,19 +284,25 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["auto generate", "suggest goals", "daily goals"], section: .advanced,
       icon: "target", settingId: "advanced.goals.autogenerate"),
     SettingsSearchItem(
-      name: "Ask omi Floating Bar",
+      name: "Floating Bar",
       subtitle: "Configure the floating bar appearance and visibility",
       keywords: ["floating bar", "ask omi", "show bar"], section: .floatingBar, icon: "sparkles",
       settingId: "floatingbar.show"),
-    SettingsSearchItem(
-      name: "Background Style", subtitle: "Toggle between solid and transparent background",
-      keywords: ["background", "solid", "transparent", "blur"], section: .floatingBar,
-      icon: "sparkles", settingId: "floatingbar.background"),
-    SettingsSearchItem(
-      name: "Draggable Floating Bar",
-      subtitle: "Allow repositioning the floating bar by dragging it",
-      keywords: ["drag", "move", "reposition", "draggable"], section: .floatingBar,
-      icon: "sparkles", settingId: "floatingbar.draggable"),
+    // HIDDEN DELIBERATELY (Nik, 2026-08-25): search entries for hidden floating-bar rows.
+    // SettingsSearchItem(
+    // name: "Notification Previews",
+    // subtitle: "Show assistant notifications under the Floating Bar",
+    // keywords: ["notification preview", "floating bar notification", "mute preview", "focus", "dnd"],
+    // section: .floatingBar, icon: "sparkles", settingId: "floatingbar.notificationpreviews"),
+    // SettingsSearchItem(
+    // name: "Background Style", subtitle: "Toggle between solid and transparent background",
+    // keywords: ["background", "solid", "transparent", "blur"], section: .floatingBar,
+    // icon: "sparkles", settingId: "floatingbar.background"),
+    // SettingsSearchItem(
+    // name: "Draggable Floating Bar",
+    // subtitle: "Allow repositioning the floating bar by dragging it",
+    // keywords: ["drag", "move", "reposition", "draggable"], section: .floatingBar,
+    // icon: "sparkles", settingId: "floatingbar.draggable"),
     SettingsSearchItem(
       name: "Typed Questions", subtitle: "Speak replies aloud for typed floating-bar questions",
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
@@ -278,11 +317,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["voice speed", "speech speed", "playback speed", "tts speed"],
       section: .floatingBar, icon: "sparkles", settingId: "floatingbar.voicespeed"),
     SettingsSearchItem(
-      name: "Shortcuts", subtitle: "Configure Ask omi and push-to-talk keyboard shortcuts",
+      name: "Shortcuts", subtitle: "Configure Open Omi and push-to-talk keyboard shortcuts",
       keywords: ["shortcuts", "keyboard", "hotkeys", "push to talk"], section: .shortcuts,
       icon: "keyboard", settingId: "floatingbar.shortcut"),
     SettingsSearchItem(
-      name: "Ask omi Shortcut", subtitle: "Global shortcut to open Ask omi from anywhere",
+      name: "Open Omi Shortcut", subtitle: "Global shortcut to open the Omi app from anywhere",
       keywords: ["shortcut", "hotkey", "keyboard", "global shortcut"], section: .shortcuts,
       icon: "keyboard", settingId: "floatingbar.shortcut"),
     SettingsSearchItem(
@@ -300,16 +339,12 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["sounds", "audio feedback", "ptt sounds"], section: .shortcuts, icon: "keyboard",
       settingId: "floatingbar.pttsounds"),
     SettingsSearchItem(
-      name: "Multiple Chat Sessions", subtitle: "Create separate chat threads",
-      keywords: ["multi chat", "threads"], section: .advanced, icon: "slider.horizontal.3",
-      settingId: "advanced.preferences.multichat"),
-    SettingsSearchItem(
-      name: "Launch at Login", subtitle: "Start omi automatically when you log in",
+      name: "Launch at Login", subtitle: "Start Omi automatically when you log in",
       keywords: ["startup", "login", "boot"], section: .advanced, icon: "slider.horizontal.3",
       settingId: "advanced.preferences.launchatlogin"),
     SettingsSearchItem(
-      name: "Report Issue", subtitle: "Send app logs and report a problem",
-      keywords: ["bug", "feedback", "logs", "report"], section: .advanced,
+      name: "Report an Issue", subtitle: "Save a redacted report on this Mac to share manually",
+      keywords: ["bug", "feedback", "logs", "report", "issue"], section: .advanced,
       icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.reportissue"),
     SettingsSearchItem(
       name: "Rescan Files", subtitle: "Re-index your files and update your AI profile",
@@ -319,33 +354,69 @@ struct SettingsSearchItem: Identifiable {
   ]
 }
 
+enum SettingsSidebarMetrics {
+  /// The settings sidebar is a **table of contents**, not a content column.
+  ///
+  /// It was 260 — the width of the app's *main* sidebar, which carries conversation titles and has
+  /// something to do with the room. Nine section names do not, and that width spent the difference
+  /// on whitespace to the right of "About" while the pane beside it is the thing anyone reads.
+  ///
+  /// The value is **derived from the longest label rather than chosen**, because this row truncates
+  /// (`lineLimit(1)`, `.tail`) and a truncated item in a table of contents is worse than a wide one.
+  /// The longest merged label is deliberately concise, so the table of contents
+  /// can stay narrow without truncating or stealing room from the settings pane.
+  static let expandedWidth: CGFloat = 208
+
+  /// Headroom over the measured label requirement. See `expandedWidth`: a zero-slack fit truncated
+  /// on a real build, so the fit is held open by this rather than by luck.
+  static let labelSlack: CGFloat = 12
+  static let horizontalInset: CGFloat = OmiSpacing.sm
+  static let itemAvailableWidth = expandedWidth - 2 * horizontalInset
+}
+
+/// **The rows this list actually shows**, as a value rather than a literal inside a `body`.
+///
+/// `ShellDestination.unreachable()` reads it: `Permissions` is an established page whose only way in
+/// is a row here, so "the row exists" has to be something a test can hold. Delete it and the
+/// reachability check names the page that lost its door instead of leaving it to be discovered in
+/// the app (INV-NAV-1).
+enum SettingsSidebarRoutes {
+  /// Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
+  /// too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
+  /// content too). The absorbed cases stay routable for deep links/automation
+  /// and highlight their merged item via `sidebarItem`.
+  ///
+  /// Capture and account first, then the things you tune, with Permissions beside
+  /// Notifications because both are access. Shortcuts / Advanced / About stay at the foot.
+  static let visibleSections: [SettingsContentView.SettingsSection] = [
+    .general,
+    .account,
+    .transcription,
+    .rewind,
+    .floatingBar,
+    .notifications,
+    .permissions,
+    .shortcuts,
+    .advanced,
+    .referral,
+    .about,
+  ]
+}
+
 /// Settings sidebar that replaces the main sidebar when in settings
 struct SettingsSidebar: View {
   @Binding var selectedSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   let onBack: () -> Void
+  /// The page Back returns to ("‹ Tasks").
+  var backTitle: String = "Chat"
+  @ObservedObject var appState: AppState
 
-  @State private var isBackHovered = false
   @State private var searchQuery = ""
   @FocusState private var isSearchFocused: Bool
 
-  private let expandedWidth: CGFloat = 260
   private let iconWidth: CGFloat = 20
-  // Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
-  // too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
-  // content too). The absorbed cases stay routable for deep links/automation
-  // and highlight their merged item via `sidebarItem`.
-  private let visibleSections: [SettingsContentView.SettingsSection] = [
-    .general,
-    .account,
-    .transcription,
-    .floatingBar,
-    .notifications,
-    .rewind,
-    .shortcuts,
-    .advanced,
-    .about,
-  ]
+  private let visibleSections = SettingsSidebarRoutes.visibleSections
 
   private var filteredSearchItems: [SettingsSearchItem] {
     guard !searchQuery.isEmpty else { return [] }
@@ -374,7 +445,7 @@ struct SettingsSidebar: View {
       // Settings title
       Text("Settings")
         .scaledFont(size: OmiType.heading, weight: .bold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.bottom, OmiSpacing.md)
 
@@ -392,6 +463,7 @@ struct SettingsSidebar: View {
                 section: section,
                 isSelected: selectedSection.sidebarItem == section,
                 iconWidth: iconWidth,
+                showsMissingPermissionNotice: section == .permissions && appState.hasMissingPermissions,
                 onTap: {
                   OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                     selectedSection = section
@@ -411,43 +483,42 @@ struct SettingsSidebar: View {
 
       Spacer()
     }
-    .frame(width: expandedWidth)
-    .background(OmiColors.backgroundPrimary)
+    .frame(width: SettingsSidebarMetrics.expandedWidth)
+    // A half-step of shading, and deliberately not a second material: the host already wears the
+    // glass (`PageGlassLane` in modern Settings, `LegacySidebarSurface` in old Home), and a
+    // `.regularMaterial` here would be a within-window blur stacked on it.
+    .background(Ink.rowFill)
   }
 
   private var searchField: some View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(isSearchFocused ? OmiColors.accent : OmiColors.textTertiary)
+        .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
         .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
-      TextField("Search settings...", text: $searchQuery)
+      TextField("Search", text: $searchQuery)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .focused($isSearchFocused)
+        .straysTypingHere($isSearchFocused)
+        .focusesOnFind($isSearchFocused)
 
       if !searchQuery.isEmpty {
-        Button {
-          searchQuery = ""
-        } label: {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-        .buttonStyle(.plain)
+        ClearFieldButton { searchQuery = "" }
       }
     }
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(OmiColors.backgroundTertiary)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+        .fill(Ink.wash)
         .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(
-              isSearchFocused ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+            // Focused takes the one accent at full strength; at rest it is a control outline, which
+            // is `Ink.hairline` and not `Ink.separator` — a field is something you type into.
+            .strokeBorder(isSearchFocused ? Ink.accent : Ink.hairline, lineWidth: 1)
         )
     )
   }
@@ -458,7 +529,7 @@ struct SettingsSidebar: View {
         if filteredSearchItems.isEmpty {
           Text("No results")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.xl)
         } else {
@@ -480,30 +551,8 @@ struct SettingsSidebar: View {
   }
 
   private var backButton: some View {
-    Button(action: onBack) {
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "chevron.left")
-          .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
-
-        Text("Back")
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
-
-        Spacer()
-      }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .contentShape(Rectangle())
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isBackHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
-      )
-    }
-    .buttonStyle(.plain)
-    .onHover { hovering in
-      isBackHovered = hovering
-    }
+    BackChip(backTitle, accessibilityIdentifier: "settings-back", action: onBack)
+      .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
@@ -512,6 +561,7 @@ struct SettingsSidebarItem: View {
   let section: SettingsContentView.SettingsSection
   let isSelected: Bool
   let iconWidth: CGFloat
+  var showsMissingPermissionNotice: Bool = false
   let onTap: () -> Void
 
   @State private var isHovered = false
@@ -528,8 +578,10 @@ struct SettingsSidebarItem: View {
     case .aiChat: return "cpu"
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
-    case .advanced: return "chart.bar"
+    case .advanced: return "cpu"
+    case .referral: return "gift"
     case .about: return "info.circle"
+    case .permissions: return PermissionNavSymbol.outline
     }
   }
 
@@ -539,33 +591,52 @@ struct SettingsSidebarItem: View {
         EmptyView()
       } else {
         Button(action: onTap) {
-          HStack(spacing: OmiSpacing.md) {
+          // The settings kit's row metrics rather than generic spacing tokens, so a row in the
+          // table of contents and a row in the pane beside it are the same object at the same
+          // rhythm — and so the narrower sidebar keeps the longest label off its own edge.
+          HStack(spacing: SettingsGlassMetrics.rowContentSpacing) {
             Image(systemName: icon)
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+              .foregroundColor(SettingsSelection.rowIcon(isSelected: isSelected))
               .frame(width: iconWidth)
 
             Text(section.displayTitle)
-              .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-              .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+              .scaledFont(size: OmiType.body, weight: SettingsSelection.rowWeight(isSelected: isSelected))
+              .foregroundColor(Ink.primary)
+              .lineLimit(1)
+              .truncationMode(.tail)
+              .layoutPriority(1)
 
-            Spacer()
+            if showsMissingPermissionNotice {
+              Image(systemName: PermissionNavSymbol.missingNotice)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(SettingsInk.notice)
+                .accessibilityHidden(true)
+            }
+
+            Spacer(minLength: 0)
           }
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.md)
+          .padding(.horizontal, SettingsGlassMetrics.rowHorizontalPadding)
+          .padding(.vertical, SettingsGlassMetrics.rowVerticalPadding)
           .contentShape(Rectangle())
           .background(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .fill(
-                isSelected
-                  ? OmiColors.backgroundTertiary.opacity(0.8)
-                  : (isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear))
+            // The top bar's pill ladder, so the current page is marked the way the current tab is.
+            // See `SettingsSelection`.
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+              .fill(SettingsSelection.rowFill(isSelected: isSelected, isHovering: isHovered))
           )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
           isHovered = hovering
         }
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityLabel(
+          Text(
+            showsMissingPermissionNotice
+              ? "\(section.displayTitle), permissions required"
+              : section.displayTitle)
+        )
       }
     }
   }
@@ -589,12 +660,12 @@ struct SettingsSubsectionItem: View {
 
         Image(systemName: subsection.icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .foregroundColor(SettingsSelection.rowIcon(isSelected: isSelected))
           .frame(width: 16)
 
         Text(subsection.rawValue)
-          .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+          .scaledFont(size: OmiType.body, weight: SettingsSelection.rowWeight(isSelected: isSelected))
+          .foregroundColor(Ink.primary)
 
         Spacer()
       }
@@ -602,17 +673,15 @@ struct SettingsSubsectionItem: View {
       .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(
-            isSelected
-              ? OmiColors.backgroundTertiary.opacity(0.6)
-              : (isHovered ? OmiColors.backgroundTertiary.opacity(0.3) : Color.clear))
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(SettingsSelection.rowFill(isSelected: isSelected, isHovering: isHovered))
       )
     }
     .buttonStyle(.plain)
     .onHover { hovering in
       isHovered = hovering
     }
+    .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
   }
 }
 
@@ -628,17 +697,17 @@ struct SettingsSearchResultRow: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: item.icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 20)
 
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(item.name)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Text(item.breadcrumb)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
 
         Spacer()
@@ -647,8 +716,8 @@ struct SettingsSearchResultRow: View {
       .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(isHovered ? Ink.rowHover : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -669,8 +738,14 @@ struct SettingHighlightModifier: ViewModifier {
     content
       .id(settingId)
       .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isHighlighted ? OmiColors.accent.opacity(0.12) : Color.clear)
+        // The "here it is" flash after a search jump: a wash of the one accent plus its edge, cut to
+        // the card's own corner so the flash lands on the card rather than beside it.
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+          .fill(isHighlighted ? Ink.accent.opacity(0.12) : Color.clear)
+          .overlay(
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+              .strokeBorder(isHighlighted ? Ink.accent : Color.clear, lineWidth: 1)
+          )
           .omiAnimation(.easeInOut(duration: 0.3), value: isHighlighted)
           .allowsHitTesting(false)
       )
@@ -691,8 +766,9 @@ struct SettingHighlightModifier: ViewModifier {
     SettingsSidebar(
       selectedSection: .constant(.advanced),
       highlightedSettingId: .constant(nil),
-      onBack: {}
+      onBack: {},
+      appState: AppState()
     )
-    .preferredColorScheme(.dark)
+    .preferredColorScheme(.light)
   }
 #endif

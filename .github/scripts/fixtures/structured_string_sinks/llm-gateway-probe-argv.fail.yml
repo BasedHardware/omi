@@ -1,0 +1,10 @@
+# Historical joined-argument shape exposed by #9945 and repaired in #9947.
+name: probe argv historical failure
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |-
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project=test-project \
+            --region us-central1

@@ -1,9 +1,9 @@
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import 'package:app_links/app_links.dart';
 import 'package:crypto/crypto.dart';
@@ -13,11 +13,14 @@ import 'package:http/http.dart' as http;
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -26,7 +29,12 @@ final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
   AuthUserSnapshot? get currentUser {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
-    return AuthUserSnapshot(uid: user.uid, email: user.email, displayName: user.displayName);
+    return AuthUserSnapshot(
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      isAnonymous: user.isAnonymous,
+    );
   }
 
   @override
@@ -40,28 +48,110 @@ final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
   Future<void> signOut() => FirebaseAuth.instance.signOut();
 }
 
+/// Source-bound proof captured before a credential-collision sign-in replaces
+/// the anonymous Firebase user.
+final class AnonymousSourceMigration {
+  const AnonymousSourceMigration({required this.uid, required this.token});
+
+  final String uid;
+  final String token;
+}
+
+/// The outcome of linking an external provider.
+///
+/// A credential collision signs in to the already-linked destination account
+/// inside [AuthService]. The caller must use [anonymousSourceMigration], rather
+/// than inspecting FirebaseAuth.currentUser after that switch, to migrate the
+/// anonymous source data.
+final class ProviderLinkResult {
+  const ProviderLinkResult({required this.destinationUid, this.destinationSession, this.anonymousSourceMigration});
+
+  final String? destinationUid;
+  final AuthSessionSnapshot? destinationSession;
+  final AnonymousSourceMigration? anonymousSourceMigration;
+}
+
+/// Captures an anonymous source proof before [establishDestination] can replace
+/// FirebaseAuth.currentUser, then returns both sides of the completed collision.
+@visibleForTesting
+Future<ProviderLinkResult> resolveProviderCredentialCollision({
+  required String sourceUid,
+  required bool sourceIsAnonymous,
+  required Future<String?> Function() captureSourceToken,
+  required Future<String?> Function() establishDestination,
+}) async {
+  final sourceToken = sourceIsAnonymous ? await captureSourceToken() : null;
+  final anonymousSourceMigration =
+      sourceToken == null ? null : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
+  final destinationUid = await establishDestination();
+  return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
+}
+
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   static AuthService get instance => _instance;
 
   AuthService._internal()
       : _tokenGateway = _FirebaseAuthTokenGateway(),
+        _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
         _refreshDelay = _defaultRefreshDelay,
         _recordTelemetry = _recordProductionTelemetry,
-        _telemetryContextProvider = _productionTelemetryContext;
+        _telemetryContextProvider = _productionTelemetryContext,
+        _prepareSiriSignOut = SiriIntegration.current.prepareForSignOut,
+        _siriPreparationTimeout = const Duration(seconds: 2),
+        _firebaseAuthOverride = null,
+        _authorizeProviderLinkOverride = null;
 
   @visibleForTesting
   AuthService.forTesting({
     required AuthTokenGateway tokenGateway,
     AuthRefreshDelay? refreshDelay,
+    Duration? refreshAttemptTimeout,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
+    Future<void> Function()? prepareSiriSignOut,
+    Duration siriPreparationTimeout = const Duration(seconds: 2),
+    FirebaseAuth? firebaseAuth,
+    Future<AuthCredential> Function(String provider)? authorizeProviderLink,
   })  : _tokenGateway = tokenGateway,
+        _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
         _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
         _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
-        _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
+        _telemetryContextProvider = telemetryContextProvider ?? (() => const {}),
+        _prepareSiriSignOut = prepareSiriSignOut ?? (() async {}),
+        _siriPreparationTimeout = siriPreparationTimeout,
+        _firebaseAuthOverride = firebaseAuth,
+        _authorizeProviderLinkOverride = authorizeProviderLink;
+
+  /// Replaces the production Firebase token gateway on the **singleton** for
+  /// the local hermetic journey lane (SCA-488).
+  ///
+  /// The gateway is an external-I/O boundary — installing a synthetic one
+  /// fakes Firebase token I/O, never a product decision: every caller
+  /// (`getIdToken`, refresh retries, session expiry) keeps running its real
+  /// logic against the gateway. The full-stack simulator lane does NOT use
+  /// this: it signs in through real FirebaseAuth against the local Auth
+  /// emulator. Debug-only and local_dev-profile-gated; assertions fail in
+  /// production-family builds instead of installing.
+  static void installLocalHarnessTokenGateway(AuthTokenGateway gateway) {
+    assert(kDebugMode, 'local-harness token gateway is a debug-only seam');
+    assert(Env.profile == AppEnvironmentProfile.localDev, 'local-harness token gateway requires the local_dev profile');
+    _instance._tokenGateway = gateway;
+  }
 
   static const int _maxRefreshAttempts = 3;
+
+  /// Per-attempt ceiling on the Firebase forced token refresh.
+  ///
+  /// `forceRefresh()` can hang indefinitely rather than fail: measured on
+  /// iPhone 17 Pro / iOS 27.0 against a Firebase Auth emulator on a non-loopback
+  /// host, it never returned at all. Because `shared.dart` refreshes on the way
+  /// into *every* authenticated request, an unbounded stall here silently freezes
+  /// all backend traffic app-wide — no error, no timeout, nothing to report.
+  ///
+  /// A timed-out attempt is reported as a transient failure, which the retry loop
+  /// below and every existing caller already handle.
+  static const Duration _defaultRefreshAttemptTimeout = Duration(seconds: 8);
   static const List<Duration> _refreshRetryDelays = [Duration(milliseconds: 200), Duration(milliseconds: 500)];
   static const Set<String> _terminalTokenErrorCodes = {
     'invalid-user-token',
@@ -72,19 +162,60 @@ class AuthService {
 
   static Future<void> _defaultRefreshDelay(Duration duration) => Future<void>.delayed(duration);
 
-  final AuthTokenGateway _tokenGateway;
+  // Non-final solely for the debug-gated local-harness seam above; every
+  // production construction still assigns exactly once in the constructor.
+  AuthTokenGateway _tokenGateway;
+  final Duration _refreshAttemptTimeout;
   final AuthRefreshDelay _refreshDelay;
   final AuthTelemetryRecorder _recordTelemetry;
   final AuthTelemetryContextProvider _telemetryContextProvider;
+  final Future<void> Function() _prepareSiriSignOut;
+  final Duration _siriPreparationTimeout;
+  final FirebaseAuth? _firebaseAuthOverride;
+  final Future<AuthCredential> Function(String provider)? _authorizeProviderLinkOverride;
+  FirebaseAuth get _firebaseAuth => _firebaseAuthOverride ?? FirebaseAuth.instance;
+
+  Future<void> _prepareSiriBestEffort() async {
+    try {
+      await _prepareSiriSignOut().timeout(_siriPreparationTimeout);
+    } catch (error) {
+      // The auth boundary must complete even when the optional native bridge
+      // is unavailable. A successfully persisted marker remains for launch
+      // maintenance; the auth-state callback still attempts the wipe.
+      Logger.debug('Siri sign-out preparation deferred: ${error.runtimeType}');
+    }
+  }
+
   final StreamController<AuthSessionExpiredEvent> _sessionExpiredController =
       StreamController<AuthSessionExpiredEvent>.broadcast(sync: true);
+  final StreamController<int> _sessionGenerationController = StreamController<int>.broadcast(sync: true);
   Future<AuthTokenResult>? _refreshInFlight;
   Future<void>? _expireSessionInFlight;
+  Object? _expirationOwner;
   bool _sessionExpired = false;
   int _sessionGeneration = 0;
   String? _refreshUserUid;
 
   Stream<AuthSessionExpiredEvent> get sessionExpiredEvents => _sessionExpiredController.stream;
+
+  Stream<int> get sessionGenerationEvents => _sessionGenerationController.stream;
+
+  AuthSessionSnapshot? captureSessionSnapshot({String? expectedUid}) {
+    handleAuthUserChanged(_tokenGateway.currentUser?.uid);
+    final user = _tokenGateway.currentUser;
+    if (_sessionExpired || user == null || user.isAnonymous) return null;
+    if (expectedUid != null && user.uid != expectedUid) return null;
+    return AuthSessionSnapshot(ownerUid: user.uid, generation: _sessionGeneration);
+  }
+
+  bool isSessionSnapshotCurrent(AuthSessionSnapshot snapshot) {
+    final user = _tokenGateway.currentUser;
+    return !_sessionExpired &&
+        user != null &&
+        !user.isAnonymous &&
+        user.uid == snapshot.ownerUid &&
+        _sessionGeneration == snapshot.generation;
+  }
 
   static void _recordProductionTelemetry(String eventName, Map<String, dynamic> properties) {
     PlatformManager.instance.analytics.track(eventName, properties: properties);
@@ -96,13 +227,20 @@ class AuthService {
         'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
       };
 
-  bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
+  /// Routes through the token gateway so the declared Firebase I/O seam
+  /// covers identity reads too: the production gateway still answers from
+  /// FirebaseAuth; the local hermetic harness answers from its synthetic
+  /// principal. No behavior change for real builds.
+  bool isSignedIn() {
+    final user = _tokenGateway.currentUser;
+    return user != null && !user.isAnonymous;
+  }
 
   static const _pkceCodeVerifierLength = 64;
   static const _pkceCharset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
 
   getFirebaseUser() {
-    return FirebaseAuth.instance.currentUser;
+    return _firebaseAuth.currentUser;
   }
 
   /// Google Sign In using the standard google_sign_in package (iOS, Android)
@@ -123,7 +261,7 @@ class AuthService {
     final credential = GoogleAuthProvider.credential(accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
 
     // Once signed in, return the UserCredential
-    final result = await FirebaseAuth.instance.signInWithCredential(credential);
+    final result = await runAccountMutation(() => _firebaseAuth.signInWithCredential(credential));
     await _updateUserPreferences(result, 'google');
     return result;
   }
@@ -147,8 +285,7 @@ class AuthService {
     try {
       // Sign out the current user first
       Logger.debug('Signing out current user...');
-      handleAuthUserChanged(null);
-      await FirebaseAuth.instance.signOut();
+      await signOutForAccountSwitch();
       Logger.debug('User signed out successfully.');
 
       final rawNonce = generateNonce();
@@ -173,7 +310,7 @@ class AuthService {
 
       // Sign in the user with Firebase.
       Logger.debug('Attempting to sign in with Firebase...');
-      UserCredential userCred = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      UserCredential userCred = await runAccountMutation(() => _firebaseAuth.signInWithCredential(oauthCredential));
       Logger.debug('Firebase sign-in successful.');
 
       // Extract name from Apple credential (only available on first sign-in)
@@ -212,15 +349,36 @@ class AuthService {
     }
   }
 
-  Future<void> signOut() async {
-    _invalidateRefreshes();
-    _clearCachedIdentityAndAuth();
-    await _tokenGateway.signOut();
+  Future<void> _accountMutationTail = Future<void>.value();
+
+  /// Firebase sign-out acts on the global session, including while its Future
+  /// is pending. Every sign-in must wait until that mutation has completed.
+  Future<T> runAccountMutation<T>(Future<T> Function() mutation) {
+    final pending = _accountMutationTail.then((_) => mutation());
+    _accountMutationTail = pending.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return pending;
   }
 
+  Future<void> signOut() => runAccountMutation(() async {
+        await _prepareSiriBestEffort();
+        _invalidateRefreshes();
+        _clearCachedIdentityAndAuth();
+        await _tokenGateway.signOut();
+      });
+
+  /// Credential collision and provider switching preserve their existing
+  /// non-Siri cache behavior, while fencing native Siri before Firebase exits.
+  Future<void> signOutForAccountSwitch() => runAccountMutation(() async {
+        await _prepareSiriBestEffort();
+        handleAuthUserChanged(null);
+        await _tokenGateway.signOut();
+      });
+
   void _invalidateRefreshes() {
+    PendingWorkStore.instance.reset();
     _sessionGeneration++;
     _refreshInFlight = null;
+    _sessionGenerationController.add(_sessionGeneration);
   }
 
   void handleAuthUserChanged(String? uid) {
@@ -262,9 +420,63 @@ class AuthService {
       case AuthTokenMissingUser():
         break;
       case AuthTokenTransientFailure():
+        _scheduleLocalDevRecovery();
         break;
     }
     return null;
+  }
+
+  bool _localDevRecoveryInFlight = false;
+
+  /// Recover a local-development session by minting a new token instead of
+  /// refreshing the old one.
+  ///
+  /// Local dev has an escape hatch production does not: the harness mints a fresh
+  /// custom token on demand, so a session can be *replaced* rather than
+  /// refreshed. That matters because `getIdTokenResult(true)` is not reliable
+  /// against the Auth emulator — measured on iPhone 17 Pro / iOS 27.0 the forced
+  /// refresh never returned, while `signInWithCustomToken` against the same
+  /// emulator succeeded every time.
+  ///
+  /// Scheduled rather than awaited, and deliberately off the current call stack.
+  /// An earlier version awaited it inline from [getIdToken] and **deadlocked on
+  /// device**: the recovery re-enters sign-in from inside the refresh call stack,
+  /// and the probe showed it entering `signInWithLocalDevToken()` and never
+  /// returning — no HTTP request ever left the app — while the identical call
+  /// from the sign-in button succeeds. The caller therefore gets its failure
+  /// immediately, and the *next* request picks up the re-minted session.
+  ///
+  /// Deliberately narrow: `local_dev` only, only after a transient refresh
+  /// failure, and re-entrancy guarded. Production is untouched — a failed refresh
+  /// must stay a failed refresh there, because silently re-authenticating would
+  /// hide exactly the signal an expired or revoked session is meant to give.
+  void _scheduleLocalDevRecovery() {
+    if (Env.profile != AppEnvironmentProfile.localDev) return;
+    if (_localDevRecoveryInFlight) return;
+    _localDevRecoveryInFlight = true;
+
+    unawaited(
+      Future<void>.delayed(Duration.zero, () async {
+        try {
+          Logger.debug('local-dev: refresh failed, re-minting a session out of band');
+          final credential = await signInWithLocalDevToken();
+          final user = credential?.user;
+          if (user == null) return;
+          // Unforced: sign-in just populated a fresh token, so read the cached one
+          // rather than re-entering the forced-refresh path that just failed.
+          final token = await user.getIdToken();
+          if (token == null || token.isEmpty) return;
+          SharedPreferencesUtil().authToken = token;
+          _sessionExpired = false;
+          markAuthenticatedUser(user.uid);
+          Logger.debug('local-dev: session re-minted; the next request will use it');
+        } catch (e) {
+          Logger.debug('local-dev: re-mint failed: $e');
+        } finally {
+          _localDevRecoveryInFlight = false;
+        }
+      }),
+    );
   }
 
   Future<AuthTokenResult> refreshIdToken() {
@@ -328,7 +540,7 @@ class AuthService {
 
   Future<AuthTokenResult> _refreshIdTokenOnce(int generation, String expectedUid) async {
     try {
-      final refreshed = await _tokenGateway.forceRefresh();
+      final refreshed = await _tokenGateway.forceRefresh().timeout(_refreshAttemptTimeout);
       if (generation != _sessionGeneration || _tokenGateway.currentUser?.uid != expectedUid) {
         return const AuthTokenMissingUser();
       }
@@ -357,6 +569,12 @@ class AuthService {
       }
       _sessionExpired = false;
       return AuthTokenSuccess(token: token, expirationTime: refreshed?.expirationTime);
+    } on TimeoutException {
+      if (generation != _sessionGeneration) return const AuthTokenMissingUser();
+      Logger.debug('refreshIdToken: forceRefresh timed out after $_refreshAttemptTimeout');
+      // Distinct class so a stalled refresh is distinguishable in telemetry from
+      // one that actually failed — they have very different causes.
+      return const AuthTokenTransientFailure(failureClass: 'refresh_timeout');
     } on FirebaseAuthException catch (e) {
       if (generation != _sessionGeneration) return const AuthTokenMissingUser();
       Logger.debug('refreshIdToken: FirebaseAuthException: ${e.code}');
@@ -392,41 +610,52 @@ class AuthService {
     final inFlight = _expireSessionInFlight;
     if (_sessionExpired) return inFlight ?? Future<void>.value();
 
+    final ownerUid = _tokenGateway.currentUser?.uid;
+    final owner = Object();
+    _expirationOwner = owner;
     _sessionExpired = true;
     _invalidateRefreshes();
+    final generation = _sessionGeneration;
     _clearCachedIdentityAndAuth();
     _sessionExpiredController.add(event);
-    final expiration = _runSessionExpiration();
+    final expiration = _runSessionExpiration(ownerUid, generation, owner);
     _expireSessionInFlight = expiration;
     return expiration;
   }
 
-  Future<void> _runSessionExpiration() async {
+  Future<void> _runSessionExpiration(String? ownerUid, int generation, Object owner) async {
+    await _prepareSiriBestEffort();
     try {
-      await _tokenGateway.signOut();
+      await runAccountMutation(() async {
+        if (_sessionGeneration != generation ||
+            _tokenGateway.currentUser?.uid != ownerUid ||
+            !identical(_expirationOwner, owner)) return;
+        await _tokenGateway.signOut();
+      });
     } catch (e) {
       // Local session state is already terminal and cleared. A platform sign-
       // out failure must not escape back into request handling or restore the
       // stale authenticated shell.
       Logger.debug('expireSession: Firebase sign-out failed: ${e.runtimeType}');
     } finally {
-      _expireSessionInFlight = null;
+      if (identical(_expirationOwner, owner)) {
+        _expireSessionInFlight = null;
+        _expirationOwner = null;
+      }
     }
   }
-
-  // Method channel for direct deep link delivery (fallback for app_links)
-  static const _deepLinkChannel = MethodChannel('com.omi/deep_links');
 
   Future<UserCredential?> authenticateWithProvider(String provider) async {
     try {
       final state = _generateState();
       final codeVerifier = _generateCodeVerifier();
       final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
+      final redirectUri = Env.authRedirectUri;
+      final callbackScheme = Env.authCallbackScheme;
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
         queryParameters: {
           'provider': provider,
           'redirect_uri': redirectUri,
@@ -447,7 +676,7 @@ class AuthService {
       linkSubscription = appLinks.uriLinkStream.listen(
         (Uri uri) {
           Logger.debug('Received callback URI via app_links: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             if (!completer.isCompleted) {
               linkSubscription.cancel();
               completer.complete(uri.toString());
@@ -463,28 +692,11 @@ class AuthService {
         },
       );
 
-      // Also listen via direct method channel (fallback)
-      _deepLinkChannel.setMethodCallHandler((call) async {
-        if (call.method == 'onDeepLink') {
-          final urlString = call.arguments as String;
-          Logger.debug('Received callback URI via method channel: $urlString');
-          final uri = Uri.parse(urlString);
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
-            if (!completer.isCompleted) {
-              linkSubscription.cancel();
-              _deepLinkChannel.setMethodCallHandler(null);
-              completer.complete(urlString);
-            }
-          }
-        }
-      });
-
       // Now launch the URL
       final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
 
       if (!launched) {
         linkSubscription.cancel();
-        _deepLinkChannel.setMethodCallHandler(null);
         throw Exception('Failed to launch authentication URL');
       }
 
@@ -492,7 +704,6 @@ class AuthService {
         const Duration(minutes: 5),
         onTimeout: () {
           linkSubscription.cancel();
-          _deepLinkChannel.setMethodCallHandler(null);
           throw Exception('Authentication timeout');
         },
       );
@@ -540,7 +751,7 @@ class AuthService {
       final useCustomToken = Env.useAuthCustomToken;
 
       final response = await http.post(
-        Uri.parse('${Env.apiBaseUrl}v1/auth/token'),
+        Uri.parse('${Env.authApiBaseUrl}v1/auth/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'grant_type': 'authorization_code',
@@ -566,6 +777,68 @@ class AuthService {
     }
   }
 
+  /// Sign in against a local dev harness with no OAuth provider involved.
+  ///
+  /// Community builds cannot complete a real OAuth flow: Google and Apple issue
+  /// OAuth clients against the official bundle id, and a community build is
+  /// deliberately signed with a suffixed one. The backend mints a Firebase custom
+  /// token against the local Auth emulator instead, and this reuses the same
+  /// custom-token sign-in the OAuth path ends with.
+  ///
+  /// The real gate is server-side and structural (the endpoint 404s unless the
+  /// backend is bound to an Auth emulator). The profile check here is only to
+  /// keep the call from being made at all outside local development.
+  Future<UserCredential?> signInWithLocalDevToken({String uid = 'local-dev-user'}) async {
+    if (Env.profile != AppEnvironmentProfile.localDev) {
+      throw StateError('Local development sign-in is only available in the local_dev profile.');
+    }
+
+    final response = await http.post(
+      Uri.parse('${Env.authApiBaseUrl}v1/auth/local-dev/custom-token'),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {'uid': uid},
+    ).timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => throw StateError(
+        'Cannot reach the local development server. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
+      ),
+    );
+
+    if (response.statusCode == 404) {
+      throw StateError(
+        'This backend has no local-dev sign-in endpoint. It is only registered when the '
+        'backend runs against a Firebase Auth emulator — check the harness is up.',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Local development sign-in failed: HTTP ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body) as Map<String, dynamic>;
+    final customToken = decoded['custom_token'] as String?;
+    if (customToken == null || customToken.isEmpty) {
+      throw Exception('Local development sign-in returned no custom token');
+    }
+
+    // Check reachability before the side-effecting Firebase sign-in. Timing out
+    // signInWithCustomToken would not cancel it: a late success could create a
+    // session after the UI has already reported failure.
+    try {
+      await http
+          .get(Uri(scheme: 'http', host: Env.firebaseAuthEmulatorHost, port: Env.firebaseAuthEmulatorPort))
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      throw StateError(
+        'Cannot reach the local Firebase Auth emulator. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
+      );
+    }
+
+    final credential = await runAccountMutation(() => _firebaseAuth.signInWithCustomToken(customToken));
+    await _updateUserPreferences(credential, 'local_dev');
+    Logger.debug('Local development sign-in successful');
+    return credential;
+  }
+
   Future<UserCredential> _signInWithOAuthCredentials(Map<String, dynamic> oauthCredentials) async {
     final provider = oauthCredentials['provider'];
     final useCustomToken = Env.useAuthCustomToken;
@@ -574,7 +847,7 @@ class AuthService {
     // Use custom token if enabled and available
     if (useCustomToken && customToken != null) {
       Logger.debug('Signing in with Firebase custom token from $provider');
-      return await FirebaseAuth.instance.signInWithCustomToken(customToken);
+      return await runAccountMutation(() => _firebaseAuth.signInWithCustomToken(customToken));
     }
 
     // Fallback to OAuth credentials
@@ -585,20 +858,25 @@ class AuthService {
 
     if (provider == 'google') {
       final credential = GoogleAuthProvider.credential(idToken: idToken, accessToken: accessToken);
-      return await FirebaseAuth.instance.signInWithCredential(credential);
+      return await runAccountMutation(() => _firebaseAuth.signInWithCredential(credential));
     } else if (provider == 'apple') {
       final credential = OAuthProvider('apple.com').credential(idToken: idToken, accessToken: accessToken);
-      return await FirebaseAuth.instance.signInWithCredential(credential);
+      return await runAccountMutation(() => _firebaseAuth.signInWithCredential(credential));
     } else {
       throw Exception('Unsupported provider: $provider');
     }
   }
 
-  Future<void> _updateUserPreferences(UserCredential result, String provider) async {
+  Future<void> _updateUserPreferences(UserCredential result, String provider,
+      {AuthSessionSnapshot? expectedOwner}) async {
     try {
       final user = result.user;
       if (user == null) return;
-      markAuthenticatedUser(user.uid);
+      if (expectedOwner != null) {
+        _requireLinkOwner(expectedOwner);
+      } else {
+        markAuthenticatedUser(user.uid);
+      }
 
       // Update UID and basic user info
       SharedPreferencesUtil().uid = user.uid;
@@ -647,8 +925,12 @@ class AuthService {
       if (displayName.isEmpty && givenName.isNotEmpty) {
         final fullName = familyName.isNotEmpty ? '$givenName $familyName' : givenName;
         try {
-          await user.updateProfile(displayName: fullName);
-          await user.reload();
+          await runAccountMutation(() async {
+            if (expectedOwner != null) _requireLinkOwner(expectedOwner);
+            await user.updateProfile(displayName: fullName);
+            if (expectedOwner != null) _requireLinkOwner(expectedOwner);
+            await user.reload();
+          });
         } catch (e) {
           Logger.debug('Failed to update Firebase profile: $e');
         }
@@ -661,6 +943,7 @@ class AuthService {
       Logger.debug('UID: ${SharedPreferencesUtil().uid}');
 
       // Restore onboarding state from server
+      if (expectedOwner != null) _requireLinkOwner(expectedOwner);
       await _restoreOnboardingState();
     } catch (e) {
       Logger.debug('Error updating user preferences: $e');
@@ -674,18 +957,28 @@ class AuthService {
 
   Future<void> _restoreOnboardingState() async {
     try {
+      OnboardingSyncRuntime.wake();
+      final session = captureSessionSnapshot();
+      if (session == null) return;
+      final pendingSourceAtStart = OnboardingSyncRuntime.hasPendingAcquisitionSource;
+      final localSourceAtStart = SharedPreferencesUtil().foundOmiSource;
       final state = await getUserOnboardingState();
-      if (state != null) {
+      if (state != null && isSessionSnapshotCurrent(session)) {
         if (state['completed'] == true) {
           SharedPreferencesUtil().onboardingCompleted = true;
         }
         final acquisitionSource = state['acquisition_source'] as String? ?? '';
-        if (acquisitionSource.isNotEmpty) {
+        // A GET started before an upload acknowledgement can carry the older
+        // survey answer even after the outbox has cleared. Do not restore it.
+        if (acquisitionSource.isNotEmpty &&
+            !pendingSourceAtStart &&
+            !OnboardingSyncRuntime.hasPendingAcquisitionSource &&
+            SharedPreferencesUtil().foundOmiSource == localSourceAtStart) {
           SharedPreferencesUtil().foundOmiSource = acquisitionSource;
         }
         // Restore language from server if not already set locally
         final serverLanguage = await getUserPrimaryLanguage();
-        if (serverLanguage != null && serverLanguage.isNotEmpty) {
+        if (serverLanguage != null && serverLanguage.isNotEmpty && isSessionSnapshotCurrent(session)) {
           SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
           SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         }
@@ -697,7 +990,7 @@ class AuthService {
 
   Future<void> updateGivenName(String fullName) async {
     try {
-      var user = FirebaseAuth.instance.currentUser;
+      var user = _firebaseAuth.currentUser;
 
       SharedPreferencesUtil().givenName = fullName.split(' ')[0];
       if (fullName.split(' ').length > 1) {
@@ -728,7 +1021,7 @@ class AuthService {
           await user.updateProfile(displayName: fullName);
         }
         await user.reload();
-        user = FirebaseAuth.instance.currentUser;
+        user = _firebaseAuth.currentUser;
       } catch (updateError) {
         Logger.debug('Firebase updateProfile failed: $updateError');
       }
@@ -767,109 +1060,177 @@ class AuthService {
     return base64Url.encode(digest.bytes).replaceAll('=', '');
   }
 
-  Future<UserCredential?> linkWithProvider(String provider) async {
-    try {
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        throw Exception('No user is currently signed in');
-      }
+  AuthSessionSnapshot _captureLinkOwner(User user) {
+    handleAuthUserChanged(user.uid);
+    final owner = AuthSessionSnapshot(ownerUid: user.uid, generation: _sessionGeneration);
+    _requireLinkOwner(owner);
+    return owner;
+  }
 
-      final state = _generateState();
-      final codeVerifier = _generateCodeVerifier();
-      final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
-
-      Logger.debug('Starting OAuth linking flow for provider: $provider');
-
-      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
-        queryParameters: {
-          'provider': provider,
-          'redirect_uri': redirectUri,
-          'state': state,
-          'code_challenge': codeChallenge,
-          'code_challenge_method': 'S256',
-        },
-      ).toString();
-
-      Logger.debug('Authorization URL: $authUrl');
-
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
-
-      if (!launched) {
-        throw Exception('Failed to launch authentication URL');
-      }
-
-      // Listen for the callback URL using app_links
-      final appLinks = AppLinks();
-      late StreamSubscription linkSubscription;
-      final completer = Completer<String>();
-
-      linkSubscription = appLinks.uriLinkStream.listen(
-        (Uri uri) {
-          Logger.debug('Received callback URI: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
-            linkSubscription.cancel();
-            completer.complete(uri.toString());
-          }
-        },
-        onError: (error) {
-          Logger.debug('App link error: $error');
-          linkSubscription.cancel();
-          completer.completeError(error);
-        },
-      );
-
-      final result = await completer.future.timeout(
-        const Duration(minutes: 5),
-        onTimeout: () {
-          linkSubscription.cancel();
-          throw Exception('Authentication timeout');
-        },
-      );
-
-      final uri = Uri.parse(result);
-      final code = uri.queryParameters['code'];
-      final returnedState = uri.queryParameters['state'];
-
-      if (code == null) {
-        throw Exception('No authorization code received');
-      }
-
-      if (returnedState != state) {
-        throw Exception('Invalid state parameter');
-      }
-
-      // Exchange the code for OAuth credentials
-      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri, codeVerifier);
-
-      if (oauthCredentials == null) {
-        throw Exception('Failed to exchange code for OAuth credentials');
-      }
-
-      // Create Firebase credential
-      final credential = await _createFirebaseCredential(oauthCredentials);
-
-      try {
-        // Link the credential to the current user
-        final result = await currentUser.linkWithCredential(credential);
-
-        // Update user preferences after successful linking
-        await _updateUserPreferences(result, provider);
-
-        Logger.debug('Firebase account linking successful');
-        return result;
-      } catch (e) {
-        if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
-          // Handle existing credential case
-          return await _handleExistingCredential(e);
-        }
-        rethrow;
-      }
-    } catch (e) {
-      Logger.debug('OAuth linking error: $e');
-      Logger.handle(e, StackTrace.current, message: 'Account linking failed');
-      rethrow;
+  void _requireLinkOwner(AuthSessionSnapshot owner) {
+    if (_sessionExpired || _tokenGateway.currentUser?.uid != owner.ownerUid || _sessionGeneration != owner.generation) {
+      throw StateError('Account changed during provider linking');
     }
+  }
+
+  Future<ProviderLinkResult?> linkWithProvider(String provider) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) throw StateError('No user is currently signed in');
+    final owner = _captureLinkOwner(user);
+    final credential = await _authorizeProviderLink(provider);
+    return _linkOwnedProvider(owner, user, provider, () => user.linkWithCredential(credential));
+  }
+
+  Future<AuthCredential> _authorizeProviderLink(String provider) async {
+    final authorize = _authorizeProviderLinkOverride;
+    if (authorize != null) return authorize(provider);
+    final state = _generateState();
+    final codeVerifier = _generateCodeVerifier();
+    final codeChallenge = _codeChallengeForVerifier(codeVerifier);
+    final redirectUri = Env.authRedirectUri;
+    final callbackScheme = Env.authCallbackScheme;
+
+    Logger.debug('Starting OAuth linking flow for provider: $provider');
+
+    final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
+      queryParameters: {
+        'provider': provider,
+        'redirect_uri': redirectUri,
+        'state': state,
+        'code_challenge': codeChallenge,
+        'code_challenge_method': 'S256',
+      },
+    ).toString();
+
+    Logger.debug('Authorization URL: $authUrl');
+
+    final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
+
+    if (!launched) {
+      throw Exception('Failed to launch authentication URL');
+    }
+
+    // Listen for the callback URL using app_links
+    final appLinks = AppLinks();
+    late StreamSubscription linkSubscription;
+    final completer = Completer<String>();
+
+    linkSubscription = appLinks.uriLinkStream.listen(
+      (Uri uri) {
+        Logger.debug('Received callback URI: $uri');
+        if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
+          linkSubscription.cancel();
+          completer.complete(uri.toString());
+        }
+      },
+      onError: (error) {
+        Logger.debug('App link error: $error');
+        linkSubscription.cancel();
+        completer.completeError(error);
+      },
+    );
+
+    final result = await completer.future.timeout(
+      const Duration(minutes: 5),
+      onTimeout: () {
+        linkSubscription.cancel();
+        throw Exception('Authentication timeout');
+      },
+    );
+
+    final uri = Uri.parse(result);
+    final code = uri.queryParameters['code'];
+    final returnedState = uri.queryParameters['state'];
+
+    if (code == null) {
+      throw Exception('No authorization code received');
+    }
+
+    if (returnedState != state) {
+      throw Exception('Invalid state parameter');
+    }
+
+    // Exchange the code for OAuth credentials
+    final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri, codeVerifier);
+
+    if (oauthCredentials == null) {
+      throw Exception('Failed to exchange code for OAuth credentials');
+    }
+
+    // Create Firebase credential
+    return _createFirebaseCredential(oauthCredentials);
+  }
+
+  Future<ProviderLinkResult> _linkOwnedProvider(
+    AuthSessionSnapshot owner,
+    User sourceUser,
+    String provider,
+    Future<UserCredential> Function() link,
+  ) async {
+    final outcome = await runAccountMutation(() async {
+      _requireLinkOwner(owner);
+      // Capture proof before the native link can fail or replace currentUser.
+      final sourceIsAnonymous = sourceUser.isAnonymous;
+      final sourceToken = sourceIsAnonymous ? await sourceUser.getIdToken() : null;
+      _requireLinkOwner(owner);
+      late UserCredential credential;
+      ProviderLinkResult result;
+      var collision = false;
+      try {
+        credential = await link();
+        _requireLinkOwner(owner);
+        if (credential.user?.uid != owner.ownerUid) throw StateError('Unexpected linked account');
+        result = ProviderLinkResult(destinationUid: credential.user?.uid);
+      } on FirebaseAuthException catch (error) {
+        if (error.code != 'credential-already-in-use' || error.credential == null) rethrow;
+        _requireLinkOwner(owner);
+        collision = true;
+        result = await resolveProviderCredentialCollision(
+          sourceUid: owner.ownerUid,
+          sourceIsAnonymous: sourceIsAnonymous,
+          captureSourceToken: () async => sourceToken,
+          establishDestination: () async {
+            _requireLinkOwner(owner);
+            await _prepareSiriBestEffort();
+            _requireLinkOwner(owner);
+            // Already holding the mutation slot: do not call queued wrappers.
+            handleAuthUserChanged(null);
+            await _tokenGateway.signOut();
+            credential = await _firebaseAuth.signInWithCredential(error.credential!);
+            return credential.user?.uid;
+          },
+        );
+      }
+      final destination = credential.user;
+      if (destination == null || _tokenGateway.currentUser?.uid != destination.uid) {
+        throw StateError('Linked account is no longer current');
+      }
+      markAuthenticatedUser(destination.uid);
+      return (
+        credential: credential,
+        result: result,
+        collision: collision,
+        owner: AuthSessionSnapshot(ownerUid: destination.uid, generation: _sessionGeneration)
+      );
+    });
+    _requireLinkOwner(outcome.owner);
+    if (outcome.collision) {
+      await getIdToken();
+      _requireLinkOwner(outcome.owner);
+      final user = outcome.credential.user!;
+      SharedPreferencesUtil().onboardingCompleted = false;
+      SharedPreferencesUtil().uid = user.uid;
+      SharedPreferencesUtil().email = user.email ?? '';
+      SharedPreferencesUtil().givenName = user.displayName?.split(' ')[0] ?? '';
+    } else {
+      await _updateUserPreferences(outcome.credential, provider, expectedOwner: outcome.owner);
+    }
+    _requireLinkOwner(outcome.owner);
+    return ProviderLinkResult(
+      destinationUid: outcome.result.destinationUid,
+      destinationSession: outcome.owner,
+      anonymousSourceMigration: outcome.result.anonymousSourceMigration,
+    );
   }
 
   Future<AuthCredential> _createFirebaseCredential(Map<String, dynamic> oauthCredentials) async {
@@ -886,34 +1247,14 @@ class AuthService {
     }
   }
 
-  /// Handle the case when credential is already in use
-  Future<UserCredential?> _handleExistingCredential(FirebaseAuthException e) async {
-    // Get existing user credentials
-    final existingCred = e.credential;
-
-    // Sign out current anonymous user
-    handleAuthUserChanged(null);
-    await FirebaseAuth.instance.signOut();
-
-    // Sign in with existing account
-    final result = await FirebaseAuth.instance.signInWithCredential(existingCred!);
-    final newUserId = FirebaseAuth.instance.currentUser?.uid;
-    if (newUserId != null) markAuthenticatedUser(newUserId);
-    await getIdToken();
-
-    SharedPreferencesUtil().onboardingCompleted = false;
-    SharedPreferencesUtil().uid = newUserId ?? '';
-    SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
-    SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
-
-    return result;
-  }
-
-  Future<UserCredential?> linkWithGoogle() async {
+  Future<ProviderLinkResult?> linkWithGoogle() async {
     return await linkWithProvider('google');
   }
 
-  Future<UserCredential?> linkWithApple() async {
-    return await linkWithProvider('apple');
+  Future<ProviderLinkResult?> linkWithApple() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) throw StateError('No user is currently signed in');
+    final owner = _captureLinkOwner(user);
+    return _linkOwnedProvider(owner, user, 'apple', () => user.linkWithProvider(AppleAuthProvider()));
   }
 }

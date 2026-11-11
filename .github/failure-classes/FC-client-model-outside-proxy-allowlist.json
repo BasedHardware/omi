@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-client-model-outside-proxy-allowlist",
+  "violated_contract": "A shipped client and the server gate that admits its requests share one capability list: whenever a client is retargeted at a model, provider or action, the allowlist that admits it must be widened in the same change, because a gate that does not know a value rejects it silently instead of degrading.",
+  "canonical_prevention": "Derive the gate's admitted set from the client's own declaration, or hold the two in sync with a check that reads the client's model table and fails when it names a value the gate would reject - so a tier or cost change cannot ship a 403 that only production logs reveal.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_desktop_proxy.py"
+  ],
+  "evidence_prs": [
+    10848
+  ],
+  "scope_hints": [
+    "backend/routers/desktop_proxy.py",
+    "desktop/macos/Desktop/Sources/ModelQoS.swift"
+  ],
+  "status": "open"
+}

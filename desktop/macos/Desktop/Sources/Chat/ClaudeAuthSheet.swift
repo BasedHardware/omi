@@ -14,45 +14,36 @@ struct ClaudeAuthSheet: View {
       HStack {
         Text("Upgrade to Omi Pro")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
-        Button(action: onCancel) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
-            .frame(width: 28, height: 28)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
-            .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
+        DismissButton(action: onCancel)
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.top, OmiSpacing.xl)
       .padding(.bottom, OmiSpacing.lg)
 
-      Divider()
-        .foregroundColor(OmiColors.border)
+      GlassSeparator()
 
       // Content
       VStack(spacing: OmiSpacing.xl) {
         // Icon
         Image(systemName: "crown")
           .scaledFont(size: OmiType.hero)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .padding(.top, OmiSpacing.sm)
 
         // Description
         VStack(spacing: OmiSpacing.sm) {
-          Text("Unlock Omi Pro for $199/month")
+          Text("Unlock Omi Pro")
             .scaledFont(size: OmiType.subheading, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .multilineTextAlignment(.center)
 
-          Text("Your browser will open to the Omi Pro checkout. After subscribing, return to omi.")
+          Text("Your browser will open to the Omi Pro checkout. After subscribing, return to Omi.")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -63,9 +54,9 @@ struct ClaudeAuthSheet: View {
             ProgressView()
               .controlSize(.small)
 
-            Text("Complete sign-in in your browser...")
+            Text("Complete sign-in in your browser…")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .padding(.top, OmiSpacing.xxs)
         }
@@ -86,22 +77,25 @@ struct ClaudeAuthSheet: View {
               ProgressView()
                 .controlSize(.mini)
             }
-            Text(isConnecting ? "Opening checkout..." : "Upgrade to Omi Pro")
+            Text(isConnecting ? "Opening checkout…" : "Upgrade to Omi Pro")
               .scaledFont(size: OmiType.body, weight: .semibold)
           }
           .frame(maxWidth: .infinity)
-          .padding(.vertical, OmiSpacing.sm)
-          .background(isConnecting ? OmiColors.backgroundTertiary : Color.accentColor)
-          .foregroundColor(isConnecting ? OmiColors.textSecondary : OmiColors.backgroundPrimary)
-          .cornerRadius(OmiChrome.elementRadius)
         }
-        .buttonStyle(.plain)
+        // The shared primary action, which is a stadium and gives on press by opacity alone.
+        //
+        // This replaces a hand-rolled `Color.accentColor` fill — an INV-UI-1 violation rather than
+        // a style choice: macOS lets a user pick the banned hue as their system accent, so
+        // `accentColor` renders off-brand on those machines and no pixel check would catch it.
+        // `InkButtonStyle` also drops the in-flight colour fork entirely: it dims a disabled button
+        // itself, so the two colour pairs this used to carry are down to none.
+        .buttonStyle(InkButtonStyle(kind: .primary))
         .disabled(isConnecting)
 
         Button(action: onCancel) {
           Text("Cancel")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -109,6 +103,10 @@ struct ClaudeAuthSheet: View {
       .padding(.bottom, OmiSpacing.xl)
     }
     .frame(width: 400, height: 380)
-    .background(OmiColors.backgroundPrimary)
+    // A sheet is its own window, not content hosted on the panel, so this is one of the few places
+    // that *should* paint a ground — and `glassContent()` pins the light appearance it resolves in,
+    // which a sheet does not inherit from the panel that presented it.
+    .background(Ink.surface)
+    .glassContent()
   }
 }

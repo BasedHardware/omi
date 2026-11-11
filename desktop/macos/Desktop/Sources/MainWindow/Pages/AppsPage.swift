@@ -4,128 +4,83 @@ import Combine
 import OmiTheme
 import SwiftUI
 
-// MARK: - Safe Dismiss Button
-/// A dismiss button that prevents click-through to underlying views on macOS.
-/// Uses onTapGesture with async delay to ensure the click is fully consumed before dismissing.
-/// The key is to wait for the full mouse event cycle to complete before triggering dismiss.
-struct SafeDismissButton: View {
-  let dismiss: DismissAction
-  var icon: String = "xmark"
-  var showBackground: Bool = true
+enum AppsPageCategoryFilter {
+  static let allCategoriesOptionId = ""
+  static let allCategoriesTitle = "All Categories"
 
-  @State private var isPressed = false
+  enum Selection: Equatable {
+    case allCategories
+    case category(String)
+  }
 
-  var body: some View {
-    Image(systemName: icon)
-      .scaledFont(size: OmiType.body, weight: .medium)
-      .foregroundColor(isPressed ? OmiColors.textTertiary : OmiColors.textSecondary)
-      .frame(width: 28, height: 28)
-      .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
-      .clipShape(Circle())
-      .contentShape(Circle())
-      .opacity(isPressed ? 0.7 : 1.0)
-      .onTapGesture {
-        guard !isPressed else { return }  // Prevent double-tap
-        isPressed = true
+  static func categoryDropdownOptions(categories: [OmiAppCategory]) -> [SearchableDropdownOption] {
+    [SearchableDropdownOption(id: allCategoriesOptionId, title: allCategoriesTitle)]
+      + categories.map { SearchableDropdownOption(id: $0.id, title: $0.title) }
+  }
 
-        let mouseLocation = NSEvent.mouseLocation
-        log("DISMISS: Tap gesture fired at mouse position: \(mouseLocation)")
+  static func selectedCategoryDropdownId(_ selectedCategory: String?) -> String {
+    selectedCategory ?? allCategoriesOptionId
+  }
 
-        // Consume the click by resigning first responder
-        NSApp.keyWindow?.makeFirstResponder(nil)
-
-        // Post a mouse-up event to ensure any pending click is consumed
-        if let window = NSApp.keyWindow {
-          let event = NSEvent.mouseEvent(
-            with: .leftMouseUp,
-            location: window.mouseLocationOutsideOfEventStream,
-            modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-          )
-          if let event = event {
-            window.sendEvent(event)
-            log("DISMISS: Sent synthetic mouse-up event")
-          }
-        }
-
-        // Use async with longer delay to ensure mouse event fully completes
-        Task { @MainActor in
-          log("DISMISS: Starting 250ms delay before dismiss")
-          // Longer delay to ensure mouse-up event is fully processed
-          try? await Task.sleep(nanoseconds: 250_000_000)  // 250ms
-          log("DISMISS: Delay complete, calling dismiss()")
-          log("DISMISS: Mouse position before dismiss: \(NSEvent.mouseLocation)")
-          dismiss()
-          log("DISMISS: dismiss() called")
-        }
-      }
+  static func categorySelection(forOptionId optionId: String) -> Selection {
+    optionId.isEmpty ? .allCategories : .category(optionId)
   }
 }
 
-// MARK: - Dismiss Button (Action-based)
-/// A dismiss button that takes a closure instead of a DismissAction.
-/// Used for overlay-based sheets where the dismiss is controlled externally.
-/// A real Button (not a tap gesture) so accessibility exposes it as a labeled
-/// "Close" control and keyboard users can reach it.
-struct DismissButton: View {
-  let action: () -> Void
-  var icon: String = "xmark"
-  var showBackground: Bool = true
-  var accessibilityLabel: String = "Close"
+enum AppsFilteredResultsPresentation: Equatable {
+  case loading
+  case empty
+  case results
+  case failure
 
-  var body: some View {
-    Button {
-      log("DISMISS_BUTTON: Activated")
-
-      // Commit any in-progress field editing before tearing the sheet down.
-      NSApp.keyWindow?.makeFirstResponder(nil)
-
-      OmiMotion.withGated(.easeOut(duration: 0.2)) {
-        action()
-      }
-    } label: {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
-        .frame(width: 28, height: 28)
-        .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
-        .clipShape(Circle())
-        .contentShape(Circle())
+  static func resolve(
+    queryState: AppFilterResultsQueryState,
+    resultsCount: Int
+  ) -> AppsFilteredResultsPresentation {
+    switch queryState {
+    case .unknown, .loading:
+      return .loading
+    case .completed:
+      return resultsCount == 0 ? .empty : .results
+    case .failed:
+      return .failure
     }
-    .buttonStyle(DismissButtonPressStyle())
-    .accessibilityLabel(accessibilityLabel)
   }
 }
 
-private struct DismissButtonPressStyle: ButtonStyle {
-  func makeBody(configuration: ButtonStyleConfiguration) -> some View {
-    configuration.label
-      .opacity(configuration.isPressed ? 0.7 : 1.0)
-  }
-}
+enum AppsAllSearchPresentation: Equatable {
+  case loading
+  case empty
+  case results(total: Int)
+  case failure
 
-enum AppsCatalogInitialSection {
-  case imports
-  case exports
+  static func resolve(
+    importsCount: Int,
+    exportsCount: Int,
+    appsCount: Int,
+    marketplace: AppsFilteredResultsPresentation
+  ) -> AppsAllSearchPresentation {
+    let localCount = importsCount + exportsCount
+    let visibleAppsCount = marketplace == .results ? appsCount : 0
+    let total = localCount + visibleAppsCount
+
+    if total > 0 { return .results(total: total) }
+    switch marketplace {
+    case .loading: return .loading
+    case .failure: return .failure
+    case .empty, .results: return .empty
+    }
+  }
 }
 
 struct AppsPage: View {
   @ObservedObject var appProvider: AppProvider
   var appState: AppState? = nil
+  var onOpenChatApp: ((OmiApp, OmiAppDetails?) async -> Void)? = nil
   @ObservedObject var connectorStatusStore: ImportConnectorStatusStore = ImportConnectorStatusStore()
   @ObservedObject private var automationPresentationCoordinator =
     DesktopAutomationPresentationCoordinator.shared
-  var initialSection: AppsCatalogInitialSection = .imports
   var handlesAutomationPresentations = false
-  var onDismiss: (() -> Void)? = nil
-  var onSelectApp: ((OmiApp) -> Void)? = nil
-  var onSelectConnector: ((ImportConnector) -> Void)? = nil
-  var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil
   @State private var searchText = ""
   @State private var selectedApp: OmiApp?
   @State private var selectedConnector: ImportConnector?
@@ -134,177 +89,126 @@ struct AppsPage: View {
   @State private var visibleAutomationPresentationTarget: DesktopAutomationPresentationTarget?
   @State private var exportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
   @State private var viewAllSection: String? = nil  // "featured", "integrations", "notifications"
+  @State private var selectedKind: AppsCatalogKind = .all
+  @State private var showAddMcpServerSheet = false
+  @State private var selectedLocalMcpServer: LocalMcpStore.Entry?
+  @State private var showAddSkillSheet = false
+  @State private var editingSkill: LocalSkillsStore.Skill?
+  @State private var selectedCatalogEntry: ExtensionCatalog.Entry?
+  @AppStorage(AppsSectionDestination.storageKey) private var selectedSectionRawValue =
+    AppsSectionDestination.apps.rawValue
+
+  private var selectedSection: AppsSectionDestination {
+    AppsSectionDestination(rawValue: selectedSectionRawValue) ?? .apps
+  }
 
   var body: some View {
-    VStack(spacing: 0) {
-      // Search bar
-      searchBar
-        .padding()
+    GeometryReader { proxy in
+      let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      VStack(spacing: QueryShellLayout.panelGap) {
+        QuerySearchBar(
+          text: $searchText,
+          accessibilityID: "apps-search-field",
+          placeholder: searchPlaceholder, searchSurface: .apps
+        )
 
-      // Content
-      if appProvider.isLoading {
-        loadingShimmerView
-      } else {
-        // Always render the page (Imports/Exports are local connectors
-        // and must show even when the marketplace API returned no apps).
-        // The marketplace sections inside the else branch are each
-        // self-gated and skip when empty.
-        ScrollView {
-          LazyVStack(alignment: .leading, spacing: OmiSpacing.xxl) {
-            if hasActiveFilters {
-              // Show filtered/search results in a flat grid
-              if appProvider.isSearching {
-                // Loading state for category filter
-                VStack(spacing: OmiSpacing.lg) {
-                  ProgressView()
-                    .scaleEffect(1.2)
-                  Text("Loading...")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.textTertiary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 200)
-              } else if filteredApps.isEmpty {
-                VStack(spacing: OmiSpacing.md) {
-                  Image(systemName: "magnifyingglass")
-                    .scaledFont(size: 32)
-                    .foregroundColor(OmiColors.textTertiary)
-                  Text("No apps found")
-                    .scaledFont(size: OmiType.subheading, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 200)
-              } else {
-                // Back button for "See more" view
-                if viewAllSection != nil {
-                  Button(action: { viewAllSection = nil }) {
-                    HStack(spacing: OmiSpacing.xs) {
-                      Image(systemName: "chevron.left")
-                        .scaledFont(size: OmiType.caption, weight: .medium)
-                      Text("Back")
-                        .scaledFont(size: OmiType.body, weight: .medium)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-                  }
-                  .buttonStyle(.plain)
-                }
+        VStack(spacing: 0) {
+          appsControlsBar
+            .pagePanelFirstRowInsets()
 
-                AppGridSection(
-                  title: filterResultsTitle,
-                  apps: filteredApps,
-                  appProvider: appProvider,
-                  onSelectApp: selectApp
-                )
-
-                // Infinite scroll: load more when reaching bottom
-                if appProvider.hasMoreFilteredApps {
-                  HStack {
-                    Spacer()
-                    if appProvider.isLoadingMore {
-                      ProgressView()
-                        .scaleEffect(0.8)
-                      Text("Loading more...")
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(OmiColors.textTertiary)
-                    } else {
-                      Color.clear
-                        .frame(height: 1)
-                        .onAppear {
-                          Task {
-                            await appProvider.loadMoreFilteredApps()
-                          }
-                        }
-                    }
-                    Spacer()
-                  }
-                  .padding(.vertical, OmiSpacing.lg)
-                }
+          // Content is scoped by Kind. Marketplace-only filters never replace
+          // the local Imports/Exports catalog with an empty app result.
+          if appProvider.isLoading {
+            loadingShimmerView
+          } else {
+            ScrollView {
+              LazyVStack(alignment: .leading, spacing: PagePanelVerticalRhythm.sectionGap) {
+                catalogContent
               }
-            } else {
-              switch initialSection {
-              case .imports:
-                ImportsSection(statusStore: connectorStatusStore) { connector in
-                  selectConnector(connector)
-                }
-
-                ExportsSection(statuses: exportStatuses) { destination in
-                  selectDestination(destination)
-                }
-              case .exports:
-                ExportsSection(statuses: exportStatuses) { destination in
-                  selectDestination(destination)
-                }
-
-                ImportsSection(statusStore: connectorStatusStore) { connector in
-                  selectConnector(connector)
-                }
-              }
-
-              // Featured section (apps marked as is_popular in backend)
-              if !appProvider.popularApps.isEmpty {
-                AppGridSection(
-                  title: "Other",
-                  apps: Array(appProvider.popularApps.prefix(6)),
-                  appProvider: appProvider,
-                  onSelectApp: selectApp,
-                  showSeeMore: appProvider.popularApps.count > 6,
-                  onSeeMore: { viewAllSection = "featured" }
-                )
-              }
-
-              // Integrations section (external_integration capability)
-              if !appProvider.integrationApps.isEmpty {
-                AppGridSection(
-                  title: "Integrations",
-                  apps: Array(appProvider.integrationApps.prefix(6)),
-                  appProvider: appProvider,
-                  onSelectApp: selectApp,
-                  showSeeMore: appProvider.integrationApps.count > 6,
-                  onSeeMore: { viewAllSection = "integrations" }
-                )
-              }
-
-              // Realtime Notifications section (proactive_notification capability)
-              if !appProvider.notificationApps.isEmpty {
-                AppGridSection(
-                  title: "Realtime Notifications",
-                  apps: Array(appProvider.notificationApps.prefix(6)),
-                  appProvider: appProvider,
-                  onSelectApp: selectApp,
-                  showSeeMore: appProvider.notificationApps.count > 6,
-                  onSeeMore: { viewAllSection = "notifications" }
-                )
-              }
+              .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+              .padding(.top, PagePanelVerticalRhythm.contentGap)
+              .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
             }
           }
-          .padding()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
       }
+      .frame(width: lane)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .padding(.top, QueryShellLayout.surfaceTopInset)
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
+    .marketplaceSetupFixture { selectedCatalogEntry = $0 }
+    // Esc leaves "See more", then clears the search, before the shell sees it.
+    .onEscapeKey(priority: .content) {
+      if viewAllSection != nil {
+        viewAllSection = nil
+        return true
+      }
+      if !searchText.isEmpty {
+        searchText = ""
+        return true
+      }
+      return false
+    }
     .onChange(of: searchText) { _, newValue in
+      // Search never changes scope on the user's behalf. In All, the same
+      // query is applied to apps, imports, and exports; a narrower Kind keeps
+      // the query local to that catalog.
+      guard selectedSection == .apps else { return }
+      guard selectedKind == .apps || selectedKind == .all else {
+        SearchAnalytics.scheduleQueryEntered(surface: .apps, query: newValue) { appsSearchResultCount }
+        return
+      }
       appProvider.searchQuery = newValue
-      // Clear filters when searching
       if !newValue.isEmpty {
         viewAllSection = nil
         appProvider.clearCategoryFilter()
       }
-      Task {
-        // Debounce search
-        try? await Task.sleep(for: .milliseconds(300))
-        if appProvider.searchQuery == newValue {
-          await appProvider.searchApps()
-        }
-      }
+      scheduleAppSearch(for: newValue)
+    }
+    .dismissableSheet(isPresented: $showAddMcpServerSheet) {
+      AddMcpServerSheet(appProvider: appProvider, onDismiss: { showAddMcpServerSheet = false })
+        .frame(width: 460, height: 424)
+    }
+    .dismissableSheet(item: $selectedLocalMcpServer) { server in
+      LocalMcpDetailSheet(
+        server: server, appProvider: appProvider, onDismiss: { selectedLocalMcpServer = nil }
+      )
+      .frame(width: 460, height: 420)
+    }
+    .dismissableSheet(isPresented: $showAddSkillSheet) {
+      SkillEditorSheet(appProvider: appProvider, editingSkill: nil, onDismiss: { showAddSkillSheet = false })
+        .frame(width: 520, height: 460)
+    }
+    .dismissableSheet(item: $selectedCatalogEntry) { entry in
+      ExtensionDetailSheet(
+        entry: entry, appProvider: appProvider, onDismiss: { selectedCatalogEntry = nil }
+      )
+      .frame(width: 460, height: ExtensionDetailSheet.preferredHeight(for: entry.install))
+    }
+    .dismissableSheet(item: $editingSkill) { skill in
+      SkillEditorSheet(appProvider: appProvider, editingSkill: skill, onDismiss: { editingSkill = nil })
+        .frame(width: 520, height: 460)
     }
     .dismissableSheet(item: $selectedApp) { app in
-      AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedApp = nil })
-        .frame(width: 500, height: 650)
-        .onAppear {
-          AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
-        }
+      AppDetailSheet(
+        app: app,
+        appProvider: appProvider,
+        onOpenChat: onOpenChatApp == nil
+          ? nil
+          : { details in
+            guard let onOpenChatApp else { return }
+            await onOpenChatApp(app, details)
+          },
+        onDismiss: { selectedApp = nil }
+      )
+      .frame(width: 480, height: 560)
+      .onAppear {
+        AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+      }
     }
     .dismissableSheet(item: $selectedConnector) { connector in
       ImportConnectorSheet(
@@ -315,7 +219,7 @@ struct AppsPage: View {
           selectedConnector = nil
         }
       )
-      .frame(width: 520, height: 620)
+      .frame(width: 500, height: 540)
       .onAppear {
         automationPresentationDidAppear(.importConnector(connector.id))
       }
@@ -331,7 +235,7 @@ struct AppsPage: View {
           selectedExportDestination = nil
         }
       )
-      .frame(width: 520, height: 620)
+      .frame(width: 500, height: 540)
       .onAppear {
         automationPresentationDidAppear(.exportDestination(destination.rawValue))
       }
@@ -348,6 +252,7 @@ struct AppsPage: View {
     }
     .onAppear {
       consumeAutomationPresentationCommand()
+      Task { await appProvider.fetchUserExtensions() }
       // If apps are already loaded, notify sidebar to clear loading indicator
       if !appProvider.isLoading {
         NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
@@ -375,27 +280,24 @@ struct AppsPage: View {
   }
 
   private func selectApp(_ app: OmiApp) {
-    if let onSelectApp {
-      onSelectApp(app)
-    } else {
-      selectedApp = app
-    }
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: filteredApps.firstIndex { $0.id == app.id },
+      searchIsActive: hasSearchQuery)
+    selectedApp = app
   }
 
   private func selectConnector(_ connector: ImportConnector) {
-    if let onSelectConnector {
-      onSelectConnector(connector)
-    } else {
-      selectedConnector = connector
-    }
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: visibleImportConnectors.firstIndex { $0.id == connector.id },
+      searchIsActive: hasSearchQuery)
+    selectedConnector = connector
   }
 
   private func selectDestination(_ destination: MemoryExportDestination) {
-    if let onSelectDestination {
-      onSelectDestination(destination)
-    } else {
-      selectedExportDestination = destination
-    }
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: visibleExportEntries.firstIndex { $0.destination == destination },
+      searchIsActive: hasSearchQuery)
+    selectedExportDestination = destination
   }
 
   private func consumeAutomationPresentationCommand() {
@@ -469,157 +371,467 @@ struct AppsPage: View {
     activeAutomationCommand = nil
   }
 
-  private var searchBar: some View {
-    ViewThatFits(in: .horizontal) {
-      HStack(spacing: OmiSpacing.sm) {
-        searchField
-          .layoutPriority(1)
-        filterControls
-        Spacer(minLength: 8)
-        createAppButton
-        dismissControl
-      }
-
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        HStack(spacing: OmiSpacing.sm) {
-          searchField
-          dismissControl
+  private var appsControlsBar: some View {
+    PageQueryToolbar(
+      refinement: {
+        if selectedSection == .apps {
+          kindMenu
+          if selectedKind == .apps {
+            appsFiltersMenu
+          }
         }
-
-        HStack(spacing: OmiSpacing.sm) {
-          filterControls
-          Spacer(minLength: 8)
-          createAppButton
-        }
+      },
+      activeFilters: {
+        ActivePageFilterStrip(filters: activeAppFilters, onClearAll: clearAppFilters)
+      },
+      actions: {
+        AppsSectionNavigation(
+          selected: selectedSection,
+          onSelect: { selectedSectionRawValue = $0.rawValue }
+        )
+        appsMoreMenu
       }
+    )
+  }
+
+  private var searchPlaceholder: String {
+    switch selectedSection {
+    case .mcp: return "Search MCP servers"
+    case .skills: return "Search skills"
+    case .apps: break
+    }
+    switch selectedKind {
+    case .all: return "Search apps, imports, and exports"
+    case .apps: return "Search apps"
+    case .imports: return "Search imports"
+    case .exports: return "Search exports"
     }
   }
 
-  private var searchField: some View {
-    HStack {
-      Image(systemName: "magnifyingglass")
-        .foregroundColor(OmiColors.textTertiary)
+  private var activeAppFilters: [PageActiveFilter] {
+    guard selectedKind == .apps else { return [] }
+    var filters: [PageActiveFilter] = []
 
-      TextField("Search apps...", text: $searchText)
-        .textFieldStyle(.plain)
-        .foregroundColor(OmiColors.textPrimary)
-        .accessibilityLabel("Search apps")
-
-      if !searchText.isEmpty {
-        Button(action: { searchText = "" }) {
-          Image(systemName: "xmark.circle.fill")
-            .foregroundColor(OmiColors.textTertiary)
-        }
-        .buttonStyle(.plain)
-      }
+    if appProvider.showInstalledOnly {
+      filters.append(
+        PageActiveFilter(id: "installed", title: "Installed") {
+          setConnectionFilter(installedOnly: false)
+        })
     }
-    .padding(OmiSpacing.sm)
-    .background(OmiColors.backgroundSecondary)
-    .cornerRadius(OmiChrome.smallControlRadius)
+
+    if appProvider.selectedCategory != nil {
+      filters.append(
+        PageActiveFilter(id: "category", title: selectedCategoryTitle) {
+          appProvider.clearCategoryFilter()
+          scheduleAppSearch(for: searchText)
+        })
+    }
+
+    return filters
   }
 
-  private var filterControls: some View {
-    HStack(spacing: OmiSpacing.sm) {
-      FilterToggle(
-        icon: "arrow.down.circle",
-        label: "Installed",
-        isActive: appProvider.showInstalledOnly
-      ) {
-        viewAllSection = nil
-        appProvider.showInstalledOnly.toggle()
-        Task { await appProvider.searchApps() }
-      }
-
-      categoryMenu
-    }
-  }
-
-  private var categoryMenu: some View {
+  private var kindMenu: some View {
     Menu {
-      Button(action: {
-        viewAllSection = nil
-        appProvider.clearCategoryFilter()
-        Task { await appProvider.searchApps() }
-      }) {
-        HStack {
-          Text("All Categories")
-          if appProvider.selectedCategory == nil {
-            Image(systemName: "checkmark")
-          }
-        }
-      }
-
-      Divider()
-
-      ForEach(appProvider.categories) { category in
-        Button(action: {
-          viewAllSection = nil
-          appProvider.selectedCategory = category.id
-          Task { await appProvider.searchApps() }
-        }) {
-          HStack {
-            Text(category.title)
-            if appProvider.selectedCategory == category.id {
-              Image(systemName: "checkmark")
-            }
-          }
+      ForEach(AppsCatalogKind.allCases) { kind in
+        Button {
+          selectKind(kind)
+        } label: {
+          Label(kind.rawValue, systemImage: kind.icon)
         }
       }
     } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "line.3.horizontal.decrease.circle")
-          .scaledFont(size: OmiType.caption)
-        Text(selectedCategoryLabel)
-          .scaledFont(size: OmiType.body)
-          .lineLimit(1)
-        Image(systemName: "chevron.down")
-          .scaledFont(size: OmiType.micro, weight: .medium)
-      }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundSecondary)
-      .foregroundColor(OmiColors.textPrimary)
-      .cornerRadius(OmiChrome.elementRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
+      PageQueryControlLabel(
+        icon: selectedKind.icon,
+        dimension: "Kind",
+        value: selectedKind.rawValue,
+        isActive: selectedKind != .all
       )
     }
-    .menuStyle(.borderlessButton)
-    .tint(OmiColors.textPrimary)
-    .fixedSize()
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("apps-kind-filter")
+    .help("Choose which app catalog to show")
   }
 
-  private var createAppButton: some View {
-    SmallHeaderButton(
-      icon: "app.badge.fill",
-      label: "Create App",
-      color: OmiColors.textSecondary
-    ) {
-      if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
-        NSWorkspace.shared.open(url)
+  private var appsFiltersMenu: some View {
+    Menu {
+      Section("Connection") {
+        Button {
+          setConnectionFilter(installedOnly: false)
+        } label: {
+          Label("All apps", systemImage: "square.grid.2x2")
+        }
+        Button {
+          setConnectionFilter(installedOnly: true)
+        } label: {
+          Label("Installed", systemImage: "checkmark.circle")
+        }
+      }
+
+      Section("Category") {
+        ForEach(AppsPageCategoryFilter.categoryDropdownOptions(categories: appProvider.categories)) { option in
+          Button(option.title) {
+            viewAllSection = nil
+            switch AppsPageCategoryFilter.categorySelection(forOptionId: option.id) {
+            case .allCategories:
+              appProvider.clearCategoryFilter()
+            case .category(let categoryId):
+              appProvider.selectedCategory = categoryId
+            }
+            scheduleAppSearch(for: searchText)
+          }
+        }
+      }
+
+      if !activeAppFilters.isEmpty {
+        Divider()
+        Button("Clear all filters", action: clearAppFilters)
+      }
+    } label: {
+      PageQueryControlLabel(
+        icon: "line.3.horizontal.decrease",
+        dimension: activeAppFilters.isEmpty ? nil : "Filter",
+        value: activeAppFilters.isEmpty ? "Filter" : "\(activeAppFilters.count)",
+        isActive: !activeAppFilters.isEmpty,
+        dimensionSeparator: " ·"
+      )
+    }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("apps-filter-menu")
+    .help("Filter apps by connection or category")
+  }
+
+  private var selectedCategoryTitle: String {
+    guard let selectedCategory = appProvider.selectedCategory,
+      let category = appProvider.categories.first(where: { $0.id == selectedCategory })
+    else {
+      return "All"
+    }
+    return category.title
+  }
+
+  private func selectKind(_ kind: AppsCatalogKind) {
+    guard selectedKind != kind else { return }
+    viewAllSection = nil
+    selectedKind = kind
+
+    // Connection and Category are marketplace dimensions. Search is a page-
+    // wide intent, so changing scope never discards what the user typed.
+    if kind != .apps {
+      clearMarketplaceFiltersPreservingSearch()
+    }
+
+    if kind == .apps || kind == .all {
+      appProvider.searchQuery = searchText
+      scheduleAppSearch(for: searchText)
+    }
+  }
+
+  private func setConnectionFilter(installedOnly: Bool) {
+    guard selectedKind == .apps else { return }
+    viewAllSection = nil
+    appProvider.showInstalledOnly = installedOnly
+    scheduleAppSearch(for: searchText)
+  }
+
+  private func clearAppFilters() {
+    viewAllSection = nil
+    clearMarketplaceFiltersPreservingSearch()
+    scheduleAppSearch(for: searchText)
+  }
+
+  private func clearMarketplaceFiltersPreservingSearch() {
+    let query = searchText
+    appProvider.clearFilters()
+    appProvider.searchQuery = query
+  }
+
+  private func scheduleAppSearch(for query: String) {
+    Task {
+      // Debounce search and keep the provider's current query authoritative.
+      try? await Task.sleep(for: .milliseconds(300))
+      guard selectedKind == .apps || selectedKind == .all,
+        appProvider.searchQuery == query
+      else { return }
+      await appProvider.searchApps()
+      SearchAnalytics.queryEntered(surface: .apps, query: query, resultsCount: appsSearchResultCount)
+    }
+  }
+
+  private var appsMoreMenu: some View {
+    PageMoreMenu(help: "More app actions", accessibilityIdentifier: "apps-more-actions") {
+      Button {
+        if let url = URL(string: "https://docs.omi.me/doc/developer/apps/Introduction") {
+          NSWorkspace.shared.open(url)
+        }
+      } label: {
+        Label("Build an app…", systemImage: "app.badge.fill")
       }
     }
   }
 
   @ViewBuilder
-  private var dismissControl: some View {
-    if let onDismiss {
-      DismissButton(action: onDismiss)
+  private var catalogContent: some View {
+    switch selectedSection {
+    case .apps:
+      appsCatalogContent
+    case .mcp:
+      McpServersSection(
+        appProvider: appProvider,
+        searchText: searchText,
+        onAdd: { showAddMcpServerSheet = true },
+        onSelectLocal: { selectedLocalMcpServer = $0 },
+        onSelectCatalogEntry: { selectedCatalogEntry = $0 }
+      )
+    case .skills:
+      SkillsSection(
+        appProvider: appProvider,
+        searchText: searchText,
+        onAdd: { showAddSkillSheet = true },
+        onSelect: { editingSkill = $0 },
+        onSelectCatalogEntry: { selectedCatalogEntry = $0 }
+      )
     }
   }
 
-  private var hasActiveFilters: Bool {
+  @ViewBuilder
+  private var appsCatalogContent: some View {
+    switch selectedKind {
+    case .imports:
+      ImportsSection(
+        statusStore: connectorStatusStore,
+        onSelectConnector: { connector in
+          selectConnector(connector)
+        },
+        connectors: visibleImportConnectors,
+        searchText: searchText,
+        onClearSearch: { searchText = "" }
+      )
+    case .exports:
+      ExportsSection(statuses: exportStatuses, searchText: searchText) { destination in
+        selectDestination(destination)
+      }
+    case .apps:
+      marketplaceContent
+    case .all:
+      if hasSearchQuery {
+        allCatalogSearchContent
+      } else {
+        localAndMarketplaceContent
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var allCatalogSearchContent: some View {
+    switch allSearchPresentation {
+    case .loading:
+      searchLoadingState
+    case .failure:
+      searchFailureState
+    case .empty:
+      globalSearchEmptyState
+    case .results(let total):
+      Text("Search Results (\(total))")
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundStyle(Ink.primary)
+
+      if !visibleImportConnectors.isEmpty {
+        ImportsSection(
+          statusStore: connectorStatusStore,
+          onSelectConnector: { connector in selectConnector(connector) },
+          connectors: visibleImportConnectors,
+          title: "Imports (\(visibleImportConnectors.count))"
+        )
+      }
+
+      if !visibleExportEntries.isEmpty {
+        ExportsSection(
+          statuses: exportStatuses,
+          title: "Exports (\(visibleExportEntries.count))",
+          entriesOverride: visibleExportEntries
+        ) { destination in
+          selectDestination(destination)
+        }
+      }
+
+      if !visibleMarketplaceSearchApps.isEmpty {
+        AppGridSection(
+          title: "Apps (\(visibleMarketplaceSearchApps.count))",
+          apps: visibleMarketplaceSearchApps,
+          appProvider: appProvider,
+          onSelectApp: selectApp,
+          titleSize: OmiType.subheading
+        )
+      }
+
+      if filteredAppsPresentation == .loading {
+        marketplaceSearchProgress
+      } else if filteredAppsPresentation == .failure {
+        marketplaceSearchFailure
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var localAndMarketplaceContent: some View {
+    ImportsSection(statusStore: connectorStatusStore) { connector in
+      selectConnector(connector)
+    }
+    ExportsSection(statuses: exportStatuses) { destination in
+      selectDestination(destination)
+    }
+
+    marketplaceSections
+  }
+
+  @ViewBuilder
+  private var marketplaceContent: some View {
+    if hasMarketplaceQuery {
+      filteredAppsContent
+    } else {
+      marketplaceSections
+    }
+  }
+
+  @ViewBuilder
+  private var marketplaceSections: some View {
+    if !appProvider.popularApps.isEmpty {
+      AppGridSection(
+        title: "Other",
+        apps: Array(appProvider.popularApps.prefix(6)),
+        appProvider: appProvider,
+        onSelectApp: selectApp,
+        showSeeMore: appProvider.popularApps.count > 6,
+        onSeeMore: {
+          selectedKind = .apps
+          viewAllSection = "featured"
+        }
+      )
+    }
+
+    if !appProvider.integrationApps.isEmpty {
+      AppGridSection(
+        title: "Integrations",
+        apps: Array(appProvider.integrationApps.prefix(6)),
+        appProvider: appProvider,
+        onSelectApp: selectApp,
+        showSeeMore: appProvider.integrationApps.count > 6,
+        onSeeMore: {
+          selectedKind = .apps
+          viewAllSection = "integrations"
+        }
+      )
+    }
+
+    if !appProvider.notificationApps.isEmpty {
+      AppGridSection(
+        title: "Realtime Notifications",
+        apps: Array(appProvider.notificationApps.prefix(6)),
+        appProvider: appProvider,
+        onSelectApp: selectApp,
+        showSeeMore: appProvider.notificationApps.count > 6,
+        onSeeMore: {
+          selectedKind = .apps
+          viewAllSection = "notifications"
+        }
+      )
+    }
+  }
+
+  private var hasMarketplaceQuery: Bool {
     appProvider.hasActiveFilters || viewAllSection != nil
   }
 
-  private var selectedCategoryLabel: String {
-    if let categoryId = appProvider.selectedCategory,
-      let category = appProvider.categories.first(where: { $0.id == categoryId })
-    {
-      return category.title
+  private var hasSearchQuery: Bool {
+    !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private var appsSearchResultCount: Int {
+    selectedKind.searchResultCount(
+      apps: filteredApps.count, imports: visibleImportConnectors.count,
+      exports: visibleExportEntries.count)
+  }
+
+  private var visibleImportConnectors: [ImportConnector] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return ImportConnector.all }
+    return ImportConnector.all
+      .filter { connector in
+        [connector.title, connector.subtitle, connector.description]
+          .contains { $0.localizedCaseInsensitiveContains(query) }
+      }
+      .sorted { catalogMatchRank($0.title, query: query) < catalogMatchRank($1.title, query: query) }
+  }
+
+  private var visibleExportEntries: [MemoryExportCatalogEntry] {
+    MemoryExportCatalog.matching(searchText)
+  }
+
+  private var visibleMarketplaceSearchApps: [OmiApp] {
+    guard filteredAppsPresentation == .results else { return [] }
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    return filteredApps.sorted {
+      catalogMatchRank($0.name, query: query) < catalogMatchRank($1.name, query: query)
     }
-    return "Category"
+  }
+
+  private var allSearchPresentation: AppsAllSearchPresentation {
+    AppsAllSearchPresentation.resolve(
+      importsCount: visibleImportConnectors.count,
+      exportsCount: visibleExportEntries.count,
+      appsCount: filteredApps.count,
+      marketplace: filteredAppsPresentation
+    )
+  }
+
+  private func catalogMatchRank(_ title: String, query: String) -> Int {
+    if title.localizedCaseInsensitiveCompare(query) == .orderedSame { return 0 }
+    if title.range(of: query, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil {
+      return 1
+    }
+    return 2
+  }
+
+  private var searchLoadingState: some View {
+    GlassLoadingState(label: "Searching apps, imports, and exports…", placement: .scrolling)
+  }
+
+  private var searchFailureState: some View {
+    GlassErrorState(
+      title: "Couldn't Finish Searching Apps", placement: .scrolling,
+      retry: { Task { await appProvider.searchApps() } })
+  }
+
+  private var globalSearchEmptyState: some View {
+    GlassEmptyState(
+      systemImage: "magnifyingglass",
+      title: "No results for “\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))”",
+      placement: .scrolling
+    ) {
+      Button("Clear Search") { searchText = "" }
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+    }
+  }
+
+  private var marketplaceSearchProgress: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      ProgressView().controlSize(.small)
+      Text("Searching marketplace apps…")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+    }
+  }
+
+  private var marketplaceSearchFailure: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Text("Marketplace apps couldn't be loaded.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+      Button(GlassPageState.retryTitle) { Task { await appProvider.searchApps() } }
+        .buttonStyle(GlassPageState.retryStyle)
+    }
   }
 
   /// Apps for the selected filter/search result set or "See more" section.
@@ -660,9 +872,75 @@ struct AppsPage: View {
     return "Results (\(apps.count))"
   }
 
+  private var filteredAppsPresentation: AppsFilteredResultsPresentation {
+    let queryState: AppFilterResultsQueryState =
+      viewAllSection == nil
+      ? appProvider.filteredAppsQueryState
+      : .completed
+    return AppsFilteredResultsPresentation.resolve(
+      queryState: queryState,
+      resultsCount: filteredApps.count
+    )
+  }
+
+  @ViewBuilder
+  private var filteredAppsContent: some View {
+    switch filteredAppsPresentation {
+    case .loading:
+      GlassLoadingState(label: "Searching…", placement: .scrolling)
+    case .empty:
+      GlassEmptyState(systemImage: "magnifyingglass", title: "No Apps Found", placement: .scrolling)
+    case .failure:
+      GlassErrorState(
+        title: "Couldn't Load Apps", placement: .scrolling,
+        retry: { Task { await appProvider.searchApps() } })
+    case .results:
+      filteredAppsGrid
+    }
+  }
+
+  @ViewBuilder
+  private var filteredAppsGrid: some View {
+    // Back button for "See more" view.
+    if viewAllSection != nil {
+      BackChip("Apps") { viewAllSection = nil }
+    }
+
+    AppGridSection(
+      title: filterResultsTitle,
+      apps: filteredApps,
+      appProvider: appProvider,
+      onSelectApp: selectApp
+    )
+
+    // Infinite scroll: load more when reaching bottom.
+    if appProvider.hasMoreFilteredApps {
+      HStack {
+        Spacer()
+        if appProvider.isLoadingMore {
+          ProgressView()
+            .controlSize(.small)
+          Text("Loading more…")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+        } else {
+          Color.clear
+            .frame(height: 1)
+            .onAppear {
+              Task {
+                await appProvider.loadMoreFilteredApps()
+              }
+            }
+        }
+        Spacer()
+      }
+      .padding(.vertical, OmiSpacing.lg)
+    }
+  }
+
   private var loadingShimmerView: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+      VStack(alignment: .leading, spacing: PagePanelVerticalRhythm.sectionGap) {
         // Shimmer sections
         ForEach(0..<3, id: \.self) { _ in
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -680,34 +958,10 @@ struct AppsPage: View {
           }
         }
       }
-      .padding()
+      .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+      .padding(.top, PagePanelVerticalRhythm.contentGap)
+      .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
     }
-  }
-
-  private var emptyView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "square.grid.2x2")
-        .scaledFont(size: 48)
-        .foregroundColor(OmiColors.textTertiary)
-
-      Text("No apps found")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
-
-      if !searchText.isEmpty {
-        Text("Try a different search term")
-          .foregroundColor(OmiColors.textTertiary)
-
-        Button("Clear Search") {
-          searchText = ""
-        }
-        .buttonStyle(.bordered)
-      } else {
-        Text("Apps will appear here once available")
-          .foregroundColor(OmiColors.textTertiary)
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
@@ -762,7 +1016,7 @@ struct ImportConnector: Identifiable {
       id: "apple-notes",
       title: "Apple Notes",
       subtitle: "Private notes",
-      description: "Import notes and private written context.",
+      description: "Import your notes.",
       brand: .appleNotes,
       statusText: "Not connected",
       metricText: nil,
@@ -813,6 +1067,7 @@ final class ImportConnectorStatusStore: ObservableObject {
     var lastSyncedAt: Date?
     var lastDeltaCount: Int?
     var availabilityText: String?
+    var requiresVerification = false
   }
 
   struct Snapshot {
@@ -888,6 +1143,7 @@ final class ImportConnectorStatusStore: ObservableObject {
       defaults.set(metrics.memoryCount, forKey: storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID))
     }
     metrics.lastSyncedAt = syncedAt
+    metrics.requiresVerification = false
     defaults.set(
       syncedAt.timeIntervalSince1970,
       forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID)
@@ -914,6 +1170,13 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
     metricsByID[connectorID] = metrics
     connectorDidSync.send(connectorID)
+    // Clear this integration's nudge history so a later disconnect is allowed
+    // to make the pitch again instead of finding a spent lifetime budget.
+    IntegrationNudgeCoordinator.shared.noteConnected(route: .importConnector(connectorID))
+  }
+
+  func markDisconnected(connectorID: String) {
+    clearStoredMetrics(for: connectorID)
   }
 
   private func clearStoredMetrics(for connectorID: String) {
@@ -960,6 +1223,11 @@ final class ImportConnectorStatusStore: ObservableObject {
         let timestamp = defaults.double(forKey: lastSyncedAtKey)
         if timestamp > 0 {
           metrics.lastSyncedAt = Date(timeIntervalSince1970: timestamp)
+          // Apple Notes access is revocable and its security-scoped folder
+          // grant can disappear between launches. A persisted import proves
+          // history, not current readability, so require an explicit refresh
+          // before displaying it as connected.
+          metrics.requiresVerification = connector.id == "apple-notes"
         }
       }
       if defaults.bool(forKey: hasLastDeltaKey) {
@@ -1107,36 +1375,40 @@ final class ImportConnectorStatusStore: ObservableObject {
   }
 
   private func refreshAppleNotesMetrics() async {
-    let status = await AppleNotesReaderService.shared.connectionStatus(maxResults: 250)
-    switch status {
-    case .connected(let noteCount, _):
-      var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
-      metrics.sourceCount = noteCount
-      defaults.set(
-        noteCount,
-        forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: "apple-notes")
-      )
-      if metrics.lastSyncedAt == nil {
-        let syncedAt = Date()
-        metrics.lastSyncedAt = syncedAt
-        defaults.set(
-          syncedAt.timeIntervalSince1970,
-          forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: "apple-notes")
-        )
-      }
-      metrics.availabilityText = "Private notes accessible"
-      defaults.set(
-        "Private notes accessible",
-        forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: "apple-notes")
-      )
-      metricsByID["apple-notes"] = metrics
-    case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
-      log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
-      clearStoredMetrics(for: "apple-notes")
+    // Reading NoteStore.sqlite is reserved for the explicit Connect/Import
+    // action. Marking a persisted import as unverified keeps passive refreshes
+    // honest without opening the protected Notes store.
+    guard var metrics = metricsByID["apple-notes"], metrics.lastSyncedAt != nil else { return }
+    metrics.requiresVerification = true
+    metricsByID["apple-notes"] = metrics
+  }
+
+  /// Whether this connector has ever completed an import for the current owner.
+  ///
+  /// Deliberately different from `snapshot(for:).isConnected`, which reports
+  /// *currently usable* access: Apple Notes reads as not-connected until a live
+  /// re-import re-proves its revocable folder grant. That is right for a status
+  /// row and wrong for deciding whether to pitch the integration — a user who
+  /// imported Notes in March has already heard the pitch and taken it.
+  /// Reads the persisted keys rather than the in-memory snapshot, because the
+  /// caller is long-lived: a retained store would keep answering from the
+  /// metrics it loaded at init and would go on offering an integration the user
+  /// connected from the Apps tab a minute ago.
+  func hasEverSynced(connectorID: String) -> Bool {
+    guard sessionUserID != nil else { return false }
+    let lastSyncedAtKey = storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID)
+    if defaults.object(forKey: lastSyncedAtKey) != nil, defaults.double(forKey: lastSyncedAtKey) > 0 {
+      return true
     }
+    guard manualConnectorIDs.contains(connectorID) else { return false }
+    let memoryCountKey = storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID)
+    return defaults.object(forKey: memoryCountKey) != nil && defaults.integer(forKey: memoryCountKey) > 0
   }
 
   private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {
+    if metrics.requiresVerification {
+      return false
+    }
     if metrics.lastSyncedAt != nil {
       return true
     }
@@ -1149,6 +1421,10 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String {
+    if connector.id == "apple-notes", metrics.requiresVerification {
+      return "Reconnect to verify access"
+    }
+
     if let sourceCount = metrics.sourceCount {
       if let memoryCount = metrics.memoryCount, memoryCount > 0 {
         return
@@ -1175,6 +1451,12 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String? {
+    if connector.id == "apple-notes", metrics.requiresVerification,
+      let lastSyncedAt = metrics.lastSyncedAt
+    {
+      return "Last imported \(relativeTimestamp(lastSyncedAt))"
+    }
+
     if let lastSyncedAt = metrics.lastSyncedAt {
       var text = "Synced \(relativeTimestamp(lastSyncedAt))"
       if let lastDeltaCount = metrics.lastDeltaCount, lastDeltaCount > 0 {
@@ -1219,27 +1501,47 @@ final class ImportConnectorStatusStore: ObservableObject {
 }
 
 struct ImportsSection: View {
-  private let connectors = ImportConnector.all
   @ObservedObject var statusStore: ImportConnectorStatusStore
   let onSelectConnector: (ImportConnector) -> Void
+  var connectors: [ImportConnector] = ImportConnector.all
+  var searchText: String = ""
+  var onClearSearch: (() -> Void)? = nil
+  var title = "Imports"
+
+  private var normalizedSearchText: String {
+    searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      Text("Imports")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      Text(title)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
+        .foregroundColor(Ink.primary)
 
-      VStack(spacing: 0) {
-        ForEach(Array(connectors.enumerated()), id: \.element.id) { index, connector in
-          if index > 0 {
-            Divider()
-              .background(OmiColors.backgroundTertiary)
+      if connectors.isEmpty && !normalizedSearchText.isEmpty {
+        GlassEmptyState(
+          systemImage: "magnifyingglass",
+          title: "No imports match “\(normalizedSearchText)”",
+          placement: .scrolling
+        ) {
+          if let onClearSearch {
+            Button("Clear Search", action: onClearSearch)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
           }
-          ImportConnectorRow(
-            connector: connector,
-            snapshot: statusStore.snapshot(for: connector)
-          ) {
-            onSelectConnector(connector)
+        }
+      } else {
+        LazyVGrid(
+          columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
+          alignment: .leading,
+          spacing: OmiSpacing.md
+        ) {
+          ForEach(connectors) { connector in
+            ImportConnectorCard(
+              connector: connector,
+              snapshot: statusStore.snapshot(for: connector)
+            ) {
+              onSelectConnector(connector)
+            }
           }
         }
       }
@@ -1262,12 +1564,12 @@ struct ImportConnectorRow: View {
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(connector.title)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           Text(connector.description)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
             .truncationMode(.tail)
         }
@@ -1278,7 +1580,7 @@ struct ImportConnectorRow: View {
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.md)
-      .background(isHovering ? OmiColors.backgroundSecondary : Color.clear)
+      .background(isHovering ? Ink.wash : Color.clear)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -1295,19 +1597,19 @@ struct ImportConnectorCard: View {
 
   var body: some View {
     Button(action: action) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         HStack(spacing: OmiSpacing.md) {
-          ConnectorBrandIcon(brand: connector.brand, size: 50, cornerRadius: OmiChrome.smallControlRadius)
+          ConnectorBrandIcon(brand: connector.brand, size: 38, cornerRadius: OmiChrome.smallControlRadius)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(connector.title)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .lineLimit(1)
 
             Text(connector.subtitle)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
 
@@ -1316,20 +1618,20 @@ struct ImportConnectorCard: View {
 
         Text(connector.description)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
-          .lineLimit(2)
+          .foregroundColor(Ink.secondary)
+          .lineLimit(1)
           .multilineTextAlignment(.leading)
 
         HStack {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(snapshot.primaryText)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(snapshot.isConnected ? OmiColors.textSecondary : OmiColors.textTertiary)
+              .foregroundColor(snapshot.isConnected ? Ink.primary : Ink.secondary)  // green: ≈1.6:1 here
 
             if let secondaryText = snapshot.secondaryText {
               Text(secondaryText)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(1)
             }
           }
@@ -1339,12 +1641,12 @@ struct ImportConnectorCard: View {
           ImportConnectorActionButton(title: snapshot.actionTitle, isConnected: snapshot.isConnected)
         }
       }
-      .padding(OmiSpacing.md)
-      .background(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+      .padding(OmiSpacing.sm)
+      .background(isHovering ? Ink.rowFillHover : Ink.rowFill)
       .cornerRadius(OmiChrome.smallControlRadius)
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
@@ -1354,21 +1656,15 @@ struct ImportConnectorCard: View {
   }
 }
 
+/// Labels drawn inside a caller's plain `Button` (the whole card is the click target), so they cannot
+/// take a `ButtonStyle`. They draw `OmiButtonStyle`'s compact capsule from its own decisions instead,
+/// so a connector's Connect reads as the same control as every other compact button.
 struct ImportConnectorActionButton: View {
   let title: String
   let isConnected: Bool
 
   var body: some View {
-    Text(title)
-      .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
-      .frame(width: isConnected ? 84 : 72, height: 28)
-      .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
-      .cornerRadius(OmiChrome.chipRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-          .stroke(OmiColors.border, lineWidth: 1)
-      )
+    OmiCompactButtonLabel(title: title, kind: isConnected ? .secondary : .primary)
   }
 }
 
@@ -1377,19 +1673,23 @@ struct ConnectionModalActionButton: View {
   var isConnected = false
 
   var body: some View {
+    OmiCompactButtonLabel(title: title, kind: isConnected ? .secondary : .primary)
+  }
+}
+
+private struct OmiCompactButtonLabel: View {
+  let title: String
+  let kind: OmiButtonStyle.Kind
+
+  var body: some View {
     Text(title)
-      .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(isConnected ? OmiColors.textPrimary : .black)
+      .scaledFont(size: OmiType.body, weight: .semibold)
+      .foregroundStyle(OmiButtonStyle.label(kind))
       .lineLimit(1)
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(minWidth: isConnected ? 84 : 72)
-      .frame(height: 28)
-      .background(isConnected ? OmiColors.backgroundSecondary : Color.white)
-      .cornerRadius(OmiChrome.chipRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-          .stroke(OmiColors.border, lineWidth: 1)
-      )
+      .padding(.horizontal, OmiButtonStyle.horizontalPadding(.compact))
+      .frame(minHeight: OmiButtonStyle.minHeight(.compact))
+      .background(Capsule(style: .continuous).fill(OmiButtonStyle.fill(kind, pressed: false)))
+      .overlay(Capsule(style: .continuous).strokeBorder(OmiButtonStyle.border(kind), lineWidth: 1))
   }
 }
 
@@ -1405,6 +1705,13 @@ struct ImportConnectorSheet: View {
   /// only ever wipe the text the run actually imported, never a newer paste.
   @State private var submittedDraft: String?
   @FocusState private var draftFocused: Bool
+  @State private var isDisconnecting = false
+  @State private var showingDisconnectConfirmation = false
+  @State private var disconnectStatusMessage: String?
+  @State private var disconnectErrorMessage: String?
+  @State private var calendarGrantConnected = false
+  @State private var calendarGrantProbeGeneration = 0
+  @State private var disconnectAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
 
   private var snapshot: ImportConnectorStatusStore.Snapshot {
     statusStore.snapshot(for: connector)
@@ -1426,15 +1733,15 @@ struct ImportConnectorSheet: View {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(connector.title)
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Text(connector.subtitle)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           Text(connector.description)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .padding(.top, OmiSpacing.xxs)
         }
 
@@ -1445,6 +1752,10 @@ struct ImportConnectorSheet: View {
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          if let entry = IntegrationNudgeCatalog.importEntry(connectorID: connector.id) {
+            IntegrationValueSection(entry: entry)
+          }
+
           if connector.id == "chatgpt" || connector.id == "claude" {
             memoryImportContent
           } else {
@@ -1457,7 +1768,7 @@ struct ImportConnectorSheet: View {
       }
     }
     .padding(OmiSpacing.xxl)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
     .onChange(of: runState?.phase) { _, newPhase in
       // A successful import consumed the pasted draft, so clear it —
       // but only if it is still the submitted text. A reopened sheet
@@ -1470,12 +1781,26 @@ struct ImportConnectorSheet: View {
         }
         submittedDraft = nil
       }
+      if connector.id == "calendar", newPhase == .succeeded || newPhase == .failed {
+        Task { await refreshCalendarGrantState() }
+      }
+    }
+    .task(id: "\(connector.id):\(RuntimeOwnerIdentity.currentOwnerId() ?? "signed-out")") {
+      await refreshCalendarGrantState()
     }
     .onDisappear {
       // A seen success is done with: clear it so the next open shows
       // the persisted snapshot status instead of stale success text.
       // Failures stay until the next start so they can't be missed.
       runner.acknowledgeSuccess(connectorID: connector.id)
+    }
+    .shellConfirmation(
+      isPresented: $showingDisconnectConfirmation,
+      title: "Disconnect Google Calendar?",
+      message: "Omi will stop syncing and using your Google Calendar. Memories already imported into Omi will remain.",
+      confirmTitle: "Disconnect"
+    ) {
+      disconnectCalendar()
     }
   }
 
@@ -1484,7 +1809,7 @@ struct ImportConnectorSheet: View {
       if let metricText = connector.metricText {
         Text(metricText)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       Button {
@@ -1492,16 +1817,27 @@ struct ImportConnectorSheet: View {
       } label: {
         ConnectionModalActionButton(
           title: primaryActionTitle,
-          isConnected: snapshot.isConnected
+          isConnected: connector.id == "calendar" ? calendarHasRevocableGrant : snapshot.isConnected
         )
       }
       .buttonStyle(.plain)
-      .disabled(isRunning)
+      .disabled(isRunning || isDisconnecting)
+
+      if connector.id == "calendar", calendarHasRevocableGrant {
+        Button {
+          beginCalendarDisconnectConfirmation()
+        } label: {
+          Text("Disconnect…")
+        }
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        .disabled(isRunning || isDisconnecting)
+        .accessibilityIdentifier("calendar-import-disconnect")
+      }
 
       if connector.id == "local-files" {
-        Text("Local files are indexed on-device and used to build your memory graph.")
+        Text("Omi reads files on this Mac to learn about your work. Nothing is uploaded.")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
   }
@@ -1510,7 +1846,7 @@ struct ImportConnectorSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Open \(connector.title), paste the copied prompt, then drop the full response here.")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Button {
         openAndCopyPrompt(for: memorySource)
@@ -1521,11 +1857,11 @@ struct ImportConnectorSheet: View {
 
       ZStack(alignment: .topLeading) {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.wash)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
               .stroke(
-                Color.white.opacity(draftFocused ? 0.18 : 0.08),
+                draftFocused ? Ink.accent : Ink.hairline,
                 lineWidth: 1
               )
           )
@@ -1533,7 +1869,7 @@ struct ImportConnectorSheet: View {
         if draftText.isEmpty {
           Text("Paste the full \(connector.title) response here…")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, draftFieldHorizontalInset)
             .padding(.vertical, draftFieldVerticalInset)
             .allowsHitTesting(false)
@@ -1542,7 +1878,7 @@ struct ImportConnectorSheet: View {
         TextEditor(text: $draftText)
           .scrollContentBackground(.hidden)
           .font(.system(size: 13))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           // NSTextView adds a built-in 5pt line-fragment inset, so
           // subtract it here to align the caret with the placeholder.
           .padding(.horizontal, draftFieldHorizontalInset - 5)
@@ -1580,7 +1916,7 @@ struct ImportConnectorSheet: View {
   private var primaryActionTitle: String {
     switch connector.id {
     case "calendar":
-      return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Calendar")
+      return isRunning ? "Importing…" : (calendarHasRevocableGrant ? "Sync now" : "Connect Calendar")
     case "email":
       return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Gmail")
     case "apple-notes":
@@ -1595,11 +1931,13 @@ struct ImportConnectorSheet: View {
   }
 
   private func startConnectorImport() {
+    disconnectStatusMessage = nil
+    disconnectErrorMessage = nil
     switch connector.id {
     case "calendar":
       startRun(
         title: "Connecting to Calendar",
-        detail: "Reading past events and upcoming commitments for memory extraction."
+        detail: "Reading your past and upcoming events."
       ) { progress in
         await ConnectorImportOperations.importCalendar(progress: progress)
       }
@@ -1636,6 +1974,106 @@ struct ImportConnectorSheet: View {
       }
     default:
       break
+    }
+  }
+
+  private func disconnectCalendar() {
+    guard connector.id == "calendar", !isRunning, !isDisconnecting,
+      let authorizationSnapshot = disconnectAuthorizationSnapshot,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
+      disconnectErrorMessage = "Your account changed. Reopen Calendar and try again."
+      return
+    }
+    isDisconnecting = true
+    disconnectStatusMessage = nil
+    disconnectErrorMessage = nil
+    let connectorID = connector.id
+    let statusStore = statusStore
+    let startedAt = Date()
+    calendarGrantProbeGeneration &+= 1
+    AnalyticsManager.shared.integrationConnectAttempted(
+      integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+      connectorID: connectorID,
+      surface: .apps,
+      stage: "disconnect")
+
+    Task { @MainActor in
+      let outcome = await ConnectorImportOperations.disconnectCalendar {
+        try await APIClient.shared.disconnectGoogleCalendarGrant(
+          authorizationSnapshot: authorizationSnapshot)
+      }
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        isDisconnecting = false
+        disconnectAuthorizationSnapshot = nil
+        return
+      }
+      let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
+      switch outcome {
+      case .success(_, let message):
+        runner.acknowledgeSuccess(connectorID: connectorID)
+        statusStore.markDisconnected(connectorID: connectorID)
+        calendarGrantConnected = false
+        disconnectStatusMessage = message
+        AnalyticsManager.shared.integrationConnectSucceeded(
+          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+          connectorID: connectorID,
+          surface: .apps,
+          stage: "disconnect",
+          durationMs: durationMs)
+      case .failure(let message, let failureClass):
+        disconnectErrorMessage = message
+        AnalyticsManager.shared.integrationConnectFailed(
+          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+          connectorID: connectorID,
+          surface: .apps,
+          stage: "disconnect",
+          errorClass: failureClass ?? .unknown,
+          durationMs: durationMs)
+      }
+      isDisconnecting = false
+      disconnectAuthorizationSnapshot = nil
+    }
+  }
+
+  private var calendarHasRevocableGrant: Bool {
+    Self.shouldShowCalendarDisconnect(
+      localSyncConnected: snapshot.isConnected,
+      backendGrantConnected: calendarGrantConnected)
+  }
+
+  static func shouldShowCalendarDisconnect(
+    localSyncConnected: Bool,
+    backendGrantConnected: Bool
+  ) -> Bool {
+    localSyncConnected || backendGrantConnected
+  }
+
+  private func beginCalendarDisconnectConfirmation() {
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      disconnectErrorMessage = "Your session changed. Sign in again before disconnecting Calendar."
+      return
+    }
+    disconnectAuthorizationSnapshot = authorizationSnapshot
+    showingDisconnectConfirmation = true
+  }
+
+  private func refreshCalendarGrantState() async {
+    guard connector.id == "calendar",
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else { return }
+    calendarGrantProbeGeneration &+= 1
+    let generation = calendarGrantProbeGeneration
+    do {
+      let connected = try await APIClient.shared.googleCalendarGrantConnected(
+        authorizationSnapshot: authorizationSnapshot)
+      guard generation == calendarGrantProbeGeneration,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      else { return }
+      calendarGrantConnected = connected
+    } catch {
+      // Local successful-sync evidence remains a safe fallback when the grant
+      // probe is temporarily unavailable; never overwrite it with a failed read.
     }
   }
 
@@ -1680,10 +2118,14 @@ struct ImportConnectorSheet: View {
   ) {
     let connectorID = connector.id
     let statusStore = statusStore
+    // Capture first-sync state before markSynced flips the persisted latch, so
+    // the terminal telemetry can separate first-ever connects from re-syncs.
+    let wasFirstSync = !statusStore.snapshot(for: connector).isConnected
     ConnectorImportRunner.shared.start(
       connectorID: connectorID,
       progressTitle: title,
-      progressDetail: detail
+      progressDetail: detail,
+      surface: IntegrationConnectOrigin.consumeSurface(for: .importConnector(connectorID))
     ) { progress in
       switch await operation(progress) {
       case .success(let result, let message):
@@ -1694,9 +2136,22 @@ struct ImportConnectorSheet: View {
           lastDeltaCount: result.newItems,
           availabilityText: availabilityText
         )
-        return .success(message: message)
-      case .failure(let message):
-        return .failure(message: message)
+        return .success(
+          message: message,
+          metrics: ConnectorImportRunner.RunMetrics(
+            sourceCount: result.sourceCount,
+            memoryCount: result.memoryCount,
+            wasFirstSync: wasFirstSync
+          )
+        )
+      case .failure(let message, let failureClass):
+        return .failure(
+          message: message,
+          metrics: ConnectorImportRunner.RunMetrics(
+            failureClass: failureClass,
+            wasFirstSync: wasFirstSync
+          )
+        )
       }
     }
   }
@@ -1709,7 +2164,34 @@ struct ImportConnectorSheet: View {
 
   @ViewBuilder
   private var statusSection: some View {
-    if let run = runState, run.phase == .running {
+    if isDisconnecting {
+      statusCard {
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
+          ProgressView()
+            .controlSize(.small)
+            .padding(.top, OmiSpacing.hairline)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Disconnecting Google Calendar")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Text("Revoking Omi's future Calendar access. Imported memories will remain.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+    } else if let disconnectStatusMessage {
+      Text(disconnectStatusMessage)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.primary)
+    } else if let disconnectErrorMessage {
+      Text(disconnectErrorMessage)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(SettingsInk.notice)
+    } else if let run = runState, run.phase == .running {
       statusCard {
         HStack(alignment: .top, spacing: OmiSpacing.md) {
           ProgressView()
@@ -1719,16 +2201,16 @@ struct ImportConnectorSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(run.progressTitle)
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(run.progressDetail)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
 
             Text("You can close this window now. Omi keeps importing in the background.")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
@@ -1736,27 +2218,27 @@ struct ImportConnectorSheet: View {
     } else if let statusMessage = runState?.statusMessage {
       Text(statusMessage)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.success)
+        .foregroundColor(Ink.primary)  // green measures ≈1.6:1 here; see SettingsStatusChip
     } else if let errorMessage = runState?.errorMessage {
       Text(UserFacingErrorPresentation.message(from: errorMessage, while: .integration(connector.title)))
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.warning)
+        .foregroundColor(SettingsInk.notice)
     } else if snapshot.isConnected || snapshot.secondaryText != nil {
       statusCard {
         VStack(alignment: .leading, spacing: OmiSpacing.xs) {
           Text("Current import status")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           Text(snapshot.primaryText)
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .fixedSize(horizontal: false, vertical: true)
 
           if let secondaryText = snapshot.secondaryText {
             Text(secondaryText)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
@@ -1766,7 +2248,7 @@ struct ImportConnectorSheet: View {
         "Start the import here. Once it starts, you can close this window and Omi keeps importing in the background."
       )
       .scaledFont(size: OmiType.caption)
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
     }
   }
 
@@ -1774,7 +2256,7 @@ struct ImportConnectorSheet: View {
     content()
       .padding(OmiSpacing.md)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(OmiColors.backgroundSecondary)
+      .background(Ink.wash)
       .cornerRadius(OmiChrome.controlRadius)
   }
 }
@@ -1789,9 +2271,9 @@ struct ShimmerView: View {
       .fill(
         LinearGradient(
           colors: [
-            OmiColors.backgroundSecondary,
-            OmiColors.backgroundTertiary,
-            OmiColors.backgroundSecondary,
+            Ink.wash,
+            Ink.rowFill,
+            Ink.wash,
           ],
           startPoint: .leading,
           endPoint: .trailing
@@ -1823,70 +2305,6 @@ struct ShimmerAppCard: View {
   }
 }
 
-// MARK: - Filter Toggle
-
-struct FilterToggle: View {
-  let icon: String
-  let label: String
-  let isActive: Bool
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: icon)
-          .scaledFont(size: OmiType.caption)
-        Text(label)
-          .scaledFont(size: OmiType.body)
-          .lineLimit(1)
-      }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(isActive ? Color.white : OmiColors.backgroundSecondary)
-      .foregroundColor(isActive ? Color.black : OmiColors.textSecondary)
-      .cornerRadius(OmiChrome.elementRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
-      )
-      .fixedSize(horizontal: true, vertical: false)
-    }
-    .buttonStyle(.plain)
-  }
-}
-
-// MARK: - Small Header Button
-
-struct SmallHeaderButton: View {
-  let icon: String
-  let label: String
-  let color: Color
-  let action: () -> Void
-
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: icon)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(color)
-        Text(label)
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
-          .lineLimit(1)
-      }
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.xs)
-      .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
-      .cornerRadius(OmiChrome.badgeRadius)
-      .fixedSize(horizontal: true, vertical: false)
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-  }
-}
-
 // MARK: - Horizontal App Section
 
 struct HorizontalAppSection: View {
@@ -1902,7 +2320,7 @@ struct HorizontalAppSection: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text(title)
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: OmiSpacing.lg) {
@@ -1916,15 +2334,15 @@ struct HorizontalAppSection: View {
               VStack(spacing: OmiSpacing.xs) {
                 ZStack {
                   RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(Ink.wash)
                     .frame(width: 56, height: 56)
                   Image(systemName: "chevron.right")
                     .scaledFont(size: 18, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                 }
                 Text("See more")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
               .frame(width: 70)
             }
@@ -1934,15 +2352,15 @@ struct HorizontalAppSection: View {
               VStack(spacing: OmiSpacing.xs) {
                 ZStack {
                   RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-                    .fill(OmiColors.backgroundSecondary)
+                    .fill(Ink.wash)
                     .frame(width: 56, height: 56)
                   Image(systemName: "chevron.right")
                     .scaledFont(size: 18, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                 }
                 Text("View all")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
               .frame(width: 70)
             }
@@ -1961,6 +2379,7 @@ struct AppGridSection: View {
   let apps: [OmiApp]
   let appProvider: AppProvider
   let onSelectApp: (OmiApp) -> Void
+  var titleSize = OmiType.heading
   var showSeeMore: Bool = false
   var onSeeMore: (() -> Void)? = nil
 
@@ -1968,8 +2387,8 @@ struct AppGridSection: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       HStack {
         Text(title)
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .scaledFont(size: titleSize, weight: .semibold)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -1981,7 +2400,7 @@ struct AppGridSection: View {
               Image(systemName: "chevron.right")
                 .scaledFont(size: OmiType.micro, weight: .medium)
             }
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
         }
@@ -2030,7 +2449,7 @@ struct CompactAppCard: View {
         VStack(spacing: OmiSpacing.hairline) {
           Text(app.name)
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           // Rating and installs
@@ -2038,30 +2457,30 @@ struct CompactAppCard: View {
             if let rating = app.formattedRating {
               Image(systemName: "star.fill")
                 .scaledFont(size: 8)
-                .foregroundColor(.yellow)
+                .foregroundColor(SettingsInk.notice)
               Text(rating)
                 .scaledFont(size: OmiType.micro)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
             if let installs = app.formattedInstalls {
               if app.formattedRating != nil {
                 Text("·")
                   .scaledFont(size: OmiType.micro)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
               Text(installs)
                 .scaledFont(size: OmiType.micro)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
           }
         }
 
         // Get/Open button
-        SmallAppButton(app: app, appProvider: appProvider, onOpen: onSelect)
+        AppActionButton(app: app, appProvider: appProvider, onOpen: onSelect)
       }
       .frame(width: 90)
       .padding(.vertical, OmiSpacing.sm)
-      .background(isHovering ? OmiColors.backgroundSecondary.opacity(0.5) : Color.clear)
+      .background(isHovering ? Ink.wash : Color.clear)
       .cornerRadius(OmiChrome.smallControlRadius)
     }
     .buttonStyle(.plain)
@@ -2070,50 +2489,11 @@ struct CompactAppCard: View {
 
   private var appIconPlaceholder: some View {
     RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-      .fill(OmiColors.backgroundTertiary)
+      .fill(Ink.rowFill)
       .overlay(
         Image(systemName: "app.fill")
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       )
-  }
-}
-
-// MARK: - Small App Button
-
-struct SmallAppButton: View {
-  let app: OmiApp
-  let appProvider: AppProvider
-  var onOpen: (() -> Void)? = nil
-
-  var body: some View {
-    Button(action: {
-      if app.enabled {
-        // If already enabled, open the app detail
-        onOpen?()
-      } else {
-        // If not enabled, enable it
-        Task { await appProvider.toggleApp(app) }
-      }
-    }) {
-      if appProvider.isAppLoading(app.id) {
-        ProgressView()
-          .scaleEffect(0.6)
-          .frame(width: 50, height: 22)
-      } else {
-        Text(app.enabled ? "Open" : "Install")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.black)
-          .frame(width: 50, height: 22)
-          .background(Color.white)
-          .cornerRadius(OmiChrome.smallControlRadius)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(OmiColors.border, lineWidth: 1)
-          )
-      }
-    }
-    .buttonStyle(.plain)
-    .disabled(appProvider.isAppLoading(app.id))
   }
 }
 
@@ -2128,7 +2508,7 @@ struct AppCard: View {
 
   var body: some View {
     Button(action: onSelect) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         HStack(spacing: OmiSpacing.md) {
           // App icon
           AsyncImage(url: URL(string: app.image)) { phase in
@@ -2141,18 +2521,18 @@ struct AppCard: View {
               appIconPlaceholder
             }
           }
-          .frame(width: 50, height: 50)
+          .frame(width: 38, height: 38)
           .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(app.name)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .lineLimit(1)
 
             Text(app.author)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
 
@@ -2161,8 +2541,8 @@ struct AppCard: View {
 
         Text(app.description)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
-          .lineLimit(2)
+          .foregroundColor(Ink.secondary)
+          .lineLimit(1)
           .multilineTextAlignment(.leading)
 
         HStack {
@@ -2172,20 +2552,20 @@ struct AppCard: View {
               HStack(spacing: OmiSpacing.hairline) {
                 Image(systemName: "star.fill")
                   .scaledFont(size: OmiType.micro)
-                  .foregroundColor(.yellow)
+                  .foregroundColor(SettingsInk.notice)
                 Text(rating)
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
             }
             if let installs = app.formattedInstalls {
               HStack(spacing: OmiSpacing.hairline) {
                 Image(systemName: "arrow.down.circle")
                   .scaledFont(size: OmiType.micro)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                 Text(installs)
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
             }
           }
@@ -2196,8 +2576,8 @@ struct AppCard: View {
           AppActionButton(app: app, appProvider: appProvider, onOpen: onSelect)
         }
       }
-      .padding(OmiSpacing.md)
-      .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
+      .padding(OmiSpacing.sm)
+      .background(isHovering ? Ink.rowFill : Ink.wash)
       .cornerRadius(OmiChrome.smallControlRadius)
     }
     .buttonStyle(.plain)
@@ -2208,50 +2588,39 @@ struct AppCard: View {
 
   private var appIconPlaceholder: some View {
     RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-      .fill(OmiColors.backgroundTertiary)
+      .fill(Ink.rowFill)
       .overlay(
         Image(systemName: "app.fill")
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       )
   }
 }
 
 // MARK: - App Action Button
 
+/// The one Open/Install button, at one size, on every app card. The label keeps its width while the
+/// spinner shows so the card does not reflow under the pointer.
 struct AppActionButton: View {
   let app: OmiApp
   let appProvider: AppProvider
   var onOpen: (() -> Void)? = nil
 
   var body: some View {
-    Button(action: {
+    let isLoading = appProvider.isAppLoading(app.id)
+    Button {
       if app.enabled {
-        // If already enabled, open the app detail
         onOpen?()
       } else {
-        // If not enabled, enable it
         Task { await appProvider.toggleApp(app) }
       }
-    }) {
-      if appProvider.isAppLoading(app.id) {
-        ProgressView()
-          .scaleEffect(0.7)
-          .frame(width: 60, height: 28)
-      } else {
-        Text(app.enabled ? "Open" : "Install")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.black)
-          .frame(width: 60, height: 28)
-          .background(Color.white)
-          .cornerRadius(OmiChrome.chipRadius)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-              .stroke(OmiColors.border, lineWidth: 1)
-          )
+    } label: {
+      ZStack {
+        Text(app.enabled ? "Open" : "Install").opacity(isLoading ? 0 : 1)
+        if isLoading { ProgressView().controlSize(.small) }
       }
     }
-    .buttonStyle(.plain)
-    .disabled(appProvider.isAppLoading(app.id))
+    .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+    .disabled(isLoading)
   }
 }
 
@@ -2277,7 +2646,7 @@ struct AppFilterSheet: View {
       HStack {
         Text("Filters")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -2287,7 +2656,7 @@ struct AppFilterSheet: View {
             Task { await appProvider.searchApps() }
           }
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         }
 
         DismissButton(action: dismissSheet)
@@ -2295,7 +2664,7 @@ struct AppFilterSheet: View {
       .padding()
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFill)
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
@@ -2303,7 +2672,7 @@ struct AppFilterSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Category")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             FlowLayout(spacing: OmiSpacing.sm) {
               ForEach(appProvider.categories) { category in
@@ -2326,7 +2695,7 @@ struct AppFilterSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Capability")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             FlowLayout(spacing: OmiSpacing.sm) {
               ForEach(appProvider.capabilities) { capability in
@@ -2349,11 +2718,11 @@ struct AppFilterSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Other")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Toggle("Show installed only", isOn: $appProvider.showInstalledOnly)
               .toggleStyle(OmiToggleStyle())
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .onChange(of: appProvider.showInstalledOnly) { _, _ in
                 Task { await appProvider.searchApps() }
               }
@@ -2363,7 +2732,7 @@ struct AppFilterSheet: View {
       }
     }
     .frame(width: 400, height: 450)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 
   private var hasActiveFilters: Bool {
@@ -2384,12 +2753,12 @@ struct FilterChip: View {
         .scaledFont(size: OmiType.body)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
-        .background(isSelected ? Color.white : OmiColors.backgroundSecondary)
-        .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+        .background(isSelected ? Ink.primary : Ink.wash)
+        .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
         .cornerRadius(OmiChrome.sectionRadius)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.sectionRadius)
-            .stroke(isSelected ? OmiColors.border : Color.clear, lineWidth: 1)
+            .stroke(isSelected ? Ink.separator : Color.clear, lineWidth: 1)
         )
     }
     .buttonStyle(.plain)
@@ -2398,72 +2767,12 @@ struct FilterChip: View {
 
 // MARK: - Category Apps Sheet
 
-struct CategoryAppsSheet: View {
-  let category: OmiAppCategory
-  let appProvider: AppProvider
-  let onSelectApp: (OmiApp) -> Void
-  var onDismiss: (() -> Void)? = nil
-
-  @Environment(\.dismiss) private var environmentDismiss
-
-  private func dismissSheet() {
-    if let onDismiss = onDismiss {
-      onDismiss()
-    } else {
-      environmentDismiss()
-    }
-  }
-
-  var categoryApps: [OmiApp] {
-    appProvider.apps(forCategory: category.id)
-  }
-
-  var body: some View {
-    VStack(spacing: 0) {
-      // Header
-      HStack {
-        DismissButton(
-          action: dismissSheet, icon: "chevron.left", showBackground: false,
-          accessibilityLabel: "Back")
-
-        Text(category.title)
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-
-        Spacer()
-
-        Text("\(categoryApps.count) apps")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
-      }
-      .padding()
-
-      Divider()
-        .background(OmiColors.backgroundTertiary)
-
-      ScrollView {
-        LazyVGrid(
-          columns: [
-            GridItem(.flexible(), spacing: OmiSpacing.lg),
-            GridItem(.flexible(), spacing: OmiSpacing.lg),
-          ], spacing: OmiSpacing.lg
-        ) {
-          ForEach(categoryApps) { app in
-            AppCard(app: app, appProvider: appProvider, onSelect: { onSelectApp(app) })
-          }
-        }
-        .padding()
-      }
-    }
-    .background(OmiColors.backgroundPrimary)
-  }
-}
-
 // MARK: - App Detail Sheet
 
 struct AppDetailSheet: View {
   let app: OmiApp
   @ObservedObject var appProvider: AppProvider
+  var onOpenChat: ((OmiAppDetails?) async -> Void)? = nil
   var onDismiss: (() -> Void)? = nil
 
   @Environment(\.dismiss) private var environmentDismiss
@@ -2472,6 +2781,7 @@ struct AppDetailSheet: View {
   @State private var showAddReview = false
   @State private var userReview: OmiAppReview?
   @State private var appDetails: OmiAppDetails?
+  @State private var isDetailVisible = true
   @State private var isSettingUp = false
   @State private var isSetupCompleted = false
   @State private var setupCheckTask: Task<Void, Never>?
@@ -2489,12 +2799,19 @@ struct AppDetailSheet: View {
   enum PrimaryAppAction: Equatable {
     case install  // not enabled → install / enable
     case open  // enabled external integration → open in browser
+    case chat  // enabled chat-capable app → open its app-scoped conversation
     case hidden  // enabled non-external → no primary action (disable is the trash button)
   }
 
-  nonisolated static func primaryAppAction(isEnabled: Bool, worksExternally: Bool) -> PrimaryAppAction {
+  nonisolated static func primaryAppAction(
+    isEnabled: Bool,
+    worksExternally: Bool,
+    worksWithChat: Bool = false,
+    hasChatAction: Bool = false
+  ) -> PrimaryAppAction {
     if !isEnabled { return .install }
-    return worksExternally ? .open : .hidden
+    if worksExternally { return .open }
+    return worksWithChat && hasChatAction ? .chat : .hidden
   }
 
   private func dismissSheet() {
@@ -2527,7 +2844,7 @@ struct AppDetailSheet: View {
                   .aspectRatio(contentMode: .fill)
               default:
                 RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                  .fill(OmiColors.backgroundTertiary)
+                  .fill(Ink.rowFill)
               }
             }
             .frame(width: 80, height: 80)
@@ -2536,11 +2853,11 @@ struct AppDetailSheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.xs) {
               Text(app.name)
                 .scaledFont(size: 24, weight: .bold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text(app.author)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
 
               HStack(spacing: OmiSpacing.md) {
                 let ratingAvg = appDetails?.ratingAvg ?? app.ratingAvg
@@ -2549,17 +2866,17 @@ struct AppDetailSheet: View {
                 if let ratingAvg, ratingCount > 0 {
                   HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "star.fill")
-                      .foregroundColor(.yellow)
+                      .foregroundColor(SettingsInk.notice)
                     Text(String(format: "%.1f", ratingAvg))
                     Text("(\(ratingCount))")
                   }
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                 }
                 if installs > 0 {
                   Text("\(installs) installs")
                     .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                 }
               }
             }
@@ -2567,7 +2884,12 @@ struct AppDetailSheet: View {
             Spacer()
 
             // Action button
-            let primaryAction = Self.primaryAppAction(isEnabled: isEnabled, worksExternally: app.worksExternally)
+            let primaryAction = Self.primaryAppAction(
+              isEnabled: isEnabled,
+              worksExternally: app.worksExternally,
+              worksWithChat: app.worksWithChat,
+              hasChatAction: onOpenChat != nil
+            )
             HStack(spacing: OmiSpacing.sm) {
               // Only render a primary button when there is a real action:
               // install/enable, or open an external integration. An enabled
@@ -2580,75 +2902,63 @@ struct AppDetailSheet: View {
                     switch primaryAction {
                     case .open:
                       // Open the external integration in browser
-                      openExternalApp()
+                      await openExternalApp()
                     case .install:
                       if app.worksExternally {
                         await handleInstall()
                       } else {
                         await appProvider.toggleApp(app)
                       }
+                    case .chat:
+                      if appDetails == nil {
+                        await loadAppDetails()
+                      }
+                      await onOpenChat?(appDetails)
+                      dismissSheet()
                     case .hidden:
                       break
                     }
                   }
                 }) {
                   if appProvider.isAppLoading(app.id) {
-                    ProgressView()
-                      .frame(width: 100, height: 36)
+                    ProgressView().controlSize(.small)
                   } else if isSettingUp {
                     HStack(spacing: OmiSpacing.xs) {
-                      ProgressView()
-                        .scaleEffect(0.7)
-                      Text("Setting up...")
-                        .scaledFont(size: OmiType.caption, weight: .semibold)
+                      ProgressView().controlSize(.small)
+                      Text("Setting up…")
                     }
-                    .foregroundColor(OmiColors.textSecondary)
-                    .frame(width: 120, height: 36)
                   } else {
-                    Text(primaryAction == .open ? "Open" : "Install")
-                      .scaledFont(size: OmiType.body, weight: .semibold)
-                      .foregroundColor(.black)
-                      .frame(width: 100, height: 36)
-                      .background(Color.white)
-                      .cornerRadius(OmiChrome.controlRadius)
-                      .overlay(
-                        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                          .stroke(OmiColors.border, lineWidth: 1)
-                      )
+                    Text(primaryAction == .open ? "Open" : primaryAction == .chat ? "Chat" : "Install")
                   }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(OmiButtonStyle(.primary))
+                .disabled(appProvider.isAppLoading(app.id) || isSettingUp)
               }
 
               // Disable button shown only when app is enabled
               if isEnabled && !appProvider.isAppLoading(app.id) && !isSettingUp {
-                Button(action: {
+                // Disabling is reversible, so it is not drawn as a delete (a red trash can).
+                Button("Disable") {
                   Task { await appProvider.toggleApp(app) }
-                }) {
-                  Image(systemName: "trash")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.error)
-                    .frame(width: 36, height: 36)
-                    .background(OmiColors.error.opacity(0.1))
-                    .cornerRadius(OmiChrome.controlRadius)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .help("Disable this app. You can enable it again any time.")
               }
             }
           }
 
           Divider()
-            .background(OmiColors.backgroundTertiary)
+            .background(Ink.rowFill)
 
           // Description
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("About")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(app.description)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
 
@@ -2657,46 +2967,42 @@ struct AppDetailSheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               ForEach(Array(integration.authSteps.enumerated()), id: \.offset) { index, step in
                 Button(action: {
-                  if let uid = AuthState.shared.userId,
-                    let url = URL(string: "\(step.url)?uid=\(uid)")
-                  {
-                    NSWorkspace.shared.open(url)
-                  }
+                  Task { await navigateToSetup(stepIndex: index) }
                 }) {
                   HStack(spacing: OmiSpacing.md) {
                     // Step number / checkmark
                     ZStack {
                       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                        .fill(isSetupCompleted ? Color.green.opacity(0.15) : OmiColors.backgroundTertiary)
+                        .fill(isSetupCompleted ? Ink.listeningGreen.opacity(0.15) : Ink.rowFill)
                         .frame(width: 40, height: 40)
                       if isSetupCompleted {
                         Image(systemName: "checkmark")
                           .scaledFont(size: OmiType.body, weight: .semibold)
-                          .foregroundColor(.green)
+                          .foregroundColor(Ink.listeningGreen)
                       } else {
                         Text("\(index + 1)")
                           .scaledFont(size: OmiType.body, weight: .semibold)
-                          .foregroundColor(OmiColors.textSecondary)
+                          .foregroundColor(Ink.secondary)
                       }
                     }
 
                     VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                       Text(step.name)
                         .scaledFont(size: OmiType.body, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
+                        .foregroundColor(Ink.primary)
                       Text(isSetupCompleted ? "Completed" : "Click to complete")
                         .scaledFont(size: OmiType.caption)
-                        .foregroundColor(isSetupCompleted ? .green : OmiColors.textTertiary)
+                        .foregroundColor(isSetupCompleted ? Ink.listeningGreen : Ink.secondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "arrow.up.right.square")
                       .scaledFont(size: OmiType.body)
-                      .foregroundColor(OmiColors.textTertiary)
+                      .foregroundColor(Ink.secondary)
                   }
                   .padding(OmiSpacing.md)
-                  .background(OmiColors.backgroundSecondary)
+                  .background(Ink.wash)
                   .cornerRadius(OmiChrome.smallControlRadius)
                 }
                 .buttonStyle(.plain)
@@ -2709,7 +3015,7 @@ struct AppDetailSheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Text("Capabilities")
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               FlowLayout(spacing: OmiSpacing.sm) {
                 ForEach(app.capabilities, id: \.self) { capability in
@@ -2723,22 +3029,22 @@ struct AppDetailSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Category")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(app.category.replacingOccurrences(of: "-", with: " ").capitalized)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
 
           Divider()
-            .background(OmiColors.backgroundTertiary)
+            .background(Ink.rowFill)
 
           // Add Review Section
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             HStack {
               Text("Reviews")
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Spacer()
 
@@ -2750,7 +3056,7 @@ struct AppDetailSheet: View {
                     Text("Add Review")
                       .scaledFont(size: OmiType.body, weight: .medium)
                   }
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                 }
                 .buttonStyle(.plain)
               }
@@ -2762,14 +3068,14 @@ struct AppDetailSheet: View {
                 HStack {
                   Text("Your Review")
                     .scaledFont(size: OmiType.body, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(Ink.primary)
 
                   Spacer()
 
                   Button(action: { showAddReview = true }) {
                     Text("Edit")
                       .scaledFont(size: OmiType.caption, weight: .medium)
-                      .foregroundColor(OmiColors.textTertiary)
+                      .foregroundColor(Ink.secondary)
                   }
                   .buttonStyle(.plain)
                 }
@@ -2787,7 +3093,7 @@ struct AppDetailSheet: View {
             } else if userReview == nil && reviews.isEmpty {
               Text("No reviews yet. Be the first to review this app.")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .padding(.vertical, OmiSpacing.sm)
             }
           }
@@ -2796,14 +3102,16 @@ struct AppDetailSheet: View {
       }
     }
     .frame(width: 500, height: 600)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
     .task {
+      isDetailVisible = true
       await loadReviews()
       await loadAppDetails()
       // Resume polling if user completed setup in browser and returned to this sheet
       await resumeSetupPollingIfNeeded()
     }
     .onDisappear {
+      isDetailVisible = false
       setupCheckTask?.cancel()
     }
     .dismissableSheet(isPresented: $showAddReview) {
@@ -2876,14 +3184,17 @@ struct AppDetailSheet: View {
     startSetupPolling(completionUrl: completionUrl, uid: uid)
   }
 
-  private func openExternalApp() {
+  /// A transport-backed app's home URL carries a one-use, short-lived launch
+  /// grant, so details are fetched immediately before each open, never reused.
+  private func openExternalApp() async {
+    guard let details = await freshLaunchDetails() else { return }
     guard let uid = AuthState.shared.userId else { return }
-    let integration = appDetails?.externalIntegration
+    let integration = details.externalIntegration
     // Prefer appHomeUrl, then first auth step URL
     if let homeUrl = integration?.appHomeUrl, !homeUrl.isEmpty, let url = URL(string: homeUrl) {
       NSWorkspace.shared.open(url)
     } else if let authSteps = integration?.authSteps, !authSteps.isEmpty,
-      let url = URL(string: "\(authSteps[0].url)?uid=\(uid)")
+      let url = AppSetupURL.withUID(authSteps[0].url, uid: uid)
     {
       NSWorkspace.shared.open(url)
     }
@@ -2897,19 +3208,27 @@ struct AppDetailSheet: View {
     if isEnabled { return }
 
     // Step 3: Enable failed — app requires setup first. Open browser and wait.
-    // Ensure app details are loaded before navigating to setup.
-    if appDetails == nil { await loadAppDetails() }
     await navigateToSetup()
   }
 
-  private func navigateToSetup() async {
+  private func freshLaunchDetails() async -> OmiAppDetails? {
+    let details = await AppSetupURL.freshDetails(
+      currentUID: { isDetailVisible ? AuthState.shared.userId : nil },
+      load: { try await APIClient.shared.getAppDetails(appId: app.id) }
+    )
+    if let details { appDetails = details }
+    return details
+  }
+
+  private func navigateToSetup(stepIndex: Int = 0) async {
+    guard let details = await freshLaunchDetails() else { return }
     guard let uid = AuthState.shared.userId else { return }
-    let integration = appDetails?.externalIntegration
+    let integration = details.externalIntegration
 
     // Open auth step or setup instructions URL in browser
     if let authSteps = integration?.authSteps, !authSteps.isEmpty {
-      let rawUrl = "\(authSteps[0].url)?uid=\(uid)"
-      if let url = URL(string: rawUrl) {
+      guard authSteps.indices.contains(stepIndex) else { return }
+      if let url = AppSetupURL.withUID(authSteps[stepIndex].url, uid: uid) {
         NSWorkspace.shared.open(url)
       }
     } else if let instructionsPath = integration?.setupInstructionsFilePath, !instructionsPath.isEmpty {
@@ -3002,7 +3321,7 @@ struct AddReviewSheet: View {
 
         Text(existingReview != nil ? "Edit Review" : "Add Review")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -3011,7 +3330,7 @@ struct AddReviewSheet: View {
       .padding()
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFill)
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
@@ -3025,7 +3344,7 @@ struct AddReviewSheet: View {
                   .aspectRatio(contentMode: .fill)
               default:
                 RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                  .fill(OmiColors.backgroundTertiary)
+                  .fill(Ink.rowFill)
               }
             }
             .frame(width: 50, height: 50)
@@ -3034,11 +3353,11 @@ struct AddReviewSheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text(app.name)
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text(app.author)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -3048,7 +3367,7 @@ struct AddReviewSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("Your Rating")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             StarRatingPicker(rating: $selectedRating)
           }
@@ -3058,27 +3377,27 @@ struct AddReviewSheet: View {
             HStack {
               Text("Your Review")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Spacer()
 
               Text("\(reviewText.count)/\(maxReviewLength)")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(reviewText.count > maxReviewLength ? OmiColors.error : OmiColors.textTertiary)
+                .foregroundColor(reviewText.count > maxReviewLength ? Ink.errorRed : Ink.secondary)
             }
 
             ZStack(alignment: .topLeading) {
               TextEditor(text: $reviewText)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 120, maxHeight: 200)
                 .padding(OmiSpacing.md)
-                .background(OmiColors.backgroundSecondary)
+                .background(Ink.wash)
                 .cornerRadius(OmiChrome.smallControlRadius)
                 .overlay(
                   RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+                    .stroke(Ink.separator, lineWidth: 1)
                 )
                 .onChange(of: reviewText) { _, newValue in
                   if newValue.count > maxReviewLength {
@@ -3087,9 +3406,9 @@ struct AddReviewSheet: View {
                 }
 
               if reviewText.isEmpty {
-                Text("Share your experience with this app...")
+                Text("Share your experience with this app…")
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                   .padding(.leading, OmiSpacing.lg)
                   .padding(.top, OmiSpacing.xl)
                   .allowsHitTesting(false)
@@ -3101,43 +3420,32 @@ struct AddReviewSheet: View {
           if let errorMessage = errorMessage {
             HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "exclamationmark.circle.fill")
-                .foregroundColor(OmiColors.error)
+                .foregroundColor(Ink.errorRed)
               Text(errorMessage)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.error)
+                .foregroundColor(Ink.errorRed)
             }
           }
 
           // Submit button
           Button(action: submitReview) {
-            HStack {
+            Group {
               if isSubmitting {
-                ProgressView()
-                  .scaleEffect(0.8)
-                  .tint(OmiColors.textPrimary)
+                ProgressView().controlSize(.small)
               } else {
                 Text(existingReview != nil ? "Update Review" : "Submit Review")
-                  .scaledFont(size: OmiType.body, weight: .semibold)
               }
             }
-            .foregroundColor(OmiColors.textPrimary)
             .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(isFormValid ? Color.white : Color.white.opacity(0.5))
-            .cornerRadius(OmiChrome.smallControlRadius)
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .stroke(OmiColors.border, lineWidth: 1)
-            )
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary))
           .disabled(!isFormValid || isSubmitting)
         }
         .padding()
       }
     }
     .frame(width: 400, height: 480)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 
   private func submitReview() {
@@ -3197,7 +3505,7 @@ struct StarRatingPicker: View {
       if rating > 0 {
         Text(ratingLabel)
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .padding(.leading, OmiSpacing.sm)
       }
     }
@@ -3210,7 +3518,7 @@ struct StarRatingPicker: View {
 
   private func starColor(for star: Int) -> Color {
     let effectiveRating = hoverRating > 0 ? hoverRating : rating
-    return star <= effectiveRating ? .yellow : OmiColors.textTertiary.opacity(0.5)
+    return star <= effectiveRating ? SettingsInk.notice : Ink.hairline
   }
 
   private func scaleEffect(for star: Int) -> CGFloat {
@@ -3257,8 +3565,8 @@ struct CapabilityBadge: View {
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.xs)
-    .background(OmiColors.backgroundSecondary)
-    .foregroundColor(OmiColors.textSecondary)
+    .background(Ink.wash)
+    .foregroundColor(Ink.secondary)
     .cornerRadius(OmiChrome.controlRadius)
   }
 }
@@ -3276,7 +3584,7 @@ struct ReviewCard: View {
           ForEach(1...5, id: \.self) { star in
             Image(systemName: star <= review.score ? "star.fill" : "star")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(star <= review.score ? .yellow : OmiColors.textTertiary)
+              .foregroundColor(star <= review.score ? SettingsInk.notice : Ink.secondary)
           }
         }
 
@@ -3284,32 +3592,32 @@ struct ReviewCard: View {
 
         Text(review.ratedAt, style: .date)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       Text(review.review)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .lineLimit(3)
 
       if let response = review.response {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Developer Response")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           Text(response)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(2)
         }
         .padding(OmiSpacing.sm)
-        .background(OmiColors.backgroundSecondary)
+        .background(Ink.wash)
         .cornerRadius(OmiChrome.elementRadius)
       }
     }
     .padding(OmiSpacing.md)
-    .background(OmiColors.backgroundSecondary.opacity(0.5))
+    .background(Ink.wash)
     .cornerRadius(OmiChrome.smallControlRadius)
   }
 }
@@ -3391,198 +3699,6 @@ struct FlowLayout: Layout {
   }
 }
 
-// MARK: - Dismissable Sheet
-/// A sheet that can be dismissed by clicking outside the content area.
-/// This provides macOS-friendly modal behavior where clicking the dimmed background dismisses the sheet.
-
-/// Maps Esc to a dismiss closure for custom overlay modals. These overlays are
-/// ZStack layers, not NSWindow sheets, so AppKit gives them no cancel handling,
-/// `onExitCommand` needs focus they never receive, and hidden SwiftUI buttons
-/// with a cancel key equivalent get culled from key-equivalent dispatch. A
-/// local key-down monitor scoped to the hosting window delivers Esc
-/// deterministically. Render it only while its overlay is the topmost modal.
-struct OverlayModalEscapeCatcher: NSViewRepresentable {
-  let action: () -> Void
-
-  func makeNSView(context: Context) -> EscapeCatcherView {
-    let view = EscapeCatcherView()
-    view.onEscape = action
-    return view
-  }
-
-  func updateNSView(_ nsView: EscapeCatcherView, context: Context) {
-    nsView.onEscape = action
-  }
-
-  final class EscapeCatcherView: NSView {
-    var onEscape: (() -> Void)?
-    private nonisolated(unsafe) var monitor: Any?
-
-    override func viewDidMoveToWindow() {
-      super.viewDidMoveToWindow()
-      if window != nil {
-        installMonitor()
-      } else {
-        removeMonitor()
-      }
-    }
-
-    // Never intercept mouse events — this view exists only for the monitor.
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    private func installMonitor() {
-      guard monitor == nil else { return }
-      monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-        guard
-          let self,
-          event.keyCode == 53,  // Esc
-          let window = self.window,
-          event.window === window
-        else { return event }
-        self.onEscape?()
-        // Consume the event — while the overlay is up it owns Esc.
-        return nil
-      }
-    }
-
-    private func removeMonitor() {
-      if let monitor {
-        NSEvent.removeMonitor(monitor)
-        self.monitor = nil
-      }
-    }
-
-    deinit {
-      // Deinitialization is nonisolated. The monitor is main-thread-only,
-      // while NSEvent.removeMonitor is safe to invoke from this boundary.
-      if let monitor {
-        NSEvent.removeMonitor(monitor)
-      }
-    }
-  }
-}
-
-struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
-  @Binding var isPresented: Bool
-  let sheetContent: () -> SheetContent
-
-  func body(content: Content) -> some View {
-    content
-      // The overlay is modal: while it is up, the content underneath must
-      // not be reachable by VoiceOver / Full Keyboard Access.
-      .accessibilityHidden(isPresented)
-      .overlay {
-        ZStack {
-          if isPresented {
-            // Dimmed background that dismisses on tap.
-            Color.black.opacity(0.3)
-              .ignoresSafeArea()
-              .contentShape(Rectangle())
-              .onTapGesture {
-                log("DISMISSABLE_SHEET: Background tapped, dismissing")
-                OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                  isPresented = false
-                }
-              }
-              .transition(.opacity)
-              .zIndex(0)
-
-            // Force the sheet into a centered full-size overlay so it
-            // does not end up clipped or visually hidden behind the scrim.
-            sheetContent()
-              .background(OmiColors.backgroundPrimary)
-              .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
-              .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-              .transition(.scale(scale: 0.95).combined(with: .opacity))
-              .accessibilityAddTraits(.isModal)
-              .zIndex(1)
-
-            OverlayModalEscapeCatcher {
-              log("DISMISSABLE_SHEET: Escape pressed, dismissing")
-              OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                isPresented = false
-              }
-            }
-            .zIndex(2)
-          }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      }
-      .omiAnimation(.easeOut(duration: 0.2), value: isPresented)
-  }
-}
-
-extension View {
-  /// Presents a sheet that can be dismissed by clicking outside the content area.
-  func dismissableSheet<Content: View>(
-    isPresented: Binding<Bool>,
-    @ViewBuilder content: @escaping () -> Content
-  ) -> some View {
-    self.modifier(DismissableSheetModifier(isPresented: isPresented, sheetContent: content))
-  }
-
-  /// Presents an item-based sheet that can be dismissed by clicking outside the content area.
-  func dismissableSheet<Item: Identifiable, Content: View>(
-    item: Binding<Item?>,
-    @ViewBuilder content: @escaping (Item) -> Content
-  ) -> some View {
-    self.modifier(DismissableSheetItemModifier(item: item, sheetContent: content))
-  }
-}
-
-/// Item-based version of DismissableSheetModifier for optional item bindings.
-struct DismissableSheetItemModifier<Item: Identifiable, SheetContent: View>: ViewModifier {
-  @Binding var item: Item?
-  let sheetContent: (Item) -> SheetContent
-
-  func body(content: Content) -> some View {
-    content
-      // The overlay is modal: while it is up, the content underneath must
-      // not be reachable by VoiceOver / Full Keyboard Access.
-      .accessibilityHidden(item != nil)
-      .overlay {
-        ZStack {
-          if let presentedItem = item {
-            // Dimmed background that dismisses on tap.
-            Color.black.opacity(0.3)
-              .ignoresSafeArea()
-              .contentShape(Rectangle())
-              .onTapGesture {
-                log("DISMISSABLE_SHEET: Background tapped, dismissing item")
-                OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                  item = nil
-                }
-              }
-              .transition(.opacity)
-              .zIndex(0)
-
-            // Force the sheet into a centered full-size overlay so it
-            // does not end up clipped or visually hidden behind the scrim.
-            sheetContent(presentedItem)
-              .background(OmiColors.backgroundPrimary)
-              .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
-              .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-              .transition(.scale(scale: 0.95).combined(with: .opacity))
-              .accessibilityAddTraits(.isModal)
-              .zIndex(1)
-
-            OverlayModalEscapeCatcher {
-              log("DISMISSABLE_SHEET: Escape pressed, dismissing item")
-              OmiMotion.withGated(.easeOut(duration: 0.2)) {
-                item = nil
-              }
-            }
-            .zIndex(2)
-          }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      }
-      .omiAnimation(.easeOut(duration: 0.2), value: item?.id != nil)
-  }
-}
-
 // MARK: - Create App Card
 /// Simple card button for creating apps or persona
 
@@ -3609,19 +3725,19 @@ struct CreateAppCard: View {
 
       Text(title)
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Spacer()
 
       Image(systemName: "chevron.right")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
     .padding(OmiSpacing.md)
     .frame(maxWidth: .infinity)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+        .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
             .stroke(iconColor.opacity(0.3), lineWidth: 1)

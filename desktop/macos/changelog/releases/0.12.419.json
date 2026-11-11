@@ -1,0 +1,9 @@
+{
+  "version": "0.12.419",
+  "date": "2026-09-29",
+  "changes": [
+    "Proactive Insights now always skip apps you excluded from Rewind and can only read, never change, your local screen history and tasks",
+    "Conversations transcribed on-device now finish uploading once you are back online, even after a long outage or backend errors, instead of getting stuck on this Mac",
+    "Fixed the app getting stuck on \"Preparing your data…\" after the local Rewind database was corrupted"
+  ]
+}

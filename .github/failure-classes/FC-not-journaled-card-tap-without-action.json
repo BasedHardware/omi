@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-not-journaled-card-tap-without-action",
+  "violated_contract": "A notch card whose kind never journals (kind.isJournaled == false) has no stored message for the generic open-notification-chat tap fallthrough to resolve, so posting it without an explicit FloatingBarNotificationAction makes the card a dead end: the tap dismisses the card and opens nothing. #12812 removed the recap announcement's journal write without giving the card an action, so the daily-recap card's click stopped opening anything; the trial card has the same shape.",
+  "canonical_prevention": "Every never-journaled producer posts its card with a typed action that owns its tap destination — the recap announcement carries .openDailyRecap, the same DailyRecapRouteRef the in-chat recap row opens — and the nil-action fallthrough fails open at the single dispatch boundary: a presentation-only card without an action opens the app's chat and records a fallback instead of silently doing nothing.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift",
+    "desktop/macos/Desktop/Tests/ChatDailySummaryTests.swift"
+  ],
+  "evidence_prs": [12812],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/**",
+    "desktop/macos/Desktop/Sources/MainWindow/Dashboard/**"
+  ],
+  "status": "open"
+}

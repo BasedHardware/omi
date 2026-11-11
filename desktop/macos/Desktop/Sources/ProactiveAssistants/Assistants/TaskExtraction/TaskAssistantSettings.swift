@@ -40,7 +40,7 @@ class TaskAssistantSettings {
   // MARK: - Browser Apps
 
   /// Apps identified as browsers — these get additional window-title keyword filtering
-  static let browserApps: Set<String> = [
+  nonisolated static let browserApps: Set<String> = [
     "Google Chrome",
     "Arc",
     "Safari",
@@ -51,7 +51,7 @@ class TaskAssistantSettings {
   ]
 
   /// Check if an app is a browser (subject to window title keyword filtering)
-  static func isBrowser(_ appName: String) -> Bool {
+  nonisolated static func isBrowser(_ appName: String) -> Bool {
     browserApps.contains(appName)
   }
 
@@ -112,6 +112,11 @@ class TaskAssistantSettings {
   private let defaultExtractionInterval: TimeInterval = 600.0  // 10 minutes
   private let defaultMinConfidence: Double = 0.75
   private let defaultNotificationsEnabled = false
+
+  /// Mirrors the backend request contract. Defaults must remain within this bound so a
+  /// settings sync can never reject an app-shipped prompt; longer user-authored prompts
+  /// remain stored locally and are omitted from sync rather than truncated.
+  static let maximumSyncedAnalysisPromptLength = 10_000
 
   /// Default system prompt for task extraction (loop-based with tool calling)
   static let defaultAnalysisPrompt = """
@@ -318,6 +323,7 @@ class TaskAssistantSettings {
     set {
       let isCustom = newValue != TaskAssistantSettings.defaultAnalysisPrompt
       UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
+      SettingsSyncManager.recordLocalPromptOwner("task", isShippedDefault: !isCustom)
       let previewLength = min(newValue.count, 50)
       let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
       log("Task analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")
@@ -326,14 +332,26 @@ class TaskAssistantSettings {
   }
 
   /// Interval between task extraction analyses in seconds
+  ///
+  /// A non-positive interval is not a schedule, and it is refused where it arrives rather than
+  /// papered over on every read. The old `value > 0 ? value : default` left the store holding a
+  /// number the app never honoured: a `0` synced down from the account read back as 600, the pane
+  /// painted 600, and the next `syncToServer()` pushed 600 — silently overwriting what the account
+  /// actually said. Normalising the write, and healing a value an older build already stored, keeps
+  /// stored state and reported state the same number.
   var extractionInterval: TimeInterval {
     get {
-      let value = UserDefaults.standard.double(forKey: extractionIntervalKey)
-      return value > 0 ? value : defaultExtractionInterval
+      let stored = UserDefaults.standard.double(forKey: extractionIntervalKey)
+      guard stored > 0 else {
+        UserDefaults.standard.set(defaultExtractionInterval, forKey: extractionIntervalKey)
+        return defaultExtractionInterval
+      }
+      return stored
     }
     set {
-      UserDefaults.standard.set(newValue, forKey: extractionIntervalKey)
-      log("Task extraction interval updated to \(newValue) seconds")
+      let interval = newValue > 0 ? newValue : defaultExtractionInterval
+      UserDefaults.standard.set(interval, forKey: extractionIntervalKey)
+      log("Task extraction interval updated to \(interval) seconds")
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }
@@ -398,16 +416,15 @@ class TaskAssistantSettings {
   /// For browser apps, check if the window title matches any keyword.
   /// Non-browser apps always pass this check.
   func isWindowAllowed(appName: String, windowTitle: String?) -> Bool {
+    guard !ScreenTaskPrivacy.isPrivateWindow(app: appName, title: windowTitle) else { return false }
     guard TaskAssistantSettings.isBrowser(appName) else { return true }
     guard let title = windowTitle, !title.isEmpty else { return false }
 
-    let lowercaseTitle = title.lowercased()
-    for keyword in browserKeywords {
-      if lowercaseTitle.contains(keyword.lowercased()) {
-        return true
-      }
-    }
-    return false
+    return TaskAssistantSettings.windowTitle(title, matchesAny: browserKeywords)
+  }
+
+  nonisolated static func windowTitle(_ title: String, matchesAny keywords: [String]) -> Bool {
+    keywords.contains { title.localizedStandardContains($0) }
   }
 
   /// Add an app to the allowed list

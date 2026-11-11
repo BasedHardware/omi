@@ -12,8 +12,16 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import pytest
 
 from deepgram import LiveTranscriptionEvents
+from config.stt_provider_policy import DEEPGRAM_CLOUD_PROVIDER, DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg
 from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words
+
+
+@pytest.fixture(autouse=True)
+def restored_plain_parakeet_slot(monkeypatch):
+    # These legacy capability/preference cases exercise the pre-retirement
+    # chain. Default-off behavior is covered by test_streaming_parakeet_slot.
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
 
 
 @pytest.mark.asyncio
@@ -323,13 +331,41 @@ async def test_returns_none_after_all_none_retries_exhausted():
     assert len(sleep_calls) == 2  # slept between retries
 
 
-def test_self_hosted_deepgram_options_never_enable_keepalive():
-    """The retained self-hosted socket must not create a keepalive thread (#5870)."""
-    from utils.stt.streaming import _self_hosted_deepgram_options
+def test_deepgram_options_never_enable_keepalive():
+    """No Deepgram socket may create a keepalive thread (#5870)."""
+    from utils.stt.streaming import DEEPGRAM_CLOUD_ENDPOINT, _deepgram_options
 
-    opts = _self_hosted_deepgram_options('https://dg.example.test')
-    assert 'keepalive' not in opts.options
-    assert opts.url == 'https://dg.example.test'
+    for endpoint in ('https://dg.example.test', DEEPGRAM_CLOUD_ENDPOINT):
+        opts = _deepgram_options(endpoint)
+        assert 'keepalive' not in opts.options
+        assert opts.url == endpoint
+
+
+def test_byok_client_leaves_managed_credential_intact(monkeypatch):
+    """A BYOK request must not repoint the process-wide client at the user's key.
+
+    DeepgramClient.__init__ calls config.set_apikey(), so any options object
+    shared between the managed and BYOK clients carries whichever key was set
+    last. In prod that stranded a canary replica on a stale BYOK key: every
+    live session it served answered HTTP 401 for six hours.
+    """
+    import utils.stt.streaming as streaming
+
+    monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'managed-key')
+    monkeypatch.setattr(streaming, 'deepgram', None)
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', False)
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda _provider: None)
+
+    managed = streaming._deepgram_client_for_request()
+    assert managed._config.api_key == 'managed-key'
+
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda _provider: 'byok-key')
+    assert streaming._deepgram_client_for_request()._config.api_key == 'byok-key'
+
+    assert managed._config.api_key == 'managed-key'
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda _provider: None)
+    assert streaming._deepgram_client_for_request()._config.api_key == 'managed-key'
 
 
 @pytest.mark.asyncio
@@ -1021,7 +1057,7 @@ class TestGetSttServiceForLanguage:
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
             'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
         ):
-            service, lang, model = get_stt_service_for_language('en')
+            service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
         assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
 
@@ -1029,17 +1065,24 @@ class TestGetSttServiceForLanguage:
         with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2']), patch.dict(
             'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
         ):
-            service, lang, model = get_stt_service_for_language('zh-TW')
+            service, lang, model = get_stt_service_for_language('zh-TW', multi_lang_enabled=False)
 
         assert (service, lang, model) == (STTService.modulate, 'zh', 'velma-2')
 
-    def test_retired_configuration_uses_non_deepgram_defaults(self):
-        with patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']), patch.dict(
-            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+    def test_disabled_configuration_uses_non_deepgram_defaults(self):
+        with (
+            patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']),
+            patch.dict('os.environ', {'STT_STREAMING_PARAKEET_SLOT_ENABLED': 'false'}),
+            patch.dict(
+                'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+                {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+            ),
         ):
-            service, lang, model = get_stt_service_for_language('en')
+            service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
-        assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
+        # Without operator rollback, a disabled deployment's model token cannot
+        # reactivate it or the plain Parakeet slot; keep the vendor default.
+        assert (service, lang, model) == (STTService.modulate, 'en', 'velma-2')
 
     def test_unsupported_language_fails_closed(self):
         with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2']):
@@ -1052,6 +1095,46 @@ class TestGetSttServiceForLanguage:
             service, lang, model = get_stt_service_for_language(None)
 
         assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
+
+
+@pytest.mark.parametrize(
+    ('language', 'multi_lang_enabled', 'surface', 'preferred_service', 'expected'),
+    [
+        ('multi', False, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
+        ('en', True, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
+        ('en', True, STTServingSurface.STREAMING, 'parakeet', (STTService.modulate, 'multi', 'velma-2')),
+        ('es', True, STTServingSurface.STREAMING, 'parakeet', (STTService.modulate, 'multi', 'velma-2')),
+        ('zh-TW', True, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
+        ('ar', True, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
+        ('es', False, STTServingSurface.STREAMING, None, (STTService.modulate, 'es', 'velma-2')),
+        ('es', False, STTServingSurface.STREAMING, 'parakeet', (STTService.modulate, 'es', 'velma-2')),
+        ('en', False, STTServingSurface.STREAMING, 'parakeet', (STTService.parakeet, 'en', 'parakeet')),
+        ('es', True, STTServingSurface.PTT, None, (STTService.modulate, 'es', 'velma-2')),
+    ],
+)
+def test_selection_respects_model_capability_and_live_multilingual_mode(
+    language, multi_lang_enabled, surface, preferred_service, expected
+):
+    with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2']), patch.dict(
+        'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+    ):
+        result = get_stt_service_for_language(
+            language,
+            multi_lang_enabled=multi_lang_enabled,
+            surface=surface,
+            preferred_service=preferred_service,
+        )
+
+    assert result == expected
+
+
+def test_explicit_parakeet_preference_reorders_only_a_capable_live_selection():
+    with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'parakeet']), patch.dict(
+        'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+    ):
+        result = get_stt_service_for_language('en', multi_lang_enabled=False, preferred_service='parakeet')
+
+    assert result == (STTService.parakeet, 'en', 'parakeet')
 
 
 class TestFillerWordsLanguageBehavior:
@@ -1240,3 +1323,33 @@ class TestShouldPreserveFillerWords:
 
     def test_arabic_true(self):
         assert should_preserve_filler_words('ar') is True
+
+
+class TestIsSttAvailable:
+    """Managed STT admission owns fallback across the configured provider chain."""
+
+    @pytest.fixture(autouse=True)
+    def reset_circuits(self):
+        from utils.stt.streaming import _deepgram_circuit, _modulate_circuit
+
+        _deepgram_circuit.record_success()
+        _modulate_circuit.record_success()
+        yield
+        _deepgram_circuit.record_success()
+        _modulate_circuit.record_success()
+
+    @pytest.mark.parametrize(
+        'models',
+        [
+            ['modulate-velma-2', 'dg-nova-3'],
+            ['dg-nova-3'],
+        ],
+    )
+    def test_open_primary_circuit_does_not_reject_the_configured_chain(self, monkeypatch, models):
+        from utils.stt.streaming import _deepgram_circuit, _modulate_circuit, is_stt_available
+
+        monkeypatch.setattr('utils.stt.streaming.stt_service_models', models)
+        for circuit in (_deepgram_circuit, _modulate_circuit):
+            for _ in range(circuit._failure_threshold):
+                circuit.record_failure()
+        assert is_stt_available() is True

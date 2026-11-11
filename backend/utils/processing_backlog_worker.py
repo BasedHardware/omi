@@ -1,0 +1,543 @@
+"""Bounded, fenced explicit-choice worker; reuses the held-audio receipt machinery."""
+
+import asyncio
+from functools import partial
+from datetime import datetime, timezone
+from enum import Enum
+import logging
+import math
+import time
+from typing import Any
+
+from google.cloud import firestore
+from database import processing_backlog as store, conversations as conversations_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
+from models.conversation import Conversation
+from utils import backlog_release, funded_processing
+from utils.processing_backlog import choose, is_active, rolls
+from utils.conversations.process_conversation import process_conversation
+from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.executors import db_executor, postprocess_executor, storage_executor, run_blocking
+from utils.sync import cap_hold, cap_hold_recovery, cap_hold_reservations, cap_work_budget
+from config.backlog_release import enabled as release_enabled
+from config.rate_card import recording_units_per_hour
+from config.stt_cap_dispatch import hold_lane, recovery_admission_enabled, recovery_cohort_admits
+from utils.observability.held_content import record_backlog_choice, record_recovery_skipped, record_release
+from utils.observability.reasons import BacklogChoiceOutcome, HeldRecoverySkipOutcome
+
+logger = logging.getLogger(__name__)
+PAGE = 10
+
+
+class AttemptOutcome(Enum):
+    COMPLETE = 'complete'
+    DEFERRED = 'deferred'
+    RETRY = 'retry'
+
+
+def _cursor_problem(cursor) -> str | None:
+    """Why a stored cursor cannot seed ``start_after``; None when absent or usable.
+
+    Firestore rejects some cursor shapes with ``InvalidArgument`` on every visit
+    (an empty ``id`` builds a document name with a trailing slash), and a null
+    ``at`` compares below every number, permanently hiding the whole queue.
+    """
+    if cursor is None:
+        return None
+    if not isinstance(cursor, dict):
+        return 'not_a_map'
+    at = cursor.get('at')
+    numeric = not isinstance(at, bool) and isinstance(at, (int, float)) and math.isfinite(at)
+    if not numeric and not isinstance(at, datetime):
+        return 'at_type'
+    identity = cursor.get('id')
+    if not isinstance(identity, str) or not identity or '/' in identity:
+        return 'id_shape'
+    return None
+
+
+def _page(uid, kind, cursor):
+    problem = _cursor_problem(cursor)
+    if problem:
+        stored_at = cursor.get('at') if isinstance(cursor, dict) else None
+        stored_id = cursor.get('id') if isinstance(cursor, dict) else None
+        logger.warning(
+            'event=processing_backlog outcome=cursor_invalid uid=%s kind=%s reason=%s at_type=%s id_type=%s id_len=%s',
+            uid,
+            kind,
+            problem,
+            type(stored_at).__name__,
+            type(stored_id).__name__,
+            len(stored_id) if isinstance(stored_id, str) else -1,
+        )
+        # Rewind to newest like the scope-skip rewind in finish(): rebuilding the
+        # same rejected query every visit strands the owner's whole choice.
+        cursor = None
+    if kind == 'audio':
+        collection = cap_hold.holds(uid)
+        query = collection.where('state', 'in', ['held', 'staging', 'sealing']).order_by(
+            'listed_at', direction=firestore.Query.DESCENDING
+        )
+        field = 'listed_at'
+    else:
+        collection = store.items(uid)
+        query = collection.order_by('started_at', direction=firestore.Query.DESCENDING)
+        field = 'started_at'
+    # Mapping cursors do not make the SDK append the document-name order.
+    # Both fields must reach RunQuery to avoid skipping a timestamp's siblings.
+    query = query.order_by('__name__', direction=firestore.Query.DESCENDING)
+    if cursor:
+        query = query.start_after({field: cursor['at'], '__name__': collection.document(cursor['id'])})
+    return [(kind, snap) for snap in query.limit(PAGE).stream()]
+
+
+def _timestamp(value):
+    if isinstance(value, datetime):
+        # Older manifests can contain Firestore timestamps, including naive UTC.
+        return (value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)).timestamp()
+    return float(value or 0)
+
+
+def _legacy_started(row) -> bool:
+    """Legacy recovery already spent on this hold, so it can only finish on the legacy route."""
+    return bool(row.get('piece_receipts') or row.get('processed_paths'))
+
+
+def _candidate(kind, snap) -> dict[str, Any]:
+    row = snap.to_dict() or {}
+    at = row.get('listed_at' if kind == 'audio' else 'started_at', 0)
+    units = (
+        cap_hold.remaining_seconds(row) * float(recording_units_per_hour('batch')) / 3600
+        if kind == 'audio'
+        else row.get('units', 0)
+    )
+    return {
+        'kind': kind,
+        'id': snap.id,
+        'at': at,
+        'units': max(0, units),
+        'state': row.get('state'),
+        'legacy_started': kind == 'audio' and _legacy_started(row),
+        'queued_at': row.get('created_at' if kind == 'audio' else 'queued_at', 0),
+    }
+
+
+def _process_text(uid, identity) -> AttemptOutcome:
+    row = conversations_db.get_conversation(uid, identity)
+    if row is None or row.get('deleted'):
+        # Deleted captures never get recreated. Repair a stale sibling queue.
+        store.remove(uid, identity)
+        return AttemptOutcome.COMPLETE
+    if not row.get('processing_deferred'):
+        store.remove(uid, identity)
+        return AttemptOutcome.COMPLETE
+    lease = store.claim_item(uid, identity)
+    if lease is None:
+        return AttemptOutcome.RETRY
+    try:
+        result = process_conversation(
+            uid, row.get('language') or 'en', Conversation(**row), trigger=ProcessingTrigger.BACKLOG_CHOICE
+        )
+        return AttemptOutcome.DEFERRED if result.processing_deferred else AttemptOutcome.COMPLETE
+    finally:
+        store.release_item(uid, identity, lease)
+
+
+async def _selected(uid, item) -> bool | None:
+    """Skips are counted here: they never reach a recovery attempt, so recovery_total cannot see them."""
+    if item['kind'] == 'text':
+        skip = None if funded_processing.enabled(uid, 'batch') else HeldRecoverySkipOutcome.TEXT_OUT_OF_SCOPE
+    else:
+        try:
+            snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
+            skip = await cap_hold_recovery.recovery_skip(uid, snap.to_dict() or {}) if snap.exists else None
+        except Exception as error:
+            logger.warning('event=processing_backlog outcome=scope_deferred exception_type=%s', type(error).__name__)
+            return None
+    if skip is not None:
+        record_recovery_skipped(skip)
+    return skip is None
+
+
+async def _release_excluded(uid, token, lease, period, item):
+    manifest = None
+    if item['kind'] == 'audio':
+        snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
+        if not snap.exists:
+            return None
+        manifest = snap.to_dict() or {}
+        meta = await run_blocking(storage_executor, cap_hold.metadata, uid, manifest)
+        lane = hold_lane(meta)
+        if lane is None or recovery_admission_enabled(uid, lane):
+            return None
+    elif item['kind'] != 'text' or funded_processing.enabled(uid, 'batch'):
+        return None
+    return await run_blocking(
+        db_executor, store.release_undispatched_reservation, uid, token, lease, period, item, audio_manifest=manifest
+    )
+
+
+async def _process(uid, item) -> AttemptOutcome:
+    if item['kind'] == 'text':
+        if not funded_processing.enabled(uid, 'batch'):
+            return AttemptOutcome.RETRY
+        return await run_blocking(postprocess_executor, _process_text, uid, item['id'])
+    snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
+    if not snap.exists or (snap.to_dict() or {}).get('state') == 'purged':
+        return AttemptOutcome.COMPLETE
+    if backlog_release.source.get() is not None and _legacy_started(snap.to_dict() or {}):
+        # Rechecked on this fresh read, resumed reservations included: an automatic release
+        # never takes the legacy route. The hold stays held for a manual choice.
+        record_release('legacy_started')
+        return AttemptOutcome.DEFERRED
+    recovered = await cap_hold_recovery.recover_selected(uid, snap)
+    return AttemptOutcome.COMPLETE if recovered else AttemptOutcome.RETRY
+
+
+async def _roll(uid: str, job: dict) -> dict:
+    """An Unlimited owner's earlier-month tap continues on its own; anything else stays parked."""
+    current = await run_blocking(db_executor, funded_processing.allowance, uid)
+    if not current.managed or not rolls(job, funded_processing.capacity(current)[0]):
+        return job
+    rolled = await run_blocking(
+        db_executor, partial(store.roll, uid, period=funded_processing.period_id(), cutoff=time.time())
+    )
+    return rolled or job
+
+
+async def run(
+    uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None
+) -> bool | None:
+    """True permits another round; false/None parks a blocked or inactive owner."""
+    if not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
+        return
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+        return
+    # A lapsed or downgraded owner parks here with the choice and holds intact.
+    if not await run_blocking(db_executor, funded_processing.paid_owner, uid):
+        return
+    max_items = max(1, min(max_items, 100))
+    if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):
+        return
+    job = await run_blocking(db_executor, store.read, uid)
+    if not is_active(job) and job.get('state') == 'processing':
+        job = await _roll(uid, job)
+    if not is_active(job):
+        return
+    # The kill switch stops a release already under way. Its holds stay held.
+    if job.get('automatic') and not release_enabled():
+        return
+    token = job['token']
+    lease = await run_blocking(db_executor, store.claim, uid, token, funded_processing.period_id())
+    if lease is None:
+        return
+
+    async def save(updates):
+        ok = await run_blocking(db_executor, store.checkpoint, uid, token, lease, updates)
+        if ok:
+            job.update(updates)
+        return ok
+
+    async def finish():
+        try:
+            # The transaction alone decides whether a durable reservation can
+            # finish, or an already-authorized upgrade needs a new-token run.
+            return await run_blocking(db_executor, store.finish, uid, token, lease, funded_processing.period_id())
+        except Exception as exc:
+            logger.warning('event=processing_backlog outcome=finish_deferred exception_type=%s', type(exc).__name__)
+            return False
+
+    async def attempt(item):
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+            return False
+        # Executors and spawned callbacks inherit this UID/month grant. Later
+        # model/STT dispatches must not silently adopt a reset allowance.
+        token_priority = backlog_release.normal_priority.set(bool(item.get('normal_priority')))
+        token_source = backlog_release.source.set(
+            item.get('release') if item.get('release') in backlog_release.SOURCES else None
+        )
+        try:
+            with funded_processing.backlog_consent(uid, job['period']):
+                outcome = await _process(uid, item)
+        finally:
+            backlog_release.source.reset(token_source)
+            backlog_release.normal_priority.reset(token_priority)
+        if outcome in (AttemptOutcome.COMPLETE, AttemptOutcome.DEFERRED):
+            # A returned deferred result is known complete, unlike a busy lease
+            # or an ambiguous application failure. Its queue row stays waiting.
+            return await save({'reserved': {}})
+        return False
+
+    fence_lost = asyncio.Event()
+
+    async def renew():
+        while True:
+            await asyncio.sleep(60)
+            if not await save({'lease_until': time.time() + 1800}):
+                fence_lost.set()
+                return
+
+    async def work(limit: int) -> bool:
+        if cap_work_budget.exhausted():
+            return False
+        reserved = job.get('reserved') or {}
+        # A reserved application attempt keeps its identity over crashes and
+        # cooldowns. Never debit the user's chosen estimate twice.
+        if reserved:
+            if job['period'] != funded_processing.period_id():
+                return False
+            selected = await _selected(uid, reserved)
+            if selected is None:
+                return False
+            if not selected:
+                try:
+                    released = await _release_excluded(uid, token, lease, job['period'], reserved)
+                except Exception as error:
+                    # A committed refund's response may be lost. Never finish
+                    # from stale local state; the next visit rereads the choice.
+                    logger.warning(
+                        'event=processing_backlog outcome=release_deferred exception_type=%s', type(error).__name__
+                    )
+                    return False
+                if released is None:
+                    return False
+                job.update(released)
+            elif not await attempt(reserved):
+                return False
+            elif limit == 1:
+                return True  # Resuming a reservation consumes this owner's turn.
+        pages = await run_blocking(db_executor, _page, uid, 'audio', job.get('cursor_audio'))
+        pages += await run_blocking(db_executor, _page, uid, 'text', job.get('cursor_text'))
+        candidates = sorted(
+            (_candidate(kind, snap) for kind, snap in pages),
+            key=lambda row: (_timestamp(row['at']), row['id']),
+            reverse=True,
+        )[:limit]
+        for item in candidates:
+            if (
+                cap_work_budget.exhausted()
+                or fence_lost.is_set()
+                or not funded_processing.enabled(uid)
+                or job['period'] != funded_processing.period_id()
+            ):
+                return False
+            remaining = job.get('remaining')
+            cursor = {'at': item['at'], 'id': item['id']}
+            updates: dict[str, Any] = {'cursor_' + item['kind']: cursor, 'lease_until': time.time() + 1800}
+            if _timestamp(item['queued_at']) > _timestamp(job['cutoff']):
+                if not await save(updates):
+                    return False
+                continue
+            if not await _selected(uid, item):
+                if not await save({**updates, 'scope_skipped': True}):
+                    return False
+                continue
+            current = await run_blocking(db_executor, funded_processing.allowance, uid)
+            if not current.managed:
+                return await finish()
+            if remaining is not None and item['units'] > remaining:
+                if not await save(updates):
+                    return False
+                continue
+            # An authorized pre-cutoff source must seal before we advance past
+            # it or finish this choice. Its created_at/listed_at survive sealing.
+            if item.get('state') in {'staging', 'sealing'}:
+                return False
+            actual_remaining, _ = funded_processing.capacity(current)
+            if actual_remaining is not None:
+                # Cap-hold units handed to batch are debited only at projection; their open
+                # reservations stand in for that spend until the batch outcome is known.
+                reserved_units = await run_blocking(
+                    db_executor,
+                    partial(
+                        cap_hold_reservations.open_units,
+                        uid,
+                        job['period'],
+                        status_reader=cap_hold_reservations.batch_status,
+                    ),
+                )
+                # Re-read after settling: a projection that commits between the first allowance read
+                # and open_units drops its reservation, so only a later read sees its usage. A commit
+                # after open_units is counted twice, which under-admits (safe).
+                current = await run_blocking(db_executor, funded_processing.allowance, uid)
+                if not current.managed:
+                    return await finish()
+                actual_remaining, _ = funded_processing.capacity(current)
+                if actual_remaining is not None:
+                    actual_remaining = max(0.0, actual_remaining - reserved_units)
+            if actual_remaining is not None and item['units'] > actual_remaining:
+                if not await save(updates):
+                    return False
+                continue
+            if job.get('automatic') and item.get('legacy_started'):
+                # An automatic release never takes the legacy route, where neither the idle gate
+                # nor the vendor table applies. It is passed over like audio that does not fit and stays
+                # held for a manual choice.
+                record_release('legacy_started')
+                if not await save(updates):
+                    return False
+                continue
+            if job.get('automatic'):
+                release = await run_blocking(
+                    db_executor, partial(backlog_release.decide, uid, job, item['units'], kind=item['kind'])
+                )
+                record_release(release.reason)
+                if not release.allowed:
+                    return False  # Nothing advanced: the next sweep asks again for this same recording.
+                item['normal_priority'] = release.normal_priority
+                item['release'] = 'trial' if job.get('trial_grant') else 'conversion'
+                updates.update(release.updates)
+            updates.update(reserved=item, remaining=None if remaining is None else max(0, remaining - item['units']))
+            if not await save(updates):
+                return False
+            if not await attempt(item):
+                return False
+        if len(candidates) == limit:
+            return True
+        return await finish()
+
+    continuation = False
+    heartbeat = asyncio.create_task(renew(), name='processing_backlog_lease')
+    try:
+        with cap_work_budget.visit(time_budget):
+            for offset in range(0, max_items, PAGE):
+                continuation = await work(min(PAGE, max_items - offset))
+                if not continuation or cap_work_budget.exhausted():
+                    break
+    except Exception as exc:
+        # The traceback names the failing call and, for a rejected query, the
+        # server's reason; the type alone could not type the InvalidArgument
+        # deferrals that parked paid owners (#23827).
+        logger.warning(
+            'event=processing_backlog outcome=deferred uid=%s exception_type=%s',
+            uid,
+            type(exc).__name__,
+            exc_info=True,
+        )
+        continuation = await finish()
+    finally:
+        heartbeat.cancel()
+        await asyncio.gather(heartbeat, return_exceptions=True)
+        try:
+            await save({'lease_until': 0})
+        except Exception as exc:
+            logger.warning('event=processing_backlog outcome=release_deferred exception_type=%s', type(exc).__name__)
+    # A productive page remains state=processing. The periodic durable sweep
+    # owns continuation, including an authorized pending upgrade consumed above.
+    return continuation
+
+
+def _stripe_status(subscription_id, *, attempts: int = 3) -> str | None:
+    """The subscription's live Stripe status; None when Stripe can't say after a short retry.
+
+    A persistent failure is counted as a conversion error, so a skipped release is visible.
+    """
+    if not subscription_id:
+        return None
+    for attempt in range(attempts):
+        try:
+            import stripe
+
+            return (stripe.Subscription.retrieve(subscription_id).to_dict() or {}).get('status')
+        except Exception as error:
+            logger.warning(
+                'event=processing_backlog outcome=conversion_status_unavailable attempt=%d exception_type=%s',
+                attempt + 1,
+                type(error).__name__,
+            )
+            if attempt + 1 < attempts:
+                time.sleep(0.5 * (attempt + 1))
+    record_backlog_choice('conversion', BacklogChoiceOutcome.ERROR)
+    return None
+
+
+def upgrade(uid: str, request_key: str, *, intent_at, subscription_id=None, status=None):
+    """Only payment intent calls this; monthly renewal/reset never creates intent.
+
+    A conversion releases only on a real charge (``active``). A trialing subscription is
+    covered by its 25h grant, and its own trialing->active update converts later, so a
+    trial's checkout or creation can never release past the grant. Unknown status waits.
+    """
+    if (status if status is not None else _stripe_status(subscription_id)) != 'active':
+        return
+    choose(uid, request_key=request_key, automatic=True, intent_at=intent_at)
+
+
+async def upgrade_async(uid: str, request_key: str, *, intent_at, subscription_id=None, status=None):
+    await run_blocking(
+        db_executor,
+        partial(upgrade, uid, request_key, intent_at=intent_at, subscription_id=subscription_id, status=status),
+    )
+
+
+def plan_changed(uid: str, price_id: str, previous, current, status: str | None) -> None:
+    """An immediate plan change that raises the allowance releases within it.
+
+    status is the modified subscription's own Stripe status, so no second lookup can fail.
+    """
+    from utils.processing_backlog import allowance_increased
+
+    if allowance_increased(previous, current):
+        key = f'plan-change:{current.stripe_subscription_id}:{price_id}:{current.current_period_end}'
+        upgrade(uid, key, intent_at=time.time(), status=status or '')
+
+
+async def checkout_completed_async(uid: str, event: dict, session: dict, previous, current) -> None:
+    """A completed checkout that raises the allowance releases within it, once the charge is real."""
+    from utils.processing_backlog import allowance_increased
+
+    if allowance_increased(previous, current):
+        await upgrade_async(
+            uid,
+            f'checkout:{session.get("id")}',
+            intent_at=event.get('created'),
+            subscription_id=session.get('subscription'),
+        )
+
+
+async def subscription_changed_async(uid: str, event: dict, stripe_subscription: dict, previous, current) -> None:
+    """A Stripe subscription event's automatic releases, for an owner whose funded processing is on.
+
+    A trial's conversion to a real charge, or an allowance increase on an active subscription,
+    releases within the plan's allowance. So does a new paid subscription created active (a
+    purchase): its status rides in the payload, so this retries a checkout whose Stripe lookup
+    failed, and creation happens once per subscription, never at renewal. Only the creation of a
+    trialing subscription grants the trial; a later update such as a plan change never does.
+    """
+    from utils.processing_backlog import allowance_increased
+    from utils.subscription import is_paid_plan
+
+    status = stripe_subscription.get('status')
+    previous_status = ((event.get('data') or {}).get('previous_attributes') or {}).get('status')
+    created = event.get('type') == 'customer.subscription.created'
+    purchased = created and is_paid_plan(current.plan)
+    if previous_status == 'trialing' or purchased or allowance_increased(previous, current):
+        await upgrade_async(
+            uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get('created'), status=status or ''
+        )
+    if purchased:
+        await trial_started_async(uid, stripe_subscription)
+
+
+async def trial_started_async(uid: str, stripe_subscription: dict) -> None:
+    """One grant per account, from the trial's start (David, 2026-11-02).
+
+    Keyed to the subscription, so a redelivery or restart finds the receipt, and
+    the account ledger refuses any later trial. The trial's own start dates the
+    intent: a late first delivery in a later month is stale, not consent.
+    """
+    started = stripe_subscription.get('trial_start')
+    if stripe_subscription.get('status') != 'trialing' or not stripe_subscription.get('id') or not started:
+        return
+    await run_blocking(
+        db_executor,
+        choose,
+        uid,
+        request_key=f'trial-grant:{stripe_subscription["id"]}',
+        automatic=True,
+        intent_at=started,
+        trial=True,
+    )
+
+
+cap_hold_recovery.register_backlog_runner(run)

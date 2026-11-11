@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { Check, Copy } from 'lucide-react'
+
 // Minimal, dependency-free markdown for chat bubbles. Supports the subset the
 // Omi chat actually emits — headings, bullet/numbered lists, fenced + inline
 // code, bold, italic, and links. NOT a full CommonMark parser; anything it does
@@ -17,7 +20,7 @@ function renderInline(text: string): React.ReactNode[] {
       return <strong key={i}>{part.slice(2, -2)}</strong>
     if (part.startsWith('`') && part.endsWith('`'))
       return (
-        <code key={i} className="rounded bg-white/10 px-1 py-0.5 text-[0.85em]">
+        <code key={i} className="rounded bg-white/10 px-1 py-0.5 font-mono text-[0.85em]">
           {part.slice(1, -1)}
         </code>
       )
@@ -52,6 +55,42 @@ const OL = /^\s*\d+\.\s+/
 const FENCE = /^```/
 const HEADING = /^(#{1,6})\s+(.*)$/
 
+// A fenced code block with a hover-revealed copy button pinned to its top-right.
+// The button lives in a relatively-positioned wrapper (not inside <pre>), so it
+// stays fixed while long lines scroll the <pre> horizontally, and toggles Copy →
+// Check for 1.5s after a successful copy — the app's copy-feedback idiom
+// (ConversationDetail). The group is named so the reveal is scoped to this block
+// and never triggered by an ancestor's `group` hover. Block code only — inline
+// code (renderInline) gets no button.
+function CodeBlock({ code }: { code: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false)
+  const onCopy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Clipboard can be denied; the code is still selectable to copy by hand.
+    }
+  }
+  return (
+    <div className="group/codeblock relative my-2">
+      <pre className="overflow-x-auto rounded-[10px] border border-line bg-white/[0.06] p-3 font-mono text-[0.85em]">
+        <code>{code}</code>
+      </pre>
+      <button
+        type="button"
+        onClick={() => void onCopy()}
+        title={copied ? 'Copied' : 'Copy code'}
+        aria-label={copied ? 'Copied' : 'Copy code'}
+        className="absolute right-2 top-2 rounded-md border border-line bg-black/40 p-1.5 text-white/60 opacity-0 backdrop-blur transition hover:text-white focus-visible:opacity-100 group-hover/codeblock:opacity-100"
+      >
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  )
+}
+
 export function Markdown({ text }: { text: string }): React.JSX.Element {
   const lines = text.replace(/\r\n/g, '\n').split('\n')
   const blocks: React.ReactNode[] = []
@@ -66,11 +105,7 @@ export function Markdown({ text }: { text: string }): React.JSX.Element {
       i++
       while (i < lines.length && !FENCE.test(lines[i].trim())) buf.push(lines[i++])
       i++ // consume closing fence
-      blocks.push(
-        <pre key={key++} className="my-2 overflow-x-auto rounded bg-white/10 p-3 text-[0.85em]">
-          <code>{buf.join('\n')}</code>
-        </pre>
-      )
+      blocks.push(<CodeBlock key={key++} code={buf.join('\n')} />)
       continue
     }
 

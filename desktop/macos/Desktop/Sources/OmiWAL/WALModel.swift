@@ -347,6 +347,69 @@ package enum OpusFrameValidator {
   }
 }
 
+// MARK: - WiFi Sync Frame Stream Parser
+
+/// Stateful parser for the device's WiFi-sync TCP byte stream.
+///
+/// The stream is laid out in fixed 440-byte blocks. Within a block a frame is
+/// `[size: UInt8][opus bytes…]`; a `0` size byte is padding that runs to the
+/// next 440-byte block boundary. Those boundaries are measured from the
+/// absolute start of the stream, so the parser must track how many stream
+/// bytes it has already consumed across calls: computing the boundary from a
+/// per-call buffer offset desyncs as soon as one incomplete frame is carried
+/// into the next chunk, after which every subsequent padding jump lands in the
+/// wrong place and audio is silently dropped.
+package struct WifiFrameStreamParser {
+  package static let blockSize = 440
+
+  /// Absolute number of stream bytes consumed and dropped before `buffer[0]`.
+  package private(set) var consumedStreamBytes = 0
+
+  package init() {}
+
+  /// Parse all complete frames from the front of `buffer`, returning the valid
+  /// Opus frames and the unparsed tail. Advances `consumedStreamBytes` by the
+  /// number of bytes consumed from the front of `buffer`; pass the returned
+  /// `remaining` (plus newly received bytes) back on the next call.
+  package mutating func parse(_ buffer: Data) -> (frames: [Data], remaining: Data) {
+    var frames: [Data] = []
+    let base = buffer.startIndex
+    var offset = 0  // relative to buffer[0]
+
+    while offset < buffer.count {
+      let sizeByte = Int(buffer[base + offset])
+
+      if sizeByte == 0 {
+        // Padding: skip to the next absolute 440-byte block boundary.
+        let absolute = consumedStreamBytes + offset
+        let nextAbsoluteBoundary = ((absolute / Self.blockSize) + 1) * Self.blockSize
+        let nextOffset = nextAbsoluteBoundary - consumedStreamBytes
+        if nextOffset <= buffer.count {
+          offset = nextOffset
+        } else {
+          break
+        }
+        continue
+      }
+
+      // Need the size byte plus the full payload.
+      guard offset + 1 + sizeByte <= buffer.count else { break }
+
+      let frameStart = base + offset + 1
+      let frameData = buffer.subdata(in: frameStart..<(frameStart + sizeByte))
+      if OpusFrameValidator.startsWithValidFrame(frameData) {
+        frames.append(frameData)
+      }
+      offset += 1 + sizeByte
+    }
+
+    consumedStreamBytes += offset
+    let remaining =
+      offset < buffer.count ? buffer.subdata(in: (base + offset)..<buffer.endIndex) : Data()
+    return (frames, remaining)
+  }
+}
+
 // MARK: - WiFi Sync Status
 
 /// WiFi sync status codes from device

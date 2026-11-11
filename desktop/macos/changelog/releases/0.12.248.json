@@ -1,0 +1,7 @@
+{
+  "version": "0.12.248",
+  "date": "2026-08-31",
+  "changes": [
+    "Desktop Chat now shows SQL and search times in your timezone instead of unlabeled UTC"
+  ]
+}

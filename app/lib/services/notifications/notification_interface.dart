@@ -25,7 +25,9 @@ abstract class NotificationInterface {
   void saveNotificationToken();
   Future<bool> hasNotificationPermissions();
 
-  Future<void> createNotification({
+  /// Returns whether the permission check passed and the notification was handed
+  /// to the presenter. False means it was not presented.
+  Future<bool> createNotification({
     String title = '',
     String body = '',
     int notificationId = 1,

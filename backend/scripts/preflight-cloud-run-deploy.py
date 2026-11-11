@@ -11,9 +11,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render_backend_runtime_env  # noqa: E402
 import repair_cloud_run_traffic  # noqa: E402
+from attach_cloud_run_gmp_sidecar import SIDECAR_NAME  # noqa: E402
+from runtime_env_validation.common import compute_project  # noqa: E402
+from runtime_env_capability_contracts import validate_voice_transcription_storage  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
@@ -56,6 +62,26 @@ def main() -> int:
     services = tuple(args.services or DEFAULT_SERVICES)
     exit_code = 0
 
+    if 'backend' in services:
+        config = {'cloud_run': {'services': _cloud_run_service_configs(env=args.env, manifest_path=args.manifest)}}
+        for error in validate_voice_transcription_storage(args.env, config):
+            parser.error(error.message)
+
+    if args.check_secrets:
+        missing = check_rendered_secrets(
+            env=args.env,
+            manifest_path=args.manifest,
+            project=args.project,
+        )
+        if missing:
+            for item in missing:
+                print(
+                    f'ERROR [secret/{item.env_name}]: required Secret Manager entry not found; check deployment manifest',
+                    file=sys.stderr,
+                )
+            return 1
+        print(f'secret preflight passed for {args.env}')
+
     if args.legacy_public_binding_services:
         try:
             migrated = migrate_legacy_public_bindings(
@@ -87,22 +113,6 @@ def main() -> int:
             exit_code = 1
         else:
             print('development Cloud Run runtime-binding contract passed')
-
-    if args.check_secrets:
-        missing = check_rendered_secrets(
-            env=args.env,
-            manifest_path=args.manifest,
-            project=args.project,
-        )
-        if missing:
-            for item in missing:
-                print(
-                    f'ERROR [secret/{item.env_name}]: Secret Manager secret {item.secret_name!r} not found',
-                    file=sys.stderr,
-                )
-            exit_code = 1
-        else:
-            print(f'secret preflight passed for {args.env}')
 
     if args.check_traffic or args.repair_traffic:
         results = repair_cloud_run_traffic.repair_live(
@@ -163,7 +173,7 @@ def migrate_legacy_public_bindings(
             raise ValueError(f'Missing public environment config for {service}')
         public_binding_names = set(public_env)
         document = _describe_cloud_run_service(service=service, project=project, region=region, runner=runner)
-        containers = _single_container(document, operation='Legacy public-binding migration')
+        containers = _application_container(document, operation='Legacy public-binding migration')
         legacy_binding_names = sorted(
             entry['name']
             for entry in _container_env_entries(containers, operation='Legacy public-binding migration')
@@ -222,7 +232,7 @@ def check_runtime_bindings(
         expected = _expected_runtime_bindings(service=service, service_config=service_config)
         declared_names = expected.public_names | set(expected.secret_references)
         document = _describe_cloud_run_service(service=service, project=project, region=region, runner=runner)
-        container = _single_container(document, operation='Runtime binding check')
+        container = _application_container(document, operation='Runtime binding check')
         actual = _actual_runtime_bindings(
             service=service,
             env_entries=_container_env_entries(container, operation='Runtime binding check'),
@@ -270,7 +280,7 @@ def _require_manifest_scope(*, env: str, project: str, manifest_path: Path, chec
     environment_config = render_backend_runtime_env._as_config_dict(environments.get(env))
     if environment_config is None:
         raise ValueError(f'{check_name} has no {env} environment in {manifest_path}')
-    expected_project = environment_config.get('gcp_project')
+    expected_project = compute_project(environment_config)
     if project != expected_project:
         raise ValueError(f'{check_name} for {env} expects project {expected_project!r}, got {project!r}')
 
@@ -335,14 +345,28 @@ def _describe_cloud_run_service(*, service: str, project: str, region: str, runn
     return cast(dict[str, Any], document)
 
 
-def _single_container(document: dict[str, Any], *, operation: str) -> dict[str, Any]:
+def _application_container(document: dict[str, Any], *, operation: str) -> dict[str, Any]:
+    """Return the one application container, ignoring the GMP metrics sidecar.
+
+    These checks read and rewrite the application's own runtime bindings, so
+    they need exactly one application container. The Managed Prometheus
+    collector attached after deploy is observability-only and carries none of
+    those bindings, so it is excluded by name rather than counted -- otherwise
+    every deploy after the first sidecar attach fails on a service that is
+    correctly configured.
+    """
     spec = document.get('spec')
     template = spec.get('template') if isinstance(spec, dict) else None
     template_spec = template.get('spec') if isinstance(template, dict) else None
     containers = template_spec.get('containers') if isinstance(template_spec, dict) else None
-    if not isinstance(containers, list) or len(containers) != 1 or not isinstance(containers[0], dict):
-        raise ValueError(f'{operation} requires exactly one container per Cloud Run service')
-    return cast(dict[str, Any], containers[0])
+    if not isinstance(containers, list):
+        raise ValueError(f'{operation} requires exactly one application container per Cloud Run service')
+    application = [
+        container for container in containers if isinstance(container, dict) and container.get('name') != SIDECAR_NAME
+    ]
+    if len(application) != 1:
+        raise ValueError(f'{operation} requires exactly one application container per Cloud Run service')
+    return cast(dict[str, Any], application[0])
 
 
 def _container_env_entries(container: dict[str, Any], *, operation: str) -> list[Any]:
@@ -370,9 +394,11 @@ def _actual_runtime_bindings(
 
 
 def _observed_binding(entry: dict[str, Any]) -> str:
-    if 'value' in entry:
-        return 'public literal'
     value_from = entry.get('valueFrom')
+    if 'value' in entry or value_from is None:
+        # Cloud Run omits `value` from describe output when the literal is the
+        # empty string, so an entry with no value source at all is still public.
+        return 'public literal'
     secret_ref = value_from.get('secretKeyRef') if isinstance(value_from, dict) else None
     secret_name = secret_ref.get('name') if isinstance(secret_ref, dict) else None
     if isinstance(secret_name, str) and secret_name:

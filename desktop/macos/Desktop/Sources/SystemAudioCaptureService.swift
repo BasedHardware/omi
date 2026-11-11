@@ -50,6 +50,7 @@ class SystemAudioCaptureService: @unchecked Sendable {
   private var aggregateDeviceID: AudioObjectID = kAudioObjectUnknown
   private var ioProcID: AudioDeviceIOProcID?
   private var isCapturing = false
+  private let streamActivity = CaptureStreamActivity()
   private var onAudioChunk: AudioChunkHandler?
   private var onAudioLevel: AudioLevelHandler?
 
@@ -92,6 +93,112 @@ class SystemAudioCaptureService: @unchecked Sendable {
     return true
   }
 
+  /// Prime the Core Audio process-tap consent DURING onboarding.
+  ///
+  /// The system-audio capture path uses a global process tap
+  /// (`CATapDescription` → `AudioHardwareCreateProcessTap`, see
+  /// `startCaptureOnQueue`) whose consent — "<app> is requesting to bypass the
+  /// system private window picker and directly access your screen and audio" —
+  /// is SEPARATE from the Screen-Recording TCC grant onboarding already
+  /// requests, and only fires the first time a tap is actually created. Because
+  /// onboarding never creates a tap, that consent would otherwise be deferred
+  /// and fire AGAIN on the first real capture, post-onboarding.
+  ///
+  /// This creates the SAME tap + aggregate device the real capture path builds
+  /// (mirroring `startCaptureOnQueue`), so macOS shows and persists the exact
+  /// same consent, then IMMEDIATELY and FULLY tears everything down (mirroring
+  /// `cleanupTap()`/`cleanup()`). It never creates an IO proc or starts real
+  /// capture. Idempotent and safe to call when permission is already granted
+  /// (no crash, no lingering device), and safe to call on a background queue.
+  /// Returns quickly.
+  ///
+  /// - Returns: `true` if the tap was created (consent granted or already
+  ///   granted); `false` if tap creation failed (e.g. the user denied consent).
+  @discardableResult
+  static func primePermission() -> Bool {
+    // Local IDs only — never touch instance state, so this is safe to call
+    // statically and concurrently with a live capture on another instance.
+    var tapID: AudioObjectID = kAudioObjectUnknown
+    var aggregateDeviceID: AudioObjectID = kAudioObjectUnknown
+
+    // Guarantee full teardown on every exit path. Mirrors cleanupTap()/cleanup()
+    // teardown order (destroy aggregate device, then tap, null out IDs). No
+    // AudioDeviceStop / AudioDeviceDestroyIOProcID — we never create an IO proc.
+    func teardown() {
+      if aggregateDeviceID != kAudioObjectUnknown {
+        AudioHardwareDestroyAggregateDevice(aggregateDeviceID)
+        aggregateDeviceID = kAudioObjectUnknown
+      }
+      if tapID != kAudioObjectUnknown {
+        AudioHardwareDestroyProcessTap(tapID)
+        tapID = kAudioObjectUnknown
+      }
+    }
+
+    // 1. Same tap description as startCaptureOnQueue (global tap, unmuted).
+    let tapUUID = UUID()
+    let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+    tapDescription.uuid = tapUUID
+    tapDescription.name = "OMI System Audio Tap (permission prime)"
+    tapDescription.muteBehavior = .unmuted  // Don't mute playback
+
+    // 2. Create the process tap — this is what triggers/persists the consent.
+    var status = AudioHardwareCreateProcessTap(tapDescription, &tapID)
+    guard status == noErr else {
+      log("SystemAudioCapture: primePermission tap creation failed (\(status)) — consent likely denied")
+      teardown()
+      return false
+    }
+    log("SystemAudioCapture: primePermission created tap with ID \(tapID)")
+
+    // 3. Create the same aggregate device the real path creates. Some macOS
+    //    versions only register the tap consent once a tap-backed aggregate
+    //    device is instantiated, so mirror startCaptureOnQueue exactly.
+    let aggregateDescription: [String: Any] = [
+      kAudioAggregateDeviceNameKey as String: "OMI System Audio Tap Device",
+      kAudioAggregateDeviceUIDKey as String: "omi.systemaudio.\(tapUUID.uuidString)",
+      kAudioAggregateDeviceIsPrivateKey as String: true,
+      kAudioAggregateDeviceTapListKey as String: [
+        [
+          kAudioSubTapUIDKey as String: tapUUID.uuidString,
+          kAudioSubTapDriftCompensationKey as String: NSNumber(value: 1),
+          kAudioSubTapDriftCompensationQualityKey as String:
+            NSNumber(value: kAudioAggregateDriftCompensationMaxQuality),
+        ]
+      ],
+      kAudioAggregateDeviceTapAutoStartKey as String: true,
+    ]
+
+    status = AudioHardwareCreateAggregateDevice(aggregateDescription as CFDictionary, &aggregateDeviceID)
+    guard status == noErr else {
+      log("SystemAudioCapture: primePermission aggregate device creation failed (\(status))")
+      // The tap itself was created, so the consent already fired — treat as
+      // primed after tearing the tap back down.
+      teardown()
+      return true
+    }
+    log("SystemAudioCapture: primePermission created aggregate device with ID \(aggregateDeviceID)")
+
+    // 4. Immediately and fully tear down — no IO proc, no capture ever started.
+    teardown()
+    log("SystemAudioCapture: primePermission complete, tap + aggregate device destroyed")
+    return true
+  }
+
+  /// Async convenience wrapper around `primePermission()`. The CoreAudio HAL
+  /// calls are synchronous IPC to coreaudiod and can block (seconds after wake
+  /// from sleep), so this offloads them onto a background queue — mirroring the
+  /// off-main dispatch the real capture path uses in `startCapture`. Never
+  /// throws; returns the same Bool as the sync form.
+  @discardableResult
+  static func primePermission() async -> Bool {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+      DispatchQueue.global(qos: .userInitiated).async {
+        continuation.resume(returning: primePermission())
+      }
+    }
+  }
+
   // MARK: - Public Methods
 
   /// Start capturing system audio
@@ -103,6 +210,7 @@ class SystemAudioCaptureService: @unchecked Sendable {
       log("SystemAudioCapture: Already capturing")
       return
     }
+    streamActivity.reset()
 
     // All CoreAudio HAL calls (CreateTap, CreateAggregateDevice, AudioDeviceStart) are
     // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
@@ -131,6 +239,9 @@ class SystemAudioCaptureService: @unchecked Sendable {
 
   /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
   private func startCaptureOnQueue() throws {
+    // A stopped IOProc can finish after startCapture's caller-side reset.
+    // Clear its evidence again after the serial queue has drained that stop.
+    streamActivity.reset()
     // 1. Create tap description for all system audio
     let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
     tapDescription.uuid = tapUUID
@@ -237,6 +348,7 @@ class SystemAudioCaptureService: @unchecked Sendable {
 
   /// Stop capturing system audio
   func stopCapture() {
+    streamActivity.reset()
     guard isCapturing else { return }
     isCapturing = false
 
@@ -285,6 +397,9 @@ class SystemAudioCaptureService: @unchecked Sendable {
   var capturing: Bool {
     return isCapturing
   }
+
+  /// A started tap alone is not proof that system audio survived a route failure.
+  var hasRecentAudioFrames: Bool { capturing && streamActivity.hasRecentFrames }
 
   // MARK: - Private Methods
 
@@ -451,6 +566,7 @@ class SystemAudioCaptureService: @unchecked Sendable {
     }
 
     // Send to callback
+    streamActivity.notePCM(byteCount: byteData.count)
     onAudioChunk?(byteData)
   }
 

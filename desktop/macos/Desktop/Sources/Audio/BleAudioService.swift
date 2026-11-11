@@ -27,6 +27,13 @@ final class BleAudioService: ObservableObject {
   private var audioStreamTask: Task<Void, Never>?
   private var cancellables = Set<AnyCancellable>()
 
+  /// Monotonic session token. `startProcessing` captures it after claiming the
+  /// slot and re-checks it after the `getAudioCodec()` await; `stopProcessing`
+  /// bumps it. A Stop/disconnect that lands during the codec await therefore
+  /// aborts the resumed start instead of re-arming `isProcessing` with the
+  /// handlers already torn down (or clobbering a newer session).
+  private var processingGeneration = 0
+
   // Audio delivery
   private var transcriptionService: TranscriptionService?
   private var audioDataHandler: ((Data) -> Void)?
@@ -58,18 +65,36 @@ final class BleAudioService: ObservableObject {
       logger.warning("Already processing audio")
       return
     }
+    // Claim the slot synchronously, before the first await, so two overlapping
+    // startProcessing calls cannot both pass the guard and double-create the
+    // processor (the second would orphan the first's processor + stream task).
+    isProcessing = true
+    processingGeneration &+= 1
+    let generation = processingGeneration
 
     self.transcriptionService = transcriptionService
     self.audioDataHandler = audioDataHandler
     self.rawFrameHandler = rawFrameHandler
 
-    // Get codec from device
+    // Get codec from device. For Omi/OpenGlass this awaits a BLE characteristic
+    // read, during which a Stop/disconnect can run on the main actor.
     let codec = await connection.getAudioCodec()
+
+    // If Stop landed during the codec await (isProcessing cleared, handlers
+    // dropped) or a newer session started, abandon this start rather than
+    // re-arming processing with torn-down state or clobbering the new session.
+    guard isProcessing, processingGeneration == generation else {
+      logger.info("startProcessing superseded during codec read; aborting stale start")
+      return
+    }
+
     currentCodec = codec
 
     // Check if codec is supported
     if !AudioDecoderFactory.isSupported(codec) {
       logger.error("Unsupported audio codec: \(codec.name)")
+      // Release the claimed slot and drop the handlers captured above.
+      stopProcessing()
       return
     }
 
@@ -113,16 +138,25 @@ final class BleAudioService: ObservableObject {
         self?.logger.error("Audio stream error: \(error.localizedDescription)")
       }
 
-      await MainActor.run {
-        self?.isProcessing = false
-      }
+      // The stream ended or errored. Run full cleanup (not just isProcessing =
+      // false), otherwise the processor, Combine subscriptions, and handlers
+      // dangle and the session cannot cleanly restart. This Task inherits the
+      // @MainActor isolation of BleAudioService, so the call is synchronous.
+      self?.handleAudioStreamEnded()
     }
   }
 
-  /// Stop processing audio
-  func stopProcessing() {
+  /// Full teardown after the device audio stream ends or errors on its own.
+  private func handleAudioStreamEnded() {
     guard isProcessing else { return }
+    logger.info("Audio stream ended; tearing down processing")
+    stopProcessing()
+  }
 
+  /// Stop processing audio. Idempotent: safe to call after the stream has
+  /// already ended (the old `guard isProcessing` early-return skipped cleanup
+  /// in exactly that case, leaving the session unrecoverable).
+  func stopProcessing() {
     audioStreamTask?.cancel()
     audioStreamTask = nil
     processor?.reset()

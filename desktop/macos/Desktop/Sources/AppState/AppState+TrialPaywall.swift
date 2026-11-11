@@ -8,6 +8,9 @@ extension AppState {
   func triggerUsageLimitPopup(reason: String) {
     // Debug escape hatch for self-test runs that don't want the overage modal in the way.
     if ProcessInfo.processInfo.environment["OMI_SKIP_USAGE_POPUP"] == "1" { return }
+    // A modal the user did not ask for, arriving over what they were doing: the same "something
+    // just opened" cue the what's-new card gets.
+    OmiUISound.play(.reveal)
     usageLimitReason = reason
     showUsageLimitPopup = true
   }
@@ -23,7 +26,27 @@ extension AppState {
   /// the persisted `desktop_isPaywalled` flag, which can lag behind BYOK
   /// activation. Use this anywhere that only has UserDefaults access.
   nonisolated static var isPaywalledEffective: Bool {
-    !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: .desktopIsPaywalled)
+  }
+
+  /// Minimum time an admission-set paywall flag (`freemium_threshold_reached`
+  /// during a live listen session) must stand before the 60s `fetchTrialMetadata`
+  /// poll may clear it. The listen admission verdict and `getTrialMetadata` can
+  /// disagree (heartbeat/Firestore lag); letting the slower verdict immediately
+  /// unlatch the fresher one loops capture stop → re-arm → admission stop on
+  /// every refresh tick (SCA-526). Bounded so a genuinely reactivated plan still
+  /// self-heals without relaunch.
+  nonisolated static let paywallAdmissionClearDebounce: TimeInterval = 10 * 60
+
+  /// Whether a non-expired trial-metadata fetch may clear `isPaywalled` now.
+  /// Pure so it is unit-testable.
+  nonisolated static func mayClearPaywallFlag(
+    lastAdmissionStopAt: Date?,
+    now: Date,
+    debounce: TimeInterval = paywallAdmissionClearDebounce
+  ) -> Bool {
+    guard let lastAdmissionStopAt else { return true }
+    return now.timeIntervalSince(lastAdmissionStopAt) >= debounce
   }
 
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.
@@ -87,7 +110,15 @@ extension AppState {
         } else if metadata.trialExpired && !self.isPaywalled {
           self.isPaywalled = true
         } else if !metadata.trialExpired && self.isPaywalled {
-          self.isPaywalled = false
+          if AppState.mayClearPaywallFlag(
+            lastAdmissionStopAt: self.lastPaywallAdmissionStopAt, now: Date())
+          {
+            self.isPaywalled = false
+          } else {
+            log(
+              "AppState: holding paywall flag — fresher than trial metadata (admission event inside debounce)"
+            )
+          }
         }
         // A mid-session `freemium_threshold_reached` event stops capture and
         // sets the sticky flag; nothing else observes the flag clearing, so
@@ -200,7 +231,7 @@ extension AppState {
     // grant). Counting .unknown as missing would permanently suppress the
     // "All permissions granted" banner for default users, so only a proven
     // denial counts.
-    if isSystemAudioSupported, effectiveSystemAudioMode != .never,
+    if isSystemAudioSupported, audioRecordingMode != .off, shouldCaptureSystemAudio,
       systemAudioPermissionStatus == .denied
     {
       missing.append("System Audio")
@@ -214,11 +245,18 @@ extension AppState {
     return missing
   }
 
-  /// Check if notification permission was explicitly denied
+  /// Check if notification permission was explicitly denied.
+  ///
+  /// Reads the actual TCC answer (`notificationAuthorizationStatus`, cached from
+  /// `checkNotificationPermission()`) rather than inferring denial from "not yet
+  /// granted". `notDetermined` is not denied: it means the user was never asked,
+  /// and macOS typically will not even list an app under System Settings ->
+  /// Notifications until it has called `requestAuthorization` once — so routing
+  /// a never-asked user to "open System Settings" was a dead end. See
+  /// `NotificationPermissionPolicy.enableAction(for:)`, the single source of
+  /// truth this must never disagree with.
   func isNotificationPermissionDenied() -> Bool {
-    // We need to check synchronously, so use a semaphore pattern
-    // This is cached from checkNotificationPermission() calls
-    return hasCompletedOnboarding && !hasNotificationPermission
+    hasCompletedOnboarding && notificationAuthorizationStatus == .denied
   }
 
   /// Open notification preferences in System Settings (directly to Omi's settings)
@@ -227,6 +265,7 @@ extension AppState {
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleId)")
     {
+      log("Opening notification settings for bundle \(bundleId)")
       NSWorkspace.shared.open(url)
     }
   }

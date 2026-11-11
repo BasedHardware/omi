@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -8,7 +9,10 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
     defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
-    let connector = ImportConnector.all.first { $0.id == "email" }!
+    guard let connector = ImportConnector.all.first(where: { $0.id == "email" }) else {
+      XCTFail("email connector is not registered")
+      return
+    }
     let syncedAt = Date(timeIntervalSince1970: 1_700_000_000)
     let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
 
@@ -34,7 +38,10 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
     defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
-    let connector = ImportConnector.all.first { $0.id == "local-files" }!
+    guard let connector = ImportConnector.all.first(where: { $0.id == "local-files" }) else {
+      XCTFail("local-files connector is not registered")
+      return
+    }
     let snapshot = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user").snapshot(
       for: connector)
 
@@ -47,7 +54,10 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
     defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
-    let connector = ImportConnector.all.first { $0.id == "local-files" }!
+    guard let connector = ImportConnector.all.first(where: { $0.id == "local-files" }) else {
+      XCTFail("local-files connector is not registered")
+      return
+    }
     let syncedAt = Date(timeIntervalSince1970: 1_700_000_000)
     let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
 
@@ -74,8 +84,14 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
     defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
-    let connector = ImportConnector.all.first { $0.id == "apple-notes" }!
-    defaults.set("Private notes accessible", forKey: "appsImportConnectorAvailabilityText.apple-notes")
+    guard let connector = ImportConnector.all.first(where: { $0.id == "apple-notes" }) else {
+      XCTFail("apple-notes connector is not registered")
+      return
+    }
+    defaults.set(
+      "Private notes accessible",
+      forKey: ScopedDefaultsKey.importConnectorAvailabilityText(connectorID: "apple-notes")
+    )
 
     let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
     let snapshot = store.snapshot(for: connector)
@@ -86,13 +102,35 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     XCTAssertFalse(reloaded.isConnected)
   }
 
+  func testPersistedAppleNotesSyncDoesNotProveCurrentAccess() {
+    let testDefaults = makeDefaults()
+    let defaults = testDefaults.defaults
+    defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+    let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
+    guard let connector = ImportConnector.all.first(where: { $0.id == "apple-notes" }) else {
+      XCTFail("apple-notes connector is not registered")
+      return
+    }
+
+    store.markSynced(connectorID: "apple-notes", sourceCount: 1)
+    XCTAssertTrue(store.snapshot(for: connector).isConnected)
+
+    store.setSessionUserID("other-user")
+    store.setSessionUserID("test-user")
+
+    XCTAssertFalse(store.snapshot(for: connector).isConnected)
+  }
+
   func testPositiveCountWithoutSuccessfulSyncDoesNotMarkConnectorConnected() {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
     defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
-    let connector = ImportConnector.all.first { $0.id == "calendar" }!
+    guard let connector = ImportConnector.all.first(where: { $0.id == "calendar" }) else {
+      XCTFail("calendar connector is not registered")
+      return
+    }
 
-    defaults.set(3, forKey: "appsImportConnectorSourceCount.calendar")
+    defaults.set(3, forKey: ScopedDefaultsKey.importConnectorSourceCount(connectorID: "calendar"))
     let snapshot = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user").snapshot(
       for: connector)
 
@@ -104,9 +142,12 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
     defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
-    let connector = ImportConnector.all.first { $0.id == "chatgpt" }!
+    guard let connector = ImportConnector.all.first(where: { $0.id == "chatgpt" }) else {
+      XCTFail("chatgpt connector is not registered")
+      return
+    }
 
-    defaults.set(4, forKey: "onboardingChatGPTImportedMemoriesCount")
+    defaults.set(4, forKey: DefaultsKey.onboardingChatGPTImportedMemories)
     let snapshot = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user").snapshot(
       for: connector)
 
@@ -118,7 +159,10 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
     defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
-    let connector = ImportConnector.all.first { $0.id == "email" }!
+    guard let connector = ImportConnector.all.first(where: { $0.id == "email" }) else {
+      XCTFail("email connector is not registered")
+      return
+    }
 
     let userAStore = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "user-a")
     userAStore.markSynced(connectorID: "email", sourceCount: 12)
@@ -131,8 +175,60 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     XCTAssertEqual(reloadedUserAStore.snapshot(for: connector).primaryText, "12 emails")
   }
 
+  func testMarkDisconnectedClearsPersistedCalendarConnectionMetrics() {
+    let testDefaults = makeDefaults()
+    let defaults = testDefaults.defaults
+    defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+    guard let connector = ImportConnector.all.first(where: { $0.id == "calendar" }) else {
+      XCTFail("calendar connector is not registered")
+      return
+    }
+    let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
+    var didEmitSync = false
+    let cancellable = store.connectorDidSync.sink { _ in didEmitSync = true }
+    store.markSynced(
+      connectorID: "calendar",
+      sourceCount: 178,
+      memoryCount: 192,
+      lastDeltaCount: 178
+    )
+    didEmitSync = false
+
+    store.markDisconnected(connectorID: "calendar")
+
+    let immediate = store.snapshot(for: connector)
+    let reloaded = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user").snapshot(
+      for: connector)
+    XCTAssertFalse(immediate.isConnected)
+    XCTAssertEqual(immediate.actionTitle, "Connect")
+    XCTAssertEqual(immediate.primaryText, "Not connected")
+    XCTAssertFalse(reloaded.isConnected)
+    XCTAssertEqual(reloaded.primaryText, "Not connected")
+    XCTAssertFalse(didEmitSync, "disconnect must not masquerade as a successful sync")
+    _ = cancellable
+  }
+
+  func testCalendarDisconnectRemainsAvailableForBackendGrantWithoutLocalSync() {
+    XCTAssertTrue(
+      ImportConnectorSheet.shouldShowCalendarDisconnect(
+        localSyncConnected: false,
+        backendGrantConnected: true))
+    XCTAssertTrue(
+      ImportConnectorSheet.shouldShowCalendarDisconnect(
+        localSyncConnected: true,
+        backendGrantConnected: false))
+    XCTAssertFalse(
+      ImportConnectorSheet.shouldShowCalendarDisconnect(
+        localSyncConnected: false,
+        backendGrantConnected: false))
+  }
+
   private func makeDefaults() -> (defaults: UserDefaults, suiteName: String) {
     let suiteName = "ImportConnectorStatusStoreTests.\(UUID().uuidString)"
-    return (UserDefaults(suiteName: suiteName)!, suiteName)
+    guard let defaults = UserDefaults(suiteName: suiteName) else {
+      XCTFail("could not create isolated UserDefaults suite")
+      return (UserDefaults.standard, suiteName)
+    }
+    return (defaults, suiteName)
   }
 }

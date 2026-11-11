@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  adapterUsesCloudModelQoSHint,
   executionRoleAllowsTool,
   providerBoundaryForAdapter,
   resolveAdapterWithinBoundary,
+  runRequestedModelIdForSession,
+  shouldRecordServedModelAsRunRequestedId,
 } from "../src/runtime/execution-policy.js";
 
 describe("agent execution policy", () => {
@@ -34,6 +37,45 @@ describe("agent execution policy", () => {
         requestedAdapterId: adapterId,
       })).toThrow();
     }
+  });
+
+  it("persists cloud QoS hints only for adapters that honor them", () => {
+    const managedPiMono = {
+      providerBoundary: "managed_cloud" as const,
+      defaultAdapterId: "pi-mono",
+      modelProfile: "claude-sonnet-4-6",
+    };
+    expect(adapterUsesCloudModelQoSHint(managedPiMono)).toBe(true);
+    expect(runRequestedModelIdForSession(managedPiMono)).toBe("claude-sonnet-4-6");
+    expect(shouldRecordServedModelAsRunRequestedId(managedPiMono)).toBe(false);
+
+    const localPiMono = {
+      providerBoundary: "managed_cloud" as const,
+      defaultAdapterId: "pi-mono",
+      modelProfile: null,
+    };
+    expect(adapterUsesCloudModelQoSHint(localPiMono)).toBe(false);
+    expect(runRequestedModelIdForSession(localPiMono)).toBeNull();
+    expect(shouldRecordServedModelAsRunRequestedId(localPiMono)).toBe(true);
+
+    for (const adapterId of ["hermes", "openclaw"] as const) {
+      const localProvider = {
+        providerBoundary: `local_user:${adapterId}` as const,
+        defaultAdapterId: adapterId,
+        modelProfile: "claude-sonnet-4-6",
+      };
+      expect(adapterUsesCloudModelQoSHint(localProvider)).toBe(false);
+      expect(runRequestedModelIdForSession(localProvider)).toBeNull();
+      expect(shouldRecordServedModelAsRunRequestedId(localProvider)).toBe(true);
+    }
+
+    const userClaude = {
+      providerBoundary: "local_user:acp" as const,
+      defaultAdapterId: "acp",
+      modelProfile: "claude-sonnet-4-6",
+    };
+    expect(adapterUsesCloudModelQoSHint(userClaude)).toBe(true);
+    expect(runRequestedModelIdForSession(userClaude)).toBe("claude-sonnet-4-6");
   });
 
   it("denies every leaf-restricted control tool for leaf roles", () => {

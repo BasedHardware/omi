@@ -59,6 +59,13 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertEqual(headers["Authorization"] as? String, "Bearer test-key")
     XCTAssertNotNil(servers["other"])
     XCTAssertTrue(MemoryExportConnectionDetector.hasExistingConnection(for: .claudeCode, matchingKey: "test-key"))
+    let skillURL = try XCTUnwrap(AgentContextSkillInstaller.skillURL(for: .claudeCode, home: tempHome))
+    let skill = try String(contentsOf: skillURL, encoding: .utf8)
+    XCTAssertEqual(skill, MemoryExportService.omiAgentSkillText)
+    XCTAssertTrue(skill.contains("`search_conversations`"))
+    XCTAssertTrue(skill.contains("`get_people`"))
+    XCTAssertTrue(skill.contains("`get_action_items`"))
+    XCTAssertTrue(skill.contains("`get_screen_activity`"))
 
     let backups = try FileManager.default.contentsOfDirectory(
       at: tempHome.appendingPathComponent(".claude/backups", isDirectory: true),
@@ -132,6 +139,99 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertTrue(content.contains(MemoryExportDestination.mcpServerURL))
     XCTAssertTrue(content.contains("Authorization: Bearer test-key"))
     XCTAssertTrue(MemoryExportConnectionDetector.hasExistingConnection(for: .codex, matchingKey: "test-key"))
+    let skillURL = try XCTUnwrap(AgentContextSkillInstaller.skillURL(for: .codex, home: tempHome))
+    XCTAssertEqual(
+      try String(contentsOf: skillURL, encoding: .utf8),
+      MemoryExportService.omiAgentSkillText
+    )
+  }
+
+  func testClaudeCodeConnectPreservesExistingUserAuthoredOmiSkill() throws {
+    try "{}".write(
+      to: tempHome.appendingPathComponent(".claude.json"),
+      atomically: true,
+      encoding: .utf8
+    )
+    let skillURL = try XCTUnwrap(AgentContextSkillInstaller.skillURL(for: .claudeCode, home: tempHome))
+    try FileManager.default.createDirectory(
+      at: skillURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    try "user-authored".write(to: skillURL, atomically: true, encoding: .utf8)
+
+    XCTAssertEqual(try MemoryBankConnector.connect(.claudeCode, key: "test-key"), "Claude Code is now connected.")
+    XCTAssertEqual(try String(contentsOf: skillURL, encoding: .utf8), "user-authored")
+  }
+
+  func testCodexConnectRewritesLegacySSEEntry() throws {
+    MemoryBankConnector.codexCLIPathOverrideForTesting = try writeFakeCodexCLI().path
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    let message = try MemoryBankConnector.connect(.codex, key: "test-key")
+
+    let content = try String(
+      contentsOf: codex.appendingPathComponent("config.toml"), encoding: .utf8)
+    XCTAssertEqual(message, "Codex is now connected.")
+    XCTAssertTrue(content.contains("\(MemoryExportDestination.mcpServerURL)\""))
+    XCTAssertFalse(content.contains("/v1/mcp/sse"))
+    XCTAssertTrue(MemoryExportConnectionDetector.hasExistingConnection(for: .codex, matchingKey: "test-key"))
+  }
+
+  func testCodexConnectRestoresOriginalConfigWhenAddFailsAfterRemove() throws {
+    MemoryBankConnector.codexCLIPathOverrideForTesting = try writeFakeCodexCLI().path
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    let config = codex.appendingPathComponent("config.toml")
+    let original = """
+      [mcp_servers.omi-memory]
+      command = "npx"
+      args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer test-key"]
+
+      [other]
+      keep = "me"
+      """
+    try original.write(to: config, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path)
+    setenv("CODEX_FAKE_FAIL_ADD", "1", 1)
+    defer { unsetenv("CODEX_FAKE_FAIL_ADD") }
+
+    XCTAssertThrowsError(try MemoryBankConnector.connect(.codex, key: "test-key")) { error in
+      XCTAssertTrue(error.localizedDescription.contains("rejected the connection update"))
+      XCTAssertFalse(error.localizedDescription.contains("test-key"), error.localizedDescription)
+    }
+
+    XCTAssertEqual(try String(contentsOf: config, encoding: .utf8), original)
+    let mode = try XCTUnwrap(
+      (try FileManager.default.attributesOfItem(atPath: config.path))[.posixPermissions]
+        as? NSNumber)
+    XCTAssertEqual(mode.intValue, 0o600)
+    XCTAssertEqual(
+      MemoryExportConnectionDetector.localMCPConnectionState(for: .codex, matchingKey: "test-key"),
+      .needsUpdate)
+  }
+
+  func testCodexConnectFailsClosedOnUnreadableConfig() throws {
+    MemoryBankConnector.codexCLIPathOverrideForTesting = try writeFakeCodexCLI().path
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    let config = codex.appendingPathComponent("config.toml")
+    let missingTarget = codex.appendingPathComponent("missing-target")
+    try FileManager.default.createSymbolicLink(atPath: config.path, withDestinationPath: missingTarget.path)
+
+    XCTAssertThrowsError(try MemoryBankConnector.connect(.codex, key: "test-key")) { error in
+      XCTAssertTrue(error.localizedDescription.contains("could not be read"))
+    }
+
+    XCTAssertEqual(
+      try FileManager.default.destinationOfSymbolicLink(atPath: config.path),
+      missingTarget.path)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: missingTarget.path))
   }
 
   func testCodexConnectRequiresCLI() throws {
@@ -544,6 +644,44 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertEqual(agents, "legacy agents prompt")
   }
 
+  // MARK: - isInstalled (onboarding upfront probe must match the connect path)
+
+  func testIsInstalledCodexRequiresCLINotJustConfigDir() throws {
+    // The exact regression: a stray ~/.codex dir with no `codex` on PATH used to
+    // pass the loose upfront probe, so onboarding showed "Connect" and only flipped
+    // to "not installed" after the click. isInstalled must require the CLI.
+    try FileManager.default.createDirectory(
+      at: tempHome.appendingPathComponent(".codex", isDirectory: true), withIntermediateDirectories: true)
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.codex))  // codexCLIPathOverrideForTesting == "" from setUp
+
+    MemoryBankConnector.codexCLIPathOverrideForTesting = try writeFakeCodexCLI().path
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.codex))
+  }
+
+  func testIsInstalledClaudeCodeDetectsConfig() throws {
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.claudeCode))
+    try "{}".write(
+      to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.claudeCode))
+  }
+
+  func testIsInstalledOpenClawRequiresConfigAndWorkspace() throws {
+    // setUp already provides a fake openclaw CLI, so this isolates the config gate.
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.openclaw))  // no config yet
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    _ = try writeOpenClawConfig(workspace: workspace)
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.openclaw))
+  }
+
+  func testIsInstalledHermesRequiresInstallEvidence() throws {
+    let hermes = tempHome.appendingPathComponent(".hermes", isDirectory: true)
+    try FileManager.default.createDirectory(at: hermes, withIntermediateDirectories: true)
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.hermes))  // bare dir, no config/install
+    _ = try writeHermesInstall()
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.hermes))
+  }
+
   private func writeOpenClawConfig(workspace: URL, extra: String = "") throws -> URL {
     let configDir = tempHome.appendingPathComponent(".openclaw", isDirectory: true)
     try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
@@ -572,7 +710,19 @@ final class MemoryBankConnectorTests: XCTestCase {
     let cli = tempHome.appendingPathComponent("codex")
     try """
     #!/bin/sh
+    if [ "$1" = "mcp" ] && [ "$2" = "remove" ] && [ "$3" = "omi-memory" ]; then
+      if [ -f "$CODEX_HOME/config.toml" ]; then
+        awk '/^\\[mcp_servers\\.omi-memory\\]/{skip=1; next} /^\\[/{skip=0} !skip' \
+          "$CODEX_HOME/config.toml" > "$CODEX_HOME/config.toml.tmp"
+        mv "$CODEX_HOME/config.toml.tmp" "$CODEX_HOME/config.toml"
+      fi
+      exit 0
+    fi
     if [ "$1" = "mcp" ] && [ "$2" = "add" ] && [ "$3" = "omi-memory" ]; then
+      if [ -n "$CODEX_FAKE_FAIL_ADD" ]; then
+        echo "simulated add failure" >&2
+        exit 1
+      fi
       mkdir -p "$CODEX_HOME"
       cat > "$CODEX_HOME/config.toml" <<EOF
     [mcp_servers.omi-memory]

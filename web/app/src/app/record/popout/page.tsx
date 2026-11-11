@@ -11,13 +11,16 @@ import {
   type RecordingBroadcastMessage,
 } from '@/lib/recordingBroadcast';
 import type { RecordingState, AudioMode } from '@/components/recording/RecordingContext';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 // Extended message type for start command with audio mode
-type ExtendedBroadcastMessage = RecordingBroadcastMessage | {
-  type: 'command';
-  command: 'start';
-  audioMode?: AudioMode;
-};
+type ExtendedBroadcastMessage =
+  | RecordingBroadcastMessage
+  | {
+      type: 'command';
+      command: 'start';
+      audioMode?: AudioMode;
+    };
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -25,10 +28,20 @@ function formatDuration(seconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
+registerMoonshineRoute('/record/popout', RecordingPopoutPage, 'root');
+
 /**
  * Animated waveform visualization
  */
-function Waveform({ level, isActive, isPaused }: { level: number; isActive: boolean; isPaused: boolean }) {
+function Waveform({
+  level,
+  isActive,
+  isPaused,
+}: {
+  level: number;
+  isActive: boolean;
+  isPaused: boolean;
+}) {
   const bars = 5;
 
   // Generate random-ish heights based on level
@@ -36,7 +49,7 @@ function Waveform({ level, isActive, isPaused }: { level: number; isActive: bool
     return Array.from({ length: bars }, (_, i) => {
       const base = 0.3;
       const variance = Math.sin(i * 1.5) * 0.3 + 0.5;
-      return base + (level * variance * 0.7);
+      return base + level * variance * 0.7;
     });
   }, [level]);
 
@@ -46,17 +59,15 @@ function Waveform({ level, isActive, isPaused }: { level: number; isActive: bool
         <motion.div
           key={i}
           className={cn(
-            "w-[3px] rounded-full",
-            isActive && !isPaused ? "bg-purple-400" : "bg-gray-500"
+            'w-[3px] rounded-full',
+            isActive && !isPaused ? 'bg-text-primary' : 'bg-gray-500',
           )}
           animate={{
-            height: isActive && !isPaused
-              ? `${Math.max(4, height * 24)}px`
-              : '4px',
+            height: isActive && !isPaused ? `${Math.max(4, height * 24)}px` : '4px',
           }}
           transition={{
             duration: 0.15,
-            ease: "easeOut",
+            ease: 'easeOut',
           }}
         />
       ))}
@@ -104,7 +115,11 @@ export default function RecordingPopoutPage() {
     if (!channel) return;
 
     if (state === 'idle') {
-      const message: ExtendedBroadcastMessage = { type: 'command', command: 'start', audioMode: selectedMode };
+      const message: ExtendedBroadcastMessage = {
+        type: 'command',
+        command: 'start',
+        audioMode: selectedMode,
+      };
       channel.postMessage(message);
       setShowModeSelector(false);
     } else if (state === 'recording') {
@@ -138,12 +153,14 @@ export default function RecordingPopoutPage() {
           onClick={handleToggle}
           disabled={isInitializing}
           className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-            "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1a1a1a]",
-            isInitializing && "opacity-50 cursor-not-allowed",
-            isRecording && "bg-purple-500 hover:bg-purple-600 focus:ring-purple-500",
-            isPaused && "bg-amber-500 hover:bg-amber-600 focus:ring-amber-500",
-            !isActive && !isInitializing && "bg-purple-500 hover:bg-purple-600 focus:ring-purple-500"
+            'w-10 h-10 rounded-full flex items-center justify-center transition-all',
+            'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1a1a1a]',
+            isInitializing && 'opacity-50 cursor-not-allowed',
+            isRecording && 'bg-text-primary hover:bg-text-primary/90 focus:ring-white/25',
+            isPaused && 'bg-amber-500 hover:bg-amber-600 focus:ring-amber-500',
+            !isActive &&
+              !isInitializing &&
+              'bg-text-primary hover:bg-text-primary/90 focus:ring-white/25',
           )}
         >
           {isInitializing ? (
@@ -172,8 +189,8 @@ export default function RecordingPopoutPage() {
           <button
             onClick={() => setShowModeSelector(!showModeSelector)}
             className={cn(
-              "flex items-center gap-1.5 px-2 py-1 rounded-full text-xs",
-              "bg-white/10 hover:bg-white/20 transition-colors"
+              'flex items-center gap-1.5 px-2 py-1 rounded-full text-xs',
+              'bg-white/10 hover:bg-white/20 transition-colors',
             )}
           >
             {selectedMode === 'mic-only' ? (
@@ -182,7 +199,12 @@ export default function RecordingPopoutPage() {
               <Monitor className="w-3 h-3" />
             )}
             <span>{selectedMode === 'mic-only' ? 'Mic' : 'Mic + System'}</span>
-            <ChevronDown className={cn("w-3 h-3 transition-transform", showModeSelector && "rotate-180")} />
+            <ChevronDown
+              className={cn(
+                'w-3 h-3 transition-transform',
+                showModeSelector && 'rotate-180',
+              )}
+            />
           </button>
         )}
 
@@ -215,10 +237,10 @@ export default function RecordingPopoutPage() {
           <button
             onClick={() => handleModeSelect('mic-only')}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors",
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors',
               selectedMode === 'mic-only'
-                ? "bg-purple-500 text-white"
-                : "bg-white/10 hover:bg-white/20 text-white/70"
+                ? 'bg-text-primary text-bg-primary'
+                : 'bg-white/10 hover:bg-white/20 text-white/70',
             )}
           >
             <Mic className="w-3 h-3" />
@@ -227,10 +249,10 @@ export default function RecordingPopoutPage() {
           <button
             onClick={() => handleModeSelect('mic-and-system')}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors",
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors',
               selectedMode === 'mic-and-system'
-                ? "bg-purple-500 text-white"
-                : "bg-white/10 hover:bg-white/20 text-white/70"
+                ? 'bg-text-primary text-bg-primary'
+                : 'bg-white/10 hover:bg-white/20 text-white/70',
             )}
           >
             <Monitor className="w-3 h-3" />

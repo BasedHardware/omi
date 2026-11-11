@@ -63,7 +63,9 @@ def _healthy_responses() -> dict[str, object]:
 def test_gateway_promotion_intent_tracks_runtime_and_helm_listener_surfaces(gateway_gate, tmp_path: Path) -> None:
     manifest = Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env.yaml'
 
-    assert gateway_gate.gateway_promotion_requested(manifest_path=manifest, environment='prod') is False
+    # The Cloud Run callers request gateway mode while the GKE listener remains off.
+    # That intent must still trigger endpoint verification before their revisions render.
+    assert gateway_gate.gateway_promotion_requested(manifest_path=manifest, environment='prod') is True
 
     listener_values = tmp_path / 'prod_listener_values.yaml'
     listener_values.write_text('env:\n  - name: OMI_LLM_GATEWAY_FEATURE_MODE\n    value: gateway\n', encoding='utf-8')
@@ -75,6 +77,39 @@ def test_gateway_promotion_intent_tracks_runtime_and_helm_listener_surfaces(gate
         )
         is True
     )
+
+    public_chat_manifest = tmp_path / 'runtime_env.yaml'
+    raw_manifest = manifest.read_text(encoding='utf-8')
+    public_chat_manifest.write_text(
+        raw_manifest.replace(
+            "PUBLIC_SHARED_CONVERSATION_CHAT_MODE:\n              value: 'off'",
+            "PUBLIC_SHARED_CONVERSATION_CHAT_MODE:\n              value: gateway",
+        ),
+        encoding='utf-8',
+    )
+    listener_values.write_text('env: []\n', encoding='utf-8')
+    assert gateway_gate.gateway_promotion_requested(
+        manifest_path=public_chat_manifest,
+        environment='prod',
+        listener_values_path=listener_values,
+    )
+
+
+def test_gateway_promotion_intent_includes_x_connector_sync_job(gateway_gate, tmp_path: Path) -> None:
+    manifest = tmp_path / 'runtime_env.yaml'
+    manifest.write_text(
+        'environments:\n'
+        '  prod:\n'
+        '    cloud_run:\n'
+        '      jobs:\n'
+        '        x-connector-sync-job:\n'
+        '          env:\n'
+        '            OMI_LLM_GATEWAY_FEATURE_MODE:\n'
+        '              value: gateway\n',
+        encoding='utf-8',
+    )
+
+    assert gateway_gate.gateway_promotion_requested(manifest_path=manifest, environment='prod') is True
 
 
 def test_verify_gateway_serving_derives_url_only_from_ready_attached_ilb(gateway_gate) -> None:

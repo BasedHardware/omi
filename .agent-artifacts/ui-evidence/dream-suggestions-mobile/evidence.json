@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-review-dream-suggestions.png",
+      "platform": "mobile-android",
+      "description": "Review with two Dream suggestions (close a task, merge two people) above a spelling question",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-review-dream-suggestions-light.png",
+      "platform": "mobile-android",
+      "description": "The same Review queue in light mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-dream-suggestion-sheet.png",
+      "platform": "mobile-android",
+      "description": "Detail sheet for a suggested memory rewrite: current and suggested text, Dream's reason, Apply / Dismiss / Not Sure",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-dream-suggestion-sheet-light.png",
+      "platform": "mobile-android",
+      "description": "The same detail sheet in light mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -5,13 +5,13 @@ Provides chat tools for current weather, short forecasts, and basic air-quality
 lookups using public Open-Meteo APIs.
 """
 
-from datetime import datetime
 from typing import Any, Literal, Optional
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
@@ -21,11 +21,38 @@ REQUEST_TIMEOUT_SECONDS = 10
 MAX_FORECAST_DAYS = 7
 
 
+class MalformedResponseError(httpx.HTTPError):
+    """Raised when a third-party body is not the documented JSON object shape."""
+
+
 app = FastAPI(
     title="Omi Open-Meteo Integration",
     description="Get current weather, short forecasts, and air quality from Omi chat tools",
     version="1.0.0",
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", []) if part != "body")
+    message = first_error.get("msg", "invalid request")
+    detail = f"{location}: {message}" if location else message
+    response = ChatToolResponse(error=f"invalid tool request: {detail}")
+    return JSONResponse(status_code=200, content=response.model_dump())
+
+
+class _NullMeansDefault(BaseModel):
+    """The Omi backend sends every optional tool parameter the model did not
+    supply as JSON null (langchain-core 1.3.3 forwards defaulted fields), so a
+    null must mean 'use the default', not 'invalid request'."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_nulls(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v is not None}
+        return data
 
 
 class ChatToolResponse(BaseModel):
@@ -35,18 +62,51 @@ class ChatToolResponse(BaseModel):
     error: Optional[str] = None
 
 
-class CurrentWeatherRequest(BaseModel):
+class CurrentWeatherRequest(_NullMeansDefault):
     location: str = Field(..., min_length=1, max_length=120)
-    temperature_unit: Literal["celsius", "fahrenheit"] = "celsius"
+    temperature_unit: Optional[Literal["celsius", "fahrenheit"]] = Field(default="celsius")
+
+    @field_validator("temperature_unit", mode="before")
+    @classmethod
+    def coerce_temperature_unit(cls, v: Any) -> str:
+        if v is None:
+            return "celsius"
+        cleaned = str(v).strip().lower()
+        if cleaned not in ("celsius", "fahrenheit"):
+            raise ValueError("temperature_unit must be 'celsius' or 'fahrenheit'")
+        return cleaned
 
 
-class ForecastRequest(BaseModel):
+class ForecastRequest(_NullMeansDefault):
     location: str = Field(..., min_length=1, max_length=120)
-    days: int = Field(default=3, ge=1, le=MAX_FORECAST_DAYS)
-    temperature_unit: Literal["celsius", "fahrenheit"] = "celsius"
+    days: Optional[int] = Field(default=3, ge=1, le=MAX_FORECAST_DAYS)
+    temperature_unit: Optional[Literal["celsius", "fahrenheit"]] = Field(default="celsius")
+
+    @field_validator("days", mode="before")
+    @classmethod
+    def coerce_days(cls, v: Any) -> int:
+        if v is None:
+            return 3
+        try:
+            val = int(v)
+        except (ValueError, TypeError):
+            raise ValueError("days must be an integer between 1 and 7")
+        if not (1 <= val <= MAX_FORECAST_DAYS):
+            raise ValueError(f"days must be between 1 and {MAX_FORECAST_DAYS}")
+        return val
+
+    @field_validator("temperature_unit", mode="before")
+    @classmethod
+    def coerce_temperature_unit(cls, v: Any) -> str:
+        if v is None:
+            return "celsius"
+        cleaned = str(v).strip().lower()
+        if cleaned not in ("celsius", "fahrenheit"):
+            raise ValueError("temperature_unit must be 'celsius' or 'fahrenheit'")
+        return cleaned
 
 
-class AirQualityRequest(BaseModel):
+class AirQualityRequest(_NullMeansDefault):
     location: str = Field(..., min_length=1, max_length=120)
 
 
@@ -55,18 +115,79 @@ def _clean_location(value: str) -> str:
 
 
 def _format_number(value: Any, suffix: str = "") -> str:
-    if value is None:
+    if value is None or isinstance(value, bool):
         return "n/a"
+    clean_suffix = str(suffix) if suffix is not None else ""
     if isinstance(value, float):
         rounded = round(value, 1)
         if rounded.is_integer():
-            return f"{int(rounded)}{suffix}"
-        return f"{rounded}{suffix}"
-    return f"{value}{suffix}"
+            return f"{int(rounded)}{clean_suffix}"
+        return f"{rounded}{clean_suffix}"
+    return f"{value}{clean_suffix}"
 
 
-def _format_weather_code(code: Optional[int]) -> str:
-    if code is None:
+def _safe_item(items: Any, index: int, default: Any = None) -> Any:
+    """Safely index a sequence without raising IndexError or TypeError."""
+    if isinstance(items, (list, tuple)) and 0 <= index < len(items):
+        return items[index]
+    return default
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    """Return value when it is a mapping, otherwise an empty mapping.
+
+    Third-party payloads occasionally change shape (a list where an object was
+    documented, a bare string, null); callers treat a miss as "no data".
+    """
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    """Return value when it is a list, otherwise an empty list."""
+    return value if isinstance(value, list) else []
+
+
+def _as_number(value: Any) -> Any:
+    """Return value when it is a real JSON number, otherwise None.
+
+    Booleans are rejected so a JSON true/false cannot be rendered as 1/0, and
+    the original int/float value is preserved so rendering stays identical.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value
+
+
+def _numeric_item(items: Any, index: int) -> Any:
+    """Read a numeric list item by position, degrading to None when malformed."""
+    return _as_number(_safe_item(items, index))
+
+
+def _require_dict(payload: Any) -> dict[str, Any]:
+    """Return payload as a mapping or raise a clean tool error."""
+    if not isinstance(payload, dict):
+        raise MalformedResponseError("malformed JSON payload (expected an object)")
+    return payload
+
+
+def _json_body(response: Any) -> dict[str, Any]:
+    """Decode an HTTP response body as a JSON object, or raise a clean tool error."""
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise MalformedResponseError("malformed JSON payload (could not decode body)") from exc
+    return _require_dict(payload)
+
+
+def _format_unit_suffix(unit_val: Any, prefix: str = "") -> str:
+    """Safely format a unit suffix, avoiding TypeError if unit_val is None or non-string."""
+    if not unit_val or not isinstance(unit_val, str):
+        return ""
+    return f"{prefix}{unit_val}"
+
+
+def _format_weather_code(code: Any) -> str:
+    if code is None or isinstance(code, bool) or not isinstance(code, (int, float)):
         return "unknown"
 
     descriptions = {
@@ -102,7 +223,42 @@ def _format_weather_code(code: Optional[int]) -> str:
     return descriptions.get(code, f"weather code {code}")
 
 
-def _format_place(place: dict[str, Any]) -> str:
+def _format_observed_at(current: Any, payload: Any) -> str:
+    """Render the observation time with the response timezone/offset when present."""
+    current = _as_dict(current)
+    payload = _as_dict(payload)
+    observed = current.get("time") or "unknown time"
+    # Keep prior minute-precision normalization for display consistency.
+    if observed != "unknown time":
+        try:
+            from datetime import datetime
+
+            observed = datetime.fromisoformat(str(observed)).isoformat(timespec="minutes")
+        except ValueError:
+            pass
+    tz = payload.get("timezone")
+    if not isinstance(tz, str):
+        tz = ""
+    offset = payload.get("utc_offset_seconds")
+    suffix_parts = []
+    if tz:
+        suffix_parts.append(tz)
+    if offset is not None:
+        try:
+            total_minutes = int(round(int(offset) / 60))
+            sign = "+" if total_minutes >= 0 else "-"
+            total_minutes = abs(total_minutes)
+            whole, minutes = divmod(total_minutes, 60)
+            suffix_parts.append(f"UTC{sign}{whole:02d}:{minutes:02d}")
+        except (TypeError, ValueError):
+            pass
+    if suffix_parts:
+        return f"{observed} ({', '.join(suffix_parts)})"
+    return observed
+
+
+def _format_place(place: Any) -> str:
+    place = _as_dict(place)
     parts = [place.get("name")]
     admin = place.get("admin1")
     country = place.get("country")
@@ -110,7 +266,7 @@ def _format_place(place: dict[str, Any]) -> str:
         parts.append(admin)
     if country:
         parts.append(country)
-    return ", ".join(part for part in parts if part)
+    return ", ".join(str(part) for part in parts if part)
 
 
 async def _resolve_location(client: httpx.AsyncClient, location: str) -> tuple[Optional[dict[str, Any]], Optional[str]]:
@@ -123,17 +279,22 @@ async def _resolve_location(client: httpx.AsyncClient, location: str) -> tuple[O
         params={"name": cleaned, "count": 1, "language": "en", "format": "json"},
     )
     response.raise_for_status()
-    payload = response.json()
-    results = payload.get("results") or []
-    if not results:
+    payload = _json_body(response)
+    results = payload.get("results")
+    if results is not None and not isinstance(results, list):
+        raise MalformedResponseError("geocoding results were not a JSON array")
+    place = _as_dict(_safe_item(_as_list(results), 0))
+    if not place:
         return None, f"no Open-Meteo geocoding result for '{cleaned}'"
-    return results[0], None
+    if _as_number(place.get("latitude")) is None or _as_number(place.get("longitude")) is None:
+        raise MalformedResponseError("geocoding result was missing numeric coordinates")
+    return place, None
 
 
 async def _request_json(client: httpx.AsyncClient, url: str, params: dict[str, Any]) -> dict[str, Any]:
     response = await client.get(url, params=params)
     response.raise_for_status()
-    return response.json()
+    return _json_body(response)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -247,21 +408,27 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
                 },
             )
 
-        current = payload.get("current") or {}
-        units = payload.get("current_units") or {}
+        current = _as_dict(payload.get("current"))
+        units = _as_dict(payload.get("current_units"))
         place_name = _format_place(place)
-        condition = _format_weather_code(current.get("weather_code"))
-        observed_at = current.get("time") or "unknown time"
+        condition = _format_weather_code(_as_number(current.get("weather_code")))
+        observed_at = _format_observed_at(current, payload)
+
+        wind_suffix = _format_unit_suffix(units.get("wind_speed_10m"), " ")
+        temp_suffix = str(units.get("temperature_2m") or "")
+        apparent_temp_suffix = str(units.get("apparent_temperature") or "")
+        humidity_suffix = str(units.get("relative_humidity_2m") or "")
+        precip_suffix = str(units.get("precipitation") or "")
 
         lines = [
             f"Current weather for {place_name}",
             f"Observed: {observed_at}",
             f"Condition: {condition}",
-            f"Temperature: {_format_number(current.get('temperature_2m'), units.get('temperature_2m', ''))}",
-            f"Feels like: {_format_number(current.get('apparent_temperature'), units.get('apparent_temperature', ''))}",
-            f"Humidity: {_format_number(current.get('relative_humidity_2m'), units.get('relative_humidity_2m', ''))}",
-            f"Precipitation: {_format_number(current.get('precipitation'), units.get('precipitation', ''))}",
-            f"Wind: {_format_number(current.get('wind_speed_10m'), ' ' + units.get('wind_speed_10m', ''))}",
+            f"Temperature: {_format_number(_as_number(current.get('temperature_2m')), temp_suffix)}",
+            f"Feels like: {_format_number(_as_number(current.get('apparent_temperature')), apparent_temp_suffix)}",
+            f"Humidity: {_format_number(_as_number(current.get('relative_humidity_2m')), humidity_suffix)}",
+            f"Precipitation: {_format_number(_as_number(current.get('precipitation')), precip_suffix)}",
+            f"Wind: {_format_number(_as_number(current.get('wind_speed_10m')), wind_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:
@@ -299,17 +466,26 @@ async def get_weather_forecast(request: ForecastRequest) -> ChatToolResponse:
                 },
             )
 
-        daily = payload.get("daily") or {}
-        units = payload.get("daily_units") or {}
+        daily = _as_dict(payload.get("daily"))
+        units = _as_dict(payload.get("daily_units"))
         place_name = _format_place(place)
-        lines = [f"{days}-day forecast for {place_name}"]
 
-        for index, day in enumerate(daily.get("time", [])[:days]):
-            condition = _format_weather_code((daily.get("weather_code") or [None])[index])
-            high = _format_number((daily.get("temperature_2m_max") or [None])[index], units.get("temperature_2m_max", ""))
-            low = _format_number((daily.get("temperature_2m_min") or [None])[index], units.get("temperature_2m_min", ""))
-            rain = _format_number((daily.get("precipitation_probability_max") or [None])[index], units.get("precipitation_probability_max", "%"))
-            wind = _format_number((daily.get("wind_speed_10m_max") or [None])[index], " " + units.get("wind_speed_10m_max", ""))
+        time_list = _as_list(daily.get("time"))
+        if not time_list:
+            return ChatToolResponse(result=f"No forecast data available for {place_name}.")
+
+        lines = [f"{days}-day forecast for {place_name}"]
+        temp_max_suffix = str(units.get("temperature_2m_max") or "")
+        temp_min_suffix = str(units.get("temperature_2m_min") or "")
+        precip_suffix = str(units.get("precipitation_probability_max") or "%")
+        wind_suffix = _format_unit_suffix(units.get("wind_speed_10m_max"), " ")
+
+        for index, day in enumerate(time_list[:days]):
+            condition = _format_weather_code(_numeric_item(daily.get("weather_code"), index))
+            high = _format_number(_numeric_item(daily.get("temperature_2m_max"), index), temp_max_suffix)
+            low = _format_number(_numeric_item(daily.get("temperature_2m_min"), index), temp_min_suffix)
+            rain = _format_number(_numeric_item(daily.get("precipitation_probability_max"), index), precip_suffix)
+            wind = _format_number(_numeric_item(daily.get("wind_speed_10m_max"), index), wind_suffix)
             lines.append(f"- {day}: {condition}; high {high}, low {low}; rain {rain}; wind up to {wind}")
 
         return ChatToolResponse(result="\n".join(lines))
@@ -336,24 +512,24 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
                 },
             )
 
-        current = payload.get("current") or {}
-        units = payload.get("current_units") or {}
+        current = _as_dict(payload.get("current"))
+        units = _as_dict(payload.get("current_units"))
         place_name = _format_place(place)
-        observed_at = current.get("time")
-        if observed_at:
-            try:
-                observed_at = datetime.fromisoformat(observed_at).isoformat(timespec="minutes")
-            except ValueError:
-                pass
+        observed_at = _format_observed_at(current, payload)
+
+        pm25_suffix = _format_unit_suffix(units.get("pm2_5"), " ")
+        pm10_suffix = _format_unit_suffix(units.get("pm10"), " ")
+        ozone_suffix = _format_unit_suffix(units.get("ozone"), " ")
+        no2_suffix = _format_unit_suffix(units.get("nitrogen_dioxide"), " ")
 
         lines = [
             f"Air quality for {place_name}",
-            f"Observed: {observed_at or 'unknown time'}",
-            f"US AQI: {_format_number(current.get('us_aqi'))}",
-            f"PM2.5: {_format_number(current.get('pm2_5'), ' ' + units.get('pm2_5', ''))}",
-            f"PM10: {_format_number(current.get('pm10'), ' ' + units.get('pm10', ''))}",
-            f"Ozone: {_format_number(current.get('ozone'), ' ' + units.get('ozone', ''))}",
-            f"Nitrogen dioxide: {_format_number(current.get('nitrogen_dioxide'), ' ' + units.get('nitrogen_dioxide', ''))}",
+            f"Observed: {observed_at}",
+            f"US AQI: {_format_number(_as_number(current.get('us_aqi')))}",
+            f"PM2.5: {_format_number(_as_number(current.get('pm2_5')), pm25_suffix)}",
+            f"PM10: {_format_number(_as_number(current.get('pm10')), pm10_suffix)}",
+            f"Ozone: {_format_number(_as_number(current.get('ozone')), ozone_suffix)}",
+            f"Nitrogen dioxide: {_format_number(_as_number(current.get('nitrogen_dioxide')), no2_suffix)}",
         ]
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:

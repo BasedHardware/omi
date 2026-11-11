@@ -1,4 +1,5 @@
 import { omiApi } from './apiClient'
+import { fetchAllMemories } from './memoriesBulk'
 import type { Memory } from '../hooks/useMemories'
 
 // Provenance tag the (now-removed) app-index pipeline stamped on every "Uses
@@ -13,11 +14,6 @@ export const APP_MEMORY_TAG = 'omi-app-index'
 // memories; kept here so that (untouched) file keeps compiling.
 export const APP_MEMORY_PREFIX = 'Uses '
 
-function extractList(data: unknown): Memory[] {
-  if (Array.isArray(data)) return data as Memory[]
-  return ((data as { memories?: Memory[] })?.memories ?? []) as Memory[]
-}
-
 // Pure: ids of memories created by the app-index pipeline, matched STRICTLY by
 // provenance tag — so legitimate user memories, even ones that happen to start
 // with "Uses …", are never deleted.
@@ -27,15 +23,12 @@ export function appMemoryIdsToDelete(memories: Memory[]): string[] {
 
 // One-time cleanup: page through ALL memories collecting the legacy app-index
 // ones (paging first, with no deletes, so offsets stay stable), then delete them.
-// Best-effort and idempotent. Returns the number deleted.
+// Best-effort and idempotent. Returns the number deleted. Uses the shared
+// fetchAllMemories pager (memoriesBulk.ts) so every fetch-all path shares one
+// cap/dedupe implementation instead of drifting independently.
 export async function purgeAppMemories(): Promise<number> {
-  const ids: string[] = []
-  for (let offset = 0; offset < 5000; offset += 200) {
-    const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset } })
-    const page = extractList(r.data)
-    ids.push(...appMemoryIdsToDelete(page))
-    if (page.length < 200) break
-  }
+  const all = await fetchAllMemories()
+  const ids = appMemoryIdsToDelete(all)
   let deleted = 0
   for (const id of ids) {
     try {

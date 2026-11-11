@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
+
+import pytest
 
 from utils.observability import fallback as fallback_mod
+from utils.stt.live_failure import PendingLiveFailover
 
 
 class FakeCounterChild:
@@ -20,6 +24,62 @@ class FakeCounter:
 
     def labels(self, **labels):
         return FakeCounterChild(self, labels)
+
+
+@pytest.mark.parametrize(
+    'typed,subtype',
+    [
+        ('modulate_serve_error', 'modulate_serve_error'),
+        ('connection_lost', 'connection_lost'),
+        ('send_failed', 'send_failed'),
+        (None, 'connection_lost'),
+        ('unbounded vendor message', 'connection_lost'),
+    ],
+)
+@pytest.mark.parametrize('source', ['first_text_deadline', 'other'])
+def test_failed_live_hop_retains_source_reason_when_successor_has_a_different_failure(
+    monkeypatch, caplog, typed, subtype, source
+):
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    pending = PendingLiveFailover(from_mode='parakeet', to_mode='modulate', reason=source)
+    with caplog.at_level(logging.WARNING, logger=fallback_mod.logger.name):
+        pending.note_failure(typed)
+        pending.note_failure(typed)
+    assert counter.increments == [
+        (
+            {
+                'component': 'stt_live_session',
+                'from_mode': 'parakeet',
+                'to_mode': 'modulate',
+                'reason': source,
+                'outcome': 'exhausted',
+            },
+            1.0,
+        )
+    ]
+    assert len(caplog.records) == 1
+    assert caplog.records[0].message == (
+        'omi_fallback_event component=stt_live_session from=parakeet to=modulate '
+        f'reason={source} outcome=exhausted' + (f' subtype={subtype}' if source == 'other' else '')
+    )
+
+
+def test_unknown_stt_subtype_is_bucketed_in_log(monkeypatch, caplog):
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    with caplog.at_level(logging.WARNING, logger=fallback_mod.logger.name):
+        fallback_mod.record_fallback(
+            component='stt_live_session',
+            from_mode='parakeet',
+            to_mode='modulate',
+            reason='other',
+            outcome='exhausted',
+            failure_subtype='unbounded vendor message',
+        )
+    assert len(caplog.records) == 1
+    assert caplog.records[0].message.endswith(' subtype=unknown')
+    assert 'unbounded' not in caplog.records[0].message
 
 
 def test_record_fallback_increments_metric_and_logs_same_fields(monkeypatch, caplog):
@@ -89,9 +149,40 @@ def test_llm_gateway_is_a_bounded_fallback_component():
     assert fallback_mod.bucket_component('llm_gateway') == 'llm_gateway'
 
 
+def test_conversation_notes_is_a_bounded_fallback_component():
+    assert fallback_mod.bucket_component('conversation_notes') == 'conversation_notes'
+
+
+def test_stt_live_session_is_a_bounded_fallback_component():
+    """Mid-session hops used component=stt_live_session; without the allowlist
+    they bucketed to other, so omi-stt-fallback-leg-dead (keyed on stt_selection)
+    could not see a 100% dead Soniox failover leg.
+    """
+    assert fallback_mod.bucket_component('stt_live_session') == 'stt_live_session'
+
+
 def test_firestore_malformed_document_labels_are_bounded():
     assert fallback_mod.bucket_component('firestore_read') == 'firestore_read'
     assert fallback_mod.bucket_reason('malformed_doc') == 'malformed_doc'
+
+
+def test_sync_budget_deferral_reasons_keep_their_exact_labels():
+    # The handler-budget deferral records these reasons; if they are not
+    # allowlisted they collapse to ``other`` and an uncertain replacement
+    # create becomes indistinguishable from a marker timeout in metrics.
+    assert fallback_mod.bucket_reason('enqueue_uncertain') == 'enqueue_uncertain'
+    assert fallback_mod.bucket_reason('marker_timeout') == 'marker_timeout'
+    assert fallback_mod.bucket_reason('acquire_unsettled') == 'acquire_unsettled'
+    assert fallback_mod.bucket_reason('marker_clear_failed') == 'marker_clear_failed'
+
+
+def test_web_search_security_reasons_keep_their_exact_labels():
+    # The Anthropic web-search gate records these reasons; if they are not
+    # allowlisted they all collapse to ``other`` and the security withhold
+    # paths become indistinguishable in metrics.
+    assert fallback_mod.bucket_reason('private_tool_output_in_context') == 'private_tool_output_in_context'
+    assert fallback_mod.bucket_reason('not_authorized') == 'not_authorized'
+    assert fallback_mod.bucket_reason('authorization_unavailable') == 'authorization_unavailable'
 
 
 def test_record_fallback_never_raises_on_metric_or_log_failure(monkeypatch):
@@ -138,6 +229,60 @@ def test_stt_selection_fallback_records_on_capability_mismatch(monkeypatch):
     ]
 
 
+def test_explicit_parakeet_preference_fallback_records_when_live_mode_is_incapable(monkeypatch):
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
+    from utils.stt import streaming as streaming_mod
+
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.test')
+    monkeypatch.setattr(streaming_mod, 'stt_service_models', ['parakeet', 'modulate-velma-2'])
+
+    service, lang, model = streaming_mod.get_stt_service_for_language(
+        'es', multi_lang_enabled=True, preferred_service='parakeet'
+    )
+
+    assert (service, lang, model) == (streaming_mod.STTService.modulate, 'multi', 'velma-2')
+    assert counter.increments == [
+        (
+            {
+                'component': 'stt_selection',
+                'from_mode': 'parakeet',
+                'to_mode': 'modulate',
+                'reason': 'capability_mismatch',
+                'outcome': 'degraded',
+            },
+            1.0,
+        )
+    ]
+
+
+def test_automatic_parakeet_capability_fallback_records_when_live_mode_is_incapable(monkeypatch):
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
+    from utils.stt import streaming as streaming_mod
+
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.test')
+    monkeypatch.setattr(streaming_mod, 'stt_service_models', ['parakeet', 'modulate-velma-2'])
+
+    service, lang, model = streaming_mod.get_stt_service_for_language('es', multi_lang_enabled=True)
+
+    assert (service, lang, model) == (streaming_mod.STTService.modulate, 'multi', 'velma-2')
+    assert counter.increments == [
+        (
+            {
+                'component': 'stt_selection',
+                'from_mode': 'parakeet',
+                'to_mode': 'modulate',
+                'reason': 'capability_mismatch',
+                'outcome': 'degraded',
+            },
+            1.0,
+        )
+    ]
+
+
 def test_hosted_vad_fallback_reason_buckets(monkeypatch):
     import httpx
     import requests
@@ -155,3 +300,123 @@ def test_hosted_vad_fallback_reason_buckets(monkeypatch):
     assert vad_mod._hosted_vad_fallback_reason(requests.HTTPError(response=response429)) == 'provider_429'
 
     assert vad_mod._hosted_vad_fallback_reason(RuntimeError('boom')) == 'other'
+
+
+def test_replay_diagnostics_are_bounded_log_values_not_metric_labels(monkeypatch, caplog):
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    diagnostics = fallback_mod.ReplayLagDiagnostics(
+        capture_seconds=1e20,
+        admitted_seconds=float('nan'),
+        seconds_since_text=-1,
+        posts_since_anchor=1000001,
+        empty_posts_since_anchor=-10,
+        post_in_flight=True,
+        empty_streak=5,
+        cut_pending=True,
+        pacing_wait=False,
+    )
+    fallback_mod.record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='replay_ring_overflow',
+        outcome='recovered',
+        replay_diagnostics=diagnostics,
+    )
+    labels, _ = counter.increments[0]
+    assert labels['reason'] == 'replay_ring_overflow'
+    assert set(labels) == {'component', 'from_mode', 'to_mode', 'reason', 'outcome'}
+    line = caplog.records[-1].message
+    assert 'un_emitted_capture_seconds=86400.000' in line
+    assert 'vad_admitted_seconds=-1.000' in line and 'seconds_since_text=-1.000' in line
+    assert 'posts_since_anchor=1000000' in line and 'empty_posts_since_anchor=0' in line
+    assert 'post_in_flight=1 empty_streak=5 cut_pending=1 pacing_wait=0' in line
+    caplog.clear()
+    fallback_mod.record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='capacity_full',
+        outcome='recovered',
+        capacity_subtype='buffer_cap',
+        replay_diagnostics=diagnostics,
+    )
+    assert 'un_emitted_capture_seconds' not in caplog.records[-1].message
+
+
+def test_first_text_diagnostics_are_bounded_log_fields_not_labels(monkeypatch, caplog):
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    diagnostic = fallback_mod.FirstTextDeadlineDiagnostics(
+        admitted_seconds=float('nan'),
+        posts=1000001,
+        empty_posts=-1,
+        answered_empty_stranded_flushes=2,
+        seconds_since_first_speech=1e20,
+        episode_admitted_seconds=float('inf'),
+        seconds_since_deadline_speech=12,
+        answered_empty_admitted_seconds=1e20,
+    )
+    fallback_mod.record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='first_text_deadline',
+        outcome='recovered',
+        first_text_diagnostics=diagnostic,
+    )
+    labels, count = counter.increments[0]
+    assert labels == {
+        'component': 'stt_live_session',
+        'from_mode': 'parakeet',
+        'to_mode': 'soniox',
+        'reason': 'first_text_deadline',
+        'outcome': 'recovered',
+    }
+    assert count == 1
+    assert caplog.records[-1].message.endswith(
+        ' vad_admitted_seconds=-1.000 posts=1000000 empty_posts=0'
+        ' answered_empty_stranded_flushes=2 seconds_since_first_speech=86400.000'
+        ' episode_admitted_seconds=-1.000 seconds_since_deadline_speech=12.000'
+        ' answered_empty_admitted_seconds=86400.000'
+    )
+    fallback_mod.record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='connection_lost',
+        outcome='recovered',
+        first_text_diagnostics=diagnostic,
+    )
+    assert 'vad_admitted_seconds' not in caplog.records[-1].message
+
+
+def test_connection_lost_log_carries_bounded_transport_cause(caplog):
+    record_fallback = fallback_mod.record_fallback
+    caplog.set_level(logging.WARNING)
+    record_fallback(
+        component='stt_selection',
+        from_mode='soniox',
+        to_mode='unavailable',
+        reason='connection_lost',
+        outcome='exhausted',
+        connection_cause='keepalive_timeout',
+    )
+    record_fallback(
+        component='stt_selection',
+        from_mode='soniox',
+        to_mode='unavailable',
+        reason='connection_lost',
+        outcome='exhausted',
+        connection_cause='private_free_text',
+    )
+    source = SimpleNamespace(normalized_death_reason=None, typed_death_reason=None, death_reason='ws recv closed: x')
+    source.connection_cause = 'abnormal_close'
+    hop = PendingLiveFailover.from_socket(source, 'modulate', 'parakeet')
+    hop.note_failure(None)
+    lines = [r.getMessage() for r in caplog.records if 'reason=connection_lost' in r.getMessage()]
+    assert lines[0].endswith('outcome=exhausted cause=keepalive_timeout')
+    assert lines[1].endswith('outcome=exhausted cause=other')
+    assert lines[2].endswith('from=modulate to=parakeet reason=connection_lost outcome=exhausted cause=abnormal_close')
+    assert 'private' not in caplog.text and 'ws recv closed' not in caplog.text

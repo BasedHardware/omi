@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/b1_surface_contract.dart",
+  "owner": "B1",
+  "before": "af298ea72b1aa28f5a013c43c6ef755a82a4af0caaacd45e818f6201797b2317",
+  "after": "45b12037e0bb997406c9de3f9192dfd1b89a40ea1216560b96be3b60fa4460bd",
+  "reason": "Spine turn9 inventory review: ARB is label authority, actual row record id is key authority, lookups scope to the visible route root. Exercise Apps tab and separate local-dev auth instead of equating Google OAuth with local sign-in. Keep every pending marker and teardown finally. Catalog/schema/generator implementation belongs to the builder."
+}

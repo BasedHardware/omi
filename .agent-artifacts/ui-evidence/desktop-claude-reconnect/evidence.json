@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-ai-provider-connect-claude.png",
+      "platform": "desktop-macos",
+      "description": "Settings > AI & Automation > AI Provider set to Claude while signed out: the new Not connected row with Connect Claude. Captured from a local omi-claude-reconnect build whose connection check was pointed at a missing file, because this Mac has a cached Claude token; that override is not in the PR.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

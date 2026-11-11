@@ -1,0 +1,66 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { version as webAppVersion } from '../../../package.json';
+import { decodePlan, planGrantsPaidCapability } from '@/types/user';
+
+vi.mock('@/lib/firebase', () => ({
+  getIdToken: vi.fn(async () => 'test-token'),
+}));
+
+vi.mock('@/lib/clientDevice', () => ({
+  getWebDeviceIdHash: vi.fn(async () => 'test-device'),
+}));
+
+import { getUserSubscription } from '@/lib/api';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('getUserSubscription plan decoding', () => {
+  it.each([
+    ['basic', false],
+    ['plus', true],
+    ['unlimited', true],
+    ['unlimited_v2', true],
+    ['operator', true],
+    ['architect', true],
+    ['pro', true],
+    ['future_plan_123', false],
+  ])('decodes %s without capability inference', async (raw, expectedPaid) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              subscription: {
+                plan: raw,
+                status: 'active',
+                features: [],
+                cancel_at_period_end: false,
+                future_subscription_field: { enabled: true },
+              },
+              transcription_seconds_limit: 90000,
+              transcription_seconds_used: 45000,
+              future_response_field: ['safe'],
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    const result = await getUserSubscription();
+
+    const headers = new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers);
+    expect(headers.get('X-App-Platform')).toBe('web');
+    expect(headers.get('X-App-Version')).toBe(webAppVersion);
+    expect(headers.get('X-Omi-Plan-Identity')).toBe('1');
+    expect(result).not.toBeNull();
+    expect(result?.transcription_seconds_limit).toBe(90000);
+    expect(result?.transcription_seconds_used).toBe(45000);
+    expect(result?.plan).toBe(raw);
+    expect(result?.plan_identity).toEqual(decodePlan(raw));
+    expect(result?.is_unlimited).toBe(expectedPaid);
+    expect(result?.is_unlimited).toBe(planGrantsPaidCapability(decodePlan(raw)));
+  });
+});

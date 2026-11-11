@@ -9,10 +9,12 @@ import database.dev_api_key as dev_api_key_db
 import database.mcp_api_key as mcp_api_key_db
 from database.api_key_metadata import ApiKeyRevocationUnavailableError, ApiKeyValidationError
 from dependencies import get_current_user_id
+from models.connector_access import ConnectorAccess, connector_access
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 from utils.dev_cache import invalidate_developer_cache
 from utils.observability.api_keys import record_api_key_repairs, record_api_key_revocation_exhausted
+from utils.mcp_scopes import MCP_SUPPORTED_SCOPES, validate_mcp_scopes
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,18 @@ def get_mcp_keys(uid: str = Depends(get_current_user_id)):
     return keys
 
 
+@mcp_router.get(
+    "/v1/mcp/keys/scopes",
+    response_model=ConnectorAccess,
+    tags=["mcp"],
+    summary="Get Key Scope Contract",
+    operation_id="get_mcp_key_scope_contract",
+)
+def get_mcp_key_scope_contract(uid: str = Depends(get_current_user_id)):
+    # Separate from the released bare-array list response; available with no keys.
+    return connector_access("mcp_api_key")
+
+
 @mcp_router.post(
     "/v1/mcp/keys",
     response_model=McpApiKeyCreated,
@@ -45,8 +59,15 @@ def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_use
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
+    if key_data.scopes is not None and not validate_mcp_scopes(key_data.scopes):
+        raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {MCP_SUPPORTED_SCOPES}")
+
     try:
-        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
+        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(
+            uid,
+            key_data.name.strip(),
+            scopes=key_data.scopes,
+        )
     except ApiKeyValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
@@ -103,6 +124,9 @@ def create_developer_key(key_data: DevApiKeyCreate, uid: str = Depends(get_curre
       - action_items:write
       - goals:read
       - goals:write
+      - people:read (explicit opt-in)
+      - profile:read (explicit opt-in)
+      - screen_activity:read (explicit opt-in)
     """
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")

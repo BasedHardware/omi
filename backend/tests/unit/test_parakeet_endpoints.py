@@ -1,14 +1,22 @@
+import asyncio
 import io
 import os
 import sys
+import threading
+import time
 import wave
+from types import SimpleNamespace
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import numpy as np
+import httpx
 import pytest
 import soundfile as sf
 
+from fastapi import UploadFile
 from fastapi.testclient import TestClient
+from starlette.requests import Request
+from starlette.websockets import WebSocketDisconnect
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
@@ -76,7 +84,7 @@ def _parakeet_modules():
         yield
 
 
-def _make_app_with_mocks(gpu_ready=True, nim_mode=False):
+def _make_app_with_mocks(gpu_ready=True, nim_mode=False, fatal_cuda_reason=None):
     import importlib.util
 
     parakeet_main = sys.modules.get("main")
@@ -93,6 +101,7 @@ def _make_app_with_mocks(gpu_ready=True, nim_mode=False):
 
     mock_gpu = MagicMock(spec=GPUWorker)
     mock_gpu.is_ready = gpu_ready
+    mock_gpu.fatal_cuda_reason = fatal_cuda_reason
 
     mock_engine = MagicMock(spec=BatchEngine)
     mock_engine._pending = []
@@ -102,6 +111,13 @@ def _make_app_with_mocks(gpu_ready=True, nim_mode=False):
         "total_files": 10,
         "rejected_requests": 0,
         "pending_requests": 0,
+    }
+    mock_engine.pressure_snapshot.return_value = {
+        'pending_requests': 0,
+        'oldest_pending_seconds': 0,
+        'live_pending_requests': 0,
+        'live_oldest_pending_seconds': 0,
+        'backfill_pending_requests': 0,
     }
 
     if nim_mode:
@@ -134,6 +150,34 @@ class TestHealthEndpoint:
         assert data["status"] == "healthy"
         assert data["ready"] is True
 
+    def test_health_returns_503_after_fatal_cuda_error(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=False, fatal_cuda_reason="stream_capture")
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/health")
+        assert resp.status_code == 503
+        assert resp.json()["status"] == "unhealthy"
+        assert resp.json()["reason"] == "stream_capture"
+
+    def test_exact_incident_error_transitions_real_worker_health_to_unhealthy(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        worker = GPUWorker()
+        worker._ready.set()
+        mod.gpu_worker = worker
+
+        assert worker.report_inference_error(
+            RuntimeError("CUDA error: operation not permitted when stream is capturing")
+        )
+
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/health")
+        assert resp.status_code == 503
+        assert resp.json() == {
+            "status": "unhealthy",
+            "ready": False,
+            "uptime_seconds": resp.json()["uptime_seconds"],
+            "reason": "stream_capture",
+        }
+
     def test_health_returns_200_nim_mode(self):
         app, mod, _, _ = _make_app_with_mocks(nim_mode=True)
         client = TestClient(app, raise_server_exceptions=False)
@@ -152,6 +196,11 @@ class TestBatchMetricsEndpoint:
         data = resp.json()
         assert data["total_requests"] == 10
         assert data["total_batches"] == 3
+        assert data["pending_requests"] == 0
+        assert data["oldest_pending_seconds"] == 0
+        assert data['live_pending_requests'] == 0
+        assert data['live_oldest_pending_seconds'] == 0
+        assert data['backfill_pending_requests'] == 0
 
     def test_batch_metrics_without_engine(self):
         app, mod, _, _ = _make_app_with_mocks(nim_mode=True)
@@ -159,6 +208,158 @@ class TestBatchMetricsEndpoint:
         resp = client.get("/batch/metrics")
         assert resp.status_code == 200
         assert resp.json() == {}
+
+    @pytest.mark.asyncio
+    async def test_metrics_responds_while_real_batch_engine_awaits_inference(self, monkeypatch):
+        app, mod, gpu, _ = _make_app_with_mocks()
+        engine = BatchEngine(gpu, max_batch_size=1, max_inflight=1, vram_safety_factor=0)
+        monkeypatch.setattr(mod, 'batch_engine', engine)
+        monkeypatch.setattr(engine, '_get_audio_duration', lambda _path: 1.0)
+        inference = asyncio.get_running_loop().create_future()
+        entered = asyncio.Event()
+
+        def submit(*_args):
+            entered.set()
+            return inference, None
+
+        gpu.submit.side_effect = submit
+        await engine.start()
+        first = asyncio.create_task(engine.submit('synthetic-first.wav', lane='live'))
+        second = None
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            second = asyncio.create_task(engine.submit('synthetic-second.wav', lane='live'))
+            await asyncio.sleep(0)
+            assert engine._batches_inflight == 1
+            assert len(engine._pending) == 1
+            # The metrics handler neither waits on inference nor acquires the
+            # batch lock, even when another producer currently owns it.
+            async with engine._lock:
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+                    response = await asyncio.wait_for(client.get('/batch/metrics'), 1)
+                assert response.status_code == 200
+                assert response.json()['live_pending_requests'] == 1
+                assert response.json()['pending_requests'] == 1
+                assert response.json()['backfill_pending_requests'] == 0
+                assert response.json()['total_requests'] == 2
+                assert response.json()['total_batches'] == 1
+                assert not inference.done()
+                assert not first.done()
+                assert not second.done()
+        finally:
+            if not inference.done():
+                inference.set_result([{'text': ''}])
+            await asyncio.gather(first, *([second] if second is not None else []), return_exceptions=True)
+            await engine.stop()
+
+
+def test_live_window_marker_excludes_request_from_prerecorded_error_metric():
+    app, mod, _, _ = _make_app_with_mocks(gpu_ready=False)
+    client = TestClient(app, raise_server_exceptions=False)
+    before = mod.PRERECORDED_REQUESTS.labels(status='error')._value.get()
+    response = client.post(
+        '/v1/transcribe', files={'file': ('a.wav', b'abc')}, headers={'X-Omi-STT-Surface': 'live-window'}
+    )
+    assert response.status_code == 503
+    assert mod.PRERECORDED_REQUESTS.labels(status='error')._value.get() == before
+    response = client.post('/v1/transcribe', files={'file': ('a.wav', b'abc')})
+    assert response.status_code == 503
+    assert mod.PRERECORDED_REQUESTS.labels(status='error')._value.get() == before + 1
+
+
+@pytest.mark.parametrize('packing,expected', [(False, 'backfill'), (True, 'live')])
+def test_legacy_stream_marker_promoted_only_with_packing(monkeypatch, packing, expected):
+    app, mod, _, engine = _make_app_with_mocks()
+    monkeypatch.setattr(mod, '_packing_enabled', packing)
+    submitted = AsyncMock(return_value={'text': 'ok', 'timestamp': {}})
+    monkeypatch.setattr(mod, 'submit_audio', submitted)
+    response = TestClient(app).post(
+        '/v1/transcribe', files={'file': ('audio.wav', _make_wav_bytes())}, headers={'X-Omi-STT-Surface': 'live-stream'}
+    )
+    assert response.status_code == 200
+    assert submitted.await_args.kwargs['lane'] == expected
+
+
+@pytest.mark.asyncio
+async def test_queue_gauges_refresh_without_batch_metrics_poll():
+    _, mod, _, engine = _make_app_with_mocks()
+    engine.pressure_snapshot.return_value = {
+        'pending_requests': 3,
+        'live_pending_requests': 1,
+        'backfill_pending_requests': 2,
+        'live_oldest_pending_seconds': 0.5,
+        'backfill_oldest_pending_seconds': 12,
+    }
+    task = asyncio.create_task(mod._refresh_pressure_metrics())
+    try:
+        await asyncio.sleep(0)
+        assert mod.LANE_OLDEST.labels(lane='backfill')._value.get() == 12
+        assert mod.LANE_PENDING.labels(lane='live')._value.get() == 1
+        assert mod.PENDING_REQUESTS._value.get() == 3
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+class TestStreamAdmissionEndpoint:
+    def test_unhealthy_gpu_rejects_stream_before_admission(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=False, fatal_cuda_reason="stream_capture")
+        mod.stream_admission = MagicMock()
+
+        client = TestClient(app, raise_server_exceptions=False)
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect('/v3/stream') as websocket:
+                websocket.receive_json()
+
+        assert exc_info.value.code == 1013
+        mod.stream_admission.try_acquire.assert_not_called()
+
+    def test_capacity_rejection_happens_before_stream_session_construction(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        mod.stream_admission = MagicMock()
+        mod.stream_admission.try_acquire.return_value = SimpleNamespace(lease=None, reason='capacity_full')
+
+        with patch.object(mod, 'StreamSession') as stream_session:
+            client = TestClient(app, raise_server_exceptions=False)
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                with client.websocket_connect('/v3/stream') as websocket:
+                    websocket.receive_json()
+
+        assert exc_info.value.code == 1013
+        stream_session.assert_not_called()
+
+    def test_session_construction_failure_releases_admission_lease(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        lease = MagicMock()
+        mod.stream_admission = MagicMock()
+        mod.stream_admission.try_acquire.return_value = SimpleNamespace(lease=lease, reason='admitted')
+
+        with patch.object(mod, 'StreamSession', side_effect=RuntimeError('construction failed')):
+            client = TestClient(app, raise_server_exceptions=False)
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                with client.websocket_connect('/v3/stream') as websocket:
+                    websocket.receive_json()
+
+        assert exc_info.value.code == 1011
+        lease.release.assert_called_once_with()
+
+    def test_disconnect_releases_admission_lease_after_ready_handshake(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        lease = MagicMock()
+        mod.stream_admission = MagicMock()
+        mod.stream_admission.try_acquire.return_value = SimpleNamespace(lease=lease, reason='admitted')
+        session = MagicMock()
+        session.flush = AsyncMock(return_value=[])
+        session.cleanup = MagicMock()
+
+        with patch.object(mod, 'StreamSession', return_value=session):
+            client = TestClient(app, raise_server_exceptions=False)
+            with client.websocket_connect('/v3/stream') as websocket:
+                assert websocket.receive_json() == {'type': 'ready'}
+
+        lease.release.assert_called_once_with()
+        session.cleanup.assert_called_once_with()
 
 
 class TestV1TranscribeEndpoint:
@@ -173,7 +374,7 @@ class TestV1TranscribeEndpoint:
     def test_v1_batch_submit_returns_result(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {
                 "text": "batch result",
                 "timestamp": {"segment": [{"segment": "batch result", "start": 0.0, "end": 1.0}]},
@@ -185,6 +386,14 @@ class TestV1TranscribeEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["text"] == "batch result"
+        assert engine.submit.await_args.kwargs['lane'] == 'backfill'
+        resp = client.post(
+            '/v1/transcribe',
+            files={'file': ('test.wav', b'fake audio data', 'audio/wav')},
+            headers={'X-Omi-STT-Surface': 'live-window'},
+        )
+        assert resp.status_code == 200
+        assert engine.submit.await_args.kwargs['lane'] == 'live'
 
     def test_v1_queue_full_returns_503(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
@@ -193,6 +402,195 @@ class TestV1TranscribeEndpoint:
         resp = client.post("/v1/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")})
         assert resp.status_code == 503
         assert "overloaded" in resp.json()["detail"].lower()
+
+
+class TestV1QueueDeadline:
+
+    def test_live_budget_header_propagates_queue_deadline(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(return_value={"text": "ok", "timestamp": {}})
+        client = TestClient(app, raise_server_exceptions=False)
+        t_before = time.monotonic()
+        resp = client.post(
+            "/v1/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            headers={'X-Omi-STT-Surface': 'live-window', 'X-Omi-STT-Timeout-Seconds': '3.5'},
+        )
+        t_after = time.monotonic()
+        assert resp.status_code == 200
+        deadline = engine.submit.await_args.kwargs['queue_deadline']
+        assert t_before + 3.5 <= deadline <= t_after + 3.5
+
+    def test_live_absent_budget_defaults_to_eight_seconds(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(return_value={"text": "ok", "timestamp": {}})
+        client = TestClient(app, raise_server_exceptions=False)
+        t_before = time.monotonic()
+        resp = client.post(
+            "/v1/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            headers={'X-Omi-STT-Surface': 'live-window'},
+        )
+        t_after = time.monotonic()
+        assert resp.status_code == 200
+        deadline = engine.submit.await_args.kwargs['queue_deadline']
+        assert t_before + 8.0 <= deadline <= t_after + 8.0
+
+    def test_live_invalid_budgets_reject_400_before_file_write(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(return_value={"text": "ok", "timestamp": {}})
+        client = TestClient(app, raise_server_exceptions=False)
+        for bad in ('bogus', 'nan', 'inf', '-0.5', '0'):
+            resp = client.post(
+                "/v1/transcribe",
+                files={"file": ("test.wav", b"fake", "audio/wav")},
+                headers={'X-Omi-STT-Surface': 'live-window', 'X-Omi-STT-Timeout-Seconds': bad},
+            )
+            assert resp.status_code == 400, bad
+        engine.submit.assert_not_called()
+
+    def test_backfill_ignores_budget_header(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(return_value={"text": "ok", "timestamp": {}})
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v1/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            headers={'X-Omi-STT-Timeout-Seconds': 'bogus'},
+        )
+        assert resp.status_code == 200
+        assert engine.submit.await_args.kwargs['queue_deadline'] is None
+        assert engine.submit.await_args.kwargs['lane'] == 'backfill'
+
+    @pytest.mark.asyncio
+    async def test_live_expired_budget_returns_503_queue_timeout(self, monkeypatch, tmp_path):
+        app, mod, gpu, _ = _make_app_with_mocks(gpu_ready=True)
+        engine = BatchEngine(gpu, max_batch_size=1, max_inflight=1, vram_safety_factor=0)
+        monkeypatch.setattr(mod, 'batch_engine', engine)
+        monkeypatch.setattr(engine, '_get_audio_duration', lambda _path: 1.0)
+        inflight = asyncio.get_running_loop().create_future()
+        entered = asyncio.Event()
+
+        def hang_submit(*_args):
+            entered.set()
+            return inflight, None
+
+        gpu.submit.side_effect = hang_submit
+
+        clock = [time.monotonic()]
+        fake_time = SimpleNamespace(monotonic=lambda: clock[0])
+        monkeypatch.setattr(mod, 'time', fake_time)
+        monkeypatch.setattr(sys.modules['batch_engine'], 'time', fake_time)
+
+        written = []
+
+        def slow_write(path, data):
+            clock[0] += 0.2
+            with open(path, "wb") as f:
+                f.write(data)
+            written.append(path)
+
+        monkeypatch.setattr(mod, '_write_file', slow_write)
+        monkeypatch.chdir(tmp_path)
+        os.makedirs("_temp", exist_ok=True)
+        refusals_before = mod.LANE_REFUSALS.labels(lane='live', reason='queue_timeout')._value.get()
+
+        await engine.start()
+        blocker = asyncio.create_task(engine.submit('synthetic-blocker.wav', lane='live'))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+                resp = await client.post(
+                    '/v1/transcribe',
+                    files={'file': ('a.wav', b'abc')},
+                    headers={'X-Omi-STT-Surface': 'live-window', 'X-Omi-STT-Timeout-Seconds': '0.05'},
+                )
+            assert resp.status_code == 503
+            assert resp.json() == {
+                'detail': 'Queued transcription request expired — try again',
+                'error': 'queue_timeout',
+            }
+            assert resp.headers['x-omi-stt-error'] == 'queue_timeout'
+            assert mod.LANE_REFUSALS.labels(lane='live', reason='queue_timeout')._value.get() == refusals_before + 1
+            assert gpu.submit.call_count == 1
+            assert written and not os.path.exists(written[0])
+        finally:
+            if not inflight.done():
+                inflight.set_result([{'text': ''}])
+            await asyncio.gather(blocker, return_exceptions=True)
+            await engine.stop()
+
+    @pytest.mark.asyncio
+    async def test_cancelled_during_upload_write_unlinks_owned_file_after_write_finishes(self, monkeypatch, tmp_path):
+        _, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.chdir(tmp_path)
+        os.makedirs("_temp", exist_ok=True)
+        write_started = threading.Event()
+        write_gate = threading.Event()
+        write_done = threading.Event()
+        written = []
+
+        def gated_write(path, data):
+            written.append(path)
+            write_started.set()
+            write_gate.wait(timeout=10)
+            try:
+                with open(path, "wb") as f:
+                    f.write(data)
+            finally:
+                write_done.set()
+
+        monkeypatch.setattr(mod, '_write_file', gated_write)
+        cancelled_before = mod.REQUESTS_TOTAL.labels(endpoint='v1_transcribe', status='cancelled')._value.get()
+
+        request = Request(
+            {
+                'type': 'http',
+                'method': 'POST',
+                'headers': [(b'x-omi-stt-surface', b'live-window')],
+            }
+        )
+        upload = UploadFile(file=io.BytesIO(b'abc'), filename='a.wav')
+        task = asyncio.create_task(mod.transcribe(request, upload))
+        try:
+            deadline = asyncio.get_running_loop().time() + 5
+            while not write_started.is_set():
+                assert asyncio.get_running_loop().time() < deadline
+                await asyncio.sleep(0.001)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert not engine.submit.called
+            write_gate.set()
+            assert write_done.wait(timeout=5)
+            deadline = asyncio.get_running_loop().time() + 5
+            while os.path.exists(written[0]):
+                assert asyncio.get_running_loop().time() < deadline
+                await asyncio.sleep(0.001)
+        finally:
+            write_gate.set()
+        assert mod.REQUESTS_TOTAL.labels(endpoint='v1_transcribe', status='cancelled')._value.get() == (
+            cancelled_before + 1
+        )
+
+    def test_failed_upload_write_removes_partial_owned_file(self, monkeypatch, tmp_path):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.chdir(tmp_path)
+        os.makedirs("_temp", exist_ok=True)
+        written = []
+
+        def fail_write(path, data):
+            written.append(path)
+            with open(path, "wb") as f:
+                f.write(b'partial')
+            raise OSError('disk full')
+
+        monkeypatch.setattr(mod, '_write_file', fail_write)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("a.wav", b"abc", "audio/wav")})
+        assert resp.status_code == 500
+        assert not engine.submit.called
+        assert written and not os.path.exists(written[0])
 
 
 class TestV2TranscribeEndpoint:
@@ -208,7 +606,7 @@ class TestV2TranscribeEndpoint:
     def test_v2_batch_submit_with_diarize_false(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "v2 result", "timestamp": {"segment": [{"segment": "v2 result", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -236,6 +634,85 @@ class TestV2TranscribeEndpoint:
             "/v2/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")}, data={"diarize": "true"}
         )
         assert resp.status_code == 503
+
+    def _post_v2_with_mocked_transcriber(self, data):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
+            return {"text": "v2 result", "timestamp": {"segment": [{"segment": "v2 result", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+
+        with patch("main.transcribe_file_v2") as mock_v2:
+            mock_v2.return_value = {
+                "text": "v2 result",
+                "segments": [{"text": "v2 result", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_0"}],
+                "detected_language": "en",
+            }
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v2/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")}, data=data)
+        return resp, mock_v2
+
+    def test_v2_forwards_speaker_bounds_to_the_transcriber(self):
+        resp, mock_v2 = self._post_v2_with_mocked_transcriber(
+            {"diarize": "true", "min_speakers": "2", "max_speakers": "5"}
+        )
+
+        assert resp.status_code == 200
+        kwargs = mock_v2.call_args.kwargs
+        assert kwargs["min_speakers"] == 2
+        assert kwargs["max_speakers"] == 5
+        assert kwargs["num_speakers"] is None
+
+    def test_v2_forwards_an_exact_speaker_count_to_the_transcriber(self):
+        resp, mock_v2 = self._post_v2_with_mocked_transcriber({"diarize": "true", "num_speakers": "3"})
+
+        assert resp.status_code == 200
+        kwargs = mock_v2.call_args.kwargs
+        assert kwargs["num_speakers"] == 3
+        assert kwargs["min_speakers"] is None
+        assert kwargs["max_speakers"] is None
+
+    def test_v2_omitted_speaker_constraints_arrive_as_none(self):
+        resp, mock_v2 = self._post_v2_with_mocked_transcriber({"diarize": "true"})
+
+        assert resp.status_code == 200
+        kwargs = mock_v2.call_args.kwargs
+        assert kwargs["num_speakers"] is None
+        assert kwargs["min_speakers"] is None
+        assert kwargs["max_speakers"] is None
+
+    def test_v2_rejects_min_speakers_above_max_speakers(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            data={"diarize": "true", "min_speakers": "4", "max_speakers": "2"},
+        )
+        assert resp.status_code == 422
+        assert "min_speakers" in resp.json()["detail"]
+
+    def test_v2_rejects_num_speakers_combined_with_bounds(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            data={"diarize": "true", "num_speakers": "3", "max_speakers": "5"},
+        )
+        assert resp.status_code == 422
+        assert "num_speakers" in resp.json()["detail"]
+
+    def test_v2_rejects_non_positive_speaker_counts(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            data={"diarize": "true", "num_speakers": "0"},
+        )
+        assert resp.status_code == 422
 
 
 def _make_wav_bytes(duration_s=2.0, sample_rate=16000, channels=1, sampwidth=2):
@@ -287,7 +764,7 @@ class TestAudioDurationFromBytes:
     def test_v1_with_real_wav_observes_audio_duration(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -387,7 +864,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 60.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -419,7 +896,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 0.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -432,7 +909,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 60.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -450,7 +927,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 5.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -475,6 +952,180 @@ class TestMetricsEndpoint:
             "parakeet_queue_duration_seconds",
             "parakeet_inference_duration_seconds",
             "parakeet_gpu_oom_total",
+            "parakeet_gpu_fatal_errors_total",
             "parakeet_requests_total",
         ]:
             assert name in body, f"Missing metric: {name}"
+
+
+def _wav_bytes(seconds: float, sample_rate: int = 16000, channels: int = 1) -> bytes:
+    buf = io.BytesIO()
+    frames = np.zeros((int(seconds * sample_rate), channels), dtype=np.float32)
+    frames[:, :] = 0.01
+    sf.write(buf, frames if channels > 1 else frames[:, 0], sample_rate, format="WAV", subtype="PCM_16")
+    return buf.getvalue()
+
+
+class TestLanguageEndpoint:
+    """POST /v2/language: the spoken-language gate in front of Parakeet-25."""
+
+    def _client(self, probabilities=None, model="whisper-base", side_effect=None):
+        app, mod, gpu, _ = _make_app_with_mocks()
+        gpu.language_id_model = model
+        gpu.submit_language_sync = MagicMock(return_value=probabilities or {}, side_effect=side_effect)
+        return TestClient(app, raise_server_exceptions=False), mod, gpu
+
+    def test_unavailable_when_gate_not_loaded(self):
+        client, _, gpu = self._client(model=None)
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(6), "audio/wav")})
+        assert resp.status_code == 503
+        assert resp.json()["error"] == "lid_unavailable"
+        gpu.submit_language_sync.assert_not_called()
+
+    def test_arabic_canary_routes_multilingual(self):
+        client, mod, _ = self._client({"ar": 0.9963, "en": 0.0002, "fr": 0.0001, "he": 0.0034})
+        before = mod.LID_ROUTES.labels(route="multilingual", bucket="ar")._value.get()
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(5.536), "audio/wav")})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["route"] == "multilingual"
+        assert body["language"] == "ar"
+        assert body["p_supported"] == pytest.approx(0.0003)
+        assert body["threshold"] == 0.985
+        assert mod.LID_ROUTES.labels(route="multilingual", bucket="ar")._value.get() == before + 1
+
+    def test_supported_speech_routes_parakeet(self):
+        client, _, _ = self._client({"en": 0.975, "de": 0.02, "ja": 0.005})
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(12), "audio/wav")})
+        assert resp.json()["route"] == "parakeet"
+        assert resp.json()["p_supported"] == pytest.approx(0.995)
+
+    def test_under_one_second_never_reaches_the_model(self):
+        client, _, gpu = self._client({"en": 1.0})
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(0.5), "audio/wav")})
+        assert resp.status_code == 200
+        assert resp.json()["route"] == "multilingual"
+        gpu.submit_language_sync.assert_not_called()
+
+    def test_input_is_cut_to_30s_mono_16k(self):
+        client, _, gpu = self._client({"en": 1.0})
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(40, 48000, 2), "audio/wav")})
+        assert resp.status_code == 200
+        samples = gpu.submit_language_sync.call_args.args[0]
+        assert samples.ndim == 1 and samples.dtype == np.float32
+        assert len(samples) == 30 * 16000
+        assert resp.json()["audio_seconds"] == 30.0
+
+    def test_unreadable_audio_is_422(self):
+        client, _, gpu = self._client({"en": 1.0})
+        resp = client.post("/v2/language", files={"file": ("a.wav", b"not audio", "audio/wav")})
+        assert resp.status_code == 422
+        gpu.submit_language_sync.assert_not_called()
+
+    def test_worker_failure_is_503_not_500(self):
+        client, _, _ = self._client(side_effect=RuntimeError("GPU queue full"))
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(6), "audio/wav")})
+        assert resp.status_code == 503
+        assert resp.json()["error"] == "lid_error"
+
+
+class TestOutputLanguageAlarm:
+    def test_counts_only_transcripts_with_enough_letters(self):
+        _, mod, _, _ = _make_app_with_mocks()
+        before_ja = mod.OUTPUT_LANGUAGE.labels(bucket="ja")._value.get()
+        before_p25 = mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get()
+        mod._record_output_language({"text": "short text", "detected_language": "ja"})
+        mod._record_output_language({"text": "a" * 30, "detected_language": "ja"})
+        mod._record_output_language({"text": "b" * 30, "detected_language": "de"})
+        assert mod.OUTPUT_LANGUAGE.labels(bucket="ja")._value.get() == before_ja + 1
+        assert mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get() == before_p25 + 1
+        assert mod.language_bucket("zh-cn") == "zh"
+        assert mod.language_bucket("sw") == "other"
+
+
+def test_v1_alarm_counts_prerecorded_but_not_live_window():
+    app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+    text = "Das ist ein ziemlich langer deutscher Satz über das Wetter heute."
+
+    async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
+        return {"text": text, "timestamp": {"segment": [{"segment": text, "start": 0.0, "end": 1.0}]}}
+
+    engine.submit = AsyncMock(side_effect=fake_submit)
+    recorded = []
+    done = threading.Event()
+    with patch.object(mod, "_record_output_language_quietly", side_effect=lambda r: (recorded.append(r), done.set())):
+        client = TestClient(app, raise_server_exceptions=False)
+        client.post(
+            "/v1/transcribe",
+            files={"file": ("t.wav", b"x", "audio/wav")},
+            headers={"X-Omi-STT-Surface": "live-window"},
+        )
+        assert client.post("/v1/transcribe", files={"file": ("t.wav", b"x", "audio/wav")}).status_code == 200
+        assert done.wait(timeout=5)
+    assert [r["text"] for r in recorded] == [text]
+    before = mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get()
+    mod._record_output_language({"text": text})  # /v1 body has no detected_language
+    assert mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get() == before + 1
+
+
+def test_language_probe_upload_is_capped():
+    app, mod, gpu, _ = _make_app_with_mocks()
+    gpu.language_id_model = "whisper-base"
+    gpu.submit_language_sync = MagicMock(return_value={"en": 1.0})
+    client = TestClient(app, raise_server_exceptions=False)
+    big = b"\0" * (mod._LID_MAX_UPLOAD_BYTES + 1)
+    resp = client.post("/v2/language", files={"file": ("a.wav", big, "audio/wav")})
+    assert resp.status_code == 413
+    gpu.submit_language_sync.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_lid_only_lifespan_skips_asr_batch_and_stream_warmup(monkeypatch):
+    app, mod, worker, _ = _make_app_with_mocks()
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setattr(mod, 'gpu_worker', None)
+    monkeypatch.setattr(mod, 'batch_engine', None)
+    worker_factory = MagicMock(return_value=worker)
+    monkeypatch.setattr(mod, 'GPUWorker', worker_factory)
+    batch_factory = MagicMock(side_effect=AssertionError('ASR batch engine started'))
+    monkeypatch.setattr(mod, 'BatchEngine', batch_factory)
+    warmup = MagicMock(side_effect=AssertionError('stream decoder warmed'))
+    monkeypatch.setattr(mod, 'warmup_rnnt_decoder', warmup)
+    async with mod.lifespan(app):
+        worker.start.assert_called_once()
+        assert mod.batch_engine is None
+    worker.stop.assert_called_once()
+    batch_factory.assert_not_called()
+    warmup.assert_not_called()
+
+
+def test_lid_only_routes_and_model_readiness(monkeypatch):
+    app, mod, worker, _ = _make_app_with_mocks()
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setattr(app.router, 'routes', list(app.router.routes))
+    mod._restrict_lid_routes()
+    assert {r.path for r in app.router.routes} == {'/health', '/v2/language', '/metrics'}
+    client = TestClient(app)
+    assert client.post('/v2/transcribe').status_code == 404
+    assert client.get('/docs').status_code == 404
+    worker.language_id_model = None
+    assert client.get('/health').status_code == 503
+    worker.language_id_model = 'whisper-base'
+    assert client.get('/health').status_code == 200
+    worker.submit_language_sync.return_value = {'en': 0.99}
+    result = client.post('/v2/language', files={'file': ('probe.wav', _make_wav_bytes(duration_s=30), 'audio/wav')})
+    assert result.status_code == 200
+    assert result.json()['audio_seconds'] == 30
+    monkeypatch.setattr(mod, 'gpu_worker', None)
+    assert client.get('/health').status_code == 503
+
+
+def test_lid_only_skips_configured_stream_model(monkeypatch):
+    _, mod, _, _ = _make_app_with_mocks()
+    transcribe = sys.modules['transcribe']
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setattr(transcribe, 'STREAM_MODEL_NAME', 'must-not-load')
+    load = MagicMock(side_effect=AssertionError('stream ASR loaded'))
+    monkeypatch.setattr(transcribe, '_load_nemo_model', load)
+    transcribe._init_stream_model()
+    load.assert_not_called()

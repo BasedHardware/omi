@@ -1,4 +1,9 @@
-import koffi from 'koffi'
+import {
+  linuxAvailable,
+  getLinuxForegroundExePath,
+  getLinuxForegroundInfo,
+  getLinuxForegroundTitle
+} from './linuxForeground'
 
 // PROCESS_QUERY_LIMITED_INFORMATION — enough to read the image path, and works
 // for processes at higher integrity than ours (unlike QUERY_INFORMATION).
@@ -10,12 +15,68 @@ const EVENT_SYSTEM_FOREGROUND = 0x0003
 const WINEVENT_OUTOFCONTEXT = 0x0000
 const OBJID_WINDOW = 0
 
+// DWMWA_EXTENDED_FRAME_BOUNDS. GetWindowRect returns the frame INCLUDING the
+// invisible resize border Win10/11 keeps around every window (~8px/side), and for
+// a MAXIMIZED window that frame deliberately hangs off-screen. EFB returns the
+// visually correct frame — the rect a human sees. Anything that draws relative to
+// a window's edges must use this, never GetWindowRect. Size of a RECT = 16 bytes.
+const DWMWA_EXTENDED_FRAME_BOUNDS = 9
+// DWMWA_CLOAKED. A cloaked window is composited-away by DWM while still enumerable
+// with a valid frame: a suspended UWP app's ApplicationFrameWindow, a window on
+// another virtual desktop, or one mid-animation. IsWindowVisible() (the WS_VISIBLE
+// style bit) reports TRUE for such a window even though NOTHING is painted where
+// its bounds say it is — so anything drawing around a window's edges must also
+// reject cloaked windows or it rings empty desktop. Returns a non-zero DWORD when
+// cloaked (the specific bit says by whom; any non-zero value means invisible).
+const DWMWA_CLOAKED = 14
+const SIZEOF_RECT = 16
+const SIZEOF_DWORD = 4
+const S_OK = 0
+
 export type ForegroundWindowInfo = {
   handle: string | null
   exePath: string | null
   // Win32 window class — lets callers distinguish a real app window from a bare
   // shell surface (desktop/taskbar/Start), which share explorer.exe.
   className: string | null
+}
+
+/** Screen rect in PHYSICAL pixels (Win32 coordinates, not DIPs). */
+export type ForegroundRect = { x: number; y: number; width: number; height: number }
+
+/**
+ * The foreground window sampled atomically in ONE GetForegroundWindow() call:
+ * its DWM extended frame bounds (the visually correct frame, physical px) plus
+ * the state flags a drawing consumer needs to decide whether to draw at all.
+ * `rect` is null when the window has no readable frame (EFB failed AND
+ * GetWindowRect failed).
+ */
+export type ForegroundFrame = {
+  handle: string | null
+  rect: ForegroundRect | null
+  className: string | null
+  exePath: string | null
+  maximized: boolean
+  minimized: boolean
+  visible: boolean
+  // DWM-cloaked (composited away though WS_VISIBLE) — see DWMWA_CLOAKED. A drawing
+  // consumer must treat this as "do not frame": the window paints nothing on screen.
+  cloaked: boolean
+  // Owning process id, so a caller can recognise its OWN windows (an Electron app's
+  // BrowserWindows are all owned by the main/browser process) and never frame them.
+  pid: number | null
+}
+
+const NO_FRAME: ForegroundFrame = {
+  handle: null,
+  rect: null,
+  className: null,
+  exePath: null,
+  maximized: false,
+  minimized: false,
+  visible: false,
+  cloaked: false,
+  pid: null
 }
 
 type Win32 = {
@@ -26,6 +87,16 @@ type Win32 = {
   // Foreground window's title text (GetWindowTextW). Lets Rewind detect
   // login/private-browsing screens without the C# helper running.
   getForegroundWindowTitle: () => string | null
+  // Foreground window's screen rect (physical px) + class + exe, read in one
+  // GetForegroundWindow() call — the bar's fullscreen-suppression signal.
+  getForegroundWindowRect: () => {
+    rect: ForegroundRect | null
+    className: string | null
+    exePath: string | null
+  }
+  // Foreground window's DWM extended frame bounds + state flags — the geometry
+  // source for anything drawn around a window (the focus halo).
+  getForegroundWindowFrame: () => ForegroundFrame
   // Fire `cb` whenever the foreground window changes. Returns an unsubscribe.
   subscribeForegroundChange: (cb: () => void) => () => void
 }
@@ -37,6 +108,8 @@ function load(): Win32 | null {
   if (cached) return cached
   if (loadFailed) return null
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const koffi = require('koffi') as typeof import('koffi')
     const user32 = koffi.load('user32.dll')
     const kernel32 = koffi.load('kernel32.dll')
 
@@ -57,6 +130,112 @@ function load(): Win32 | null {
     const GetWindowTextW = user32.func(
       'int32 GetWindowTextW(void* hWnd, _Out_ uint16* lpString, int32 nMaxCount)'
     )
+    const RECT = koffi.struct('OMI_RECT', {
+      left: 'int32',
+      top: 'int32',
+      right: 'int32',
+      bottom: 'int32'
+    })
+    const GetWindowRect = user32.func('bool GetWindowRect(void* hWnd, _Out_ OMI_RECT* lpRect)')
+    const IsZoomed = user32.func('bool IsZoomed(void* hWnd)')
+    const IsIconic = user32.func('bool IsIconic(void* hWnd)')
+    const IsWindowVisible = user32.func('bool IsWindowVisible(void* hWnd)')
+    void RECT
+
+    // dwmapi is loaded lazily-but-eagerly here alongside user32; if it is
+    // unavailable the frame reader falls back to GetWindowRect (and the halo's
+    // maximized gate then rejects, which is the safe direction).
+    let DwmGetWindowAttribute: ((...args: unknown[]) => number) | null = null
+    // Same export, DWORD-out overload — koffi types a func by its C signature, so
+    // the RECT and DWORD attribute reads need distinct declarations.
+    let DwmGetWindowAttributeDword: ((...args: unknown[]) => number) | null = null
+    try {
+      const dwmapi = koffi.load('dwmapi.dll')
+      DwmGetWindowAttribute = dwmapi.func(
+        'int32 DwmGetWindowAttribute(void* hwnd, uint32 dwAttribute, _Out_ OMI_RECT* pvAttribute, uint32 cbAttribute)'
+      ) as (...args: unknown[]) => number
+      // Same symbol, DWORD-out overload. koffi binds a signature, not just a
+      // symbol, so the RECT-out and DWORD-out reads are two distinct declarations;
+      // the variadic (symbol, result, params) form gives the second one without
+      // re-parsing a C prototype.
+      DwmGetWindowAttributeDword = dwmapi.func('DwmGetWindowAttribute', 'int32', [
+        'void*',
+        'uint32',
+        koffi.out(koffi.pointer('uint32')),
+        'uint32'
+      ]) as (...args: unknown[]) => number
+    } catch (e) {
+      console.warn('[usage] dwmapi unavailable; falling back to GetWindowRect:', e)
+    }
+
+    const rectFrom = (out: {
+      left?: number
+      top?: number
+      right?: number
+      bottom?: number
+    }): ForegroundRect | null => {
+      if (typeof out.left !== 'number' || typeof out.top !== 'number') return null
+      if (typeof out.right !== 'number' || typeof out.bottom !== 'number') return null
+      return {
+        x: out.left,
+        y: out.top,
+        width: out.right - out.left,
+        height: out.bottom - out.top
+      }
+    }
+
+    // The window's VISUALLY correct frame (physical px). EFB first; GetWindowRect
+    // only as a last resort (it includes the invisible resize border — callers
+    // that need exact edges must treat that fallback as untrustworthy).
+    const frameRectFromHwnd = (hwnd: unknown): ForegroundRect | null => {
+      if (DwmGetWindowAttribute) {
+        try {
+          const out: { left?: number; top?: number; right?: number; bottom?: number } = {}
+          const hr = DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out, SIZEOF_RECT)
+          if (hr === S_OK) {
+            const r = rectFrom(out)
+            if (r) return r
+          }
+        } catch {
+          // fall through to GetWindowRect
+        }
+      }
+      try {
+        const out: { left?: number; top?: number; right?: number; bottom?: number } = {}
+        if (GetWindowRect(hwnd, out)) return rectFrom(out)
+      } catch {
+        return null
+      }
+      return null
+    }
+
+    // Is the window composited-away by DWM (DWMWA_CLOAKED != 0)? A cloaked window
+    // has WS_VISIBLE set yet paints nothing on screen (suspended UWP host, another
+    // virtual desktop, mid-animation). Unreadable (no dwmapi) ⇒ false: absent the
+    // signal, fall back to the other visibility gates rather than over-suppress.
+    const cloakedFromHwnd = (hwnd: unknown): boolean => {
+      if (!DwmGetWindowAttributeDword) return false
+      try {
+        const box: [number] = [0]
+        const hr = DwmGetWindowAttributeDword(hwnd, DWMWA_CLOAKED, box, SIZEOF_DWORD)
+        return hr === S_OK && box[0] !== 0
+      } catch {
+        return false
+      }
+    }
+
+    // The window's owning process id, or null on any permission edge. A throw
+    // degrades to pid=null (halo still allowed) rather than suppressing the halo —
+    // symmetric with cloakedFromHwnd's fail-open.
+    const pidFromHwnd = (hwnd: unknown): number | null => {
+      try {
+        const pidBox: [number] = [0]
+        GetWindowThreadProcessId(hwnd, pidBox)
+        return pidBox[0] || null
+      } catch {
+        return null
+      }
+    }
 
     // Read an HWND's title text. Returns null on any edge. Titles can be long
     // (browser tabs include the page name), so allow 512 UTF-16 chars.
@@ -176,6 +355,46 @@ function load(): Win32 | null {
         const hwnd = GetForegroundWindow()
         if (!hwnd) return null
         return titleFromHwnd(hwnd)
+      },
+      getForegroundWindowRect() {
+        const hwnd = GetForegroundWindow()
+        if (!hwnd) return { rect: null, className: null, exePath: null }
+        let rect: ForegroundRect | null = null
+        try {
+          const out: { left?: number; top?: number; right?: number; bottom?: number } = {}
+          if (GetWindowRect(hwnd, out) && typeof out.left === 'number') {
+            rect = {
+              x: out.left,
+              y: out.top!,
+              width: out.right! - out.left,
+              height: out.bottom! - out.top!
+            }
+          }
+        } catch {
+          rect = null
+        }
+        return { rect, className: classNameFromHwnd(hwnd), exePath: exePathFromHwnd(hwnd) }
+      },
+      getForegroundWindowFrame(): ForegroundFrame {
+        const hwnd = GetForegroundWindow()
+        if (!hwnd) return NO_FRAME
+        let handle: string | null = null
+        try {
+          handle = koffi.address(hwnd).toString()
+        } catch {
+          handle = null
+        }
+        return {
+          handle,
+          rect: frameRectFromHwnd(hwnd),
+          className: classNameFromHwnd(hwnd),
+          exePath: exePathFromHwnd(hwnd),
+          maximized: !!IsZoomed(hwnd),
+          minimized: !!IsIconic(hwnd),
+          visible: !!IsWindowVisible(hwnd),
+          cloaked: cloakedFromHwnd(hwnd),
+          pid: pidFromHwnd(hwnd)
+        }
       }
     }
     return cached
@@ -190,6 +409,9 @@ function load(): Win32 | null {
 // unavailable (no foreground window, permission edge, or koffi failed to load).
 // Never throws.
 export function getForegroundExePath(): string | null {
+  if (process.platform === 'linux') {
+    return linuxAvailable() ? getLinuxForegroundExePath() : null
+  }
   if (process.platform !== 'win32') return null
   try {
     return load()?.getForegroundExePath() ?? null
@@ -202,6 +424,11 @@ export function getForegroundExePath(): string | null {
 // Returns the current foreground window's HWND (decimal string) + owning exe
 // path, or nulls when unavailable. Never throws.
 export function getForegroundWindowInfo(): ForegroundWindowInfo {
+  if (process.platform === 'linux') {
+    return linuxAvailable()
+      ? getLinuxForegroundInfo()
+      : { handle: null, exePath: null, className: null }
+  }
   if (process.platform !== 'win32') return { handle: null, exePath: null, className: null }
   try {
     return load()?.getForegroundWindowInfo() ?? { handle: null, exePath: null, className: null }
@@ -214,12 +441,49 @@ export function getForegroundWindowInfo(): ForegroundWindowInfo {
 // Returns the current foreground window's title text, or null when unavailable.
 // Never throws.
 export function getForegroundWindowTitle(): string | null {
+  if (process.platform === 'linux') {
+    return linuxAvailable() ? getLinuxForegroundTitle() : null
+  }
   if (process.platform !== 'win32') return null
   try {
     return load()?.getForegroundWindowTitle() ?? null
   } catch (e) {
     console.warn('[usage] getForegroundWindowTitle failed:', e)
     return null
+  }
+}
+
+// Returns the current foreground window's rect (physical px) + class + exe, or
+// nulls when unavailable. Never throws.
+export function getForegroundWindowRect(): {
+  rect: ForegroundRect | null
+  className: string | null
+  exePath: string | null
+} {
+  if (process.platform !== 'win32') return { rect: null, className: null, exePath: null }
+  try {
+    return load()?.getForegroundWindowRect() ?? { rect: null, className: null, exePath: null }
+  } catch (e) {
+    console.warn('[usage] getForegroundWindowRect failed:', e)
+    return { rect: null, className: null, exePath: null }
+  }
+}
+
+// Returns the current foreground window's DWM extended frame bounds (physical px)
+// + class/exe + maximized/minimized/visible flags, sampled in one
+// GetForegroundWindow() call. All-null/false when unavailable. Never throws.
+//
+// Use this — NOT getForegroundWindowRect — for anything drawn around the window's
+// edges: GetWindowRect's rect includes the invisible resize border and hangs
+// off-screen when maximized (that bug shipped once already: three of four glow
+// bands landed off-screen and the fourth read as a stray bar).
+export function getForegroundWindowFrame(): ForegroundFrame {
+  if (process.platform !== 'win32') return NO_FRAME
+  try {
+    return load()?.getForegroundWindowFrame() ?? NO_FRAME
+  } catch (e) {
+    console.warn('[usage] getForegroundWindowFrame failed:', e)
+    return NO_FRAME
   }
 }
 

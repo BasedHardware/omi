@@ -219,8 +219,23 @@ class TestCreateOrchestration:
         assert args[1]['description'] == 'Email Bob'  # trimmed
         assert args[1]['due_at'] == datetime(2026, 7, 1, tzinfo=timezone.utc)
         assert kwargs['idempotency_key'] == actions.content_idempotency_key(UID, 'Email Bob')
+        # The key is the title's hash, so a finished task holding it is an earlier task, not a retry.
+        assert kwargs['reuse_finished'] is False
         mock_vec.assert_called_once_with(UID, 'a1', 'Email Bob')
         assert out['id'] == 'a1' and out['description'] == 'Email Bob'
+
+    @patch('utils.mcp_action_items.upsert_action_item_vector')
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_create_idempotent_hit_indexes_saved_description(self, mock_db, mock_vec):
+        # An open task renamed after MCP creation still holds the original title's
+        # idempotency key; a replay must keep the saved description in the vector index.
+        mock_db.create_action_item.return_value = 'a1'
+        mock_db.get_action_item.return_value = _action_item('a1', desc='Email Bob the signed contract')
+
+        out = actions.create_action_item(UID, 'Email Bob')
+
+        mock_vec.assert_called_once_with(UID, 'a1', 'Email Bob the signed contract')
+        assert out['id'] == 'a1' and out['description'] == 'Email Bob the signed contract'
 
     @patch('utils.mcp_action_items.upsert_action_item_vector', side_effect=RuntimeError('pinecone down'))
     @patch('utils.mcp_action_items.action_items_db')
@@ -322,6 +337,145 @@ class TestMutationGuards:
         update_data = mock_db.update_action_item.call_args[0][2]
         assert 'due_at' not in update_data
         assert update_data['description'] == 'New'
+
+
+@patch('utils.mcp_action_items.upsert_action_item_vector', MagicMock())
+@patch('utils.mcp_action_items.delete_action_item_vector', MagicMock())
+class TestReminderSync:
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_create_with_due_date_arms_reminder(self, mock_db, mock_sync):
+        mock_db.create_action_item.return_value = 'a1'
+        mock_db.get_action_item.return_value = _action_item('a1')
+        actions.create_action_item(UID, 'Email Bob', due_at=NOW)
+        mock_sync.assert_called_once_with(
+            user_id=UID,
+            action_item_id='a1',
+            description='Email Bob',
+            completed=False,
+            due_at=NOW,
+            status=None,
+            deleted=False,
+        )
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_create_without_due_date_sends_nothing(self, mock_db, mock_sync):
+        mock_db.create_action_item.return_value = 'a1'
+        mock_db.get_action_item.return_value = _action_item('a1', due_at=None)
+        actions.create_action_item(UID, 'Email Bob')
+        mock_sync.assert_not_called()
+
+    @pytest.mark.parametrize('requested_completed', [False, True])
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_create_replay_with_no_requested_date_reconciles_saved_due_lifecycle(
+        self, mock_db, mock_sync, requested_completed
+    ):
+        mock_db.create_action_item.return_value = 'a1'
+        saved = _action_item('a1')
+        saved['status'] = 'cancelled'
+        mock_db.get_action_item.return_value = saved
+
+        result = actions.create_action_item(UID, 'Email Bob', completed=requested_completed)
+
+        mock_sync.assert_called_once_with(
+            user_id=UID,
+            action_item_id='a1',
+            description='Email Bob',
+            completed=False,
+            due_at=NOW,
+            status='cancelled',
+            deleted=False,
+        )
+        assert result['completed'] is False
+        assert 'status' not in result
+
+    @pytest.mark.parametrize('saved_completed,saved_due', [(True, NOW), (False, None)])
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_create_replay_does_not_schedule_from_stale_request_when_saved_state_is_done_or_undated(
+        self, mock_db, mock_sync, saved_completed, saved_due
+    ):
+        mock_db.create_action_item.return_value = 'a1'
+        mock_db.get_action_item.return_value = _action_item('a1', completed=saved_completed, due_at=saved_due)
+
+        actions.create_action_item(UID, 'Email Bob', due_at=NOW, completed=False)
+
+        mock_sync.assert_not_called()
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_complete_cancels_reminder(self, mock_db, mock_sync):
+        mock_db.get_action_item.side_effect = [_action_item('a1'), _action_item('a1', completed=True)]
+        mock_db.mark_action_item_completed.return_value = True
+        actions.set_completed(UID, 'a1', completed=True)
+        mock_sync.assert_called_once_with(
+            user_id=UID,
+            action_item_id='a1',
+            description='Email Bob',
+            completed=True,
+            due_at=NOW,
+            status=None,
+            deleted=False,
+        )
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_due_date_change_reschedules_reminder(self, mock_db, mock_sync):
+        later = datetime(2026, 7, 2, tzinfo=timezone.utc)
+        mock_db.get_action_item.side_effect = [_action_item('a1'), _action_item('a1', due_at=later)]
+        mock_db.update_action_item.return_value = True
+        actions.update_action_item(UID, 'a1', due_at='2026-07-02')
+        mock_sync.assert_called_once_with(
+            user_id=UID,
+            action_item_id='a1',
+            description='Email Bob',
+            completed=False,
+            due_at=later,
+            status=None,
+            deleted=False,
+        )
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_description_change_rearms_reminder_with_new_title(self, mock_db, mock_sync):
+        # The phone reminder carries the title it was armed with, so a rename must re-arm it.
+        mock_db.get_action_item.side_effect = [_action_item('a1'), _action_item('a1', desc='Email Bob the deck')]
+        mock_db.update_action_item.return_value = True
+        actions.update_action_item(UID, 'a1', description='Email Bob the deck')
+        mock_sync.assert_called_once_with(
+            user_id=UID,
+            action_item_id='a1',
+            description='Email Bob the deck',
+            completed=False,
+            due_at=NOW,
+            status=None,
+            deleted=False,
+        )
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_delete_cancels_reminder(self, mock_db, mock_sync):
+        mock_db.get_action_item.return_value = _action_item('a1')
+        mock_db.delete_action_item.return_value = True
+        actions.delete_action_item(UID, 'a1')
+        mock_sync.assert_called_once_with(
+            user_id=UID,
+            action_item_id='a1',
+            description='',
+            completed=True,
+            due_at=None,
+            status=None,
+            deleted=False,
+        )
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True, side_effect=RuntimeError('fcm'))
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_reminder_failure_does_not_fail_the_write(self, mock_db, _mock_sync):
+        mock_db.get_action_item.return_value = _action_item('a1')
+        mock_db.delete_action_item.return_value = True
+        actions.delete_action_item(UID, 'a1')
 
 
 class TestSearchOrchestration:
@@ -432,6 +586,20 @@ class TestSseDispatch:
     def test_tool_create_bad_due_date_is_invalid_params(self, _mock_db):
         with pytest.raises(sse.ToolExecutionError) as ei:
             sse.execute_tool(UID, 'create_action_item', {'description': 'x', 'due_at': 'whenever'})
+        assert ei.value.code == -32602
+
+    @pytest.mark.parametrize(
+        ('tool_name', 'arguments'),
+        [
+            ('create_action_item', {'description': {'text': 'Email Bob'}}),
+            ('create_action_item', {'description': 'Email Bob', 'due_at': ['2026-07-01']}),
+            ('search_action_items', {'query': {'text': 'Bob'}}),
+        ],
+    )
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_tool_rejects_non_string_text_arguments(self, _mock_db, tool_name, arguments):
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, tool_name, arguments)
         assert ei.value.code == -32602
 
     @patch('utils.mcp_action_items.action_items_db')

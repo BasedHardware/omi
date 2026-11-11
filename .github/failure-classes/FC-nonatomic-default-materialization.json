@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-nonatomic-default-materialization",
+  "violated_contract": "An implicit default or fill-if-missing setting must never overwrite an explicit user choice committed since the writer read the document. Timezone and token registration must preserve a concurrent daily-summary opt-out and chosen hour; desktop-only timezone seeding must retain a client-reported zone.",
+  "canonical_prevention": "All related settings writers use one transactional default-materialization primitive. Compute defaults and the fill-if-missing predicate from the transactional snapshot, then atomically update only that patch or create the missing document. Explicit request fields remain authoritative. Restart only explicit transaction contention on a fresh transaction using the shared bounded retry helper.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_daily_summary_schedule_fields.py",
+    "backend/tests/unit/fixtures/strict_firestore_transaction.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/notifications.py"
+  ],
+  "status": "open"
+}

@@ -60,7 +60,6 @@ tests/unit/test_short_term_memory.py
 tests/unit/test_sync_transcription_prefs.py
 tests/unit/test_desktop_updates.py
 tests/unit/test_review_queue_non_active_routes.py
-tests/unit/test_kg_user_type_mismatch.py
 tests/unit/test_kg_edge_id_sanitization.py
 tests/unit/test_conversation_events_bounds.py
 tests/unit/test_conversations_date_range_validation.py
@@ -69,13 +68,10 @@ tests/unit/test_screen_activity_tool_result_bound.py
 tests/unit/test_ws_auth_handshake.py
 tests/unit/test_process_conversation_usage_context.py
 tests/unit/test_batch_upload_storage.py
-tests/unit/test_memory_tools.py
-tests/unit/test_memorydb_memory_id_alias.py
 tests/unit/test_geocoding_cache.py
 tests/unit/test_tts.py
 tests/unit/test_notification_token_cleanup.py
 tests/unit/test_proactive_notification_language.py
-tests/unit/test_mentor_notifications.py
 tests/unit/test_apps_review_reply_validation.py
 tests/unit/test_create_persona_user_none.py
 tests/unit/test_billable_transcription_seconds.py
@@ -93,7 +89,6 @@ tests/unit/test_fair_use_engine.py
 tests/unit/test_fair_use_free_tier.py
 tests/unit/test_sync_fair_use_gate.py
 tests/unit/test_vad_onnx.py
-tests/unit/test_patch_adapter.py
 tests/unit/test_modulate_stt.py
 tests/unit/test_short_audio_embedding.py
 tests/unit/test_streaming_deepgram_backoff.py
@@ -106,7 +101,6 @@ tests/unit/test_neo_desktop_grandfather.py
 tests/unit/test_sync_playback_service.py
 tests/unit/test_prompt_caching.py
 tests/unit/test_llm_gateway_chat_extraction_pilot.py
-tests/unit/test_l2_promotion_agent_v2.py
 tests/unit/test_parakeet_prerecorded.py
 tests/unit/test_parakeet_stream_session.py
 tests/unit/test_voice_message_language.py
@@ -115,5 +109,8 @@ tests/unit/test_translation_dedup_edge_cases.py
 tests/unit/test_translation_nllb.py
 tests/unit/test_translation_optimization.py
 tests/routers/test_users.py
-tests/unit/v3_router_probes/fastapi_route_contract.py
 tests/unit/test_desktop_transcribe.py
+tests/unit/test_redis_db_deserialize.py
+tests/unit/test_app_visibility_missing_doc_guard.py
+tests/unit/test_diarizer_main.py
+tests/unit/test_episode_boundary_evidence.py

@@ -89,6 +89,108 @@ describe("AgentRuntimeKernel cancellation", () => {
     expect(store.allRows("SELECT type FROM events WHERE type = 'run.cancellation_requested'")).toHaveLength(0);
     store.close();
   });
+
+  it("cascades cancellation to in-flight delegated children", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const runningParent = kernel.executeRun(baseRunInput);
+    await waitUntil(() => adapter.executed.length === 1);
+    const parentRunId = adapter.executed[0].runId;
+
+    const spawned = await kernel.delegateAgent({
+      mode: "spawn",
+      parentRunId,
+      objective: "child objective",
+      clientId: "client",
+      requestId: "request-child",
+    });
+    await waitUntil(() => adapter.executed.length === 2);
+    const childRunId = spawned.childRun.runId;
+
+    const ack = await kernel.cancelRun(parentRunId);
+
+    expect(ack.accepted).toBe(true);
+    expect(adapter.cancelled).toHaveLength(2);
+    expect(adapter.cancelled.map((context) => context.runId)).toContain(childRunId);
+    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [childRunId]).status).toBe("cancelling");
+
+    adapter.resolveDeferred({ terminalStatus: "cancelled" });
+    await runningParent;
+    await waitUntil(
+      () => store.getRow("SELECT status FROM runs WHERE run_id = ?", [childRunId]).status === "cancelled",
+    );
+    await waitUntil(
+      () =>
+        store.getRow("SELECT status FROM delegations WHERE child_run_id = ?", [childRunId]).status === "cancelled",
+    );
+    // The delegation settles exactly once, via executeDelegationAsync — not the cascade.
+    expect(store.allRows("SELECT type FROM events WHERE type = 'delegation.completed'")).toHaveLength(1);
+    store.close();
+  });
+
+  it("leaves already-terminal delegated children untouched", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferOnlyPromptIncludes = "hello";
+    adapter.deferResult();
+    const runningParent = kernel.executeRun(baseRunInput);
+    await waitUntil(() => adapter.executed.length === 1);
+    const parentRunId = adapter.executed[0].runId;
+
+    const completed = await kernel.delegateAgent({
+      mode: "call",
+      parentRunId,
+      objective: "finished child objective",
+      clientId: "client",
+      requestId: "request-child-call",
+    });
+    const childRunId = completed.childRun.runId;
+    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [childRunId]).status).toBe("succeeded");
+
+    const ack = await kernel.cancelRun(parentRunId);
+
+    expect(ack.accepted).toBe(true);
+    expect(adapter.cancelled).toHaveLength(1);
+    expect(adapter.cancelled[0].runId).toBe(parentRunId);
+    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [childRunId]).status).toBe("succeeded");
+    expect(store.allRows("SELECT type FROM events WHERE type = 'delegation.completed'")).toHaveLength(1);
+
+    adapter.resolveDeferred({ terminalStatus: "cancelled" });
+    await runningParent;
+    store.close();
+  });
+
+  it("does not cascade to background agents spawned outside a delegation", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const runningParent = kernel.executeRun(baseRunInput);
+    await waitUntil(() => adapter.executed.length === 1);
+    const parentRunId = adapter.executed[0].runId;
+
+    const background = await kernel.spawnBackgroundAgent({
+      ownerId: "owner",
+      clientId: "client",
+      requestId: "request-background",
+      prompt: "independent background work",
+      trustedUserSpawn: true,
+      adapterId: "fake",
+      defaultAdapterId: "fake",
+    });
+    await waitUntil(() => adapter.executed.length === 2);
+    const backgroundRunId = background.run.runId;
+
+    const ack = await kernel.cancelRun(parentRunId);
+
+    // Background agents are user-visible floating-bar work designed to
+    // outlive the parent turn — the cascade must not touch them.
+    expect(ack.accepted).toBe(true);
+    expect(adapter.cancelled).toHaveLength(1);
+    expect(adapter.cancelled[0].runId).toBe(parentRunId);
+    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [backgroundRunId]).status).toBe("running");
+
+    adapter.resolveDeferred({ terminalStatus: "cancelled" });
+    await runningParent;
+    store.close();
+  });
 });
 
 function newDatabasePath(): string {

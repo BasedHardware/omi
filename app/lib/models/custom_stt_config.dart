@@ -17,6 +17,11 @@ class CustomSttConfig {
   final Map<String, String>? params;
   final String? audioFieldName;
   final Map<String, dynamic>? schemaJson;
+  final bool sendRawAudioToOmi;
+
+  /// Overrides [sttConfigId] when set. Used for synthesized freemium configs so
+  /// a plan change mid-session forces a reconnect (`freemium:on-device`).
+  final String? identity;
 
   const CustomSttConfig({
     required this.provider,
@@ -31,6 +36,8 @@ class CustomSttConfig {
     this.params,
     this.audioFieldName,
     this.schemaJson,
+    this.sendRawAudioToOmi = true,
+    this.identity,
   });
 
   /// Determine if live/streaming based on request_type
@@ -102,6 +109,7 @@ class CustomSttConfig {
   }
 
   String get sttConfigId {
+    if (identity != null && identity!.isNotEmpty) return identity!;
     if (!isEnabled) return 'omi:default';
 
     final configData = {
@@ -114,6 +122,9 @@ class CustomSttConfig {
       'request_type': requestType,
       'headers': headers,
       'params': params,
+      if (audioFieldName != null) 'audio_field_name': audioFieldName,
+      if (schemaJson != null) 'schema': schemaJson,
+      'send_raw_audio_to_omi': sendRawAudioToOmi,
     };
 
     final jsonStr = jsonEncode(configData);
@@ -136,6 +147,7 @@ class CustomSttConfig {
         'params': params,
         'audio_field_name': audioFieldName,
         'schema': schemaJson,
+        'send_raw_audio_to_omi': sendRawAudioToOmi,
       };
 
   factory CustomSttConfig.fromJson(Map<String, dynamic> json) {
@@ -161,6 +173,7 @@ class CustomSttConfig {
       params: safeStringMap(json['params']),
       audioFieldName: json['audio_field_name'],
       schemaJson: json['schema'] != null ? Map<String, dynamic>.from(json['schema']) : null,
+      sendRawAudioToOmi: json['send_raw_audio_to_omi'] != false,
     );
   }
 
@@ -180,6 +193,8 @@ class CustomSttConfig {
     Map<String, String>? params,
     String? audioFieldName,
     Map<String, dynamic>? schemaJson,
+    bool? sendRawAudioToOmi,
+    String? identity,
   }) {
     return CustomSttConfig(
       provider: provider ?? this.provider,
@@ -194,6 +209,8 @@ class CustomSttConfig {
       params: params ?? this.params,
       audioFieldName: audioFieldName ?? this.audioFieldName,
       schemaJson: schemaJson ?? this.schemaJson,
+      sendRawAudioToOmi: sendRawAudioToOmi ?? this.sendRawAudioToOmi,
+      identity: identity ?? this.identity,
     );
   }
 

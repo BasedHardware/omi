@@ -3,6 +3,7 @@ Unit tests for compute_text_containment function.
 Tests character trigram containment across multiple languages.
 """
 
+import unicodedata
 from utils.text_utils import compute_text_containment
 
 
@@ -52,3 +53,27 @@ class TestComputeTextContainment:
 
     def test_trigram_length_boundary_not_contained(self):
         assert compute_text_containment("hey", "oh he there") == 0.0
+
+    def test_canonical_equivalence_spanish_nfd_nfc(self):
+        expected = "El próximo miércoles hablaremos sobre la configuración y la información del proyecto."
+        transcript_nfd = unicodedata.normalize("NFD", expected)
+        transcript_nfc = unicodedata.normalize("NFC", expected)
+        assert compute_text_containment(transcript_nfd, transcript_nfc) == 1.0
+        assert compute_text_containment(transcript_nfc, transcript_nfd) == 1.0
+
+    def test_canonical_equivalence_short_string(self):
+        expected = "él habló de todo"
+        transcript_nfd = unicodedata.normalize("NFD", "él")
+        assert compute_text_containment(transcript_nfd, expected) == 1.0
+
+    def test_canonical_equivalence_korean_hangul(self):
+        composed = "안녕하세요 세계"
+        decomposed = unicodedata.normalize("NFD", composed)
+        assert compute_text_containment(decomposed, composed) == 1.0
+        assert compute_text_containment(composed, decomposed) == 1.0
+
+    def test_canonical_equivalence_japanese_kana(self):
+        composed = "がんばってください"
+        decomposed = unicodedata.normalize("NFD", composed)
+        assert compute_text_containment(decomposed, composed) == 1.0
+        assert compute_text_containment(composed, decomposed) == 1.0

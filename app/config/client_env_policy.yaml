@@ -2,7 +2,6 @@
   "public_client_env": {
     "allowed": [
       "PUBLIC_API_BASE_URL",
-      "PUBLIC_STAGING_API_URL",
       "PUBLIC_USE_WEB_AUTH",
       "PUBLIC_USE_AUTH_CUSTOM_TOKEN",
       "PUBLIC_GOOGLE_MAPS_API_KEY",
@@ -33,7 +32,8 @@
       "NEXT_PUBLIC_FIREBASE_APP_ID",
       "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID",
       "NEXT_PUBLIC_FIREBASE_VAPID_KEY",
-      "NEXT_PUBLIC_MIXPANEL_TOKEN",
+      "NEXT_PUBLIC_POSTHOG_HOST",
+      "NEXT_PUBLIC_POSTHOG_KEY",
       "NEXT_PUBLIC_EXTRA_PROMPT_RULES",
       "NEXT_PUBLIC_PLUGINS_APP_ID",
       "NEXT_PUBLIC_OMI_API_URL"
@@ -41,7 +41,6 @@
   },
   "public_client_env_sources": {
     "allowed": [
-      "STAGING_API_URL"
     ]
   },
   "restricted_public_client_keys": {

@@ -21,7 +21,7 @@ final class HardeningSeamActionTests: XCTestCase {
     guard let start = source.range(of: "name: \"reorder_task\"") else {
       return XCTFail("reorder_task registration not found")
     }
-    let block = String(source[start.lowerBound...].prefix(2200))
+    let block = String(source[start.lowerBound...].prefix(3200))
     XCTAssertTrue(
       block.contains("\"flush\""),
       "reorder_task must expose the flush param (TASK-05 debounce-coalescing seam)")
@@ -34,6 +34,25 @@ final class HardeningSeamActionTests: XCTestCase {
     XCTAssertTrue(
       block.contains("(params[\"flush\"] ?? \"true\")"),
       "flush must default to true — only an explicit flush=false opts into the debounce path")
+    XCTAssertTrue(
+      block.contains("params: [\"id\", \"description\", \"index\", \"category\", \"flush\"]"),
+      "reorder_task must support description lookup so hermetic CRUD flows can exercise reorder without hard-coding ids"
+    )
+    XCTAssertTrue(
+      block.contains("\"position\": String(order.firstIndex(of: task.id) ?? -1)"),
+      "reorder_task must report the resulting position so the E2E flow proves the move was meaningful"
+    )
+    XCTAssertTrue(
+      block.contains("\"persisted\": persistedTask?.sortOrder == nil ? \"false\" : \"true\""),
+      "reorder_task must read back the local rank after a flush so the E2E flow proves persistence"
+    )
+    XCTAssertTrue(
+      block.contains("\"flushed\": flushed ? \"true\" : \"false\""),
+      "reorder_task must report the actual sync result rather than echoing the requested flush mode"
+    )
+    XCTAssertTrue(
+      block.contains("matches = self.store.tasks.filter { $0.description.contains(description) }"),
+      "description lookup must use the same store-backed task collection as the id path")
   }
 
   func testSimulateSystemWakeIsRegisteredNonProdGatedAndPostsTheRealSignal() throws {

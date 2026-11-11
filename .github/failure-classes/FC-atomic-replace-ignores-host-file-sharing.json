@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-atomic-replace-ignores-host-file-sharing",
+  "violated_contract": "An atomic status writer must tolerate the file-sharing rules of every supported host. On Windows, a reader that has the destination open without delete sharing can briefly make os.replace fail with PermissionError; treating that transient sharing violation as a permanent write failure aborts the single-flight owner while another process is only polling its status.",
+  "canonical_prevention": "Keep the write-to-temp-and-replace primitive, but retry only Windows PermissionError failures for a short bounded interval so an active reader can release the destination. Preserve immediate failure for other platforms and errors, and run a native Windows regression that holds the destination open while the writer attempts the swap.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_preflight_runner.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/scripts/preflight_runner.py",
+    ".github/scripts/test_preflight_runner.py"
+  ],
+  "status": "open"
+}

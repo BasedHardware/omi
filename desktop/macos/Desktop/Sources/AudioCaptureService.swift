@@ -10,6 +10,14 @@ class AudioCaptureService: @unchecked Sendable {
 
   // MARK: - Types
 
+  /// A currently available CoreAudio input device. `uid` stays stable when
+  /// CoreAudio assigns a different numeric device ID after reconnecting it.
+  struct InputDevice: Hashable {
+    let id: AudioDeviceID
+    let uid: String
+    let name: String
+  }
+
   /// Callback for receiving audio chunks
   typealias AudioChunkHandler = @Sendable (Data) -> Void
 
@@ -26,6 +34,9 @@ class AudioCaptureService: @unchecked Sendable {
     let deviceDescription: String
     let consecutiveSilentWindows: Int
     let isBluetoothTransport: Bool
+    let framesReceived: Int
+    let peak: Int16
+    let secondsToFirstFrame: TimeInterval?
 
     var suggestedAction: SilentMicRecoveryAction {
       isBluetoothTransport ? .fallbackToBuiltIn : .rebuildCoreAudioStack
@@ -59,15 +70,31 @@ class AudioCaptureService: @unchecked Sendable {
   // MARK: - Properties
 
   private var deviceID: AudioDeviceID = kAudioObjectUnknown
+  // Resolved on audioQueue before AudioDeviceStart, never through HAL while
+  // holding the watchdog lock or running an IOProc. A HAL/watchdog lock inversion
+  // can otherwise freeze both the main thread and the microphone callback.
+  private var captureDeviceIsBuiltIn = false
+  private var captureDeviceIsBluetooth = false
   private var ioProcID: AudioDeviceIOProcID?
   private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
   private var deviceFormatListenerBlock: AudioObjectPropertyListenerBlock?
   private var isCapturing = false
+  /// When the current reconfiguration episode began, on a monotonic clock; nil when not
+  /// reconfiguring. Deliberately not `Date`: this is a budget, and a wall clock can be
+  /// stepped by NTP or by the user mid-episode, which would either cut the retries short
+  /// or run them long. `DispatchTime` cannot move backwards.
+  private var reconfigurationStartedAt: DispatchTime?
   private var isTrackingOverrideDevice = false
 
   /// Optional explicit device to open instead of the system default input.
   /// Used by the silent-mic fallback path to bind directly to the built-in mic.
   private let overrideDeviceID: AudioDeviceID?
+
+  /// True when this service was built to pin capture to an explicit device.
+  var hasOverrideDevice: Bool { overrideDeviceID != nil }
+
+  /// CoreAudio device currently opened by this service (for preferred-mic reconnect).
+  var activeDeviceID: AudioDeviceID { deviceID }
 
   /// Default initializer — opens the system default input device.
   init() {
@@ -90,28 +117,52 @@ class AudioCaptureService: @unchecked Sendable {
   /// silence. The watchdog re-arms after each fire (see `evaluateSilentMicWindow`), so a
   /// single capture session can recover from more than one silent episode.
   var onSilentMicDetected: (@Sendable (SilentMicDetection) -> Void)?
+  /// One notification when real PCM returns after a watchdog trip, including
+  /// after its recovery budget is exhausted. No per-buffer main-actor traffic.
+  var onLiveMicRecovered: (@Sendable () -> Void)?
   var detectSilentMicOnAnyTransport = false
+  /// Fires (once per change) when the HAL reports a device/format/route change
+  /// during an active capture — a known precursor of silent capture (headset
+  /// plug/unplug, Bluetooth profile flip, default-input switch). Carries no
+  /// device identity; owners record only a boolean "route changed" flag.
+  var onInputRouteChanged: (@Sendable () -> Void)?
 
   /// Human-readable description of the capture device currently in use — for
   /// diagnostics (which mic a turn was recorded from).
   var currentDeviceDescription: String {
-    let isBuiltIn = (deviceID == AudioCaptureService.findBuiltInMicDeviceID())
-    return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
+    captureDeviceIsBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
+  }
+  /// Whether the active capture device is on a Bluetooth transport (A2DP/HFP),
+  /// the known profile-conflict case that feeds zeros. Exposed so the PTT
+  /// lifecycle route classification can label Bluetooth without logging the
+  /// device name. Derives from CoreAudio transport type, not the redacted
+  /// `currentDeviceDescription` string.
+  var isCurrentDeviceBluetoothTransport: Bool {
+    captureDeviceIsBluetooth
+  }
+
+  /// Bind metadata while the old IOProc is quiescent and before the new one
+  /// starts. Quiet-window classification is then a pure snapshot read.
+  func bindCaptureRoute(deviceID: AudioDeviceID, isBuiltIn: Bool, isBluetooth: Bool) {
+    self.deviceID = deviceID
+    captureDeviceIsBuiltIn = isBuiltIn
+    captureDeviceIsBluetooth = isBluetooth
   }
 
   // Silent-mic watchdog. Re-arms after each fire so one session can recover from more
   // than one silent episode; two guards keep it from spinning the recovery loop:
   //   - `silentMicRecoveryCooldown`: suppress re-detection right after a fire so a freshly
   //     rebuilt/switched capture has time to deliver real audio before we judge it again.
-  //   - `maxSilentMicFiresPerSession`: hard cap so an unrecoverable mic can't loop forever.
+  //   - `maxSilentMicFiresPerEpisode`: hard cap until genuine live PCM returns.
   // `silentMicDetectedFired` now means "recently fired, awaiting re-arm" (not a permanent latch).
   private var consecutiveSilentWindows: Int = 0
   private var silentMicDetectedFired: Bool = false
   private var silentMicFireCount: Int = 0
   private var lastSilentMicFireTime: CFAbsoluteTime = 0
+  private var awaitingLiveMicSignal = false
   private let silentMicWindowThreshold: Int = 2  // windows of ~1s each
   private let silentMicRecoveryCooldown: CFAbsoluteTime = 3.0  // seconds to let recovery take effect
-  private let maxSilentMicFiresPerSession: Int = 3
+  private let maxSilentMicFiresPerEpisode: Int = 3
 
   /// Target sample rate for DeepGram
   private let targetSampleRate: Double = 16000
@@ -139,6 +190,10 @@ class AudioCaptureService: @unchecked Sendable {
   // so we can detect a Bluetooth mic that's alive-but-silent (A2DP profile conflict).
   private var watchdogWindowPeak: Int16 = 0
   private var watchdogWindowStart: CFAbsoluteTime = 0
+  private var watchdogFrameCount = 0
+  private var watchdogFirstFrameAt: CFAbsoluteTime?
+  private var watchdogStartedAt: CFAbsoluteTime?
+  private let silentMicWatchdogLock = NSLock()
 
   /// Dedicated queue for CoreAudio device operations (start/stop/reconfigure)
   /// to avoid blocking the main thread on AudioDeviceStart/Stop calls.
@@ -147,12 +202,18 @@ class AudioCaptureService: @unchecked Sendable {
   // MARK: - Public Methods
 
   func resetSilentMicWatchdog() {
+    silentMicWatchdogLock.lock()
+    defer { silentMicWatchdogLock.unlock() }
     consecutiveSilentWindows = 0
     silentMicDetectedFired = false
     silentMicFireCount = 0
     lastSilentMicFireTime = 0
+    awaitingLiveMicSignal = false
     watchdogWindowPeak = 0
     watchdogWindowStart = 0
+    watchdogFrameCount = 0
+    watchdogFirstFrameAt = nil
+    watchdogStartedAt = CFAbsoluteTimeGetCurrent()
   }
 
   /// Classify one closed ~1-second watchdog window and update re-arm bookkeeping.
@@ -162,12 +223,36 @@ class AudioCaptureService: @unchecked Sendable {
   /// caller then invokes `onSilentMicDetected`. Returns `nil` otherwise. After a fire the
   /// watchdog suppresses re-detection until `silentMicRecoveryCooldown` has elapsed, then
   /// re-arms, so a mic that recovered and later re-wedged (or a recovery that did not take)
-  /// is detected again — bounded by `maxSilentMicFiresPerSession` so an unrecoverable mic
+  /// is detected again — bounded by `maxSilentMicFiresPerEpisode` so an unrecoverable mic
   /// cannot loop the recovery path forever.
   ///
   /// `internal` (not `private`) so the recover-more-than-once-per-session contract can be
   /// unit-tested without driving real CoreAudio buffers.
   func evaluateSilentMicWindow(peak: Int16, isBluetooth: Bool, now: CFAbsoluteTime) -> SilentMicDetection? {
+    silentMicWatchdogLock.lock()
+    let recovered = takeLiveMicRecoveryLocked(peak: peak)
+    let detection = evaluateSilentMicWindowLocked(peak: peak, isBluetooth: isBluetooth, now: now)
+    silentMicWatchdogLock.unlock()
+    if recovered { onLiveMicRecovered?() }
+    return detection
+  }
+
+  private func takeLiveMicRecoveryLocked(peak: Int16) -> Bool {
+    guard awaitingLiveMicSignal, peak > 5 else { return false }
+    awaitingLiveMicSignal = false
+    // Allow a later quiet episode to be observed after genuine recovery.
+    // AppState retains the cross-driver rebuild budget, so this never opens
+    // another rebuild loop after it elected to continue system audio.
+    silentMicFireCount = 0
+    silentMicDetectedFired = false
+    return true
+  }
+
+  private func evaluateSilentMicWindowLocked(
+    peak: Int16,
+    isBluetooth: Bool,
+    now: CFAbsoluteTime
+  ) -> SilentMicDetection? {
     // peak ≤ 5 (≈ -76 dBFS) is effectively silent compared to real speech.
     if peak <= 5 {
       consecutiveSilentWindows += 1
@@ -181,7 +266,7 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     guard !silentMicDetectedFired,
-      silentMicFireCount < maxSilentMicFiresPerSession,
+      silentMicFireCount < maxSilentMicFiresPerEpisode,
       consecutiveSilentWindows >= silentMicWindowThreshold,
       isBluetooth || detectSilentMicOnAnyTransport
     else {
@@ -190,6 +275,7 @@ class AudioCaptureService: @unchecked Sendable {
 
     let firedWindows = consecutiveSilentWindows
     silentMicDetectedFired = true
+    awaitingLiveMicSignal = true
     silentMicFireCount += 1
     lastSilentMicFireTime = now
     // Require a fresh run of silent windows before the next fire so we never re-trigger
@@ -200,7 +286,12 @@ class AudioCaptureService: @unchecked Sendable {
       deviceID: deviceID,
       deviceDescription: currentDeviceDescription,
       consecutiveSilentWindows: firedWindows,
-      isBluetoothTransport: isBluetooth
+      isBluetoothTransport: isBluetooth,
+      framesReceived: watchdogFrameCount,
+      peak: peak,
+      secondsToFirstFrame: watchdogFirstFrameAt.flatMap { first in
+        watchdogStartedAt.map { max(0, first - $0) }
+      }
     )
   }
 
@@ -279,10 +370,15 @@ class AudioCaptureService: @unchecked Sendable {
     // 1. Resolve input device: explicit override wins while available, otherwise
     // fall back to the system default instead of pinning capture to a stale device.
     let inputDeviceID = try resolveInputDeviceID()
-    self.deviceID = inputDeviceID
+    bindCaptureRoute(
+      deviceID: inputDeviceID,
+      isBuiltIn: inputDeviceID == Self.findBuiltInMicDeviceID(),
+      isBluetooth: Self.isBluetoothTransport(deviceID: inputDeviceID))
+    registerActiveCapture(deviceID: inputDeviceID)
 
     // 2. Get device stream format
     guard let streamFormat = getStreamFormat(for: deviceID) else {
+      unregisterActiveCapture()
       throw AudioCaptureError.noInputAvailable
     }
 
@@ -298,12 +394,14 @@ class AudioCaptureService: @unchecked Sendable {
         interleaved: false
       )
     else {
+      unregisterActiveCapture()
       throw AudioCaptureError.converterCreationFailed
     }
     self.inputFormat = inputFmt
 
     // 4. Create target format: Float32 at 16kHz mono
     guard let targetFmt = AVAudioFormat(standardFormatWithSampleRate: targetSampleRate, channels: 1) else {
+      unregisterActiveCapture()
       throw AudioCaptureError.converterCreationFailed
     }
     self.targetFormat = targetFmt
@@ -312,6 +410,7 @@ class AudioCaptureService: @unchecked Sendable {
 
     // 5. Create audio converter for resampling
     guard let converter = AVAudioConverter(from: inputFmt, to: targetFmt) else {
+      unregisterActiveCapture()
       throw AudioCaptureError.converterCreationFailed
     }
     self.audioConverter = converter
@@ -324,6 +423,7 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     guard ioProcStatus == noErr, let validProcID = procID else {
+      unregisterActiveCapture()
       throw AudioCaptureError.engineStartFailed(
         NSError(
           domain: "AudioCapture", code: Int(ioProcStatus),
@@ -337,6 +437,7 @@ class AudioCaptureService: @unchecked Sendable {
     guard startStatus == noErr else {
       AudioDeviceDestroyIOProcID(deviceID, validProcID)
       self.ioProcID = nil
+      unregisterActiveCapture()
       throw AudioCaptureError.engineStartFailed(
         NSError(
           domain: "AudioCapture", code: Int(startStatus),
@@ -378,11 +479,17 @@ class AudioCaptureService: @unchecked Sendable {
     // clears; startCapture assigns this state on the same queue, so a stop's
     // clear and a restart's fresh assignment can never interleave.
     // AudioDeviceStop can block waiting for the IO thread — run off main thread.
+    let teardownToken = activeCaptureToken
     audioQueue.async { [weak self] in
       if let procID = procID, devID != kAudioObjectUnknown {
         AudioDeviceStop(devID, procID)
         AudioDeviceDestroyIOProcID(devID, procID)
       }
+      // Token unregister: releases physical ownership only after the HAL
+      // teardown above completes, still runs if the service was deallocated
+      // while this block waited, and can never collide with a replacement
+      // service's registration (no reliance on weak self or address identity).
+      AudioCaptureService.unregisterActiveCapture(token: teardownToken)
       guard let self else { return }
       self.onAudioChunk = nil
       self.onAudioLevel = nil
@@ -412,48 +519,135 @@ class AudioCaptureService: @unchecked Sendable {
     return isCapturing
   }
 
+  /// The input devices currently available to use for microphone capture.
+  static func availableInputDevices() -> [InputDevice] {
+    audioDeviceIDs().compactMap { deviceID in
+      guard
+        isAvailableInputDevice(deviceID),
+        let uid = deviceStringProperty(deviceID, selector: kAudioDevicePropertyDeviceUID)
+      else { return nil }
+
+      return InputDevice(
+        id: deviceID,
+        uid: uid,
+        name: deviceStringProperty(deviceID, selector: kAudioObjectPropertyName) ?? "Microphone"
+      )
+    }
+    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+  }
+
+  /// Resolve a persisted CoreAudio device UID to its current numeric ID.
+  static func inputDeviceID(forUID uid: String) -> AudioDeviceID? {
+    availableInputDevices().first(where: { $0.uid == uid })?.id
+  }
+
+  /// Ray-Ban Meta / Oakley Meta glasses expose no vendor API on macOS; the
+  /// input-device name is the only identity signal, so match Meta's product
+  /// names precisely rather than anything containing "glass".
+  static func isMetaGlassesName(_ name: String) -> Bool {
+    let lower = name.lowercased()
+    // Real glasses often present their EssilorLuxottica codename rather than a
+    // product name — observed as "EL AI 000F" on hardware. Prefix-anchored so
+    // it cannot swallow unrelated names like "El Camino AI".
+    return lower.contains("ray-ban") || lower.contains("rayban")
+      || lower.contains("oakley meta") || lower.contains("meta glasses")
+      || lower.hasPrefix("el ai ")
+  }
+
+  /// Human-readable name for a CoreAudio device.
+  static func deviceName(for deviceID: AudioDeviceID) -> String? {
+    deviceStringProperty(deviceID, selector: kAudioObjectPropertyName)
+  }
+
+  /// UserDefaults key for the user's explicit microphone choice ("" = system default).
+  static let preferredInputUIDDefaultsKey = DefaultsKey.preferredMicrophoneDeviceUID.rawValue
+
+  /// Serializes every preferred-microphone HAL resolution onto one queue: the
+  /// enumeration has no deadline against a wedged driver, so concurrent callers
+  /// (session metadata, capture open, retries) must strand at most one worker —
+  /// later requests wait behind it instead of spawning more blocked tasks.
+  private static let preferredMicResolveQueue = DispatchQueue(
+    label: "com.omi.preferred-mic-resolve", qos: .userInitiated)
+
+  /// Resolve the persisted preferred-microphone UID to its current device ID
+  /// and display name, off the calling actor. Returns nil when no selection is
+  /// set or the device is unavailable.
+  static func resolvePreferredMicrophone() async -> (id: AudioDeviceID, name: String?)? {
+    let uid = UserDefaults.standard.string(forKey: preferredInputUIDDefaultsKey) ?? ""
+    guard !uid.isEmpty else { return nil }
+    return await withCheckedContinuation { continuation in
+      preferredMicResolveQueue.async {
+        guard let id = inputDeviceID(forUID: uid) else {
+          continuation.resume(returning: nil)
+          return
+        }
+        continuation.resume(returning: (id: id, name: deviceName(for: id)))
+      }
+    }
+  }
+
+  // MARK: - Active-capture registry
+  //
+  // Tracks which devices are held by a live capture so other audio consumers
+  // (push-to-talk) can avoid opening a second IOProc against the same device
+  // — or joining a Bluetooth mic's A2DP↔HFP profile flap — which races the
+  // two instances' stream-format reconfiguration paths.
+  private static let activeCapturesLock = NSLock()
+  // nonisolated(unsafe): every access is guarded by activeCapturesLock (same
+  // pattern as ScreenCaptureService's lock-guarded statics).
+  nonisolated(unsafe) private static var activeCaptures: [UUID: AudioDeviceID] = [:]
+
+  /// Per-instance registration token. Deliberately NOT ObjectIdentifier: the
+  /// queued HAL-teardown unregister can run after this service deallocates,
+  /// and a replacement service allocated at the same address would collide on
+  /// an identity key — the stale removal would then delete the replacement's
+  /// live entry. A UUID can never be reused by a new instance.
+  private let activeCaptureToken = UUID()
+
+  private func registerActiveCapture(deviceID: AudioDeviceID) {
+    Self.activeCapturesLock.lock()
+    Self.activeCaptures[activeCaptureToken] = deviceID
+    Self.activeCapturesLock.unlock()
+  }
+
+  private func unregisterActiveCapture() {
+    Self.unregisterActiveCapture(token: activeCaptureToken)
+  }
+
+  /// Token form so a queued HAL-teardown block can release the registry entry
+  /// after AudioDeviceStop completes even when the service itself was
+  /// deallocated while the block waited.
+  private static func unregisterActiveCapture(token: UUID) {
+    activeCapturesLock.lock()
+    activeCaptures.removeValue(forKey: token)
+    activeCapturesLock.unlock()
+  }
+
+  /// True when a live capture already holds this device.
+  static func isDeviceActivelyCaptured(
+    _ deviceID: AudioDeviceID,
+    excluding excludedCapture: AudioCaptureService? = nil
+  ) -> Bool {
+    activeCapturesLock.lock()
+    defer { activeCapturesLock.unlock() }
+    let excludedToken = excludedCapture?.activeCaptureToken
+    return activeCaptures.contains { token, activeDeviceID in
+      activeDeviceID == deviceID && token != excludedToken
+    }
+  }
+
+  /// True when any capture is currently running in this process.
+  static func hasActiveCapture(excluding excludedCapture: AudioCaptureService? = nil) -> Bool {
+    activeCapturesLock.lock()
+    defer { activeCapturesLock.unlock() }
+    guard let excludedCapture else { return !activeCaptures.isEmpty }
+    return activeCaptures.keys.contains { $0 != excludedCapture.activeCaptureToken }
+  }
+
   /// Get the name of the current default input device (microphone)
   static func getCurrentMicrophoneName() -> String? {
-    var deviceID: AudioDeviceID = 0
-    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-    var address = AudioObjectPropertyAddress(
-      mSelector: kAudioHardwarePropertyDefaultInputDevice,
-      mScope: kAudioObjectPropertyScopeGlobal,
-      mElement: kAudioObjectPropertyElementMain
-    )
-
-    let status = AudioObjectGetPropertyData(
-      AudioObjectID(kAudioObjectSystemObject),
-      &address,
-      0,
-      nil,
-      &size,
-      &deviceID
-    )
-
-    guard status == noErr, deviceID != kAudioDeviceUnknown else {
-      return nil
-    }
-
-    // Get the device name
-    var name: Unmanaged<CFString>?
-    size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-    address.mSelector = kAudioObjectPropertyName
-
-    let nameStatus = AudioObjectGetPropertyData(
-      deviceID,
-      &address,
-      0,
-      nil,
-      &size,
-      &name
-    )
-
-    guard nameStatus == noErr, let cfName = name?.takeRetainedValue() else {
-      return nil
-    }
-
-    return cfName as String
+    guard let deviceID = currentDefaultInputDeviceID() else { return nil }
+    return deviceStringProperty(deviceID, selector: kAudioObjectPropertyName)
   }
 
   // MARK: - Private Methods
@@ -475,7 +669,7 @@ class AudioCaptureService: @unchecked Sendable {
     return defaultDeviceID
   }
 
-  private static func currentDefaultInputDeviceID() -> AudioDeviceID? {
+  static func currentDefaultInputDeviceID() -> AudioDeviceID? {
     var deviceID: AudioDeviceID = kAudioObjectUnknown
     var size = UInt32(MemoryLayout<AudioDeviceID>.size)
     var address = AudioObjectPropertyAddress(
@@ -499,6 +693,55 @@ class AudioCaptureService: @unchecked Sendable {
 
   private static func isAvailableInputDevice(_ deviceID: AudioDeviceID) -> Bool {
     deviceID != kAudioObjectUnknown && deviceID != kAudioDeviceUnknown && deviceHasInputChannels(deviceID)
+  }
+
+  private static func audioDeviceIDs() -> [AudioDeviceID] {
+    var address = AudioObjectPropertyAddress(
+      mSelector: kAudioHardwarePropertyDevices,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain
+    )
+    var size: UInt32 = 0
+    guard
+      AudioObjectGetPropertyDataSize(
+        AudioObjectID(kAudioObjectSystemObject),
+        &address,
+        0,
+        nil,
+        &size
+      ) == noErr
+    else { return [] }
+
+    let count = Int(size) / MemoryLayout<AudioDeviceID>.size
+    guard count > 0 else { return [] }
+    var deviceIDs = [AudioDeviceID](repeating: kAudioObjectUnknown, count: count)
+    guard
+      AudioObjectGetPropertyData(
+        AudioObjectID(kAudioObjectSystemObject),
+        &address,
+        0,
+        nil,
+        &size,
+        &deviceIDs
+      ) == noErr
+    else { return [] }
+    return deviceIDs
+  }
+
+  private static func deviceStringProperty(_ deviceID: AudioDeviceID, selector: AudioObjectPropertySelector) -> String?
+  {
+    var value: Unmanaged<CFString>?
+    var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+    var address = AudioObjectPropertyAddress(
+      mSelector: selector,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain
+    )
+    guard
+      AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value) == noErr,
+      let string = value?.takeRetainedValue()
+    else { return nil }
+    return string as String
   }
 
   /// Get stream format for a device on input scope
@@ -534,6 +777,20 @@ class AudioCaptureService: @unchecked Sendable {
   ) -> AVAudioFrameCount {
     guard frameCount > 0, sourceSampleRate > 0, targetSampleRate > 0 else { return 0 }
     return AVAudioFrameCount(ceil(Double(frameCount) * targetSampleRate / sourceSampleRate))
+  }
+
+  /// Linear16 chunks at or below the watchdog's five-count floor are silence.
+  /// Cloud capture must not stream these chunks during a silent route probe.
+  static func containsLivePCM(_ data: Data) -> Bool {
+    data.withUnsafeBytes { buffer in
+      let bytes = buffer.bindMemory(to: UInt8.self)
+      guard bytes.count >= 2 else { return false }
+      for offset in stride(from: 0, to: bytes.count - 1, by: 2) {
+        let sample = Int16(bitPattern: UInt16(bytes[offset]) | (UInt16(bytes[offset + 1]) << 8))
+        if sample < -5 || sample > 5 { return true }
+      }
+      return false
+    }
   }
 
   /// Handle incoming audio data from the IOProc callback
@@ -608,6 +865,7 @@ class AudioCaptureService: @unchecked Sendable {
     let processedFrameLength = Int(outputBuffer.frameLength)
     var pcmData = [Int16]()
     pcmData.reserveCapacity(processedFrameLength)
+    var windowPeak: Int16 = 0
 
     for i in 0..<processedFrameLength {
       let sample = channelData[i]
@@ -618,7 +876,7 @@ class AudioCaptureService: @unchecked Sendable {
       // Accumulate the silent-mic peak while converting samples to avoid an
       // extra pass on the audio callback hot path.
       let absoluteSample = pcmSample == Int16.min ? Int16.max : Int16(pcmSample.magnitude)
-      if absoluteSample > watchdogWindowPeak { watchdogWindowPeak = absoluteSample }
+      if absoluteSample > windowPeak { windowPeak = absoluteSample }
     }
 
     // Convert to Data (little-endian, which is native on Apple platforms)
@@ -633,24 +891,37 @@ class AudioCaptureService: @unchecked Sendable {
     // one-shot latch) so the watchdog observes recovery and can re-arm for a second
     // episode — see `evaluateSilentMicWindow`.
     let nowAbs = CFAbsoluteTimeGetCurrent()
+    let isBluetooth = captureDeviceIsBluetooth
+    silentMicWatchdogLock.lock()
+    watchdogFrameCount += processedFrameLength
+    if watchdogFirstFrameAt == nil { watchdogFirstFrameAt = nowAbs }
+    if windowPeak > watchdogWindowPeak { watchdogWindowPeak = windowPeak }
     if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
+    let detection: SilentMicDetection?
+    let recovered: Bool
     if nowAbs - watchdogWindowStart >= 1.0 {
-      let isBluetooth = Self.isBluetoothTransport(deviceID: deviceID)
-      if let detection = evaluateSilentMicWindow(peak: watchdogWindowPeak, isBluetooth: isBluetooth, now: nowAbs) {
-        if isBluetooth {
-          log(
-            "AudioCapture: Bluetooth mic returning silence for \(detection.consecutiveSilentWindows)s — falling back to built-in mic"
-          )
-        } else {
-          log(
-            "AudioCapture: Input device returning silence for \(detection.consecutiveSilentWindows)s — rebuilding CoreAudio capture"
-          )
-        }
-        let handler = onSilentMicDetected
-        DispatchQueue.main.async { handler?(detection) }
-      }
+      recovered = takeLiveMicRecoveryLocked(peak: watchdogWindowPeak)
+      detection = evaluateSilentMicWindowLocked(peak: watchdogWindowPeak, isBluetooth: isBluetooth, now: nowAbs)
       watchdogWindowPeak = 0
       watchdogWindowStart = nowAbs
+    } else {
+      detection = nil
+      recovered = false
+    }
+    silentMicWatchdogLock.unlock()
+    if recovered { onLiveMicRecovered?() }
+    if let detection {
+      if isBluetooth {
+        log(
+          "AudioCapture: Bluetooth mic returning silence for \(detection.consecutiveSilentWindows)s — falling back to built-in mic"
+        )
+      } else {
+        log(
+          "AudioCapture: Input device returning silence for \(detection.consecutiveSilentWindows)s — rebuilding CoreAudio capture"
+        )
+      }
+      let handler = onSilentMicDetected
+      DispatchQueue.main.async { handler?(detection) }
     }
 
     // Calculate and report audio level (RMS normalized to 0.0 - 1.0)
@@ -692,6 +963,7 @@ class AudioCaptureService: @unchecked Sendable {
   // MARK: - Property Listeners
 
   private func installPropertyListeners() {
+    registerActiveCapture(deviceID: deviceID)
     updateDefaultDeviceListener()
     installDeviceFormatListener()
   }
@@ -802,8 +1074,13 @@ class AudioCaptureService: @unchecked Sendable {
   private func handleConfigurationChange() {
     guard isCapturing, !isReconfiguring else { return }
     isReconfiguring = true
+    // One clock per reconfiguration episode, not per attempt: the budget is how long the
+    // device may take to come back, so it must span the whole retry chain.
+    reconfigurationStartedAt = DispatchTime.now()
 
     log("AudioCapture: Configuration changed, restarting with new device...")
+    let routeHandler = onInputRouteChanged
+    DispatchQueue.main.async { routeHandler?() }
 
     // Stop IOProc on old device
     if let procID = ioProcID, deviceID != kAudioObjectUnknown {
@@ -821,7 +1098,45 @@ class AudioCaptureService: @unchecked Sendable {
     }
   }
 
-  private static let maxRetries = 3
+  /// How long reconfiguration keeps trying before it concedes the device is gone, and the
+  /// ceiling on the gap between attempts.
+  ///
+  /// The shipped policy was three retries at 1s, 2s and 3s — six seconds, then a permanent
+  /// stop. That is far shorter than the devices that actually need it take to settle:
+  /// aggregate and virtual inputs renegotiate their stream format while another audio app
+  /// holds them, and every renegotiation fires the format listener, so the window has to
+  /// outlast the other application rather than the hardware. Six seconds does not.
+  private static let reconfigurationRetryWindow: TimeInterval = 300
+  private static let maxReconfigurationRetryDelay: TimeInterval = 30
+
+  /// The wait before the next attempt, or nil once the window is spent.
+  ///
+  /// Bounded by elapsed time rather than attempt count so the policy states the thing that
+  /// matters — how long a user's chosen microphone may take to come back — instead of a
+  /// number of tries whose meaning changes with the backoff curve. A device that really is
+  /// gone still ends in a give-up; it just is not one that fires while the device is merely
+  /// busy.
+  nonisolated static func reconfigurationRetryDelay(
+    retryCount: Int,
+    elapsed: TimeInterval
+  ) -> TimeInterval? {
+    let remaining = reconfigurationRetryWindow - elapsed
+    guard remaining > 0 else { return nil }
+    let backoff = min(pow(2.0, Double(max(retryCount, 0))), maxReconfigurationRetryDelay)
+    // Clamp to what is left: an unclamped backoff late in the episode schedules an attempt
+    // past the deadline the window is supposed to be, so the budget would mean one thing in
+    // the doc comment and another in the schedule.
+    return min(backoff, remaining)
+  }
+
+  /// Seconds between a monotonic mark and now. `DispatchTime` is unsigned and cannot run
+  /// backwards, so the only way `now` precedes `start` is a caller passing a future mark;
+  /// that reads as zero elapsed rather than underflowing into a vast interval.
+  nonisolated static func monotonicElapsed(since start: DispatchTime) -> TimeInterval {
+    let now = DispatchTime.now().uptimeNanoseconds
+    guard now > start.uptimeNanoseconds else { return 0 }
+    return TimeInterval(now - start.uptimeNanoseconds) / 1_000_000_000
+  }
 
   private func reconfigureAfterChange(retryCount: Int) {
     guard
@@ -839,7 +1154,11 @@ class AudioCaptureService: @unchecked Sendable {
       return
     }
 
-    self.deviceID = newDeviceID
+    bindCaptureRoute(
+      deviceID: newDeviceID,
+      isBuiltIn: newDeviceID == Self.findBuiltInMicDeviceID(),
+      isBluetooth: Self.isBluetoothTransport(deviceID: newDeviceID))
+    registerActiveCapture(deviceID: newDeviceID)
 
     // Get new format
     guard let streamFormat = getStreamFormat(for: deviceID) else {
@@ -912,6 +1231,7 @@ class AudioCaptureService: @unchecked Sendable {
 
     log("AudioCapture: Restarted with new configuration")
     isReconfiguring = false
+    reconfigurationStartedAt = nil
   }
 
   nonisolated static func shouldRunDeferredReconfiguration(
@@ -922,15 +1242,22 @@ class AudioCaptureService: @unchecked Sendable {
   }
 
   private func retryOrGiveUp(retryCount: Int) {
-    if retryCount < Self.maxRetries {
-      let delay = Double(retryCount + 1) * 1.0  // 1s, 2s, 3s backoff
-      log("AudioCapture: Retrying in \(delay)s...")
+    let elapsed = reconfigurationStartedAt.map { Self.monotonicElapsed(since: $0) } ?? 0
+    if let delay = Self.reconfigurationRetryDelay(retryCount: retryCount, elapsed: elapsed) {
+      log("AudioCapture: Retrying in \(delay)s (\(Int(elapsed))s elapsed)...")
       audioQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
         self?.reconfigureAfterChange(retryCount: retryCount + 1)
       }
     } else {
-      logError("AudioCapture: Giving up after \(retryCount + 1) attempts")
+      logError("AudioCapture: Giving up after \(Int(elapsed))s of reconfiguration attempts")
+      // Clearing isCapturing makes stopCapture() and deinit skip their
+      // listener cleanup, so the still-registered CoreAudio listeners must be
+      // removed here or repeated unrecoverable route changes leak them.
+      removePropertyListeners()
       isReconfiguring = false
+      isCapturing = false
+      reconfigurationStartedAt = nil
+      unregisterActiveCapture()
     }
   }
 
@@ -976,37 +1303,7 @@ class AudioCaptureService: @unchecked Sendable {
   /// Locate the CoreAudio device ID of the built-in microphone (if present).
   /// Returns `nil` when no built-in input is available (e.g. desktop Mac without a mic).
   static func findBuiltInMicDeviceID() -> AudioDeviceID? {
-    var address = AudioObjectPropertyAddress(
-      mSelector: kAudioHardwarePropertyDevices,
-      mScope: kAudioObjectPropertyScopeGlobal,
-      mElement: kAudioObjectPropertyElementMain
-    )
-    var size: UInt32 = 0
-    guard
-      AudioObjectGetPropertyDataSize(
-        AudioObjectID(kAudioObjectSystemObject),
-        &address,
-        0,
-        nil,
-        &size
-      ) == noErr
-    else { return nil }
-
-    let count = Int(size) / MemoryLayout<AudioDeviceID>.size
-    guard count > 0 else { return nil }
-    var deviceIDs = [AudioDeviceID](repeating: kAudioObjectUnknown, count: count)
-    guard
-      AudioObjectGetPropertyData(
-        AudioObjectID(kAudioObjectSystemObject),
-        &address,
-        0,
-        nil,
-        &size,
-        &deviceIDs
-      ) == noErr
-    else { return nil }
-
-    for id in deviceIDs where id != kAudioObjectUnknown {
+    for id in audioDeviceIDs() where id != kAudioObjectUnknown {
       guard deviceHasInputChannels(id) else { continue }
 
       var transport: UInt32 = 0
@@ -1066,6 +1363,11 @@ class AudioCaptureService: @unchecked Sendable {
         AudioDeviceStop(deviceID, procID)
         AudioDeviceDestroyIOProcID(deviceID, procID)
       }
+      // Direct-teardown path only: after stopCapture() the queued audioQueue
+      // block owns the release (by owner identity, surviving dealloc) and it
+      // must not happen before AudioDeviceStop completes — unregistering here
+      // in that case would mark the device free while its IOProc is alive.
+      unregisterActiveCapture()
     }
   }
 }

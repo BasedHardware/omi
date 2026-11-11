@@ -8,6 +8,7 @@ final class AppServicesCoordinator {
   var systemAudioCaptureService: Any?
   var audioMixer: AudioMixer?
   var meetingDetector: MeetingDetector?
+  var dictationMicSuppressionMonitor: DictationMicSuppressionMonitor?
   var vadGateService: VADGateService?
   var localMicService: LocalTranscriptionService?
   var localSystemService: LocalTranscriptionService?
@@ -22,7 +23,7 @@ final class AppServicesCoordinator {
   var screenUnlockedObserver: NSObjectProtocol?
   var screenCapturePermissionLostObserver: NSObjectProtocol?
   var screenCaptureKitBrokenObserver: NSObjectProtocol?
-  var systemAudioCaptureModeObserver: NSObjectProtocol?
+  var audioRecordingModeObserver: NSObjectProtocol?
   var coreAudioCaptureRecoveryObserver: NSObjectProtocol?
 
   var buttonStreamTask: Task<Void, Never>?
@@ -67,9 +68,9 @@ final class AppServicesCoordinator {
       NotificationCenter.default.removeObserver(observer)
       screenCaptureKitBrokenObserver = nil
     }
-    if let observer = systemAudioCaptureModeObserver {
+    if let observer = audioRecordingModeObserver {
       NotificationCenter.default.removeObserver(observer)
-      systemAudioCaptureModeObserver = nil
+      audioRecordingModeObserver = nil
     }
     if let observer = coreAudioCaptureRecoveryObserver {
       NotificationCenter.default.removeObserver(observer)

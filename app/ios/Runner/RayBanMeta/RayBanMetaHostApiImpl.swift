@@ -70,8 +70,8 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
 
     // MARK: - Audio (HFP route — available in both modes)
 
-    func startAudioCapture() throws {
-        try audioCapture.start()
+    func startAudioCapture(inputUid: String?) throws {
+        try audioCapture.start(targetUid: inputUid)
     }
 
     func stopAudioCapture() throws {
@@ -79,10 +79,10 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
     }
 
     func isGlassesAudioRouteActive() throws -> Bool {
-        return RayBanMetaAudioCapture.isHfpRouteActive()
+        return audioCapture.isSelectedRouteActive
     }
 
-    func getBluetoothHfpInputNames() throws -> [String] {
+    func getBluetoothHfpInputs() throws -> [BluetoothHfpInput] {
         // Enumerating Bluetooth inputs requires a record-capable session category.
         // This can run during discovery while another device records, so restore
         // the prior category instead of leaving the shared session mutated.
@@ -95,11 +95,13 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             try? session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothHFP])
             mutated = true
         }
-        let names = RayBanMetaAudioCapture.availableHfpInputNames()
+        let inputs = RayBanMetaAudioCapture.availableHfpInputs().map {
+            BluetoothHfpInput(uid: $0.uid, name: $0.name)
+        }
         if mutated {
             try? session.setCategory(priorCategory, mode: priorMode, options: priorOptions)
         }
-        return names
+        return inputs
     }
 
     #if canImport(MWDATCore)

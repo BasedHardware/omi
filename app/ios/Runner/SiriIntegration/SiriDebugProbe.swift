@@ -1,0 +1,1158 @@
+#if compiler(>=6.4)
+#if OMI_SIRI_PROBE
+import Foundation
+import FirebaseAuth
+import FirebaseCore
+import AppIntents
+import CoreSpotlight
+import app_links
+import ObjectiveC.runtime
+
+/// Simulator-only, opt-in probe for a Runner launch that has no Dart engine.
+/// It accepts only loopback, and uses a fake token against a local stub.
+enum SiriDebugProbe {
+    static var spotlightModeActive: Bool {
+        ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-spotlight") ||
+            UserDefaults.standard.bool(forKey: "omi.siri.spotlightProbe")
+    }
+
+    @available(iOS 26.0, *)
+    private static func runSpotlightProbe() async {
+        guard ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-spotlight") else {
+            NSLog("[SiriSceneProbe] coldProbeLaunch pendingRoute=%@",
+                  SiriSnapshotStore.shared.pendingRoute()?.route ?? "nil")
+            return
+        }
+        UserDefaults.standard.set(true, forKey: "omi.siri.spotlightProbe")
+        do {
+            let uid = "siri-spotlight-probe"
+            try await SiriSnapshotStore.shared.bind(uid: uid)
+            NSLog("[SiriSceneProbe] syntheticIndexStage=bound generation=%@",
+                  String(describing: SiriSnapshotStore.shared.generationForOwner(uid)))
+            let config = SiriSessionConfig(uid: uid,
+                generation: SiriSnapshotStore.shared.generationForOwner(uid) ?? 0,
+                baseUrl: "http://127.0.0.1:9", profile: "local_dev",
+                appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
+                token: "fake-siri-probe-token",
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(3600)))
+            try SiriSession.shared.publish(config)
+            NSLog("[SiriSceneProbe] syntheticIndexStage=published")
+            let now = CheckedIntegerConversion.epochMs()
+            try await SiriSnapshotStore.shared.upsert([
+                SiriConversation(id: "spotlight-conversation", title: "Spotlight Omi Probe Conversation",
+                                 summary: "Synthetic probe", startedAtMs: now, updatedAtMs: now)
+            ], uid: uid)
+            NSLog("[SiriSceneProbe] syntheticIndexStage=conversation")
+            try await SiriSnapshotStore.shared.upsert([
+                SiriMemory(id: "spotlight-memory", content: "Spotlight Omi Probe Memory",
+                           createdAtMs: now, expiresAtMs: nil)
+            ], uid: uid)
+            NSLog("[SiriSceneProbe] syntheticIndexStage=memory")
+            try await SiriSnapshotStore.shared.upsert([
+                SiriTask(id: "spotlight-task", title: "Spotlight Omi Probe Task", completed: false,
+                         createdAtMs: now, dueAtMs: nil, completedAtMs: nil)
+            ], uid: uid)
+            try await SiriSnapshotStore.shared.rebuildIndex()
+            NSLog("[SiriSceneProbe] syntheticIndex=ready owner=%@", uid)
+            let found: Int = await withCheckedContinuation { continuation in
+                let query = CSSearchQuery(queryString: "title == \"Spotlight Omi Probe Conversation\"",
+                                          queryContext: nil)
+                query.completionHandler = { error in
+                    NSLog("[SiriSceneProbe] syntheticQueryError=%@", String(describing: error))
+                    continuation.resume(returning: query.foundItemCount)
+                }
+                query.start()
+            }
+            NSLog("[SiriSceneProbe] syntheticQueryCount=%d", found)
+            if #available(iOS 27.0, *) {
+                let conversation = ConversationEntity(id: "spotlight-conversation", name: "Probe",
+                    content: "Synthetic", creationDate: Date(), modificationDate: Date())
+                let memory = MemoryEntity(id: "spotlight-memory", content: "Synthetic", creationDate: Date())
+                let task = TaskEntity(id: "spotlight-task", title: "Probe", isCompleted: false,
+                    creationDate: Date(), dueDate: nil, completionDate: nil)
+                for (label, identifier, expectedRoute) in [
+                    ("conversation", EntityIdentifier(for: conversation), "/conversation/spotlight-conversation"),
+                    ("memory", EntityIdentifier(for: memory), "/memory/spotlight-memory"),
+                    ("task", EntityIdentifier(for: task), "/task/spotlight-task"),
+                    ("memoryNote", EntityIdentifier(for: ConversationEntity(
+                        memoryId: "spotlight-memory", content: "Synthetic", creationDate: Date())),
+                     "/memory/spotlight-memory"),
+                ] {
+                    let activity = NSUserActivity(activityType: CSSearchableItemActionType)
+                    activity.appEntityIdentifier = identifier
+                    activity.userInfo = [CSSearchableItemActivityIdentifier: identifier.description]
+                    SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(false) }
+                    OmiSpotlightActivityRoute.handle(activity)
+                    let pending = SiriSnapshotStore.shared.pendingRoute()
+                    NSLog("[SiriSceneProbe] syntheticActivity_%@=%@ target=%@",
+                          label, pending?.route == expectedRoute ? "PASS" : "FAIL",
+                          String(describing: OmiSpotlightActivityRoute.target(activity)))
+                    if let pending {
+                        SiriSnapshotStore.shared.finishPendingRoute(route: pending.route, uid: pending.uid,
+                            generation: pending.generation, delivered: true)
+                    }
+                    SiriSnapshotStore.shared.resetRouteDedupForProbe()
+                }
+                SiriBridge.shared.routeDeliveryProbe = nil
+                let stale = NSUserActivity(activityType: CSSearchableItemActionType)
+                stale.appEntityIdentifier = EntityIdentifier(for: TaskEntity(id: "missing-task",
+                    title: "Gone", isCompleted: false, creationDate: Date(), dueDate: nil,
+                    completionDate: nil))
+                OmiSpotlightActivityRoute.handle(stale)
+                NSLog("[SiriSceneProbe] syntheticActivity_stale=%@",
+                      SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL")
+
+                let store = SiriSnapshotStore.shared
+                _ = SiriTelemetry.take()
+                var deliveries = 0
+                SiriBridge.shared.routeDeliveryProbe = { _, completion in
+                    deliveries += 1
+                    completion(true)
+                }
+                let duplicateActivity = NSUserActivity(activityType: CSSearchableItemActionType)
+                duplicateActivity.appEntityIdentifier = EntityIdentifier(for: conversation)
+                OmiSpotlightActivityRoute.handle(duplicateActivity)
+                var duplicateIntent = OpenOmiIntent()
+                duplicateIntent.target = conversation
+                _ = try await duplicateIntent.perform()
+                let openRows = SiriTelemetry.take().filter { $0.intent == "open" }
+                let paths = Set(openRows.map(\.entryPath))
+                NSLog("[SiriSceneProbe] duplicateCrossPath=%@ deliveries=%d telemetry=%@",
+                      deliveries == 1 && store.pendingRoute() == nil && openRows.count == 2 &&
+                          paths == Set(["user_activity", "app_intent"]) ? "PASS" : "FAIL",
+                      deliveries, String(describing: paths))
+                store.resetRouteDedupForProbe()
+                _ = SiriTelemetry.take()
+                var deferredAcknowledgment: ((Bool) -> Void)?
+                deliveries = 0
+                SiriBridge.shared.routeDeliveryProbe = { _, completion in
+                    deliveries += 1
+                    deferredAcknowledgment = completion
+                }
+                _ = try await duplicateIntent.perform()
+                OmiSpotlightActivityRoute.handle(duplicateActivity)
+                let pendingBeforeAck = store.pendingRoute()?.route == "/conversation/spotlight-conversation"
+                deferredAcknowledgment?(true)
+                let inFlightRows = SiriTelemetry.take().filter { $0.intent == "open" }
+                NSLog("[SiriSceneProbe] duplicateBeforeAck=%@",
+                      deliveries == 1 && pendingBeforeAck && store.pendingRoute() == nil &&
+                          Set(inFlightRows.map(\.entryPath)) == Set(["app_intent", "user_activity"])
+                          ? "PASS" : "FAIL")
+                SiriBridge.shared.routeDeliveryProbe = nil
+                store.resetRouteDedupForProbe()
+
+                let expired = store.claimPendingRoute("/task/expired", started: Date().addingTimeInterval(-61))
+                let expiredClaimed: Bool
+                if case .accepted = expired { expiredClaimed = true } else { expiredClaimed = false }
+                NSLog("[SiriSceneProbe] expiredRoute=%@",
+                      expiredClaimed && store.pendingRoute() == nil ? "PASS" : "FAIL")
+                store.resetRouteDedupForProbe()
+                let retry = store.claimPendingRoute("/task/retry", started: Date().addingTimeInterval(-59))
+                if case .accepted(let route) = retry {
+                    store.finishPendingRoute(route: route.route, uid: route.uid,
+                                             generation: route.generation, delivered: false)
+                    let stillPending = store.pendingRoute()?.route == route.route
+                    store.finishPendingRoute(route: route.route, uid: route.uid,
+                                             generation: route.generation, delivered: true)
+                    NSLog("[SiriSceneProbe] inWindowRetry=%@",
+                          stillPending && store.pendingRoute() == nil ? "PASS" : "FAIL")
+                } else {
+                    NSLog("[SiriSceneProbe] inWindowRetry=FAIL claim")
+                }
+                store.resetRouteDedupForProbe()
+
+                let sharedID = "spotlight-shared-id"
+                try await store.upsert([SiriConversation(id: sharedID, title: "Shared probe",
+                    summary: "Synthetic", startedAtMs: now, updatedAtMs: now)], uid: uid)
+                try await store.upsert([SiriMemory(id: sharedID, content: "Shared probe",
+                    createdAtMs: now, expiresAtMs: nil)], uid: uid)
+                let shared = ConversationEntity(id: sharedID, name: "Shared probe", content: "Synthetic",
+                    creationDate: Date(), modificationDate: Date())
+                let ambiguous = NSUserActivity(activityType: CSSearchableItemActionType)
+                ambiguous.appEntityIdentifier = EntityIdentifier(for: shared)
+                OmiSpotlightActivityRoute.handle(ambiguous)
+                NSLog("[SiriSceneProbe] ambiguousConversationMemory=%@",
+                      store.pendingRoute() == nil ? "PASS" : "FAIL")
+                let explicitMemory = NSUserActivity(activityType: CSSearchableItemActionType)
+                explicitMemory.appEntityIdentifier = EntityIdentifier(for: shared)
+                explicitMemory.userInfo = [CSSearchableItemActivityIdentifier: "omi://memory/\(sharedID)"]
+                SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(false) }
+                OmiSpotlightActivityRoute.handle(explicitMemory)
+                NSLog("[SiriSceneProbe] explicitMemoryKind=%@",
+                      store.pendingRoute()?.route == "/memory/\(sharedID)" ? "PASS" : "FAIL")
+                SiriBridge.shared.routeDeliveryProbe = nil
+            }
+        } catch {
+            NSLog("[SiriSceneProbe] syntheticIndex=failed error=%@", String(describing: error))
+        }
+    }
+
+    /// Compiles from the iOS 16 API floor; a 26-only intent or provider breaks
+    /// the opt-in probe build before it can reach the simulator.
+    @available(iOS 16.0, *)
+    private static func classicShortcutAvailability() -> Bool {
+        let shortcuts = OmiAppShortcuts.appShortcuts
+        _ = RememberIntent()
+        _ = AskOmiIntent()
+        _ = OpenOmiChatActionIntent()
+        _ = StartOmiListeningIntent()
+        _ = StopOmiListeningIntent()
+        let discoverySafe: Bool
+        if #available(iOS 17.0, *) {
+            discoverySafe = !OpenOmiChatIntent.isDiscoverable && AskOmiIntent.isDiscoverable &&
+                OpenOmiChatActionIntent.isDiscoverable
+        } else {
+            discoverySafe = true
+        }
+        return shortcuts.count == 5 && !RememberIntent.openAppWhenRun && !AskOmiIntent.openAppWhenRun &&
+            AskOmiIntent.authenticationPolicy == .requiresAuthentication &&
+            discoverySafe && OpenOmiChatActionIntent.openAppWhenRun &&
+            StartOmiListeningIntent.openAppWhenRun && StopOmiListeningIntent.openAppWhenRun
+    }
+
+    @available(iOS 26.0, *)
+    static func runIfRequested() {
+        if spotlightModeActive {
+            Task { await runSpotlightProbe() }
+            return
+        }
+        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-auth-seed") {
+            Task { await runAuthFenceProbe(seed: true) }
+            return
+        }
+        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-auth-verify") {
+            Task { await runAuthFenceProbe(seed: false) }
+            return
+        }
+        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-auth-gate") {
+            Task { await runAuthGateProbe() }
+            return
+        }
+        guard ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") else { return }
+        Task {
+            let support = FileManager.default.temporaryDirectory.appendingPathComponent("siri-storage-probe")
+            let fallback = SiriStorageLocation.container(groupURL: nil, appSupportURL: support)
+            let group = support.appendingPathComponent("group")
+            let fallbackCorrect = fallback.standardizedFileURL.path ==
+                support.appendingPathComponent("SiriIndex").standardizedFileURL.path
+            let groupCorrect = SiriStorageLocation.container(groupURL: group, appSupportURL: support)
+                .standardizedFileURL.path == group.standardizedFileURL.path
+            NSLog("[SiriProbe] missingAppGroupFallback=%@",
+                  fallbackCorrect && groupCorrect ? "PASS" : "FAIL")
+            let unavailableSession = SiriSession(defaults: nil)
+            let unavailableFailsSafe = unavailableSession.currentConfig() == nil
+            NSLog("[SiriProbe] missingSessionSuiteUnavailable=%@", unavailableFailsSafe ? "PASS" : "FAIL")
+            let terminal = "done: " + Data("{\"text\":\"The answer\"}".utf8).base64EncodedString()
+            let answerValid = (try? OmiNativeAPI.terminalChatAnswer(terminal)) == "The answer"
+            let partialIgnored = (try? OmiNativeAPI.terminalChatAnswer("data: partial")) == nil
+            let emptyRejected = (try? OmiNativeAPI.terminalChatAnswer("done: e30=")) == nil
+            NSLog("[SiriProbe] askOmiTerminalAnswer=%@",
+                  answerValid && partialIgnored && emptyRejected ? "PASS" : "FAIL")
+            let reservedDraft = "What is A&B = C+D #100%? 😀"
+            let encodedRoute = try? OpenOmiChatIntent.route(draft: reservedDraft)
+            let decodedDraft = encodedRoute.flatMap { URLComponents(string: $0)?.queryItems?.first?.value }
+            NSLog("[SiriProbe] askOmiDraftEncoding=%@",
+                  decodedDraft == reservedDraft && encodedRoute?.contains("%2B") == true ? "PASS" : "FAIL")
+            let normalizedQuestion = cleanedSiriQuestion("  Ask Omi about what I did today  ")
+            let normalizedFallback = cleanedSiriQuestion("Ask about what I did today")
+            let normalizedBareCarrier = cleanedSiriQuestion("Ask what I did today")
+            NSLog("[SiriProbe] askOmiQuestionRouting=%@",
+                  normalizedQuestion == "what I did today" &&
+                    normalizedFallback == "what I did today" &&
+                    normalizedBareCarrier == "what I did today" &&
+                    !OpenOmiChatIntent.isDiscoverable && AskOmiIntent.isDiscoverable ? "PASS" : "FAIL")
+            let attemptedFallback = AskOmiIntent.fallbackOpenChat(
+                OpenOmiChatIntent(), question: "What did I do today?", didAttemptChatPost: true)
+            let unattemptedFallback = AskOmiIntent.fallbackOpenChat(
+                OpenOmiChatIntent(), question: "What did I do today?", didAttemptChatPost: false)
+            NSLog("[SiriProbe] askOmiNoDoubleSend=%@",
+                  attemptedFallback.draftWasAttempted == true &&
+                    !OpenOmiChatIntent.shouldAutoSend(draft: attemptedFallback.draft,
+                                                      wasAttempted: attemptedFallback.draftWasAttempted) &&
+                    OpenOmiChatIntent.shouldAutoSend(draft: unattemptedFallback.draft,
+                                                     wasAttempted: unattemptedFallback.draftWasAttempted)
+                    ? "PASS" : "FAIL")
+            let production = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12")
+            let development = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12.development")
+            let productionKeys = [production.ownerKey, production.pendingWipeOwnersKey,
+                production.generationKey, production.enabledKey, production.pendingRouteKey,
+                production.sessionConfigKey, production.telemetryKey]
+            let developmentKeys = [development.ownerKey, development.pendingWipeOwnersKey,
+                development.generationKey, development.enabledKey, development.pendingRouteKey,
+                development.sessionConfigKey, development.telemetryKey]
+            guard let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12") else {
+                NSLog("[SiriProbe] flavorNamespace=FAIL (app-group defaults unavailable)")
+                return
+            }
+            let probeA = SiriStorageNamespace(bundleID: "com.omi.probe.a")
+            let probeB = SiriStorageNamespace(bundleID: "com.omi.probe.b")
+            defaults.set("probe-a", forKey: probeA.ownerKey)
+            defaults.set("probe-b", forKey: probeB.ownerKey)
+            let isolated = production.snapshotFileName != development.snapshotFileName &&
+                Set(productionKeys).isDisjoint(with: developmentKeys) &&
+                defaults.string(forKey: probeA.ownerKey) == "probe-a" &&
+                defaults.string(forKey: probeB.ownerKey) == "probe-b" &&
+                production.keychainService != development.keychainService &&
+                production.keychainAccount != development.keychainAccount &&
+                production.indexName(for: "same-user") != development.indexName(for: "same-user")
+            defaults.removeObject(forKey: probeA.ownerKey)
+            defaults.removeObject(forKey: probeB.ownerKey)
+            NSLog("[SiriProbe] flavorNamespace=%@", isolated ? "PASS" : "FAIL")
+            if FirebaseApp.app() == nil { FirebaseApp.configure() }
+            NSLog("[SiriProbe] engine=absent firebaseUser=%@", Auth.auth().currentUser?.uid ?? "nil")
+            NSLog("[SiriProbe] classicShortcuts=%@", classicShortcutAvailability() ? "PASS" : "FAIL")
+            let backgroundModes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] ?? []
+            NSLog("[SiriProbe] backgroundAudioBLEModes=%@",
+                  backgroundModes.contains("audio") && backgroundModes.contains("bluetooth-central") ? "PASS" : "FAIL")
+            let quickActionsClass = NSClassFromString("quick_actions_ios.QuickActionsPlugin")
+            let sceneProtocol = NSProtocolFromString("FlutterSceneLifeCycleDelegate")
+            let quickActionAvailable: Bool
+            if let quickActionsClass, let sceneProtocol {
+                quickActionAvailable = class_conformsToProtocol(quickActionsClass, sceneProtocol)
+            } else {
+                quickActionAvailable = false
+            }
+            NSLog("[SiriProbe] quickActionScenePlugin=%@", quickActionAvailable ? "PASS" : "FAIL")
+            for (label, rawURL) in [
+                ("scheme", "omi-dev://conversation/scene-probe"),
+                ("universal", "https://h.omi.me/conversation/scene-probe"),
+                ("oauth", "com.googleusercontent.apps.probe:/oauth-callback"),
+            ] {
+                guard let url = URL(string: rawURL) else {
+                    NSLog("[SiriProbe] sceneLink_%@=FAIL (invalid URL)", label)
+                    continue
+                }
+                if label == "universal" {
+                    let activity = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
+                    activity.webpageURL = url
+                    OmiSceneLinkRouter.forward(urls: [], activities: [activity])
+                } else {
+                    OmiSceneLinkRouter.forward(urls: [url], activities: [])
+                }
+                let latest = Mirror(reflecting: AppLinks.shared).children
+                    .first(where: { $0.label == "latestLink" })?.value as? String
+                NSLog("[SiriProbe] sceneLink_%@=%@", label, latest == rawURL ? "PASS" : "FAIL")
+            }
+            SiriSession.shared.clear()
+            do { _ = try await SiriSession.shared.token(); NSLog("[SiriProbe] signedOut=unexpected-token") }
+            catch { NSLog("[SiriProbe] signedOut=auth") }
+            guard let raw = ProcessInfo.processInfo.environment["OMI_SIRI_PROBE_URL"],
+                  let url = URL(string: raw), url.scheme == "http",
+                  ["127.0.0.1", "localhost"].contains(url.host ?? "") else {
+                NSLog("[SiriProbe] loopback URL missing; signed-out path only")
+                return
+            }
+            do {
+              try await SiriSnapshotStore.shared.bind(uid: "siri-probe")
+              var config = SiriSessionConfig(uid: "siri-probe",
+                generation: SiriSnapshotStore.shared.generationForOwner("siri-probe") ?? 0,
+                baseUrl: raw, profile: "local_dev",
+                appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
+                token: "fake-siri-probe-token",
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
+                try SiriSession.shared.publish(config)
+                let resumedGeneration = SiriSnapshotStore.shared.generationForOwner(config.uid)
+                NSLog("[SiriProbe] sameOwnerGeneration=%@ changedOwnerGeneration=%@",
+                      resumedGeneration != nil ? "PASS" : "FAIL",
+                      SiriSnapshotStore.shared.generationForOwner("another-uid") == nil ? "PASS" : "FAIL")
+                var intent = RememberIntent()
+                intent.content = "probe memory"
+                let result = try await intent.perform()
+                NSLog("[SiriProbe] rememberPerform=returned result=%@", String(reflecting: result))
+                NSLog("[SiriProbe] engineFreeRememberIndexed=%@",
+                      SiriSnapshotStore.shared.probeStoredEntity(type: "memory", id: "stub-memory-1") ? "PASS" : "FAIL")
+                // Model a process kill after the native sign-out preparation,
+                // before Flutter's auth-state callback can finish the wipe.
+                SiriSnapshotStore.shared.prepareForSignOut()
+                let markerPersisted = (defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? [])
+                    .contains(config.uid)
+                NSLog("[SiriProbe] pendingSignOutMarkerPersisted=%@", markerPersisted ? "PASS" : "FAIL")
+                let pendingQueriesEmpty: Bool
+                if #available(iOS 27.0, *) {
+                    pendingQueriesEmpty = SiriSnapshotStore.shared.memories(ids: nil).isEmpty &&
+                        SiriSnapshotStore.shared.memoryNotes(ids: nil).isEmpty &&
+                        SiriSnapshotStore.shared.conversations(ids: nil).isEmpty &&
+                        SiriSnapshotStore.shared.tasks(ids: nil).isEmpty
+                } else { pendingQueriesEmpty = true }
+                let pendingIntentDenied: Bool
+                do { _ = try await OmiNativeAPI().request(method: "POST", path: "/v1/memories", body: [:]); pendingIntentDenied = false }
+                catch SiriSession.Failure.auth { pendingIntentDenied = true }
+                catch { pendingIntentDenied = false }
+                NSLog("[SiriProbe] pendingSignOutQueriesEmpty=%@ intentDenied=%@",
+                      pendingQueriesEmpty ? "PASS" : "FAIL", pendingIntentDenied ? "PASS" : "FAIL")
+                let retried = try await SiriSnapshotStore.shared.retryPendingWipe()
+                NSLog("[SiriProbe] pendingSignOutWipeRetried=%@", retried ? "PASS" : "FAIL")
+                try await SiriSnapshotStore.shared.bind(uid: config.uid)
+                config = SiriSessionConfig(uid: config.uid,
+                    generation: SiriSnapshotStore.shared.generationForOwner(config.uid) ?? -1,
+                    baseUrl: config.baseUrl, profile: config.profile,
+                    appVersion: config.appVersion, appBuild: config.appBuild,
+                    deviceIdHash: config.deviceIdHash, token: "fake-siri-probe-token",
+                    tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
+                try SiriSession.shared.publish(config)
+                if #available(iOS 27.0, *) {
+                    let writeConfig = URLSessionConfiguration.ephemeral
+                    writeConfig.protocolClasses = [SiriProbeURLProtocol.self]
+                    OmiNativeAPI.testSession = URLSession(configuration: writeConfig)
+                    SiriProbeURLProtocol.status = 200
+                    SiriProbeURLProtocol.payload = "{\"id\":\"native-task-1\"}"
+                    var create = CreateOmiTaskIntent()
+                    create.title = "Native task"
+                    _ = try await create.perform()
+                    NSLog("[SiriProbe] engineFreeCreateIndexed=%@",
+                          SiriSnapshotStore.shared.probeStoredEntity(type: "task", id: "native-task-1") ? "PASS" : "FAIL")
+                    SiriProbeURLProtocol.payload = "{\"id\":\"native-task-1\"}"
+                    var complete = CompleteOmiTaskIntent()
+                    complete.target = TaskEntity(id: "native-task-1", title: "Native task", isCompleted: false,
+                                                 creationDate: Date(), dueDate: nil, completionDate: nil)
+                    complete.isCompleted = true
+                    _ = try await complete.perform()
+                    NSLog("[SiriProbe] engineFreeCompleteIndexed=%@",
+                          SiriSnapshotStore.shared.tasks(ids: ["native-task-1"]).first?.isCompleted == true ? "PASS" : "FAIL")
+                    SiriSnapshotStore.shared.simulateSnapshotPersistFailureOnce = true
+                    var cacheFailedRemember = RememberIntent()
+                    cacheFailedRemember.content = "confirmed despite cache failure"
+                    _ = try await cacheFailedRemember.perform()
+                    NSLog("[SiriProbe] confirmedRememberCacheFailure=%@",
+                          SiriTelemetry.take().last(where: { $0.intent == "remember" })?.outcome == "ok" ? "PASS" : "FAIL")
+                    SiriSnapshotStore.shared.simulateSnapshotPersistFailureOnce = true
+                    var cacheFailedNote = OmiCreateNoteIntent()
+                    cacheFailedNote.name = "confirmed despite cache failure"
+                    do {
+                        _ = try await cacheFailedNote.perform()
+                        NSLog("[SiriProbe] confirmedNoteCacheFailure=PASS")
+                    } catch { NSLog("[SiriProbe] confirmedNoteCacheFailure=FAIL") }
+                    SiriSnapshotStore.shared.simulateSnapshotPersistFailureOnce = true
+                    SiriProbeURLProtocol.payload = "{\"id\":\"native-task-2\"}"
+                    var cacheFailedCreate = CreateOmiTaskIntent()
+                    cacheFailedCreate.title = "confirmed despite cache failure"
+                    do {
+                        _ = try await cacheFailedCreate.perform()
+                        NSLog("[SiriProbe] confirmedCreateCacheFailure=PASS")
+                    } catch { NSLog("[SiriProbe] confirmedCreateCacheFailure=FAIL") }
+                    SiriSnapshotStore.shared.simulateSnapshotPersistFailureOnce = true
+                    SiriProbeURLProtocol.payload = "{\"id\":\"native-task-1\"}"
+                    do {
+                        _ = try await complete.perform()
+                        NSLog("[SiriProbe] confirmedCompleteCacheFailure=PASS")
+                    } catch { NSLog("[SiriProbe] confirmedCompleteCacheFailure=FAIL") }
+                    try await Task.sleep(nanoseconds: 31_000_000_000)
+                    NSLog("[SiriProbe] confirmedCacheRepair=%@",
+                          SiriSnapshotStore.shared.probePersistedEntity(type: "task", id: "native-task-2") ? "PASS" : "FAIL")
+                    OmiNativeAPI.testSession = nil
+                    SiriProbeURLProtocol.payload = "[]"
+                    let rebuildsBeforeSingleUpsert = SiriSnapshotStore.shared.probeFullRebuildCount
+                    try await SiriSnapshotStore.shared.upsert([
+                        SiriConversation(id: "probe-single-upsert", title: "Single", summary: "summary",
+                                         startedAtMs: CheckedIntegerConversion.epochMs(),
+                                         updatedAtMs: CheckedIntegerConversion.epochMs())
+                    ], uid: config.uid)
+                    NSLog("[SiriProbe] singleUpsertFullRebuilds=%@",
+                          SiriSnapshotStore.shared.probeFullRebuildCount == rebuildsBeforeSingleUpsert ? "PASS" : "FAIL")
+                    try await SiriSnapshotStore.shared.upsert([
+                        SiriMemory(id: "stub-memory-1", content: "probe memory",
+                                   createdAtMs: CheckedIntegerConversion.epochMs(),
+                                   expiresAtMs: nil)
+                    ], uid: config.uid)
+                    var open = OpenOmiIntent()
+                    open.target = ConversationEntity(memoryId: "stub-memory-1", content: "",
+                                                     creationDate: Date())
+                    _ = try await open.perform()
+                    NSLog("[SiriProbe] memoryNoteOpenRoute=%@",
+                          SiriSnapshotStore.shared.pendingRoute()?.route ?? "nil")
+                    if let pending = SiriSnapshotStore.shared.pendingRoute() {
+                        SiriSnapshotStore.shared.finishPendingRoute(route: pending.route, uid: pending.uid,
+                            generation: pending.generation, delivered: true)
+                    }
+                    var invalidFolder = OpenOmiFolderIntent()
+                    invalidFolder.target = OmiFolderEntity(id: "other", name: "Other")
+                    do {
+                        _ = try await invalidFolder.perform()
+                        NSLog("[SiriProbe] invalidFolderOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] invalidFolderOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
+                    var invalidList = OpenOmiListIntent()
+                    invalidList.target = OmiListEntity(id: "other", name: "Other")
+                    do {
+                        _ = try await invalidList.perform()
+                        NSLog("[SiriProbe] invalidListOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] invalidListOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
+                    var staleMemory = OpenOmiMemoryIntent()
+                    staleMemory.target = MemoryEntity(id: "missing-memory", content: "Private",
+                                                      creationDate: Date())
+                    do {
+                        _ = try await staleMemory.perform()
+                        NSLog("[SiriProbe] staleMemoryOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] staleMemoryOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
+                    var staleConversation = OpenOmiIntent()
+                    staleConversation.target = ConversationEntity(id: "missing-conversation", name: "Gone",
+                        content: "Private", creationDate: Date(), modificationDate: Date())
+                    do {
+                        _ = try await staleConversation.perform()
+                        NSLog("[SiriProbe] staleConversationOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] staleConversationOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
+                    var staleTask = OpenOmiTaskIntent()
+                    staleTask.target = TaskEntity(id: "missing-task", title: "Gone", isCompleted: false,
+                        creationDate: Date(), dueDate: nil, completionDate: nil)
+                    do {
+                        _ = try await staleTask.perform()
+                        NSLog("[SiriProbe] staleTaskOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] staleTaskOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
+                    SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(true) }
+                    SiriBridge.shared.navigate("/task/live-delivery")
+                    NSLog("[SiriProbe] liveRouteCleared=%@",
+                          SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL")
+                    SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(false) }
+                    SiriBridge.shared.navigate("/task/cold-fallback")
+                    NSLog("[SiriProbe] failedRoutePreserved=%@",
+                          SiriSnapshotStore.shared.pendingRoute()?.route == "/task/cold-fallback" ? "PASS" : "FAIL")
+                    SiriBridge.shared.routeDeliveryProbe = nil
+                    let row = SiriMemory(id: "probe-memory", content: "probe-memory-native-index-2026", createdAtMs:
+                        CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([row], uid: config.uid)
+                    let fetched: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(
+                            queryString: "title == \"probe-memory-native-index-2026\"", queryContext: nil)
+                        query.completionHandler = { error in
+                            NSLog("[SiriProbe] spotlightQueryError=%@", String(describing: error))
+                            continuation.resume(returning: query.foundItemCount)
+                        }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] spotlightFetch=%d", fetched)
+                    for title in ["Conversations", "Memories", "Omi"] {
+                        let count: Int = await withCheckedContinuation { continuation in
+                            let query = CSSearchQuery(queryString: "title == \"\(title)\"", queryContext: nil)
+                            query.completionHandler = { error in
+                                NSLog("[SiriProbe] staticItem=%@ error=%@", title, String(describing: error))
+                                continuation.resume(returning: query.foundItemCount)
+                            }
+                            query.start()
+                        }
+                        NSLog("[SiriProbe] staticItem=%@ count=%d", title, count)
+                    }
+                    let cutoffNow = CheckedIntegerConversion.epochMs()
+                    let expiringConversation = SiriConversation(
+                        id: "probe-aged-conversation", title: "probe-aged-conversation-2026",
+                        summary: "Cutoff test", startedAtMs: cutoffNow - 180 * 86_400_000 + 1_500,
+                        updatedAtMs: cutoffNow)
+                    let expiringTask = SiriTask(
+                        id: "probe-aged-task", title: "probe-aged-task-2026", completed: true,
+                        createdAtMs: cutoffNow - 40 * 86_400_000,
+                        completedAtMs: cutoffNow - 30 * 86_400_000 + 1_500)
+                    try await SiriSnapshotStore.shared.upsert([expiringConversation], uid: config.uid)
+                    try await SiriSnapshotStore.shared.upsert([expiringTask], uid: config.uid)
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    NSLog("[SiriProbe] agedConversationTimer=%@ agedTaskTimer=%@",
+                          SiriSnapshotStore.shared.probeStoredEntity(type: "conversation", id: expiringConversation.id) ? "FAIL" : "PASS",
+                          SiriSnapshotStore.shared.probeStoredEntity(type: "task", id: expiringTask.id) ? "FAIL" : "PASS")
+                    let expiring = SiriMemory(id: "probe-expiring", content: "probe-expiring-native-index-2026",
+                        createdAtMs: CheckedIntegerConversion.epochMs(),
+                        expiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(1.5)))
+                    try await SiriSnapshotStore.shared.upsert([expiring], uid: config.uid)
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    NSLog("[SiriProbe] expiredMemoryQuery=%d expiredNoteQuery=%d",
+                          SiriSnapshotStore.shared.memories(ids: [expiring.id]).count,
+                          SiriSnapshotStore.shared.memoryNotes(ids: [expiring.id]).count)
+                    let expiredIndexCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(
+                            queryString: "title == \"probe-expiring-native-index-2026\"", queryContext: nil)
+                        query.completionHandler = { error in
+                            NSLog("[SiriProbe] expiredSpotlightError=%@", String(describing: error))
+                            continuation.resume(returning: query.foundItemCount)
+                        }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] expiredSpotlightCount=%d", expiredIndexCount)
+                    let coldExpired = SiriMemory(id: "probe-cold-expired", content: "probe-cold-expired-private-2026",
+                        createdAtMs: CheckedIntegerConversion.epochMs(),
+                        expiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(1.5)))
+                    try await SiriSnapshotStore.shared.upsert([coldExpired], uid: config.uid)
+                    SiriSnapshotStore.shared.simulateTerminatedExpiryTimer()
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    SiriBridge.shared.retryPendingWipeOnLaunch()
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    let coldExpiredCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(queryString: "title == \"probe-cold-expired-private-2026\"",
+                            queryContext: nil)
+                        query.completionHandler = { _ in continuation.resume(returning: query.foundItemCount) }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] coldLaunchExpiredSpotlight=%@ count=%d",
+                          coldExpiredCount == 0 ? "PASS" : "FAIL", coldExpiredCount)
+                    var donation = OmiUiActivityIntent()
+                    donation.kind = "memory"
+                    donation.id = row.id
+                    do {
+                        _ = try await donation.donate()
+                        NSLog("[SiriProbe] donation=ok")
+                    } catch {
+                        NSLog("[SiriProbe] donation=failed type=%@", String(describing: error))
+                    }
+                    try await SiriSnapshotStore.shared.delete(type: "memory", ids: [row.id], uid: config.uid)
+                    let deletedIndexCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(
+                            queryString: "title == \"probe-memory-native-index-2026\"", queryContext: nil)
+                        query.completionHandler = { error in
+                            NSLog("[SiriProbe] deletedSpotlightError=%@", String(describing: error))
+                            continuation.resume(returning: query.foundItemCount)
+                        }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] deletedMemoryQuery=%d deletedSpotlightCount=%d",
+                          SiriSnapshotStore.shared.memories(ids: [row.id]).count, deletedIndexCount)
+                    let noteRow = SiriMemory(id: "probe-memory-note-delete",
+                        content: "probe-memory-note-delete-private-2026",
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([noteRow], uid: config.uid)
+                    try await ConversationQuery().reindexEntities(for: [noteRow.id],
+                        indexDescription: CSSearchableIndexDescription())
+                    try await SiriSnapshotStore.shared.delete(type: "memory", ids: [noteRow.id], uid: config.uid)
+                    let deletedNoteCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(queryString: "title == \"probe-memory-note-delete-private-2026\"",
+                            queryContext: nil)
+                        query.completionHandler = { _ in continuation.resume(returning: query.foundItemCount) }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] deletedMemoryNoteAbsent=%@ count=%d",
+                          deletedNoteCount == 0 ? "PASS" : "FAIL", deletedNoteCount)
+                    let disabledRow = SiriMemory(id: "probe-disabled", content: "probe-disabled-index-2026",
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([disabledRow], uid: config.uid)
+                    try await SiriSnapshotStore.shared.setEnabled(false)
+                    let explicitFolder = try await OmiFolderQuery().entities(for: ["memories"])
+                    NSLog("[SiriProbe] disabledExplicitFolder=%@",
+                          explicitFolder.count == 1 ? "PASS" : "FAIL")
+                    do {
+                        try await SiriSnapshotStore.shared.delete(type: "memory", ids: [disabledRow.id], uid: config.uid)
+                        try await SiriSnapshotStore.shared.setEnabled(true)
+                        NSLog("[SiriProbe] disabledDelete=%@",
+                              SiriSnapshotStore.shared.memories(ids: [disabledRow.id]).isEmpty ? "PASS" : "FAIL")
+                    } catch {
+                        NSLog("[SiriProbe] disabledDelete=FAIL error=%@", String(describing: error))
+                        try? await SiriSnapshotStore.shared.setEnabled(true)
+                    }
+                    let disableFailure = SiriMemory(id: "probe-disable-failure",
+                        content: "probe-disable-failure-private-2026",
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([disableFailure], uid: config.uid)
+                    SiriSnapshotStore.shared.simulateIndexDeleteFailure = true
+                    do { try await SiriSnapshotStore.shared.setEnabled(false) }
+                    catch { NSLog("[SiriProbe] injectedDisableFailure=observed") }
+                    SiriSnapshotStore.shared.simulateIndexDeleteFailure = false
+                    SiriBridge.shared.retryPendingWipeOnLaunch()
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    let disableFailureCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(queryString: "title == \"probe-disable-failure-private-2026\"",
+                            queryContext: nil)
+                        query.completionHandler = { _ in continuation.resume(returning: query.foundItemCount) }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] failedDisableRetriedOnLaunch=%@ count=%d",
+                          disableFailureCount == 0 ? "PASS" : "FAIL", disableFailureCount)
+                    try await SiriSnapshotStore.shared.setEnabled(true)
+                    let removedByServer = SiriMemory(id: "probe-remote-deleted",
+                        content: "probe-remote-deleted-private-2026",
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([removedByServer], uid: config.uid)
+                    try await SiriSnapshotStore.shared.reconcile([SiriMemory](), uid: config.uid)
+                    NSLog("[SiriProbe] authoritativeMemoryRemoval=%@",
+                          SiriSnapshotStore.shared.memories(ids: [removedByServer.id]).isEmpty ? "PASS" : "FAIL")
+                    let nowMs = CheckedIntegerConversion.epochMs()
+                    let staleNew = SiriConversation(id: "probe-remote-deleted-conversation", title: "private",
+                        summary: "private summary", startedAtMs: nowMs, updatedAtMs: nowMs)
+                    let outsidePage = SiriConversation(id: "probe-outside-page", title: "older",
+                        summary: "older summary", startedAtMs: nowMs - 100 * 86_400_000, updatedAtMs: nowMs)
+                    try await SiriSnapshotStore.shared.upsert([staleNew, outsidePage], uid: config.uid)
+                    try await SiriSnapshotStore.shared.reconcile([SiriConversation](), uid: config.uid,
+                        coveredAfterMs: nowMs - 50 * 86_400_000)
+                    NSLog("[SiriProbe] authoritativePageWindow=%@",
+                          SiriSnapshotStore.shared.conversations(ids: [staleNew.id]).isEmpty &&
+                          !SiriSnapshotStore.shared.conversations(ids: [outsidePage.id]).isEmpty ? "PASS" : "FAIL")
+                    let activeTask = SiriTask(id: "probe-remote-deleted-task", title: "private active task",
+                        completed: false, createdAtMs: nowMs, dueAtMs: nil, completedAtMs: nil)
+                    let completedTask = SiriTask(id: "probe-preserved-completed-task", title: "recent done task",
+                        completed: true, createdAtMs: nowMs, dueAtMs: nil, completedAtMs: nowMs)
+                    try await SiriSnapshotStore.shared.upsert([activeTask, completedTask], uid: config.uid)
+                    try await SiriSnapshotStore.shared.reconcile([SiriTask](), uid: config.uid,
+                        includeCompleted: false)
+                    NSLog("[SiriProbe] authoritativeActiveTasks=%@",
+                          SiriSnapshotStore.shared.tasks(ids: [activeTask.id]).isEmpty &&
+                          !SiriSnapshotStore.shared.tasks(ids: [completedTask.id]).isEmpty ? "PASS" : "FAIL")
+                    let oldConversation = SiriConversation(id: "probe-too-old-conversation", title: "old",
+                        summary: "old summary", startedAtMs: nowMs - 181 * 86_400_000, updatedAtMs: nowMs)
+                    let oldTask = SiriTask(id: "probe-too-old-completion", title: "old task", completed: true,
+                        createdAtMs: nowMs - 45 * 86_400_000, dueAtMs: nil,
+                        completedAtMs: nowMs - 31 * 86_400_000)
+                    try await SiriSnapshotStore.shared.upsert([oldConversation], uid: config.uid)
+                    try await SiriSnapshotStore.shared.upsert([oldTask], uid: config.uid)
+                    try await SiriSnapshotStore.shared.rebuildIndex()
+                    NSLog("[SiriProbe] reindexScope=%@",
+                          SiriSnapshotStore.shared.conversations(ids: [oldConversation.id]).isEmpty &&
+                          SiriSnapshotStore.shared.tasks(ids: [oldTask.id]).isEmpty ? "PASS" : "FAIL")
+                    NSLog("[SiriProbe] deviceListeningDialog=%@",
+                          SiriListeningFailure(pigeonCode: "device_already_listening").spokenDialog(starting: true) ==
+                          "Omi is already listening from your device." ? "PASS" : "FAIL")
+                    NSLog("[SiriProbe] listeningFailureDialogs=%@",
+                          SiriListeningFailure(pigeonCode: "recording_off").spokenDialog(starting: true) ==
+                            "Turn on audio recording in Omi first." &&
+                          SiriListeningFailure(pigeonCode: "mic_permission_denied").spokenDialog(starting: true) ==
+                            "Allow microphone access in Omi first." &&
+                          SiriListeningFailure(pigeonCode: "capture_paused").spokenDialog(starting: true) ==
+                            "Omi is paused. Open Omi to resume." &&
+                          SiriListeningFailure(pigeonCode: "nothing_to_stop").spokenDialog(starting: false) ==
+                            "Omi isn't listening right now." ? "PASS" : "FAIL")
+                    defaults.removeObject(forKey: SiriStorageNamespace.current.ownerKey)
+                    NSLog("[SiriProbe] ownerMissingVisible=%d", SiriSnapshotStore.shared.memories(ids: nil).count)
+                    try await SiriSnapshotStore.shared.bind(uid: "siri-probe-next")
+                    let next = SiriSessionConfig(uid: "siri-probe-next",
+                        generation: SiriSnapshotStore.shared.generationForOwner("siri-probe-next") ?? 0,
+                        baseUrl: raw, profile: "local_dev",
+                        appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
+                        token: "fake-siri-probe-token",
+                        tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
+                    try SiriSession.shared.publish(next)
+                    do {
+                        try await SiriSnapshotStore.shared.upsert([row], uid: config.uid)
+                        NSLog("[SiriProbe] staleUidWrite=unexpected-accepted")
+                    } catch SiriSession.Failure.auth {
+                        NSLog("[SiriProbe] staleUidWrite=rejected")
+                    }
+                    do {
+                        let prior = SiriSession.Config(
+                            uid: config.uid, generation: config.generation, baseUrl: config.baseUrl,
+                            profile: config.profile, appVersion: config.appVersion,
+                            appBuild: config.appBuild, deviceIdHash: config.deviceIdHash,
+                            expiresAtMs: config.tokenExpiresAtMs)
+                        try await SiriSnapshotStore.shared.applyConfirmedMemory(
+                            id: "stale-confirmed", content: "old owner", owner: prior)
+                        NSLog("[SiriProbe] staleConfirmedWrite=FAIL")
+                    } catch SiriSession.Failure.auth {
+                        NSLog("[SiriProbe] staleConfirmedWrite=PASS")
+                    }
+                    let sessionConfig = URLSessionConfiguration.ephemeral
+                    sessionConfig.protocolClasses = [SiriProbeURLProtocol.self]
+                    OmiNativeAPI.testSession = URLSession(configuration: sessionConfig)
+                    let switched = SiriSessionConfig(uid: "siri-probe-switched", generation: 0,
+                        baseUrl: raw, profile: "local_dev", appVersion: "probe", appBuild: "0",
+                        deviceIdHash: "probe-device", token: "switched-account-token",
+                        tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
+                    let requestsBeforeSwitch = SiriProbeURLProtocol.requestCount
+                    SiriSession.shared.beforeTokenLookup = { try? SiriSession.shared.publish(switched) }
+                    do {
+                        _ = try await OmiNativeAPI().request(method: "POST", path: "/v3/memories", body: [:])
+                        NSLog("[SiriProbe] switchedOwnerRequest=FAIL success")
+                    } catch SiriSession.Failure.auth {
+                        NSLog("[SiriProbe] switchedOwnerRequest=%@",
+                              SiriProbeURLProtocol.requestCount == requestsBeforeSwitch ? "PASS" : "FAIL sent")
+                    } catch {
+                        NSLog("[SiriProbe] switchedOwnerRequest=FAIL error=%@", String(describing: error))
+                    }
+                    SiriSession.shared.beforeTokenLookup = nil
+                    try SiriSession.shared.publish(next)
+                    SiriProbeURLProtocol.status = 200
+                    let beforeUnsupported = SiriProbeURLProtocol.requestCount
+                    var wrongFolder = OmiCreateNoteIntent()
+                    wrongFolder.name = "private note"
+                    wrongFolder.folder = .conversations
+                    do {
+                        _ = try await wrongFolder.perform()
+                        NSLog("[SiriProbe] unsupportedNoteFolder=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] unsupportedNoteFolder=%@ spoken=%@",
+                              SiriProbeURLProtocol.requestCount == beforeUnsupported &&
+                              (error as? LocalizedError)?.errorDescription ==
+                              "Omi can only save note text to Memories." ? "PASS" : "FAIL",
+                              (error as? LocalizedError)?.errorDescription ?? "nil")
+                    }
+                    var extraTask = CreateOmiTaskIntent()
+                    extraTask.title = "private task"
+                    extraTask.note = AttributedString("Don't drop this")
+                    do {
+                        _ = try await extraTask.perform()
+                        NSLog("[SiriProbe] unsupportedTaskFields=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] unsupportedTaskFields=%@ spoken=%@",
+                              SiriProbeURLProtocol.requestCount == beforeUnsupported &&
+                              (error as? LocalizedError)?.errorDescription ==
+                              "Omi can only create tasks with a title, due date, and the Omi list." ? "PASS" : "FAIL",
+                              (error as? LocalizedError)?.errorDescription ?? "nil")
+                    }
+                    for status in [401, 402, 429, 500, 200, 0] {
+                        SiriProbeURLProtocol.status = status
+                        do {
+                            let failureResult = try await intent.perform()
+                            let recorded = SiriTelemetry.take().last {
+                                $0.kind == "intent" && $0.intent == "remember"
+                            }?.outcome ?? "missing"
+                            NSLog("[SiriProbe] httpStatus=%d result=%@", status,
+                                  String(reflecting: failureResult))
+                            NSLog("[SiriProbe] httpStatus=%d outcome=%@", status, recorded)
+                        } catch {
+                            NSLog("[SiriProbe] httpStatus=%d unexpectedThrow=%@", status,
+                                  String(describing: error))
+                        }
+                        var note = OmiCreateNoteIntent()
+                        note.name = "probe note"
+                        do {
+                            _ = try await note.perform()
+                            NSLog("[SiriProbe] noteStatus=%d unexpectedSuccess", status)
+                        } catch {
+                            NSLog("[SiriProbe] noteStatus=%d spoken=%@", status,
+                                  (error as? LocalizedError)?.errorDescription ?? "nil")
+                        }
+                        var create = CreateOmiTaskIntent()
+                        create.title = "probe task"
+                        do {
+                            _ = try await create.perform()
+                            NSLog("[SiriProbe] createTaskStatus=%d unexpectedSuccess", status)
+                        } catch {
+                            NSLog("[SiriProbe] createTaskStatus=%d spoken=%@", status,
+                                  (error as? LocalizedError)?.errorDescription ?? "nil")
+                        }
+                        let task = TaskEntity(id: "probe-task", title: "probe task", isCompleted: false,
+                                              creationDate: Date(), dueDate: nil, completionDate: nil)
+                        var complete = CompleteOmiTaskIntent()
+                        complete.target = task
+                        complete.isCompleted = true
+                        do {
+                            _ = try await complete.perform()
+                            NSLog("[SiriProbe] completeTaskStatus=%d unexpectedSuccess", status)
+                        } catch {
+                            NSLog("[SiriProbe] completeTaskStatus=%d spoken=%@", status,
+                                  (error as? LocalizedError)?.errorDescription ?? "nil")
+                        }
+                    }
+                    OmiNativeAPI.testSession = nil
+                    let racingMemory = SiriMemory(id: "probe-reindex-wipe", content: "probe-reindex-wipe-private-2026",
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([racingMemory], uid: next.uid)
+                    await SiriReindexProbeGate.shared.arm()
+                    let reindex = Task {
+                        try await MemoryQuery().reindexEntities(for: [racingMemory.id],
+                            indexDescription: CSSearchableIndexDescription())
+                    }
+                    await SiriReindexProbeGate.shared.waitUntilPaused()
+                    let concurrentWipe = Task { try await SiriSnapshotStore.shared.wipe() }
+                    try await Task.sleep(nanoseconds: 200_000_000)
+                    await SiriReindexProbeGate.shared.release()
+                    try await reindex.value
+                    try await concurrentWipe.value
+                    let raceCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(queryString: "title == \"probe-reindex-wipe-private-2026\"",
+                            queryContext: nil)
+                        query.completionHandler = { _ in continuation.resume(returning: query.foundItemCount) }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] reindexConcurrentWipeEmpty=%@ count=%d",
+                          raceCount == 0 ? "PASS" : "FAIL", raceCount)
+                    try await SiriSnapshotStore.shared.bind(uid: next.uid)
+                    try SiriSession.shared.publish(next)
+                    SiriSnapshotStore.shared.simulateIndexDeleteFailure = true
+                    do { try await SiriSnapshotStore.shared.wipe() }
+                    catch { NSLog("[SiriProbe] injectedWipeFailure=observed") }
+                    let pending = defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? []
+                    NSLog("[SiriProbe] failedWipeOwnerRecoverable=%@",
+                          pending.contains(next.uid) ? "PASS" : "FAIL")
+                    SiriSnapshotStore.shared.simulateIndexDeleteFailure = false
+                    if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-leave-pending-wipe") {
+                        NSLog("[SiriProbe] leavingPendingWipeForRelaunch=YES")
+                        return
+                    }
+                    let staleAccepted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                        SiriBridge.shared.wipe { _ in
+                            SiriBridge.shared.publishSessionConfig(config: next) { result in
+                                if case .success = result { continuation.resume(returning: true) }
+                                else { continuation.resume(returning: false) }
+                            }
+                        }
+                    }
+                    NSLog("[SiriProbe] stalePublishAfterWipe=%@", staleAccepted ? "FAIL" : "PASS")
+                    try await SiriSnapshotStore.shared.bind(uid: next.uid)
+                    let failedPrepOwner = SiriSessionConfig(uid: next.uid,
+                        generation: SiriSnapshotStore.shared.generationForOwner(next.uid) ?? -1,
+                        baseUrl: next.baseUrl, profile: next.profile,
+                        appVersion: next.appVersion, appBuild: next.appBuild,
+                        deviceIdHash: next.deviceIdHash, token: "fake-siri-probe-token",
+                        tokenExpiresAtMs: next.tokenExpiresAtMs)
+                    try SiriSession.shared.publish(failedPrepOwner)
+                    let blockedMemory = SiriMemory(id: "probe-blocked-fence", content: "blocked-fence-private",
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([blockedMemory], uid: next.uid)
+                    await SiriReindexProbeGate.shared.arm()
+                    let blockedReindex = Task {
+                        try await MemoryQuery().reindexEntities(for: [blockedMemory.id],
+                            indexDescription: CSSearchableIndexDescription())
+                    }
+                    await SiriReindexProbeGate.shared.waitUntilPaused()
+                    let fastFence = Task { SiriSnapshotStore.shared.prepareForSignOut() }
+                    try await Task.sleep(nanoseconds: 150_000_000)
+                    let fenceBypassedQueue = (defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? [])
+                        .contains(next.uid)
+                    NSLog("[SiriProbe] signOutFenceBypassesSpotlightGate=%@", fenceBypassedQueue ? "PASS" : "FAIL")
+                    await SiriReindexProbeGate.shared.release()
+                    _ = try? await blockedReindex.value
+                    await fastFence.value
+                    _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+                    try await SiriSnapshotStore.shared.bind(uid: next.uid)
+                    let resumedAfterFence = SiriSessionConfig(uid: next.uid,
+                        generation: SiriSnapshotStore.shared.generationForOwner(next.uid) ?? -1,
+                        baseUrl: next.baseUrl, profile: next.profile,
+                        appVersion: next.appVersion, appBuild: next.appBuild,
+                        deviceIdHash: next.deviceIdHash, token: "fake-siri-probe-token",
+                        tokenExpiresAtMs: next.tokenExpiresAtMs)
+                    try SiriSession.shared.publish(resumedAfterFence)
+                    SiriSession.shared.simulateKeychainDeleteFailureOnce = true
+                    SiriSnapshotStore.shared.prepareForSignOut()
+                    let failedPrepPending = (defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? [])
+                        .contains(next.uid)
+                    NSLog("[SiriProbe] failedPreparationMarkerPersisted=%@", failedPrepPending ? "PASS" : "FAIL")
+                    _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+                    let recoveredUID = "siri-probe-recovered"
+                    try await SiriSnapshotStore.shared.bind(uid: recoveredUID)
+                    let recovered = SiriSessionConfig(uid: recoveredUID,
+                        generation: SiriSnapshotStore.shared.generationForOwner(recoveredUID) ?? -1,
+                        baseUrl: next.baseUrl, profile: next.profile,
+                        appVersion: next.appVersion, appBuild: next.appBuild,
+                        deviceIdHash: next.deviceIdHash, token: "fake-siri-probe-token",
+                        tokenExpiresAtMs: next.tokenExpiresAtMs)
+                    try SiriSession.shared.publish(recovered)
+                    NSLog("[SiriProbe] signInAfterFailedPreparation=%@",
+                          SiriSnapshotStore.shared.generationForOwner(recoveredUID) != nil &&
+                          SiriSession.shared.currentConfig()?.uid == recoveredUID ? "PASS" : "FAIL")
+                    SiriSnapshotStore.shared.simulateMarkerFlushFailureOnce = true
+                    SiriSnapshotStore.shared.prepareForSignOut()
+                    let tokenRemoved = !SiriSession.shared.hasMirroredToken()
+                    SiriSnapshotStore.shared.probeSimulateColdLaunchWithoutMarker()
+                    let noMarkerQueriesEmpty = SiriSnapshotStore.shared.memories(ids: nil).isEmpty &&
+                        SiriSnapshotStore.shared.tasks(ids: nil).isEmpty
+                    let noMarkerIntentDenied: Bool
+                    do { _ = try await SiriSession.shared.token(); noMarkerIntentDenied = false }
+                    catch SiriSession.Failure.auth { noMarkerIntentDenied = true }
+                    catch { noMarkerIntentDenied = false }
+                    NSLog("[SiriProbe] failedMarkerTokenRemoved=%@ coldQueriesEmpty=%@ intentDenied=%@",
+                          tokenRemoved ? "PASS" : "FAIL", noMarkerQueriesEmpty ? "PASS" : "FAIL",
+                          noMarkerIntentDenied ? "PASS" : "FAIL")
+                    _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+                    try await SiriSnapshotStore.shared.bind(uid: "siri-probe-after-marker-failure")
+                    NSLog("[SiriProbe] signInAfterMarkerFailure=%@",
+                          SiriSnapshotStore.shared.owner == "siri-probe-after-marker-failure" ? "PASS" : "FAIL")
+                }
+            } catch {
+                NSLog("[SiriProbe] request=failed type=%@", String(describing: error))
+            }
+            SiriSession.shared.clear()
+            try? await SiriSnapshotStore.shared.wipe()
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private static func runAuthFenceProbe(seed: Bool) async {
+        guard ProcessInfo.processInfo.environment["OMI_SIRI_AUTH_EMULATOR"] == "127.0.0.1:9099" else { return }
+        if FirebaseApp.app() == nil { FirebaseApp.configure() }
+        let auth = Auth.auth()
+        auth.useEmulator(withHost: "127.0.0.1", port: 9099)
+        do {
+            if seed {
+                _ = try? auth.signOut()
+                _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+                let user = try await auth.signInAnonymously().user
+                try await SiriSnapshotStore.shared.bind(uid: user.uid)
+                let config = SiriSessionConfig(uid: user.uid,
+                    generation: SiriSnapshotStore.shared.generationForOwner(user.uid) ?? -1,
+                    baseUrl: "http://127.0.0.1:8976", profile: "local_dev",
+                    appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
+                    token: "fake-siri-probe-token",
+                    tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
+                try SiriSession.shared.publish(config)
+                NSLog("[SiriProbe] firebaseAuthSeed=%@", SiriSession.shared.hasMirroredToken() ? "PASS" : "FAIL")
+                return
+            }
+            let owner = SiriSnapshotStore.shared.owner
+            let coldSignedInPreserved = owner != nil && auth.currentUser?.uid == owner &&
+                SiriSession.shared.hasMirroredToken() &&
+                (UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")?
+                    .stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? []).isEmpty
+            NSLog("[SiriProbe] coldFirebaseUserPreserved=%@", coldSignedInPreserved ? "PASS" : "FAIL")
+            try auth.signOut() // No Flutter engine or Pigeon messenger exists in this probe.
+            for _ in 0..<40 {
+                if !SiriSession.shared.hasMirroredToken() &&
+                    !(UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")?
+                        .stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? []).isEmpty { break }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+            let pending = !(UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")?
+                .stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? []).isEmpty
+            NSLog("[SiriProbe] firebaseSignOutWithoutPigeon=%@", pending && !SiriSession.shared.hasMirroredToken() ? "PASS" : "FAIL")
+            _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+            let next = try await auth.signInAnonymously().user
+            try await SiriSnapshotStore.shared.bind(uid: next.uid)
+            let config = SiriSessionConfig(uid: next.uid,
+                generation: SiriSnapshotStore.shared.generationForOwner(next.uid) ?? -1,
+                baseUrl: "http://127.0.0.1:8976", profile: "local_dev",
+                appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
+                token: "fake-siri-probe-token",
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
+            try SiriSession.shared.publish(config)
+            NSLog("[SiriProbe] firebaseReSignInRestoresSiri=%@",
+                  SiriSnapshotStore.shared.generationForOwner(next.uid) != nil &&
+                  SiriSession.shared.hasMirroredToken() ? "PASS" : "FAIL")
+        } catch { NSLog("[SiriProbe] firebaseAuthFenceProbe=FAIL error=%@", String(describing: error)) }
+    }
+
+    /// Exercise the request gate with the asynchronous Auth listener disabled.
+    /// A process can die between Firebase sign-out and that listener callback.
+    @available(iOS 26.0, *)
+    private static func runAuthGateProbe() async {
+        guard ProcessInfo.processInfo.environment["OMI_SIRI_AUTH_EMULATOR"] == "127.0.0.1:9099" else { return }
+        if FirebaseApp.app() == nil { FirebaseApp.configure() }
+        let auth = Auth.auth()
+        auth.useEmulator(withHost: "127.0.0.1", port: 9099)
+        guard let config = SiriSession.shared.currentConfig(),
+              auth.currentUser?.uid == config.uid else {
+            NSLog("[SiriProbe] authGateColdSignedIn=FAIL missing seed")
+            return
+        }
+        let coldAllowed = (try? await SiriSession.shared.token(for: config)) != nil
+        NSLog("[SiriProbe] authGateColdSignedIn=%@", coldAllowed ? "PASS" : "FAIL")
+        SiriSession.shared.simulateFirebaseTokenFailure = true
+        let mirror = try? await SiriSession.shared.token(for: config)
+        SiriSession.shared.simulateFirebaseTokenFailure = false
+        NSLog("[SiriProbe] authGateMatchingUserMirrorFallback=%@",
+              mirror == "fake-siri-probe-token" ? "PASS" : "FAIL")
+        do {
+            try await SiriSnapshotStore.shared.upsert([
+                SiriMemory(id: "auth-gate-private", content: "private", createdAtMs:
+                    CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
+            ], uid: config.uid)
+            try auth.signOut()
+            let refused: Bool
+            do { _ = try await SiriSession.shared.token(for: config); refused = false }
+            catch SiriSession.Failure.auth { refused = true }
+            catch { refused = false }
+            let queriesEmpty: Bool
+            if #available(iOS 27.0, *) {
+                queriesEmpty = SiriSnapshotStore.shared.memories(ids: nil).isEmpty &&
+                    SiriSnapshotStore.shared.tasks(ids: nil).isEmpty
+            } else { queriesEmpty = true }
+            let pending = !(UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")?
+                .stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? []).isEmpty
+            NSLog("[SiriProbe] authGateNilRefused=%@ queriesEmpty=%@ fenced=%@",
+                  refused ? "PASS" : "FAIL", queriesEmpty ? "PASS" : "FAIL", pending ? "PASS" : "FAIL")
+            _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+            let original = try await auth.signInAnonymously().user
+            try await SiriSnapshotStore.shared.bind(uid: original.uid)
+            let rebound = SiriSessionConfig(uid: original.uid,
+                generation: SiriSnapshotStore.shared.generationForOwner(original.uid) ?? -1,
+                baseUrl: "http://127.0.0.1:8976", profile: "local_dev", appVersion: "probe",
+                appBuild: "0", deviceIdHash: "probe-device", token: "fake-siri-probe-token",
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
+            try SiriSession.shared.publish(rebound)
+            guard let oldConfig = SiriSession.shared.currentConfig() else {
+                NSLog("[SiriProbe] authGateDifferentUidRefused=FAIL (missing session config)")
+                return
+            }
+            try auth.signOut()
+            _ = try await auth.signInAnonymously().user
+            let differentRefused: Bool
+            do { _ = try await SiriSession.shared.token(for: oldConfig); differentRefused = false }
+            catch SiriSession.Failure.auth { differentRefused = true }
+            catch { differentRefused = false }
+            NSLog("[SiriProbe] authGateDifferentUidRefused=%@", differentRefused ? "PASS" : "FAIL")
+            _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+            guard let currentUid = auth.currentUser?.uid else {
+                NSLog("[SiriProbe] authGateDifferentUidRefused=FAIL (missing Firebase user)")
+                return
+            }
+            try await SiriSnapshotStore.shared.bind(uid: currentUid)
+            let current = SiriSessionConfig(uid: currentUid,
+                generation: SiriSnapshotStore.shared.generationForOwner(currentUid) ?? -1,
+                baseUrl: "http://127.0.0.1:8976", profile: "local_dev", appVersion: "probe",
+                appBuild: "0", deviceIdHash: "probe-device", token: "fake-siri-probe-token",
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
+            try SiriSession.shared.publish(current)
+            SiriSession.shared.simulateKeychainDeleteFailuresRemaining = 2
+            SiriSnapshotStore.shared.simulateMarkerFlushFailureOnce = true
+            SiriSnapshotStore.shared.prepareForSignOut()
+            let missingMarker = (UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")?
+                .stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? []).isEmpty
+            let queryDenied: Bool
+            if #available(iOS 27.0, *) { queryDenied = SiriSnapshotStore.shared.memories(ids: nil).isEmpty }
+            else { queryDenied = true }
+            let inMemoryDenied = SiriSession.shared.hasMirroredToken() && missingMarker &&
+                SiriSnapshotStore.shared.generationForOwner(currentUid) == nil && queryDenied
+            NSLog("[SiriProbe] authGateAllPersistenceFailedInMemoryFence=%@",
+                  inMemoryDenied ? "PASS" : "FAIL")
+        } catch { NSLog("[SiriProbe] authGateNilRefused=FAIL error=%@", String(describing: error)) }
+    }
+}
+
+/// Holds a system reindex inside the owner queue so the probe can submit a
+/// concurrent wipe and assert that the wipe is the final Spotlight operation.
+actor SiriReindexProbeGate {
+    static let shared = SiriReindexProbeGate()
+    private var armed = false
+    private var paused: CheckedContinuation<Void, Never>?
+    private var reached: CheckedContinuation<Void, Never>?
+
+    func arm() { armed = true }
+    func pauseIfArmed() async {
+        guard armed else { return }
+        armed = false
+        await withCheckedContinuation { continuation in
+            paused = continuation
+            reached?.resume()
+            reached = nil
+        }
+    }
+    func waitUntilPaused() async {
+        if paused != nil { return }
+        await withCheckedContinuation { reached = $0 }
+    }
+    func release() {
+        paused?.resume()
+        paused = nil
+    }
+}
+
+/// URLProtocol is local to the debug probe and never appears in release builds.
+private final class SiriProbeURLProtocol: URLProtocol {
+    static var status = 500
+    static var requestCount = 0
+    static var payload = "[]"
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.requestCount += 1
+        if Self.status == 0 {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
+        guard let url = request.url,
+              let response = HTTPURLResponse(url: url, statusCode: Self.status,
+                                             httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.status == 200 ? Data(Self.payload.utf8) : Data("{}".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+#endif
+#endif

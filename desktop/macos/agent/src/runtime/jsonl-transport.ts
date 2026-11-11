@@ -38,6 +38,9 @@ export interface McpServerBuildContext {
   includeSwiftBackedTools?: boolean;
   screenContext?: boolean;
   executionRole?: "coordinator" | "leaf";
+  /** Server-authoritative projection admitted into this exact run snapshot. */
+  chatFirstUi?: boolean;
+  chatFirstControlGeneration?: number | null;
 }
 
 export type McpServerBuilder = (
@@ -49,6 +52,15 @@ export type McpServerBuilder = (
 
 export type RecoverableErrorPredicate = (error: unknown, adapterId: string) => boolean;
 export type RecoverableErrorHandler = (error: unknown, adapterId: string) => Promise<void>;
+export type QueryActivityLeaseScheduler = (emit: () => void) => () => void;
+
+const QUERY_ACTIVITY_LEASE_INTERVAL_MS = 15_000;
+
+function scheduleQueryActivityLease(emit: () => void): () => void {
+  const timer = setInterval(emit, QUERY_ACTIVITY_LEASE_INTERVAL_MS);
+  timer.unref();
+  return () => clearInterval(timer);
+}
 
 export interface JsonlTransportOptions {
   kernel: AgentRuntimeKernel;
@@ -63,6 +75,7 @@ export interface JsonlTransportOptions {
   onRecoverableError?: RecoverableErrorHandler;
   maxRecoverableRetries?: number;
   activeOwnerId?: () => string;
+  scheduleQueryActivity?: QueryActivityLeaseScheduler;
 }
 
 interface ActiveRequestContext {
@@ -77,6 +90,12 @@ interface ActiveRequestContext {
   isRunning?: boolean;
   authorityController?: AbortController;
   revoked?: boolean;
+  /** Served models observed on this query's completions (from `model_used`
+   *  adapter events); reported on the terminal result message. */
+  modelsUsed?: Set<string>;
+  /** Provider targets observed beside `modelsUsed`; kept separate from the
+   *  runtime adapter so `pi-mono` is not mislabeled as its requested model. */
+  providerTargets?: Set<string>;
 }
 
 const TERMINAL_RUN_EVENT_STATUSES = new Set([
@@ -94,6 +113,7 @@ const QUERY_WIRE_FIELDS = new Set([
   "clientId",
   "ownerId",
   "sessionId",
+  "surfaceKind",
   "producingTurnId",
   "prompt",
   "mode",
@@ -103,7 +123,13 @@ const QUERY_WIRE_FIELDS = new Set([
   "expectedContextSnapshotGeneration",
   "expectedContextRendererFingerprint",
   "expectedCapabilityVersion",
+  "reasoningEffort",
 ]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 
 export class JsonlTransport {
   private readonly kernel: AgentRuntimeKernel;
@@ -118,6 +144,7 @@ export class JsonlTransport {
   private readonly onRecoverableError?: RecoverableErrorHandler;
   private readonly maxRecoverableRetries: number;
   private readonly activeOwnerId: () => string;
+  private readonly scheduleQueryActivity: QueryActivityLeaseScheduler;
   private readonly activeByRequest = new Map<string, ActiveRequestContext>();
   private readonly activeByRun = new Map<string, ActiveRequestContext>();
   private readonly latestRunByClient = new Map<string, string>();
@@ -136,6 +163,7 @@ export class JsonlTransport {
     this.onRecoverableError = options.onRecoverableError;
     this.maxRecoverableRetries = Math.max(0, options.maxRecoverableRetries ?? 0);
     this.activeOwnerId = options.activeOwnerId ?? (() => this.ownerId);
+    this.scheduleQueryActivity = options.scheduleQueryActivity ?? scheduleQueryActivityLease;
     this.kernel.subscribe((event) => this.handleKernelEvent(event));
   }
 
@@ -157,6 +185,16 @@ export class JsonlTransport {
       revoked: false,
     };
     this.activeByRequest.set(key, context);
+    const stopQueryActivity = this.scheduleQueryActivity(() => {
+      // The callback is deliberately owned by this live request registration.
+      // A scheduler callback racing with terminal cleanup cannot extend a
+      // completed or owner-revoked turn.
+      if (context.revoked || !this.activeByRequest.has(key)) return;
+      this.send(this.withCorrelation({
+        type: "turn_activity",
+        phase: "running",
+      }, context));
+    });
 
     try {
       const result = await this.kernel.executeRun(input);
@@ -178,6 +216,8 @@ export class JsonlTransport {
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
         cacheReadTokens: result.run.cacheReadTokens ?? 0,
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
+        modelsUsed: context.modelsUsed ? [...context.modelsUsed] : undefined,
+        providerTargets: context.providerTargets ? [...context.providerTargets] : undefined,
         artifacts: result.artifacts.map(serializeArtifact),
         completionDeltaArtifacts: result.completionDeltaArtifacts?.map(serializeArtifact),
       };
@@ -197,6 +237,7 @@ export class JsonlTransport {
       };
       this.send(this.withCorrelation(errorMessage, context));
     } finally {
+      stopQueryActivity();
       this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
       if (context.runId) {
         this.activeByRun.delete(context.runId);
@@ -402,14 +443,17 @@ export class JsonlTransport {
     const ownerId = this.requireActiveOwner(message.ownerId);
     const sessionId = message.sessionId.trim();
     if (!sessionId) throw new Error("query requires sessionId");
+    const surfaceKind = message.surfaceKind.trim();
+    if (!surfaceKind) throw new Error("query requires surfaceKind");
     const producingTurnId = message.producingTurnId?.trim();
     if (message.producingTurnId !== undefined && !producingTurnId) {
       throw new Error("query producingTurnId must not be empty");
     }
     const session = this.kernel.ownedSession(sessionId, ownerId);
-    const surfaceKind = session.surfaceKind;
-    if (!surfaceKind) throw new Error("canonical session requires surfaceKind");
     const profile = this.kernel.sessionExecutionProfile(sessionId, ownerId);
+    // One canonical conversation may retain a legacy session identity while
+    // being bound to newer surfaces. Project the caller's resolved surface,
+    // but only through contextSnapshot's owner/session binding check.
     const snapshot = this.kernel.contextSnapshot(sessionId, ownerId, surfaceKind);
     const expectationCount = [
       message.expectedContextSnapshotVersion,
@@ -465,6 +509,12 @@ export class JsonlTransport {
         sessionId,
         adapterId: profile.adapterId,
         executionRole,
+        surfaceKind,
+        screenContext: snapshot.sourceOutcomes.some(
+          (source) => source.source === "screen" && source.outcome === "available",
+        ),
+        chatFirstUi: snapshot.capabilities.chatFirstUi === true,
+        chatFirstControlGeneration: snapshot.capabilities.chatFirstControlGeneration,
       }),
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
       recoverAfterError: this.recoverAfterError(profile.adapterId),
@@ -481,6 +531,7 @@ export class JsonlTransport {
         contextSnapshotGeneration: snapshot.snapshotGeneration,
         contextRendererFingerprint: snapshot.rendererFingerprint,
         contextCapabilityVersion: snapshot.capabilityVersion,
+        ...(message.reasoningEffort ? { reasoningEffort: message.reasoningEffort } : {}),
       },
     };
   }
@@ -550,11 +601,23 @@ export class JsonlTransport {
     context.adapterSessionId = adapterEvent.adapterSessionId ?? context.adapterSessionId;
 
     switch (type) {
+      case "model_used": {
+        // Collected onto the owning query and reported once on its terminal
+        // result; not forwarded as a streaming event.
+        const served = (adapterEvent as { model?: unknown }).model;
+        if (typeof served === "string" && served.length > 0) {
+          (context.modelsUsed ??= new Set()).add(served);
+        }
+        const provider = (adapterEvent as { provider?: unknown }).provider;
+        if (typeof provider === "string" && provider.length > 0) {
+          (context.providerTargets ??= new Set()).add(provider);
+        }
+        break;
+      }
       case "text_delta":
       case "tool_activity":
       case "tool_result_display":
       case "thinking_delta":
-      case "error":
         this.send(this.withCorrelation({
           ...adapterEvent,
           type,
@@ -565,6 +628,14 @@ export class JsonlTransport {
           runId: event.runId,
           attemptId: event.attemptId ?? context.attemptId,
         }));
+        break;
+      case "error":
+        // Adapter errors are progress inside an admitted kernel run, not a
+        // second query-terminal protocol. executeRun terminalizes the canonical
+        // run/attempt and handleQuery emits its one correlated failed result.
+        // Forwarding this early error made Swift release the request before that
+        // authoritative result arrived, leaving the producing journal turn
+        // durably stuck in `streaming`.
         break;
       case "tool_use":
         if (!this.suppressToolUseEvents && context.adapterId !== "pi-mono") {
@@ -625,14 +696,13 @@ export class JsonlTransport {
     if (!this.isRecoverableError || !this.onRecoverableError || this.maxRecoverableRetries === 0) {
       return undefined;
     }
-    let recoveries = 0;
     return async (error) => {
-      if (recoveries >= this.maxRecoverableRetries || !this.isRecoverableError?.(error, adapterId)) {
+      if (!this.isRecoverableError?.(error, adapterId)) {
         return false;
       }
-      recoveries += 1;
       await this.onRecoverableError?.(error, adapterId);
-      return true;
+      // Provider auth is terminal for the active turn; OAuth must not block retries.
+      return false;
     };
   }
 }
@@ -664,11 +734,16 @@ function boundedTerminalFailure(result: Awaited<ReturnType<AgentRuntimeKernel["e
     code,
     failureCode: persisted?.failureCode,
     userMessage,
-    technicalMessage: persisted?.technicalMessage,
+    technicalMessage: persisted?.technicalMessage
+      ? sanitizeProcessDiagnostic(persisted.technicalMessage)
+      : undefined,
     source: persisted?.source ?? "runtime",
     adapterId: persisted?.adapterId,
     provider: persisted?.provider,
     retryable: persisted?.retryable ?? false,
+    recoveryAction: persisted?.recoveryAction,
+    recoveryOutcome: persisted?.recoveryOutcome,
+    retryDisposition: persisted?.retryDisposition,
   });
 }
 

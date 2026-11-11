@@ -42,6 +42,9 @@
           "time_window": {"type": ["string", "null"]},
           "minimum_sample": {"type": ["number", "string", "null"]},
           "value": {"type": ["number", "string", "object", "array", "null"]},
+          "health_status": {"enum": ["healthy", "unhealthy", "unknown", null]},
+          "numerator": {"type": ["number", "string", "null"]},
+          "alarm_reason": {"type": ["string", "null"]},
           "reason": {"type": "string"}
         }
       }

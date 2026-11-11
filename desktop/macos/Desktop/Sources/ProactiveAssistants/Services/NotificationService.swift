@@ -1,6 +1,17 @@
+// Proactive notification delivery: scheduling and posting through
+// UNUserNotificationCenter, with snooze/frequency state.
+//
+// Every send must pass the shared gate primitive (master toggle, frequency
+// throttle, snooze, presence) -- two proactive lanes once reached the poster
+// directly and skipped those gates, shipping silent.
 import AppKit
 import Foundation
 @preconcurrency import UserNotifications
+
+extension Notification.Name {
+  static let proactiveNotificationSnoozeDidChange = Notification.Name(
+    "proactiveNotificationSnoozeDidChange")
+}
 
 /// Sendable wrapper for a `UNUserNotificationCenter` completion handler so the
 /// non-Sendable closure can be captured across an isolation hop (e.g. into a
@@ -10,54 +21,57 @@ private struct UNCompletionHandlerBox: @unchecked Sendable {
   init(_ value: @escaping (UNNotificationPresentationOptions) -> Void) { self.value = value }
 }
 
+/// Collapses floating-bar and system-banner acknowledgements into one delivery receipt.
+/// A notification can reach both surfaces, but producer state must advance only once.
+@MainActor
+final class NotificationPresentationReceipt {
+  private var wasPresented = false
+  private let onPresented: (() -> Void)?
+
+  init(onPresented: (() -> Void)?) { self.onPresented = onPresented }
+
+  func record() {
+    guard !wasPresented else { return }
+    wasPresented = true
+    onPresented?()
+  }
+}
+
 /// Sound options for notifications
 enum NotificationSound {
   case `default`
-  case focusLost
-  case focusRegained
   case none
 
   var unSound: UNNotificationSound? {
     switch self {
     case .default:
       return .default
-    case .focusLost, .focusRegained:
-      // Custom sounds are played manually via NSSound (see playCustomSound)
-      // because UNNotificationSound(named:) can't find SPM-bundled resources.
-      return nil
     case .none:
       return nil
     }
   }
 
-  /// Play the custom sound manually from the SPM resource bundle.
-  func playCustomSound() {
-    let filename: String
-    switch self {
-    case .focusLost:
-      filename = "focus-lost"
-    case .focusRegained:
-      filename = "focus-regained"
-    default:
-      return
-    }
+}
 
-    guard let url = Bundle.resourceBundle.url(forResource: filename, withExtension: "aiff") else {
-      log("NotificationSound: Could not find \(filename).aiff in bundle")
-      return
-    }
+/// Named delivery intent for notifications that must not become Chat rows.
+/// The default preserves the existing floating-bar presentation and journaling
+/// path; system-banner-only callers still pass every owner, toggle, and
+/// frequency gate in `NotificationService` before reaching UserNotifications.
+enum NotificationDeliveryMode: Equatable {
+  case standard
+  case systemBannerOnly
 
-    guard let sound = NSSound(contentsOf: url, byReference: true) else {
-      log("NotificationSound: Could not load sound from \(url)")
-      return
-    }
-
-    sound.play()
-  }
+  var presentsInFloatingBar: Bool { self == .standard }
+  var requiresSystemBanner: Bool { self == .systemBannerOnly }
 }
 
 @MainActor
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
+  /// Retain the existing preference for goals and reminders when Advice is retired.
+  static var goalReminderNotificationsEnabled: Bool {
+    get { UserDefaults.standard.object(forKey: .goalReminderNotificationsEnabled) as? Bool ?? true }
+    set { UserDefaults.standard.set(newValue, forKey: .goalReminderNotificationsEnabled) }
+  }
   static let shared = NotificationService(registerWithSystemNotificationCenter: true)
 
   /// Category ID for notifications that track dismissal
@@ -72,6 +86,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// Title that identifies screen capture reset notifications
   static let screenCaptureResetTitle = "Screen Recording Needs Reset"
 
+  /// Title that identifies the consent-decline notice: macOS re-confirmed consent for
+  /// app-built capture filters and the capture loop went terminal instead of retrying
+  /// (see ScreenCaptureConsentPolicy). Distinct from the reset title on purpose — the
+  /// grant is intact, so the repair is "start capturing again", NOT the tccutil wipe
+  /// the reset flow performs.
+  static let screenCaptureConsentTitle = "Screen Recording Paused"
+
   /// UserDefaults key that records whether the screen capture reset notification
   /// has already been shown in the current broken-capture episode. Cleared by
   /// `AppState.checkScreenRecordingPermission()` as soon as capture recovers,
@@ -80,30 +101,42 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
   /// UserDefaults key mirroring the user's `notification_frequency` setting from the backend.
   /// 0=Off (default), 1=Minimal, 2=Low, 3=Balanced, 4=High, 5=Maximum.
-  /// The Settings page writes this on load and on slider change; `sendNotification`
-  /// reads it synchronously to throttle proactive notifications.
-  static let frequencyDefaultsKey = "notification_frequency"
+  /// `NotificationSettingsSyncCoordinator` writes this on hydrate and on slider change;
+  /// `sendNotification` reads it synchronously to throttle proactive notifications.
+  nonisolated static let frequencyDefaultsKey = "notification_frequency"
+  static let settingsPendingSyncDefaultsKey = "notification_settings_pending_sync"
+  static let settingsSyncRevisionDefaultsKey = "notification_settings_sync_revision"
 
-  /// One-time migration flag: when set, the notifications-off-by-default migration
-  /// has already run for this install, so we never re-disable a user who opted back in.
-  static let offByDefaultMigrationKey = "notificationsOffByDefaultMigrationDone"
+  /// One-time migration flag: when set, the balanced-by-default re-enable migration
+  /// has already run for this install, so we never re-enable a user who turns
+  /// notifications off after the migration.
+  nonisolated static let balancedByDefaultMigrationKey = "notificationsBalancedByDefaultMigrationDone"
+
+  /// Frequency level the re-enable migration applies (3 = Balanced).
+  nonisolated static let balancedFrequencyLevel = 3
 
   /// UserDefaults key mirroring the master `notifications_enabled` toggle from the backend.
-  /// The Settings page writes it on load and on toggle change; `sendNotification` reads it
-  /// synchronously so proactive notifications are suppressed the moment the user turns the
-  /// master Notifications switch off — without waiting for a backend round-trip. Defaults to
-  /// `true` when the key is absent (first run before the Settings page hydrates).
+  /// `NotificationSettingsSyncCoordinator` writes it on hydrate and on toggle change;
+  /// `sendNotification` reads it synchronously so proactive notifications are suppressed
+  /// the moment the user turns the master Notifications switch off — without waiting for
+  /// a backend round-trip. Defaults to `true` when the key is absent (first run before
+  /// the coordinator hydrates).
   static let masterEnabledDefaultsKey = "notifications_enabled"
 
   /// Default level used when the key has never been written (e.g. first run before
   /// the Settings page has hydrated from the backend). Mirrors the backend default.
-  /// Proactive notifications are OFF by default — users opt in via the Settings slider.
+  /// Kept at 0 (fail-closed) only for the window before `migrateToBalancedDefaultIfNeeded`
+  /// writes the key at launch; the effective default is Balanced via that migration.
   private static let defaultFrequencyLevel = 0
 
   private struct NotificationMetadata {
     let title: String
+    let message: String
     let assistantId: String
+    let context: FloatingBarNotificationContext?
     let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    var action: FloatingBarNotificationAction? = nil
+    var onInteraction: ((NotificationInteraction) -> Void)? = nil
   }
 
   /// Interaction provenance is bound to the exact authorization generation
@@ -144,7 +177,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// The system notification center raises an Objective-C exception when
   /// constructed from SwiftPM's command-line test host. Owner-bound policy
   /// tests inject `false`; production always uses the shared `true` instance.
-  init(registerWithSystemNotificationCenter: Bool) {
+  init(
+    registerWithSystemNotificationCenter: Bool
+  ) {
     super.init()
     if registerWithSystemNotificationCenter {
       // Set ourselves as the delegate to show notifications even when app is in foreground
@@ -219,7 +254,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // an OS callback may arrive after the originating session signed out.
     let completion = UNCompletionHandlerBox(completionHandler)
     Task { @MainActor in
-      guard let metadata = self.notificationMetadata[notificationId],
+      let metadata =
+        self.notificationMetadata[notificationId]
+      guard let metadata,
         RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot)
       else {
         self.notificationMetadata.removeValue(forKey: notificationId)
@@ -246,8 +283,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let notificationId = response.notification.request.identifier
 
     Task { @MainActor in
-      // Retrieve stored metadata
-      let metadata = self.notificationMetadata[notificationId]
+      // Only the session that delivered a banner may dispatch its interaction.
+      let metadata =
+        self.notificationMetadata[notificationId]
       guard let metadata,
         RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot)
       else {
@@ -269,19 +307,34 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
           surface: "system_notification"
         )
 
-        // If this is a screen capture reset notification, trigger the reset
-        if title == Self.screenCaptureResetTitle {
+        metadata.onInteraction?(.opened)
+        switch Self.openAction(
+          assistantId: assistantId,
+          title: title,
+        ) {
+        case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
+        case .resumeScreenCapture:
+          self.handleScreenCaptureResumeAction(source: "notification_click")
+        case .openMainChat:
+          // The same reveal-and-land-on-chat path the floating bar's
+          // "Continue in Omi" affordance uses; the chat transcript there
+          // carries the meeting-notes card with the conversation link.
+          AppDelegate.summonWindowTarget()?.openMainAppChat()
+        case .none:
+          break
         }
 
       case UNNotificationDismissActionIdentifier:
+        metadata.onInteraction?(.dismissed)
         // User explicitly dismissed the notification (X button, swipe, or Clear)
         print("[\(assistantId)] Notification dismissed: \(title)")
         AnalyticsManager.shared.notificationDismissed(
           notificationId: notificationId,
           title: title,
           assistantId: assistantId,
-          surface: "system_notification"
+          surface: "system_notification",
+          dismissalKind: .user
         )
 
       case Self.resetNowActionId:
@@ -308,22 +361,234 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     completionHandler()
   }
 
-  /// Handle screen capture reset action from notification click or action button
+  /// What tapping a delivered banner does, beyond recording that it was tapped.
+  ///
+  /// Tapping a notification is a request to *see the thing it is about*. A banner whose tap only
+  /// fires analytics is worse than no banner: it interrupts, then refuses. This names the cases
+  /// where the app owes the user a destination.
+  enum OpenAction: Equatable {
+    /// Nothing to open — the notification's content was the whole message.
+    case none
+    /// The screen-recording repair, which is an action rather than a page.
+    case resetScreenCapture
+    /// Resume after a terminal consent decline: the grant is intact, so the repair is
+    /// simply restarting monitoring (one user-initiated capture attempt), never a reset.
+    case resumeScreenCapture
+    /// The main-window chat surface, where the meeting-notes card (with its
+    /// conversation link) was materialized.
+    case openMainChat
+  }
+
+  /// Resolve the tap destination from the notification's provenance.
+  ///
+  /// The screen-capture case matches on title because that is how its own delivery gates
+  /// (`screenCaptureResetShownKey`) already identify it — changing that identity is a separate
+  /// change with its own suppression-state migration.
+  static func openAction(
+    assistantId: String,
+    title: String
+  ) -> OpenAction {
+    if title == screenCaptureResetTitle { return .resetScreenCapture }
+    if title == screenCaptureConsentTitle { return .resumeScreenCapture }
+    if assistantId == MeetingActionItemBannerPolicy.assistantID { return .openMainChat }
+    return .none
+  }
+
   private func handleScreenCaptureResetAction(source: String) {
     log("Screen capture reset triggered from \(source)")
     AnalyticsManager.shared.screenCaptureResetClicked(source: source)
     ScreenCaptureService.resetScreenCapturePermissionAndRestart()
   }
 
-  /// Send a notification via the floating bar, and optionally as a native macOS system banner.
+  /// Handle the consent-decline resume: this is the single user-facing repair
+  /// affordance after a terminal "user declined TCCs" stop. It restarts monitoring —
+  /// one user-initiated capture attempt — which either just works (the user allowed
+  /// the OS dialog) or surfaces the consent dialog exactly once, at a moment the user
+  /// chose. Deliberately not the reset flow: the TCC grant is intact.
+  private func handleScreenCaptureResumeAction(source: String) {
+    log("Screen capture resume triggered from \(source)")
+    Task { @MainActor in
+      ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
+        if !success, let error {
+          log("Screen capture resume from \(source) failed to start monitoring: \(error)")
+        }
+      }
+    }
+  }
+
+  /// When proactive notifications are silenced until, or `nil` when they are not.
   ///
-  /// `deliverSystemBanner` defaults to `false` because proactive AI notifications are
-  /// floating-bar only — users who disabled the floating bar reported clicking the
-  /// top-right system banner and getting no conversation context, which was confusing.
-  /// Functional notifications (Crisp support replies, screen-recording permission
-  /// prompts with a repair action) must pass `deliverSystemBanner: true` so they
-  /// still surface as a system banner — they either have no floating-bar equivalent
-  /// or must reach the user even when the floating bar is hidden/snoozed.
+  /// Deliberately distinct from `floatingBar_snoozedUntil`. That key hides the *bar* and
+  /// documents that hiding the bar must still let notifications through ("an hour of a
+  /// movie with the bar hidden or off must still nudge"). This one is the statement that
+  /// key is documented not to make: silence the nudges themselves.
+  nonisolated static let notificationsSnoozedUntilDefaultsKey = "notifications_snoozedUntil"
+
+  /// Standard silence durations offered to the user.
+  nonisolated static let snoozeDurations: [(label: String, seconds: TimeInterval)] = [
+    ("For 1 hour", 60 * 60),
+    ("For 4 hours", 4 * 60 * 60),
+    ("For 8 hours", 8 * 60 * 60),
+  ]
+
+  nonisolated static func currentSnoozeExpiry(
+    defaults: UserDefaults = .standard
+  ) -> Date? {
+    defaults.object(forKey: notificationsSnoozedUntilDefaultsKey) as? Date
+  }
+
+  /// The hour "until tomorrow" resolves to. A workday start rather than midnight:
+  /// silencing at 11pm and resuming an hour later at 00:00 is not what the phrase means
+  /// to anyone.
+  nonisolated static let snoozeUntilTomorrowHour = 9
+
+  /// Next `snoozeUntilTomorrowHour` strictly after `now`.
+  ///
+  /// Pure and calendar-supplied so the boundaries are testable: silencing at 11pm resumes
+  /// at 9am the next calendar day, and silencing at 2am — already "tomorrow" by the clock
+  /// — resumes at 9am the same morning rather than waiting 31 hours.
+  nonisolated static func snoozeUntilTomorrowExpiry(
+    now: Date,
+    calendar: Calendar = .current
+  ) -> Date {
+    if let todayAtHour = calendar.date(
+      bySettingHour: snoozeUntilTomorrowHour, minute: 0, second: 0, of: now),
+      todayAtHour > now
+    {
+      return todayAtHour
+    }
+    let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now.addingTimeInterval(86_400)
+    return calendar.date(
+      bySettingHour: snoozeUntilTomorrowHour, minute: 0, second: 0, of: tomorrow)
+      ?? now.addingTimeInterval(86_400)
+  }
+
+  /// Silence until the next workday start. Separate from `snoozeNotifications(for:)`
+  /// because the expiry is a wall-clock boundary, not an offset.
+  nonisolated static func snoozeNotificationsUntilTomorrow(
+    now: Date = Date(),
+    calendar: Calendar = .current,
+    defaults: UserDefaults = .standard
+  ) {
+    let until = snoozeUntilTomorrowExpiry(now: now, calendar: calendar)
+    defaults.set(until, forKey: notificationsSnoozedUntilDefaultsKey)
+    NotificationCenter.default.post(name: .proactiveNotificationSnoozeDidChange, object: nil)
+    log("NotificationService: proactive notifications silenced until \(until)")
+  }
+
+  /// Whether a delivery must be withheld because the user silenced notifications.
+  ///
+  /// Pure so the policy is testable without waiting out a real snooze. `respectFrequency`
+  /// is the existing proactive/functional split: silencing suggestions must not silence a
+  /// screen-recording repair prompt, or a user who snoozed for eight hours could not be
+  /// told why capture stopped working.
+  nonisolated static func shouldSuppressForSnooze(
+    respectFrequency: Bool,
+    snoozedUntil: Date?,
+    now: Date
+  ) -> Bool {
+    guard respectFrequency, let snoozedUntil else { return false }
+    return snoozedUntil > now
+  }
+
+  /// Silence proactive notifications for `duration`, replacing any existing snooze.
+  nonisolated static func snoozeNotifications(
+    for duration: TimeInterval,
+    now: Date = Date(),
+    defaults: UserDefaults = .standard
+  ) {
+    defaults.set(now.addingTimeInterval(duration), forKey: notificationsSnoozedUntilDefaultsKey)
+    NotificationCenter.default.post(name: .proactiveNotificationSnoozeDidChange, object: nil)
+    log("NotificationService: proactive notifications silenced for \(Int(duration / 60))m")
+  }
+
+  nonisolated static func endNotificationSnooze(defaults: UserDefaults = .standard) {
+    defaults.removeObject(forKey: notificationsSnoozedUntilDefaultsKey)
+    NotificationCenter.default.post(name: .proactiveNotificationSnoozeDidChange, object: nil)
+    log("NotificationService: proactive notification snooze cleared")
+  }
+
+  /// The two ways other people being around changes what a proactive nudge costs.
+  struct PresenceSignals: Equatable {
+    /// The user's screen is being broadcast, so anything Omi draws is seen by everyone.
+    let screenShared: Bool
+    /// The user is in a call. Others can hear the room, but they cannot see the screen.
+    let onCall: Bool
+  }
+
+  /// Whether a delivery must be withheld because other people are present.
+  ///
+  /// Only sharing withholds. Sharing makes a private nudge **visible to everyone**, which
+  /// is unrecoverable — the wrong audience has already read it. A call, on its own, only
+  /// makes the nudge *arrive at a busy moment*, and that is frequently the moment it is
+  /// worth most: mid-call with someone is exactly when "you owe them a task" is useful.
+  ///
+  /// This originally suppressed on either signal. That treated the interruption as the
+  /// harm; it is not, it is the product working. What must not happen during a call is
+  /// the nudge being *spoken* — see `shouldWithholdSpeechForPresence`.
+  ///
+  /// Pure so the policy is testable without a real call; the detection it is fed is
+  /// impure and lives in `currentPresence()`.
+  nonisolated static func shouldSuppressForPresence(
+    respectFrequency: Bool,
+    presence: PresenceSignals
+  ) -> Bool {
+    respectFrequency && presence.screenShared
+  }
+
+  /// Whether a delivered notification must stay silent even though it is shown.
+  ///
+  /// Speech has no private surface. A banner during a call is seen by the user alone; the
+  /// same text read aloud is heard by everyone in the room and everyone on the call, with
+  /// no screen share needed. So the visual delivery goes through and the voice does not.
+  nonisolated static func shouldWithholdSpeechForPresence(presence: PresenceSignals) -> Bool {
+    presence.onCall || presence.screenShared
+  }
+
+  /// Live presence detection, kept out of the policy so the policy stays testable.
+  ///
+  /// Three complementary signals, all pre-existing and already trusted in production:
+  /// `activeScreenSharePresent()` (used to pause capture during shares, #10143),
+  /// `callAppIsUsingMicrophone()` for an active call, and `browserCallWindowPresent()`
+  /// which is the documented fallback for a *muted* browser call where mic input has
+  /// dropped. Omi's own ambient capture cannot trip the mic signal: it matches only
+  /// native call apps and browsers by bundle id.
+  nonisolated static func currentPresence() -> PresenceSignals {
+    let shared = ConferencingApps.activeScreenSharePresent()
+    // The audio-process API this reads is macOS 14.4+. On 14.0–14.3 the browser
+    // window-title fallback below still catches browser calls; a native-app call on those
+    // versions goes undetected, which fails open — a missed suppression, never a missed
+    // notification.
+    var onCall = false
+    if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { onCall = true }
+    if !onCall { onCall = ConferencingApps.browserCallWindowPresent() }
+    // Reported only when something is detected, so ordinary use stays quiet. Without this
+    // a delivered nudge cannot be told apart from a detector that saw nothing — which is
+    // the difference between "the call rule worked" and "the call rule never ran".
+    if shared || onCall {
+      log("NotificationService: presence — screenShared=\(shared) onCall=\(onCall)")
+    }
+    return PresenceSignals(screenShared: shared, onCall: onCall)
+  }
+
+  /// Only the Notifications master toggle (and frequency gate) decide whether a
+  /// notification is owed. Disabling the Ask Omi bar (`askOmiBarEnabled`) hides the
+  /// persistent bar UI only: delivery still uses the existing temp-show path, which
+  /// pops the card and re-hides afterwards. `FloatingBarNotificationPreviewPolicy`
+  /// forces a system banner once the user has explicitly muted in-bar previews
+  /// (`ShortcutSettings.floatingBarNotificationPreviewsEnabled == false`) while the
+  /// Floating Bar is still enabled, so that opt-out is never fully silenced (#6765).
+  /// Previews muted *and* the bar disabled still temp-shows the card rather than
+  /// going silent or falling back to a contentless banner. That temp-show is a
+  /// proactive-notification surface only: a caller passing `deliverSystemBanner: true`
+  /// while the bar is disabled keeps its banner instead, because a card on a bar the
+  /// user turned off auto-dismisses in seconds and cannot carry a functional notice
+  /// (the screen-recording repair prompt is delivered once per broken-capture episode).
+  /// bounded delivery outcomes and never carries notification text or window context.
+  ///
+  /// Proactive deliveries are rechecked for snooze and live presence at the actual
+  /// presentation boundary. `onPresented` therefore means the user-visible surface
+  /// really presented, not merely that a card entered the queue.
   func sendNotification(
     ownerID: String,
     title: String,
@@ -332,10 +597,18 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     sound: NotificationSound = .default,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
+    suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     screenshotData: Data? = nil,
     deliverSystemBanner: Bool = false,
+    deliveryMode: NotificationDeliveryMode = .standard,
     respectFrequency: Bool = true,
-    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    isPersistent: Bool = false,
+    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    onPresented: (() -> Void)? = nil,
+    notificationID: UUID = UUID(),
+    onInteraction: ((NotificationInteraction) -> Void)? = nil,
+    expiresAt: Date? = nil,
+    onDropped: (() -> Void)? = nil
   ) {
     guard !ownerID.isEmpty,
       let authorizationSnapshot = suppliedAuthorizationSnapshot
@@ -344,6 +617,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else {
       log("NotificationService: rejecting notification from stale runtime owner")
+      onDropped?()
       return
     }
     prepareOwnerScopedState(for: authorizationSnapshot)
@@ -355,7 +629,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // NOTE: only READ the "already shown" flag here. The flag is SET at actual
     // delivery time (just before showNotification below), NOT here — setting it
     // before the snooze/enabled/frequency gates meant that if any gate suppressed
-    // this delivery (e.g. the user is snoozed when capture breaks), the flag was
+    // this delivery (e.g. notifications are disabled when capture breaks), the flag was
     // still persisted, and since it is only cleared on capture RECOVERY — which
     // never happens while capture stays broken — every later retry hit this early
     // return and the "screen recording needs reset" notice was never delivered.
@@ -363,15 +637,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       && UserDefaults.standard.bool(forKey: Self.screenCaptureResetShownKey)
     {
       log("NotificationService: suppressing duplicate screen capture reset notification")
+      onDropped?()
       return
     }
 
-    // Honor the floating-bar snooze for both the in-bar preview and the native
-    // macOS banner — the user opted into "no notifications for 2h".
-    if FloatingControlBarManager.shared.isSnoozed {
-      log("NotificationService: suppressing notification because floating bar is snoozed")
-      return
-    }
+    // Hiding the floating bar ("Hide for 2 hours") and disabling it are both statements
+    // about the BAR, not about notifications: an hour of a movie with the bar hidden or
+    // off must still nudge. Delivery goes through the existing temp-show path, which pops
+    // the card and re-hides the bar afterwards. It deliberately does not gate here.
 
     // Proactive notifications honor the master Notifications toggle. When the user
     // turns Notifications off in Settings, suppress the floating-bar popup and the
@@ -380,85 +653,400 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // to bypass this, matching the frequency gate below.
     if respectFrequency && !Self.areNotificationsEnabled() {
       log("NotificationService: suppressing \(assistantId) notification because notifications are disabled")
+      onDropped?()
+      return
+    }
+
+    // Every proactive notification belongs to one of the five user-facing categories
+    // (Focus, Task, Insight, Memory, Integration), and this shared boundary is where a category's
+    // Settings toggle binds every producer — goals and meeting action items included,
+    // not just the assistants that consult their own toggle before generating.
+    // Functional notices (`respectFrequency: false`) map to `.general` and stay ungated.
+    if respectFrequency,
+      !Self.categoryToggleAllows(
+        kind: ProactiveNotificationKind.from(assistantId: assistantId),
+        focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
+        taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+        insightEnabled: Self.goalReminderNotificationsEnabled,
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled,
+        meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
+    {
+      log("NotificationService: suppressing \(assistantId) notification because its category toggle is off")
+      onDropped?()
       return
     }
 
     // Proactive notifications honor the user's frequency setting. Functional
     // notifications (Crisp support replies, screen-recording permission prompts,
     // onboarding test) pass `respectFrequency: false` to bypass the gate.
+    // The meeting summary share card is exempt: it is a direct receipt of the
+    // user's own meeting ending, so it must appear after every meeting — the
+    // master toggle and its own category toggle above remain its only gates.
     if respectFrequency
-      && !shouldAllowProactiveNotification(
+      && assistantId != MeetingActionItemBannerPolicy.assistantID
+      && !isProactiveNotificationEligible(
         assistantId: assistantId,
+        now: Date(),
         authorizationSnapshot: authorizationSnapshot
       )
     {
       log("NotificationService: throttled \(assistantId) notification (frequency=\(Self.currentFrequencyLevel()))")
+      onDropped?()
+      return
+    }
+
+    // A proactive notification is addressed to one person. While the user is presenting,
+    // every surface Omi draws on is broadcast to everyone on the call, so the audience for
+    // a private nudge is no longer the audience it was written for — "Submit prototype for
+    // SBI Hackathon before the deadline" is useful alone and a disclosure on a shared
+    // screen. Suppress rather than reveal.
+    //
+    // `respectFrequency` is the existing proactive/functional split: functional notices
+    // (screen-recording repair prompts, Crisp replies, onboarding test) pass false and must
+    // still reach the user, because suppressing a permission prompt during a share is how a
+    // broken capture stays broken.
+    //
+    // Placed after the cheap boolean gates deliberately: `activeScreenSharePresent()` scans
+    // the window list, so it must not run for notifications an earlier gate already refused.
+    // Checked before presence: a defaults read is far cheaper than the window scans and
+    // audio-process enumeration presence detection performs.
+    if Self.shouldSuppressForSnooze(
+      respectFrequency: respectFrequency,
+      snoozedUntil: Self.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log("NotificationService: suppressing \(assistantId) notification — user silenced notifications")
+      onDropped?()
+      return
+    }
+
+    let presence =
+      respectFrequency
+      ? Self.currentPresence()
+      : PresenceSignals(screenShared: false, onCall: false)
+    if Self.shouldSuppressForPresence(respectFrequency: respectFrequency, presence: presence) {
+      log("NotificationService: suppressing \(assistantId) notification while the screen is shared")
+      onDropped?()
       return
     }
 
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       log("NotificationService: owner changed before notification presentation")
+      onDropped?()
       return
     }
 
-    // Mark the screen-capture reset notice as shown only now that it has passed
-    // every suppression gate and is actually being delivered — so a snoozed (or
-    // otherwise gated) attempt does not permanently suppress it for the episode.
-    if title == Self.screenCaptureResetTitle {
-      UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
+    // `respectFrequency` is the existing proactive/functional split: assistants leave it
+    // true; functional notices (onboarding test, screen-repair prompts) pass false and
+    // must never be spoken.
+    let speech = NotificationSpeechOnDelivery(message: message, isProactive: respectFrequency)
+    let presentationReceipt = NotificationPresentationReceipt(onPresented: onPresented)
+    let recordPresentation = { [weak self] in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+      speech.notificationWasPresented()
+      presentationReceipt.record()
+      if respectFrequency {
+        self?.recordProactiveNotificationPresented(
+          assistantId: assistantId,
+          authorizationSnapshot: authorizationSnapshot)
+      }
+      if title == Self.screenCaptureResetTitle {
+        UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
+      }
     }
 
-    FloatingControlBarManager.shared.showNotification(
+    let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
+    let floatingBarPreviewEnabled =
+      deliveryMode.presentsInFloatingBar
+      && FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+        deliverSystemBanner: deliverSystemBanner
+      )
+
+    var floatingBarMayDeliver = false
+    var floatingBarQueued = false
+    if floatingBarPreviewEnabled {
+      let presentation = FloatingControlBarManager.shared.showNotification(
+        ownerID: ownerID,
+        title: title,
+        message: message,
+        assistantId: assistantId,
+        sound: sound,
+        // The same category this delivery was already gated on a few lines up.
+        kind: ProactiveNotificationKind.from(assistantId: assistantId),
+        context: context,
+        action: action,
+        suggestionTelemetryIdentity: suggestionTelemetryIdentity,
+        screenshotData: screenshotData,
+        isPersistent: isPersistent,
+        isProactive: respectFrequency,
+        spokenAloud: speech.willSpeak,
+        onPresented: recordPresentation,
+        onDropped: onDropped,
+        notificationID: notificationID,
+        onInteraction: onInteraction,
+        expiresAt: expiresAt
+      )
+      switch presentation {
+      case .presented:
+        floatingBarMayDeliver = true
+      case .queued:
+        // Queue admission is not user-visible delivery. Leave the identity unresolved so a
+        // later presentation boundary (or a system-banner fallback) can emit the terminal event.
+        floatingBarQueued = true
+      case .suppressed:
+        // Unreachable today (a hidden or disabled bar presents via temp-show instead of
+        // suppressing), kept for the shared result type; label with the surface, not a
+        // retired reason.
+        return
+      case .rejectedOwnerChange:
+        return
+      case .windowUnavailable:
+        break
+      }
+    }
+
+    // V2 receipts require a mounted card. Native enqueue success is not render evidence.
+    if assistantId == "proactivity_v2" {
+      if !floatingBarMayDeliver && !floatingBarQueued { onDropped?() }
+      return
+    }
+
+    // Default path: floating-bar card (including temp-show when the bar is disabled).
+    // Functional callers opt-in via `deliverSystemBanner: true` (see the parameter
+    // doc above). When the user explicitly muted in-bar previews (bar still enabled),
+    // fall back to the system banner so the notification is never fully silenced.
+    let shouldDeliverSystemBanner =
+      deliveryMode.requiresSystemBanner
+      || FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+        deliverSystemBanner: deliverSystemBanner,
+        floatingBarAccepted: floatingBarMayDeliver || floatingBarQueued
+      )
+    guard shouldDeliverSystemBanner else {
+      if !floatingBarMayDeliver && !floatingBarQueued {
+        // Genuine no-surface failure (window creation / presentation never started).
+        // Bar-disabled is no longer a suppression reason; that path temp-shows.
+      }
+      return
+    }
+
+    // Freeze the presentation decision before crossing the UserNotifications callback boundary;
+    // @Sendable MainActor closures must not capture mutable local state.
+    let floatingBarDelivered = floatingBarMayDeliver
+    let floatingBarHasQueued = floatingBarQueued
+    UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        log("NotificationService: dropping stale-owner system notification")
+        return
+      }
+      guard NotificationPermissionPolicy.isGranted(authorizationStatus) else {
+        log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
+
+        // Report at the authorization boundary, before delivery is skipped.
+        Self.reportUnauthorizedDrop(
+          status: authorizationStatus,
+          surface: ProactiveNotificationKind.from(assistantId: assistantId)
+        )
+
+        if !floatingBarDelivered && !floatingBarHasQueued {
+        }
+
+        // Sending an assistant notification is not consent to change TCC or
+        // LaunchServices state. A user can repair notification access from
+        // Settings; background delivery simply remains unavailable.
+        return
+      }
+
+      if respectFrequency {
+        if Self.shouldSuppressForSnooze(
+          respectFrequency: true,
+          snoozedUntil: Self.currentSnoozeExpiry(),
+          now: Date())
+        {
+          log("NotificationService: dropping system notification because snooze became active")
+          return
+        }
+        if Self.shouldSuppressForPresence(respectFrequency: true, presence: Self.currentPresence()) {
+          log("NotificationService: dropping system notification because screen sharing became active")
+          return
+        }
+      }
+
+      self?.deliverNotification(
+        title: title,
+        message: message,
+        assistantId: assistantId,
+        sound: sound,
+        context: context,
+        authorizationSnapshot: authorizationSnapshot,
+        onPresented: recordPresentation,
+        notificationID: notificationID,
+        action: action,
+        onInteraction: onInteraction
+      )
+    }
+  }
+
+  /// Single reporter for "this notification was dropped because the app is not
+  /// authorized to show it".
+  ///
+  /// Report here because denied notifications never reach `deliverNotification`.
+  @MainActor
+  static func reportUnauthorizedDrop(status: UNAuthorizationStatus, surface: ProactiveNotificationKind) {
+    AnalyticsManager.shared.notificationDeliverySkipped(
+      authStatus: NotificationDeliveryTelemetry.AuthStatus(status),
+      surface: surface
+    )
+  }
+
+  /// The gated path for a proactive card whose point is its action button.
+  ///
+  /// `sendNotification` returns `Void` and keeps the presentation result to
+  /// itself. A caller that must know whether the card actually reached the
+  /// screen — because it spends a bounded, lifetime offer budget from
+  /// `onPresented` rather than from the call returning — cannot use it, and
+  /// `IntegrationNudgeCoordinator` reached straight for
+  /// `FloatingControlBarManager.showNotification` for exactly that reason,
+  /// skipping every control the user has along the way.
+  ///
+  /// Applies the same snooze and presence gates as `sendNotification`, returns the
+  /// presentation result, carries a `FloatingBarNotificationAction`, and throttles
+  /// against the caller's own `assistantId`.
+  ///
+  /// A suppressed card composes correctly with a bounded budget: `onPresented`
+  /// never fires, so the offer stays unspent and the same nudge is free to be
+  /// made again once the user is no longer silenced or in company.
+  @discardableResult
+  func presentActionableProactiveNotification(
+    ownerID: String,
+    title: String,
+    message: String,
+    assistantId: String,
+    /// Required, and passed straight through: `showNotification` takes no
+    /// assistant-id fallback for what a card *is*, so routing a card through this
+    /// gate must not cost it its kind.
+    kind: ProactiveNotificationKind,
+    action: FloatingBarNotificationAction,
+    sound: NotificationSound = .none,
+    onPresented: (() -> Void)? = nil,
+    onDropped: (() -> Void)? = nil
+  ) -> OwnerBoundNotificationPresentationResult {
+    guard !ownerID.isEmpty,
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
+      onDropped?()
+      return .rejectedOwnerChange
+    }
+
+    guard Self.areNotificationsEnabled() else {
+      onDropped?()
+      return .suppressed
+    }
+
+    guard
+      isProactiveNotificationEligible(
+        assistantId: assistantId,
+        now: Date(),
+        authorizationSnapshot: authorizationSnapshot)
+    else {
+      onDropped?()
+      return .suppressed
+    }
+
+    // The category toggle belongs here, not in the caller. Today's only caller gates
+    // itself on `IntegrationNudgeCoordinator.isFeatureEnabled`, which is the same
+    // setting `categoryToggleAllows` reads for `.integration` — so this changes nothing
+    // for it. It is here so the next caller, with a different kind, cannot arrive
+    // ungated: Settings promises five notification types, and a toggle that silences
+    // only the producers that remembered to check it would make that promise a lie.
+    // Same reasoning, and same argument list, as the context-director path above.
+    guard
+      Self.categoryToggleAllows(
+        kind: kind,
+        focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
+        taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+        insightEnabled: Self.goalReminderNotificationsEnabled,
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled,
+        meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
+    else {
+      onDropped?()
+      return .suppressed
+    }
+
+    // Hard-codes `respectFrequency: true`: this entry point is proactive by
+    // construction. A functional notice goes through `sendNotification` with
+    // `respectFrequency: false`.
+    if Self.shouldSuppressForSnooze(
+      respectFrequency: true,
+      snoozedUntil: Self.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log("NotificationService: withholding \(assistantId) card — user silenced notifications")
+      onDropped?()
+      return .suppressed
+    }
+
+    if Self.shouldSuppressForPresence(
+      respectFrequency: true,
+      presence: Self.currentPresence())
+    {
+      log("NotificationService: withholding \(assistantId) card — the screen is shared")
+      onDropped?()
+      return .suppressed
+    }
+
+    let recordPresented = { [weak self] in
+      self?.recordProactiveNotificationPresented(
+        assistantId: assistantId,
+        authorizationSnapshot: authorizationSnapshot)
+      onPresented?()
+    }
+
+    return FloatingControlBarManager.shared.showNotification(
       ownerID: ownerID,
       title: title,
       message: message,
       assistantId: assistantId,
       sound: sound,
-      context: context,
+      kind: kind,
       action: action,
-      screenshotData: screenshotData
-    )
+      isProactive: true,
+      authorizationSnapshot: authorizationSnapshot,
+      onPresented: recordPresented,
+      onDropped: onDropped)
+  }
 
-    // Default path: floating-bar only. Functional callers opt-in via
-    // `deliverSystemBanner: true` (see the parameter doc above).
-    guard deliverSystemBanner else { return }
-
-    UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
-      Task { @MainActor in
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
-          log("NotificationService: dropping stale-owner system notification")
-          return
-        }
-        guard settings.authorizationStatus == .authorized else {
-          log("Notification skipped (auth=\(settings.authorizationStatus.rawValue)): \(title)")
-
-          // If auth reverted to notDetermined (not explicitly denied), trigger repair.
-          // Debounce: at most once per 10 minutes to avoid hammering lsregister.
-          if settings.authorizationStatus == .notDetermined {
-            let now = Date()
-            if self?.lastRepairAttempt == nil || now.timeIntervalSince(self?.lastRepairAttempt ?? .distantPast) > 600 {
-              self?.lastRepairAttempt = now
-              log("Notification auth is notDetermined at send time — triggering repair")
-              AnalyticsManager.shared.notificationRepairTriggered(
-                reason: "send_time_not_determined",
-                previousStatus: "unknown",
-                currentStatus: "notDetermined"
-              )
-              ProactiveAssistantsPlugin.repairNotificationRegistration()
-            }
-          }
-
-          return
-        }
-
-        self?.deliverNotification(
-          title: title,
-          message: message,
-          assistantId: assistantId,
-          sound: sound,
-          authorizationSnapshot: authorizationSnapshot
-        )
-      }
+  /// Maps every proactive notification kind to its user-facing category — Focus, Task,
+  /// Insight, Memory, or Integration — and answers whether that category's Settings
+  /// toggle allows delivery. Focus is the focus-nudge assistant alone; generic tips,
+  /// resurfaced items, and generated goals are all insights; meeting action items are
+  /// tasks; connect-an-app offers are integrations. `.general` is functional system
+  /// alerting outside the taxonomy and is never category-gated.
+  nonisolated static func categoryToggleAllows(
+    kind: ProactiveNotificationKind,
+    focusEnabled: Bool,
+    taskEnabled: Bool,
+    insightEnabled: Bool,
+    memoryEnabled: Bool,
+    integrationEnabled: Bool,
+    meetingSummaryEnabled: Bool = true
+  ) -> Bool {
+    switch kind {
+    case .suggestion: return focusEnabled
+    case .task: return taskEnabled
+    case .meetingNotes: return meetingSummaryEnabled
+    case .insight, .resurface, .goal: return insightEnabled
+    case .memory: return memoryEnabled
+    case .integration: return integrationEnabled
+    // Functional system notices, the never-journaled product cards, and the
+    // recap announcement sit outside the five-category taxonomy and are
+    // ungated by it.
+    case .general, .functional, .trial, .onboarding, .dailyRecap, .proactivityV2: return true
     }
   }
 
@@ -488,9 +1076,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         authorizationSnapshot: authorizationSnapshot
       ),
       taskNotificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
-      focusSuppressed: FocusStorage.shared.currentStatus == .focused
-        || ProactiveTaskInterruptionSettings.isFocusSuppressed,
-      snoozed: FloatingControlBarManager.shared.isSnoozed,
+      focusSuppressed: ProactiveTaskInterruptionSettings.isFocusSuppressed,
       now: now,
       calendar: calendar
     )
@@ -552,7 +1138,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         ambientFrequencyEligible: false,
         taskNotificationsEnabled: false,
         focusSuppressed: false,
-        snoozed: false,
         now: now,
         calendar: .current
       ),
@@ -565,9 +1150,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     message: String,
     assistantId: String,
     sound: NotificationSound,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    context: FloatingBarNotificationContext? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    onPresented: (() -> Void)? = nil,
+    onDropped: (() -> Void)? = nil,
+    notificationID: UUID = UUID(),
+    action: FloatingBarNotificationAction? = nil,
+    onInteraction: ((NotificationInteraction) -> Void)? = nil
   ) {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     let content = UNMutableNotificationContent()
     content.title = title
     content.body = message
@@ -580,7 +1170,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       content.categoryIdentifier = Self.trackableCategoryId  // Enable dismiss tracking
     }
 
-    let notificationId = UUID().uuidString
+    let notificationId = notificationID.uuidString
     let request = UNNotificationRequest(
       identifier: notificationId,
       content: content,
@@ -592,81 +1182,132 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     storeNotificationMetadata(
       id: notificationId,
       title: title,
+      message: message,
       assistantId: assistantId,
+      context: context,
       authorizationSnapshot: authorizationSnapshot
     )
 
-    // Play custom sound manually (SPM resources aren't found by UNNotificationSound)
-    sound.playCustomSound()
+    notificationMetadata[notificationId]?.action = action
+    notificationMetadata[notificationId]?.onInteraction = onInteraction
 
     print("[\(assistantId)] Sending notification: \(title) - \(message)")
-    UNUserNotificationCenter.current().add(request) { [weak self] error in
-      if let error = error {
-        print("Notification error: \(error)")
-        logError("Notification error", error: error)
+    UserNotificationCallbackBridge.add(request) { [weak self] result in
+      if let errorDescription = result.errorDescription {
+        print("Notification error: \(errorDescription)")
+        log("Notification error: \(errorDescription)")
         // Clean up metadata on error
-        Task { @MainActor in
-          self?.notificationMetadata.removeValue(forKey: notificationId)
-          self?.notificationMetadataOrder.removeAll { $0 == notificationId }
-        }
+        self?.notificationMetadata.removeValue(forKey: notificationId)
+        self?.notificationMetadataOrder.removeAll { $0 == notificationId }
+        onDropped?()
       } else {
         print("Notification sent successfully")
         // Track notification sent
-        Task { @MainActor in
-          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-          AnalyticsManager.shared.notificationSent(
-            notificationId: notificationId,
-            title: title,
-            assistantId: assistantId,
-            surface: "system_notification"
-          )
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+          onDropped?()
+          return
         }
+        AnalyticsManager.shared.notificationSent(
+          notificationId: notificationId,
+          title: title,
+          assistantId: assistantId,
+          surface: "system_notification"
+        )
+        onPresented?()
       }
     }
   }
 
   // MARK: - Frequency throttle
 
-  /// One-time migration to make proactive notifications OFF by default for ALL users.
-  /// Runs once per install (guarded by `offByDefaultMigrationKey`): sets the local
-  /// frequency to Off and persists it to the backend so the choice sticks across
-  /// devices and is reflected in Settings. Because it is guarded by the flag, a user
-  /// who later turns notifications back on is never re-disabled on subsequent launches.
+  /// One-time migration to re-enable proactive notifications at Balanced for users the
+  /// notifications-off-by-default migration (`48239de8`) turned off. A user at Off — or a
+  /// fresh install with no stored level — moves to Balanced; a user who opted in to any
+  /// other level keeps it. Per-assistant toggles are not touched, so only the categories
+  /// that default on (Focus, Insight) fire; Task and Memory stay opt-in.
+  /// Because it is guarded by `balancedByDefaultMigrationKey`, a user who turns
+  /// notifications off after the migration is never re-enabled on subsequent launches.
   /// Call early at launch, before any proactive assistant can fire.
-  static func migrateToOffByDefaultIfNeeded() {
-    guard !UserDefaults.standard.bool(forKey: Self.offByDefaultMigrationKey) else { return }
-    UserDefaults.standard.set(0, forKey: Self.frequencyDefaultsKey)
-    UserDefaults.standard.set(true, forKey: Self.offByDefaultMigrationKey)
-    log("NotificationService: applied notifications-off-by-default migration (frequency=0)")
-    guard AuthService.shared.isSignedIn else { return }
-    Task {
-      do {
-        _ = try await APIClient.shared.updateNotificationSettings(enabled: nil, frequency: 0)
-      } catch {
-        logError(
-          "NotificationService: off-by-default migration backend push failed", error: error)
-      }
+  static func migrateToBalancedDefaultIfNeeded() {
+    guard let target = applyBalancedDefaultMigration(defaults: .standard) else { return }
+    log("NotificationService: applied balanced-by-default migration (frequency=\(target))")
+    // Route the backend push through the pending-sync journal and the durable
+    // coordinator: a failed push is retried with bounded backoff until the server
+    // confirms, instead of waiting for a Settings load, and a slow launch push can
+    // never land after — and overwrite — a frequency change the user makes right
+    // after startup.
+    let revision = beginNotificationSettingsSync()
+    NotificationSettingsSyncCoordinator.shared.enqueue(
+      enabled: nil, frequency: target, revision: revision)
+  }
+
+  /// Local half of the balanced-by-default migration, split from the backend push so the
+  /// decision is synchronously unit-testable. Returns the level to push to the backend,
+  /// or nil when nothing changed (already migrated, or the user opted in to another level).
+  @discardableResult
+  nonisolated static func applyBalancedDefaultMigration(defaults: UserDefaults) -> Int? {
+    guard !defaults.bool(forKey: Self.balancedByDefaultMigrationKey) else { return nil }
+    defaults.set(true, forKey: Self.balancedByDefaultMigrationKey)
+    // The raw stored value, not `currentFrequencyLevel()`: an absent key (fresh install)
+    // must migrate so the level is written locally AND to the backend — otherwise the
+    // backend's off default would hydrate 0 over the in-memory fallback later.
+    if defaults.object(forKey: Self.frequencyDefaultsKey) != nil,
+      defaults.integer(forKey: Self.frequencyDefaultsKey) != 0
+    {
+      return nil
     }
+    defaults.set(Self.balancedFrequencyLevel, forKey: Self.frequencyDefaultsKey)
+    return Self.balancedFrequencyLevel
   }
 
   /// Whether the master Notifications toggle is on. Reads the mirrored UserDefaults key,
   /// defaulting to `true` when absent so notifications are not accidentally suppressed
-  /// before the Settings page has hydrated from the backend.
-  static func areNotificationsEnabled() -> Bool {
-    guard UserDefaults.standard.object(forKey: Self.masterEnabledDefaultsKey) != nil else {
+  /// before the coordinator has hydrated from the backend. The delivery gate never
+  /// consults the network.
+  static func areNotificationsEnabled(defaults: UserDefaults = .standard) -> Bool {
+    guard defaults.object(forKey: Self.masterEnabledDefaultsKey) != nil else {
       return true
     }
-    return UserDefaults.standard.bool(forKey: Self.masterEnabledDefaultsKey)
+    return defaults.bool(forKey: Self.masterEnabledDefaultsKey)
   }
 
   /// Current frequency level from UserDefaults, clamped to [0, 5]. Falls back to
   /// `defaultFrequencyLevel` when the key is absent (first run before sync).
-  static func currentFrequencyLevel() -> Int {
-    guard UserDefaults.standard.object(forKey: Self.frequencyDefaultsKey) != nil else {
+  static func currentFrequencyLevel(defaults: UserDefaults = .standard) -> Int {
+    guard defaults.object(forKey: Self.frequencyDefaultsKey) != nil else {
       return Self.defaultFrequencyLevel
     }
-    let raw = UserDefaults.standard.integer(forKey: Self.frequencyDefaultsKey)
+    let raw = defaults.integer(forKey: Self.frequencyDefaultsKey)
     return max(0, min(5, raw))
+  }
+
+  @discardableResult
+  static func beginNotificationSettingsSync(defaults: UserDefaults = .standard) -> Int {
+    let revision = defaults.integer(forKey: settingsSyncRevisionDefaultsKey) &+ 1
+    defaults.set(revision, forKey: settingsSyncRevisionDefaultsKey)
+    defaults.set(true, forKey: settingsPendingSyncDefaultsKey)
+    return revision
+  }
+
+  static func completeNotificationSettingsSync(
+    revision: Int,
+    defaults: UserDefaults = .standard
+  ) {
+    guard defaults.integer(forKey: settingsSyncRevisionDefaultsKey) == revision else { return }
+    defaults.set(false, forKey: settingsPendingSyncDefaultsKey)
+  }
+
+  static func hasPendingNotificationSettingsSync(defaults: UserDefaults = .standard) -> Bool {
+    defaults.bool(forKey: settingsPendingSyncDefaultsKey)
+  }
+
+  static func shouldPreserveLocalNotificationSettings(
+    revisionAtLoadStart: Int,
+    currentRevision: Int,
+    pendingAtLoadStart: Bool,
+    pendingNow: Bool
+  ) -> Bool {
+    pendingAtLoadStart || pendingNow || currentRevision != revisionAtLoadStart
   }
 
   /// Minimum interval between proactive notifications for a given level.
@@ -674,18 +1315,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   private static func minInterval(forLevel level: Int) -> TimeInterval? {
     switch level {
     case 0: return .infinity  // Off
-    case 1: return 60 * 60  // Minimal:  1 per hour
-    case 2: return 30 * 60  // Low:      1 per 30 min
-    case 3: return 10 * 60  // Balanced: 1 per 10 min
-    case 4: return 3 * 60  // High:     1 per 3 min
+    case 1: return 60 * 60
+    case 2: return 30 * 60
+    case 3: return 10 * 60
+    case 4: return 3 * 60
     default: return nil  // Maximum:  no throttle
     }
   }
 
-  /// Decide whether a proactive notification from `assistantId` should be delivered.
-  /// Records the timestamp when allowed so subsequent calls within the window are
-  /// suppressed. Per-assistant + global limits combine so a chatty assistant cannot
-  /// starve another.
+  /// Prepare the owner-scoped throttle ledger. Eligibility checks are read-only;
+  /// timestamps advance only at a visible presentation boundary.
   private func prepareOwnerScopedState(
     for authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) {
@@ -700,36 +1339,39 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     throttleOwnerSnapshot = authorizationSnapshot
   }
 
-  private func shouldAllowProactiveNotification(
+  private func recordProactiveNotificationPresented(
     assistantId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     now: Date = Date()
-  ) -> Bool {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
+  ) {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     prepareOwnerScopedState(for: authorizationSnapshot)
-    guard
-      isProactiveNotificationEligible(
-        assistantId: assistantId,
-        now: now,
-        authorizationSnapshot: authorizationSnapshot
-      )
-    else { return false }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
     lastNotificationAt[assistantId] = now
     lastNotificationAtGlobal = now
-    return true
+  }
+
+  func lastProactivePresentationAtForCurrentOwner() -> Date? {
+    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
+    else { return nil }
+    prepareOwnerScopedState(for: snapshot)
+    return lastNotificationAtGlobal
   }
 
   private func storeNotificationMetadata(
     id: String,
     title: String,
+    message: String = "",
     assistantId: String,
+    context: FloatingBarNotificationContext? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     notificationMetadata[id] = NotificationMetadata(
       title: title,
+      message: message,
       assistantId: assistantId,
+      context: context,
       authorizationSnapshot: authorizationSnapshot
     )
     notificationMetadataOrder.append(id)
@@ -768,11 +1410,40 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     now: Date
   ) -> Bool {
-    shouldAllowProactiveNotification(
+    guard
+      isProactiveNotificationEligible(
+        assistantId: assistantId,
+        now: now,
+        authorizationSnapshot: authorizationSnapshot)
+    else { return false }
+    recordProactiveNotificationPresented(
       assistantId: assistantId,
       authorizationSnapshot: authorizationSnapshot,
       now: now
     )
+    return true
+  }
+
+  func proactiveNotificationEligibleForTesting(
+    assistantId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    now: Date
+  ) -> Bool {
+    isProactiveNotificationEligible(
+      assistantId: assistantId,
+      now: now,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  func recordProactiveNotificationPresentedForTesting(
+    assistantId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    now: Date
+  ) {
+    recordProactiveNotificationPresented(
+      assistantId: assistantId,
+      authorizationSnapshot: authorizationSnapshot,
+      now: now)
   }
 
   private func isProactiveNotificationEligible(

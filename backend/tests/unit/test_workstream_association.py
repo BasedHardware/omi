@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,14 +19,6 @@ from models.workstream_association import (
     RecurrenceInboxReceipt,
     RecurrenceInboxStatus,
 )
-from utils.memory.memory_system import MemorySystem
-from utils.memory.canonical_consolidation import (
-    CONSOLIDATION_AGENT_PROMPT,
-    ConsolidationAgentBatch,
-    ConsolidationReport,
-)
-from utils.memory import canonical_short_term_maintenance_cron as maintenance_cron
-from utils.memory.short_term_promotion import CanonicalShortTermMaintenanceReport
 from utils.task_intelligence import workstream_association as association
 from utils.task_intelligence import workstream_index
 from database import vector_db
@@ -49,7 +42,6 @@ def _workstream(payload: dict) -> Workstream:
 
 @pytest.fixture
 def enabled(monkeypatch):
-    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         association.workstreams_db,
         'get_task_workflow_control',
@@ -72,7 +64,7 @@ def test_golden_association_fixtures_append_only_material_intent_match(enabled):
             return SimpleNamespace(event_id=f'event-{case["id"]}')
 
         judgment = case['recorded_judgment']
-        outcome = association.associate_canonical_evidence(
+        outcome = association.associate_workflow_evidence(
             'uid-1',
             AssociationEvidence(evidence_id=case['id'], **case['evidence']),
             firestore_client=object(),
@@ -113,7 +105,7 @@ def test_retrieval_hydrates_authority_and_purges_missing_or_closed_hits(enabled)
     purged: list[str] = []
     seen_candidates: list[str] = []
 
-    outcome = association.associate_canonical_evidence(
+    outcome = association.associate_workflow_evidence(
         'uid-1',
         AssociationEvidence(
             evidence_id='memory-1',
@@ -166,8 +158,8 @@ def test_retry_coalesces_same_evidence_into_one_event_key(enabled):
         ),
         'append_event': append,
     }
-    first = association.associate_canonical_evidence('uid-1', evidence, **kwargs)
-    second = association.associate_canonical_evidence('uid-1', evidence, **kwargs)
+    first = association.associate_workflow_evidence('uid-1', evidence, **kwargs)
+    second = association.associate_workflow_evidence('uid-1', evidence, **kwargs)
 
     assert len(events) == 1
     assert first.event_id == second.event_id
@@ -178,7 +170,7 @@ def test_material_event_uses_minimized_adjudicator_summary_not_memory_content(en
     appended = []
     raw_memory = 'Sarah said the exact confidential pricing is 12345 and asked us to change the draft.'
 
-    association.associate_canonical_evidence(
+    association.associate_workflow_evidence(
         'uid-1',
         AssociationEvidence(
             evidence_id='memory-1',
@@ -204,7 +196,7 @@ def test_material_event_uses_minimized_adjudicator_summary_not_memory_content(en
     assert appended[0][1]['required_status'] == WorkstreamStatus.open
 
 
-def test_shadow_association_adjudicates_but_does_not_append(enabled, monkeypatch):
+def test_persisted_shadow_mode_cannot_suppress_canonical_association(enabled, monkeypatch):
     monkeypatch.setattr(
         association.workstreams_db,
         'get_task_workflow_control',
@@ -215,7 +207,7 @@ def test_shadow_association_adjudicates_but_does_not_append(enabled, monkeypatch
     )
     record = _workstream({'workstream_id': 'ws-1', 'objective': 'Send update', 'current_state_summary': 'Drafting'})
     appended = []
-    outcome = association.associate_canonical_evidence(
+    outcome = association.associate_workflow_evidence(
         'uid-1',
         AssociationEvidence(
             evidence_id='memory-1',
@@ -230,17 +222,18 @@ def test_shadow_association_adjudicates_but_does_not_append(enabled, monkeypatch
             reason=AssociationReason.selected,
             event_summary='Revise the draft for the changed pricing assumption.',
         ),
-        append_event=lambda *args, **kwargs: appended.append('event'),
+        append_event=lambda *args, **kwargs: appended.append('event') or SimpleNamespace(event_id='event-1'),
     )
 
-    assert outcome.outcome == AssociationOutcomeKind.would_append
-    assert appended == []
+    assert outcome.outcome == AssociationOutcomeKind.appended
+    assert outcome.event_id == 'event-1'
+    assert appended == ['event']
 
 
 def test_verbatim_material_summary_fails_closed_without_append(enabled):
     record = _workstream({'workstream_id': 'ws-1', 'objective': 'Send update', 'current_state_summary': 'Drafting'})
     appended = []
-    outcome = association.associate_canonical_evidence(
+    outcome = association.associate_workflow_evidence(
         'uid-1',
         AssociationEvidence(
             evidence_id='memory-1',
@@ -273,15 +266,14 @@ def test_adjudication_reason_requires_consistent_selection_shape():
         AssociationJudgment(material=False, reason=AssociationReason.immaterial)
 
 
-def test_noncanonical_user_executes_no_retrieval_or_recurrence_mutation(monkeypatch):
-    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
+def test_universal_user_executes_retrieval_and_recurrence_mutation(enabled):
     calls: list[str] = []
     evidence = AssociationEvidence(
         evidence_id='memory-1',
         summary='Something changed',
         evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
     )
-    outcome = association.associate_canonical_evidence(
+    outcome = association.associate_workflow_evidence(
         'uid-1',
         evidence,
         retrieve_ids=lambda *args, **kwargs: calls.append('retrieve') or [],
@@ -289,12 +281,14 @@ def test_noncanonical_user_executes_no_retrieval_or_recurrence_mutation(monkeypa
     recurrence = association.consume_recurrence_signal(
         'uid-1',
         _recurrence_signal(distinct_days=3),
-        create_candidate=lambda *args, **kwargs: calls.append('candidate'),
+        account_generation=7,
+        create_candidate=lambda *args, **kwargs: calls.append('candidate')
+        or SimpleNamespace(candidate_id='candidate-1'),
     )
 
-    assert outcome.outcome == AssociationOutcomeKind.not_canonical_cohort
-    assert recurrence.outcome == RecurrenceOutcomeKind.not_canonical_cohort
-    assert calls == []
+    assert outcome.outcome == AssociationOutcomeKind.no_candidates
+    assert recurrence.outcome == RecurrenceOutcomeKind.candidate_created
+    assert calls == ['retrieve', 'candidate']
 
 
 def _recurrence_signal(*, distinct_days: int) -> CanonicalRecurrenceSignal:
@@ -311,45 +305,6 @@ def _recurrence_signal(*, distinct_days: int) -> CanonicalRecurrenceSignal:
         last_seen_at=NOW,
         evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
     )
-
-
-def test_canonical_consolidation_emits_neutral_recurrence_contract_only():
-    signal = _recurrence_signal(distinct_days=3)
-    batch = ConsolidationAgentBatch.model_validate({'decisions': [], 'recurrence_signals': [signal.model_dump()]})
-
-    assert batch.recurrence_signals == [signal]
-    assert 'at least two distinct days' in ' '.join(CONSOLIDATION_AGENT_PROMPT.split())
-
-
-def test_maintenance_orchestrator_hands_recurrence_to_workflow_callback(monkeypatch):
-    signal = _recurrence_signal(distinct_days=3)
-    monkeypatch.setenv('MEMORY_CANONICAL_PROMOTION_CRON_ENABLED', 'true')
-    monkeypatch.setattr(maintenance_cron, 'list_canonical_cohort_uids', lambda: ['uid-1'])
-    maintenance_kwargs = {}
-
-    def run_maintenance(uid, **kwargs):
-        maintenance_kwargs.update(kwargs)
-        return CanonicalShortTermMaintenanceReport(
-            uid=uid,
-            consolidation=ConsolidationReport(uid=uid, recurrence_signals=[signal]),
-        )
-
-    monkeypatch.setattr(maintenance_cron, 'run_canonical_short_term_maintenance', run_maintenance)
-    consumed: list[CanonicalRecurrenceSignal] = []
-
-    summary = maintenance_cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=object(),
-        now=NOW,
-        run_id='run-1',
-        recurrence_signal_persister=lambda *args, **kwargs: 1,
-        recurrence_signal_consumer=lambda uid, signals, firestore_client=None: (
-            consumed.extend(signals) or len(signals)
-        ),
-    )
-
-    assert consumed == [signal]
-    assert summary.recurrence_candidates_total == 1
-    assert maintenance_kwargs['recurrence_signal_sink'] is not None
 
 
 def test_recurrence_requires_multiple_days_and_is_idempotent_across_retries(enabled):
@@ -388,8 +343,7 @@ def test_recurrence_requires_multiple_days_and_is_idempotent_across_retries(enab
     assert len(created) == 1
 
 
-def test_recurrence_shadow_evaluates_without_candidate_mutation(monkeypatch):
-    monkeypatch.setattr(association, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
+def test_persisted_shadow_mode_cannot_suppress_canonical_recurrence_candidate(monkeypatch):
     monkeypatch.setattr(
         association.workstreams_db,
         'get_task_workflow_control',
@@ -404,12 +358,14 @@ def test_recurrence_shadow_evaluates_without_candidate_mutation(monkeypatch):
         'uid-1',
         _recurrence_signal(distinct_days=3),
         account_generation=7,
-        create_candidate=lambda *args, **kwargs: calls.append('candidate'),
+        create_candidate=lambda *args, **kwargs: calls.append('candidate')
+        or SimpleNamespace(candidate_id='candidate-1'),
     )
 
-    assert result.outcome == RecurrenceOutcomeKind.would_create
+    assert result.outcome == RecurrenceOutcomeKind.candidate_created
+    assert result.candidate_id == 'candidate-1'
     assert result.idempotency_key
-    assert calls == []
+    assert calls == ['candidate']
 
 
 def test_durable_recurrence_inbox_retries_failures_and_continues(enabled, monkeypatch):
@@ -498,7 +454,6 @@ def test_recurrence_contract_rejects_impossible_temporal_counts():
 
 
 def test_index_rebuild_resets_and_indexes_only_open_authoritative_workstreams(monkeypatch):
-    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         workstream_index.workstreams_db,
         'get_task_workflow_control',
@@ -526,7 +481,7 @@ def test_index_rebuild_resets_and_indexes_only_open_authoritative_workstreams(mo
     assert report.indexed_count == 1
 
 
-def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkeypatch):
+def test_index_refresh_upserts_open_deletes_closed_for_every_authenticated_user(monkeypatch):
     open_record = _workstream(
         {'workstream_id': 'open-1', 'objective': 'Ship update', 'current_state_summary': 'Drafting'}
     )
@@ -534,7 +489,6 @@ def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkey
     indexed: list[str] = []
     deleted: list[str] = []
 
-    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         workstream_index.workstreams_db,
         'get_task_workflow_control',
@@ -557,15 +511,9 @@ def test_index_refresh_upserts_open_deletes_closed_and_skips_noncanonical(monkey
         delete_index=lambda uid, workstream_id, **kwargs: deleted.append(workstream_id) is None or True,
     )
 
-    monkeypatch.setattr(workstream_index, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
-    assert not workstream_index.refresh_workstream_association_index(
-        'uid-1',
-        'legacy-1',
-        hydrate=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('must not hydrate')),
-    )
     report = workstream_index.rebuild_workstream_association_index(
         'uid-1',
-        list_source=lambda uid, **kwargs: (_ for _ in ()).throw(AssertionError('must not list')),
+        list_source=lambda uid, **kwargs: [],
     )
 
     assert indexed == ['open-1']
@@ -578,11 +526,13 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
         def __init__(self):
             self.upserts = []
             self.deletes = []
+            self.queries = []
 
         def upsert(self, **kwargs):
             self.upserts.append(kwargs)
 
         def query(self, **kwargs):
+            self.queries.append(kwargs)
             assert kwargs['namespace'] == vector_db.WORKSTREAM_ASSOCIATION_NAMESPACE
             return {
                 'matches': [
@@ -595,9 +545,18 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
         def delete(self, **kwargs):
             self.deletes.append(kwargs)
 
+    raw_index = object()
     fake = FakeIndex()
-    monkeypatch.setattr(vector_db, 'index', fake)
+    routes = []
+
+    def route(raw, uid, **kwargs):
+        routes.append((raw, uid, kwargs))
+        return fake
+
+    monkeypatch.setattr(vector_db, 'index', raw_index)
+    monkeypatch.setattr(vector_db, 'owner_index', route)
     monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_query=lambda text: [0.1, 0.2]))
+    monkeypatch.setattr(vector_db, 'external_write_fence', lambda *args, **kwargs: nullcontext())
 
     assert vector_db.upsert_workstream_association_vector(
         'uid-1',
@@ -609,7 +568,12 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
     assert vector_db.delete_workstream_association_vector('uid-1', 'ws-1')
     assert vector_db.reset_workstream_association_vectors('uid-1')
 
+    assert routes == [(raw_index, 'uid-1', {'index_name': vector_db._pinecone_index_name})] * 4
+    assert len(fake.upserts) == len(fake.queries) == 1
+    assert len(fake.deletes) == 2
+    assert fake.queries[0]['filter']['uid'] == {'$eq': 'uid-1'}
     record = fake.upserts[0]['vectors'][0]
+    assert record['metadata']['uid'] == 'uid-1'
     assert 'objective' not in record['metadata']
     assert record['metadata']['schema_version'] == 1
     assert all(call['namespace'] == vector_db.WORKSTREAM_ASSOCIATION_NAMESPACE for call in fake.deletes)

@@ -22,7 +22,7 @@ describe("adapter selection and activation", () => {
 
   it("keeps activation separate from implementation", () => {
     expect(adapterActivationEnv("acp")).toBeUndefined();
-    expect(adapterActivationEnv("pi-mono")).toBe("OMI_AUTH_TOKEN");
+    expect(adapterActivationEnv("pi-mono")).toBe("OMI_MODEL_CREDENTIALS");
     expect(adapterActivationEnv("hermes")).toBe("OMI_HERMES_ADAPTER_COMMAND");
     expect(adapterActivationEnv("openclaw")).toBe("OMI_OPENCLAW_ADAPTER_COMMAND");
 
@@ -57,6 +57,10 @@ describe("adapter selection and activation", () => {
       "OpenClaw is not available. Make sure OpenClaw is installed first, then try again."
     );
     expect(adapterActivationError("openclaw")).not.toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
+    expect(adapterActivationError("pi-mono")).toBe(
+      "Omi AI is not available. Sign in and try again."
+    );
+    expect(adapterActivationError("pi-mono")).not.toContain("OMI_MODEL_CREDENTIALS");
   });
 
   it("source: daemon registers Hermes/OpenClaw explicitly and does not stamp MCP env as ACP", () => {
@@ -68,6 +72,7 @@ describe("adapter selection and activation", () => {
     expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"openclaw\"");
     expect(indexSource).toContain('adapterActivationError("hermes")');
     expect(indexSource).toContain('adapterActivationError("openclaw")');
+    expect(indexSource).toContain('adapterActivationError("pi-mono")');
     expect(indexSource).toContain("query.ownerId = queryOwnerId");
     expect(indexSource).toContain('{ name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" }');
     expect(indexSource).not.toContain('{ name: "OMI_ADAPTER_ID", value: "acp" }');

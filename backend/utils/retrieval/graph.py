@@ -1,5 +1,5 @@
 """
-Chat routing — dispatches to persona, file-chat, or agentic paths.
+Chat routing — dispatches every turn to the agentic path.
 
 Replaces the previous LangGraph state machine with a simple async router.
 Claude decides implicitly whether to use tools, eliminating the need for
@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import uuid
 import asyncio
-from typing import List, Optional, AsyncGenerator, Tuple, Any, Dict, cast, TYPE_CHECKING
+from contextlib import nullcontext
+from typing import List, Optional, AsyncGenerator, Tuple, Any, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from models.conversation import Conversation
@@ -19,27 +20,48 @@ from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, Base
 
 from models.app import App
 from models.chat import ChatSession, Message, PageContext
-from utils.llm.chat import retrieve_is_file_question
+from utils.journey_metrics_contract import ClientKind
+from utils.llm.shaped_agent import route_for_uid
+from utils.messaging.projection import surface_runtime
+from utils.messaging.context import preparation_scope
+from utils.llm.chat import get_current_datetime_block, get_user_timezone
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
-from utils.executors import db_executor, llm_executor, run_blocking
-from utils.other.chat_file import FileChatTool
+from utils.executors import db_executor, run_blocking
 from utils.retrieval.agentic import (
     AGENT_STREAM_FAILURE_MESSAGE,
     AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS,
     AGENT_STREAM_MAX_DURATION_SECONDS,
     AGENT_STREAM_PROGRESS_HEARTBEAT,
     AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS,
+    AGENT_STREAM_SETUP_TIMEOUT_SECONDS,
     AGENT_STREAM_TIMEOUT_MESSAGE,
     AsyncStreamingCallback,
     cancel_stream_task,
     execute_agentic_chat_stream,
+    get_mobile_city,
     next_stream_chunk,
 )
 from utils.observability.langsmith import get_chat_tracer_callbacks
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+async def _current_prompt_metadata(
+    uid: str, platform: Optional[str], client_tz: Optional[str] = None
+) -> tuple[str, str]:
+    try:
+        tz = client_tz or await run_blocking(db_executor, get_user_timezone, uid)
+        city = await get_mobile_city(uid, platform)
+        return get_current_datetime_block(uid, tz=tz, location=city), tz
+    except Exception as error:
+        logger.warning('Prompt metadata unavailable error_type=%s', type(error).__name__)
+        return get_current_datetime_block(uid, tz='UTC'), 'UTC'
+
+
+def _with_prompt_metadata(text: str, metadata: str) -> str:
+    return f'{metadata}\n\n{text}'
 
 
 async def _drain_chat_callback(
@@ -93,81 +115,6 @@ async def _drain_chat_callback(
 
 
 # ---------------------------------------------------------------------------
-# File chat helper
-# ---------------------------------------------------------------------------
-
-
-async def _has_file_context(last_message: Optional[Message], chat_session: Optional[ChatSession]) -> bool:
-    """Check if the request involves file attachments."""
-    if last_message and last_message.files_id and len(last_message.files_id) > 0:
-        return chat_session is not None
-
-    if chat_session and chat_session.file_ids and len(chat_session.file_ids) > 0:
-        question = last_message.text if last_message else ""
-        # retrieve_is_file_question runs a synchronous ~1-2s LLM inference; offload it so it
-        # doesn't block the event loop while execute_chat_stream's async generator is driven
-        # on the loop by StreamingResponse.
-        if question and await run_blocking(llm_executor, retrieve_is_file_question, question):
-            return True
-
-    return False
-
-
-async def _execute_file_chat_stream(
-    uid: str,
-    messages: List[Message],
-    chat_session: ChatSession,
-    callback_data: Optional[Dict[str, Any]] = None,
-) -> AsyncGenerator[Optional[str], None]:
-    """Handle file chat with streaming."""
-    last_message = messages[-1] if messages else None
-    question = last_message.text if last_message else ""
-
-    # Determine which files to use
-    if last_message and last_message.files_id and len(last_message.files_id) > 0:
-        file_ids = last_message.files_id
-    else:
-        file_ids = chat_session.file_ids if chat_session.file_ids else []
-
-    logger.info(f"Processing file chat with {len(file_ids)} files")
-
-    callback = AsyncStreamingCallback()
-
-    try:
-        # The constructor reads Firestore synchronously, so it belongs inside
-        # the supervised producer as well. That starts the first-event deadline
-        # before any blocking file-chat setup can hold the event loop.
-        async def _produce() -> str:
-            fc_tool = await run_blocking(db_executor, FileChatTool, uid, chat_session.id)
-            return await fc_tool.process_chat_with_file_stream(question, file_ids, callback=cast(Any, callback))
-
-        task = asyncio.create_task(_produce())
-
-        async for chunk in _drain_chat_callback(callback, task, route='file'):
-            if chunk and chunk.startswith('error: '):
-                if callback_data is not None:
-                    callback_data['error'] = 'stream_failure'
-                yield chunk
-                return
-            if chunk:
-                yield chunk
-
-        answer = await task
-
-        if callback_data is not None:
-            callback_data['answer'] = answer
-            callback_data['memories_found'] = []
-            callback_data['ask_for_nps'] = True
-
-        yield None
-    except Exception as error:
-        logger.error('file chat stream failed error_type=%s', type(error).__name__)
-        if callback_data is not None:
-            callback_data['error'] = 'stream_failure'
-        yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
-
-
-# ---------------------------------------------------------------------------
 # Persona chat (kept on existing LangChain/OpenAI for now)
 # ---------------------------------------------------------------------------
 
@@ -179,16 +126,22 @@ async def execute_persona_chat_stream(
     cited: Optional[bool] = False,
     callback_data: Optional[Dict[str, Any]] = None,
     chat_session: Optional[ChatSession] = None,
+    current_datetime_block: Optional[str] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Handle streaming chat responses for persona-type apps."""
+    if callback_data is not None:
+        callback_data.setdefault('route', 'persona')
     system_prompt = app.persona_prompt
     formatted_messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
 
-    for msg in messages:
+    for index, msg in enumerate(messages):
         if msg.sender == "ai":
             formatted_messages.append(AIMessage(content=msg.text))
         else:
-            formatted_messages.append(HumanMessage(content=msg.text))
+            text = msg.text
+            if current_datetime_block and index == len(messages) - 1:
+                text = _with_prompt_metadata(text, current_datetime_block)
+            formatted_messages.append(HumanMessage(content=text))
 
     full_response: List[str] = []
     callback = AsyncStreamingCallback()
@@ -237,7 +190,9 @@ async def execute_persona_chat_stream(
             if chunk and chunk.startswith('error: '):
                 if callback_data is not None:
                     callback_data['error'] = 'stream_failure'
+                    callback_data['answer'] = chunk[len('error: ') :]
                 yield chunk
+                yield None
                 return
             if chunk:
                 if chunk.startswith("data: "):
@@ -258,7 +213,9 @@ async def execute_persona_chat_stream(
         logger.error('persona chat stream failed error_type=%s', type(error).__name__)
         if callback_data is not None:
             callback_data['error'] = 'stream_failure'
+            callback_data['answer'] = AGENT_STREAM_FAILURE_MESSAGE
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+        yield None
         return
 
 
@@ -272,39 +229,71 @@ async def execute_chat_stream(
     messages: List[Message],
     app: Optional[App] = None,
     cited: Optional[bool] = False,
-    callback_data: Dict[str, Any] = {},
+    callback_data: Optional[Dict[str, Any]] = None,
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
+    platform: Optional[str] = None,
+    client_kind: Optional[ClientKind] = None,
+    client_tz: Optional[str] = None,
+    device_tool_names: Optional[set] = None,
+    shaped_invocation: bool = False,
 ) -> AsyncGenerator[Optional[str], None]:
-    """Route chat requests to the appropriate handler.
+    """Route chat requests to the agentic chat handler.
 
-    - Persona apps -> persona chat (LangChain/OpenAI)
-    - File attachments -> file chat (OpenAI Assistants)
-    - Everything else -> Anthropic agentic chat (Claude decides whether to use tools)
+    All selected apps (chat and persona capable) run through the same agentic
+    stream; the selected app's personality text is applied inside the shared
+    system prompt rather than replacing it.
     """
+    if callback_data is None:
+        callback_data = {}
     logger.info(f'execute_chat_stream app: {app.id if app else "<none>"}')
+    # Start before router metadata and agentic prompt/tools; the model consumes
+    # only ready components. Old/shadow routing starts no context IO.
+    scope = nullcontext()
+    if surface_runtime.get() is not None or (shaped_invocation and route_for_uid(uid) == 'new'):
+        scope = preparation_scope(
+            uid,
+            chat_session.id if chat_session else None,
+            [message.id for message in messages if getattr(message, 'id', None)],
+        )
+    async with scope:
+        # One absolute setup deadline covers router metadata and agentic prompt/tool
+        # load so the SSE body cannot stay silent for two stacked 25s budgets.
+        setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
+        try:
+            async with asyncio.timeout(max(0.0, setup_deadline_at - asyncio.get_running_loop().time())):
+                current_datetime_block, tz = await _current_prompt_metadata(uid, platform, client_tz=client_tz)
+        except TimeoutError:
+            logger.error(
+                'chat stream setup timed out route=router uid=%s reason=setup_timeout',
+                uid,
+            )
+            callback_data['error'] = 'setup_timeout'
+            callback_data['route'] = 'router'
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
+            yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+            yield None
+            return
 
-    # 1. Persona apps
-    if app and app.is_a_persona():
-        async for chunk in execute_persona_chat_stream(
-            uid, messages, app, cited=cited, callback_data=callback_data, chat_session=chat_session
+        # Persona apps previously took a dedicated LangChain/OpenAI stream; every
+        # turn now keeps the shared prompt, history and tools so a selected persona
+        # cannot drop tool, memory, or file access.
+        async for chunk in execute_agentic_chat_stream(
+            uid,
+            messages,
+            app,
+            callback_data=callback_data,
+            chat_session=chat_session,
+            context=context,
+            platform=platform,
+            client_kind=client_kind,
+            current_datetime_block=current_datetime_block,
+            tz=tz,
+            setup_deadline_at=setup_deadline_at,
+            device_tool_names=device_tool_names,
+            shaped_invocation=shaped_invocation,
         ):
             yield chunk
-        return
-
-    # 2. File attachments
-    last_msg = messages[-1] if messages else None
-    if chat_session is not None and await _has_file_context(last_msg, chat_session):
-        async for chunk in _execute_file_chat_stream(uid, messages, chat_session, callback_data):
-            yield chunk
-        return
-
-    # 3. Default: Anthropic agentic chat
-    # Claude decides implicitly whether to use tools — no requires_context() needed
-    async for chunk in execute_agentic_chat_stream(
-        uid, messages, app, callback_data=callback_data, chat_session=chat_session, context=context
-    ):
-        yield chunk
 
 
 # Backward compatibility aliases

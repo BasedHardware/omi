@@ -1,7 +1,13 @@
-import { mkdirSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
+import {
+  backendTombstoneCode,
+  backendTurnPayload,
+  backendTurnPayloadHash,
+} from "./backend-turn-projection.js";
+import { conversationTurnFromRow } from "./conversation-turns.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -69,6 +75,12 @@ const CLEARED_BACKEND_TURN_CLAIMS_MIGRATION_VERSION = 24;
 const CONTEXT_SOURCE_SURFACE_SCOPE_MIGRATION_VERSION = 25;
 const BACKEND_RECONCILE_CURSOR_MIGRATION_VERSION = 26;
 const JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION = 27;
+const CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION = 28;
+const CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION = 29;
+const CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION = 30;
+const LOCAL_ONLY_JOURNAL_DELIVERY_MIGRATION_VERSION = 31;
+const CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_OWNER_SCOPE_MIGRATION_VERSION = 32;
+const CONVERSATION_TURN_REVISION_TURN_ID_INDEX_MIGRATION_VERSION = 33;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -373,8 +385,17 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runToolInvocationLedgerMigration(db, Date.now());
     runKernelContextAuthorityMigration(db, Date.now());
     runJournalGenerationBaseMigration(db, Date.now());
+    runOwnerContextSnapshotMigration(db, Date.now());
+    runBackendConversationDeleteOutboxMigration(db, Date.now());
+    runBackendReconcileStateMigration(db, Date.now());
+    runClearedBackendTurnClaimsMigration(db, Date.now());
     runContextSourceSurfaceScopeMigration(db, Date.now());
+    runBackendReconcileCursorMigration(db, Date.now());
     runJournalProducingAttemptMigration(db, Date.now());
+    runChatFirstDeferralOutboxMigration(db, Date.now());
+    runChatFirstMaterializationReceiptsMigration(db, Date.now());
+    runChatFirstColdStartSequenceReceiptsMigration(db, Date.now());
+    runLocalOnlyJournalDeliveryMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -408,9 +429,25 @@ export class SqliteAgentStore implements AgentStore {
 
   constructor(options: SqliteAgentStoreOptions = {}) {
     const databasePath = options.databasePath ?? databasePathForStateDir(requiredStateDir(options.stateDir));
-    mkdirSync(dirname(databasePath), { recursive: true });
+    // Agent state can contain prompt material, so keep its directory, SQLite
+    // database, and sidecars owner-only even when the caller umask is permissive.
+    process.umask(0o077);
+    const isInMemory = databasePath === ":memory:";
+    if (!isInMemory) {
+      const stateDirectory = dirname(databasePath);
+      mkdirSync(stateDirectory, { recursive: true, mode: 0o700 });
+      hardenOwnerOnlyDirectory(stateDirectory);
+      rejectSymlink(databasePath, "database");
+    }
     const Database = options.databaseFactory ?? DatabaseSync;
     this.db = new Database(databasePath) as DatabaseSync;
+    if (!isInMemory) {
+      hardenOwnerOnlyFile(databasePath, "database");
+      for (const suffix of ["-wal", "-shm"]) {
+        const sidecarPath = `${databasePath}${suffix}`;
+        if (pathExists(sidecarPath)) hardenOwnerOnlyFile(sidecarPath, `database ${suffix} sidecar`);
+      }
+    }
     this.nowMs = options.nowMs ?? Date.now;
 
     applyConnectionPragmas(this.db);
@@ -506,6 +543,31 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION)) {
       runJournalProducingAttemptMigration(this.db, this.nowMs());
+    }
+    // Origin/main used migration version 28 for local-only delivery cleanup.
+    // A database upgraded from that build has the version row but not the
+    // Chat-first deferral table, so use the schema as the authoritative
+    // compatibility signal and let the Chat-first migration backfill it.
+    if (
+      !this.hasMigration(CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION)
+      || !this.hasTable("chat_first_deferral_outbox")
+    ) {
+      runChatFirstDeferralOutboxMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION)) {
+      runChatFirstMaterializationReceiptsMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION)) {
+      runChatFirstColdStartSequenceReceiptsMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(LOCAL_ONLY_JOURNAL_DELIVERY_MIGRATION_VERSION)) {
+      runLocalOnlyJournalDeliveryMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_OWNER_SCOPE_MIGRATION_VERSION)) {
+      runChatFirstColdStartSequenceReceiptsOwnerScopeMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CONVERSATION_TURN_REVISION_TURN_ID_INDEX_MIGRATION_VERSION)) {
+      runConversationTurnRevisionTurnIdIndexMigration(this.db, this.nowMs());
     }
   }
 
@@ -645,7 +707,8 @@ export class SqliteAgentStore implements AgentStore {
       }
 
       const reconciledJournalTurns = reconcileNonterminalJournalRows(this.db, now);
-      for (const repair of reconciledJournalTurns) {
+      const repairedBackendTurnOutboxes = reconcileBackendTurnOutboxRows(this.db, now);
+      for (const repair of [...reconciledJournalTurns, ...repairedBackendTurnOutboxes]) {
         const surface = this.getOptionalRow(
           `SELECT agent_session_id FROM surface_conversations
            WHERE conversation_id = ? ORDER BY last_active_at_ms DESC LIMIT 1`,
@@ -735,6 +798,17 @@ export class SqliteAgentStore implements AgentStore {
            WHERE status = 'delivering'`,
         ).run(now, now);
       }
+      const requeuedChatFirstDeferralIds = this.allRows(
+        "SELECT continuity_key FROM chat_first_deferral_outbox WHERE status = 'delivering'",
+      ).map((row) => text(row.continuity_key));
+      if (requeuedChatFirstDeferralIds.length > 0) {
+        this.db.prepare(
+          `UPDATE chat_first_deferral_outbox
+           SET status = 'retrying', available_at_ms = 0, lease_expires_at_ms = NULL,
+               last_error_code = 'daemon_restart', updated_at_ms = ?
+           WHERE status = 'delivering'`,
+        ).run(now);
+      }
       this.db.prepare(
         `UPDATE backend_reconcile_state
          SET in_flight_id = NULL, page_cursor = NULL, page_count = 0,
@@ -820,6 +894,7 @@ export class SqliteAgentStore implements AgentStore {
         repairedBindingProfileReferenceIds: repairedProfileReferences.bindingIds,
         repairedLegacyJournalTurnIds,
         reconciledJournalTurnIds: reconciledJournalTurns.map((repair) => repair.turnId),
+        repairedBackendTurnOutboxIds: repairedBackendTurnOutboxes.map((repair) => repair.turnId),
         recoveryDispatchIds,
         clearedAttemptInstanceIds,
         clearedBindingInstanceIds,
@@ -1571,6 +1646,12 @@ export class SqliteAgentStore implements AgentStore {
     return this.db.prepare("SELECT 1 FROM schema_migrations WHERE version = ?").get(version) !== undefined;
   }
 
+  private hasTable(name: string): boolean {
+    return this.db.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+    ).get(name) !== undefined;
+  }
+
   private appendReconciliationEvent(input: {
     sessionId: string;
     runId: string | null;
@@ -1611,6 +1692,44 @@ export class SqliteAgentStore implements AgentStore {
       payloadJson: input.payloadJson ?? "{}",
       createdAtMs: input.createdAtMs ?? this.nowMs(),
     };
+  }
+}
+
+function hardenOwnerOnlyDirectory(path: string): void {
+  const attributes = lstatSync(path);
+  if (!attributes.isDirectory() || attributes.isSymbolicLink()) {
+    throw new Error(`SqliteAgentStore state directory must be a real directory: ${path}`);
+  }
+  chmodSync(path, 0o700);
+}
+
+function hardenOwnerOnlyFile(path: string, label: string): void {
+  const attributes = lstatSync(path);
+  if (!attributes.isFile() || attributes.isSymbolicLink()) {
+    throw new Error(`SqliteAgentStore ${label} must be a real file: ${path}`);
+  }
+  chmodSync(path, 0o600);
+}
+
+function rejectSymlink(path: string, label: string): void {
+  try {
+    const attributes = lstatSync(path);
+    if (attributes.isSymbolicLink()) {
+      throw new Error(`SqliteAgentStore ${label} cannot be a symbolic link: ${path}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+}
+
+function pathExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
   }
 }
 
@@ -1844,6 +1963,55 @@ function reconcileNonterminalJournalRows(
       code,
     };
   });
+}
+
+function reconcileBackendTurnOutboxRows(
+  db: Pick<DatabaseSync, "prepare">,
+  nowMs: number,
+): StartupJournalRepair[] {
+  const rows = db.prepare(
+    `SELECT ct.*, outbox.payload_hash AS outbox_payload_hash
+     FROM backend_turn_outbox outbox
+     JOIN conversation_turns ct
+       ON ct.conversation_id = outbox.conversation_id
+      AND ct.turn_id = outbox.turn_id
+     WHERE outbox.status IN ('pending', 'retrying', 'delivering')
+       AND ct.status IN ('completed', 'failed')
+     ORDER BY outbox.created_at_ms ASC, outbox.turn_id ASC`,
+  ).all() as Row[];
+  const repairs: StartupJournalRepair[] = [];
+  for (const row of rows) {
+    const turn = conversationTurnFromRow(row);
+    const payloadHash = backendTurnPayloadHash(backendTurnPayload(turn));
+    if (payloadHash === text(row.outbox_payload_hash)) continue;
+    const tombstoneCode = backendTombstoneCode(turn);
+    db.prepare(
+      `UPDATE backend_turn_outbox
+       SET payload_hash = ?,
+           status = CASE WHEN ? IS NOT NULL THEN 'failed' ELSE 'pending' END,
+           attempt_count = 0,
+           available_at_ms = ?,
+           lease_expires_at_ms = NULL,
+           last_error_code = ?,
+           updated_at_ms = ?
+       WHERE turn_id = ? AND payload_hash != ?`,
+    ).run(
+      payloadHash,
+      tombstoneCode,
+      nowMs,
+      tombstoneCode,
+      nowMs,
+      turn.turnId,
+      payloadHash,
+    );
+    repairs.push({
+      turnId: turn.turnId,
+      conversationId: turn.conversationId,
+      producingRunId: turn.producingRunId,
+      code: "daemon_restart_outbox_revision_repair",
+    });
+  }
+  return repairs;
 }
 
 function rewriteJournalRow(
@@ -3135,6 +3303,226 @@ function runJournalProducingAttemptMigration(
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/**
+ * T08 deferrals are a second, intentionally narrow durable transport. They
+ * are not conversation rows and must never be folded into backend_turn_outbox:
+ * delivery creates task-intelligence state, not transcript state.
+ */
+function runChatFirstDeferralOutboxMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE chat_first_deferral_outbox(
+        continuity_key TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        subject_kind TEXT NOT NULL CHECK (subject_kind IN ('task', 'goal', 'capture')),
+        subject_id TEXT NOT NULL,
+        question_json TEXT NOT NULL CHECK (json_valid(question_json)),
+        payload_hash TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'delivering', 'retrying', 'delivered', 'failed')),
+        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+        delivery_generation INTEGER NOT NULL DEFAULT 0 CHECK (delivery_generation >= 0),
+        available_at_ms INTEGER NOT NULL,
+        lease_expires_at_ms INTEGER,
+        last_error_code TEXT CHECK (last_error_code IS NULL OR length(last_error_code) <= 128),
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        delivered_at_ms INTEGER
+      ) STRICT;
+      CREATE INDEX chat_first_deferral_outbox_drain_idx
+        ON chat_first_deferral_outbox(owner_id, status, available_at_ms ASC, created_at_ms ASC);
+    `);
+    db.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/**
+ * Kernel materialization receipts are deliberately separate from both the
+ * transcript reconciliation outbox and question deferrals. The server only
+ * marks an intent delivered after this receipt is observed, while the local
+ * receipt survives a process crash after its assistant row committed.
+ */
+function runChatFirstMaterializationReceiptsMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE chat_first_materialization_receipts(
+        intent_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        receipt_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+      ) STRICT;
+      CREATE INDEX chat_first_materialization_receipts_owner_idx
+        ON chat_first_materialization_receipts(owner_id, conversation_id, control_generation, created_at_ms ASC);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/**
+ * Terminal sparse-sequence receipts are a local-journal outbox, not a second
+ * transcript state or client-side rollout flag. The server attaches the
+ * accepted receipt to the originating cold-start intent before it permits
+ * agent-tier judgment again.
+ */
+function runChatFirstColdStartSequenceReceiptsMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE chat_first_cold_start_sequence_receipts(
+        sequence_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        receipt_id TEXT NOT NULL,
+        terminal_state TEXT NOT NULL CHECK (terminal_state IN ('completed', 'abandoned')),
+        created_at_ms INTEGER NOT NULL
+      ) STRICT;
+      CREATE INDEX chat_first_cold_start_sequence_receipts_owner_idx
+        ON chat_first_cold_start_sequence_receipts(
+          owner_id, conversation_id, control_generation, created_at_ms ASC
+        );
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runChatFirstColdStartSequenceReceiptsOwnerScopeMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      ALTER TABLE chat_first_cold_start_sequence_receipts
+        RENAME TO chat_first_cold_start_sequence_receipts_legacy;
+      CREATE TABLE chat_first_cold_start_sequence_receipts(
+        sequence_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        receipt_id TEXT NOT NULL,
+        terminal_state TEXT NOT NULL CHECK (terminal_state IN ('completed', 'abandoned')),
+        created_at_ms INTEGER NOT NULL,
+        PRIMARY KEY(sequence_id, owner_id)
+      ) STRICT;
+      INSERT INTO chat_first_cold_start_sequence_receipts(
+        sequence_id, owner_id, conversation_id, control_generation,
+        receipt_id, terminal_state, created_at_ms
+      )
+      SELECT sequence_id, owner_id, conversation_id, control_generation,
+             receipt_id, terminal_state, created_at_ms
+      FROM chat_first_cold_start_sequence_receipts_legacy;
+      DROP TABLE chat_first_cold_start_sequence_receipts_legacy;
+      CREATE INDEX chat_first_cold_start_sequence_receipts_owner_idx
+        ON chat_first_cold_start_sequence_receipts(
+          owner_id, conversation_id, control_generation, created_at_ms ASC
+        );
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_OWNER_SCOPE_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/// The context snapshot every chat turn waits on joins `conversation_turns` to
+/// `conversation_turn_revisions` on `turn_id` to recover each turn's durable
+/// insertion ordinal. That table is keyed `(conversation_id, turn_seq)`, so
+/// without an index carrying `turn_id` the join can only seek on
+/// `conversation_id` and then walks every revision row of the conversation for
+/// every turn in it - quadratic in conversation length. On an account with
+/// thousands of turns the snapshot query measured 27.65s against the 15s
+/// `get_context_snapshot` contract budget, so every chat turn timed out before
+/// the model was ever queried and the runtime's reply was discarded as late.
+///
+/// The index makes that join an equality seek: the same query measured 0.03s.
+/// It is deliberately additive - the query, its results and their order are
+/// untouched, so the chronology contract documented at the query stays intact.
+function runConversationTurnRevisionTurnIdIndexMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS conversation_turn_revisions_turn_id_idx
+        ON conversation_turn_revisions(conversation_id, turn_id);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CONVERSATION_TURN_REVISION_TURN_ID_INDEX_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runLocalOnlyJournalDeliveryMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    // Canonical surface ownership is the delivery authority. Remove only rows
+    // whose owner and conversation both resolve to a local-only surface so an
+    // upgrade cannot flush previously queued onboarding/task data to backend.
+    db.exec(`
+      DELETE FROM backend_turn_outbox
+      WHERE EXISTS (
+        SELECT 1
+        FROM surface_conversations
+        WHERE surface_conversations.conversation_id = backend_turn_outbox.conversation_id
+          AND surface_conversations.owner_id = backend_turn_outbox.owner_id
+          AND surface_conversations.surface_kind IN ('onboarding', 'task_chat', 'workstream')
+      );
+      DELETE FROM backend_conversation_delete_outbox
+      WHERE EXISTS (
+        SELECT 1
+        FROM surface_conversations
+        WHERE surface_conversations.conversation_id = backend_conversation_delete_outbox.conversation_id
+          AND surface_conversations.owner_id = backend_conversation_delete_outbox.owner_id
+          AND surface_conversations.surface_kind IN ('onboarding', 'task_chat', 'workstream')
+      );
+      DELETE FROM backend_reconcile_state
+      WHERE EXISTS (
+        SELECT 1
+        FROM surface_conversations
+        WHERE surface_conversations.conversation_id = backend_reconcile_state.conversation_id
+          AND surface_conversations.owner_id = backend_reconcile_state.owner_id
+          AND surface_conversations.surface_kind IN ('onboarding', 'task_chat', 'workstream')
+      );
+      DELETE FROM cleared_backend_turn_claims
+      WHERE EXISTS (
+        SELECT 1
+        FROM surface_conversations
+        WHERE surface_conversations.conversation_id = cleared_backend_turn_claims.conversation_id
+          AND surface_conversations.owner_id = cleared_backend_turn_claims.owner_id
+          AND surface_conversations.surface_kind IN ('onboarding', 'task_chat', 'workstream')
+      );
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      LOCAL_ONLY_JOURNAL_DELIVERY_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

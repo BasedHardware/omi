@@ -101,9 +101,19 @@ class _NotificationMessage:
         return dict(message.__dict__)
 
 
+class _UnsafeWebhookURLError(Exception):
+    """Isolated stand-in for ``utils.http_client.UnsafeWebhookURLError``.
+
+    Production's SSRF guard catches this to reject non-public webhook URLs
+    without tripping the circuit breaker, so the stub must expose a genuine
+    exception class — the ``AutoMockModule`` default is a non-exception
+    ``MagicMock`` that the production ``except`` clause can neither raise nor
+    match, turning the guard into a ``TypeError``.
+    """
+
+
 @pytest.fixture
 def integration_harness() -> Iterator[SimpleNamespace]:
-    process_mentor_notification = MagicMock(return_value=None)
     get_available_apps = MagicMock(return_value=[])
     add_app_message = MagicMock(return_value={'id': 'msg-1'})
     send_notification_async = AsyncMock(return_value=None)
@@ -123,6 +133,10 @@ def integration_harness() -> Iterator[SimpleNamespace]:
         'utils.llms': _package('utils.llms', BACKEND_DIR / 'utils' / 'llms'),
         'utils.conversations': _package('utils.conversations', BACKEND_DIR / 'utils' / 'conversations'),
         'database': _package('database', BACKEND_DIR / 'database'),
+        'database.account_deletion_marker': _module(
+            'database.account_deletion_marker',
+            account_deletion_blocks_user_work=lambda _uid: False,
+        ),
         'models': _package('models', BACKEND_DIR / 'models'),
         'langchain_core': _package('langchain_core', BACKEND_DIR),
         'langchain_core.callbacks': _module(
@@ -208,6 +222,8 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             get_webhook_semaphore=MagicMock(return_value=asyncio.Semaphore(1)),
             latest_wins_start=MagicMock(return_value=1),
             latest_wins_check=MagicMock(return_value=True),
+            safe_request_target=MagicMock(side_effect=lambda url: (url, {'headers': {}, 'extensions': {}})),
+            UnsafeWebhookURLError=_UnsafeWebhookURLError,
         ),
         'utils.executors': _module(
             'utils.executors',
@@ -223,7 +239,6 @@ def integration_harness() -> Iterator[SimpleNamespace]:
         ),
         'utils.subscription': _module(
             'utils.subscription',
-            is_trial_paywalled=MagicMock(return_value=False),
         ),
         'utils.conversations.factory': _module(
             'utils.conversations.factory',
@@ -233,6 +248,9 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             'utils.conversations.render',
             conversations_to_string=MagicMock(return_value=''),
             conversation_to_dict=MagicMock(return_value={}),
+            redact_conversation_for_integration=lambda conv: {
+                key: value for key, value in conv.items() if key != 'geolocation'
+            },
             serialize_datetimes=MagicMock(side_effect=lambda value: value),
         ),
         'utils.apps': _module('utils.apps', get_available_apps=get_available_apps),
@@ -259,10 +277,6 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             get_prompt_memories=MagicMock(return_value=('', '')),
         ),
         'utils.log_sanitizer': _module('utils.log_sanitizer', sanitize=MagicMock(side_effect=lambda value: value)),
-        'utils.mentor_notifications': _module(
-            'utils.mentor_notifications',
-            process_mentor_notification=process_mentor_notification,
-        ),
     }
 
     with stub_modules(stubs):
@@ -277,7 +291,6 @@ def integration_harness() -> Iterator[SimpleNamespace]:
         yield SimpleNamespace(
             app=app_integrations,
             usage=usage_tracker,
-            process_mentor_notification=process_mentor_notification,
             get_available_apps=get_available_apps,
             add_app_message=add_app_message,
             send_notification_async=send_notification_async,
@@ -293,32 +306,8 @@ def test_realtime_integrations_feature_constant_exists(integration_harness):
 
 
 @pytest.mark.asyncio
-async def test_mentor_notification_tracked_under_realtime_integrations(integration_harness):
-    """The mentor coordinator enters the realtime-integration usage context."""
-    app = integration_harness.app
-    usage = integration_harness.usage
-    captured_contexts = []
-    original_track = usage.track_usage
-
-    @contextmanager
-    def spy_track_usage(uid, feature):
-        captured_contexts.append((uid, feature))
-        with original_track(uid, feature):
-            yield
-
-    with patch.object(app, 'track_usage', spy_track_usage), patch.object(
-        app,
-        'process_mentor_notification',
-        MagicMock(return_value=[{'text': 'hello'}]),
-    ), patch.object(app, '_process_mentor_proactive_notification', MagicMock(return_value=None)):
-        await app.trigger_realtime_integrations('user-rt-1', [{'text': 'hello'}], 'conv-1')
-
-    assert ('user-rt-1', usage.Features.REALTIME_INTEGRATIONS) in captured_contexts
-
-
-@pytest.mark.asyncio
 async def test_no_tracking_when_no_llm_calls(integration_harness):
-    """No mentor payload and no apps means no usage context is entered."""
+    """No app payload means no usage context is entered."""
     app = integration_harness.app
     usage = integration_harness.usage
     captured_contexts = []
@@ -331,42 +320,11 @@ async def test_no_tracking_when_no_llm_calls(integration_harness):
             yield
 
     with patch.object(app, 'track_usage', spy_track_usage), patch.object(
-        app, 'process_mentor_notification', MagicMock(return_value=None)
-    ), patch.object(app, 'get_available_apps', MagicMock(return_value=[])):
+        app, 'get_available_apps', MagicMock(return_value=[])
+    ):
         await app.trigger_realtime_integrations('user-rt-2', [{'text': 'hello'}], 'conv-2')
 
     assert captured_contexts == []
-
-
-@pytest.mark.asyncio
-async def test_track_usage_context_entered_around_proactive_message(integration_harness):
-    """Usage context surrounds the mentor processing call, including its exit."""
-    app = integration_harness.app
-    usage = integration_harness.usage
-    call_log = []
-
-    @contextmanager
-    def spy_track_usage(uid, feature):
-        call_log.append(('enter', uid, feature))
-        yield
-        call_log.append(('exit', uid, feature))
-
-    def spy_process(*_args, **_kwargs):
-        call_log.append(('process_called',))
-        return 'Test notification'
-
-    with patch.object(app, 'track_usage', spy_track_usage), patch.object(
-        app,
-        'process_mentor_notification',
-        MagicMock(return_value=[{'text': 'hello'}]),
-    ), patch.object(app, '_process_mentor_proactive_notification', spy_process):
-        await app.trigger_realtime_integrations('user-rt-3', [{'text': 'hello'}], 'conv-3')
-
-    marker = ('enter', 'user-rt-3', usage.Features.REALTIME_INTEGRATIONS)
-    process_idx = call_log.index(('process_called',))
-    enter_idx = call_log.index(marker)
-    exit_idx = call_log.index(('exit', 'user-rt-3', usage.Features.REALTIME_INTEGRATIONS))
-    assert enter_idx < process_idx < exit_idx
 
 
 @pytest.mark.asyncio
@@ -420,28 +378,6 @@ async def test_audio_app_lookup_uses_db_executor_without_blocking_loop(integrati
 
 
 @pytest.mark.asyncio
-async def test_trial_paywall_read_uses_db_executor_and_preserves_errors(integration_harness):
-    app = integration_harness.app
-    calls = []
-
-    def failing_paywall(uid, source):
-        assert (uid, source) == ('user-paywall', 'desktop')
-        raise RuntimeError('paywall store unavailable')
-
-    async def tracking_run_blocking(executor, func, *args, **kwargs):
-        calls.append((executor, func, args, kwargs))
-        return func(*args, **kwargs)
-
-    with patch.object(app, 'run_blocking', tracking_run_blocking), patch.object(
-        app, 'is_trial_paywalled', failing_paywall
-    ):
-        with pytest.raises(RuntimeError, match='paywall store unavailable'):
-            await app.trigger_realtime_integrations('user-paywall', [{'text': 'hello'}], 'conv-1', source='desktop')
-
-    assert calls == [(app.db_executor, failing_paywall, ('user-paywall', 'desktop'), {})]
-
-
-@pytest.mark.asyncio
 async def test_realtime_message_uses_async_notification_boundary(integration_harness):
     app = integration_harness.app
     external_app = _realtime_app()
@@ -452,10 +388,8 @@ async def test_realtime_message_uses_async_notification_boundary(integration_har
     notifier = AsyncMock(return_value=None)
 
     with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
-        app, 'process_mentor_notification', return_value=None
-    ), patch.object(app, 'get_webhook_client', return_value=client), patch.object(
-        app, 'send_app_notification_async', notifier
-    ):
+        app, 'get_webhook_client', return_value=client
+    ), patch.object(app, 'send_app_notification_async', notifier):
         result = await app.trigger_realtime_integrations('user-message', [{'text': 'hello'}], 'conv-1')
 
     notifier.assert_awaited_once_with('user-message', 'Test App', 'app-1', 'A useful notification')
@@ -473,11 +407,38 @@ async def test_realtime_notification_failure_remains_fail_soft(integration_harne
     integration_harness.add_app_message.reset_mock()
 
     with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
-        app, 'process_mentor_notification', return_value=None
-    ), patch.object(app, 'get_webhook_client', return_value=client), patch.object(
-        app, 'send_app_notification_async', AsyncMock(side_effect=RuntimeError('fcm unavailable'))
-    ):
+        app, 'get_webhook_client', return_value=client
+    ), patch.object(app, 'send_app_notification_async', AsyncMock(side_effect=RuntimeError('fcm unavailable'))):
         result = await app.trigger_realtime_integrations('user-message', [{'text': 'hello'}], 'conv-1')
 
     assert result == []
     integration_harness.add_app_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_realtime_non_public_webhook_rejected_fail_soft(integration_harness):
+    """The SSRF guard rejects a non-public webhook URL before any delivery.
+
+    This pins the isolation-stub contract the realtime coordinator depends
+    on: ``utils.http_client`` must expose a genuine ``UnsafeWebhookURLError``
+    exception class — the production ``except`` clause cannot match the
+    ``AutoMockModule`` default ``MagicMock`` — and a ``safe_request_target``
+    whose ``(pinned_url, {headers, extensions})`` return shape the webhook
+    delivery path unpacks.
+    """
+    app = integration_harness.app
+    # A non-exception default would make the production except clause raise
+    # TypeError instead of matching; this assert fails first if the stub
+    # regresses to the AutoMockModule default.
+    assert issubclass(app.UnsafeWebhookURLError, BaseException)
+
+    external_app = _realtime_app()
+    client = AsyncMock()
+
+    with patch.object(app, 'get_available_apps', return_value=[external_app]), patch.object(
+        app, 'safe_request_target', side_effect=app.UnsafeWebhookURLError('private ip')
+    ), patch.object(app, 'get_webhook_client', return_value=client):
+        result = await app.trigger_realtime_integrations('user-ssrf', [{'text': 'hi'}], 'conv-ssrf')
+
+    assert result == []
+    client.post.assert_not_called()

@@ -4,25 +4,149 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+/// Omi Pro (`unlimited_v2`) is the only plan sold. Retired plans render only as
+/// the subscriber's own current plan.
+let omiProPlanId = "unlimited_v2"
+
+/// Single edit point for the Omi Pro price quoted in the deprecation-banner
+/// fallback (used only when the backend omits `deprecationMessage`).
+let omiProDeprecationFallbackPrice = "$29.99/mo"
+
+enum SubscriptionPlanPresentation {
+  static let resubscribeFirst = "Resubscribe first to change plans."
+
+  /// The two routes use 409 for different refusals: upgrade means a pending
+  /// cancellation, checkout means the account already has a subscription.
+  static func upgradeErrorMessage(_ error: APIError) -> String {
+    if case .httpError(let statusCode, _) = error, statusCode == 409 { return resubscribeFirst }
+    return error.detail ?? "Failed to schedule plan change."
+  }
+
+  static func checkoutErrorMessage(_ error: APIError) -> String {
+    error.detail ?? "Failed to open checkout."
+  }
+
+  enum Purchase {
+    case resubscribe
+    case blocked
+    case proceed
+  }
+
+  static func purchase(cancelAtPeriodEnd: Bool, currentPriceId: String?, priceId: String) -> Purchase {
+    guard cancelAtPeriodEnd else { return .proceed }
+    if let currentPriceId, !currentPriceId.isEmpty, priceId == currentPriceId {
+      return .resubscribe
+    }
+    return .blocked
+  }
+
+  static func endsLine(plan: String, date: String) -> String {
+    "Your \(plan) plan ends \(date)."
+  }
+
+  static func renewsLine(plan: String, date: String) -> String {
+    "Your \(plan) plan will renew on \(date)."
+  }
+
+  static func selectionLabel(planTitle: String, startingPrice: String?) -> String {
+    guard let startingPrice, !startingPrice.isEmpty else {
+      return "Select \(planTitle)"
+    }
+    return "Select \(planTitle) · \(startingPrice)"
+  }
+}
+
+/// Trailing actions on the current-plan card. The catalog hides the plan the
+/// reader is already on, so Resubscribe has to live here while a cancellation
+/// is pending. Manage stays available either way.
+struct CurrentPlanCardActions: View {
+  let cancelAtPeriodEnd: Bool
+  let currentPriceId: String?
+  let checkoutBusy: Bool
+  let portalBusy: Bool
+  let onResubscribe: (String) -> Void
+  let onManage: () -> Void
+
+  var resubscribePriceId: String? {
+    guard cancelAtPeriodEnd, let currentPriceId, !currentPriceId.isEmpty else { return nil }
+    return currentPriceId
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      if let priceId = resubscribePriceId {
+        Button(action: { onResubscribe(priceId) }) {
+          if checkoutBusy {
+            ProgressView()
+              .controlSize(.small)
+          } else {
+            Text("Resubscribe")
+              .scaledFont(size: OmiType.body, weight: .semibold)
+          }
+        }
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        .disabled(checkoutBusy)
+        .accessibilityIdentifier("current-plan-resubscribe")
+      }
+
+      Button(action: onManage) {
+        if portalBusy {
+          ProgressView()
+            .controlSize(.small)
+        } else {
+          Text("Manage")
+            .scaledFont(size: OmiType.body, weight: .semibold)
+        }
+      }
+      .buttonStyle(OmiButtonStyle(resubscribePriceId == nil ? .primary : .secondary, size: .compact))
+      .disabled(portalBusy)
+    }
+  }
+}
+
+/// Copy comes from the server's allowance decision, not the synthetic BYOK
+/// subscription flag: an enrolled LLM key alone does not pay for transcription.
+enum TranscriptionAllowancePresentation {
+  static func statusText(_ allowance: TranscriptionAllowanceSnapshot?) -> String {
+    guard let allowance else { return "Transcription allowance unavailable — refresh to check" }
+    switch allowance.reason {
+    case "byok": return "Transcription: using your Deepgram key"
+    case "plan_within_allowance": return "Transcription: Omi-managed allowance"
+    case "plan_allowance_exhausted": return "Transcription: Omi-managed allowance exhausted"
+    case "plan_unlimited", "marketplace_reviewer": return "Transcription: Omi-managed (unlimited)"
+    case "trial_paywalled": return "Transcription: Omi trial access ended"
+    case "subscription_inactive": return "Transcription: Omi plan inactive"
+    default: return "Transcription allowance unavailable — refresh to check"
+    }
+  }
+}
+
 extension SettingsContentView {
   var hasPaidSubscription: Bool {
     guard let subscription = userSubscription?.subscription else { return false }
     if subscription.features.contains("byok") { return false }
-    return subscription.plan != .basic && subscription.status == .active
+    return subscription.plan.hasPaidCapability && subscription.status == .active
   }
 
   var shouldShowPlanPurchaseOptions: Bool {
     !subscriptionPlansForDisplay.isEmpty
   }
 
+  static let retiredPlanIds: Set<String> = ["plus", "operator", "architect", "pro", "unlimited"]
+
   var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    // Operator (mass-market, green) on the left, Architect (premium, white accent)
-    // on the right. Hide the user's current plan — they already see it above.
-    // Neo ($20) | Operator ($49) | Architect ($200) — cheapest to premium
-    let order = ["unlimited": 0, "operator": 1, "architect": 2]
+    Self.purchasablePlans(mergedPlanCatalog, isCurrent: isCurrentSubscriptionPlan)
+  }
+
+  /// Omi Pro first. Retired plans are never offered; the user's own current plan
+  /// is already shown in the current-plan card above, so it is hidden here too.
+  static func purchasablePlans(
+    _ catalog: [SubscriptionPlanOption], isCurrent: (SubscriptionPlanOption) -> Bool
+  ) -> [SubscriptionPlanOption] {
+    let order = [omiProPlanId: 0]
     return
-      mergedPlanCatalog
-      .filter { !isCurrentSubscriptionPlan($0) }
+      catalog
+      .filter { !retiredPlanIds.contains($0.id) && !isCurrent($0) }
       .sorted { lhs, rhs in
         let lhsOrder = order[lhs.id, default: Int.max]
         let rhsOrder = order[rhs.id, default: Int.max]
@@ -35,17 +159,18 @@ extension SettingsContentView {
 
   var currentPlanTitle: String {
     guard let subscription = userSubscription?.subscription else {
-      return isLoadingSubscription ? "Loading plan..." : "Free"
+      return isLoadingSubscription ? "Loading plan…" : "Free"
     }
-    // BYOK users: the backend returns plan=unlimited to turn off metering
-    // but that's an implementation detail — to the user, they're on the
-    // free plan because they pay the providers directly, not Omi.
+    // The synthetic BYOK subscription describes enrolled keys, not an
+    // unlimited allowance for every feature. Chat has its own quota snapshot.
     if subscription.features.contains("byok") {
-      return "Free (BYOK)"
+      return "Custom keys (BYOK)"
     }
     switch subscription.plan {
     case .basic:
       return "Free"
+    case .plus:
+      return "Plus"
     case .unlimited:
       // Backend serializes Operator subscribers as plan="unlimited" for
       // backward compat with old mobile builds that don't know the
@@ -55,10 +180,14 @@ extension SettingsContentView {
         return "Operator"
       }
       return "Neo"
+    case .unlimitedV2:
+      return "Omi Pro"
     case .architect, .pro:
       return "Architect"
     case .operator:
       return "Operator"
+    case .unknown:
+      return subscription.plan.displayName
     }
   }
 
@@ -70,7 +199,7 @@ extension SettingsContentView {
       let currentPriceId = subscription.currentPriceId
     else { return false }
     for plan in mergedPlanCatalog {
-      guard plan.title == "Operator" else { continue }
+      guard plan.id == "operator" else { continue }
       if plan.prices.contains(where: { $0.id == currentPriceId }) {
         return true
       }
@@ -80,7 +209,10 @@ extension SettingsContentView {
 
   var currentPlanSubtitle: String {
     if isLoadingSubscription {
-      return "Fetching subscription details from omi."
+      return "Fetching subscription details from Omi."
+    }
+    if userSubscription?.subscription.features.contains("byok") == true {
+      return "Using your own AI keys for supported features."
     }
     if let detail = currentPlanBillingDetail {
       return detail
@@ -101,7 +233,7 @@ extension SettingsContentView {
 
     for plan in mergedPlanCatalog {
       if let price = plan.prices.first(where: { $0.id == currentPriceId }) {
-        return "\(plan.title) \(price.title) • \(price.priceString)"
+        return "\(plan.displayTitle) \(price.title) • \(price.priceString)"
       }
     }
 
@@ -115,12 +247,24 @@ extension SettingsContentView {
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
     formatter.timeStyle = .none
-    let prefix = subscription.cancelAtPeriodEnd ? "Access ends" : "Renews"
-    return "\(prefix) on \(formatter.string(from: date))"
+    let formatted = formatter.string(from: date)
+    if subscription.cancelAtPeriodEnd {
+      return SubscriptionPlanPresentation.endsLine(plan: subscription.plan.displayName, date: formatted)
+    }
+    return "Renews on \(formatted)"
   }
 
-  func planSubtitle(for planId: String) -> String? {
+  func mediumPeriodDate(_ periodEnd: Int) -> String {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .none
+    return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(periodEnd)))
+  }
+
+  static func planSubtitle(for planId: String) -> String? {
     switch planId {
+    case omiProPlanId:
+      return "1,000 questions per month"
     case "unlimited":
       return "200 questions per month"
     case "operator":
@@ -133,13 +277,19 @@ extension SettingsContentView {
   }
 
   func planAccentColor(for planId: String) -> Color {
-    // Architect is the premium white-accent tier; Operator + legacy Unlimited
-    // are the mass-market green tier.
-    planId == "architect" ? OmiColors.accent : OmiColors.success
+    // Retired Architect keeps its white accent; Omi Pro and the rest are green.
+    planId == "architect" ? Ink.accent : Ink.listeningGreen
   }
 
   func planSummaryText(for plan: SubscriptionPlanOption) -> String {
     preferredStartingPrice(for: plan)?.priceString ?? ""
+  }
+
+  func planSelectionLabel(for plan: SubscriptionPlanOption) -> String {
+    SubscriptionPlanPresentation.selectionLabel(
+      planTitle: plan.displayTitle,
+      startingPrice: preferredStartingPrice(for: plan)?.priceString
+    )
   }
 
   func preferredStartingPrice(for plan: SubscriptionPlanOption) -> SubscriptionPriceOption? {
@@ -153,8 +303,10 @@ extension SettingsContentView {
     return prices.first
   }
 
-  func planEyebrow(for planId: String) -> String {
+  static func planEyebrow(for planId: String) -> String {
     switch planId {
+    case omiProPlanId:
+      return "Mac + mobile + web"
     case "unlimited":
       return "Starter"
     case "operator":
@@ -166,10 +318,12 @@ extension SettingsContentView {
     }
   }
 
-  func planDescription(for planId: String) -> String {
+  static func planDescription(for planId: String) -> String {
     switch planId {
+    case omiProPlanId:
+      return "1,000 chat questions per month. Works on Mac, mobile, and web."
     case "unlimited":
-      return "100 chat questions per month. Shared with mobile and web."
+      return "200 chat questions per month. Shared with mobile and web."
     case "operator":
       return "500 chat questions per month. Shared with mobile and web."
     case "architect":
@@ -214,8 +368,15 @@ extension SettingsContentView {
     SubscriptionPlanCatalogMerger.merge(primary: primary, fallback: fallback)
   }
 
-  func fallbackFeatures(for planId: String) -> [String] {
+  static func fallbackFeatures(for planId: String) -> [String] {
     switch planId {
+    case omiProPlanId:
+      return [
+        "Unlimited listening and transcription",
+        "1,000 chat questions per month",
+        "Unlimited memories and insights",
+        "Works on Mac, mobile, and web",
+      ]
     case "architect":
       return [
         "Automations and vibe coding",
@@ -243,25 +404,12 @@ extension SettingsContentView {
   }
 
   func normalizedPlanId(from title: String) -> String? {
-    let normalized = title.lowercased()
-    // Match the three plan families by title keyword. Neo is the post-rename
-    // display name for the legacy "unlimited" plan and still maps to that id
-    // because Stripe/backend PlanType enum is unchanged.
-    if normalized.contains("unlimited") || normalized.contains("neo") {
-      return "unlimited"
-    }
-    if normalized.contains("operator") {
-      return "operator"
-    }
-    if normalized.contains("architect") || normalized.contains("pro") {
-      return "architect"
-    }
-    return nil
+    SubscriptionPlanNames.planId(from: title)
   }
 
   func planCatalog(from prices: [AvailablePlanPriceOption]) -> [SubscriptionPlanOption] {
     let groupedPrices = Dictionary(grouping: prices) { price in
-      normalizedPlanId(from: price.title) ?? "unknown"
+      price.planId ?? normalizedPlanId(from: price.title) ?? "unknown"
     }
 
     return groupedPrices.compactMap { planId, options in
@@ -275,6 +423,10 @@ extension SettingsContentView {
         title = "Operator"
       case "architect":
         title = "Architect"
+      case "plus":
+        title = "Plus"
+      case omiProPlanId:
+        title = "Omi Pro"
       default:
         title = options.first?.title ?? "Plan"
       }
@@ -291,7 +443,7 @@ extension SettingsContentView {
       return SubscriptionPlanOption(
         id: planId,
         title: title,
-        features: fallbackFeatures(for: planId),
+        features: Self.fallbackFeatures(for: planId),
         prices: mappedPrices
       )
     }
@@ -307,45 +459,63 @@ extension SettingsContentView {
       || userSubscription?.subscription.plan == .pro
     let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
+    let cancelPending = userSubscription?.subscription.cancelAtPeriodEnd == true
+    let ownsCurrentPrice = plan.prices.contains {
+      $0.id == userSubscription?.subscription.currentPriceId
+    }
 
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-          Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
-            .scaledFont(size: OmiType.micro, weight: .bold)
-            .foregroundColor(accent)
-            .tracking(0.8)
+          // The tint is the disc, not the word — the same measurement `SettingsStatusChip`
+          // documents. These are *named system colours* on a light panel: `systemGreen` sets a
+          // 10 pt bold eyebrow at ≈1.6:1 against this card and `systemBlue` at ≈2.4:1, so the
+          // plan's colour was there and the plan's name could not be read. Moving the hue to a
+          // 6 pt disc keeps the tier legible at a glance *and* legible as words.
+          HStack(spacing: 5) {
+            Circle()
+              .fill(accent)
+              .frame(width: 6, height: 6)
+            Text((plan.eyebrow ?? Self.planEyebrow(for: plan.id)).uppercased())
+              .scaledFont(size: OmiType.micro, weight: .bold)
+              .foregroundColor(Ink.secondary)
+              .tracking(0.8)
+          }
 
-          Text(plan.title)
+          Text(plan.displayTitle)
             .scaledFont(size: OmiType.heading, weight: .bold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
-          if let subtitle = plan.subtitle ?? planSubtitle(for: plan.id) {
+          if let subtitle = plan.subtitle ?? Self.planSubtitle(for: plan.id) {
             Text(subtitle)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
 
         Spacer()
 
+        // Selection is carried by the tile's own fill and border, so the price does not also change
+        // colour to say it. The selected branch of both of these used to tint the copy — and at
+        // `accent.opacity(0.8)` on a selected card that was the faintest text on the pane, i.e. the
+        // state that most wanted reading was the one hardest to read.
         VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {
           Text(planSummaryText(for: plan))
             .scaledFont(size: OmiType.subheading, weight: .bold)
-            .foregroundColor(isSelected ? accent : OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
 
           Text("starting price")
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(isSelected ? accent.opacity(0.8) : OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .fixedSize(horizontal: true, vertical: false)
       }
 
-      Text(plan.description ?? planDescription(for: plan.id))
+      Text(plan.description ?? Self.planDescription(for: plan.id))
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         ForEach(plan.features.prefix(4), id: \.self) { feature in
@@ -354,20 +524,25 @@ extension SettingsContentView {
               Circle()
                 .fill(accent.opacity(0.16))
                 .frame(width: 18, height: 18)
+              // The disc carries the tint; the mark on it is ink. A `systemGreen` glyph on a 16%
+              // `systemGreen` disc is the same sub-2:1 pair the eyebrow had.
               Image(systemName: "checkmark")
                 .scaledFont(size: OmiType.micro, weight: .bold)
-                .foregroundColor(accent)
+                .foregroundColor(Ink.primary)
             }
             Text(feature)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
 
-      if isSelected && canPurchase {
-        Divider()
-          .overlay(OmiColors.backgroundQuaternary)
+      if isSelected && canPurchase && cancelPending && !ownsCurrentPrice {
+        Text(SubscriptionPlanPresentation.resubscribeFirst)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(SettingsInk.notice)
+      } else if isSelected && canPurchase {
+        GlassSeparator()
 
         VStack(alignment: .leading, spacing: OmiSpacing.sm) {
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
@@ -384,7 +559,7 @@ extension SettingsContentView {
                 Image(systemName: isPromoCodeExpanded ? "chevron.up" : "chevron.down")
                   .scaledFont(size: OmiType.micro)
               }
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
             }
             .buttonStyle(.plain)
 
@@ -404,7 +579,7 @@ extension SettingsContentView {
                     Text(error)
                       .scaledFont(size: OmiType.caption)
                   }
-                  .foregroundColor(OmiColors.warning)
+                  .foregroundColor(SettingsInk.notice)
                 }
               }
               .transition(.opacity.combined(with: .move(edge: .top)))
@@ -413,7 +588,7 @@ extension SettingsContentView {
 
           Text("Choose billing")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           HStack(spacing: OmiSpacing.sm) {
             ForEach(sortedPrices(for: plan)) { price in
@@ -431,61 +606,80 @@ extension SettingsContentView {
                         .scaledFont(size: OmiType.caption, weight: .bold)
                       Text(price.priceString)
                         .scaledFont(size: OmiType.caption)
-                        .foregroundColor(OmiColors.backgroundPrimary.opacity(0.92))
+                        .foregroundColor(Ink.secondary)
                     }
-                    .foregroundColor(OmiColors.backgroundPrimary)
                     .frame(maxWidth: .infinity)
                   }
                 }
-                .padding(.vertical, OmiSpacing.sm)
               }
-              .buttonStyle(.borderedProminent)
-              .tint(accent)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               .disabled(activeCheckoutPriceId != nil)
             }
           }
         }
       } else if isCurrentPlan {
-        HStack {
-          Text("Current Plan")
-            .scaledFont(size: OmiType.caption, weight: .bold)
-          Spacer()
-          Image(systemName: "checkmark.circle.fill")
-            .scaledFont(size: OmiType.caption)
+        if cancelPending, let priceId = userSubscription?.subscription.currentPriceId, !priceId.isEmpty {
+          Button(action: { startCheckout(for: priceId) }) {
+            Group {
+              if activeCheckoutPriceId == priceId {
+                ProgressView()
+                  .controlSize(.small)
+                  .frame(maxWidth: .infinity)
+              } else {
+                Text("Resubscribe")
+                  .frame(maxWidth: .infinity)
+              }
+            }
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(activeCheckoutPriceId != nil)
+        } else {
+          HStack {
+            Text("Current Plan")
+              .scaledFont(size: OmiType.caption, weight: .bold)
+              .foregroundColor(Ink.primary)
+            Spacer()
+            // The glyph keeps the tint — it is a graphical object, which is a 3:1 bar rather than a
+            // 4.5:1 one — and the words next to it stop being set in a hue that cannot clear either.
+            Image(systemName: "checkmark.circle.fill")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(accent)
+          }
+          .padding(.vertical, OmiSpacing.sm)
         }
-        .foregroundColor(accent)
-        .padding(.vertical, OmiSpacing.sm)
       } else {
         Button(action: {
           selectedPlanIdForCheckout = plan.id
         }) {
           HStack {
-            Text("Select \(plan.title)")
+            Text(planSelectionLabel(for: plan))
               .scaledFont(size: OmiType.caption, weight: .bold)
             Spacer()
             Image(systemName: "arrow.right")
               .scaledFont(size: OmiType.caption, weight: .bold)
           }
-          .foregroundColor(OmiColors.backgroundPrimary)
-          .padding(.vertical, OmiSpacing.sm)
+          .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(accent)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
     }
     .padding(OmiSpacing.xxl)
     .frame(maxWidth: .infinity, alignment: .leading)
+    // The tile is now the pane's *only* card here rather than content inside one, so at rest it is
+    // exactly the card every other pane draws — `Ink.rowFill` behind an `Ink.separator` hairline.
+    // It was `Ink.wash` behind `Ink.hairline`, which are the well and control-outline tokens: right
+    // for something sitting on a card, a shade too heavy once it *is* the card.
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-        .fill(isSelected ? accent.opacity(0.12) : OmiColors.backgroundPrimary.opacity(0.68))
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+        .fill(isSelected ? accent.opacity(0.12) : Ink.rowFill)
         .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
             .stroke(
-              isSelected ? accent.opacity(0.85) : OmiColors.backgroundQuaternary,
+              isSelected ? accent.opacity(0.85) : Ink.separator,
               lineWidth: isSelected ? 1.5 : 1)
         )
     )
-    .contentShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
+    .contentShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous))
     .onTapGesture {
       guard canPurchase else { return }
       selectedPlanIdForCheckout = plan.id
@@ -515,20 +709,23 @@ extension SettingsContentView {
 
   // MARK: - Slider Index Helpers
 
+  // Each of these was `options.firstIndex(of: stored) ?? 0`. See
+  // `SettingsControlMetrics.nearestLadderIndex` for what that `?? 0` did to a stored value the
+  // slider does not offer, and why the handle now snaps to the nearest step instead. When it is only
+  // an approximation, `offLadderStepNote` says so under the slider.
+
   var analysisDelaySliderIndex: Int {
-    analysisDelayOptions.firstIndex(of: analysisDelay) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(of: analysisDelay, in: analysisDelayOptions)
   }
 
   var taskIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: taskExtractionInterval) ?? 0
-  }
-
-  var insightIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: insightExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: taskExtractionInterval, in: extractionIntervalOptions)
   }
 
   var memoryIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: memoryExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: memoryExtractionInterval, in: extractionIntervalOptions)
   }
 
   // MARK: - Helpers
@@ -564,42 +761,6 @@ extension SettingsContentView {
 
     // Persist the setting
     AssistantSettings.shared.screenAnalysisEnabled = enabled
-  }
-
-  func toggleTranscription(enabled: Bool) {
-    // Check microphone permission
-    if enabled && !appState.hasMicrophonePermission {
-      transcriptionError = "Microphone permission required"
-      isTranscribing = false
-      return
-    }
-
-    transcriptionError = nil
-    isTogglingTranscription = true
-
-    // Track setting change
-    AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
-
-    if enabled {
-      appState.startTranscription()
-      isTogglingTranscription = false
-      isTranscribing = true
-    } else {
-      appState.stopTranscription()
-      isTogglingTranscription = false
-      isTranscribing = false
-    }
-
-    // Persist the setting
-    AssistantSettings.shared.transcriptionEnabled = enabled
-  }
-
-  func setSystemAudioCaptureMode(_ mode: AssistantSettings.SystemAudioCaptureMode) {
-    AnalyticsManager.shared.settingToggled(
-      setting: "system_audio_capture_mode_\(mode.rawValue)", enabled: mode != .never)
-    // Persisting posts .systemAudioCaptureModeDidChange; AppState re-applies the gate live for
-    // any in-progress recording.
-    AssistantSettings.shared.systemAudioCaptureMode = mode
   }
 
   func startGlowPreview() {
@@ -724,16 +885,16 @@ extension SettingsContentView {
     transcriptionLanguage = AssistantSettings.shared.transcriptionLanguage
     transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+    vocabularyLoadedFromAccount = false
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
+    let dailySummaryDepthRevisionAtLoadStart = dailySummaryDepthRevision
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
-    systemAudioCaptureMode = AssistantSettings.shared.systemAudioCaptureMode
-
     Task {
       do {
         // Load all settings in parallel
         async let dailySummaryTask = APIClient.shared.getDailySummarySettings()
-        async let notificationsTask = APIClient.shared.getNotificationSettings()
+        async let notificationsReconcile: Void = NotificationSettingsSyncCoordinator.shared.reconcile()
         async let languageTask = APIClient.shared.getUserLanguage()
         async let recordingTask = APIClient.shared.getRecordingPermission()
         async let cloudSyncTask = APIClient.shared.getPrivateCloudSync()
@@ -742,9 +903,9 @@ extension SettingsContentView {
         // Sync assistant settings from server in parallel
         async let assistantSyncTask: () = SettingsSyncManager.shared.syncFromServer()
 
-        let (dailySummary, notifications, language, recording, cloudSync, transcription, _) = try await (
+        let (dailySummary, _, language, recording, cloudSync, transcription, _) = try await (
           dailySummaryTask,
-          notificationsTask,
+          notificationsReconcile,
           languageTask,
           recordingTask,
           cloudSyncTask,
@@ -754,18 +915,26 @@ extension SettingsContentView {
 
         await MainActor.run {
           dailySummaryEnabled = dailySummary.enabled
+          savedDailySummaryEnabled = dailySummary.enabled
+          dailySummaryEnabledError = nil
           dailySummaryHour = dailySummary.hour
+          if dailySummaryDepthRevision == dailySummaryDepthRevisionAtLoadStart {
+            savedDailySummaryDepth = dailySummary.depth
+            dailySummaryDepth = dailySummary.depth
+            dailySummaryDepthError = nil
+          }
           dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
             forHour: dailySummary.hour, referenceDate: Date())
-          notificationsEnabled = notifications.enabled
-          notificationFrequency = notifications.frequency
-          // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
-          UserDefaults.standard.set(
-            notifications.enabled, forKey: NotificationService.masterEnabledDefaultsKey)
-          UserDefaults.standard.set(notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
+          // Local UserDefaults remain the gate. The coordinator owns GET/hydrate/retry.
+          notificationsEnabled = NotificationService.areNotificationsEnabled()
+          notificationFrequency = NotificationService.currentFrequencyLevel()
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
+          savedRecordingPermissionEnabled = recording.enabled
+          recordingPermissionError = nil
           privateCloudSyncEnabled = cloudSync.enabled
+          savedPrivateCloudSyncEnabled = cloudSync.enabled
+          privateCloudSyncError = nil
           singleLanguageMode = transcription.singleLanguageMode
           // Do not let a GET that began before a local/PATCH mutation overwrite
           // the newer vocabulary when it finally completes.
@@ -774,9 +943,11 @@ extension SettingsContentView {
           ) {
             vocabularyList = transcription.vocabulary
             AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
+            savedVocabularyList = transcription.vocabulary
           } else {
             vocabularyList = AssistantSettings.shared.transcriptionVocabulary
           }
+          vocabularyLoadedFromAccount = true
 
           // Sync backend language to local if different (backend is source of truth for language)
           let normalizedLanguage = AssistantSettings.normalizeTranscriptionLanguageCode(language.language)
@@ -815,7 +986,12 @@ extension SettingsContentView {
 
     Task {
       do {
-        let subscription = try await APIClient.shared.getUserSubscription()
+        let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+        let subscription = try await APIClient.shared.getUserSubscription(authorizationSnapshot: authorization)
+        if let authorization {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+          ScreenCloudEntitlementService.shared.accept(subscription, authorization: authorization)
+        }
         let availablePlans = try? await APIClient.shared.getAvailablePlans()
         await MainActor.run {
           userSubscription = subscription
@@ -831,7 +1007,7 @@ extension SettingsContentView {
           // hit the paywall once (e.g. WS connected before payment cleared
           // the trial cache) — without this they'd stay paywalled until the
           // next app restart even after their Operator/Architect plan is active.
-          if subscription.subscription.plan != .basic,
+          if subscription.subscription.plan.hasPaidCapability,
             subscription.subscription.status == .active,
             AppState.current?.isPaywalled == true
           {
@@ -905,10 +1081,11 @@ extension SettingsContentView {
 
     FloatingBarUsageLimiter.shared.applyPlan(
       plan: subscription.subscription.plan,
-      status: subscription.subscription.status
+      status: subscription.subscription.status,
+      desktopGrandfatherUntil: subscription.desktopGrandfatherUntil
     )
 
-    if subscription.subscription.plan != .basic,
+    if subscription.subscription.plan.hasPaidCapability,
       subscription.subscription.status == .active,
       AppState.current?.isPaywalled == true
     {
@@ -919,11 +1096,41 @@ extension SettingsContentView {
     refreshPlanUsageDetails()
   }
 
-  func startCheckout(for priceId: String) {
+  func checkoutSelection(for priceId: String) -> (plan: String, interval: String) {
+    for plan in fallbackPlanCatalog {
+      if let price = plan.prices.first(where: { $0.id == priceId }) {
+        return (plan.id, SubscriptionFunnelWire.interval(price.title))
+      }
+    }
+    if let selectedPlanIdForCheckout {
+      return (selectedPlanIdForCheckout, "unknown")
+    }
+    return ("unknown", "unknown")
+  }
+
+  /// `selection` names the plan and interval when the caller already knows them (the
+  /// storefront payload); otherwise they are looked up in the local catalog.
+  func startCheckout(for priceId: String, selection known: (plan: String, interval: String)? = nil) {
     guard activeCheckoutPriceId == nil else { return }
+    if let subscription = userSubscription?.subscription,
+      SubscriptionPlanPresentation.purchase(
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+        currentPriceId: subscription.currentPriceId,
+        priceId: priceId
+      ) == .blocked
+    {
+      subscriptionError = SubscriptionPlanPresentation.resubscribeFirst
+      return
+    }
     activeCheckoutPriceId = priceId
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
+    subscriptionConfirmation = nil
+    let selection = known ?? checkoutSelection(for: priceId)
+    pendingCheckoutPlanId = selection.plan
+    pendingCheckoutInterval = selection.interval
+    AnalyticsManager.shared.upgradePlanSelected(
+      plan: selection.plan, billingInterval: selection.interval, source: "macos_settings_view")
 
     let promotionCode = upgradePromotionCode.trimmingCharacters(in: .whitespacesAndNewlines)
     let promoToSend: String? = promotionCode.isEmpty ? nil : promotionCode
@@ -943,13 +1150,16 @@ extension SettingsContentView {
             pendingSubscriptionPriceId = nil
             subscriptionError = nil
             self.upgradePromotionCode = ""
+            // Scheduled change: the API accepted it. The current price id does not
+            // move until the period rolls, so this is not a refreshed-price proof.
+            AnalyticsManager.shared.upgradeSucceeded(plan: selection.plan, billingInterval: selection.interval)
             loadSubscriptionInfo()
           }
         } catch let apiError as APIError {
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
-            subscriptionError = apiError.detail ?? "Failed to schedule plan change."
+            subscriptionError = SubscriptionPlanPresentation.upgradeErrorMessage(apiError)
           }
         } catch {
           logError("Failed to schedule plan change", error: error)
@@ -975,9 +1185,15 @@ extension SettingsContentView {
 
         if response.status == "reactivated" {
           await MainActor.run {
+            let planName = userSubscription?.subscription.plan.displayName ?? "plan"
+            if let periodEnd = userSubscription?.subscription.currentPeriodEnd {
+              subscriptionConfirmation = SubscriptionPlanPresentation.renewsLine(
+                plan: planName, date: mediumPeriodDate(periodEnd))
+            }
             subscriptionError = nil
             pendingSubscriptionPriceId = nil
             pendingCheckoutSessionId = nil
+            AnalyticsManager.shared.upgradeSucceeded(plan: selection.plan, billingInterval: selection.interval)
             loadSubscriptionInfo()
           }
         } else if let urlString = response.url, let url = URL(string: urlString) {
@@ -1003,7 +1219,7 @@ extension SettingsContentView {
           activeCheckoutPriceId = nil
           pendingSubscriptionPriceId = nil
           pendingCheckoutSessionId = nil
-          subscriptionError = apiError.detail ?? "Failed to open checkout."
+          subscriptionError = SubscriptionPlanPresentation.checkoutErrorMessage(apiError)
         }
       } catch {
         logError("Failed to create checkout session", error: error)
@@ -1059,6 +1275,7 @@ extension SettingsContentView {
         }
       }
     case .cancelled, .dismissed:
+      AnalyticsManager.shared.upgradeCancelled()
       pendingSubscriptionPriceId = nil
       pendingCheckoutSessionId = nil
       loadSubscriptionInfo()
@@ -1071,14 +1288,21 @@ extension SettingsContentView {
     Task {
       for attempt in 0..<8 {
         do {
-          let subscription = try await APIClient.shared.getUserSubscription()
+          let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+          let subscription = try await APIClient.shared.getUserSubscription(authorizationSnapshot: authorization)
+          if let authorization {
+            guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+            ScreenCloudEntitlementService.shared.accept(subscription, authorization: authorization)
+          }
           let matchedPrice =
             expectedPriceId == nil || subscription.subscription.currentPriceId == expectedPriceId
           let hasPaidPlan =
-            subscription.subscription.plan != .basic && subscription.subscription.status == .active
+            subscription.subscription.plan.hasPaidCapability && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
             await MainActor.run {
+              AnalyticsManager.shared.upgradeSucceeded(
+                plan: pendingCheckoutPlanId, billingInterval: pendingCheckoutInterval)
               applySuccessfulSubscriptionRefresh(subscription)
             }
             return
@@ -1089,6 +1313,8 @@ extension SettingsContentView {
               userSubscription = subscription
               subscriptionError =
                 "Payment completed, but plan refresh is still catching up. Please try reloading this page in a moment."
+              // The refreshed subscription has not shown the new price, so this
+              // is not Upgrade Succeeded.
               pendingSubscriptionPriceId = nil
               pendingCheckoutSessionId = nil
             }

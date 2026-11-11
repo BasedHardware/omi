@@ -3,9 +3,11 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from threading import RLock
 
+import fakeredis
 import pytest
 
 import database.action_items as action_items_db
+import database.action_items_cache as action_items_cache
 import database.goals as goals_db
 import database.recurrence_inbox as recurrence_inbox_db
 import database.workstreams as workstreams_db
@@ -278,18 +280,21 @@ def test_focus_cap_requires_explicit_replacement_and_keeps_all_goals(fake_db):
     assert goals_db.get_goal_by_id('u1', 'g0', firestore_client=fake_db)['status'] == 'background'
 
 
-def test_canonical_goal_mutations_are_mode_and_generation_fenced(fake_db):
+def test_goal_mutations_are_universal_and_generation_fenced(fake_db):
     create_goal(fake_db, 'g1')
-    seed_control(fake_db, mode='shadow')
-    with pytest.raises(goals_db.GoalConflictError):
-        goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3, firestore_client=fake_db)
-
+    seed_control(fake_db)
+    first = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3, firestore_client=fake_db)
+    assert first['status'] == 'focused'
     seed_control(fake_db, generation=4, mode='read')
     with pytest.raises(goals_db.GoalConflictError):
         goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3, firestore_client=fake_db)
-    first = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=4, firestore_client=fake_db)
-    replay = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=4, firestore_client=fake_db)
-    assert replay == first
+    next_result = goals_db.focus_goal(
+        'u1', 'g1', idempotency_key='focus-g1-generation-4', account_generation=4, firestore_client=fake_db
+    )
+    replay = goals_db.focus_goal(
+        'u1', 'g1', idempotency_key='focus-g1-generation-4', account_generation=4, firestore_client=fake_db
+    )
+    assert replay == next_result
 
 
 def test_goal_lifecycle_disposition_detaches_without_deleting_dependents(fake_db):
@@ -563,6 +568,127 @@ def test_workstream_candidate_acceptance_is_atomic_and_idempotent(fake_db):
     assert anchor_task['priority'] == 'high'
     assert anchor_task['recurrence_rule'] == 'FREQ=WEEKLY'
     assert anchor_task['recurrence_parent_id'] == 'task-parent'
+
+
+class CachedTaskListPage:
+    """A cached GET /v1/action-items page, addressed by the current list version like the route."""
+
+    params = {'limit': 100, 'offset': 0, 'completed': False}
+
+    def _key(self):
+        version = action_items_cache.get_action_items_list_version('u1')
+        return action_items_cache.list_cache_key('u1', version, self.params)
+
+    def cache(self):
+        action_items_cache.write_cached_list(self._key(), body={'action_items': []}, etag='W/"old"', ttl=30)
+
+    def is_served(self):
+        return action_items_cache.read_cached_list(self._key()) is not None
+
+
+@pytest.fixture
+def task_list_page(monkeypatch):
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(action_items_cache, '_redis', lambda: redis)
+    return CachedTaskListPage()
+
+
+def test_workstream_candidate_acceptance_invalidates_cached_task_list(fake_db, task_list_page):
+    seed_control(fake_db)
+    proposal = CandidateCreate.model_validate(
+        {
+            'subject_kind': 'workstream',
+            'proposed_action': 'create',
+            'workstream_proposal': {
+                'title': 'Investor outreach',
+                'objective': 'Prepare Sarah outreach',
+                'anchor_task': {'description': 'Draft Sarah email', 'owner': 'user'},
+            },
+            'capture_confidence': 0.9,
+            'ownership_confidence': 1,
+            'evidence_refs': [{'kind': 'conversation', 'id': 'c1', 'scope': 'canonical'}],
+            'source_surface': 'conversation',
+        }
+    )
+    candidate = CandidateRecord(
+        **proposal.model_dump(mode='python'),
+        candidate_id='cand-1',
+        account_generation=3,
+        idempotency_key='idem-1',
+        created_at=datetime.now(timezone.utc),
+    )
+    fake_db.rows[('users', 'u1', 'candidates', 'cand-1')] = candidate.model_dump(mode='python')
+
+    task_list_page.cache()
+    accepted = workstreams_db.resolve_workstream_candidate('u1', candidate, 3, firestore_client=fake_db)
+    assert ('users', 'u1', 'action_items', accepted.task_id) in fake_db.rows
+    assert not task_list_page.is_served()
+
+    # A repeated accept writes nothing, so the page cached after the first one stays valid.
+    task_list_page.cache()
+    replay = workstreams_db.resolve_workstream_candidate('u1', candidate, 3, firestore_client=fake_db)
+    assert replay.newly_resolved is False
+    assert task_list_page.is_served()
+
+
+def test_work_intents_invalidate_cached_task_list_only_when_writing_a_task(fake_db, task_list_page):
+    seed_control(fake_db)
+    create_goal(fake_db, 'g1')
+    seed_task(fake_db)
+    request = TaskOriginWorkIntent(task_id='t1')
+
+    task_list_page.cache()
+    linked = workstreams_db.resolve_work_intent(
+        'u1', request, idempotency_key='first-click', account_generation=3, firestore_client=fake_db
+    )
+    assert fake_db.rows[('users', 'u1', 'action_items', 't1')]['workstream_id'] == linked.workstream_id
+    assert not task_list_page.is_served()
+
+    # A replay and a new click on the already linked task leave every task unchanged.
+    task_list_page.cache()
+    for idempotency_key in ('first-click', 'second-click'):
+        workstreams_db.resolve_work_intent(
+            'u1', request, idempotency_key=idempotency_key, account_generation=3, firestore_client=fake_db
+        )
+    assert task_list_page.is_served()
+
+    anchored = workstreams_db.resolve_work_intent(
+        'u1',
+        GoalOriginWorkIntent(
+            goal_id='g1',
+            title='Investor outreach',
+            objective='Prepare Sarah outreach',
+            anchor_task_description='Draft Sarah email',
+        ),
+        idempotency_key='goal-click',
+        account_generation=3,
+        firestore_client=fake_db,
+    )
+    assert ('users', 'u1', 'action_items', anchored.task_id) in fake_db.rows
+    assert not task_list_page.is_served()
+
+
+def test_task_goal_link_import_invalidates_cached_task_list_only_when_writing_a_task(fake_db, task_list_page):
+    seed_control(fake_db)
+    create_goal(fake_db, 'g1')
+    seed_task(fake_db)
+    request = TaskGoalLinkImportRequest(links=[{'task_id': 't1', 'goal_id': 'g1'}])
+
+    task_list_page.cache()
+    first = workstreams_db.import_task_goal_links(
+        'u1', request, idempotency_key='import-1', account_generation=3, firestore_client=fake_db
+    )
+    assert first.imported == 1
+    assert fake_db.rows[('users', 'u1', 'action_items', 't1')]['goal_id'] == 'g1'
+    assert not task_list_page.is_served()
+
+    # Importing a link the task already has writes nothing.
+    task_list_page.cache()
+    second = workstreams_db.import_task_goal_links(
+        'u1', request, idempotency_key='import-2', account_generation=3, firestore_client=fake_db
+    )
+    assert second.unchanged == 1
+    assert task_list_page.is_served()
 
 
 def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0, generation=3):
@@ -912,19 +1038,18 @@ def test_concurrent_journal_appends_allocate_stable_unique_sequences(fake_db):
     assert workstreams_db.get_workstream('u1', 'w1', firestore_client=fake_db).latest_event_sequence == 20
 
 
-def test_workstream_mutations_are_generation_fenced_and_receipt_idempotent(fake_db):
-    seed_control(fake_db, mode='shadow')
+def test_workstream_mutations_are_universal_generation_fenced_and_receipt_idempotent(fake_db):
+    seed_control(fake_db)
     seed_workstream(fake_db)
-    with pytest.raises(workstreams_db.WorkstreamConflictError):
-        workstreams_db.update_workstream(
-            'u1',
-            'w1',
-            WorkstreamUpdate(current_state_summary='Blocked in shadow'),
-            idempotency_key='update-1',
-            account_generation=3,
-            firestore_client=fake_db,
-        )
-
+    first_generation = workstreams_db.update_workstream(
+        'u1',
+        'w1',
+        WorkstreamUpdate(current_state_summary='Ready in universal mode'),
+        idempotency_key='update-1',
+        account_generation=3,
+        firestore_client=fake_db,
+    )
+    assert first_generation.current_state_summary == 'Ready in universal mode'
     seed_control(fake_db, generation=4, mode='read')
     with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError):
         workstreams_db.update_workstream(

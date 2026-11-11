@@ -2,6 +2,7 @@ import os
 import shutil
 import uuid
 import wave
+from functools import lru_cache
 from typing import Any, Dict, List, cast
 
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
@@ -49,18 +50,36 @@ def _validate_audio_duration(file_path: str) -> None:
         )
 
 
-# Instantiate pretrained speaker embedding model
-device: Any = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # type: ignore[reportUnknownMemberType]  # torch untyped
-embedding_model: Any = Model.from_pretrained("pyannote/embedding", token=os.getenv('HUGGINGFACE_TOKEN'))  # type: ignore[reportUnknownMemberType]  # pyannote untyped
-embedding_inference: Any = Inference(embedding_model, window="whole")  # type: ignore[reportUnknownMemberType]  # pyannote untyped
-embedding_inference.to(device)  # type: ignore[reportUnknownMemberType]  # pyannote untyped
+@lru_cache(maxsize=2)
+def _get_inference(version: int) -> Any:
+    device: Any = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if version == 2:
+        model = Model.from_pretrained(
+            "pyannote/wespeaker-voxceleb-resnet34-LM",
+            revision="837717ddb9ff5507820346191109dc79c958d614",
+            token=os.getenv('HUGGINGFACE_TOKEN'),
+        )
+    else:
+        model = Model.from_pretrained("pyannote/embedding", token=os.getenv('HUGGINGFACE_TOKEN'))
+    inference = Inference(model, window="whole")
+    inference.to(device)
+    return inference
 
-# Instantiate wespeaker-voxceleb-resnet34-LM model for v2
-embedding_model_v2: Any = Model.from_pretrained(  # type: ignore[reportUnknownMemberType]  # pyannote untyped
-    "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.getenv('HUGGINGFACE_TOKEN')
-)
-embedding_inference_v2: Any = Inference(embedding_model_v2, window="whole")  # type: ignore[reportUnknownMemberType]  # pyannote untyped
-embedding_inference_v2.to(device)  # type: ignore[reportUnknownMemberType]  # pyannote untyped
+
+def initialize_embeddings(*, batch_only: bool = False) -> None:
+    """Startup-only warmup; failures propagate and prevent readiness."""
+    if not batch_only:
+        _get_inference(1)
+    _get_inference(2)
+
+
+def embedding_inference(audio: Dict[str, Any]) -> Any:
+    return _get_inference(1)(audio)
+
+
+def embedding_inference_v2(audio: Dict[str, Any]) -> Any:
+    return _get_inference(2)(audio)
+
 
 os.makedirs('_temp', exist_ok=True)
 

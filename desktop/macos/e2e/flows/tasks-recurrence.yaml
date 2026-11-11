@@ -1,0 +1,47 @@
+version: 2
+name: tasks-recurrence
+tier: manual
+description: Completion-driven recurrence through the real task path, using disposable canonical fixtures on an isolated offline backend
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/Stores/TaskRecurrenceDatePolicy.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Verify isolated named-bundle identity
+    do: "Start the existing offline harness and use desktop-run-local with a named omi-recurrence-date-qa bundle and its seeded alice account. Verify omi-ctl health reports the tested clean source revision and loopback backend URLs. Never mix production auth seeding with the emulator profile or run this fixture against a customer account. Record the host calendar and timezone; the weekday case below requires a Gregorian Saturday/Sunday weekend."
+
+  - id: S2
+    name: Seed a future weekday recurrence through the canonical API
+    do: "Using the same authenticated emulator account and loopback backend the bundle uses, POST /v1/action-items with a uniquely marked [[MARKER:tasks-recurrence]] description, status active, completed false, recurrence_rule weekdays, and a timezone-aware due_at on a future Friday at 09:00 in the recorded calendar. Read the returned saved ID and due date. GET the canonical record to confirm the rule and active state. The existing create_task bridge action does not accept recurrence or due date and cannot seed this case."
+
+  - id: S3
+    name: Load the saved recurring task into the real Tasks surface
+    bridge.navigate:
+      target: tasks
+      activateApp: false
+    wait:
+      state.chatFirstRoute: tasks
+
+  - id: S4
+    name: Refresh and locate the exact fixture
+    do: "Invoke the existing refresh_all_data action and wait for the unique fixture row on Tasks. Confirm its backend ID matches the canonical seed and record its displayed date. Do not modify SQLite or inject operation overrides. dump_tasks may confirm local ID/completion but does not expose recurrence or due dates, so it is not their authority."
+
+  - id: S5
+    name: Complete through the genuine task path
+    do: "Invoke the existing toggle_task action with the exact saved fixture ID, or use that row's checkbox once. This runs TasksViewModel.toggleTask, TasksStore.toggleTask, nextFutureDueDate and TaskRecurrenceDatePolicy without test operation overrides. Wait for canonical completion and successor upload with a bounded timeout; a failed or missing upload is a failure, not assumed success."
+
+  - id: S6
+    name: Verify canonical successor and reload
+    do: "Read the parent and canonical task list from the isolated backend. Verify the parent is completed and exactly one newly created incomplete child has source recurring, unchanged weekdays rule and recurrence_parent_id equal to the original parent ID. Its due date must be the next Monday at the original local time in the recorded calendar. Refresh the real Tasks surface and confirm the same child survives the cache reload. This one successful completion is not an exactly-once retry/concurrency or durable-rollover guarantee."
+
+  - id: S7
+    name: Replay sequential monthly catch-up
+    do: "Repeat with another unique disposable canonical task whose monthly due date is January 31 before the recorded current date, then complete it through the same real action. Compute the expected date by sequential calendar-month additions: February clamps to 28 or 29, subsequent additions retain that clamped day, and missed dates are skipped until an occurrence is not before completion. Verify canonical child rule, parent and due date; do not expect a direct multi-month jump anchored to January 31. Nil, nonfinite and nonprogressing arithmetic cases remain hermetic XCTest coverage, not a claimed physical reproduction."
+
+  - id: S8
+    name: Remove only disposable fixture records
+    do: "Record the exact canonical parent and child IDs from both cases. Delete only those IDs through the existing authenticated canonical DELETE endpoint on the isolated backend, then refresh Tasks and verify the unique markers are absent. Keep source identity, calendar/timezone, before/after canonical receipts and observed failures with the replay report."

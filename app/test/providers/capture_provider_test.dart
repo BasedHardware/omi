@@ -1,3 +1,4 @@
+import 'package:omi/backend/http/api/recording_speakers.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -12,21 +13,47 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/app_globals.dart';
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/enums.dart';
+
+import '../support/crashlytics_recorder.dart';
 
 /// Fake external actions that tracks people-refresh calls.
 class MockCaptureExternalActions extends NoopCaptureExternalActions {
   int setPeopleCallCount = 0;
   int fetchSubscriptionCallCount = 0;
   Completer<void>? _setPeopleCompleter;
+  bool assignmentResult = false;
+  Completer<bool>? assignmentCompleter;
+  int assignmentCalls = 0;
+  int? assignedSpeaker;
+  (String, String)? assignedVoice;
+  List<String>? assignedIds;
+  @override
+  Future<bool> assignSpeaker(String conversationId, List<String> ids, String personId,
+      {int? speakerId, (String, String)? voice}) async {
+    assignmentCalls++;
+    assignedSpeaker = speakerId;
+    assignedVoice = voice;
+    assignedIds = ids;
+    return assignmentCompleter == null ? assignmentResult : await assignmentCompleter!.future;
+  }
+
   bool? outOfCreditsOverride;
   String? topConversationIdOverride;
 
@@ -56,6 +83,27 @@ class MockCaptureExternalActions extends NoopCaptureExternalActions {
   }
 }
 
+class _NoopBle implements CaptureBleListeners {
+  @override
+  void addBatchRecordingFinalizedListener(void Function(String) callback) {}
+
+  @override
+  void removeBatchRecordingFinalizedListener(void Function(String) callback) {}
+}
+
+CaptureProvider _seamedProvider(CaptureExternalActions actions) {
+  return CaptureProvider(
+    externalActions: actions,
+    connectivity: CaptureConnectivityBoundary(
+      initiallyConnected: true,
+      changes: const Stream.empty(),
+      isConnected: () => true,
+    ),
+    bleListeners: _NoopBle(),
+    inProgressConversationLoader: () async {},
+  );
+}
+
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
   Future<List<ConnectivityResult>> checkConnectivity() async {
@@ -79,20 +127,235 @@ TranscriptSegment _segment(String id, String text) {
   );
 }
 
+Future<void> _flushEventQueue() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
+}
+
+Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Future<void> Function() body) async {
+  final unhandled = <Object>[];
+  final done = Completer<void>();
+  Object? harnessError;
+  runZonedGuarded(() async {
+    try {
+      await body();
+    } catch (e) {
+      harnessError = e;
+    } finally {
+      await _flushEventQueue();
+      done.complete();
+    }
+  }, (error, stackTrace) => unhandled.add(error));
+  await done.future;
+  return (unhandled: unhandled, harnessError: harnessError);
+}
+
 BtDevice _device({required String id, required DeviceType type, String name = 'TestDevice'}) =>
     BtDevice(id: id, name: name, type: type, rssi: -50);
+
+/// CaptureProvider whose socket opening is held on a per-call gate, so a
+/// connection attempt can be kept in flight while another caller tries to
+/// start one, and each attempt can be released independently.
+class _GatedSocketCaptureProvider extends CaptureProvider {
+  final List<Completer<void>> gates = [];
+  final List<_IdentifiedSocketService> sockets = [];
+  int? lastSubscribedId;
+  bool returnSockets = false;
+
+  int get openCalls => gates.length;
+
+  @override
+  Future<TranscriptSegmentSocketService?> openConversationSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+    String? source,
+    String? clientConversationId,
+    CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
+    bool localPreview = false,
+  }) async {
+    final gate = Completer<void>();
+    gates.add(gate);
+    await gate.future;
+    if (!returnSockets) return null;
+    final socket = _IdentifiedSocketService(gates.length - 1, (id) => lastSubscribedId = id);
+    sockets.add(socket);
+    return socket;
+  }
+
+  void release(int attempt) => gates[attempt].complete();
+
+  void releaseAll() {
+    for (final gate in gates) {
+      if (!gate.isCompleted) gate.complete();
+    }
+  }
+}
+
+class _NullSocketCaptureProvider extends CaptureProvider {
+  @override
+  Future<TranscriptSegmentSocketService?> openConversationSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+    String? source,
+    String? clientConversationId,
+    CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
+    bool localPreview = false,
+  }) async =>
+      null;
+}
+
+class _CountingSocketCaptureProvider extends CaptureProvider {
+  _CountingSocketCaptureProvider({super.audioCodecLoader});
+
+  int openCalls = 0;
+
+  @override
+  Future<TranscriptSegmentSocketService?> openConversationSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+    String? source,
+    String? clientConversationId,
+    CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
+    bool localPreview = false,
+  }) async {
+    openCalls++;
+    return null;
+  }
+}
+
+class _CountingConversationLocationCapture extends ConversationLocationCapture {
+  int calls = 0;
+  final List<bool> promptIfDeniedArgs = [];
+
+  @override
+  Future<Geolocation?> captureAndUpload({bool promptIfDenied = true}) async {
+    calls++;
+    promptIfDeniedArgs.add(promptIfDenied);
+    return Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026));
+  }
+}
+
+class _HangingConversationLocationCapture extends ConversationLocationCapture {
+  int calls = 0;
+  final Completer<Geolocation?> _done = Completer<Geolocation?>();
+
+  @override
+  Future<Geolocation?> captureAndUpload({bool promptIfDenied = true}) async {
+    calls++;
+    return _done.future;
+  }
+
+  @override
+  Future<Geolocation?> capture({bool promptIfDenied = true}) async {
+    calls++;
+    return _done.future;
+  }
+
+  @override
+  Future<void> uploadCompatibilitySnapshot(Geolocation geolocation) async {}
+
+  void complete() {
+    if (!_done.isCompleted) {
+      _done.complete(Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026)));
+    }
+  }
+}
+
+class _FakeBatchMicRecorder implements IMicRecorderService {
+  int startBatchCalls = 0;
+  bool emitRecordingOnStart = false;
+
+  @override
+  Future<void> start({
+    required Function(Uint8List bytes) onByteReceived,
+    Function()? onRecording,
+    Function()? onStop,
+    Function()? onInitializing,
+    Function()? onStalled,
+    Function(bool began)? onInterruption,
+  }) async {
+    if (emitRecordingOnStart) onRecording?.call();
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    startBatchCalls++;
+  }
+
+  @override
+  void stop() {}
+
+  @override
+  void probeStallAfterForeground() {}
+}
+
+class _IdentifiedSocketService extends TranscriptSegmentSocketService {
+  _IdentifiedSocketService(this.id, this.onSubscribed)
+      : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
+
+  final int id;
+  final void Function(int id) onSubscribed;
+
+  @override
+  void subscribe(Object context, ITransctiptSegmentSocketServiceListener listener) {
+    onSubscribed(id);
+    throw StateError('test socket subscribed');
+  }
+}
+
+class _TrackingSocket implements IPureSocket {
+  @override
+  PureSocketStatus get status => PureSocketStatus.connected;
+
+  @override
+  Future<bool> connect() async => true;
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  void send(dynamic message) {}
+
+  @override
+  void setListener(IPureSocketListener listener) {}
+
+  @override
+  void onMessage(dynamic message) {}
+
+  @override
+  void onConnected() {}
+
+  @override
+  void onClosed() {}
+
+  @override
+  void onError(Object err, StackTrace trace) {}
+}
 
 /// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
 /// config reading Env.apiBaseUrl) don't hit a LateInitializationError.
 class _TestEnvFields implements EnvFields {
   @override
-  String? get openAIAPIKey => null;
-  @override
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => null;
-  @override
-  String? get googleMapsApiKey => null;
   @override
   String? get intercomAppId => null;
   @override
@@ -107,15 +370,16 @@ class _TestEnvFields implements EnvFields {
   bool? get useWebAuth => false;
   @override
   bool? get useAuthCustomToken => false;
-  @override
-  String? get stagingApiUrl => null;
 }
+
+late CrashlyticsRecorder crashlytics;
 
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    crashlytics = await installCrashlyticsRecorder();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       (MethodCall call) async {
@@ -136,9 +400,337 @@ void main() {
     }
   });
 
+  setUp(() => crashlytics.reset());
+
   // ------------------------------------------------------------------ //
   // Existing tests (preserved verbatim from the original file)          //
   // ------------------------------------------------------------------ //
+
+  test('held audio event reaches capture state and never changes WAL custody', () async {
+    final provider = CaptureProvider(
+      externalActions: MockCaptureExternalActions(),
+      inProgressConversationLoader: () async {},
+      conversationLocationCapture: _CountingConversationLocationCapture(),
+    );
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-1',
+      'held_seconds': 125,
+      'paused': true,
+    }));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.heldSeconds, 125);
+    expect(provider.liveHeldAudio.paused, isTrue);
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-1',
+      'held_seconds': 125,
+      'paused': false,
+    }));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.paused, isFalse);
+    expect(provider.liveHeldAudio.heldSeconds, 125);
+    provider.onConnected();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.sessionId, isNull);
+    expect(provider.liveHeldAudio.heldSeconds, 0);
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-2',
+      'held_seconds': 3,
+      'paused': true,
+    }));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.sessionId, 'connection-2');
+    expect(provider.liveHeldAudio.heldSeconds, 3);
+    provider.dispose();
+  });
+
+  test('live whole-recording rename fences reused ids across reconnect scopes', () async {
+    final actions = MockCaptureExternalActions()..assignmentResult = true;
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'scoped',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [],
+    }));
+    final a = _segment('a', 'first')..speakerIdScope = 'stream:1';
+    final b = _segment('b', 'reconnect')..speakerIdScope = 'stream:2';
+    provider.onSegmentReceived([a, b]);
+    await Future<void>.delayed(Duration.zero);
+    expect(await provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a', 'b'], applyToSpeaker: true), isTrue);
+    expect(a.personId, 'maya');
+    expect(b.personId, isNull);
+    expect(actions.assignedIds, ['a']);
+    expect(actions.assignedVoice, ('stream:1', 'SPEAKER_0'));
+    final later = _segment('later', 'same scope')..speakerIdScope = 'stream:1';
+    final other = _segment('other', 'another reconnect')..speakerIdScope = 'stream:2';
+    provider.onSegmentReceived([later, other]);
+    await Future<void>.delayed(Duration.zero);
+    expect(later.personId, 'maya');
+    expect(other.personId, isNull);
+    provider.dispose();
+  });
+
+  test('live renames queue while the first is in flight and both persist', () async {
+    final actions = MockCaptureExternalActions()..assignmentCompleter = Completer<bool>();
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'queued',
+      'started_at': null,
+      'finished_at': null,
+      'created_at': '2026-09-21T00:00:00Z',
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [_segment('a', 'one').toJson(), _segment('b', 'two').toJson()],
+    }));
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a']);
+    expect(await provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['missing']), isFalse);
+    final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['b']);
+    expect(provider.segments.map((s) => s.personId), ['maya', 'sam']);
+    await Future<void>.delayed(Duration.zero);
+    expect(actions.assignmentCalls, 1);
+    actions.assignmentCompleter!.complete(true);
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+    expect(actions.assignmentCalls, 2);
+    expect(provider.segments.map((s) => s.personId), ['maya', 'sam']);
+    provider.dispose();
+  });
+
+  test('overlapping live renames stay protected until the last save finishes', () async {
+    final firstGate = Completer<bool>();
+    final secondGate = Completer<bool>();
+    final actions = MockCaptureExternalActions()..assignmentCompleter = firstGate;
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'overlap',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [_segment('a', 'one').toJson()],
+    }));
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a']);
+    await Future<void>.delayed(Duration.zero);
+    final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['a']);
+    actions.assignmentCompleter = secondGate;
+    firstGate.complete(true);
+    expect(await first, isTrue);
+    expect(provider.taggingSegmentIds, contains('a'));
+    expect(provider.segments.single.personId, 'sam');
+    secondGate.complete(true);
+    expect(await second, isTrue);
+    expect(provider.taggingSegmentIds, isEmpty);
+    expect(provider.segments.single.personId, 'sam');
+    provider.dispose();
+  });
+
+  test('overlapping failed live saves restore committed labels and keep each error specific', () async {
+    for (final firstSaved in [false, true]) {
+      final firstGate = Completer<bool>();
+      final secondGate = Completer<bool>();
+      final actions = MockCaptureExternalActions()..assignmentCompleter = firstGate;
+      final provider = CaptureProvider(
+          externalActions: actions,
+          inProgressConversationLoader: () async {},
+          conversationLocationCapture: _CountingConversationLocationCapture());
+      provider.applyInProgressConversation(ServerConversation.fromJson({
+        'id': 'failed-overlap',
+        'created_at': '2026-09-21T00:00:00Z',
+        'started_at': null,
+        'finished_at': null,
+        'structured': {},
+        'status': 'in_progress',
+        'transcript_segments': [_segment('a', 'one').toJson()],
+      }));
+      provider.onSegmentReceived([_segment('a', 'one')]);
+      await Future<void>.delayed(Duration.zero);
+      final outcomes = <({bool saved, int lines, bool stale, bool limited, bool partial, bool coverageComplete})>[];
+      final first = provider.assignSpeakerToConversation(0, 'maya', 'Maya', ['a'], onSettled: outcomes.add);
+      await Future<void>.delayed(Duration.zero);
+      final second = provider.assignSpeakerToConversation(0, 'sam', 'Sam', ['a'], onSettled: outcomes.add);
+      actions.assignmentCompleter = secondGate;
+      if (firstSaved) {
+        firstGate.complete(true);
+      } else {
+        firstGate.completeError(const StaleSpeakerException());
+      }
+      expect(await first, firstSaved);
+      expect(provider.segments.single.personId, 'sam');
+      expect(provider.taggingSegmentIds, contains('a'));
+      expect(outcomes.single.stale, !firstSaved);
+      if (firstSaved) {
+        secondGate.completeError(const StaleSpeakerException());
+      } else {
+        secondGate.complete(false);
+      }
+      expect(await second, isFalse);
+      expect(provider.segments.single.personId, firstSaved ? 'maya' : null);
+      expect(provider.taggingSegmentIds, isEmpty);
+      expect(outcomes.last.stale, firstSaved);
+      provider.dispose();
+    }
+  });
+
+  test('manual save requires acknowledgment and respects selected scope', () async {
+    final actions = MockCaptureExternalActions();
+    final conversation = ServerConversation.fromJson({
+      'id': 'manual-conversation',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [_segment('a', 'one').toJson(), _segment('b', 'two').toJson()],
+    });
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(conversation);
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(await provider.assignSpeakerToConversation(0, 'new', 'New', ['a']), isFalse);
+    expect(provider.segments.every((s) => s.personId == null), isTrue);
+    expect(await provider.assignSpeakerToConversation(0, '', 'Creation failed', ['a']), isFalse);
+    expect(actions.assignmentCalls, 1);
+    actions.assignmentResult = true;
+    expect(await provider.assignSpeakerToConversation(0, 'new', 'New', ['a']), isTrue);
+    expect(provider.segments.first.personId, 'new');
+    expect(provider.segments.last.personId, isNull);
+    expect(actions.assignedSpeaker, isNull);
+    provider.onSegmentReceived([_segment('a', 'individual revision')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.first.personId, 'new');
+    expect(provider.segments.last.personId, isNull);
+    expect(await provider.assignSpeakerToConversation(0, 'user', 'Me', ['a', 'b'], applyToSpeaker: true), isTrue);
+    expect(actions.assignedSpeaker, 0);
+    expect(provider.segments.every((s) => s.isUser && s.personId == null), isTrue);
+    provider.onSegmentReceived([_segment('c', 'later')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.isUser, isTrue);
+    expect(provider.segments.last.personId, isNull);
+    // The newest live line is revised after its first delivery. A stale wire
+    // label must not replace the manual choice made for this voice.
+    provider.onSegmentReceived([_segment('c', 'later revised')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.text, 'later revised');
+    expect(provider.segments.last.isUser, isTrue);
+    expect(provider.segments.last.speakerLabelSource, 'manual');
+    provider.onMessageEventReceived(TranslationEvent(segments: [_segment('c', 'translated')]));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.isUser, isTrue);
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'manual-conversation',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'transcript_segments': [_segment('c', 'server refresh').toJson()],
+    }));
+    expect(provider.segments.single.isUser, isTrue);
+    provider.onSegmentReceived([
+      _segment('c', 'another acknowledged manual edit')
+        ..personId = 'another-person'
+        ..speakerLabelSource = 'manual'
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.single.isUser, isFalse);
+    expect(provider.segments.single.personId, 'another-person');
+    provider.applyInProgressConversation(ServerConversation.fromJson({
+      'id': 'next-conversation',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'transcript_segments': [_segment('different-scope', 'another voice').toJson()],
+    }));
+    provider.onSegmentReceived([_segment('next-line', 'new scope')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.every((s) => !s.isUser && s.personId == null), isTrue);
+    provider.dispose();
+  });
+
+  test('manual acknowledgment after rollover cannot paint the next conversation', () async {
+    final actions = MockCaptureExternalActions()..assignmentCompleter = Completer<bool>();
+    final conversation = ServerConversation.fromJson({
+      'id': 'old',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'transcript_segments': [_segment('a', 'one').toJson()],
+    });
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(conversation);
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    final pending = provider.assignSpeakerToConversation(0, 'new', 'New', ['a']);
+    provider.onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation));
+    provider.segments = [_segment('next', 'next')];
+    actions.assignmentCompleter!.complete(true);
+    expect(await pending, isTrue);
+    expect(provider.segments.single.personId, isNull);
+    provider.dispose();
+  });
+
+  test('name-only suggestions stay local and malformed or stale suggestions cannot rewrite manual labels', () {
+    final actions = MockCaptureExternalActions();
+    final provider = CaptureProvider(externalActions: actions);
+    provider.segments = [_segment('candidate', 'hello'), _segment('manual', 'hello')..personId = 'saved'];
+    Map<String, dynamic> payload = {
+      'type': 'speaker_label_suggestion',
+      'speaker_id': 0,
+      'person_id': '',
+      'person_name': 'Alex',
+      'segment_id': 'candidate'
+    };
+    provider.onMessageEventReceived(MessageEvent.fromJson(payload));
+    expect(provider.suggestionsBySegmentId['candidate']?.personName, 'Alex');
+    expect(provider.segments.first.personId, isNull);
+    expect(actions.assignmentCalls, 0);
+    for (final invalid in [
+      {...payload, 'speaker_id': '0'},
+      {...payload, 'speaker_id': null},
+      {...payload, 'person_id': 42},
+      {...payload, 'person_name': false},
+      {...payload, 'segment_id': []},
+      {...payload, 'segment_id': 'old-conversation'},
+      {...payload, 'speaker_id': 9}
+    ]) {
+      provider.onMessageEventReceived(MessageEvent.fromJson(invalid));
+    }
+    expect(provider.segments.first.personId, isNull);
+    provider.onMessageEventReceived(MessageEvent.fromJson({...payload, 'person_id': 'inferred'}));
+    expect(provider.segments.first.personId, 'inferred');
+    expect(actions.setPeopleCallCount, 1);
+    expect(provider.segments.last.personId, 'saved');
+    provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['candidate']));
+    expect(provider.suggestionsBySegmentId, isEmpty);
+    provider.dispose();
+  });
 
   test('removes segments and related state on deletion event', () {
     final provider = CaptureProvider();
@@ -162,6 +754,116 @@ void main() {
     expect(provider.suggestionsBySegmentId.containsKey('a'), false);
     expect(provider.taggingSegmentIds.contains('a'), false);
     expect(provider.hasTranscripts, true);
+  });
+
+  test('first transcript refreshes conversation location without a foreground task', () async {
+    final locationCapture = _CountingConversationLocationCapture();
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+      inProgressConversationLoader: () async {},
+    );
+
+    provider.onSegmentReceived([_segment('first', 'hello')]);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(locationCapture.calls, 1);
+    provider.dispose();
+  });
+
+  test('streamDeviceRecording does not wait for location capture', () async {
+    final locationCapture = _HangingConversationLocationCapture();
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture);
+
+    await provider.streamDeviceRecording().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
+        );
+    expect(locationCapture.calls, 1);
+    locationCapture.complete();
+    provider.dispose();
+  });
+
+  test('phone batch starts native audio before waiting for location metadata', () async {
+    await SharedPreferencesUtil().remove('phoneBatchGeolocation');
+    final locationCapture = _HangingConversationLocationCapture();
+    final micRecorder = _FakeBatchMicRecorder();
+    final provider = CaptureProvider(
+      conversationLocationCapture: locationCapture,
+      microphonePermissionRequester: () async => true,
+      phoneMicBatchRecorder: micRecorder,
+    );
+
+    await provider.startPhoneMicBatchForTesting().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('phone batch start blocked on location capture'),
+        );
+
+    expect(micRecorder.startBatchCalls, 1);
+    expect(provider.recordingState, RecordingState.record);
+    expect(locationCapture.calls, 1);
+    var preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('phoneBatchGeolocation'), isNull);
+
+    locationCapture.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('phoneBatchGeolocation'), isNotNull);
+    provider.dispose();
+  });
+
+  test('homepage no-device streamDeviceRecording is check-only', () async {
+    final locationCapture = _CountingConversationLocationCapture();
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-check-only',
+    );
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture, recordingTelemetry: telemetry);
+
+    await provider.streamDeviceRecording();
+    expect(locationCapture.calls, 1);
+    expect(locationCapture.promptIfDeniedArgs, [false]);
+    expect(events, isEmpty, reason: 'a no-device homepage entry must not emit Recording Start Failed');
+    expect(telemetry.recordingId, isNull);
+    provider.dispose();
+  });
+
+  test('failed device streamDeviceRecording emits capture_unavailable', () async {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-device-fail',
+    );
+    // Batch mode skips the transcription socket, so this stays hermetic: a
+    // device is requested, but no BLE connection exists, so start cannot
+    // reach deviceRecord.
+    SharedPreferencesUtil().batchModeEnabled = true;
+    addTearDown(() => SharedPreferencesUtil().batchModeEnabled = false);
+    final provider = CaptureProvider(recordingTelemetry: telemetry);
+
+    await provider.streamDeviceRecording(
+      device: _device(id: 'omi-1', type: DeviceType.omi),
+    );
+
+    expect(events.map((event) => event.name),
+        [RecordingLifecycleTelemetry.requestedEvent, RecordingLifecycleTelemetry.startFailedEvent]);
+    expect(events.last.properties['failure_class'], 'capture_unavailable');
+    expect(events.last.properties['recording_id'], 'recording-device-fail');
+    provider.dispose();
+  });
+
+  test('active capture identity survives deletion of the first segment', () {
+    final provider = CaptureProvider();
+    provider.testSessionStartSeconds = 12345;
+    provider.segments = [_segment('first', 'one'), _segment('second', 'two')];
+
+    final captureIdentity = provider.activeCaptureSessionId;
+    provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['first']));
+
+    expect(captureIdentity, 'live-12345');
+    expect(provider.activeCaptureSessionId, captureIdentity);
+    expect(provider.segments.single.id, 'second');
   });
 
   group('metricsNotifyEnabled', () {
@@ -313,18 +1015,43 @@ void main() {
   });
 
   group('SpeakerLabelSuggestionEvent', () {
-    test('ignores event when personId is empty', () {
+    test('retains a name-only suggestion without assigning a person', () {
       final provider = CaptureProvider();
       provider.segments = [_segment('seg1', 'hello')];
 
-      // Empty personId: backend didn't assign, nothing happens
+      // Wire contract: person_id_for_client can withhold assignment while supplying a name.
       final event = SpeakerLabelSuggestionEvent(speakerId: 0, personId: '', personName: 'Alice', segmentId: 'seg1');
 
       provider.onMessageEventReceived(event);
 
-      // Nothing stored, nothing applied
-      expect(provider.suggestionsBySegmentId.containsKey('seg1'), false);
+      expect(provider.suggestionsBySegmentId['seg1']?.personName, 'Alice');
       expect(provider.segments.first.personId, isNull);
+    });
+
+    test('replacing a near match removes the old chip across segments of the same speaker', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg1', 'hello'), _segment('seg2', 'later')];
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Sam', segmentId: 'seg2', suggestedPersonId: 'sam'));
+      expect(provider.suggestionsBySegmentId.keys, ['seg2']);
+      expect(provider.suggestionsBySegmentId['seg2']?.suggestedPersonId, 'sam');
+      expect(provider.segments.every((segment) => segment.personId == null), isTrue);
+    });
+
+    test('a wire retraction clears every stale chip for that speaker even after its segment leaves', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg1', 'hello')];
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
+      provider.suggestionsBySegmentId['other'] = SpeakerLabelSuggestionEvent(
+          speakerId: 1, personId: '', personName: 'Other', segmentId: 'other', suggestedPersonId: 'other');
+      provider.segments = [];
+      final retraction = SpeakerLabelSuggestionEvent.fromJson(
+          {'speaker_id': 0, 'person_id': '', 'person_name': '', 'segment_id': 'new', 'retracted': true});
+      provider.onMessageEventReceived(retraction);
+      expect(provider.suggestionsBySegmentId.keys, ['other']);
     });
 
     test('auto-applies assignment when personId is provided', () {
@@ -488,6 +1215,111 @@ void main() {
 
       // Should trigger a new call
       expect(mockExternalActions.setPeopleCallCount, 2);
+    });
+
+    test('a failed refresh from unknown-person segments reschedules without an unhandled zone error', () async {
+      final sentinel = StateError('people-refresh-boom');
+      final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
+      final actions = MockCaptureExternalActions();
+      final provider = _seamedProvider(actions);
+      provider.segments = [_segmentWithPerson('seed', null)];
+
+      final outcome = await _runInGuardedZone(() async {
+        final first = Completer<void>();
+        actions.setSetPeopleCompleter(first);
+        provider.onSegmentReceived([_segmentWithPerson('seg-a', 'seg-person-a')]);
+        expect(actions.setPeopleCallCount, 1);
+        provider.onSegmentReceived([_segmentWithPerson('seg-b', 'seg-person-b')]);
+        expect(actions.setPeopleCallCount, 1);
+        first.completeError(sentinel, deterministicStack);
+        await _flushEventQueue();
+        final second = Completer<void>();
+        actions.setSetPeopleCompleter(second);
+        provider.onSegmentReceived([_segmentWithPerson('seg-c', 'seg-person-c')]);
+        expect(actions.setPeopleCallCount, 2);
+        second.complete();
+        await _flushEventQueue();
+        provider.dispose();
+      });
+
+      expect(outcome.harnessError, isNull);
+      expect(outcome.unhandled, isEmpty);
+      expect(crashlytics.recordErrors, hasLength(1));
+      final args = crashlytics.recordErrors.single.arguments as Map<dynamic, dynamic>;
+      expect(args['exception'], 'capture_people_refresh_segments: StateError');
+      expect(args['fatal'], isFalse);
+      expect(args['stackTraceElements'], isNotEmpty);
+    });
+
+    test('a failed refresh from a speaker suggestion reschedules without an unhandled zone error', () async {
+      final sentinel = StateError('people-refresh-boom');
+      final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
+      final actions = MockCaptureExternalActions();
+      final provider = _seamedProvider(actions);
+      provider.segments = [
+        _segmentWithPerson('seg-a', null),
+        _segmentWithPerson('seg-b', null)..speakerId = 1,
+        _segmentWithPerson('seg-c', null)..speakerId = 2,
+      ];
+
+      final outcome = await _runInGuardedZone(() async {
+        final first = Completer<void>();
+        actions.setSetPeopleCompleter(first);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 0, personId: 'suggested-a', personName: 'A', segmentId: 'seg-a'));
+        expect(actions.setPeopleCallCount, 1);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 1, personId: 'suggested-b', personName: 'B', segmentId: 'seg-b'));
+        expect(actions.setPeopleCallCount, 1);
+        first.completeError(sentinel, deterministicStack);
+        await _flushEventQueue();
+        expect(crashlytics.recordErrors, hasLength(1));
+        final second = Completer<void>();
+        actions.setSetPeopleCompleter(second);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 2, personId: 'suggested-c', personName: 'C', segmentId: 'seg-c'));
+        expect(actions.setPeopleCallCount, 2);
+        second.complete();
+        await _flushEventQueue();
+        provider.dispose();
+      });
+
+      expect(outcome.harnessError, isNull);
+      expect(outcome.unhandled, isEmpty);
+      expect(crashlytics.recordErrors, hasLength(1));
+      final args = crashlytics.recordErrors.single.arguments as Map<dynamic, dynamic>;
+      expect(args['exception'], 'capture_people_refresh_suggestion: StateError');
+      expect(args['fatal'], isFalse);
+      expect(args['stackTraceElements'], isNotEmpty);
+    });
+
+    test('a suggestion joining a segment-owned refresh attaches no second error observer', () async {
+      final sentinel = StateError('people-refresh-boom');
+      final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
+      final actions = MockCaptureExternalActions();
+      final provider = _seamedProvider(actions);
+      provider.segments = [
+        _segmentWithPerson('seed', null),
+        _segmentWithPerson('seg-b', null)..speakerId = 1,
+      ];
+
+      final outcome = await _runInGuardedZone(() async {
+        final gate = Completer<void>();
+        actions.setSetPeopleCompleter(gate);
+        provider.onSegmentReceived([_segmentWithPerson('seg-a', 'seg-person-a')]);
+        expect(actions.setPeopleCallCount, 1);
+        provider.onMessageEventReceived(
+            SpeakerLabelSuggestionEvent(speakerId: 1, personId: 'suggested-b', personName: 'B', segmentId: 'seg-b'));
+        expect(actions.setPeopleCallCount, 1);
+        gate.completeError(sentinel, deterministicStack);
+        await _flushEventQueue();
+        provider.dispose();
+      });
+
+      expect(outcome.harnessError, isNull);
+      expect(outcome.unhandled, isEmpty);
+      expect(crashlytics.recordErrors, hasLength(1));
+      expect(crashlytics.recordErrors.single.arguments['exception'], 'capture_people_refresh_segments: StateError');
     });
   });
 
@@ -677,22 +1509,81 @@ void main() {
       provider.onClosed();
 
       expect(provider.recordingState, RecordingState.stop);
+      expect(provider.keepAliveScheduledForTesting, isFalse);
       provider.dispose();
     });
 
-    test('onConnected restores record from interrupted', () {
+    test('schedules reconnect only for an active device capture', () {
       final provider = CaptureProvider();
-      provider.onConnectionStateChanged(true);
-      provider.updateRecordingState(RecordingState.record);
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+      provider.updateRecordingState(RecordingState.deviceRecord);
 
       provider.onClosed();
+
+      expect(provider.keepAliveScheduledForTesting, isTrue);
+      provider.updateRecordingState(RecordingState.stop);
+      provider.onClosed();
+      expect(provider.keepAliveScheduledForTesting, isFalse);
+      provider.dispose();
+    });
+
+    test('does not reconnect after device capture stops while codec lookup is pending', () async {
+      final codec = Completer<BleAudioCodec>();
+      final provider = _CountingSocketCaptureProvider(audioCodecLoader: (_) => codec.future);
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+      provider.updateRecordingState(RecordingState.deviceRecord);
+
+      final reconnect = provider.reconnectActiveCaptureForTesting();
+      await Future<void>.delayed(Duration.zero);
+      provider.updateRecordingState(RecordingState.stop);
+      codec.complete(BleAudioCodec.opus);
+      await reconnect;
+
+      expect(provider.openCalls, 0);
+      provider.dispose();
+    });
+
+    test('system audio capture remains eligible for websocket reconnect', () async {
+      final provider = _CountingSocketCaptureProvider();
+      provider.updateRecordingState(RecordingState.systemAudioRecord);
+
+      await provider.reconnectActiveCaptureForTesting();
+
+      expect(provider.openCalls, 1);
+      provider.dispose();
+    });
+
+    test('onConnected restores record from interrupted', () async {
+      final mic = _FakeBatchMicRecorder()..emitRecordingOnStart = true;
+      final provider = CaptureProvider(
+        phoneMicRecorder: mic,
+        microphonePermissionRequester: () async => true,
+        openSocket: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async =>
+            null,
+      );
+      addTearDown(provider.dispose);
+      provider.onConnectionStateChanged(true);
+      await provider.streamRecording();
+      expect(provider.liveCaptureSource, 'phone');
+      expect(provider.recordingState, RecordingState.record);
+
+      provider.onClosed();
+      await provider.pendingSourceSwitch;
       expect(provider.recordingState, RecordingState.interrupted);
 
       provider.onConnected();
-
+      await provider.pendingSourceSwitch;
       expect(provider.recordingState, RecordingState.record);
-      provider.updateRecordingState(RecordingState.stop);
-      provider.dispose();
+      await provider.stopStreamRecording();
     });
 
     test('onConnected does not alter stop state', () {
@@ -932,6 +1823,21 @@ void main() {
       provider.dispose();
     });
 
+    test('keeps native Omi background audio disabled when Custom STT raw forwarding is off', () async {
+      await SharedPreferencesUtil().saveCustomSttConfig(
+        const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false),
+      );
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      final result = await provider.setBackgroundModeEnabled(true);
+
+      expect(result, isTrue);
+      expect(SharedPreferencesUtil().backgroundModeEnabled, isTrue);
+      expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
+      provider.dispose();
+    });
+
     test('enable preserves foreground-ready when foreground streaming is already active', () async {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
@@ -1018,6 +1924,52 @@ void main() {
     });
   });
 
+  group('unsupported Custom STT codec privacy recovery', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      await SharedPreferencesUtil().saveCustomSttConfig(
+        const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false),
+      );
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
+    });
+
+    tearDown(() async {
+      await SharedPreferencesUtil().saveCustomSttConfig(CustomSttConfig.defaultConfig);
+    });
+
+    test('disables native Omi audio and schedules a websocket retry', () {
+      fakeAsync((async) {
+        final provider = _NullSocketCaptureProvider();
+        provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+        provider.updateRecordingState(RecordingState.deviceRecord);
+        final timersBefore = async.pendingTimers.length;
+        var completed = false;
+
+        provider.changeAudioRecordProfile(audioCodec: BleAudioCodec.lc3FS1030).then((_) => completed = true);
+        async.flushMicrotasks();
+
+        expect(completed, isTrue);
+        expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
+        expect(async.pendingTimers.length, timersBefore + 1);
+        provider.dispose();
+      });
+    });
+
+    test('does not schedule a websocket retry when capture is idle', () {
+      fakeAsync((async) {
+        final provider = CaptureProvider();
+        final timersBefore = async.pendingTimers.length;
+
+        provider.changeAudioRecordProfile(audioCodec: BleAudioCodec.lc3FS1030);
+        async.flushMicrotasks();
+
+        expect(async.pendingTimers.length, timersBefore);
+        provider.dispose();
+      });
+    });
+  });
+
   group('stale reconciliation — hasNativeBleAudioRoute after device switch', () {
     test('switching from valid device to no device clears route', () {
       final provider = CaptureProvider();
@@ -1088,12 +2040,12 @@ void main() {
   // doesn't it stay off?", "Cv1 unmutes on disconnect/reconnect").      //
   // ------------------------------------------------------------------ //
   group('device mute persistence', () {
-    setUp(() {
-      SharedPreferencesUtil().deviceMuted = false;
+    setUp(() async {
+      await SharedPreferencesUtil().setCaptureMuted(false);
     });
 
-    test('constructor restores muted state when deviceMuted pref is set', () {
-      SharedPreferencesUtil().deviceMuted = true;
+    test('constructor restores the shared muted capture policy', () async {
+      await SharedPreferencesUtil().setCaptureMuted(true);
 
       final provider = CaptureProvider();
 
@@ -1103,8 +2055,8 @@ void main() {
       provider.dispose();
     });
 
-    test('constructor leaves recording unpaused when deviceMuted pref is unset', () {
-      SharedPreferencesUtil().deviceMuted = false;
+    test('constructor leaves recording unpaused when capture policy permits it', () async {
+      await SharedPreferencesUtil().setCaptureMuted(false);
 
       final provider = CaptureProvider();
 
@@ -1112,15 +2064,294 @@ void main() {
       provider.dispose();
     });
 
-    test('pauseDeviceRecording persists the mute to prefs', () async {
+    test('pauseDeviceRecording cannot confirm mute without a device connection', () async {
       final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      await expectLater(provider.pauseDeviceRecording(), throwsStateError);
+
+      expect(provider.isPaused, isFalse);
+      expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+      provider.dispose();
+    });
+
+    test('pauseDeviceRecording persists local mute after the pendant acknowledges', () async {
+      final written = <bool>[];
+      final provider = CaptureProvider(
+        deviceMuteWriter: (id, muted) async {
+          expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+          written.add(muted);
+        },
+      );
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
 
       await provider.pauseDeviceRecording();
 
+      expect(written, [true]);
+      expect(provider.isPaused, isTrue);
+      expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
+      provider.dispose();
+    });
+
+    test('reconnect restores paused UI from device mute state', () async {
+      await SharedPreferencesUtil().setCaptureMuted(false);
+      final provider = CaptureProvider();
+      expect(provider.isPaused, isFalse);
+
+      expect(await provider.applyReconnectMute(deviceMuted: true), isTrue);
       expect(provider.isPaused, isTrue);
       expect(SharedPreferencesUtil().deviceMuted, isTrue);
       provider.dispose();
+    });
+
+    test('reconnect stays paused when device mute is unknown and local mute is set', () async {
+      await SharedPreferencesUtil().setCaptureMuted(true);
+      final provider = CaptureProvider();
+      expect(await provider.applyReconnectMute(deviceMuted: null), isTrue);
+      expect(provider.isPaused, isTrue);
+      provider.dispose();
+    });
+
+    test('reconnect unpauses when the device reports unmuted', () async {
+      await SharedPreferencesUtil().setCaptureMuted(true);
+      final provider = CaptureProvider();
+      expect(provider.isPaused, isTrue);
+      expect(await provider.applyReconnectMute(deviceMuted: false), isFalse);
+      expect(provider.isPaused, isFalse);
+      expect(SharedPreferencesUtil().deviceMuted, isFalse);
+      provider.dispose();
+    });
+  });
+
+  // Regression coverage for issue #6311: before this change
+  // `transcriptServiceReady` was `_transcriptServiceReady && _isConnected`, so a
+  // transient ConnectivityService flicker (WiFi↔cellular handoff, brief DNS
+  // hiccup) flipped the header to "Recording, reconnecting" even while the
+  // transcript WebSocket was alive and segments were flowing. The socket
+  // lifecycle is the authoritative signal; a connectivity change must never
+  // change transcript-service readiness.
+  group('transcriptServiceReady is socket-driven, not connectivity-driven (#6311)', () {
+    test('connectivity flicker does not toggle readiness of a ready socket', () {
+      final provider = CaptureProvider();
+
+      // Drive the provider into the socket-subscribed state (the scenario the
+      // old getter got wrong): onConnected mirrors the transcript WebSocket
+      // subscribing, which sets _transcriptServiceReady = true.
+      provider.onConnected();
+      expect(provider.transcriptServiceReady, isTrue);
+
+      // A connectivity flicker must not toggle readiness off. Before the fix
+      // this ANDed _isConnected=false into the getter and manufactured a false
+      // "Recording, reconnecting" over a healthy socket.
+      provider.onConnectionStateChanged(false);
+      expect(provider.transcriptServiceReady, isTrue, reason: 'ready socket must survive a connectivity flicker');
+
+      // And it must not depend on connectivity coming back either.
+      provider.onConnectionStateChanged(true);
+      expect(provider.transcriptServiceReady, isTrue);
+
+      // A socket close is the only thing that should end readiness.
+      provider.onClosed();
+      expect(provider.transcriptServiceReady, isFalse, reason: 'socket close must end transcript readiness');
+      provider.dispose();
+    });
+  });
+
+  // Regression coverage for issue #11305: the keep-alive reconnect callback is
+  // async, so a tick could call _initiateWebsocket() again while the previous
+  // attempt was still connecting. The capture log showed reconnect attempts 24
+  // and 25 overlapping (12s apart, both reaching service-ready), which opens
+  // duplicate /v4/listen sessions and races the controller state.
+  group('no duplicate transcription connection attempt (#11305)', () {
+    Future<void> settle() async {
+      for (var i = 0; i < 50; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    setUp(() {
+      // Batch mode short-circuits the socket entirely; an earlier test leaves
+      // the shared preference on.
+      SharedPreferencesUtil().batchModeEnabled = false;
+    });
+
+    Future<void> startAttempt(
+      _GatedSocketCaptureProvider provider, {
+      BleAudioCodec codec = BleAudioCodec.pcm16,
+      int sampleRate = 16000,
+    }) =>
+        provider.changeAudioRecordProfile(
+          audioCodec: codec,
+          sampleRate: sampleRate,
+          source: ConversationSource.phone.name,
+        );
+
+    test('drops a reconnect attempt while one is still in flight', () async {
+      final provider = _GatedSocketCaptureProvider();
+
+      final first = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 1, reason: 'the first attempt must reach the socket service');
+
+      // Second attempt arrives before the first completes: previously it opened
+      // a second socket, now it is dropped.
+      await startAttempt(provider);
+      expect(provider.openCalls, 1, reason: 'an overlapping attempt must not open a second socket');
+
+      provider.release(0);
+      await first;
+
+      // The guard clears once the attempt finishes, so reconnects still work.
+      final next = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 2, reason: 'a later attempt must connect again');
+
+      provider.releaseAll();
+      await next;
+      provider.dispose();
+    });
+
+    test('does not drop a forced attempt', () async {
+      final provider = _GatedSocketCaptureProvider();
+
+      final first = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 1);
+
+      // Settings/profile changes stop the current socket and must replace it
+      // even while an attempt is in flight.
+      provider.updateRecordingState(RecordingState.record);
+      final forced = provider.onTranscriptionSettingsChanged();
+      await settle();
+      expect(provider.openCalls, 2, reason: 'a forced reconnect must not be gated');
+
+      provider.releaseAll();
+      await first;
+      await forced;
+      provider.dispose();
+    });
+
+    test('does not install a stale socket after a newer forced attempt', () async {
+      final provider = _GatedSocketCaptureProvider();
+      provider.returnSockets = true;
+
+      final first = startAttempt(provider);
+      await settle();
+      provider.updateRecordingState(RecordingState.record);
+      final forced = provider.onTranscriptionSettingsChanged();
+      await settle();
+      expect(provider.openCalls, 2);
+
+      provider.release(1);
+      try {
+        await forced;
+      } catch (error) {
+        expect(error, isA<StateError>());
+      }
+      expect(provider.lastSubscribedId, 1);
+
+      provider.release(0);
+      await first;
+      expect(provider.lastSubscribedId, 1);
+      provider.dispose();
+    });
+
+    test('stays gated while a forced attempt with the same parameters runs', () async {
+      final provider = _GatedSocketCaptureProvider();
+
+      final first = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 1);
+
+      // Same parameters as the attempt in flight, so both share a guard key.
+      provider.updateRecordingState(RecordingState.record);
+      final forced = provider.onTranscriptionSettingsChanged();
+      await settle();
+      expect(provider.openCalls, 2);
+
+      // The first attempt finishing must not ungate the forced one still
+      // connecting, or the next keep-alive tick opens a third socket.
+      provider.release(0);
+      await first;
+
+      await startAttempt(provider);
+      expect(provider.openCalls, 2, reason: 'a repeat must stay gated while the forced attempt is in flight');
+
+      provider.releaseAll();
+      await forced;
+      provider.dispose();
+    });
+
+    test('does not drop an attempt with different parameters', () async {
+      final provider = _GatedSocketCaptureProvider();
+
+      final first = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 1);
+
+      // A different codec is a new intent (e.g. the user starts phone mic while
+      // a device reconnect is in flight), not the same attempt repeated.
+      final other = startAttempt(provider, codec: BleAudioCodec.opus, sampleRate: 16000);
+      await settle();
+      expect(provider.openCalls, 2, reason: 'a differently configured attempt must not be gated');
+
+      provider.releaseAll();
+      await first;
+      await other;
+      provider.dispose();
+    });
+  });
+
+  group('in-progress conversation poll cycle', () {
+    // The socket starts this cycle on every connect. Restarting an already
+    // running cycle put its attempt counter back to zero, so a connection that
+    // reconnects more often than the give-up window kept the app polling
+    // GET /v1/conversations?...&statuses=in_progress indefinitely instead of
+    // ever reaching the cap.
+    test('a reconnect mid-cycle does not reset the attempt counter', () {
+      fakeAsync((async) {
+        final provider = CaptureProvider(inProgressConversationLoader: () async => []);
+        provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+        provider.updateRecordingState(RecordingState.deviceRecord);
+
+        provider.startInProgressConversationRefreshForTesting();
+        async.elapse(const Duration(seconds: 10));
+        async.flushMicrotasks();
+
+        final attemptsBeforeReconnect = provider.inProgressConversationRefreshAttemptsForTesting;
+        expect(attemptsBeforeReconnect, greaterThan(0));
+
+        // Simulate a socket reconnect landing while the cycle is still running.
+        provider.startInProgressConversationRefreshForTesting();
+
+        expect(
+          provider.inProgressConversationRefreshAttemptsForTesting,
+          attemptsBeforeReconnect,
+          reason: 'a reconnect must not restart an already-running poll cycle',
+        );
+
+        provider.dispose();
+      });
+    });
+
+    test('the cycle self-terminates at its cap when nothing interrupts it', () {
+      fakeAsync((async) {
+        var loadCalls = 0;
+        final provider = CaptureProvider(inProgressConversationLoader: () async {
+          loadCalls++;
+        });
+        provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+        provider.updateRecordingState(RecordingState.deviceRecord);
+
+        provider.startInProgressConversationRefreshForTesting();
+        async.elapse(const Duration(seconds: 90));
+        async.flushMicrotasks();
+
+        expect(provider.inProgressConversationRefreshActiveForTesting, isFalse);
+        expect(loadCalls, 30);
+
+        provider.dispose();
+      });
     });
   });
 }

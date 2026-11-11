@@ -89,7 +89,7 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
 
   override func tearDown() async throws {
     let cleanupAttempt = auth.beginSessionAttempt()
-    _ = await auth.commitSignedOutSession(attempt: cleanupAttempt, phase: .signedOut)
+    _ = try? await auth.commitSignedOutSession(attempt: cleanupAttempt, phase: .signedOut)
     auth.tokenStorageHooks = .live
     auth.tokenRefreshHooks = .live
     auth = nil
@@ -100,6 +100,43 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     }
     createdOwnerIDs = []
     AuthState.shared.transition(to: originalPhase)
+  }
+
+  /// **Fence reads never wait on an in-flight commit.** The shipped deadlock: a background auth
+  /// commit held the fence while its defaults write synchronously waited on a main-queue
+  /// notification observer — and the main thread was itself inside `current()` waiting for the
+  /// fence (every `APIClient.buildHeaders` reads it). Frozen sign-in screen, no clickable
+  /// buttons (#11374 follow-up). Reads are lock-free; only begin/commit serialize.
+  func testReadersCompleteWhileACommitHoldsTheFence() {
+    let fence = AuthSessionAttemptFence()
+    let attempt = fence.begin()
+    let commitEntered = DispatchSemaphore(value: 0)
+    let releaseCommit = DispatchSemaphore(value: 0)
+    let commitDone = expectation(description: "commit finished")
+
+    DispatchQueue.global().async {
+      _ = fence.commitIfCurrent(attempt) {
+        commitEntered.signal()
+        releaseCommit.wait()
+        return true
+      }
+      commitDone.fulfill()
+    }
+    commitEntered.wait()
+
+    // Pre-fix these two calls hang forever; the test's own timeout is the tripwire.
+    XCTAssertEqual(fence.current(), attempt)
+    XCTAssertTrue(fence.isCurrent(attempt))
+
+    releaseCommit.signal()
+    wait(for: [commitDone], timeout: 5)
+
+    // Serialisation between begin and commit is intact: nothing newer began mid-commit,
+    // and a subsequent begin still supersedes.
+    XCTAssertTrue(fence.isCurrent(attempt))
+    let newer = fence.begin()
+    XCTAssertFalse(fence.isCurrent(attempt))
+    XCTAssertTrue(fence.isCurrent(newer))
   }
 
   func testNewSignInTokensSurviveSupersededSignOutWaitingOnOwnerTransition() async throws {
@@ -122,7 +159,7 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
 
     let signOutAttempt = auth.beginSessionAttempt()
     let signOutTask = Task {
-      await auth.commitSignedOutSession(attempt: signOutAttempt, phase: .signedOut)
+      try await auth.commitSignedOutSession(attempt: signOutAttempt, phase: .signedOut)
     }
     await EffectiveOwnerTransitionFence.shared.waitUntilTransitionIsPending()
 
@@ -136,7 +173,7 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
 
     await gate.release()
     try await leaseTask.value
-    let staleSignOutCommitted = await signOutTask.value
+    let staleSignOutCommitted = try await signOutTask.value
     let ownerBCommitted = try await signInTask.value
     XCTAssertFalse(staleSignOutCommitted)
     XCTAssertTrue(ownerBCommitted)
@@ -145,6 +182,57 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authTokenUserId), ownerB)
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "id-\(ownerB)")
     XCTAssertEqual(AuthState.shared.sessionPhase, .authenticated)
+  }
+
+  func testLightSessionInvalidationPreservesOwnerWithoutClearingAuthUserId() async throws {
+    let ownerA = makeOwnerID("light-invalidate-a")
+    let seedAttempt = auth.beginSessionAttempt()
+    let seededOwnerA = try await auth.commitSignedInSession(
+      tokens: tokens(for: ownerA),
+      email: "a@example.test",
+      attempt: seedAttempt)
+    XCTAssertTrue(seededOwnerA)
+
+    let invalidateAttempt = auth.beginSessionAttempt()
+    let invalidated = try await auth.commitLightInvalidatedSession(attempt: invalidateAttempt)
+    XCTAssertTrue(invalidated)
+
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), ownerA)
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserEmail), "a@example.test")
+    XCTAssertNil(UserDefaults.standard.string(forKey: .authIdToken))
+    XCTAssertFalse(UserDefaults.standard.bool(forKey: .authIsSignedIn))
+    XCTAssertEqual(AuthState.shared.sessionPhase, .needsReauth)
+    XCTAssertEqual(RuntimeOwnerIdentity.currentOwnerId(), ownerA)
+  }
+
+  func testStoragePreparationFailureLeavesPreviousCredentialGenerationIntact() async throws {
+    enum PreparationFailure: Error { case injected }
+
+    let ownerA = makeOwnerID("failed-signout-a")
+    let seedAttempt = auth.beginSessionAttempt()
+    let seededOwnerA = try await auth.commitSignedInSession(
+      tokens: tokens(for: ownerA),
+      email: "a@example.test",
+      attempt: seedAttempt)
+    XCTAssertTrue(seededOwnerA)
+    let phaseBeforeSignOut = AuthState.shared.sessionPhase
+
+    let signOutAttempt = auth.beginSessionAttempt()
+    do {
+      _ = try await auth.commitSignedOutSession(
+        attempt: signOutAttempt,
+        phase: .signedOut,
+        prepareLocalStorageTransition: { _, _ in throw PreparationFailure.injected })
+      XCTFail("Storage preparation failure must be surfaced")
+    } catch PreparationFailure.injected {
+      // Expected: the transition closure must not clear credentials or owner state.
+    }
+
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), ownerA)
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authTokenUserId), ownerA)
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "id-\(ownerA)")
+    XCTAssertTrue(UserDefaults.standard.bool(forKey: .authIsSignedIn))
+    XCTAssertEqual(AuthState.shared.sessionPhase, phaseBeforeSignOut)
   }
 
   func testReplacementCredentialsPublishAtomicallyWithTheirOwner() async throws {
@@ -223,13 +311,13 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
 
     let signOutAttempt = auth.beginSessionAttempt()
     let signOutTask = Task {
-      await auth.commitSignedOutSession(attempt: signOutAttempt, phase: .signedOut)
+      try await auth.commitSignedOutSession(attempt: signOutAttempt, phase: .signedOut)
     }
 
     await gate.release()
     try await leaseTask.value
     let staleRestoreCommitted = await restoreTask.value
-    let signOutCommitted = await signOutTask.value
+    let signOutCommitted = try await signOutTask.value
     XCTAssertFalse(staleRestoreCommitted)
     XCTAssertTrue(signOutCommitted)
 
@@ -264,7 +352,7 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     await responseGate.waitUntilReached()
 
     let signOutAttempt = auth.beginSessionAttempt()
-    let signedOut = await auth.commitSignedOutSession(
+    let signedOut = try await auth.commitSignedOutSession(
       attempt: signOutAttempt,
       phase: .signedOut)
     XCTAssertTrue(signedOut)

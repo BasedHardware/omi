@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-request-input-rejection-escapes-as-server-fault",
+  "violated_contract": "A route owns the classification of its own request input. When a library or an upstream provider rejects something the caller supplied -- a media type with no decoder, an extension outside a vendor's accepted set -- that rejection is a bad request, and the route must answer 4xx. Letting the library's or provider's exception propagate turns ordinary user input into a 5xx: the client can say nothing useful to the user, the failure is indistinguishable from a real outage in serving metrics, and every retry re-pages.",
+  "canonical_prevention": "Catch the narrow, input-caused exception types at the point where the unprocessable input is identified, convert them to one typed domain error, and map that error to an explicit 4xx at the route boundary with a detail the client can show. Catch only the input-caused types -- transport, disk and quota failures must still surface as 5xx, because those are server faults. A regression test drives the real route over HTTP with the offending input and asserts the status code the client receives.",
+  "canonical_prevention_artifact": [
+    "backend/utils/other/chat_file.py",
+    "backend/routers/chat.py",
+    "backend/tests/unit/test_chat_file_upload_unsupported.py"
+  ],
+  "evidence_prs": [
+    11853
+  ],
+  "scope_hints": [
+    "backend/routers/**"
+  ],
+  "status": "open"
+}

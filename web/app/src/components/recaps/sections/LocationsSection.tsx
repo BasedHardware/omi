@@ -1,11 +1,11 @@
 'use client';
 
 import { MapPin } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { cn } from '@/lib/utils';
 import type { LocationPin } from '@/types/recap';
 
-// Dynamically import the map component to avoid SSR issues
+// Code-split the map preview out of the recap bundle
 const LocationMap = dynamic(() => import('./LocationMap'), {
   ssr: false,
   loading: () => (

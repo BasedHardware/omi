@@ -3,10 +3,12 @@
 import asyncio
 import importlib
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from fastapi.websockets import WebSocketDisconnect
 from unittest.mock import patch
 
 import utils.async_tasks as async_tasks_mod
@@ -387,6 +389,39 @@ class TestSuperviseTasks:
             )
             # finite completes, then receive completes -> disconnect
             assert result.reason == "disconnect"
+
+        asyncio.run(_run())
+
+    def test_same_round_disconnect_wins_over_bg_task_observing_it(self):
+        """A bg writer that sees the same client disconnect must not report a crash.
+
+        `asyncio.wait` returns a set, so scanning it in iteration order made the
+        classification depend on hash order alone; repeat the round so a pre-fix
+        supervisor cannot pass on luck.
+        """
+
+        async def _run():
+            for _ in range(25):
+
+                async def receive():
+                    return None
+
+                async def bg():
+                    raise WebSocketDisconnect()
+
+                recv = asyncio.create_task(receive(), name="receive")
+                bg_task = asyncio.create_task(bg(), name="heartbeat")
+                # Both land in the same asyncio.wait round.
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                assert recv.done() and bg_task.done()
+
+                result = await supervise_tasks(
+                    receive_task=recv,
+                    bg_tasks=[bg_task],
+                    label="test",
+                )
+                assert result.reason == "disconnect", result
 
         asyncio.run(_run())
 
@@ -929,5 +964,121 @@ class TestUtilityBoundaries:
             end_of_first_chunk = max(idx for idx, (op, i) in enumerate(call_order) if op == 'end' and i < 2)
             start_of_second_chunk = min(idx for idx, (op, i) in enumerate(call_order) if op == 'start' and i >= 2)
             assert end_of_first_chunk < start_of_second_chunk
+
+        asyncio.run(_run())
+
+
+class TestDrainTasksDeadline:
+    def test_deadline_clamps_first_wait_and_ack(self):
+        async def _run():
+            release = asyncio.Event()
+            waits: list = []
+            real_wait = asyncio.wait
+
+            async def spy(tasks, **kwargs):
+                waits.append(kwargs.get('timeout'))
+                return await real_wait(tasks, **kwargs)
+
+            async def stubborn():
+                try:
+                    await asyncio.sleep(999)
+                except asyncio.CancelledError:
+                    await release.wait()
+                    raise
+
+            task = asyncio.create_task(stubborn(), name="test:stubborn")
+            await asyncio.sleep(0)
+            try:
+                with patch.object(asyncio, 'wait', spy):
+                    force = await drain_tasks(
+                        [task],
+                        timeout=30.0,
+                        label="deadline",
+                        cancel=False,
+                        deadline=time.monotonic() + 0.05,
+                    )
+                assert force == 1
+                assert waits[0] == pytest.approx(0.05, abs=0.03)
+                assert waits[1] <= 0.05
+            finally:
+                task.cancel()
+                release.set()
+                await asyncio.gather(task, return_exceptions=True)
+            assert task.cancelled()
+
+        asyncio.run(_run())
+
+    def test_expired_deadline_cancels_without_ack_wait(self):
+        async def _run():
+            release = asyncio.Event()
+            waits: list = []
+            real_wait = asyncio.wait
+
+            async def spy(tasks, **kwargs):
+                waits.append(kwargs.get('timeout'))
+                return await real_wait(tasks, **kwargs)
+
+            async def stubborn():
+                try:
+                    await asyncio.sleep(999)
+                except asyncio.CancelledError:
+                    await release.wait()
+                    raise
+
+            task = asyncio.create_task(stubborn(), name="test:expired")
+            await asyncio.sleep(0)
+            try:
+                with patch.object(asyncio, 'wait', spy):
+                    force = await drain_tasks(
+                        [task],
+                        timeout=30.0,
+                        label="expired",
+                        cancel=False,
+                        deadline=time.monotonic() - 1.0,
+                    )
+                assert force == 1
+                assert waits[0] == 0.0
+                assert waits[1] == 0.0
+            finally:
+                task.cancel()
+                release.set()
+                await asyncio.gather(task, return_exceptions=True)
+            assert task.cancelled()
+
+        asyncio.run(_run())
+
+    def test_no_deadline_keeps_legacy_waits(self):
+        async def _run():
+            release = asyncio.Event()
+            waits: list = []
+            real_wait = asyncio.wait
+
+            async def spy(tasks, **kwargs):
+                waits.append(kwargs.get('timeout'))
+                return await real_wait(tasks, **kwargs)
+
+            async def stubborn():
+                try:
+                    await asyncio.sleep(999)
+                except asyncio.CancelledError:
+                    await release.wait()
+                    raise
+
+            task = asyncio.create_task(stubborn(), name="test:legacy")
+            await asyncio.sleep(0)
+            try:
+                with patch.object(asyncio, 'wait', spy):
+                    drain = asyncio.create_task(drain_tasks([task], timeout=0.05, label="legacy", cancel=False))
+                    await asyncio.sleep(0.15)
+                    release.set()
+                    force = await drain
+                assert force == 1
+                assert waits[0] == 0.05
+                assert waits[1] == 5.0
+            finally:
+                task.cancel()
+                release.set()
+                await asyncio.gather(task, return_exceptions=True)
+            assert task.cancelled()
 
         asyncio.run(_run())

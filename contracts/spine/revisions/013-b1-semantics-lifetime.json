@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/b1_surface_contract.dart",
+  "owner": "B1",
+  "before": "e881a16f4a2d92d3f62685c16bf50966f60ff62a2fc55de375e061003ac69c86",
+  "after": "af298ea72b1aa28f5a013c43c6ef755a82a4af0caaacd45e818f6201797b2317",
+  "reason": "Spine turn7 reproduces Flutter3.44.5 invariant checking before addTearDown. Release the handle in finally before returning to the binding; preserve all assertions, with no extra pump or delay."
+}

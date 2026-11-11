@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-backend-route-regression-unpaged",
+  "violated_contract": "A 5xx regression concentrated on one backend route must page even when the service-wide 5xx ratio stays flat. Cloud Run's platform request metrics carry no route label, so a route-level failure — including platform-generated 504s that never produce an application ERROR log — hides inside the service aggregate until a user-facing symptom surfaces elsewhere.",
+  "canonical_prevention": "Provision a Cloud Logging counter over backend request logs labelled by method and a generic path family — optional version plus up to three complete lowercase segments, stopping at the first invalid segment — and page on every non-empty family above a sustained threshold chosen from measured incident and chronic rates. Shape-based normalization excludes mixed-case and digit-bearing IDs, but lowercase slugs and all-letter IDs remain a cardinality limitation. Reconcile without writes when metric filter/extractors and policy match; preserve the condition resource name when updating so unchanged deploys do not restart dwell. Provision from the deploy path without blocking successful deployment, while visibly reporting failure.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_ensure_backend_route_5xx_alert.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/monitoring/backend_route_5xx_metric.json",
+    ".github/monitoring/backend_route_5xx_policy.json",
+    ".github/scripts/ensure_backend_route_5xx_alert.py",
+    ".github/scripts/test_ensure_backend_route_5xx_alert.py",
+    ".github/workflows/gcp_backend.yml",
+    "backend/docs/runbooks/backend-route-5xx.md"
+  ],
+  "status": "open"
+}

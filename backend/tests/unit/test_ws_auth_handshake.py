@@ -15,6 +15,7 @@ leaks to later test files. See ``backend/docs/test_isolation.md`` and DECISIONS 
 
 import asyncio
 import importlib
+import os
 import sys
 import types
 import unittest
@@ -91,12 +92,22 @@ def _build_fakes():
     database_redis_stub.try_acquire_listen_lock = MagicMock(return_value=True)
     database_redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
+    directory_pkg = types.ModuleType("database.directory")
+    directory_pkg.__path__ = []
+    directory_router_stub = types.ModuleType("database.directory.router")
+    directory_router_stub.routing_active = lambda: False
+    directory_router_stub.cached_plane = lambda _uid: 'firestore'
+    directory_router_stub.DirectoryRoutingUnavailable = RuntimeError
+
     users_stub = types.ModuleType("database.users")
     users_stub.record_user_platform = MagicMock()
     users_stub.record_client_device = MagicMock()
+    users_stub.get_user_deletion_wipe_status = MagicMock(return_value=None)
 
     fakes = {
         "database": database_pkg,
+        "database.directory": directory_pkg,
+        "database.directory.router": directory_router_stub,
         "utils": utils_pkg,
         "utils.other": utils_other_pkg,
         "firebase_admin": firebase_admin_stub,
@@ -164,6 +175,19 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
             with self.client.websocket_connect("/ws-listen"):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
+
+    def test_critical_executor_saturation_sends_close_1013(self):
+        """Overloaded auth capacity tells clients to retry, rather than misreporting bad credentials."""
+        endpoints = sys.modules['utils.other.endpoints']
+        with patch.object(
+            endpoints,
+            'run_blocking',
+            side_effect=endpoints.ExecutorSaturatedError('critical executor is saturated'),
+        ):
+            with self.assertRaises(WebSocketDisconnect) as ctx:
+                with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer valid_token"}):
+                    self.fail("Expected overload close frame")
+        self.assertEqual(ctx.exception.code, 1013)
 
     @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('bad token'))
     def test_invalid_token_sends_close_1008(self, mock_verify):

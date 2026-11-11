@@ -4,53 +4,78 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+/// What a settled BYOK key set owes the backend.
+///
+/// The key fields are `SecureField`s bound straight to `@AppStorage`, so the
+/// binding is written on *every character*. Reconciling on each of those writes
+/// pinged provider auth endpoints with a half-typed key and flapped the
+/// backend free-plan flag once per keystroke. Deciding the action from the
+/// settled key set — separately from performing it — is what makes that policy
+/// testable without a network.
+enum BYOKReconciliation {
+  enum Action: Equatable {
+    /// Every key is present: prove them against the providers, then flip the
+    /// free plan on (or back off if a provider rejects one).
+    case validateAndActivate
+    /// The free plan cannot be active with a partial key set.
+    case deactivate
+    /// Nothing was ever entered and nothing was ever reconciled — opening the
+    /// pane is not a reason to touch the network.
+    case none
+  }
+
+  static func action(
+    forKeys keys: [String],
+    hasCheckedStatuses: Bool,
+    hasActivationError: Bool
+  ) -> Action {
+    let entered = keys.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    if entered.count == keys.count, !keys.isEmpty { return .validateAndActivate }
+    if entered.isEmpty, !hasCheckedStatuses, !hasActivationError { return .none }
+    return .deactivate
+  }
+}
+
 extension SettingsContentView {
   var developerKeysSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
       byokStatusBanner
 
-      developerKeyField(
-        provider: .openai,
-        title: "OpenAI API Key",
-        subtitle: "For GPT calls.",
-        settingId: "advanced.devkeys.openai",
-        value: $devOpenAIKey
-      )
+      settingsCard(settingId: "advanced.devkeys.llm") {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          Text("Language model")
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.primary)
+          Text("Choose a provider for supported memory and insight features. Desktop chat supports Anthropic keys.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+          Picker("LLM provider", selection: $devBYOKLLMProvider) {
+            ForEach(BYOKLLMProvider.allCases) { provider in
+              Text(provider.displayName).tag(provider.rawValue)
+            }
+          }
+          .pickerStyle(.menu)
+        }
+      }
 
       developerKeyField(
-        provider: .anthropic,
-        title: "Anthropic API Key",
-        subtitle: "For chat (Claude).",
-        settingId: "advanced.devkeys.anthropic",
-        value: $devAnthropicKey
-      )
-
-      developerKeyField(
-        provider: .gemini,
-        title: "Gemini API Key",
-        subtitle: "For proactive AI (memory, tasks, insights, focus).",
-        settingId: "advanced.devkeys.gemini",
-        value: $devGeminiKey
+        provider: selectedBYOKLLMProvider.provider,
+        title: "\(selectedBYOKLLMProvider.displayName) API Key",
+        subtitle: selectedBYOKLLMSubtitle,
+        settingId: "advanced.devkeys.llm-key",
+        value: selectedBYOKLLMKey
       )
 
       developerKeyField(
         provider: .deepgram,
         title: "Deepgram API Key",
-        subtitle: "For live transcription.",
+        subtitle: "Needed to use your own Deepgram key. Without it, transcription counts toward your Omi plan.",
         settingId: "advanced.devkeys.deepgram",
         value: $devDeepgramKey
       )
 
       if let byokActivationError {
-        settingsCard(settingId: "advanced.devkeys.error") {
-          HStack(spacing: OmiSpacing.sm) {
-            Image(systemName: "exclamationmark.triangle.fill")
-              .foregroundColor(OmiColors.warning)
-            Text(byokActivationError)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.warning)
-          }
-        }
+        byokWarningCard(byokActivationError, settingId: "advanced.devkeys.error")
       }
 
       if hasAnyBYOKKey {
@@ -60,7 +85,7 @@ extension SettingsContentView {
             Button(action: clearAllBYOKKeys) {
               Text("Clear All Custom Keys")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(.red)
+                .foregroundColor(Ink.errorRed)
             }
             .buttonStyle(.plain)
             Spacer()
@@ -68,39 +93,109 @@ extension SettingsContentView {
         }
       }
     }
-    .onChange(of: devOpenAIKey) { _, _ in refreshBYOKActivation() }
-    .onChange(of: devAnthropicKey) { _, _ in refreshBYOKActivation() }
-    .onChange(of: devGeminiKey) { _, _ in refreshBYOKActivation() }
-    .onChange(of: devDeepgramKey) { _, _ in refreshBYOKActivation() }
+    // One reconcile per settled key set, not one per keystroke. `.task(id:)`
+    // cancels the superseded run, so a key typed by hand reaches the providers
+    // once — and opening the pane with four saved keys finally fills in the
+    // per-provider badges instead of leaving them blank until the next edit.
+    .task(id: byokKeySetFingerprint) {
+      migrateLegacyBYOKSelection()
+      await refreshBYOKActivation()
+    }
+  }
+
+  /// Identity of the current key set for `.task(id:)` — a SHA-256 over the four
+  /// values, never the values themselves, so the view can compare key sets
+  /// without a secret sitting in a view-diff identity.
+  var byokKeySetFingerprint: String {
+    APIKeyService.byokFingerprint(
+      [devBYOKLLMProvider, selectedBYOKLLMKey.wrappedValue, devDeepgramKey].joined(separator: "\u{1}"))
+  }
+
+  var selectedBYOKLLMProvider: BYOKLLMProvider {
+    BYOKLLMProvider(rawValue: devBYOKLLMProvider)
+      ?? APIKeyService.selectedBYOKLLMProvider.flatMap { BYOKLLMProvider(rawValue: $0.rawValue) }
+      ?? .openrouter
+  }
+
+  func migrateLegacyBYOKSelection() {
+    guard BYOKLLMProvider(rawValue: devBYOKLLMProvider) == nil else { return }
+    devBYOKLLMProvider = selectedBYOKLLMProvider.rawValue
+  }
+
+  var selectedBYOKLLMKey: Binding<String> {
+    switch selectedBYOKLLMProvider {
+    case .openrouter: return $devOpenRouterKey
+    case .openai: return $devOpenAIKey
+    case .gemini: return $devGeminiKey
+    case .anthropic: return $devAnthropicKey
+    }
+  }
+
+  var selectedBYOKLLMSubtitle: String {
+    switch selectedBYOKLLMProvider {
+    case .openrouter: return "Routes supported models through your OpenRouter account."
+    case .openai: return "Uses your OpenAI API key directly."
+    case .gemini: return "Uses Gemini 2.5 Flash Lite directly."
+    case .anthropic: return "Uses your Anthropic API key directly."
+    }
+  }
+
+  func byokWarningCard(_ text: String, settingId: String) -> some View {
+    settingsCard(settingId: settingId) {
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundColor(SettingsInk.notice)
+        Text(text)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(SettingsInk.notice)
+      }
+    }
   }
 
   var hasAnyBYOKKey: Bool {
-    !devOpenAIKey.isEmpty || !devAnthropicKey.isEmpty || !devGeminiKey.isEmpty
+    !devOpenRouterKey.isEmpty || !devOpenAIKey.isEmpty || !devAnthropicKey.isEmpty || !devGeminiKey.isEmpty
       || !devDeepgramKey.isEmpty
   }
 
-  var hasAllBYOKKeys: Bool {
-    !devOpenAIKey.isEmpty && !devAnthropicKey.isEmpty && !devGeminiKey.isEmpty
-      && !devDeepgramKey.isEmpty
+  var hasActiveLLMByok: Bool {
+    APIKeyService.isByokActive
+  }
+
+  var byokStatusTitle: String {
+    hasActiveLLMByok ? "LLM BYOK active" : "Bring your own keys"
+  }
+
+  var byokUsageDescription: String {
+    "An LLM key covers supported AI features only. Desktop chat supports Anthropic keys; other LLM keys do not remove Omi's chat limit."
   }
 
   @ViewBuilder
   var byokStatusBanner: some View {
     settingsCard(settingId: "advanced.devkeys.info") {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
-        Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
-          .foregroundColor(hasAllBYOKKeys ? OmiColors.success : OmiColors.textTertiary)
+        Image(systemName: hasActiveLLMByok ? "checkmark.seal.fill" : "key.fill")
+          .foregroundColor(hasActiveLLMByok ? Ink.listeningGreen : Ink.secondary)
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
+          Text(byokStatusTitle)
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
+          Text(byokUsageDescription)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
           Text(
-            hasAllBYOKKeys
-              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
-              : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this Mac — we never store them on our servers."
+            "A validated Deepgram key is required to avoid Omi's transcription allowance. Without it, new synced conversations may be locked when that allowance runs out."
           )
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
+          Text(TranscriptionAllowancePresentation.statusText(userSubscription?.transcriptionAllowance))
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.primary)
+          Text("Adding Deepgram later does not unlock conversations already locked.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+          Text("Keys are saved on this Mac and sent with requests, never stored on Omi's servers.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
         }
         Spacer()
       }
@@ -109,65 +204,142 @@ extension SettingsContentView {
 
   func clearAllBYOKKeys() {
     devOpenAIKey = ""
+    devOpenRouterKey = ""
     devAnthropicKey = ""
     devGeminiKey = ""
     devDeepgramKey = ""
+    byokKeyStatuses = [:]
+    byokActivationError = nil
+    // Clearing the fields is an explicit "take me off the free plan", so say so
+    // now rather than leaving it to the debounced reconcile. Cleared within the
+    // debounce window the reconcile sees an untouched-looking form and — quite
+    // correctly — decides there is nothing to do, which would have left the
+    // backend believing BYOK was still active with no keys behind it. Both
+    // paths only ever deactivate, so the duplicate call is harmless.
     Task {
       try? await APIClient.shared.deactivateBYOK()
+      APIKeyService.persistEnrolledFingerprints([:])
+      await FloatingBarUsageLimiter.shared.fetchPlan()
     }
   }
 
-  func refreshBYOKActivation() {
-    Task {
-      if APIKeyService.isByokActive {
-        // Validate before flipping the backend flag — otherwise we'd put the
-        // user on the free plan with dead keys and every chat would 401.
-        let snapshot = APIKeyService.byokSnapshot.reduce(into: [BYOKProvider: String]()) {
-          acc, entry in acc[entry.key] = entry.value.key
-        }
-        let results = await BYOKValidator.validateAll(snapshot)
-        let allOk = results.allSatisfy {
-          if case .ok = $0.value { return true }
+  /// Debounce before a settled key set is spent on the network. Long enough to
+  /// swallow hand-typing, short enough that a paste feels immediate.
+  static let byokReconcileDebounce: Duration = .milliseconds(600)
+
+  @MainActor
+  func refreshBYOKActivation() async {
+    guard !selectedBYOKLLMKey.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      byokKeyStatuses = [:]
+      byokActivationError = nil
+      if hasAnyBYOKKey || !APIKeyService.enrolledFingerprints().isEmpty {
+        try? await APIClient.shared.deactivateBYOK()
+        APIKeyService.persistEnrolledFingerprints([:])
+        await FloatingBarUsageLimiter.shared.fetchPlan()
+      }
+      loadSubscriptionInfo()
+      return
+    }
+    let action = BYOKReconciliation.action(
+      forKeys: [selectedBYOKLLMKey.wrappedValue],
+      hasCheckedStatuses: !byokKeyStatuses.isEmpty,
+      hasActivationError: byokActivationError != nil
+    )
+    guard action != .none else { return }
+
+    do {
+      try await Task.sleep(for: Self.byokReconcileDebounce)
+    } catch {
+      return  // superseded by a newer key set
+    }
+
+    switch action {
+    case .none:
+      return
+
+    case .validateAndActivate:
+      let candidateSnapshot = APIKeyService.byokActivationCandidateSnapshot
+      // The badge state the UI has always been able to draw but never reached:
+      // say a provider is being checked while it is being checked.
+      var checking: [BYOKProvider: BYOKValidator.Status] = [:]
+      for provider in candidateSnapshot.keys { checking[provider] = .checking }
+      byokKeyStatuses = checking
+
+      // Validate before flipping the backend flag — otherwise we'd put the
+      // user on the free plan with dead keys and every chat would 401.
+      let snapshot = candidateSnapshot.reduce(into: [BYOKProvider: String]()) {
+        acc, entry in acc[entry.key] = entry.value.key
+      }
+      let results = await BYOKValidator.validateAll(snapshot)
+      guard !Task.isCancelled else { return }
+      let selectedLLMValid =
+        results[selectedBYOKLLMProvider.provider].map {
+          if case .ok = $0 { return true }
           return false
-        }
-        if allOk {
-          let fingerprints = APIKeyService.byokSnapshot.reduce(into: [String: String]()) {
-            acc, entry in acc[entry.key.rawValue] = entry.value.fingerprint
+        } ?? false
+      if selectedLLMValid {
+        let fingerprints = candidateSnapshot.reduce(into: [String: String]()) { acc, entry in
+          if let status = results[entry.key], case .ok = status {
+            acc[entry.key.rawValue] = entry.value.fingerprint
           }
-          try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+        }
+        do {
+          try await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+          APIKeyService.persistEnrolledFingerprints(fingerprints)
           await FloatingBarUsageLimiter.shared.fetchPlan()
           await MainActor.run {
             // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
-            // event — once all 4 BYOK keys validate, the user is on the free BYOK
-            // plan and shouldn't be locked out of capture/transcription anymore.
+            // event — once the selected LLM BYOK key validates, the user is on the
+            // free BYOK plan for supported AI features. Managed transcription
+            // still follows the server allowance without an enrolled Deepgram key.
             AppState.current?.isPaywalled = false
             byokKeyStatuses = results
             byokActivationError = nil
           }
-        } else {
-          let failed = results.filter {
-            if case .ok = $0.value { return false }
-            return true
-          }
-          let names = failed.keys.map(\.displayName).sorted().joined(separator: ", ")
-          try? await APIClient.shared.deactivateBYOK()
-          await FloatingBarUsageLimiter.shared.fetchPlan()
+        } catch {
           await MainActor.run {
             byokKeyStatuses = results
             byokActivationError =
-              "Rejected by provider: \(names). Free plan stays off until all 4 keys authenticate."
+              "Could not enroll keys with Omi. Free plan stays off until enrollment succeeds."
           }
         }
+      } else if BYOKValidator.isTransient(results[selectedBYOKLLMProvider.provider] ?? .failed("missing")) {
+        // The check produced no provider verdict (transport failure, provider
+        // 5xx/429, offline). The key may be perfectly good: keep the existing
+        // enrollment intact and say the check can be retried, instead of
+        // treating a non-answer as a rejection and tearing the free plan down.
+        await MainActor.run {
+          byokKeyStatuses = results
+          byokActivationError =
+            "Couldn't reach \(selectedBYOKLLMProvider.displayName) to verify your key. Your saved keys stay active — try again in a moment."
+        }
       } else {
+        let failed = results.filter {
+          if case .ok = $0.value { return false }
+          return true
+        }
+        let names = failed.keys.map(\.displayName).sorted().joined(separator: ", ")
         try? await APIClient.shared.deactivateBYOK()
+        APIKeyService.persistEnrolledFingerprints([:])
         await FloatingBarUsageLimiter.shared.fetchPlan()
         await MainActor.run {
-          byokKeyStatuses = [:]
-          byokActivationError = nil
+          byokKeyStatuses = results
+          byokActivationError =
+            "Rejected by provider: \(names). Free plan stays off until the selected language model authenticates."
         }
       }
-      await MainActor.run { loadSubscriptionInfo() }
+
+    case .deactivate:
+      try? await APIClient.shared.deactivateBYOK()
+      APIKeyService.persistEnrolledFingerprints([:])
+      await FloatingBarUsageLimiter.shared.fetchPlan()
+      await MainActor.run {
+        byokKeyStatuses = [:]
+        byokActivationError = nil
+      }
     }
+
+    await MainActor.run { loadSubscriptionInfo() }
   }
 
   func developerKeyField(
@@ -179,7 +351,7 @@ extension SettingsContentView {
         HStack {
           Text(title)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
           Spacer()
           if let provider, let status = byokKeyStatuses[provider] {
             byokStatusBadge(status)
@@ -187,14 +359,14 @@ extension SettingsContentView {
         }
         Text(subtitle)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         SecureField("Leave blank for default", text: value)
           .textFieldStyle(.roundedBorder)
           .scaledFont(size: OmiType.body)
         if let provider, case .failed(let msg) = byokKeyStatuses[provider] ?? .notChecked {
           Text(msg)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(SettingsInk.notice)
         }
       }
     }
@@ -208,12 +380,14 @@ extension SettingsContentView {
     case .checking:
       HStack(spacing: OmiSpacing.xxs) {
         ProgressView().controlSize(.mini)
-        Text("Checking…").scaledFont(size: OmiType.caption).foregroundColor(OmiColors.textTertiary)
+        Text("Checking…").scaledFont(size: OmiType.caption).foregroundColor(Ink.secondary)
       }
     case .ok:
-      Text("Valid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(OmiColors.success)
+      Text("Valid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(Ink.listeningGreen)
     case .failed:
-      Text("Invalid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(OmiColors.warning)
+      Text("Invalid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(SettingsInk.notice)
+    case .transient:
+      Text("Check failed").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(Ink.secondary)
     }
   }
 

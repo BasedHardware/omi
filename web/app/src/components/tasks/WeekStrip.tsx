@@ -28,16 +28,16 @@ export function WeekStrip({
 }: WeekStripProps) {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.currentTarget.classList.add('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.add('ring-2', 'ring-white');
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    e.currentTarget.classList.remove('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.remove('ring-2', 'ring-white');
   };
 
   const handleDrop = (e: React.DragEvent, date: Date) => {
     e.preventDefault();
-    e.currentTarget.classList.remove('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.remove('ring-2', 'ring-white');
     const taskId = e.dataTransfer.getData('taskId');
     if (taskId && onDropTask) {
       onDropTask(date, taskId);
@@ -65,16 +65,16 @@ export function WeekStrip({
               'flex flex-col items-center min-w-[72px] px-3 py-2 rounded-lg',
               'border transition-all duration-150',
               day.isToday
-                ? 'bg-purple-primary/10 border-purple-primary/50'
-                : 'bg-bg-tertiary border-transparent hover:bg-bg-quaternary hover:border-purple-primary/30',
-              isSelected && 'ring-2 ring-purple-primary'
+                ? 'bg-white/10 border-white/50'
+                : 'bg-bg-tertiary border-transparent hover:bg-bg-quaternary hover:border-white/30',
+              isSelected && 'ring-2 ring-white',
             )}
           >
             {/* Day name */}
             <span
               className={cn(
                 'text-[10px] font-medium uppercase tracking-wide',
-                day.isToday ? 'text-purple-primary' : 'text-text-quaternary'
+                day.isToday ? 'text-white' : 'text-text-quaternary',
               )}
             >
               {day.dayName}
@@ -84,7 +84,7 @@ export function WeekStrip({
             <span
               className={cn(
                 'text-lg font-semibold my-0.5',
-                day.isToday ? 'text-text-primary' : 'text-text-secondary'
+                day.isToday ? 'text-text-primary' : 'text-text-secondary',
               )}
             >
               {day.dayNumber}
@@ -101,7 +101,7 @@ export function WeekStrip({
                   <span
                     className={cn(
                       'px-1.5 py-0.5 rounded-full text-xs font-medium',
-                      'bg-purple-primary text-white'
+                      'bg-white text-black',
                     )}
                   >
                     {day.pending}

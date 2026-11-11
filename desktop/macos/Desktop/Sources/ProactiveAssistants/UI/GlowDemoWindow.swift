@@ -65,6 +65,10 @@ class GlowDemoWindow: NSWindow {
     self.titlebarAppearsTransparent = true
     self.isMovableByWindowBackground = true
     self.isReleasedWhenClosed = false
+    // The inside of a titled window is glass: transparent, light-pinned, and shadowed by its own
+    // frame (`WindowGlass.Kind.titled`). Without the pin the title bar and the traffic lights stay in
+    // the machine's appearance — a dark title bar on a white sheet on a Dark Mac.
+    WindowGlass.wear(self, as: .titled)
     self.level = .floating
 
     // Center on screen
@@ -113,7 +117,7 @@ struct GlowDemoContentView: View {
         if state.phase != .none {
           ProgressView()
             .scaleEffect(0.6)
-          Text(state.phase == .focused ? "Showing focused glow..." : "Showing distracted glow...")
+          Text(state.phase == .focused ? "Showing focused glow…" : "Showing distracted glow…")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(.secondary)
         } else {
@@ -126,7 +130,7 @@ struct GlowDemoContentView: View {
     }
     .padding(OmiSpacing.xxl)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color(nsColor: .windowBackgroundColor))
+    .inkGlassPanel(cornerRadius: 0, shadow: nil)
   }
 
   private func glowStatePreview(title: String, description: String, color: Color, isActive: Bool) -> some View {

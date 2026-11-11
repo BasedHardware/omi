@@ -20,7 +20,7 @@ import {
   orderBy,
   deleteDoc,
 } from 'firebase/firestore';
-import { signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup } from 'firebase/auth';
 import { googleProvider } from '@/lib/firebase';
 import { getDoc, doc, setDoc } from 'firebase/firestore';
 import {
@@ -32,15 +32,37 @@ import {
 } from '@/components/ui/dialog';
 import { Message } from '@/types/chat';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
-import { Mixpanel } from '@/lib/mixpanel';
+import { PostHog } from '@/lib/posthog';
 
 function ChatContent() {
-  useEffect(() => {
-    // Identify the user first
-    Mixpanel.identify();
+  const chatRequestHeaders = async () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const user = auth.currentUser;
+    if (user && !user.isAnonymous) {
+      headers.Authorization = `Bearer ${await user.getIdToken()}`;
+    }
+    return headers;
+  };
 
-    // Then track the page view
-    Mixpanel.track('Page View', {
+  const streamText = (parsed: any): string =>
+    parsed?.text ?? parsed?.choices?.[0]?.delta?.content ?? '';
+
+  /**
+   * Split a raw SSE byte chunk into complete `data:` lines, carrying over any
+   * trailing partial line to the next read. The gateway response is forwarded as
+   * a raw ReadableStream, so a single read is not guaranteed to contain a whole
+   * SSE event — buffering prevents JSON fragments from being silently discarded.
+   */
+  const processSSEChunk = (chunk: string, buffer: { tail: string }): string[] => {
+    const combined = buffer.tail + chunk;
+    const parts = combined.split('\n');
+    buffer.tail = parts.pop() ?? '';
+    return parts.filter((line) => line.startsWith('data: '));
+  };
+
+  useEffect(() => {
+    // Track the page view
+    PostHog.track('Page View', {
       page: 'Chat',
       url: window.location.pathname,
       timestamp: new Date().toISOString(),
@@ -71,6 +93,26 @@ function ChatContent() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [userMessageCount, setUserMessageCount] = useState(0);
   const [showDevicePopup, setShowDevicePopup] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [authUid, setAuthUid] = useState<string | null>(null);
+
+  // Wait for Firebase to restore the persisted session before selecting the
+  // auth tier. auth.currentUser is null until onAuthStateChanged fires the
+  // first time, so a returning user's initial message would otherwise use the
+  // unauthenticated lane permanently.
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, (user) => {
+        setAuthUid(user?.uid ?? null);
+        setAuthReady(true);
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    // Identify once the Firebase uid is available.
+    if (authUid) PostHog.identify(authUid);
+  }, [authUid]);
 
   // Fetch bot data on component mount
   useEffect(() => {
@@ -195,12 +237,12 @@ function ChatContent() {
 
   useEffect(() => {
     const getInitialMessage = async () => {
-      if (initialMessageSent || !botId) return;
+      if (!authReady || initialMessageSent || !botId) return;
       setIsLoading(true);
       try {
         const response = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await chatRequestHeaders(),
           body: JSON.stringify({
             message:
               'lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.',
@@ -217,34 +259,34 @@ function ChatContent() {
         if (!reader) throw new Error('No reader available');
 
         let accumulatedText = '';
+        const sseBuffer = { tail: '' };
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           const chunk = new TextDecoder().decode(value);
-          const lines = chunk.split('\n');
+          const dataLines = processSSEChunk(chunk, sseBuffer);
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
+          for (const line of dataLines) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
 
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.text) {
-                  accumulatedText += parsed.text;
-                  setTypingMessage((prev) => ({
-                    id: prev?.id || Date.now(),
-                    text: accumulatedText,
-                    sender: 'omi',
-                    type: 'text',
-                    status: 'sending',
-                  }));
-                }
-              } catch (e) {
-                console.warn('Failed to parse SSE message:', e);
+            try {
+              const parsed = JSON.parse(data);
+              const content = streamText(parsed);
+              if (content) {
+                accumulatedText += content;
+                setTypingMessage((prev) => ({
+                  id: prev?.id || Date.now(),
+                  text: accumulatedText,
+                  sender: 'omi',
+                  type: 'text',
+                  status: 'sending',
+                }));
               }
+            } catch (e) {
+              console.warn('Failed to parse SSE message:', e);
             }
           }
         }
@@ -261,7 +303,7 @@ function ChatContent() {
           setMessages((prev) => [...prev, newMessage]);
 
           // Track initial message
-          Mixpanel.track('Initial Message Received', {
+          PostHog.track('Initial Message Received', {
             bot_name: botName,
             bot_id: botId,
             message_length: accumulatedText.length,
@@ -278,7 +320,7 @@ function ChatContent() {
     };
 
     getInitialMessage();
-  }, [initialMessageSent, botId]);
+  }, [authReady, initialMessageSent, botId]);
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
@@ -286,7 +328,7 @@ function ChatContent() {
     const newUserMessageCount = userMessageCount + 1;
 
     // Track message sent
-    Mixpanel.track('Message Sent', {
+    PostHog.track('Message Sent', {
       bot_name: botName,
       bot_id: botId,
       message_count: newUserMessageCount,
@@ -323,7 +365,7 @@ function ChatContent() {
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await chatRequestHeaders(),
         body: JSON.stringify({
           message: inputText,
           botId: botId,
@@ -343,33 +385,34 @@ function ChatContent() {
         status: 'sending',
       });
 
+      const sseBuffer = { tail: '' };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = new TextDecoder().decode(value);
-        const lines = chunk.split('\n');
+        const dataLines = processSSEChunk(chunk, sseBuffer);
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
+        for (const line of dataLines) {
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
 
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.text) {
-                accumulatedText += parsed.text;
-                setTypingMessage((prev) => ({
-                  id: prev?.id || Date.now(),
-                  text: accumulatedText,
-                  sender: 'omi',
-                  type: 'text',
-                  status: 'sending',
-                }));
-              }
-            } catch (e) {
-              console.warn('Failed to parse SSE message:', e);
+          try {
+            const parsed = JSON.parse(data);
+            const content = streamText(parsed);
+            if (content) {
+              accumulatedText += content;
+              setTypingMessage((prev) => ({
+                id: prev?.id || Date.now(),
+                text: accumulatedText,
+                sender: 'omi',
+                type: 'text',
+                status: 'sending',
+              }));
             }
+          } catch (e) {
+            console.warn('Failed to parse SSE message:', e);
           }
         }
       }
@@ -388,7 +431,7 @@ function ChatContent() {
         ]);
 
         // Track message received
-        Mixpanel.track('Message Received', {
+        PostHog.track('Message Received', {
           bot_name: botName,
           bot_id: botId,
           message_length: accumulatedText.length,
@@ -400,7 +443,7 @@ function ChatContent() {
       console.error('Error:', error);
 
       // Track error
-      Mixpanel.track('Message Error', {
+      PostHog.track('Message Error', {
         bot_name: botName,
         bot_id: botId,
         error: error.toString(),
@@ -609,7 +652,7 @@ function ChatContent() {
       }`}
     >
       <Link
-        href="https://www.omi.me/products/omi-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_chat"
+        href="https://www.omi.me/?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_chat"
         target="_blank"
         rel="noopener noreferrer"
         className="relative block h-[200px] w-[220px] overflow-hidden rounded-2xl bg-black shadow-2xl"

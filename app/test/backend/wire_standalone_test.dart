@@ -1,5 +1,7 @@
 /// Standalone wire decode test that imports ONLY generated types from gen/.
 /// Avoids the full app compilation chain (pre-existing FaIconData errors block flutter test).
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items;
 import 'package:omi/backend/schema/gen/api_keys_wire.g.dart' as api_keys;
@@ -55,6 +57,31 @@ void main() {
       expect(decoded.isLocked, original.isLocked);
       expect(decoded.indentLevel, original.indentLevel);
       expect(decoded.sortOrder, original.sortOrder);
+    });
+
+    test('date-only reminders preserve precision and creation provenance', () {
+      final item = action_items.GeneratedActionItemResponse.fromJson({
+        'id': 'synthetic-reminder',
+        'description': 'Renew the library card',
+        'completed': false,
+        'due_at': null,
+        'due': {'kind': 'date', 'date': '2027-01-15', 'timezone': 'Asia/Ho_Chi_Minh'},
+        'reminder_origin': {
+          'input_revision': 'synthetic-input',
+          'speaker_evidence_revision': 'synthetic-speaker',
+          'extracted_at': '2026-11-01T10:00:00Z',
+        },
+        'creation_receipt': {'revision': 1, 'operation': 'create'},
+      });
+      expect(item.dueAt, isNull);
+      expect(item.due?.kind, 'date');
+      expect(item.due?.date, '2027-01-15');
+      expect(item.due?.instant, isNull);
+      expect(item.reminderOrigin?.inputRevision, 'synthetic-input');
+      final replay = action_items.GeneratedActionItemResponse.fromJson(item.toJson());
+      expect(replay.dueAt, isNull);
+      expect(replay.due?.date, '2027-01-15');
+      expect(replay.creationReceipt?['operation'], 'create');
     });
 
     test('defaults applied for optional fields', () {

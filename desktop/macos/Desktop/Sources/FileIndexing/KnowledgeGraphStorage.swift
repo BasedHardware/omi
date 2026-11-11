@@ -4,28 +4,20 @@ import Foundation
 /// Actor for local knowledge graph CRUD operations
 actor KnowledgeGraphStorage {
   static let shared = KnowledgeGraphStorage()
-
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
+  private let repository = RewindRepository(owner: "KnowledgeGraphStorage")
 
   private init() {}
 
   private func ensureDB() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration { return db }
-
-    try await RewindDatabase.shared.initialize()
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw NSError(
         domain: "KnowledgeGraphStorage", code: 1, userInfo: [NSLocalizedDescriptionKey: "Database not initialized"])
     }
-    _dbQueue = db
-    _dbGeneration = generation
-    return db
+    return databasePool
   }
 
-  func invalidateCache() {
-    _dbQueue = nil
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   /// Load the local knowledge graph as an API-compatible response

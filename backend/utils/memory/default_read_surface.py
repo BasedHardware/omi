@@ -14,7 +14,10 @@ from utils.memory.default_read_rollout import (
     disabled_default_read_rollout_decision,
 )
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.memory.vector_search_service import fetch_default_vector_memory_search
+from utils.memory.vector_search_service import (
+    DEFAULT_MEMORY_VECTOR_MAX_CANDIDATES,
+    fetch_default_vector_memory_search,
+)
 
 T = TypeVar('T')
 MemoryPayload = dict[str, Any]
@@ -30,7 +33,7 @@ class DefaultReadSearchResult:
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
+        return False
 
 
 def parse_default_read_datetime(value: Any) -> datetime:
@@ -101,6 +104,8 @@ def fetch_default_read_list(
     item_filter: Optional[Callable[[Any], bool]] = None,
     item_formatter: Callable[[MemoryPayload, MemoryAccessPolicy], Any],
     max_limit: int = 500,
+    view: str = 'released',
+    as_of: Optional[datetime] = None,
 ) -> DefaultReadSearchResult:
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
         return deny_default_read_search(decision)
@@ -121,6 +126,8 @@ def fetch_default_read_list(
         now=now,
         limit=bounded_limit,
         offset=bounded_offset,
+        view=view,
+        as_of=as_of,
     )
     formatted: list[Any] = []
     for item in response['items']:
@@ -142,6 +149,7 @@ def fetch_default_read_vector(
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
     item_formatter: Callable[[MemoryPayload, MemoryAccessPolicy], Any],
+    now: Optional[datetime] = None,
     score_attacher: Optional[Callable[[Any, MemoryPayload, dict[str, float]], Any]] = None,
 ) -> DefaultReadSearchResult:
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
@@ -169,8 +177,15 @@ def fetch_default_read_vector(
         policy=policy,
         vector_query=vector_query,
         limit=bounded_limit,
+        # The candidate budget must cover the requested limit — fetch_default_vector_memory_search
+        # rejects max_candidates < limit. Its default is 50 while the developer_api branch above
+        # admits up to 100, so limits of 51..100 raised ValueError (HTTP 500) instead of returning
+        # results. Only widen the budget when the caller actually asked for more than the default;
+        # bounded_limit never exceeds MAX_MEMORY_VECTOR_SEARCH_LIMIT, so this stays in range.
+        max_candidates=max(DEFAULT_MEMORY_VECTOR_MAX_CANDIDATES, bounded_limit),
         required_projection_commit_id=projection_commit_id,
         required_account_generation=decision.rollout_capabilities.account_generation,
+        now=now,
     )
     scores_by_memory_id = response.get('scores_by_memory_id', {})
     formatted: list[Any] = []

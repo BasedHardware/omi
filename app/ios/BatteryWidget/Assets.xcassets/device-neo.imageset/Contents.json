@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "device-neo.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

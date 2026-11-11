@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -33,29 +35,75 @@ class WalSyncs implements IWalSync {
 
   bool _isCancelled = false;
   BtDevice? _device;
+  String? _firmwareVersion;
 
   /// Called from DeviceProvider when a device connects/disconnects so the
   /// firmware-version gate in syncAll() can route to the right Phase-0 sync.
-  void setDevice(BtDevice? device) {
+  ///
+  /// [firmwareVersion] is the enriched value resolved after getDeviceInfo();
+  /// prefer it over [device].firmwareRevision, which on the raw connect object
+  /// is frequently still 'Unknown' and would misroute ring-buffer devices to
+  /// the multi-file enumerator (so their recordings never enumerate).
+  void setDevice(BtDevice? device, {String? firmwareVersion}) {
     _device = device;
+    _firmwareVersion = firmwareVersion;
+    // Ring status shares the legacy characteristic but has a different layout.
+    _sdcardSync.setDevice(_usesLegacySdcard
+        ? (device?.firmwareRevision == _resolvedFirmware
+            ? device
+            : device?.copyWith(firmwareRevision: _resolvedFirmware))
+        : null);
+  }
+
+  /// Re-route an already attached device after a device-info retry resolves it.
+  void updateFirmwareVersion(String deviceId, String firmwareVersion) {
+    if (_device?.id != deviceId || _firmwareVersion == firmwareVersion) return;
+    setDevice(_device, firmwareVersion: firmwareVersion);
+  }
+
+  bool get _usesLegacySdcard {
+    final firmware = _resolvedFirmware;
+    return firmware != null && firmware.isNotEmpty && firmware != 'Unknown' && !isRingBufferFirmware(firmware);
+  }
+
+  /// Best available firmware for discovery routing: the enriched value if it
+  /// resolved, otherwise whatever the raw connect object carries.
+  String? get _resolvedFirmware => resolveDiscoveryFirmware(_firmwareVersion, _device?.firmwareRevision);
+
+  /// Prefer the enriched firmware over the raw connect-object value, which is
+  /// frequently still 'Unknown'. A missing/'Unknown' enriched value falls back
+  /// to the raw one so behavior is never worse than before.
+  static String? resolveDiscoveryFirmware(String? enriched, String? raw) {
+    if (enriched != null && enriched.isNotEmpty && enriched != 'Unknown') return enriched;
+    return raw;
   }
 
   /// Firmware >= 3.0.20 speaks the ring-buffer protocol; older multi-file
   /// firmware (3.0.17–3.0.19) keeps using StorageSync.
-  static bool isRingBufferFirmware(String? version) {
-    if (version == null || version.isEmpty || version == 'Unknown') return false;
-    final parts = version.split('.').map((p) => int.tryParse(p) ?? 0).toList();
-    if (parts.length < 3) return false;
-    if (parts[0] > 3) return true;
-    if (parts[0] < 3) return false;
-    if (parts[1] > 0) return true;
-    if (parts[1] < 0) return false;
-    return parts[2] >= 20;
-  }
+  static bool isRingBufferFirmware(String? version) => RingProtocol.isRingBufferFirmware(version);
 
-  WalSyncs(this.listener) {
-    _phoneSync = LocalWalSyncImpl(listener);
-    _sdcardSync = SDCardWalSyncImpl(listener);
+  WalSyncs(
+    this.listener, {
+    SDCardWalSyncImpl? sdcardSync,
+    LocalWalSyncImpl? phoneSync,
+    SyncUploadGate? phoneUploadGate,
+    DateTime Function()? phoneNow,
+    Timer Function(Duration, void Function(Timer))? phonePeriodic,
+    Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
+    WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
+    Future<int?> Function()? phoneFreeDiskBytes,
+  }) {
+    _phoneSync = phoneSync ??
+        LocalWalSyncImpl(
+          listener,
+          uploadGate: phoneUploadGate,
+          now: phoneNow,
+          periodic: phonePeriodic,
+          freeDiskBytes: phoneFreeDiskBytes,
+          jobStatusFetcher: phoneJobStatusFetcher,
+          coverageTelemetry: phoneCoverageTelemetry,
+        );
+    _sdcardSync = sdcardSync ?? SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
     _storageSync = StorageSyncImpl(listener);
     _ringSync = RingStorageSyncImpl(listener);
@@ -80,37 +128,57 @@ class WalSyncs implements IWalSync {
     List<Wal> wals = [];
     wals.addAll(await _ringSync.getMissingWals());
     wals.addAll(await _storageSync.getMissingWals());
-    wals.addAll(await _sdcardSync.getMissingWals());
+    if (_usesLegacySdcard) wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getMissingWals());
     wals.addAll(await _flashPageSync.getMissingWals());
     return wals;
   }
 
+  List<Wal>? _cachedPhoneWals;
+  List<Wal> _cachedDeviceWals = const [];
+  List<Wal>? _cachedAllWals;
+
   Future<List<Wal>> getAllWals() async {
-    List<Wal> wals = [];
-    wals.addAll(await _ringSync.getMissingWals());
-    wals.addAll(await _storageSync.getMissingWals());
-    wals.addAll(await _sdcardSync.getMissingWals());
-    wals.addAll(await _phoneSync.getAllWals());
-    wals.addAll(await _flashPageSync.getMissingWals());
-    return wals;
+    final devices = <Wal>[
+      ...await _ringSync.getMissingWals(),
+      ...await _storageSync.getMissingWals(),
+      if (_usesLegacySdcard) ...await _sdcardSync.getMissingWals(),
+    ];
+    final phone = await _phoneSync.getAllWals();
+    final flash = await _flashPageSync.getMissingWals();
+    final allDevices = [...devices, ...flash];
+    var unchanged = identical(phone, _cachedPhoneWals) && allDevices.length == _cachedDeviceWals.length;
+    if (unchanged) {
+      for (var i = 0; i < allDevices.length; i++) {
+        if (!identical(allDevices[i], _cachedDeviceWals[i])) {
+          unchanged = false;
+          break;
+        }
+      }
+    }
+    if (_cachedAllWals == null || !unchanged) {
+      _cachedPhoneWals = phone;
+      _cachedDeviceWals = allDevices;
+      _cachedAllWals = List.unmodifiable([...devices, ...phone, ...flash]);
+    }
+    return _cachedAllWals!;
   }
 
   /// Enumerate offline recordings from the connected device WITHOUT downloading
   /// them, so they can be listed (e.g. on the Auto Sync page) even when the user
   /// has turned auto-sync off. Mirrors the per-firmware device discovery that
   /// [syncAll] runs in Phase 0/1b, minus the download. SD-card WALs are already
-  /// enumerated on connect via [sdcard.setDevice], so they're not repeated here.
+  /// enumerated on legacy-device connect via [setDevice], so they're not repeated here.
   /// Safe no-op when no device is set; each sub-sync guards against running
   /// while a sync is in progress.
   Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
     if (_device == null) return;
-    // Prefer the caller-supplied firmware (resolved from the enriched
-    // pairedDevice) — _device here is the raw connect object whose
-    // firmwareRevision can still be 'Unknown', which would misroute discovery.
+    // Prefer the caller-supplied firmware, then the enriched value stored at
+    // setDevice — the raw connect object's firmwareRevision can still be
+    // 'Unknown', which would misroute ring-buffer discovery.
     final fw = (firmwareVersion != null && firmwareVersion.isNotEmpty && firmwareVersion != 'Unknown')
         ? firmwareVersion
-        : _device?.firmwareRevision;
+        : _resolvedFirmware;
     if (isRingBufferFirmware(fw)) {
       await _ringSync.refreshWalsFromDevice();
     } else {
@@ -170,23 +238,7 @@ class WalSyncs implements IWalSync {
   }
 
   int _estimateWalSize(Wal wal) {
-    int bytesPerSecond;
-    switch (wal.codec) {
-      case BleAudioCodec.opusFS320:
-        bytesPerSecond = 16000;
-      case BleAudioCodec.opus:
-        bytesPerSecond = 8000;
-        break;
-      case BleAudioCodec.pcm16:
-        bytesPerSecond = wal.sampleRate * 2 * wal.channel;
-        break;
-      case BleAudioCodec.pcm8:
-        bytesPerSecond = wal.sampleRate * 1 * wal.channel;
-        break;
-      default:
-        bytesPerSecond = 8000;
-    }
-    return bytesPerSecond * wal.seconds;
+    return wal.codec.estimatedRecordingBytes(seconds: wal.seconds, sampleRate: wal.sampleRate, channels: wal.channel);
   }
 
   Future<void> deleteAllSyncedWals() async {
@@ -205,10 +257,18 @@ class WalSyncs implements IWalSync {
     await _ringSync.deleteAllPendingWals();
   }
 
+  /// Terminal corruption is produced by the phone-local WAL owner. Device
+  /// stores keep their existing pending-deletion semantics.
+  Future<void> deleteAllCorruptedWals() => _phoneSync.deleteAllCorruptedWals();
+
+  /// Bounded phone-only drain used while iOS/Android grants background time.
+  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
+      _phoneSync.syncLiveCaptureOnly(progress: progress);
+
   @override
   void start() {
     _phoneSync.start();
-    _sdcardSync.start();
+    if (_usesLegacySdcard) _sdcardSync.start();
     _flashPageSync.start();
     _storageSync.start();
     _ringSync.start();
@@ -236,13 +296,11 @@ class WalSyncs implements IWalSync {
       'phone': allMissing.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).length,
     });
 
-    // Protect the live path before a potentially multi-hour device drain. The
-    // phone scheduler is lane-aware and sends recent WALs first; its one-job
-    // backfill window prevents this pass from flooding historical work.
-    Logger.debug("WalSyncs: Phase -1 - Uploading already-local fresh recordings");
-    DebugLogManager.logInfo('Sync Phase -1: Uploading fresh phone files first');
+    // Protect the live path before a potentially multi-hour device drain.
+    Logger.debug("WalSyncs: Phase -1 - Uploading already-local live-capture recordings");
+    DebugLogManager.logInfo('Sync Phase -1: Uploading live-capture phone files first');
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
-    final preDrainResult = await _phoneSync.syncFreshOnly(progress: progress);
+    final preDrainResult = await _phoneSync.syncLiveCaptureOnly(progress: progress);
     if (preDrainResult != null) {
       resp.newConversationIds.addAll(
         preDrainResult.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
@@ -253,13 +311,15 @@ class WalSyncs implements IWalSync {
         ),
       );
       resp.localUploadFailures += preDrainResult.localUploadFailures;
+      resp.localUploadPermanentFailures += preDrainResult.localUploadPermanentFailures;
+      resp.localUploadPermanentError ??= preDrainResult.localUploadPermanentError;
     }
 
     // Phase 0: New offline storage sync, gated by firmware version.
     //   fw >= 3.0.20  -> ring-buffer protocol (RingStorageSync)
     //   fw 3.0.17–.19 -> multi-file LittleFS protocol (StorageSync)
     //   fw < 3.0.17   -> falls through to Phase 1a legacy SD-card path
-    final fwVersion = _device?.firmwareRevision;
+    final fwVersion = _resolvedFirmware;
     final useRing = isRingBufferFirmware(fwVersion);
     if (useRing) {
       await _ringSync.refreshWalsFromDevice();
@@ -287,14 +347,16 @@ class WalSyncs implements IWalSync {
     }
 
     // Phase 1a: Download SD card data to phone (legacy firmware)
-    Logger.debug("WalSyncs: Phase 1a - Downloading SD card data to phone");
-    DebugLogManager.logInfo('Sync Phase 1a: Downloading SD card data to phone');
-    progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
-    final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
+    if (_usesLegacySdcard) {
+      Logger.debug("WalSyncs: Phase 1a - Downloading SD card data to phone");
+      DebugLogManager.logInfo('Sync Phase 1a: Downloading SD card data to phone');
+      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+      final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
 
-    if (missingSDCardWals.isNotEmpty) {
-      DebugLogManager.logInfo('SD card sync over BLE', {'walCount': missingSDCardWals.length});
-      await _sdcardSync.syncAll(progress: progress);
+      if (missingSDCardWals.isNotEmpty) {
+        DebugLogManager.logInfo('SD card sync over BLE', {'walCount': missingSDCardWals.length});
+        await _sdcardSync.syncAll(progress: progress);
+      }
     }
 
     if (_isCancelled) {
@@ -337,6 +399,8 @@ class WalSyncs implements IWalSync {
         ),
       );
       resp.localUploadFailures += partialRes.localUploadFailures;
+      resp.localUploadPermanentFailures += partialRes.localUploadPermanentFailures;
+      resp.localUploadPermanentError ??= partialRes.localUploadPermanentError;
     }
 
     DebugLogManager.logEvent('sync_completed', {
@@ -353,6 +417,12 @@ class WalSyncs implements IWalSync {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       if (wal.fileNum == -1) {
         return _ringSync.syncWal(wal: wal, progress: progress);
+      }
+      if (_storageSync.owns(wal)) {
+        return _storageSync.syncWal(wal: wal, progress: progress);
+      }
+      if (!_usesLegacySdcard) {
+        throw StateError('Legacy SD read unavailable on ring-buffer firmware');
       }
       return _sdcardSync.syncWal(wal: wal, progress: progress);
     } else if (wal.storage == WalStorage.flashPage) {
@@ -374,6 +444,11 @@ class WalSyncs implements IWalSync {
     _phoneSync.cancelSync();
   }
 
+  void clearUserData() {
+    _phoneSync.clearUserData();
+    cancelSync();
+  }
+
   bool get isStorageSyncing => _storageSync.isSyncing || _ringSync.isSyncing;
 
   double get storageSpeedKBps => _ringSync.isSyncing ? _ringSync.currentSpeedKBps : _storageSync.currentSpeedKBps;
@@ -383,6 +458,11 @@ class WalSyncs implements IWalSync {
   double get sdCardSpeedKBps => _sdcardSync.currentSpeedKBps;
 
   bool get isFlashPageSyncing => _flashPageSync.isSyncing;
+
+  /// Why the last flash-page drain pass stopped early (reset at the start of
+  /// each flash sync). Lets the UI distinguish "pendant is recording" from a
+  /// plain transfer lull instead of reporting silent success.
+  FlashSyncStallReason get flashStallReason => _flashPageSync.lastStallReason;
 
   /// Get conversation IDs accumulated so far from completed upload batches.
   /// Returns null if no sync is in progress or no batches have completed.

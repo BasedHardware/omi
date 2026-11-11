@@ -1,0 +1,9 @@
+{
+  "version": "0.12.159",
+  "date": "2026-08-11",
+  "changes": [
+    "Stopped the reserved account-migration prompt from flashing and blocking clicks during normal app launch",
+    "Fixed Omi Beta dead zones that prevented clicks on navigation and filter controls",
+    "Reduced macOS candidate build time while preserving signed Beta verification"
+  ]
+}

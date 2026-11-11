@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-summary-generated-from-titles-only-render",
+  "violated_contract": "A generator must not be invoked on rendered input that cannot support its output contract. The daily-recap prompt renders each conversation through conversations_to_string(use_transcript=False), which shows the title plus the first app result or the structured overview — nothing else. When a day's conversations carry neither body field (the §1.7 deterministic minimum's shape), the model receives titles alone; the output it returns is thin or hallucinated from first sentences, and the delivery path then pushes it and stores it as the user's recap of their day. The spend (one managed luna call per user per day) happens even though the input made a faithful summary impossible, and the degenerate output is indistinguishable from a real one once delivered.",
+  "canonical_prevention": "Before the generation call, decline when no conversation in the bounded input carries the body fields the renderer actually consumes (mirroring the renderer's own field selection, not a parallel guess), the same way the existing empty-window guard declines — no model call, no record, no push, lock released. A guard that reads exactly the fields the prompt reads cannot drift from the input the model would see.",
+  "canonical_prevention_artifact": [
+    "backend/utils/other/notifications.py",
+    "backend/tests/unit/test_daily_summary_generation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/other/notifications.py",
+    "backend/utils/conversations/render.py",
+    "backend/utils/other/daily_summary_budget.py"
+  ],
+  "status": "open"
+}

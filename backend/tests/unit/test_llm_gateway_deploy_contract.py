@@ -2,26 +2,45 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
+import tempfile
 from typing import Any, cast
 
+import pytest
 import yaml
+
+from testing.shell import bash_command, bash_path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
+DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / '.github/actions/deploy-backend-stack/action.yml'
+_GITHUB_SCRIPTS = REPOSITORY_ROOT / '.github' / 'scripts'
+if str(_GITHUB_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_GITHUB_SCRIPTS))
+from workflow_composite_contract import backend_deploy_contract_text as _expand_contract  # noqa: E402
+
 GATEWAY_DEPLOY_WORKFLOWS = (
     'gcp_llm_gateway.yml',
-    'gcp_llm_gateway_auto_dev.yml',
+    'gcp_backend_auto_dev.yml',
     'gcp_backend_pusher.yml',
 )
 VPC_PROBE_WORKFLOWS = (
     'gcp_backend_auto_dev.yml',
     'gcp_backend.yml',
     'gcp_llm_gateway.yml',
-    'gcp_llm_gateway_auto_dev.yml',
     'gcp_backend_pusher.yml',
 )
+VPC_PROBE_WORKFLOW_DEPLOY_PROFILES = {
+    'gcp_backend_auto_dev.yml': 'auto-dev',
+    'gcp_backend.yml': 'manual',
+}
+
+
+def backend_deploy_contract_text(workflow_name: str) -> str:
+    workflow = (REPOSITORY_ROOT / '.github' / 'workflows' / workflow_name).read_text(encoding='utf-8')
+    return _expand_contract(workflow, REPOSITORY_ROOT, Path('.github/actions/deploy-backend-stack/action.yml'))
 
 
 def _load_yaml(relative_path: str) -> dict[str, Any]:
@@ -42,26 +61,45 @@ def _load_workflow(name: str) -> dict[str, Any]:
     return cast(dict[str, Any], loaded)
 
 
-def _workflow_step(workflow: dict[str, Any], name: str) -> dict[str, Any]:
-    steps = workflow['jobs']['deploy']['steps']
+def _deploy_steps(workflow: dict[str, Any], workflow_name: str) -> list[dict[str, Any]]:
+    steps = list(workflow['jobs']['deploy']['steps'])
+    if any('./.github/actions/deploy-backend-stack' in str(step.get('uses', '')) for step in steps):
+        action = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+        assert isinstance(action, dict)
+        composite_steps = action['runs']['steps']
+        assert isinstance(composite_steps, list)
+        return [*steps, *composite_steps]
+    return steps
+
+
+def _workflow_step(workflow: dict[str, Any], name: str, *, workflow_name: str) -> dict[str, Any]:
+    steps = _deploy_steps(workflow, workflow_name)
     return next(step for step in steps if step.get('name') == name)
 
 
-def _workflow_step_with_run(workflow: dict[str, Any], needle: str) -> dict[str, Any]:
-    steps = workflow['jobs']['deploy']['steps']
+def _workflow_step_with_run(workflow: dict[str, Any], needle: str, *, workflow_name: str) -> dict[str, Any]:
+    steps = _deploy_steps(workflow, workflow_name)
     return next(step for step in steps if needle in str(step.get('run', '')))
 
 
-def _render_probe_workflow_run(run: str) -> str:
+def _render_probe_workflow_run(run: str, *, deploy_profile: str | None = None) -> str:
     replacements = {
         '${{ vars.GCP_PROJECT_ID }}': 'test-project',
+        '${{ inputs.project_id }}': 'test-project',
+        '${{ inputs.region }}': 'us-central1',
+        '${{ inputs.service }}': 'backend',
         '${{ env.REGION }}': 'us-central1',
         '${{ env.SERVICE }}': 'llm-gateway',
         '${{ steps.image-tag.outputs.short_sha }}': 'abc1234',
         '${{ steps.gateway-serving.outputs.gateway_url }}': 'http://10.0.0.5',
+        '${{ steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url }}': 'http://10.0.0.5',
         '${{ vars.CLOUD_RUN_VPC_NETWORK }}': 'test-network',
         '${{ vars.CLOUD_RUN_VPC_SUBNET }}': 'test-subnet',
+        '${{ env.CLOUD_RUN_VPC_NETWORK }}': 'test-network',
+        '${{ env.CLOUD_RUN_VPC_SUBNET }}': 'test-subnet',
     }
+    if deploy_profile is not None:
+        replacements['${{ inputs.deploy_profile }}'] = deploy_profile
     for expression, value in replacements.items():
         run = run.replace(expression, value)
     return run
@@ -82,7 +120,7 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
             'key': 'ANTHROPIC_API_KEY',
         }
         assert 'ANTHROPIC_API_KEY' in _secret_keys(secrets)
-        for provider_secret in ('OPENROUTER_API_KEY',):
+        for provider_secret in ('OPENROUTER_API_KEY', 'PERPLEXITY_API_KEY'):
             assert env[provider_secret]['valueFrom']['secretKeyRef'] == {
                 'name': f'{environment}-omi-backend-secrets',
                 'key': provider_secret,
@@ -97,37 +135,104 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert env['LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS']['value'] == '1'
         assert env['LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES']['value'] == '1000'
         assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in _secret_keys(secrets)
-        assert 'PERPLEXITY_API_KEY' not in env
         probe_command = gateway['readinessProbe']['exec']['command'][-1]
         assert '/ready' in probe_command
         assert '${OMI_LLM_GATEWAY_SERVICE_TOKEN}' in probe_command
         assert 'X-Omi-Service-Caller: backend' in probe_command
 
+    deployment = (BACKEND_ROOT / 'charts/llm-gateway/templates/deployment.yaml').read_text(encoding='utf-8')
+    assert 'name: OMI_LLM_GATEWAY_BUILD_IDENTITY' in deployment
+    assert 'value: {{ required "image.tag is required" .Values.image.tag | quote }}' in deployment
 
-def test_prod_gateway_wiring_is_off_until_verified_promotion():
+
+def test_gateway_ingress_timeout_can_carry_the_flex_route_deadline():
+    backend_config = (BACKEND_ROOT / 'charts/llm-gateway/templates/backendconfig.yaml').read_text(encoding='utf-8')
+
+    assert '  timeoutSec: 960\n' in backend_config
+    assert '    timeoutSec: 5\n' in backend_config
+
+
+@pytest.fixture(scope='module')
+def gateway_reservation_redis_contract():
+    # Parse deployment inputs during fixture setup so the fast-unit call-phase
+    # budget measures the assertions, not repeated YAML decoding.
+    manifest = _load_yaml('deploy/runtime_env.yaml')
+    classification = _load_yaml('../config/deployment-setting-classification.json')
+    contracts = {}
+
+    for environment in ('dev', 'prod'):
+        gateway = _load_yaml(f'charts/llm-gateway/{environment}_omi_llm_gateway_values.yaml')
+        listen = _load_yaml(f'charts/backend-listen/{environment}_omi_backend_listen_values.yaml')
+        secrets = _load_yaml(f'charts/backend-secrets/{environment}_omi_backend_secrets_values.yaml')
+        gateway_env = _env_map(gateway)
+        listen_env = _env_map(listen)
+        namespace = manifest['environments'][environment]['llm_gateway']['namespace']
+        shared_config = f'{environment}-omi-backend-config'
+        shared_secret = f'{environment}-omi-backend-secrets'
+
+        expected_password_ref = {'name': shared_secret, 'key': 'REDIS_DB_PASSWORD'}
+        contracts[environment] = {
+            'namespace': namespace,
+            'listen_config': listen['envFrom'][0]['configMapRef']['name'],
+            'gateway_host': gateway_env['REDIS_DB_HOST']['valueFrom']['configMapKeyRef'],
+            'listen_port': listen_env['REDIS_DB_PORT']['value'],
+            'gateway_port': gateway_env['REDIS_DB_PORT']['value'],
+            'listen_password': listen_env['REDIS_DB_PASSWORD']['valueFrom']['secretKeyRef'],
+            'gateway_password': gateway_env['REDIS_DB_PASSWORD']['valueFrom']['secretKeyRef'],
+            'secret_keys': _secret_keys(secrets),
+            'expected_password': expected_password_ref,
+        }
+
+    # The gateway chart has no NetworkPolicy; egress is not narrowed there.
+    contracts['network_policy'] = list((BACKEND_ROOT / 'charts/llm-gateway' / 'templates').glob('*networkpolicy*'))
+    contracts['classification'] = classification
+    return contracts
+
+
+@pytest.mark.parametrize('environment', ('dev', 'prod'))
+def test_gateway_reservation_state_uses_the_shared_backend_redis(environment, gateway_reservation_redis_contract):
+    contract = gateway_reservation_redis_contract[environment]
+    shared_config = f'{environment}-omi-backend-config'
+
+    assert contract['namespace'] == f'{environment}-omi-backend'
+    assert contract['listen_config'] == shared_config
+    assert contract['gateway_host'] == {'name': shared_config, 'key': 'REDIS_DB_HOST'}
+    assert contract['listen_port'] == contract['gateway_port'] == '13151'
+    assert contract['listen_password'] == contract['gateway_password'] == contract['expected_password']
+    assert 'REDIS_DB_PASSWORD' in contract['secret_keys']
+    assert 'REDIS_DB_PASSWORD' in gateway_reservation_redis_contract['classification']['kinds']['secret']
+    assert {'REDIS_DB_HOST', 'REDIS_DB_PORT'} <= set(
+        gateway_reservation_redis_contract['classification']['kinds']['config']
+    )
+    assert not gateway_reservation_redis_contract['network_policy']
+
+
+def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection():
     manifest = _load_yaml('deploy/runtime_env.yaml')
     prod = manifest['environments']['prod']
     gke_env = prod['gke']['backend-listen']['env']
     assert (
         gke_env['OMI_LLM_GATEWAY_URL']['value'] == 'http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080'
     )
-    assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'off'
+    assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
+    assert gke_env['OMI_LLM_CHAT_AGENT_ROUTE']['value'] == 'gateway'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
-    assert gke_env['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
+    assert gke_env['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'false'
     assert gke_env['USE_VERTEX_AI']['value'] == 'true'
     assert gke_env['GCP_LOCATION']['value'] == 'us-central1'
     assert gke_env['GOOGLE_CLOUD_PROJECT']['value'] == 'based-hardware'
 
-    for service in ('backend', 'backend-sync', 'backend-integration'):
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         service_config = prod['cloud_run']['services'][service]
         assert service_config['env']['OMI_LLM_GATEWAY_URL'] == {
             'env_var': 'OMI_LLM_GATEWAY_URL',
             'default': 'http://127.0.0.1:9',
             'category': 'service_discovery',
         }
-        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'off'
+        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
+        assert service_config['env']['OMI_LLM_CHAT_AGENT_ROUTE']['value'] == 'gateway'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
-        assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
+        assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'false'
         assert service_config['env']['USE_VERTEX_AI']['value'] == 'true'
         assert service_config['env']['GCP_LOCATION']['value'] == 'us-central1'
         assert service_config['env']['GOOGLE_CLOUD_PROJECT']['value'] == 'based-hardware'
@@ -142,7 +247,15 @@ def test_prod_gateway_wiring_is_off_until_verified_promotion():
     assert gateway['ingress']['annotations']['kubernetes.io/ingress.regional-static-ip-name'] == (
         'prod-omi-self-hosted-llm-ip-address'
     )
-    assert prod['llm_gateway'] == {
+    assert {
+        key: prod['llm_gateway'][key]
+        for key in (
+            'namespace',
+            'release_name',
+            'ingress_name',
+            'static_address_name',
+        )
+    } == {
         'namespace': 'prod-omi-backend',
         'release_name': 'prod-omi-llm-gateway',
         'ingress_name': 'prod-omi-llm-gateway',
@@ -175,41 +288,269 @@ def test_gateway_deploy_workflow_and_helper_allow_explicit_prod_launches():
     assert 'Probe LLM Gateway from the Cloud Run VPC' in workflow
     assert 'verify-llm-gateway-serving.py' in workflow
     assert 'probe-llm-gateway-from-cloud-run.sh' in workflow
+    assert 'workflow_dispatch:' in workflow
+    assert 'push:' not in workflow
+    assert 'workflow_run:' not in workflow
+    assert 'schedule:' not in workflow
+    assert '--update-traffic' not in workflow
+    assert 'gcloud run services update-traffic' not in workflow
+
+
+def test_gateway_auto_deploy_is_folded_into_the_admitted_backend_lifecycle():
+    """Static tripwire for FC-deploy-concurrency: one automatic backend-stack writer only."""
+    workflows = REPOSITORY_ROOT / '.github/workflows'
+    auto_dev_path = workflows / 'gcp_backend_auto_dev.yml'
+    workflow = backend_deploy_contract_text('gcp_backend_auto_dev.yml')
+    trigger = workflow.split('\njobs:', 1)[0]
+
+    assert not (workflows / 'gcp_llm_gateway_auto_dev.yml').exists()
+    assert 'workflow_run:' in trigger
+    assert '\n  push:' not in trigger
+    assert 'workflows: ["Release Eligibility"]' in trigger
+    assert "github.event.workflow_run.event == 'push'" in workflow
+    assert "github.event.workflow_run.run_attempt == 1" in workflow
+    assert "github.event.workflow_run.head_branch == 'main'" in workflow
+    assert 'github.event.workflow_run.head_repository.full_name == github.repository' in workflow
+    assert '${{ needs.firestore_readiness.outputs.admitted_sha }}' in workflow
+    assert 'gcp_llm_gateway' in workflow
+
+    automatic_backend_stack_writers = []
+    for path in workflows.glob('*.yml'):
+        text = path.read_text(encoding='utf-8')
+        workflow_trigger = text.split('\njobs:', 1)[0]
+        if 'group: deploy-backend-stack-development' in workflow_trigger and (
+            'workflow_run:' in workflow_trigger or '\n  push:' in workflow_trigger
+        ):
+            automatic_backend_stack_writers.append(path.name)
+    assert automatic_backend_stack_writers == ['gcp_backend_auto_dev.yml']
+
+    build = workflow.index('- name: Build, smoke, and push combined LLM Gateway image')
+    deploy = workflow.index('- name: Deploy LLM Gateway with backend stack')
+    serving = workflow.index('- name: Verify combined LLM gateway serving data plane')
+    vpc_probe = workflow.index('- name: Probe LLM gateway from the Cloud Run VPC before promotion')
+    smoke = workflow.index('- name: Smoke LLM Gateway')
+    caller_render = workflow.index('- name: Render backend runtime env')
+    assert build < deploy < serving < smoke < vpc_probe < caller_render
+    gateway_image = 'gcr.io/${{ inputs.project_id }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}'
+    assert f'gateway_image="{gateway_image}"' in workflow
+    assert f'image: {gateway_image}' in workflow
+    assert 'runtime_image_contracts.py" smoke' in workflow
+    assert (
+        'IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"'
+        in workflow
+    )
+    assert (
+        'OMI_LLM_GATEWAY_URL: ${{ steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url || \'http://127.0.0.1:9\' }}'
+        in workflow
+    )
+    assert '--lane omi:auto:public-shared-conversation-chat' in workflow
+    assert '--check-metrics' in workflow
+
+
+def test_combined_gateway_smoke_allows_cold_pull_and_keeps_failure_diagnostics():
+    action = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+    assert isinstance(action, dict)
+    steps = action['runs']['steps']
+    smoke_step = next(step for step in steps if step.get('name') == 'Smoke LLM Gateway')
+    smoke = str(smoke_step['run'])
+
+    # The pod startup budget covers scheduling and image pulls. The smoke
+    # client's own HTTP/retry deadline starts only after the pod is Running.
+    assert 'SMOKE_STARTUP_BUDGET_SECONDS=300' in smoke
+    assert 'SMOKE_PROBE_BUDGET_SECONDS=180' in smoke
+    assert 'startup_deadline=$((SECONDS + SMOKE_STARTUP_BUDGET_SECONDS))' in smoke
+    assert 'while (( SECONDS < startup_deadline )); do' in smoke
+    assert 'probe_deadline=$((SECONDS + SMOKE_PROBE_BUDGET_SECONDS))' in smoke
+    assert 'while (( SECONDS < probe_deadline )); do' in smoke
+    assert 'kubectl --request-timeout=10s -n "$NAMESPACE" get pod "$SMOKE_POD"' in smoke
+    assert 'kubectl --request-timeout=30s -n "$NAMESPACE" apply -f -' in smoke
+    assert 'LLM gateway smoke pod could not be created' in smoke
+    assert '--rm -i' not in smoke
+
+    # Diagnostics must run before the EXIT cleanup removes the pod, including
+    # the Pending/ImagePullBackOff case that caused the original one-minute
+    # kubectl run timeout to erase the evidence.
+    assert 'trap cleanup_smoke_pod EXIT' in smoke
+    assert 'kubectl --request-timeout=30s -n "$NAMESPACE" describe pod "$SMOKE_POD" || true' in smoke
+    assert 'kubectl --request-timeout=30s -n "$NAMESPACE" logs "$SMOKE_POD" --all-containers=true || true' in smoke
+    assert (
+        'kubectl --request-timeout=30s -n "$NAMESPACE" get events --field-selector "involvedObject.name=$SMOKE_POD"'
+        in smoke
+    )
+    assert 'LLM gateway smoke pod did not start within' in smoke
+    assert 'LLM gateway smoke probe did not complete within' in smoke
+
+
+def test_combined_gateway_smoke_rendered_script_handles_pod_phases_and_preserves_env_literals():
+    action = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+    assert isinstance(action, dict)
+    smoke_step = next(step for step in action['runs']['steps'] if step.get('name') == 'Smoke LLM Gateway')
+    smoke = re.sub(r'\$\{\{[^}]+\}\}', 'placeholder', str(smoke_step['run']))
+
+    fake_kubectl = '''#!/usr/bin/env python3
+import os
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+with Path(os.environ["FAKE_CALLS"]).open("a", encoding="utf-8") as handle:
+    handle.write(" ".join(args) + "\\n")
+if "apply" in args:
+    Path(os.environ["FAKE_MANIFEST"]).write_text(sys.stdin.read(), encoding="utf-8")
+elif "get" in args and "pod" in args:
+    print(os.environ["FAKE_PHASE"])
+'''
+
+    def run_case(phase: str, expected_code: int, *, startup_budget: int | None = None) -> tuple[str, str]:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            kubectl = root / 'kubectl'
+            kubectl.write_text(fake_kubectl, encoding='utf-8')
+            kubectl.chmod(0o755)
+            rendered = smoke
+            if startup_budget is not None:
+                rendered = rendered.replace(
+                    'SMOKE_STARTUP_BUDGET_SECONDS=300',
+                    f'SMOKE_STARTUP_BUDGET_SECONDS={startup_budget}',
+                )
+            env = {
+                **os.environ,
+                'PATH': f'{root}{os.pathsep}{os.environ["PATH"]}',
+                'GITHUB_RUN_ID': '42',
+                'GITHUB_RUN_ATTEMPT': '1',
+                'FAKE_PHASE': phase,
+                'FAKE_MANIFEST': str(root / 'manifest.yaml'),
+                'FAKE_CALLS': str(root / 'calls.txt'),
+            }
+            result = subprocess.run(
+                ['bash', '-euo', 'pipefail', '-c', rendered],
+                check=False,
+                capture_output=True,
+                env=env,
+                text=True,
+            )
+            assert result.returncode == expected_code, result.stderr
+            return (root / 'manifest.yaml').read_text(encoding='utf-8'), (root / 'calls.txt').read_text(
+                encoding='utf-8'
+            )
+
+    manifest, succeeded_calls = run_case('Succeeded', 0)
+    assert r'--url \"$SMOKE_URL\" --token \"$SMOKE_TOKEN\"' in manifest
+    assert '--request-timeout=10s' in succeeded_calls
+    assert 'describe pod' in succeeded_calls
+    assert 'logs' in succeeded_calls
+    assert 'get events' in succeeded_calls
+    assert 'delete pod' in succeeded_calls
+
+    _, failed_calls = run_case('Failed', 1)
+    assert 'describe pod' in failed_calls
+    assert 'logs' in failed_calls
+    assert 'get events' in failed_calls
+    assert 'delete pod' in failed_calls
+
+    _, pending_calls = run_case('Pending', 1, startup_budget=1)
+    assert 'describe pod' in pending_calls
+    assert 'logs' in pending_calls
+    assert 'get events' in pending_calls
+    assert 'delete pod' in pending_calls
 
 
 def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_promotion():
-    workflow = (BACKEND_ROOT.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
-    auto_dev = (BACKEND_ROOT.parent / '.github/workflows/gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
+    workflow = backend_deploy_contract_text('gcp_backend.yml')
+    auto_dev = backend_deploy_contract_text('gcp_backend_auto_dev.yml')
 
     assert 'Determine whether this deploy requests gateway-first serving' in workflow
     assert 'Verify LLM gateway control plane before promotion' in workflow
     assert 'Probe LLM gateway from the Cloud Run VPC before promotion' in workflow
     assert "steps.gateway-intent.outputs.enabled == 'true'" in workflow
     assert (
-        '--listener-values="backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml"' in workflow
+        '--listener-values="backend/charts/backend-listen/${{ inputs.runtime_env }}_omi_backend_listen_values.yaml"'
+        in workflow
     )
-    assert "steps.gateway-serving.outputs.gateway_url || 'http://127.0.0.1:9'" in workflow
-    assert 'Verify LLM gateway control plane before promotion' in auto_dev
+    intent_step = workflow[
+        workflow.index('- name: Determine whether this deploy requests gateway-first serving') : workflow.index(
+            '- name: Get GKE credentials for gateway serving gate'
+        )
+    ]
+    assert "github.event.inputs.deploy_targets == 'all'" not in intent_step
+    assert 'Reject an inert gateway endpoint when source-controlled gateway mode is requested' in workflow
+    assert 'Gateway mode requires a verified non-sentinel endpoint.' in workflow
+    assert (
+        'steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url || \'http://127.0.0.1:9\''
+        in workflow
+    )
+    assert 'Build, smoke, and push combined LLM Gateway image' in auto_dev
+    assert 'Deploy LLM Gateway with backend stack' in auto_dev
+    assert 'Verify combined LLM gateway serving data plane' in auto_dev
     assert 'Probe LLM gateway from the Cloud Run VPC before promotion' in auto_dev
-    assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in auto_dev
+    assert 'Smoke LLM Gateway' in auto_dev
+    assert '--lane omi:auto:public-shared-conversation-chat' in workflow
+    assert '--lane omi:auto:public-shared-conversation-chat' in auto_dev
+
+
+def test_backend_can_compose_dev_gateway_with_immutable_backend_image_but_prod_stays_separate():
+    workflow = backend_deploy_contract_text('gcp_backend.yml')
+    standalone = (BACKEND_ROOT.parent / '.github/workflows/gcp_llm_gateway.yml').read_text(encoding='utf-8')
+
+    assert 'deploy_gateway:' in workflow
+    assert "default: false\n        type: boolean" in workflow
+    assert (
+        'environment=prod, deploy_gateway=true is unsupported; use the standalone manual LLM gateway workflow.'
+        in workflow
+    )
+    assert 'deploy_gateway=true requires deploy_targets=all.' in workflow
+    gateway_publish = workflow.index('- name: Build, smoke, and push combined LLM Gateway image')
+    gateway_deploy = workflow.index('- name: Deploy LLM Gateway with backend stack')
+    assert gateway_publish < gateway_deploy
+    combined_publish_step = workflow[gateway_publish:gateway_deploy]
+    assert (
+        'gateway_image="gcr.io/${{ inputs.project_id }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}"'
+        in combined_publish_step
+    )
+    assert 'runtime_image_contracts.py" smoke' in combined_publish_step
+    assert 'docker push "$gateway_image"' in combined_publish_step
+    assert 'Deploy LLM Gateway with backend stack' in workflow
+    assert (
+        'IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"'
+        in workflow
+    )
+    # Both share the backend-stack lock; in prod both take the B5 prod-train lock instead.
+    shared_lock = "format('deploy-backend-stack-{0}', github.event.inputs.environment)"
+    assert shared_lock in workflow and "&& 'prod-train' ||" in workflow
+    assert shared_lock in standalone and "&& 'prod-train' ||" in standalone
+    assert 'IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")' in standalone
 
 
 def test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract():
     """Static guard: each deploy-llm-gateway caller must supply its script inputs and serving gates."""
+    serving_step_names = {
+        'gcp_backend_auto_dev.yml': 'Verify combined LLM gateway serving data plane',
+        'gcp_llm_gateway.yml': 'Verify LLM Gateway serving data plane',
+        'gcp_backend_pusher.yml': 'Verify LLM Gateway serving data plane',
+    }
+    probe_step_names = {
+        'gcp_backend_auto_dev.yml': 'Probe LLM gateway from the Cloud Run VPC before promotion',
+        'gcp_llm_gateway.yml': 'Probe LLM Gateway from the Cloud Run VPC',
+        'gcp_backend_pusher.yml': 'Probe LLM Gateway from the Cloud Run VPC',
+    }
     for workflow_name in GATEWAY_DEPLOY_WORKFLOWS:
         workflow = _load_workflow(workflow_name)
-        deploy = _workflow_step_with_run(workflow, 'backend/scripts/deploy-llm-gateway.sh')
-        assert deploy['env']['LLM_GATEWAY_GSA'] == '${{ vars.LLM_GATEWAY_GSA }}'
-        assert any(
-            'test -n "$LLM_GATEWAY_GSA"' in str(step.get('run', '')) for step in workflow['jobs']['deploy']['steps']
+        deploy = _workflow_step_with_run(workflow, 'deploy-llm-gateway.sh', workflow_name=workflow_name)
+        expected_gsa = (
+            '${{ env.LLM_GATEWAY_GSA }}'
+            if workflow_name == 'gcp_backend_auto_dev.yml'
+            else '${{ vars.LLM_GATEWAY_GSA }}'
         )
-        assert _workflow_step(workflow, 'Verify LLM Gateway serving data plane')
-        assert _workflow_step(workflow, 'Probe LLM Gateway from the Cloud Run VPC')
+        assert deploy['env']['LLM_GATEWAY_GSA'] == expected_gsa
+        assert any(
+            'test -n "$LLM_GATEWAY_GSA"' in str(step.get('run', '')) for step in _deploy_steps(workflow, workflow_name)
+        )
+        assert _workflow_step(workflow, serving_step_names[workflow_name], workflow_name=workflow_name)
+        assert _workflow_step(workflow, probe_step_names[workflow_name], workflow_name=workflow_name)
 
 
 def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
     """Exercise each rendered workflow caller through the real probe parser with fake gcloud."""
-    probe = BACKEND_ROOT / 'scripts' / 'probe-llm-gateway-from-cloud-run.sh'
     calls = tmp_path / 'gcloud-calls.txt'
     fake_gcloud = tmp_path / 'gcloud'
     fake_gcloud.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$FAKE_GCLOUD_CALLS"\n', encoding='utf-8')
@@ -217,18 +558,24 @@ def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
 
     for workflow_name in VPC_PROBE_WORKFLOWS:
         workflow = _load_workflow(workflow_name)
-        step = _workflow_step_with_run(workflow, 'probe-llm-gateway-from-cloud-run.sh')
+        step = _workflow_step_with_run(workflow, 'probe-llm-gateway-from-cloud-run.sh', workflow_name=workflow_name)
         environment = {
             **os.environ,
-            'FAKE_GCLOUD_CALLS': str(calls),
+            'FAKE_GCLOUD_CALLS': bash_path(calls, cwd=REPOSITORY_ROOT),
             'GITHUB_RUN_ATTEMPT': '1',
             'GITHUB_RUN_ID': '42',
             'GITHUB_SHA': 'abcdef0123456789',
-            'PATH': f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
+            'DEPLOY_CONTROL_SCRIPTS': bash_path(BACKEND_ROOT / 'scripts', cwd=REPOSITORY_ROOT),
+            'OMI_TEST_FAKE_BIN': bash_path(tmp_path, cwd=REPOSITORY_ROOT),
         }
+        run = (
+            f'export PATH="$OMI_TEST_FAKE_BIN:$PATH"\n'
+            f'export IMAGE_TAG=abc1234\n'
+            f'{_render_probe_workflow_run(str(step["run"]), deploy_profile=VPC_PROBE_WORKFLOW_DEPLOY_PROFILES.get(workflow_name))}'
+        )
 
         result = subprocess.run(
-            ['bash', '-c', _render_probe_workflow_run(str(step['run']))],
+            bash_command('-c', run, cwd=REPOSITORY_ROOT),
             cwd=REPOSITORY_ROOT,
             check=False,
             capture_output=True,
@@ -243,14 +590,28 @@ def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
     assert any(call.startswith('run jobs execute llm-gateway-vpc-probe-42-1 ') for call in recorded_calls)
     assert any(call.startswith('run jobs delete llm-gateway-vpc-probe-42-1 ') for call in recorded_calls)
 
+    # gcloud rejects `--args` lists that repeat an element ("<value>" cannot be
+    # specified multiple times), which is how a second probe lane broke every
+    # backend deploy at the VPC probe step.
+    for call in recorded_calls:
+        if not call.startswith('run jobs deploy '):
+            continue
+        smoke_args = next(
+            (token[len('--args=') :] for token in call.split(' ') if token.startswith('--args=')),
+            None,
+        )
+        assert smoke_args is not None, call
+        elements = smoke_args.split(',')
+        assert len(elements) == len(set(elements)), f'duplicate --args element: {smoke_args}'
+
 
 def test_gateway_vpc_probe_rejects_equals_style_arguments():
     result = subprocess.run(
-        [
-            'bash',
+        bash_command(
             str(BACKEND_ROOT / 'scripts' / 'probe-llm-gateway-from-cloud-run.sh'),
             '--project=test-project',
-        ],
+            cwd=REPOSITORY_ROOT,
+        ),
         check=False,
         capture_output=True,
         text=True,
@@ -263,8 +624,14 @@ def test_gateway_vpc_probe_rejects_equals_style_arguments():
 def test_auto_dev_revision_fence_targets_the_deployment_project_static_contract():
     """Static guard: every final revision read uses the same explicit project as promotion."""
     workflow = _load_workflow('gcp_backend_auto_dev.yml')
-    fence = _workflow_step(workflow, 'Verify validated revisions are still current')
-    assert str(fence['run']).count('--project=${{ vars.GCP_PROJECT_ID }}') == 4
+    fence = _workflow_step(
+        workflow, 'Verify validated revisions are still current', workflow_name='gcp_backend_auto_dev.yml'
+    )
+    promotion = _workflow_step(
+        workflow, 'Shift Cloud Run traffic to validated revisions', workflow_name='gcp_backend_auto_dev.yml'
+    )
+    assert str(fence['run']).count('--region=${{ inputs.region }}') == 4
+    assert str(promotion['run']).count('--project=${{ inputs.project_id }}') == 4
 
 
 def test_monitoring_scrapes_llm_gateway_with_shared_metrics_secret_contract():

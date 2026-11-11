@@ -10,6 +10,27 @@ enum BluetoothReliabilityTestError: Error {
   case expected
 }
 
+/// One-shot async gate for deterministically driving suspension points in test
+/// doubles across executors. `wait()` suspends until the first `open()`. Actor
+/// isolation makes the cross-executor signalling data-race-free.
+actor TestAsyncGate {
+  private var isOpen = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func open() {
+    guard !isOpen else { return }
+    isOpen = true
+    let pending = waiters
+    waiters.removeAll()
+    for waiter in pending { waiter.resume() }
+  }
+
+  func wait() async {
+    if isOpen { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+}
+
 @MainActor
 final class AudioControllerHarness {
   var suspendStart = false
@@ -266,6 +287,13 @@ final class SessionConnectionDouble: DeviceConnection {
   var batteryLevel = -1
   var suspendBattery = false
   var batteryCallCount = 0
+
+  /// Optional gates to drive a suspending `getAudioCodec()` for start/stop race
+  /// tests: the double opens `audioCodecEnteredGate` when the call is reached
+  /// and awaits `audioCodecReleaseGate` before returning `audioCodec`.
+  var audioCodecEnteredGate: TestAsyncGate?
+  var audioCodecReleaseGate: TestAsyncGate?
+  var audioCodec: BleAudioCodec = .pcm8
   var batteryStreamCallCount = 0
   private var connectContinuation: CheckedContinuation<Void, Error>?
   private var disconnectContinuation: CheckedContinuation<Void, Never>?
@@ -345,7 +373,11 @@ final class SessionConnectionDouble: DeviceConnection {
     batteryStreamContinuation?.finish()
     batteryStreamContinuation = nil
   }
-  func getAudioCodec() async -> BleAudioCodec { .pcm8 }
+  func getAudioCodec() async -> BleAudioCodec {
+    await audioCodecEnteredGate?.open()
+    await audioCodecReleaseGate?.wait()
+    return audioCodec
+  }
   func getAudioStream() -> AsyncThrowingStream<Data, Error> {
     AsyncThrowingStream { $0.finish() }
   }

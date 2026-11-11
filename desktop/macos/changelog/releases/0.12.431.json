@@ -1,0 +1,7 @@
+{
+  "version": "0.12.431",
+  "date": "2026-10-01",
+  "changes": [
+    "Naming a speaker during a live recording now actually saves — the label is stored before the sheet closes and the sheet shows an error instead of silently dismissing when the save fails."
+  ]
+}

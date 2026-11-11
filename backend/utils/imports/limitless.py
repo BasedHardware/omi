@@ -10,22 +10,57 @@ import re
 import uuid
 import traceback
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Tuple, Optional
 from zipfile import ZipFile
 
-import database.import_jobs as import_jobs_db
 import database.conversations as conversations_db
+import database.import_jobs as import_jobs_db
+from database.document_ids import document_id_from_seed
 from models.conversation import AppResult, Conversation
 from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from models.transcript_segment import TranscriptSegment
-from utils.notifications import send_notification
+from utils.notification_dispatch import (
+    NotificationDispatchStatus,
+    NotificationIntent,
+    NotificationKind,
+    dispatch_notification,
+)
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.projection_payload import omit_null_processing_state
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _notify_import_job(uid: str, job_id: str, title: str, body: str, data: Dict[str, str]) -> None:
+    """Push is best effort; delivery cannot change a committed import status."""
+    try:
+        outcome = dispatch_notification(
+            NotificationIntent(
+                user_id=uid,
+                title=title,
+                body=body,
+                source='limitless_import',
+                kind=NotificationKind.IMPORT_JOB,
+                data=data,
+            )
+        )
+    except Exception as exc:
+        logger.error(
+            'Limitless import notification failed job_id=%s uid=%s error_class=%s', job_id, uid, type(exc).__name__
+        )
+        return
+    if outcome.status != NotificationDispatchStatus.DISPATCHED or outcome.delivered == 0:
+        logger.warning(
+            'Limitless import notification not delivered job_id=%s uid=%s status=%s delivered=%s',
+            job_id,
+            uid,
+            outcome.status.value,
+            outcome.delivered,
+        )
 
 
 def parse_lifelog_filename(filename: str) -> Tuple[Optional[datetime], Optional[str]]:
@@ -199,6 +234,66 @@ def _create_overview_from_transcript(segments: List[TranscriptSegment], max_char
     return overview if overview else "Imported from Limitless"
 
 
+# Namespace prefix for deterministic Limitless conversation IDs. NEVER CHANGE this
+# string: it is baked into the ID of every already-imported conversation, so a new
+# value would orphan them and re-create duplicates on the next import.
+LIMITLESS_IMPORT_ID_NAMESPACE = "limitless"
+
+
+def conversation_id_for_lifelog(uid: str, lifelog_path: str, *, started_at: Optional[datetime] = None) -> str:
+    """Deterministic conversation ID for a Limitless lifelog file.
+
+    Keyed on (uid, stable lifelog identity) via the shared ``document_id_from_seed``
+    primitive, so re-importing the same export resolves to the same ID and the
+    importer can skip lifelogs it has already stored (idempotent import).
+
+    The identity is the lifelog's start timestamp parsed from the filename
+    (e.g. ``2025-10-08_07h00m25s_Title-slug.md`` -> ``2025-10-08T07:00:25+00:00``).
+    The mutable title slug is deliberately excluded so that if Limitless
+    regenerates a lifelog's title between exports, the re-import still maps to the
+    same conversation instead of creating a near-duplicate. A single pendant cannot
+    start two lifelogs in the same second, so the timestamp alone identifies a
+    lifelog. If the filename carries no parseable timestamp, a recovered
+    ``started_at`` from the lifelog body (``startMs``) is used before falling
+    back to the archive path, so the same record packaged as
+    ``export/lifelogs/note.md`` vs ``lifelogs/note.md`` does not duplicate.
+    """
+    filename_started_at, _title_slug = parse_lifelog_filename(Path(lifelog_path).name)
+    identity_dt = filename_started_at or started_at
+    identity = identity_dt.isoformat() if identity_dt else lifelog_path
+    return document_id_from_seed(f"{LIMITLESS_IMPORT_ID_NAMESPACE}:{uid}:{identity}")
+
+
+def find_legacy_limitless_conversation_id(uid: str, started_at: datetime) -> Optional[str]:
+    """Return a pre-deterministic Limitless conversation id at this started_at.
+
+    Imports from before deterministic IDs used random UUIDs. A re-upload after
+    the upgrade must skip those rows instead of inserting a second document.
+    """
+    rows = conversations_db.get_conversations(
+        uid,
+        limit=20,
+        include_discarded=True,
+        start_date=started_at,
+        end_date=started_at,
+        date_field='started_at',
+    )
+    for row in rows:
+        if row.get('source') in (ConversationSource.limitless, ConversationSource.limitless.value):
+            return row.get('id')
+    return None
+
+
+def _is_macos_archive_metadata(name: str) -> bool:
+    """Finder's ``__MACOSX/`` tree and ``._<name>`` AppleDouble entries: resource forks, not export files."""
+    return any(part == '__MACOSX' or part.startswith('._') for part in PurePosixPath(name).parts)
+
+
+def _job_cancelled(job_id: str) -> bool:
+    current = import_jobs_db.get_import_job(job_id)
+    return bool(current and current.get('status') == ImportJobStatus.cancelled.value)
+
+
 def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code: str = 'en') -> None:
     """
     Background worker to process a Limitless ZIP export using LIGHT IMPORT mode.
@@ -229,16 +324,21 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
         # Open and scan the ZIP file
         with ZipFile(zip_path, 'r') as zf:
-            all_files = zf.namelist()
+            all_files = [name for name in zf.namelist() if not _is_macos_archive_metadata(name)]
             logger.info(f"[Limitless Import] ZIP contains {len(all_files)} entries")
             logger.info(f"[Limitless Import] First 20 entries: {all_files[:20]}")
 
             # Find all lifelog markdown files
-            # Handle both "lifelogs/..." and "something/lifelogs/..." structures
+            # Handle both "lifelogs/..." and "something/lifelogs/..." structures.
+            # Skip macOS archive metadata (__MACOSX/ tree and AppleDouble "._name" files)
+            # that Finder's "Compress" adds alongside every real entry.
             lifelog_files = [
                 name
                 for name in all_files
-                if ('lifelogs/' in name or name.startswith('lifelogs')) and name.endswith('.md')
+                if ('lifelogs/' in name or name.startswith('lifelogs'))
+                and name.endswith('.md')
+                and '__MACOSX' not in name
+                and not Path(name).name.startswith('.')
             ]
 
             logger.info(f"[Limitless Import] Found {len(lifelog_files)} lifelog files")
@@ -267,6 +367,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
             processed_files = 0
             conversations_created = 0
+            conversations_skipped = 0
             errors: List[str] = []
 
             for lifelog_path in lifelog_files:
@@ -283,6 +384,8 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         import_jobs_db.update_import_job(job_id, {'processed_files': processed_files})
                         continue
 
+                    conversation_id = conversation_id_for_lifelog(uid, lifelog_path, started_at=started_at)
+
                     # Calculate finished_at from last segment
                     if segments and started_at:
                         last_segment_end = max(seg.end for seg in segments)
@@ -290,6 +393,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     else:
                         finished_at = started_at or datetime.now(timezone.utc)
 
+                    source_started_at = started_at
                     if not started_at:
                         started_at = datetime.now(timezone.utc)
 
@@ -312,9 +416,9 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         events=[],
                     )
 
-                    # Create conversation object directly
+                    # Create conversation object directly (no AI processing).
                     conversation = Conversation(
-                        id=str(uuid.uuid4()),
+                        id=conversation_id,
                         created_at=started_at,  # Use started_at as created_at for proper ordering
                         started_at=started_at,
                         finished_at=finished_at,
@@ -325,11 +429,29 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         apps_results=apps_results,
                         status=ConversationStatus.completed,
                         discarded=False,
+                        imported=True,
                     )
 
-                    # Save directly to database (skip all AI processing)
-                    lifecycle_service.persist_imported_conversation(uid, conversation.model_dump())
-                    conversations_created += 1
+                    # Create-if-absent so re-importing the same export skips lifelogs already
+                    # stored instead of overwriting them. This is atomic (Firestore create()),
+                    # so it never duplicates and never clobbers edits a user may have made to a
+                    # previously-imported conversation ("first import wins").
+                    # Before create, skip when a legacy random-UUID Limitless row already
+                    # exists at this started_at so the first post-upgrade re-import does
+                    # not insert a deterministic duplicate.
+                    legacy_id = (
+                        find_legacy_limitless_conversation_id(uid, source_started_at) if source_started_at else None
+                    )
+                    if legacy_id and legacy_id != conversation_id:
+                        conversations_skipped += 1
+                        logger.info("[Limitless Import] Skipped already-imported lifelog")
+                    elif lifecycle_service.persist_imported_conversation(
+                        uid, omit_null_processing_state(conversation.model_dump())
+                    ):
+                        conversations_created += 1
+                    else:
+                        conversations_skipped += 1
+                        logger.info("[Limitless Import] Skipped already-imported lifelog")
 
                 except Exception as e:
                     error_msg = f"Error processing {lifelog_path}: {str(e)}"
@@ -345,15 +467,30 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         {
                             'processed_files': processed_files,
                             'conversations_created': conversations_created,
+                            'conversations_skipped': conversations_skipped,
                         },
                     )
+                    # A cancel has to stop the work, not just the final status write, or
+                    # conversations keep appearing after the user cancelled the import.
+                    if processed_files != total_files and _job_cancelled(job_id):
+                        logger.info(
+                            f"Import job {job_id} was cancelled; stopped after {processed_files} of {total_files} files"
+                        )
+                        return
+
+            logger.info(
+                f"[Limitless Import] Done: {conversations_created} created, "
+                f"{conversations_skipped} skipped (already imported), {len(errors)} errors"
+            )
 
             # Mark as completed
             final_status = ImportJobStatus.completed.value
             error_msg = None
 
             if errors:
-                if conversations_created == 0:
+                # Only a hard failure if nothing was created and nothing was skipped
+                # (a re-import that skips everything is a success, not a failure).
+                if conversations_created == 0 and conversations_skipped == 0:
                     final_status = ImportJobStatus.failed.value
                     error_msg = f"All files failed to process. First error: {errors[0]}"
                 else:
@@ -362,8 +499,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
             # A user cancel during processing must stick: don't overwrite a cancelled job with the
             # final completed/failed status.
-            current = import_jobs_db.get_import_job(job_id)
-            if current and current.get('status') == ImportJobStatus.cancelled.value:
+            if _job_cancelled(job_id):
                 logger.info(f"Import job {job_id} was cancelled; skipping final status write")
                 return
 
@@ -373,27 +509,40 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     'status': final_status,
                     'completed_at': datetime.now(timezone.utc).isoformat(),
                     'error': error_msg,
+                    'conversations_created': conversations_created,
+                    'conversations_skipped': conversations_skipped,
                 },
             )
 
             # Send push notification
             if final_status == ImportJobStatus.completed.value:
-                send_notification(
-                    user_id=uid,
-                    title="Limitless Import Complete! 🎉",
-                    body=f"Successfully imported {conversations_created} conversations from your Limitless data.",
-                    data={
+                complete_body = f"Successfully imported {conversations_created} conversations from your Limitless data."
+                if conversations_skipped:
+                    complete_body = (
+                        f"Imported {conversations_created} new conversations "
+                        f"({conversations_skipped} already imported) from your Limitless data."
+                    )
+                if errors:
+                    complete_body += f" {len(errors)} file(s) could not be processed."
+                _notify_import_job(
+                    uid,
+                    job_id,
+                    "Limitless Import Complete! 🎉",
+                    complete_body,
+                    {
                         'type': 'import_complete',
                         'job_id': job_id,
                         'conversations_created': str(conversations_created),
+                        'conversations_skipped': str(conversations_skipped),
                     },
                 )
             else:
-                send_notification(
-                    user_id=uid,
-                    title="Limitless Import Failed",
-                    body=error_msg or "There was an error importing your data. Please try again.",
-                    data={'type': 'import_failed', 'job_id': job_id},
+                _notify_import_job(
+                    uid,
+                    job_id,
+                    "Limitless Import Failed",
+                    error_msg or "There was an error importing your data. Please try again.",
+                    {'type': 'import_failed', 'job_id': job_id},
                 )
 
     except Exception as e:
@@ -409,11 +558,12 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
         )
 
         # Send failure notification
-        send_notification(
-            user_id=uid,
-            title="Limitless Import Failed",
-            body="There was an error importing your data. Please try again.",
-            data={'type': 'import_failed', 'job_id': job_id},
+        _notify_import_job(
+            uid,
+            job_id,
+            "Limitless Import Failed",
+            "There was an error importing your data. Please try again.",
+            {'type': 'import_failed', 'job_id': job_id},
         )
 
     finally:

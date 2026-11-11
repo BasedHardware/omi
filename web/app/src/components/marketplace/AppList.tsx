@@ -1,5 +1,7 @@
 'use client';
 
+import Link from '@tschk/moonshine-next/link';
+
 import { FeaturedPluginCard } from './plugin-card/FeaturedPluginCard';
 import { CompactPluginCard } from './plugin-card/CompactPluginCard';
 import { CategoryHeader } from './CategoryHeader';
@@ -125,22 +127,28 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
       .slice(0, 9);
 
     // Group plugins by category and sort by installs
-    const groupedPlugins = initialPlugins.reduce((acc, plugin) => {
-      const category = plugin.category;
-      if (!acc[category]) {
-        acc[category] = [];
-      }
-      acc[category].push(plugin);
-      return acc;
-    }, {} as Record<string, Plugin[]>);
+    const groupedPlugins = initialPlugins.reduce(
+      (acc, plugin) => {
+        const category = plugin.category;
+        if (!acc[category]) {
+          acc[category] = [];
+        }
+        acc[category].push(plugin);
+        return acc;
+      },
+      {} as Record<string, Plugin[]>,
+    );
 
     // Sort categories by number of plugins
     const sortedCategories = Object.entries(groupedPlugins)
       .sort(([, a], [, b]) => b.length - a.length)
-      .reduce((acc, [category, plugins]) => {
-        acc[category] = plugins.sort((a, b) => b.installs - a.installs);
-        return acc;
-      }, {} as Record<string, Plugin[]>);
+      .reduce(
+        (acc, [category, plugins]) => {
+          acc[category] = plugins.sort((a, b) => b.installs - a.installs);
+          return acc;
+        },
+        {} as Record<string, Plugin[]>,
+      );
 
     return {
       featuredApps: featured,
@@ -173,10 +181,7 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
           headerMinimized ? 'bg-[#0B0F17]/95 shadow-lg backdrop-blur-lg' : ''
         }`}
       >
-        <MarketplaceHeader
-          minimized={headerMinimized}
-          onSearching={handleSearching}
-        />
+        <MarketplaceHeader minimized={headerMinimized} onSearching={handleSearching} />
       </div>
 
       {/* Main Content */}
@@ -254,13 +259,13 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
                       totalApps={sortedCategories['productivity-and-organization'].length}
                     />
                     {sortedCategories['productivity-and-organization'].length > 4 && (
-                      <a
+                      <Link
                         href="/apps/category/productivity-and-organization"
                         className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
                       >
                         See all
                         <ChevronRight className="h-4 w-4" />
-                      </a>
+                      </Link>
                     )}
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-4 lg:grid-cols-4">
@@ -283,13 +288,13 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
                       Integration Apps
                     </h3>
                     {totalIntegrationApps > 9 && (
-                      <a
+                      <Link
                         href="/apps/category/integration"
                         className="flex items-center gap-1 text-sm font-medium text-[#6C8EEF] hover:underline"
                       >
                         See all
                         <ChevronRight className="h-4 w-4" />
-                      </a>
+                      </Link>
                     )}
                   </div>
                   <div className="mt-4 grid grid-cols-1 gap-y-2 sm:mt-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">

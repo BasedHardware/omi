@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-launch-later-cohort-misclassification",
+  "status": "open",
+  "violated_contract": "A one-time persisted-default migration must classify the install cohort using state that is stable across launches. Deciding 'existing vs fresh install' from a flag the same install flips during its first launch (onboarding completion) makes every later launch re-run the classification after the flip and pin fresh installs to the existing-user default, silently inverting the rollout default the feature shipped with.",
+  "canonical_prevention": "Decide the cohort on the first launch that runs the migration build and write an explicit cohort marker in the same pass (marker write ordered so a crash re-runs the decision instead of half-applying it). Later launches consult only the marker, never re-derive cohort from mutable lifecycle flags. Behavioral contract test simulates launch-1 and launch-2 against both cohorts.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/auto_remove_synced_copies_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/backend/preferences.dart",
+    "app/lib/main.dart"
+  ]
+}

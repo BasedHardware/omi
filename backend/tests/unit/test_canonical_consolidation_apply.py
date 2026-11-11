@@ -1,14 +1,13 @@
-"""WS-O consolidation tests exercising the real durable apply path."""
+"""Behavioral tests for the authoritative L2 route/apply boundary."""
 
 from __future__ import annotations
 
-import copy
+import hashlib
 import importlib
 import os
 import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -26,17 +25,13 @@ from tests.unit.memory_import_isolation import (
 )
 
 canonical_consolidation = None
-ConsolidationAgentBatch = None
+observation_intake = None
 ConsolidationAgentDecision = None
 apply_consolidation_decision = None
-list_pending_consolidation_items = None
-run_canonical_consolidation = None
-jobs_mod = None
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _consolidation_apply_import_isolation():
-    """Install heavy-import stubs for this module only; restore after to avoid polluting combined runs."""
     saved = snapshot_sys_modules(CONSOLIDATION_APPLY_STUB_MODULE_NAMES)
     touched = install_consolidation_apply_stubs()
     saved.update(snapshot_sys_modules(touched))
@@ -45,29 +40,26 @@ def _consolidation_apply_import_isolation():
     for stale_module in ("database.memory_apply_store", "utils.memory.canonical_consolidation"):
         sys.modules.pop(stale_module, None)
 
-    cc = importlib.import_module("utils.memory.canonical_consolidation")
-    g = globals()
-    g["canonical_consolidation"] = cc
-    g["ConsolidationAgentBatch"] = cc.ConsolidationAgentBatch
-    g["ConsolidationAgentDecision"] = cc.ConsolidationAgentDecision
-    g["apply_consolidation_decision"] = cc.apply_consolidation_decision
-    g["list_pending_consolidation_items"] = cc.list_pending_consolidation_items
-    g["run_canonical_consolidation"] = cc.run_canonical_consolidation
-    g["jobs_mod"] = importlib.import_module("jobs.short_term_lifecycle_worker")
-    g["apply_long_term_patch_firestore"] = importlib.import_module(
-        "database.memory_apply_store"
-    ).apply_long_term_patch_firestore
-
+    module = importlib.import_module("utils.memory.canonical_consolidation")
+    globals()["canonical_consolidation"] = module
+    globals()['observation_intake'] = module
+    globals()["ConsolidationAgentDecision"] = module.ConsolidationAgentDecision
+    globals()["apply_consolidation_decision"] = module.apply_consolidation_decision
     yield
-
     restore_sys_modules(saved)
 
 
-apply_long_term_patch_firestore = None
-from models.memory_apply import ApplyStatus, MemoryControlState
+from models.memory_apply import MemoryControlState, memory_content_hash
+from models.memory_admission import (
+    REQUIRED_PROCESSING_RECEIPT_VERSION,
+    REQUIRED_PROCESSOR_ID,
+    REQUIRED_PROCESSOR_VERSION,
+    valid_required_processing_receipt,
+)
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
-from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
+from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from utils.memory.canonical_lineage import canonical_lineage_root
 from utils.memory.memory_system import MemorySystem
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
@@ -88,7 +80,7 @@ class _FakeDocumentRef:
         self.path = path
         self._db = db
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, **_kwargs):
         if self.path not in self._db.docs:
             return _FakeSnapshot(None, exists=False)
         return _FakeSnapshot(self._db.docs[self.path], exists=True)
@@ -106,6 +98,7 @@ class _FakeTransaction:
     def __init__(self, db):
         self._db = db
         self.sets = []
+        self.deletes = []
         self.fail_after_sets: Optional[int] = None
         self._id = None
         self._read_only = False
@@ -116,19 +109,27 @@ class _FakeTransaction:
         if self.fail_after_sets is not None and len(self.sets) > self.fail_after_sets:
             raise RuntimeError("injected transaction set failure")
 
+    def delete(self, ref):
+        self.deletes.append(ref.path)
+
     def _clean_up(self):
         self._id = None
 
     def _begin(self, retry_id=None):
         self._id = retry_id or "txn-1"
         self.sets = []
+        self.deletes = []
 
     def _commit(self):
         for path, data in self.sets:
             self._db.docs[path] = data
+        for path in self.deletes:
+            self._db.docs.pop(path, None)
 
     def _rollback(self):
         self._id = None
+        self.sets = []
+        self.deletes = []
 
 
 class _FakeDb:
@@ -157,11 +158,10 @@ def _item(
     memory_id: str,
     content: str,
     *,
-    tier=MemoryTier.short_term,
+    tier: MemoryTier = MemoryTier.short_term,
     evidence_ids: Optional[list[str]] = None,
-    corroboration_count: int = 0,
 ) -> MemoryItem:
-    evidence = [_evidence(eid) for eid in (evidence_ids or [f"ev_{memory_id}"])]
+    evidence = [_evidence(evidence_id) for evidence_id in (evidence_ids or [f"ev_{memory_id}"])]
     return MemoryItem(
         memory_id=memory_id,
         uid=UID,
@@ -177,15 +177,17 @@ def _item(
         user_asserted=False,
         captured_at=NOW - timedelta(hours=2),
         updated_at=NOW - timedelta(hours=1),
-        expires_at=NOW + timedelta(days=30),
+        expires_at=NOW + timedelta(days=30) if tier == MemoryTier.short_term else None,
         ledger_commit_id="commit-1",
         ledger_sequence=1,
         item_revision=2,
         source_commit_id="commit-1",
         source_commit_sequence=1,
-        content_hash="hash",
+        content_hash=memory_content_hash(
+            content=content,
+            evidence_ids=[item.evidence_id for item in evidence],
+        ),
         account_generation=1,
-        corroboration_count=corroboration_count,
     )
 
 
@@ -193,643 +195,610 @@ def _stored(model) -> dict:
     return model.model_dump(mode="json")
 
 
-def _db_for_apply(
-    *,
-    survivor: MemoryItem,
-    extra_items: Optional[list[MemoryItem]] = None,
-    extra_evidence: Optional[list[MemoryEvidence]] = None,
-) -> _FakeDb:
+def _db_for_items(source: MemoryItem, *other_items: MemoryItem) -> _FakeDb:
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     docs = {
         f"users/{UID}/memory_state/apply_control": _stored(control),
-        f"users/{UID}/memory_items/{survivor.memory_id}": _stored(survivor),
     }
-    for item in extra_items or []:
+    for item in (source, *other_items):
         docs[f"users/{UID}/memory_items/{item.memory_id}"] = _stored(item)
-        for ev in item.evidence:
-            docs[f"users/{UID}/memory_evidence/{ev.evidence_id}"] = _stored(ev)
-    for ev in survivor.evidence:
-        docs[f"users/{UID}/memory_evidence/{ev.evidence_id}"] = _stored(ev)
-    for ev in extra_evidence or []:
-        docs[f"users/{UID}/memory_evidence/{ev.evidence_id}"] = _stored(ev)
+        for evidence in item.evidence:
+            docs[f"users/{UID}/memory_evidence/{evidence.evidence_id}"] = _stored(evidence)
     return _FakeDb(docs)
 
 
-def _stored_item(db: _FakeDb, memory_id: str) -> MemoryItem:
-    return MemoryItem(**db.docs[f"users/{UID}/memory_items/{memory_id}"])
-
-
-@pytest.fixture(autouse=True)
-def _canonical_cohort_for_apply(monkeypatch):
-    monkeypatch.setattr(
-        "utils.memory.canonical_consolidation.resolve_memory_system",
-        lambda uid, db_client=None: MemorySystem.CANONICAL,
+def _promote_decision(
+    source: MemoryItem,
+    *,
+    supersedes: Optional[list[str]] = None,
+    target_memory_id: Optional[str] = None,
+):
+    return ConsolidationAgentDecision(
+        source_memory_id=source.memory_id,
+        route="promote",
+        reconciliation="replace" if supersedes else "create",
+        target_memory_id=target_memory_id,
+        supersedes=supersedes or [],
+        memory_text="The user enjoys hiking in Seattle.",
+        evidence_ids=[evidence.evidence_id for evidence in source.evidence],
+        subject_entity_id="user",
+        predicate="enjoys_activity",
+        arguments={"activity": "hiking", "location": "Seattle"},
+        relationship_to_user="self",
+        aboutness="primary_user",
+        basis_for_memory="explicit",
+        confidence="high",
+        rationale="Explicit first-person preference.",
     )
-    monkeypatch.setattr("utils.memory.canonical_consolidation.delete_atom_keyword_doc", MagicMock())
-    monkeypatch.setattr("utils.memory.canonical_consolidation.delete_canonical_memory_vector", MagicMock())
-    monkeypatch.setattr("utils.memory.canonical_consolidation.invalidate_kg_for_memory_retraction", MagicMock())
-    monkeypatch.setattr("utils.memory.canonical_consolidation.purge_stale_review_conflicts_for_memories", MagicMock())
 
 
-@pytest.mark.parametrize("agent_decision", ["merge", "add_evidence"])
-def test_merge_and_add_evidence_update_survivor_in_place(agent_decision: str):
-    survivor = _item("mem_survivor", "Enjoys hiking in Seattle")
-    duplicate_ev = _evidence("ev_pending", source_id="conv-2")
-    db = _db_for_apply(survivor=survivor, extra_evidence=[duplicate_ev])
+def _apply(source: MemoryItem, decision, db: _FakeDb, *, quarantine: bool = False):
     control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
-    pending = _item("mem_pending", "Enjoys hiking in Seattle", evidence_ids=["ev_pending"])
-
-    decision = ConsolidationAgentDecision(
-        decision=agent_decision,
-        survivor_memory_id="mem_survivor",
-        memory_text="Enjoys hiking in Seattle",
-        evidence_ids=["ev_pending"],
-        corroboration_increment=True,
-        rationale="cross-source duplicate",
-    )
-
-    apply_consolidation_decision(
+    return apply_consolidation_decision(
         UID,
         decision=decision,
-        pending_by_id={survivor.memory_id: survivor, pending.memory_id: pending},
+        pending_by_id={source.memory_id: source},
         control=control,
-        run_id="run-merge",
+        run_id="run-route",
         now=NOW,
         db_client=db,
+        quarantine=quarantine,
     )
 
-    updated = _stored_item(db, "mem_survivor")
-    assert updated.memory_id == "mem_survivor"
-    assert updated.version == survivor.version + 1
-    assert updated.tier == survivor.tier
-    assert updated.captured_at == survivor.captured_at
-    assert updated.corroboration_count == 1
-    evidence_ids = {ev.evidence_id for ev in updated.evidence}
-    assert evidence_ids == {"ev_mem_survivor", "ev_pending"}
+
+def test_promote_route_atomically_commits_long_term_item_and_graph_assertion():
+    source = _item("mem_source", "I enjoy hiking in Seattle.")
+    db = _db_for_items(source)
+
+    applied_ids = _apply(source, _promote_decision(source), db)
+
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    assertion = db.docs[f"users/{UID}/memory_graph_assertions/{source.memory_id}"]
+    operations = [
+        MemoryOperation(**payload)
+        for path, payload in db.docs.items()
+        if path.startswith(f"users/{UID}/memory_operations/")
+    ]
+    assert applied_ids == [source.memory_id]
+    assert stored.tier == MemoryTier.long_term
+    assert stored.graph_ready is True
+    assert stored.graph_assertion_id == assertion["assertion_id"]
+    assert assertion["item_revision"] == stored.item_revision
+    assert assertion["content_hash"] == stored.content_hash
+    assert assertion["predicate"] == "enjoys_activity"
+    assert len(operations) == 1
+    assert operations[0].operation_type == MemoryOperationType.synthesis
+    assert operations[0].status == MemoryOperationStatus.committed
 
 
-def test_skip_duplicate_with_corroboration_increments_survivor():
-    survivor = _item("mem_existing", "Likes coffee", corroboration_count=2)
-    db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
-
-    decision = ConsolidationAgentDecision(
-        decision="skip_duplicate",
-        survivor_memory_id="mem_existing",
-        corroboration_increment=True,
-        rationale="duplicate pending item",
-    )
-
-    apply_consolidation_decision(
-        UID,
-        decision=decision,
-        pending_by_id={},
-        control=control,
-        run_id="run-skip",
-        now=NOW,
-        db_client=db,
-    )
-
-    updated = _stored_item(db, "mem_existing")
-    assert updated.memory_id == "mem_existing"
-    assert updated.version == survivor.version + 1
-    assert updated.corroboration_count == 3
-    assert updated.last_corroborated_at is not None
-
-
-def test_consolidation_apply_is_idempotent_on_operation_retry():
-    survivor = _item("mem_survivor", "Enjoys hiking")
-    db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
-    decision = ConsolidationAgentDecision(
-        decision="merge",
-        survivor_memory_id="mem_survivor",
-        memory_text="Enjoys hiking",
-        evidence_ids=["ev_mem_survivor"],
-        corroboration_increment=True,
-    )
-
-    apply_consolidation_decision(
-        UID,
-        decision=decision,
-        pending_by_id={survivor.memory_id: survivor},
-        control=control,
-        run_id="run-idem",
-        now=NOW,
-        db_client=db,
-    )
-    after_first = copy.deepcopy(db.docs[f"users/{UID}/memory_items/mem_survivor"])
-
-    op_paths = [path for path in db.docs if "/memory_operations/" in path]
-    assert len(op_paths) == 1
-    operation_id = op_paths[0].split("/")[-1]
-    operation_doc = db.docs[op_paths[0]]
-    patch_payload = {
-        "patch_id": operation_doc.get("patch_id", "patch_retry"),
-        "packet_id": "consolidation_run-idem",
-        "run_id": "run-idem",
-        "observed_head_commit_id": control.head_commit_id,
-        "idempotency_key": "retry-key",
-        "decision": "update",
-        "result_status": "active",
-        "target_memory_id": "mem_survivor",
-        "memory_text": "Enjoys hiking",
-        "evidence_ids": ["ev_mem_survivor"],
-        "corroboration_count": 1,
-        "last_corroborated_at": NOW.isoformat(),
-    }
-
-    retry = apply_long_term_patch_firestore(
-        uid=UID,
-        operation_id=operation_id,
-        patch_payload=patch_payload,
-        db_client=db,
-    )
-    assert retry.status == ApplyStatus.idempotent_skip
-    after_retry = db.docs[f"users/{UID}/memory_items/mem_survivor"]
-    assert after_retry["version"] == after_first["version"]
-    assert after_retry["corroboration_count"] == after_first["corroboration_count"]
-
-
-def test_update_with_supersede_real_apply_excludes_superseded_from_reads():
-    old = _item("mem_old", "Loves ice cream")
-    new = _item("mem_new", "Hates ice cream")
-    db = _db_for_apply(survivor=new, extra_items=[old])
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
-
-    apply_consolidation_decision(
-        UID,
-        decision=ConsolidationAgentDecision(
-            decision="update",
-            survivor_memory_id="mem_new",
-            supersedes=["mem_old"],
-            memory_text="Hates ice cream",
-            evidence_ids=["ev_mem_new"],
-            rationale="preference flipped",
-        ),
-        pending_by_id={new.memory_id: new, old.memory_id: old},
-        control=control,
-        run_id="run-supersede-real",
-        now=NOW,
-        db_client=db,
-    )
-
-    old_stored = _stored_item(db, "mem_old")
-    new_stored = _stored_item(db, "mem_new")
-    assert old_stored.status == MemoryItemStatus.superseded
-    assert old_stored.superseded_by == "mem_new"
-    assert new_stored.content == "Hates ice cream"
-    assert new_stored.version == new.version + 1
-
-    policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
-    visible = filter_canonical_default_visible_items([old_stored, new_stored], policy=policy, now=NOW)
-    assert [item.memory_id for item in visible] == ["mem_new"]
-
-
-def test_partial_supersede_after_survivor_blocks_watermark():
-    uid = UID
-    survivor = _item("mem_new", "Hates ice cream")
-    old = _item("mem_old", "Loves ice cream")
-    control = MemoryControlState(
-        uid=uid,
-        head_commit_id="head0",
-        account_generation=1,
-        source_generation=1,
-        last_consolidation_run_at=NOW - timedelta(days=2),
-    )
-    db = _db_for_apply(survivor=survivor, extra_items=[old])
-    db.docs[f"users/{uid}/memory_state/apply_control"] = _stored(control)
-    pending = [old, survivor]
-
-    agent_response = ConsolidationAgentBatch(
-        decisions=[
-            ConsolidationAgentDecision(
-                decision="update",
-                survivor_memory_id="mem_new",
-                supersedes=["mem_old"],
-                memory_text="Hates ice cream",
-                evidence_ids=["ev_mem_new"],
-            )
-        ]
-    )
-
-    with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
-        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent", return_value=agent_response),
-        patch(
-            "utils.memory.canonical_consolidation._apply_superseded_item",
-            side_effect=canonical_consolidation.ConsolidationApplySkipped("target memory is not active"),
-        ),
-    ):
-        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-partial", now=NOW, batch_threshold=2)
-
-    assert report.decisions_partial == 1
-    assert report.watermark_blocked is True
-    assert report.last_consolidation_run_at == control.last_consolidation_run_at
-    updated_survivor = _stored_item(db, "mem_new")
-    assert updated_survivor.version == survivor.version + 1
-    assert _stored_item(db, "mem_old").status == MemoryItemStatus.active
-
-
-def test_watermark_not_advanced_on_parse_failure():
-    uid = UID
-    control = MemoryControlState(
-        uid=uid,
-        head_commit_id="head0",
-        account_generation=1,
-        source_generation=1,
-        last_consolidation_run_at=NOW - timedelta(days=2),
-    )
-    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
-    pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
-
-    with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
-        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent") as mock_agent,
-    ):
-        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
-        mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="parse_failed:JSONDecodeError")
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-parse-fail", now=NOW, batch_threshold=2)
-
-    assert report.decisions_applied == 0
-    assert report.last_consolidation_run_at == control.last_consolidation_run_at
-
-
-def test_watermark_advanced_on_clean_empty_run():
-    uid = UID
-    control = MemoryControlState(
-        uid=uid,
-        head_commit_id="head0",
-        account_generation=1,
-        source_generation=1,
-        last_consolidation_run_at=NOW - timedelta(days=2),
-    )
-    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
-    pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
-
-    with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
-        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent") as mock_agent,
-    ):
-        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending[:10], candidates_by_anchor={})
-        mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="no_changes")
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-zero", now=NOW, batch_threshold=2)
-
-    assert report.decisions_applied == 0
-    assert report.last_consolidation_run_at == NOW
-    stored_control = MemoryControlState(**db.docs[f"users/{uid}/memory_state/apply_control"])
-    assert stored_control.last_consolidation_run_at == NOW
-
-
-def test_consolidation_watermark_persist_preserves_apply_head_fields():
-    uid = UID
-    control = MemoryControlState(
-        uid=uid,
-        head_commit_id="head0",
-        commit_sequence=0,
-        account_generation=1,
-        source_generation=1,
-        last_consolidation_run_at=NOW - timedelta(days=2),
-    )
-    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
-    pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
-
-    original_set = _FakeDocumentRef.set
-
-    def concurrent_apply_before_watermark(self, data, merge=False):
-        if merge:
-            current = dict(self._db.docs[self.path])
-            current.update({"head_commit_id": "head-concurrent", "commit_sequence": 42})
-            self._db.docs[self.path] = current
-        return original_set(self, data, merge=merge)
-
-    with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
-        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent") as mock_agent,
-        patch.object(_FakeDocumentRef, "set", concurrent_apply_before_watermark),
-    ):
-        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending[:10], candidates_by_anchor={})
-        mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="no_changes")
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-zero", now=NOW, batch_threshold=2)
-
-    assert report.last_consolidation_run_at == NOW
-    stored_control = MemoryControlState(**db.docs[f"users/{uid}/memory_state/apply_control"])
-    assert stored_control.head_commit_id == "head-concurrent"
-    assert stored_control.commit_sequence == 42
-    assert stored_control.last_consolidation_run_at == NOW
-
-
-def test_batch_cap_limits_pending_items_per_llm_call_and_loops_all_pending():
-    uid = UID
-    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
-    pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(15)]
-
-    with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
-        patch("utils.memory.canonical_consolidation.consolidation_batch_cap", return_value=10),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
-        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent") as mock_agent,
-    ):
-        mock_gather.side_effect = lambda _uid, batch, **kwargs: MagicMock(
-            uid=uid, pending_items=batch, candidates_by_anchor={}
-        )
-        mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="no_changes")
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-cap", now=NOW, batch_threshold=10)
-
-    assert mock_gather.call_count == 2
-    assert all(len(call.args[1]) <= 10 for call in mock_gather.call_args_list)
-    assert len(report.batched_memory_ids) == 15
-
-
-def test_missing_survivor_skips_decision_without_corruption():
-    survivor = _item("mem_survivor", "Enjoys hiking")
-    db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
-    initial_item = copy.deepcopy(db.docs[f"users/{UID}/memory_items/mem_survivor"])
-
-    decision = ConsolidationAgentDecision(
-        decision="merge",
-        survivor_memory_id="mem_hallucinated",
-        memory_text="Enjoys hiking",
-        evidence_ids=["ev_mem_survivor"],
-        corroboration_increment=True,
-    )
-
-    with pytest.raises(canonical_consolidation.ConsolidationApplySkipped):
-        apply_consolidation_decision(
-            UID,
-            decision=decision,
-            pending_by_id={},
-            control=control,
-            run_id="run-missing-survivor",
-            now=NOW,
-            db_client=db,
-        )
-
-    assert db.docs[f"users/{UID}/memory_items/mem_survivor"] == initial_item
-    assert "mem_hallucinated" not in db.docs
-
-
-def test_superseded_survivor_skips_decision():
-    survivor = _item("mem_survivor", "Old fact")
-    survivor.status = MemoryItemStatus.superseded
-    db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
-    initial_item = copy.deepcopy(db.docs[f"users/{UID}/memory_items/mem_survivor"])
-
-    decision = ConsolidationAgentDecision(
-        decision="update",
-        survivor_memory_id="mem_survivor",
-        memory_text="Updated fact",
-        evidence_ids=["ev_mem_survivor"],
-    )
-
-    with pytest.raises(canonical_consolidation.ConsolidationApplySkipped):
-        apply_consolidation_decision(
-            UID,
-            decision=decision,
-            pending_by_id={},
-            control=control,
-            run_id="run-superseded-survivor",
-            now=NOW,
-            db_client=db,
-        )
-
-    assert db.docs[f"users/{UID}/memory_items/mem_survivor"] == initial_item
-
-
-def test_merged_survivor_stays_short_term_and_reappears_in_pending():
-    survivor = _item("mem_survivor", "Enjoys hiking in Seattle", tier=MemoryTier.short_term)
-    duplicate_ev = _evidence("ev_pending", source_id="conv-2")
-    db = _db_for_apply(survivor=survivor, extra_evidence=[duplicate_ev])
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
-    pending = _item("mem_pending", "Enjoys hiking in Seattle", evidence_ids=["ev_pending"])
-
-    apply_consolidation_decision(
-        UID,
-        decision=ConsolidationAgentDecision(
-            decision="merge",
-            survivor_memory_id="mem_survivor",
-            memory_text="Enjoys hiking in Seattle",
-            evidence_ids=["ev_pending"],
-            corroboration_increment=True,
-        ),
-        pending_by_id={survivor.memory_id: survivor, pending.memory_id: pending},
-        control=control,
-        run_id="run-merge-tier",
-        now=NOW,
-        db_client=db,
-    )
-
-    updated = _stored_item(db, "mem_survivor")
-    assert updated.tier == MemoryTier.short_term
-
-    jobs_mod.fetch_short_term_memory_items_firestore.return_value = [updated]
-    pending_items = list_pending_consolidation_items(UID, db_client=db, now=NOW)
-    assert [item.memory_id for item in pending_items] == ["mem_survivor"]
-
-
-def test_batch_skips_hallucinated_evidence_and_applies_valid_decision():
-    uid = UID
-    survivor = _item("mem_valid", "Likes coffee")
-    control = MemoryControlState(
-        uid=uid,
-        head_commit_id="head0",
-        account_generation=1,
-        source_generation=1,
-        last_consolidation_run_at=NOW - timedelta(days=2),
-    )
-    db = _FakeDb(
-        {
-            f"users/{uid}/memory_state/apply_control": _stored(control),
-            f"users/{uid}/memory_items/mem_valid": _stored(survivor),
-            f"users/{uid}/memory_evidence/ev_mem_valid": _stored(survivor.evidence[0]),
+def test_promotion_and_supersession_share_one_commit_and_remove_old_assertion():
+    source = _item("mem_new", "I now live in Seattle.")
+    old = _item("mem_old", "The user lives in Portland.", tier=MemoryTier.long_term)
+    old = old.model_copy(
+        update={
+            "graph_ready": True,
+            "graph_assertion_id": "mga_old",
+            "graph_plan_hash": "old-plan",
+            "kg_extracted": True,
         }
     )
-    pending = [survivor, _item("mem_pending", "Duplicate coffee", evidence_ids=["ev_pending"])]
-
-    agent_response = ConsolidationAgentBatch(
-        decisions=[
-            ConsolidationAgentDecision(
-                decision="merge",
-                survivor_memory_id="mem_valid",
-                memory_text="Likes coffee",
-                evidence_ids=["ev_hallucinated"],
-                corroboration_increment=True,
-            ),
-            ConsolidationAgentDecision(
-                decision="skip_duplicate",
-                survivor_memory_id="mem_valid",
-                corroboration_increment=True,
-            ),
-        ]
+    db = _db_for_items(source, old)
+    db.docs[f"users/{UID}/memory_graph_assertions/{old.memory_id}"] = {
+        "assertion_id": "mga_old",
+    }
+    decision = _promote_decision(
+        source,
+        supersedes=[old.memory_id],
+        target_memory_id=old.memory_id,
     )
 
-    with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
-        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent", return_value=agent_response),
-    ):
-        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
-        report = run_canonical_consolidation(
-            uid,
-            db_client=db,
-            run_id="run-mixed-batch",
-            now=NOW,
-            batch_threshold=2,
-        )
+    applied_ids = _apply(source, decision, db)
 
-    assert report.decisions_applied == 1
-    assert report.decisions_skipped == 1
-    assert report.last_consolidation_run_at == NOW
-    updated = _stored_item(db, "mem_valid")
-    assert updated.corroboration_count == 1
+    promoted = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    superseded = MemoryItem(**db.docs[f"users/{UID}/memory_items/{old.memory_id}"])
+    assert applied_ids == [source.memory_id, old.memory_id]
+    assert promoted.tier == MemoryTier.long_term
+    assert superseded.status == MemoryItemStatus.superseded
+    assert superseded.superseded_by == source.memory_id
+    assert superseded.canonical_memory_id == source.memory_id
+    items_by_id = {item.memory_id: item for item in (promoted, superseded)}
+    assert canonical_lineage_root(promoted, items_by_id=items_by_id) == source.memory_id
+    assert canonical_lineage_root(superseded, items_by_id=items_by_id) == source.memory_id
+    assert promoted.ledger_commit_id == superseded.ledger_commit_id
+    assert f"users/{UID}/memory_graph_assertions/{old.memory_id}" not in db.docs
 
 
-def test_partial_apply_halts_subsequent_batches():
-    """After partial apply, no further LLM batches run in the same pass."""
-    uid = UID
-    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
-    pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(15)]
-
-    first_batch_response = ConsolidationAgentBatch(
-        decisions=[
-            ConsolidationAgentDecision(
-                decision="update",
-                survivor_memory_id="mem_0",
-                supersedes=["mem_1"],
-                memory_text="fact 0 updated",
-                evidence_ids=["ev_mem_0"],
-            )
-        ]
-    )
-
-    with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
-        patch("utils.memory.canonical_consolidation.consolidation_batch_cap", return_value=10),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
-        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent") as mock_agent,
-        patch(
-            "utils.memory.canonical_consolidation.apply_consolidation_decision",
-            side_effect=canonical_consolidation.ConsolidationPartialApply("supersede failed"),
-        ),
-    ):
-        mock_gather.side_effect = lambda _uid, batch, **kwargs: MagicMock(
-            uid=uid, pending_items=batch, candidates_by_anchor={}
-        )
-        mock_agent.return_value = first_batch_response
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-partial-halt", now=NOW, batch_threshold=10)
-
-    assert mock_agent.call_count == 1
-    assert report.decisions_partial == 1
-    assert report.watermark_blocked is True
-    assert len(report.batched_memory_ids) == 0
-
-
-def test_invoke_failure_blocks_watermark_and_defers_promotion_gate():
-    uid = UID
-    control = MemoryControlState(
-        uid=uid,
-        head_commit_id="head0",
-        account_generation=1,
-        source_generation=1,
-        last_consolidation_run_at=NOW - timedelta(days=2),
-    )
-    db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
-    pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
-
-    def _raise_invoke(_prompt: str) -> str:
-        raise RuntimeError("llm unavailable")
-
-    with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
-    ):
-        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
-        report = run_canonical_consolidation(
-            uid,
-            db_client=db,
-            run_id="run-invoke-fail",
-            now=NOW,
-            batch_threshold=2,
-            llm_invoke=_raise_invoke,
-        )
-
-    assert report.watermark_blocked is True
-    assert report.last_consolidation_run_at == control.last_consolidation_run_at
-
-    from utils.memory.short_term_promotion import run_canonical_short_term_promotion
-
-    with (
-        patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.short_term_promotion.list_promotable_short_term_items", return_value=pending),
-        patch("utils.memory.short_term_promotion.list_fast_track_promotable_items", return_value=[]),
-        patch("utils.memory.short_term_promotion._read_control_state", return_value=control),
-        patch("utils.memory.short_term_promotion.promote_short_term_item_via_apply") as mock_promote,
-    ):
-        promo = run_canonical_short_term_promotion(
-            uid,
-            db_client=db,
-            run_id="run-invoke-fail-promo",
-            now=NOW,
-            consolidation_batched_ids=set(),
-        )
-
-    assert promo.skipped_reason == "consolidation_watermark_blocked"
-    mock_promote.assert_not_called()
-
-
-def _read_control_state_from_db(db: _FakeDb) -> MemoryControlState:
-    return MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
-
-
-def test_corroboration_increment_idempotent_across_runs():
-    survivor = _item("mem_survivor", "Enjoys hiking", corroboration_count=0)
-    db = _db_for_apply(survivor=survivor)
-    control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
+@pytest.mark.parametrize(
+    ("route", "expected_status"),
+    [
+        ("archive", MemoryItemStatus.active),
+        ("review", MemoryItemStatus.active),
+        ("reject", MemoryItemStatus.hidden),
+    ],
+)
+def test_nonpromote_routes_are_terminal_archive_outcomes(route: str, expected_status: MemoryItemStatus, monkeypatch):
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'false')
+    source = _item(f"mem_{route}", "A broad but non-durable observation.")
+    db = _db_for_items(source)
     decision = ConsolidationAgentDecision(
-        decision="skip_duplicate",
-        survivor_memory_id="mem_survivor",
-        corroboration_increment=True,
-        rationale="duplicate pending item",
+        source_memory_id=source.memory_id,
+        route=route,
+        evidence_ids=[],
+        relationship_to_user="unclear",
+        basis_for_memory="weak_or_none",
+        rationale="Not safe or useful enough for durable memory.",
     )
 
-    apply_consolidation_decision(
+    _apply(source, decision, db)
+
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    assert stored.tier == MemoryTier.archive
+    assert stored.status == expected_status
+    review_path = f"users/{UID}/memory_review_queue/review:{source.memory_id}:r{stored.item_revision}:"
+    if route == "review":
+        assert db.docs[review_path]["source_commit_id"] == stored.ledger_commit_id
+        assert db.docs[review_path]["status"] == "pending"
+        assert db.docs[review_path]["authority"] == "canonical_memory"
+    else:
+        assert review_path not in db.docs
+    assert stored.graph_ready is False
+    assert f"users/{UID}/memory_graph_assertions/{source.memory_id}" not in db.docs
+
+
+def test_reject_hides_after_consolidation():
+    source = _item("mem_reject_off", "A broad but non-durable observation.")
+    db = _db_for_items(source)
+    decision = ConsolidationAgentDecision(
+        source_memory_id=source.memory_id,
+        route="reject",
+        evidence_ids=[],
+        relationship_to_user="unclear",
+        basis_for_memory="weak_or_none",
+        rationale="Not safe or useful enough for durable memory.",
+    )
+    _apply(source, decision, db)
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    assert stored.tier == MemoryTier.archive
+    assert stored.status == MemoryItemStatus.hidden
+
+
+def test_expired_review_is_not_requeued_by_consolidation_replay():
+    source = _item('mem_expired_review', 'A synthetic review candidate.')
+    db = _db_for_items(source)
+    decision = ConsolidationAgentDecision(
+        source_memory_id=source.memory_id,
+        route='review',
+        evidence_ids=[],
+        relationship_to_user='unclear',
+        basis_for_memory='weak_or_none',
+        rationale='Needs review.',
+    )
+    _apply(source, decision, db)
+    stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+    review_path = f'users/{UID}/memory_review_queue/review:{source.memory_id}:r{stored.item_revision}:'
+    db.docs[review_path].update({'status': 'expired', 'permitted_uses': []})
+    before = {path: dict(row) for path, row in db.docs.items()}
+
+    assert stored.tier == MemoryTier.short_term
+    _apply(source, decision, db)
+
+    assert db.docs == before
+    assert db.docs[review_path]['status'] == 'expired'
+
+
+def test_quarantine_review_is_a_canonical_blocked_commit_with_projection_deletes():
+    source = _item("mem_quarantine", "A source that exhausted automatic consolidation.")
+    db = _db_for_items(source)
+    decision = ConsolidationAgentDecision(
+        source_memory_id=source.memory_id,
+        route="review",
+        relationship_to_user="unclear",
+        basis_for_memory="weak_or_none",
+        rationale="Automatic consolidation exhausted its bounded retry budget.",
+    )
+
+    _apply(source, decision, db, quarantine=True)
+
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    assert stored.tier == MemoryTier.short_term
+    assert stored.processing_state == ProcessingState.blocked
+    assert stored.promotion is not None
+    assert stored.promotion["route"] == "review"
+    assert stored.promotion["processing_status"] == "processing_blocked"
+    review_path = f"users/{UID}/memory_review_queue/review:{source.memory_id}:r{stored.item_revision}:"
+    assert db.docs[review_path]["status"] == "pending"
+    outbox = [payload for path, payload in db.docs.items() if path.startswith(f"users/{UID}/memory_outbox/")]
+    assert len(outbox) == 2
+    assert {event["payload"]["action"] for event in outbox} == {"delete"}
+
+
+def test_same_route_retry_is_idempotent_and_does_not_increment_revision_twice():
+    source = _item("mem_idempotent", "I enjoy hiking.")
+    db = _db_for_items(source)
+    decision = _promote_decision(source)
+
+    _apply(source, decision, db)
+    first = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    _apply(source, decision, db)
+    second = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+
+    assert second.item_revision == first.item_revision
+    assert second.ledger_commit_id == first.ledger_commit_id
+
+
+def test_pending_required_promote_stamps_processing_receipt_then_routes():
+    content = "Remember I enjoy hiking in Seattle."
+    source = _item("mem_required", content)
+    source = source.model_copy(
+        update={
+            "processing_state": ProcessingState.pending,
+            "user_asserted": True,
+            "promotion": {
+                "required": True,
+                "status": "pending",
+                "processing_status": "pending_processing",
+                "processor_id": REQUIRED_PROCESSOR_ID,
+                "processor_version": REQUIRED_PROCESSOR_VERSION,
+                "submission": {
+                    "submission_id": source.memory_id,
+                    "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                },
+                "source_attribution": {
+                    "subject_entity_id": "user",
+                    "subject_attribution": "user",
+                },
+            },
+        }
+    )
+    db = _db_for_items(source)
+
+    applied_ids = _apply(source, _promote_decision(source), db)
+
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    operations = [
+        MemoryOperation(**payload)
+        for path, payload in db.docs.items()
+        if path.startswith(f"users/{UID}/memory_operations/")
+    ]
+    assert applied_ids == [source.memory_id]
+    assert stored.tier == MemoryTier.long_term
+    assert stored.content == "The user enjoys hiking in Seattle."
+    assert stored.processing_state == ProcessingState.processed
+    assert stored.promotion is not None
+    assert stored.promotion.get("required") is True
+    assert valid_required_processing_receipt(
+        content=stored.content,
+        item_revision=stored.item_revision,
+        promotion=stored.promotion,
+    )
+    assert (
+        stored.promotion["processing_receipt"]["output_hash"]
+        == hashlib.sha256(stored.content.encode("utf-8")).hexdigest()
+    )
+    assert len(operations) == 2
+    assert {op.operation_type for op in operations} == {MemoryOperationType.synthesis}
+
+
+def test_already_processed_required_promote_rebinds_memory_text_to_l2_content():
+    l2_content = "The user enjoys hiking in Seattle."
+    raw = "Remember I enjoy hiking in Seattle."
+    source = _item("mem_required_processed", l2_content)
+    source = source.model_copy(
+        update={
+            "user_asserted": True,
+            "promotion": {
+                "required": True,
+                "status": "pending",
+                "processing_status": "processed",
+                "processor_id": REQUIRED_PROCESSOR_ID,
+                "processor_version": REQUIRED_PROCESSOR_VERSION,
+                "submission": {
+                    "submission_id": source.memory_id,
+                    "content_hash": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                },
+                "processing_receipt": {
+                    "receipt_version": REQUIRED_PROCESSING_RECEIPT_VERSION,
+                    "processor_id": REQUIRED_PROCESSOR_ID,
+                    "processor_version": REQUIRED_PROCESSOR_VERSION,
+                    "decision": "durable_required",
+                    "processed_at": NOW.isoformat(),
+                    "input_hash": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                    "output_hash": hashlib.sha256(l2_content.encode("utf-8")).hexdigest(),
+                    "input_item_revision": source.item_revision - 1,
+                    "output_item_revision": source.item_revision,
+                    "source_submission_id": source.memory_id,
+                    "rationale": "normalized during consolidation",
+                },
+                "source_attribution": {
+                    "subject_entity_id": "user",
+                    "subject_attribution": "user",
+                },
+            },
+        }
+    )
+    db = _db_for_items(source)
+    decision = _promote_decision(source).model_copy(update={"memory_text": "The user loves backpacking instead."})
+
+    applied_ids = _apply(source, decision, db)
+
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    assert applied_ids == [source.memory_id]
+    assert stored.tier == MemoryTier.long_term
+    assert stored.content == l2_content
+    assert valid_required_processing_receipt(
+        content=stored.content,
+        item_revision=stored.item_revision,
+        promotion=stored.promotion or {},
+    )
+
+
+def test_free_owner_observation_gets_receipted_decision_without_dream_membership(monkeypatch):
+    """Post-retirement regression: ordinary processed rows had no route writer."""
+    monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'allowlist')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', '')
+    source = _item('mem_ordinary', 'Enjoys hiking in Seattle.')
+    source.subject_entity_id = 'user'
+    source.promotion = {'source_attribution': {'subject_entity_id': 'user', 'subject_attribution': 'user'}}
+    # Expiry is not a decision; backlogged rows must also reach intake.
+    source.captured_at = NOW - timedelta(days=4)
+    db = _db_for_items(source)
+    report = observation_intake.complete_observation_intake(
         UID,
-        decision=decision,
-        pending_by_id={survivor.memory_id: survivor},
-        control=control,
-        run_id="run-first",
+        memory_ids=[source.memory_id],
+        db_client=db,
         now=NOW,
-        db_client=db,
+        run_id='ordinary',
+        planner=lambda items: [_promote_decision(items[0])],
     )
-    after_first = _stored_item(db, "mem_survivor")
-    assert after_first.corroboration_count == 1
+    stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+    assert report.promoted_memory_ids == [source.memory_id]
+    assert stored.tier == MemoryTier.long_term
+    assert stored.promotion['admission_receipt']
+    assert stored.graph_ready
 
-    apply_consolidation_decision(
+
+def test_observation_failure_preserves_committed_capture(monkeypatch):
+    source = _item('mem_retry', 'Enjoys hiking.')
+    db = _db_for_items(source)
+    before = dict(db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+
+    def fail(items):
+        raise RuntimeError('synthetic planner unavailable')
+
+    report = observation_intake.complete_observation_intake(
         UID,
-        decision=decision,
-        pending_by_id={after_first.memory_id: after_first},
-        control=_read_control_state_from_db(db),
-        run_id="run-retry",
-        now=NOW + timedelta(hours=1),
+        memory_ids=[source.memory_id],
         db_client=db,
+        now=NOW,
+        run_id='retry',
+        planner=fail,
     )
-    after_second = _stored_item(db, "mem_survivor")
-    assert after_second.corroboration_count == 1
-    assert after_second.version == after_first.version
+    assert report.failed_memory_ids == [source.memory_id]
+    assert db.docs[f'users/{UID}/memory_items/{source.memory_id}'] == before
+
+
+def test_review_stays_short_term_and_rollback_restores_archive(monkeypatch):
+    for enabled, expected in [('true', MemoryTier.short_term), ('false', MemoryTier.archive)]:
+        monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', enabled)
+        source = _item('mem_review_switch', 'A synthetic observation awaiting confirmation.')
+        db = _db_for_items(source)
+        _apply(source, ConsolidationAgentDecision(source_memory_id=source.memory_id, route='review'), db)
+        stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+        assert stored.tier == expected
+        assert stored.promotion['route'] == 'review'
+
+
+@pytest.mark.parametrize(
+    'field,value',
+    [
+        ('status', MemoryItemStatus.hidden),
+        ('processing_state', ProcessingState.blocked),
+        ('source_state', SourceState.tombstoned),
+    ],
+)
+def test_observation_intake_never_resurrects_fenced_rows(field, value):
+    source = _item('mem_fenced', 'A synthetic observation.')
+    source = source.model_copy(update={field: value})
+    db = _db_for_items(source)
+    canonical_consolidation._read_control_state(UID, db_client=db)
+    before = dict(db.docs)
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='fenced',
+        planner=lambda items: pytest.fail('fenced row reached planner'),
+    )
+    assert not report.decided_memory_ids
+    assert db.docs == before
+
+
+@pytest.mark.parametrize('promotion', [{'is_locked': True}, {'user_review': False}, {'required': True}])
+def test_observation_intake_preserves_locks_rejection_and_explicit_intake(promotion):
+    source = _item('mem_locked', 'A synthetic observation.')
+    source.promotion = promotion
+    db = _db_for_items(source)
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='locked',
+        planner=lambda items: pytest.fail('protected row reached planner'),
+    )
+    assert not report.decided_memory_ids
+
+
+@pytest.mark.parametrize('unsafe', ['partition', 'foreign_evidence', 'unknown_subject', 'supersedes'])
+def test_observation_intake_validates_whole_batch_before_writing(unsafe):
+    source = _item('mem_unsafe', 'A synthetic observation.')
+    db = _db_for_items(source)
+    canonical_consolidation._read_control_state(UID, db_client=db)
+    before = dict(db.docs)
+    decision = _promote_decision(source)
+    if unsafe == 'partition':
+        decisions = []
+    else:
+        changes = {
+            'foreign_evidence': {'evidence_ids': ['foreign']},
+            'unknown_subject': {'subject_entity_id': 'invented'},
+            'supersedes': {'supersedes': ['unseen']},
+        }
+        decisions = [decision.model_copy(update=changes[unsafe])]
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='unsafe',
+        planner=lambda items: decisions,
+    )
+    assert report.failed_memory_ids == [source.memory_id]
+    assert db.docs == before
+
+
+def test_restricted_observation_gets_review_without_provider_call():
+    from unittest.mock import Mock
+
+    source = _item('mem_restricted', 'Sensitive fixture content.')
+    source.sensitivity_labels = ['credential']
+    model = Mock(side_effect=AssertionError('restricted evidence reached provider'))
+    decisions = observation_intake.plan_observation_intake([source], llm=model)
+    assert [d.route for d in decisions] == ['review']
+    model.invoke.assert_not_called()
+
+
+@pytest.mark.parametrize('changed_field', ['source_generation', 'writer_epoch', 'writer_mode'])
+def test_observation_generation_race_keeps_source_undecided(changed_field):
+    source = _item('mem_generation', 'Enjoys hiking in Seattle.')
+    source.subject_entity_id = 'user'
+    source.promotion = {'source_attribution': {'subject_entity_id': 'user', 'subject_attribution': 'user'}}
+    db = _db_for_items(source)
+
+    def race(items):
+        state = db.docs[f'users/{UID}/memory_state/apply_control']
+        if changed_field == 'writer_mode':
+            state[changed_field] = 'ledger'
+        else:
+            state[changed_field] += 1
+        return [_promote_decision(items[0])]
+
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='generation',
+        planner=race,
+    )
+    assert report.failed_memory_ids == [source.memory_id]
+    stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+    assert stored.tier == MemoryTier.short_term
+    assert not (stored.promotion or {}).get('route')
+
+
+@pytest.mark.asyncio
+async def test_observation_recovery_separates_db_and_model_steps(monkeypatch):
+    from utils import executors
+
+    source = _item('mem_recovery', 'Enjoys hiking in Seattle.')
+    source.subject_entity_id = 'user'
+    source.promotion = {'source_attribution': {'subject_entity_id': 'user', 'subject_attribution': 'user'}}
+    db = _db_for_items(source)
+    pools = []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        pools.append(pool)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(executors, 'run_blocking', blocking)
+    monkeypatch.setattr(observation_intake, '_pending_observation_ids', lambda *args, **kwargs: [source.memory_id])
+    monkeypatch.setattr(observation_intake, 'plan_observation_intake', lambda items: [_promote_decision(items[0])])
+    report = await observation_intake.complete_pending_observation_intake(
+        UID,
+        db_client=db,
+        now=NOW,
+        run_id='recovery',
+    )
+    assert report.promoted_memory_ids == [source.memory_id]
+    assert pools == [executors.db_executor, executors.db_executor, executors.llm_executor, executors.db_executor]
+
+
+@pytest.mark.parametrize('setting', ['0', 'false', 'off', 'no'])
+@pytest.mark.asyncio
+async def test_observation_kill_switch_stops_all_entrypoints_before_any_work(monkeypatch, setting):
+    monkeypatch.setenv('MEMORY_OBSERVATION_INTAKE_ENABLED', setting)
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'true')
+
+    def unexpected(*args, **kwargs):
+        pytest.fail('disabled intake attempted a read, cursor write or planner call')
+
+    monkeypatch.setattr(observation_intake, '_load_observation_intake', unexpected)
+    monkeypatch.setattr(observation_intake, '_pending_observation_ids', unexpected)
+    monkeypatch.setattr(observation_intake, 'plan_observation_intake', unexpected)
+    common = dict(db_client=object(), now=NOW, run_id='disabled')
+    reports = [
+        observation_intake.complete_observation_intake(UID, memory_ids=['already_committed'], **common),
+        observation_intake.complete_pending_observation_intake_sync(UID, **common),
+        await observation_intake.complete_pending_observation_intake(UID, **common),
+    ]
+    assert all(not r.decided_memory_ids and not r.failed_memory_ids and r.error_code is None for r in reports)
+
+
+@pytest.mark.parametrize('sizes,expected_calls', [([20_000] * 4, 2), ([100_000], 0), ([2_000, 100_000, 2_000], 2)])
+def test_context_budget_splits_to_items_and_reviews_oversized_singleton(sizes, expected_calls, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from langchain_core import output_parsers
+
+    # This file's isolation fixture replaces LangChain; preserve real Pydantic
+    # validation at the seam instead of the fixture's unrestricted MagicMock.
+    class Parser:
+        def __init__(self, *, pydantic_object):
+            self.schema = pydantic_object
+
+        def get_format_instructions(self):
+            return json.dumps(self.schema.model_json_schema())
+
+        def parse(self, content):
+            return self.schema.model_validate_json(content)
+
+    monkeypatch.setattr(output_parsers, 'PydanticOutputParser', Parser)
+    monkeypatch.delenv('MEMORY_OBSERVATION_INTAKE_ENABLED', raising=False)
+    items = [_item(f'mem_budget_{i}', 'x' * size) for i, size in enumerate(sizes)]
+    db = _db_for_items(*items)
+    requests = []
+
+    class Model:
+        def invoke(self, messages):
+            payload = messages[-1]['content']
+            assert len(payload.encode()) <= 64_000
+            rows = json.loads(payload)
+            requests.append([row['memory_id'] for row in rows])
+            return SimpleNamespace(
+                content=json.dumps(
+                    {'decisions': [{'source_memory_id': row['memory_id'], 'route': 'review'} for row in rows]}
+                )
+            )
+
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[item.memory_id for item in items],
+        db_client=db,
+        now=NOW,
+        run_id='budget',
+        planner=lambda selected: observation_intake.plan_observation_intake(selected, llm=Model()),
+    )
+    assert report.error_code is None
+    assert report.decided_memory_ids == [item.memory_id for item in items]
+    assert len(requests) == expected_calls
+    sent = [memory_id for batch in requests for memory_id in batch]
+    assert len(sent) == len(set(sent))
+    assert set(sent) == {item.memory_id for item, size in zip(items, sizes) if size < 64_000}
+    for source in items:
+        stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+        assert stored.promotion['route'] == 'review'
+        assert stored.content == source.content
+        assert stored.status == MemoryItemStatus.active

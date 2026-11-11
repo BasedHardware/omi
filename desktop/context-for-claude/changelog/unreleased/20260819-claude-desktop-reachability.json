@@ -1,0 +1,3 @@
+{
+  "change": "The connection status now tells you the truth about Claude Desktop. It used to read \"Connected\" whenever the config file had an entry, even when Claude Desktop had no working server — so a connector that had been dead for days still looked fine. It now checks for a live server and, when Claude Desktop has not picked the registration up yet, says to quit and reopen it"
+}

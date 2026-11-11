@@ -46,6 +46,10 @@ final class VoiceTurnUIProjectionCopyTests: XCTestCase {
     XCTAssertEqual(
       VoiceTurnUICopy.terminalHint(for: .toolTimeout),
       "A tool took too long — try again")
+    // An offline question is not a provider failure: nothing was reached.
+    XCTAssertEqual(
+      VoiceTurnUICopy.terminalHint(for: .noNetwork),
+      "No network — say “type …” to dictate offline")
     XCTAssertNil(VoiceTurnUICopy.terminalHint(for: .interruptedByBargeIn))
     XCTAssertNil(VoiceTurnUICopy.terminalHint(for: .hubWarmTimeout))
     XCTAssertNil(VoiceTurnUICopy.terminalHint(for: .success))
@@ -124,5 +128,32 @@ final class VoiceTurnUIProjectionCopyTests: XCTestCase {
       AgentFailureTranscriptFormatter.transcriptText(
         for: "URLSessionTask failed with error: timeout https://x"),
       "Failed: \(AgentFailureTranscriptFormatter.genericSpawnFailure)")
+  }
+
+  /// A generic spawn failure (empty/transport/technical error with no known
+  /// external provider) must not blame OpenClaw — the default agent is
+  /// Omi-native, and the user may never have installed or intended OpenClaw.
+  /// Regression for the "Agent couldn't start — check OpenClaw setup" copy that
+  /// showed on plain background-agent failures.
+  func testGenericSpawnFailureIsProviderNeutral() {
+    XCTAssertFalse(
+      AgentFailureTranscriptFormatter.genericSpawnFailure.lowercased().contains("openclaw"),
+      "Generic spawn-failure copy must be provider-neutral")
+    XCTAssertFalse(
+      AgentFailureTranscriptFormatter.genericSpawnFailure.lowercased().contains("hermes"),
+      "Generic spawn-failure copy must be provider-neutral")
+
+    // A raw transport failure with no directed/known provider maps to the
+    // neutral generic copy — never a provider-specific setup hint.
+    let neutral = AgentFailureTranscriptFormatter.userFacingFailure(
+      "URLSessionTask failed with error: The request timed out. (-1001) https://example.com/v1")
+    XCTAssertFalse(neutral.lowercased().contains("openclaw"))
+
+    // Genuine missing-OpenClaw errors still map to OpenClaw setup copy.
+    XCTAssertEqual(
+      AgentFailureTranscriptFormatter.userFacingFailure(
+        "openclaw adapter not found",
+        harnessMode: .openclaw),
+      AgentPillsManager.DirectedProvider.openclaw.setupNeededStatus)
   }
 }

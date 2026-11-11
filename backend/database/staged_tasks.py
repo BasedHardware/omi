@@ -5,18 +5,29 @@ Collection: users/{uid}/staged_tasks
 
 import logging
 import uuid
+from database.action_item_fence import fenced_action_item_commit
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from ._client import db
+from ._client import db, get_firestore_client
+from .action_items_cache import bump_action_items_list_version
+from .firestore_index_registry import LEGACY_CONVERSATION_RECOVERY_QUERY
 import database.action_items as action_items_db
+from database.staged_promote_cache import invalidate_around_write
 
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
+
+# Recovery uses one atomic create-if-absent batch per row. Keep the page small
+# enough that a user with a large historical migration never holds an HTTP
+# request open for an unbounded number of Firestore commits.
+LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE = 50
+LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES = 3
 
 
 def _user_col(uid: str, collection: str):
@@ -32,6 +43,7 @@ def _commit_batch(batch, count):
     return batch, count
 
 
+@invalidate_around_write
 def create_staged_task(uid: str, description: str, **kwargs) -> dict:
     """Create a staged task.  Deduplicates by normalized description.
 
@@ -43,13 +55,15 @@ def create_staged_task(uid: str, description: str, **kwargs) -> dict:
     """
     col = _user_col(uid, 'staged_tasks')
 
-    # Deduplicate
+    # Deduplicate against active (uncompleted) staged tasks
     desc_norm = action_items_db._normalize_description(description)
     for doc in col.stream():
-        if action_items_db._normalize_description(doc.to_dict().get('description', '')) == desc_norm:
-            existing = doc.to_dict()
-            existing['id'] = doc.id
-            return existing
+        data = doc.to_dict() or {}
+        if data.get('completed'):
+            continue
+        if action_items_db._normalize_description(data.get('description', '')) == desc_norm:
+            data['id'] = doc.id
+            return data
 
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -57,10 +71,11 @@ def create_staged_task(uid: str, description: str, **kwargs) -> dict:
         'id': task_id,
         'description': description,
         'completed': False,
+        'relevance_score': kwargs.get('relevance_score', 0) if kwargs.get('relevance_score') is not None else 0,
         'created_at': now,
         'updated_at': now,
     }
-    for field in ('due_at', 'source', 'priority', 'metadata', 'category', 'relevance_score'):
+    for field in ('due_at', 'source', 'priority', 'metadata', 'category'):
         if field in kwargs and kwargs[field] is not None:
             doc[field] = kwargs[field]
 
@@ -85,15 +100,45 @@ def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[dict]:
     return items
 
 
-def get_all_staged_tasks_for_migration(uid: str) -> List[dict]:
+def get_all_staged_tasks_for_migration(uid: str) -> List[dict[str, Any]]:
     """Read active and terminal staged rows for idempotent Candidate reconciliation."""
 
-    items: List[dict] = []
+    items: List[dict[str, Any]] = []
     for snapshot in _user_col(uid, 'staged_tasks').stream():
         data = snapshot.to_dict() or {}
         data['id'] = snapshot.id
         items.append(data)
     return items
+
+
+def get_active_staged_tasks_for_compatibility(uid: str) -> List[dict]:
+    """Read every active historical row for complete released compatibility."""
+
+    # Do not filter in Firestore: old rows may predate the ``completed`` field,
+    # and a field predicate would silently hide exactly the data this adapter
+    # exists to preserve.
+    query = _user_col(uid, 'staged_tasks').order_by('__name__')
+    items: List[dict] = []
+    for snapshot in query.stream():
+        data = snapshot.to_dict() or {}
+        if data.get('completed'):
+            continue
+        data['id'] = snapshot.id
+        items.append(data)
+    return items
+
+
+def get_staged_task_for_compatibility(uid: str, staged_id: str) -> Optional[dict]:
+    """Point-read one active historical row without scanning the account."""
+
+    snapshot = _user_col(uid, 'staged_tasks').document(staged_id).get()
+    if not snapshot.exists:
+        return None
+    data = snapshot.to_dict() or {}
+    if data.get('completed'):
+        return None
+    data['id'] = snapshot.id
+    return data
 
 
 def get_top_staged_task_for_promotion(uid: str) -> Optional[dict]:
@@ -113,6 +158,7 @@ def get_top_staged_task_for_promotion(uid: str) -> Optional[dict]:
     return row
 
 
+@invalidate_around_write
 def delete_staged_task(uid: str, task_id: str) -> bool:
     ref = _user_col(uid, 'staged_tasks').document(task_id)
     if not ref.get().exists:
@@ -121,6 +167,7 @@ def delete_staged_task(uid: str, task_id: str) -> bool:
     return True
 
 
+@invalidate_around_write
 def complete_staged_task_promotion(
     uid: str,
     staged_id: str,
@@ -138,6 +185,7 @@ def complete_staged_task_promotion(
     _user_col(uid, 'staged_tasks').document(staged_id).update(patch)
 
 
+@invalidate_around_write
 def suppress_staged_task_for_terminal_candidate(uid: str, staged_id: str, *, reason: str) -> None:
     """Close a legacy row whose canonical sidecar is already terminal without creating a task."""
 
@@ -152,6 +200,7 @@ def suppress_staged_task_for_terminal_candidate(uid: str, staged_id: str, *, rea
     )
 
 
+@invalidate_around_write
 def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
     """Update relevance_score for staged tasks in batches of 500.
 
@@ -178,6 +227,7 @@ def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
         batch.commit()
 
 
+@invalidate_around_write
 def promote_staged_task(
     uid: str,
     task_id: Optional[str] = None,
@@ -324,6 +374,7 @@ def promote_staged_task(
     return {**action_item, '_staged_task_id': staged['id']} if include_staged_id else action_item
 
 
+@invalidate_around_write
 def clear_staged_tasks(uid: str) -> int:
     """Delete all active (uncompleted) staged tasks for a user in one call.
 
@@ -345,68 +396,106 @@ def clear_staged_tasks(uid: str) -> int:
     return total
 
 
-def migrate_ai_tasks(uid: str) -> dict:
-    """One-time migration: move excess AI tasks from action_items to staged_tasks.
+@invalidate_around_write
+def restore_legacy_conversation_items(
+    uid: str,
+    *,
+    limit: int = LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE,
+    cursor: Optional[str] = None,
+    firestore_client=None,
+) -> dict:
+    """Restore rows moved by the retired desktop conversation migration.
 
-    Keeps top 3 AI tasks in action_items, moves the rest to staged_tasks.
-    Uses a 'source' field marker to identify AI-created tasks.
+    Only active ``conversation_migration`` rows qualify. Each row is restored
+    with an atomic create+delete batch, so an existing action item is never
+    overwritten; an action item created or restored concurrently wins. Results
+    are ordered by document ID and cursor-paginated so the client can finish a
+    large recovery without one request exceeding its Firestore deadline.
     """
-    col = _user_col(uid, 'action_items')
-    query = col.where(filter=FieldFilter('completed', '==', False))
 
-    all_items = []
-    for doc in query.stream():
-        data = doc.to_dict()
-        data['id'] = doc.id
-        if data.get('deleted'):
-            continue
-        all_items.append(data)
+    if limit < 1:
+        raise ValueError('limit must be positive')
 
-    # Separate AI-generated tasks from manual ones
-    ai_tasks = [item for item in all_items if 'screenshot' in (item.get('source') or '')]
-    if len(ai_tasks) <= 3:
-        return {'moved': 0, 'kept': len(ai_tasks)}
+    # Resolve the client at the call boundary. The legacy ``db`` proxy is safe
+    # for older helpers in this module, but recovery must be independently
+    # testable and must not capture a client during import.
+    client = firestore_client or get_firestore_client()
+    user_doc = client.collection('users').document(uid)
+    action_items_col = user_doc.collection('action_items')
+    staged_col = user_doc.collection('staged_tasks')
+    migrated_query = LEGACY_CONVERSATION_RECOVERY_QUERY.build(
+        staged_col,
+        {'source': 'conversation_migration'},
+        field_filter_factory=FieldFilter,
+    ).order_by('__name__')
+    if cursor:
+        migrated_query = migrated_query.start_after({'__name__': staged_col.document(cursor)})
+    # Read one look-ahead document so the caller can distinguish a complete
+    # recovery from a page that must be continued with ``next_cursor``.
+    migrated_rows = list(migrated_query.limit(limit + 1).stream())
+    page = migrated_rows[:limit]
+    has_more = len(migrated_rows) > limit
+    next_cursor = page[-1].id if has_more and page else None
+    restored = 0
+    skipped_existing = 0
 
-    # Sort by relevance_score ascending (best first)
-    ai_tasks.sort(key=lambda x: x.get('relevance_score') or 999)
-    keep = ai_tasks[:3]
-    to_move = ai_tasks[3:]
+    for staged_snapshot in page:
+        # Keep the marker check in addition to the indexed query so a permissive
+        # fake or future query refactor can never restore an ordinary staged row.
+        action_item_ref = action_items_col.document(staged_snapshot.id)
+        staged_ref = staged_col.document(staged_snapshot.id)
+        for attempt in range(LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1):
+            staged_row = staged_snapshot.to_dict() or {}
+            if staged_row.get('source') != 'conversation_migration' or staged_row.get('completed'):
+                break
 
-    staged_col = _user_col(uid, 'staged_tasks')
-    batch = db.batch()
-    batch_count = 0
-    for task in to_move:
-        batch.set(staged_col.document(task['id']), task)
-        batch.delete(col.document(task['id']))
-        batch_count += 2  # set + delete = 2 operations
-        batch, batch_count = _commit_batch(batch, batch_count)
-    if batch_count > 0:
-        batch.commit()
+            action_item = dict(staged_row)
+            # `id` is document identity and `source` is the recovery marker, not
+            # original action-item data. Recreating either would mutate the legacy
+            # task's meaning rather than restoring it.
+            action_item.pop('id', None)
+            action_item.pop('source', None)
 
-    return {'moved': len(to_move), 'kept': len(keep)}
+            batch = client.batch()
+            batch.create(action_item_ref, action_item)
+            # Keep the streamed staged row as the delete authority. If promotion
+            # or another recovery attempt updates it after the query, Firestore
+            # rejects the atomic batch instead of deleting the newer record.
+            delete_option = client.write_option(last_update_time=staged_snapshot.update_time)
+            batch.delete(staged_ref, option=delete_option)
+            try:
+                with fenced_action_item_commit(uid):
+                    batch.commit()
+            except (AlreadyExists, Conflict):
+                # An action-item collision preserves both copies for the next
+                # recovery pass or manual inspection.
+                skipped_existing += 1
+                break
+            except FailedPrecondition:
+                # A stale-row update is not an identity collision: it may be a
+                # score or metadata write with no corresponding action item.
+                # Refresh the row and retry so recovery never acknowledges an
+                # arbitrary contention as complete. Exhaustion re-raises and
+                # leaves the sweep unacknowledged for a later request.
+                if attempt >= LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES:
+                    raise
+                refreshed_snapshot = staged_ref.get()
+                if not refreshed_snapshot.exists:
+                    break
+                staged_snapshot = refreshed_snapshot
+                continue
+            else:
+                restored += 1
+                break
 
+    if restored:
+        # Recovery creates action items directly (not through
+        # database.action_items), so the list cache is invalidated here too.
+        bump_action_items_list_version(uid)
 
-def migrate_conversation_items_to_staged(uid: str) -> dict:
-    """Move conversation-sourced action items (without 'source') to staged_tasks."""
-    col = _user_col(uid, 'action_items')
-    staged_col = _user_col(uid, 'staged_tasks')
-
-    batch = db.batch()
-    moved = 0
-    batch_count = 0
-    for doc in col.stream():
-        data = doc.to_dict()
-        if data.get('deleted') or data.get('completed'):
-            continue
-        if data.get('conversation_id') and not data.get('source'):
-            data['id'] = doc.id
-            data['source'] = 'conversation_migration'
-            batch.set(staged_col.document(doc.id), data)
-            batch.delete(col.document(doc.id))
-            moved += 1
-            batch_count += 2  # set + delete = 2 operations
-            batch, batch_count = _commit_batch(batch, batch_count)
-    if batch_count > 0:
-        batch.commit()
-
-    return {'moved': moved}
+    return {
+        'restored': restored,
+        'skipped_existing': skipped_existing,
+        'has_more': has_more,
+        'next_cursor': next_cursor,
+    }

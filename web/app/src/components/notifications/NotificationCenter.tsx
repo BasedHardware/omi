@@ -7,42 +7,8 @@ import { useNotificationContext } from './NotificationContext';
 import { NotificationItem } from './NotificationItem';
 import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 import { cn } from '@/lib/utils';
-import type { OmiNotification } from '@/types/notification';
-
-/**
- * Group notifications by date (Today, Yesterday, Earlier)
- */
-function groupNotificationsByDate(notifications: OmiNotification[]) {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-
-  const groups: { label: string; notifications: OmiNotification[] }[] = [
-    { label: 'Today', notifications: [] },
-    { label: 'Yesterday', notifications: [] },
-    { label: 'Earlier', notifications: [] },
-  ];
-
-  notifications.forEach((notification) => {
-    const notifDate = new Date(notification.timestamp);
-    const notifDay = new Date(
-      notifDate.getFullYear(),
-      notifDate.getMonth(),
-      notifDate.getDate()
-    );
-
-    if (notifDay.getTime() >= today.getTime()) {
-      groups[0].notifications.push(notification);
-    } else if (notifDay.getTime() >= yesterday.getTime()) {
-      groups[1].notifications.push(notification);
-    } else {
-      groups[2].notifications.push(notification);
-    }
-  });
-
-  // Filter out empty groups
-  return groups.filter((g) => g.notifications.length > 0);
-}
+import { PanelReveal } from '@/components/ui/PanelReveal';
+import { groupNotificationsByDate } from '@/lib/notificationGroups';
 
 export function NotificationCenter() {
   const {
@@ -62,7 +28,7 @@ export function NotificationCenter() {
 
   const groupedNotifications = useMemo(
     () => groupNotificationsByDate(notifications),
-    [notifications]
+    [notifications],
   );
 
   const showPermissionBanner =
@@ -91,26 +57,20 @@ export function NotificationCenter() {
             className={cn(
               'h-full flex-shrink-0 overflow-hidden',
               'bg-bg-secondary border-l border-bg-tertiary',
-              'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full'
+              'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full',
             )}
           >
-            <div
-              className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}
-            >
+            <PanelReveal className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}>
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-purple-primary/20 flex items-center justify-center">
-                    <Bell className="w-4 h-4 text-purple-primary" />
+                  <div className="w-8 h-8 rounded-full bg-white/[0.14] flex items-center justify-center">
+                    <Bell className="w-4 h-4 text-text-primary" />
                   </div>
                   <div>
-                    <h2 className="font-semibold text-text-primary">
-                      Notifications
-                    </h2>
+                    <h2 className="font-semibold text-text-primary">Notifications</h2>
                     {unreadCount > 0 && (
-                      <p className="text-xs text-text-tertiary">
-                        {unreadCount} unread
-                      </p>
+                      <p className="text-xs text-text-tertiary">{unreadCount} unread</p>
                     )}
                   </div>
                 </div>
@@ -175,11 +135,15 @@ export function NotificationCenter() {
                           {group.notifications.map((notification) => {
                             // Extract app_id from notification data for image lookup
                             // Try multiple sources: direct data fields, or extract from navigate_to
-                            let appId = notification.data?.app_id as string | undefined
-                              || notification.data?.plugin_id as string | undefined;
+                            let appId =
+                              (notification.data?.app_id as string | undefined) ||
+                              (notification.data?.plugin_id as string | undefined);
 
                             // Fallback: extract from navigate_to (e.g., /chat/bitcoin-live)
-                            if (!appId && notification.navigate_to?.startsWith('/chat/')) {
+                            if (
+                              !appId &&
+                              notification.navigate_to?.startsWith('/chat/')
+                            ) {
                               appId = notification.navigate_to.split('/').pop();
                             }
 
@@ -187,9 +151,7 @@ export function NotificationCenter() {
                               <NotificationItem
                                 key={notification.id}
                                 notification={notification}
-                                onClick={() =>
-                                  navigateToNotification(notification)
-                                }
+                                onClick={() => navigateToNotification(notification)}
                                 onMarkAsRead={() => markAsRead(notification.id)}
                                 onClear={() => clearNotification(notification.id)}
                                 appImage={getAppImage(appId)}
@@ -202,7 +164,7 @@ export function NotificationCenter() {
                   </div>
                 )}
               </div>
-            </div>
+            </PanelReveal>
           </motion.div>
         </>
       )}

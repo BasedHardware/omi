@@ -1,4 +1,4 @@
-import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/services/integrations/integration_oauth.dart';
 
 import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -8,7 +8,12 @@ abstract class BaseIntegrationService {
   final String appKey;
   final String prefKey;
 
-  BaseIntegrationService({required this.appKey, required this.prefKey});
+  /// Key whose OAuth flow grants this integration. Defaults to [appKey]; differs
+  /// only when several integrations share one grant (Gmail rides Google Calendar).
+  final String oauthAppKey;
+
+  BaseIntegrationService({required this.appKey, required this.prefKey, String? oauthAppKey})
+      : oauthAppKey = oauthAppKey ?? appKey;
 
   bool get isAuthenticated {
     return SharedPreferencesUtil().getBool(prefKey);
@@ -18,38 +23,19 @@ abstract class BaseIntegrationService {
     await checkConnection();
   }
 
-  Future<bool> authenticate() async {
-    try {
-      final authUrl = await getIntegrationOAuthUrl(appKey);
-      if (authUrl == null) {
-        Logger.debug('Failed to get OAuth URL for $appKey');
-        return false;
-      }
-
-      final uri = Uri.parse(authUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return true;
-      } else {
-        Logger.debug('Cannot launch OAuth URL for $appKey');
-        return false;
-      }
-    } catch (e) {
-      Logger.debug('Error during $appKey authentication: $e');
-      return false;
-    }
-  }
+  Future<bool> authenticate({bool Function()? isCurrent}) =>
+      launchIntegrationOAuth(() => getIntegrationOAuthUrl(oauthAppKey), isCurrent: isCurrent);
 
   Future<bool> checkConnection() async {
     try {
       final response = await getIntegration(appKey);
-      final isConnected = response != null && response.connected;
+      if (response == null) return isAuthenticated;
+      final isConnected = response.connected;
       await SharedPreferencesUtil().saveBool(prefKey, isConnected);
       return isConnected;
     } catch (e) {
       Logger.debug('Error checking $appKey connection: $e');
-      await SharedPreferencesUtil().saveBool(prefKey, false);
-      return false;
+      return isAuthenticated;
     }
   }
 

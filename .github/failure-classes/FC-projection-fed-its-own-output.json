@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-projection-fed-its-own-output",
+  "violated_contract": "A projection that may withhold part of its input must be applied to the accumulated raw input on every pass. Storing the projection's output back into the only buffer and extending that buffer with the next delta destroys the evidence the projection needs, so anything withheld once is emitted on a later pass.",
+  "canonical_prevention": "Accumulate the raw input separately from the projected output: append deltas to the raw accumulator, project the whole accumulator, and write the result outward without ever reading it back. Release the accumulator when the stream terminates so a reused identity cannot resume from a previous one. Prove it by replaying the same input broken at every possible boundary and asserting the withheld content never appears in any intermediate output.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ChatStreamingTailProjectionTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift",
+    "desktop/macos/Desktop/Sources/Chat/ChatFollowUpTail.swift",
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift"
+  ],
+  "status": "open"
+}

@@ -1,6 +1,13 @@
 // src/renderer/src/lib/screenRedact.test.ts
 import { describe, it, expect } from 'vitest'
-import { redact, isPrivateWindow, isDeniedContext, DEFAULT_DENYLIST, redactFrameFields } from './screenRedact'
+import {
+  redact,
+  isPrivateWindow,
+  isDeniedContext,
+  isUserDenied,
+  DEFAULT_DENYLIST,
+  redactFrameFields
+} from './screenRedact'
 
 describe('redact', () => {
   it('redacts emails, cards, ssn, tokens', () => {
@@ -28,6 +35,33 @@ describe('isDeniedContext', () => {
     expect(isDeniedContext({ app: 'Chrome', windowTitle: 'Chase - Log in', processName: 'chrome.exe' })).toBe(true)
     expect(isDeniedContext({ app: 'Code', windowTitle: 'plan.md', processName: 'code.exe' })).toBe(false)
     expect(DEFAULT_DENYLIST.length).toBeGreaterThan(0)
+  })
+})
+
+describe('isUserDenied', () => {
+  const slackFrame = { app: 'Slack', windowTitle: 'general | Acme', processName: 'slack.exe' }
+
+  it('excludes a frame whose app matches the user denylist (case-insensitive)', () => {
+    expect(isUserDenied(slackFrame, ['Slack'])).toBe(true)
+    expect(isUserDenied(slackFrame, ['slack'])).toBe(true)
+    // matches windowTitle / processName too, mirroring isDeniedContext
+    expect(isUserDenied({ app: 'Chrome', windowTitle: 'Notion — Roadmap', processName: 'chrome.exe' }, ['notion'])).toBe(
+      true
+    )
+  })
+
+  it('retains a frame when the user denylist is empty or has no real match (no false positive)', () => {
+    expect(isUserDenied(slackFrame, [])).toBe(false)
+    expect(isUserDenied({ app: 'Code', windowTitle: 'plan.md', processName: 'code.exe' }, ['slack'])).toBe(false)
+    // blank / whitespace-only entries must not match everything
+    expect(isUserDenied(slackFrame, ['', '   '])).toBe(false)
+  })
+
+  it('adds a leg, not a replacement: a builtin-denied frame stays excluded with an empty user denylist', () => {
+    const pwFrame = { app: '1Password', windowTitle: '', processName: '1password.exe' }
+    // The builtin leg still catches it independently of the (empty) user leg.
+    expect(isDeniedContext(pwFrame)).toBe(true)
+    expect(isUserDenied(pwFrame, [])).toBe(false)
   })
 })
 

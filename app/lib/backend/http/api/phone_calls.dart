@@ -1,7 +1,7 @@
 import 'dart:convert';
 
+import 'package:omi/backend/http/error_detail.dart';
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/phone_calls_wire.g.dart' as wire;
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/env/env.dart';
@@ -26,12 +26,10 @@ Future<Map<String, dynamic>?> verifyPhoneNumber(String phoneNumber) async {
     );
     return generated.toJson();
   }
-  try {
-    final body = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    if (body.detail != null) {
-      return {'error': body.detail};
-    }
-  } catch (_) {}
+  final detail = errorDetailMessage(response.body);
+  if (detail != null) {
+    return {'error': detail};
+  }
   return null;
 }
 
@@ -77,15 +75,24 @@ Future<bool> deleteVerifiedPhoneNumber(String phoneNumberId) async {
 // ************** TOKEN MANAGEMENT ****************
 // ************************************************
 
-Future<PhoneCallToken?> getPhoneCallToken() async {
+/// A call token, or the reason the backend refused to mint one.
+class PhoneCallTokenResult {
+  final PhoneCallToken? token;
+  final String? error;
+
+  const PhoneCallTokenResult({this.token, this.error});
+}
+
+Future<PhoneCallTokenResult> getPhoneCallToken() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/phone/token', headers: {}, method: 'POST', body: '');
-  if (response == null) return null;
-  Logger.debug('getPhoneCallToken: ${response.body}');
+  if (response == null) return const PhoneCallTokenResult();
+  // A 200 body is a live call access token; log only the status.
+  Logger.debug('getPhoneCallToken: ${response.statusCode}');
   if (response.statusCode == 200) {
     final generated = wire.GeneratedTokenResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return PhoneCallToken.fromGenerated(generated);
+    return PhoneCallTokenResult(token: PhoneCallToken.fromGenerated(generated));
   }
-  return null;
+  return PhoneCallTokenResult(error: errorDetailMessage(response.body));
 }
 
 // ************************************************

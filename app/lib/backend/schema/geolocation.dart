@@ -1,9 +1,6 @@
-// Phase 4.1 SKIPPED — not a pure 1:1 wrapper, so not typedef'd here.
-// GeneratedGeolocation (gen/conversation_wire.g.dart) only carries latitude, longitude,
-// googlePlaceId, address, locationType. This class additionally holds
-// id/altitude/accuracy/time, treats latitude/longitude as nullable (the generated type
-// requires them), and throws a StateError from toGenerated() when lat/lon are absent.
-// Typedefing would drop the extra fields and change nullability + the throw contract.
+// Not a pure 1:1 wrapper: this class additionally holds the legacy local id,
+// treats latitude/longitude as nullable (the wire type requires them), and
+// throws from toGenerated() when either coordinate is absent.
 
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 
@@ -18,6 +15,7 @@ class Geolocation {
   double? accuracy;
 
   DateTime? time;
+  String? captureSource;
 
   String? googlePlaceId;
   String? address;
@@ -29,6 +27,7 @@ class Geolocation {
     this.altitude,
     this.accuracy,
     this.time,
+    this.captureSource,
     this.googlePlaceId,
     this.address,
     this.locationType,
@@ -40,10 +39,10 @@ class Geolocation {
     var geolocation = Geolocation(
       latitude: generated.latitude,
       longitude: generated.longitude,
-      altitude: json['altitude'],
-      accuracy: json['accuracy'],
-      // not in server
-      time: json['time'] == null ? null : DateTime.parse(json['time']),
+      altitude: generated.altitude,
+      accuracy: generated.accuracy,
+      time: generated.capturedAt?.toUtc() ?? (json['time'] == null ? null : DateTime.parse(json['time']).toUtc()),
+      captureSource: generated.captureSource,
       // google_place_id server
       googlePlaceId: generated.googlePlaceId,
       address: generated.address,
@@ -57,6 +56,10 @@ class Geolocation {
     return Geolocation(
       latitude: generated.latitude,
       longitude: generated.longitude,
+      altitude: generated.altitude,
+      accuracy: generated.accuracy,
+      time: generated.capturedAt?.toUtc(),
+      captureSource: generated.captureSource,
       googlePlaceId: generated.googlePlaceId,
       address: generated.address,
       locationType: generated.locationType,
@@ -72,6 +75,10 @@ class Geolocation {
     return wire.GeneratedGeolocation(
       latitude: lat,
       longitude: lon,
+      altitude: altitude,
+      accuracy: accuracy,
+      capturedAt: time,
+      captureSource: captureSource,
       googlePlaceId: googlePlaceId,
       address: address,
       locationType: locationType,
@@ -85,7 +92,8 @@ class Geolocation {
       'id': id,
       'altitude': altitude,
       'accuracy': accuracy,
-      'time': time?.toUtc().toIso8601String(),
+      'captured_at': time?.toUtc().toIso8601String(),
+      'capture_source': captureSource,
       'google_place_id': googlePlaceId,
       'location_type': locationType,
       'address': address,

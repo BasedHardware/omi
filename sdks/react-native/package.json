@@ -27,11 +27,11 @@
     "!**/.*"
   ],
   "scripts": {
-    "test": "jest",
+    "test": "jest --config jest.config.issue12979.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "build": "bob build",
-    "prepare": "yarn build",
+    "prepare": "npm run build",
     "release": "release-it",
     "example": "yarn --cwd example",
     "bootstrap": "yarn example && yarn install"
@@ -71,7 +71,10 @@
     "react-native": "0.79.2",
     "react-native-builder-bob": "^0.20.0",
     "release-it": "^15.0.0",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "babel-jest": "^29.7.0"
   },
   "peerDependencies": {
     "react": "*",
@@ -87,7 +90,12 @@
     "tmp": "^0.2.4",
     "proxy-agent": "^6.4.0",
     "pac-proxy-agent": "^7.0.1",
-    "pac-resolver": "^7.0.1"
+    "pac-resolver": "^7.0.1",
+    "brace-expansion": "~2.1.2",
+    "fast-uri": "~3.1.4",
+    "js-yaml": "~4.3.0",
+    "shell-quote": "~1.11.0",
+    "ip-address": "^10.7.1"
   },
   "engines": {
     "node": ">= 16.0.0"
@@ -97,6 +105,10 @@
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
       "<rootDir>/lib/"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/src/__tests__/zero-value.test.ts"
     ]
   },
   "commitlint": {

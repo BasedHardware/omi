@@ -34,6 +34,7 @@ if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
 from database.memory_collections import MemoryCollections
+from database.pinecone_partition_index import owner_index
 from database.memory_vector_repair_outbox_worker import (
     VectorRepairOutboxWorkerTickConfig,
     run_vector_repair_outbox_worker_tick,
@@ -182,7 +183,11 @@ def build_vector_repair_outbox_production_dependencies(
     llm_clients_module = module_loader("utils.llm.clients")
 
     pinecone_client = pinecone_module.Pinecone(api_key=pinecone_api_key)
-    pinecone_index = pinecone_client.Index(pinecone_index_name)
+    pinecone_index = owner_index(
+        pinecone_client.Index(pinecone_index_name),
+        _required_dependency_env(env, MEMORY_VECTOR_REPAIR_OUTBOX_UID_ENV),
+        index_name=pinecone_index_name,
+    )
     db_client = firestore_client_module.db
     embeddings = llm_clients_module.embeddings
 
@@ -195,6 +200,7 @@ def build_vector_repair_outbox_production_dependencies(
         ),
         vector_repairer=make_pinecone_vector_repairer(
             embed_text=embeddings.embed_query,
+            delete_vectors=pinecone_index.delete,
             upsert_vectors=pinecone_index.upsert,
             namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),

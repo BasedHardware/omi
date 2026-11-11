@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-recovery-dark.png",
+      "platform": "mobile-ios",
+      "description": "Actual recovery widget in a synthetic iOS preview; disabled schedule, recovered October 4 result, dark theme.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-recovery-light.png",
+      "platform": "mobile-ios",
+      "description": "Same synthetic iOS recovery preview in the light theme.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-sync-needs-attention.png",
+      "platform": "mobile-ios",
+      "description": "Actual legacy Offline Sync widget, synthetic unavailable recording; no false completion message.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-sync-processed.png",
+      "platform": "mobile-ios",
+      "description": "Actual Auto Sync widget, synthetic completed empty processing; no invented conversation or cloud audio claim.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -7,35 +7,30 @@ def _read(path: str) -> str:
     return (BACKEND_DIR / path).read_text(encoding='utf-8')
 
 
-def test_v3_memories_route_uses_memory_response_builders_for_public_egress():
+def test_v3_memories_route_uses_canonical_response_builders_for_public_egress():
     source = _read('routers/memories.py')
 
-    assert (
-        'from utils.memory.memory_api_response import memory_batch_response, memory_item_response, memory_list_response'
-        in source
-    )
+    assert 'from utils.memory.memory_api_response import memory_item_response, memory_list_response' in source
     assert 'jsonable_encoder(' not in source
-    assert (
-        'exposure = MemoryApiExposure.CANONICAL if canonical_lifecycle_exposed else MemoryApiExposure.LEGACY' in source
-    )
-    assert 'memory_list_response(memory_response.body or [], exposure' in source
-    assert 'memory_list_response(\n        memories,\n        MemoryApiExposure.LEGACY' in source
-    assert 'memory_item_response(memory, MemoryApiExposure.LEGACY)' in source
-    assert 'memory_batch_response(memories, MemoryApiExposure.LEGACY' in source
+    assert 'return memory_item_response(memory, MemoryApiExposure.CANONICAL)' in source
+    assert 'memory_list_response(\n            page_memories,\n            MemoryApiExposure.CANONICAL' in source
+    assert 'MemoryApiExposure.LEGACY' not in source
 
 
 def test_external_memory_surfaces_use_exposure_aware_projection_before_returning_memory_objects():
-    mcp_sse_source = _read('routers/mcp_sse.py')
+    mcp_handler_source = _read('utils/mcp_server/handlers/memories.py')
     memory_service_source = _read('utils/memory/memory_service.py')
 
-    create_tool = mcp_sse_source[
-        mcp_sse_source.index('elif tool_name == "create_memory":') : mcp_sse_source.index(
-            'elif tool_name == "delete_memory":'
-        )
+    create_tool = mcp_handler_source[
+        mcp_handler_source.index('def create_memory(') : mcp_handler_source.index('def delete_memory(')
     ]
-    assert 'exposure = (' in create_tool
-    assert 'MemoryApiExposure.CANONICAL' in create_tool
-    assert 'MemoryApiExposure.LEGACY' in create_tool
-    assert 'return {"success": True, "memory": memory_api_payload(memory_db, exposure)}' in create_tool
-    assert 'memory_write_payload(memory_db, MemoryApiExposure.LEGACY)' in memory_service_source
-    assert '[memory_write_payload(memory, MemoryApiExposure.LEGACY) for memory in memory_dbs]' in memory_service_source
+    assert (
+        'return {"success": True, "memory": memory_api_payload(memory_db, MemoryApiExposure.CANONICAL)}' in create_tool
+    )
+    assert 'MemoryApiExposure.LEGACY' not in create_tool
+    # Historical payload projection is permitted only inside the read-only
+    # compatibility adapter; external writes must enter canonical authority.
+    external_writes = memory_service_source[memory_service_source.index('def create_external_memory(') :]
+    assert 'memory_write_payload(' not in external_writes
+    assert '_canonical_write(' in external_writes
+    assert 'self._canonical.write_batch(' in external_writes

@@ -8,46 +8,65 @@ private struct ActionItemMetadataPayload: @unchecked Sendable {
   init(_ value: [String: Any]) { self.value = value }
 }
 
+/// Identity of a task id surfaced to the UI: either a backend id, or
+/// "local_<rowid>" minted by `ActionItemRecord.toTaskActionItem()` for a row
+/// that has not synced to the backend yet (offline creation, failed create
+/// POST). Every storage or API path that receives a surfaced id must resolve
+/// both forms — filtering only on the `backendId` column silently no-ops (or
+/// throws `recordNotFound`) for unsynced rows.
+enum ActionItemTaskIdentity: Equatable {
+  case backend(String)
+  case localRow(Int64)
+
+  init(surfacedId: String) {
+    if surfacedId.hasPrefix("local_"), let rowId = Int64(surfacedId.dropFirst(6)) {
+      self = .localRow(rowId)
+    } else {
+      self = .backend(surfacedId)
+    }
+  }
+
+  /// True when the task exists only in the local database — there is no
+  /// backend row addressable by this id, so backend mutation calls with it
+  /// can only 404.
+  var isLocalOnly: Bool {
+    if case .localRow = self { return true }
+    return false
+  }
+}
+
 /// Actor-based storage manager for action items/tasks with bidirectional sync
 /// Provides local-first caching for fast startup and background sync with backend
 actor ActionItemStorage {
   static let shared = ActionItemStorage()
+  private let repository = RewindRepository(owner: "ActionItemStorage")
 
-  private var _dbQueue: DatabasePool?
-  private var _dbGeneration = -1
-  private var isInitialized = false
+  /// Resolve a surfaced task id (backend id or "local_<rowid>") to its record.
+  static func fetchRecord(_ database: Database, surfacedId: String) throws -> ActionItemRecord? {
+    switch ActionItemTaskIdentity(surfacedId: surfacedId) {
+    case .localRow(let rowId):
+      return try ActionItemRecord.fetchOne(database, key: rowId)
+    case .backend(let id):
+      return
+        try ActionItemRecord
+        .filter(Column("backendId") == id)
+        .fetchOne(database)
+    }
+  }
 
   private init() {}
 
   /// Invalidate cached DB queue (called on user switch / sign-out)
-  func invalidateCache() {
-    _dbQueue = nil
-    isInitialized = false
+  func invalidateCache() async {
+    await repository.invalidate()
   }
 
   /// Ensure database is initialized before use
-  private func ensureInitialized() async throws -> DatabasePool {
-    if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
-      return db
-    }
-
-    // Initialize RewindDatabase which creates our tables via migrations
-    do {
-      try await RewindDatabase.shared.initialize()
-    } catch {
-      log("ActionItemStorage: Database initialization failed: \(error.localizedDescription)")
-      throw error
-    }
-
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+  func ensureInitialized() async throws -> DatabasePool {
+    guard let databasePool = try await repository.databasePool() else {
       throw ActionItemStorageError.databaseNotInitialized
     }
-
-    _dbQueue = db
-    _dbGeneration = generation
-    isInitialized = true
-    return db
+    return databasePool
   }
 
   // MARK: - Local-First Read Operations
@@ -112,6 +131,26 @@ actor ActionItemStorage {
     }
   }
 
+  /// Get every non-deleted action item from the local cache. Reorder persistence
+  /// must use this complete set rather than a rendered page, search result, or
+  /// filtered subset so hidden rows keep their unique position in a category.
+  func getAllLocalActionItems(includeDeleted: Bool = false) async throws -> [TaskActionItem] {
+    let db = try await ensureInitialized()
+
+    return try await db.read { database in
+      var query = ActionItemRecord.all()
+      if !includeDeleted {
+        query = query.filter(Column("deleted") == false)
+      }
+
+      let records =
+        try query
+        .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
+        .fetchAll(database)
+      return records.map { $0.toTaskActionItem() }
+    }
+  }
+
   /// Check if a non-deleted action item with the given description exists
   func actionItemExists(description: String) async -> Bool {
     guard let db = try? await ensureInitialized() else { return false }
@@ -124,17 +163,12 @@ actor ActionItemStorage {
       }) ?? false
   }
 
-  /// Get a single action item by its backend ID
+  /// Get a single action item by its surfaced id (backend id or "local_<rowid>")
   func getLocalActionItem(byBackendId backendId: String) async throws -> TaskActionItem? {
     let db = try await ensureInitialized()
 
     return try await db.read { database in
-      guard
-        let record =
-          try ActionItemRecord
-          .filter(Column("backendId") == backendId)
-          .fetchOne(database)
-      else {
+      guard let record = try Self.fetchRecord(database, surfacedId: backendId) else {
         return nil
       }
       return record.toTaskActionItem()
@@ -267,6 +301,52 @@ actor ActionItemStorage {
         .fetchAll(database)
 
       return records.map { $0.toTaskActionItem() }
+    }
+  }
+
+  /// Read the bounded incomplete-task surface used by the Tasks page.
+  ///
+  /// Dated rows are complete because Today/Tomorrow/Later are not pageable.
+  /// No Deadline rows are independently paged so this method never loads the
+  /// entire undated local universe merely to render the first page.
+  func getIncompleteTaskSurface(
+    noDeadlineLimit: Int = 100,
+    noDeadlineOffset: Int = 0
+  ) async throws -> (dated: [TaskActionItem], noDeadline: [TaskActionItem], hasMoreNoDeadline: Bool) {
+    let db = try await ensureInitialized()
+
+    return try await db.read { database in
+      func filteredIncomplete(
+        dueDateIsNull: Bool,
+        limit: Int,
+        offset: Int
+      ) throws -> [TaskActionItem] {
+        var query = ActionItemRecord.all()
+          .filter(Column("deleted") == false)
+          .filter(Column("completed") == false)
+        query =
+          dueDateIsNull
+          ? query.filter(Column("dueAt") == nil)
+          : query.filter(Column("dueAt") != nil)
+        let records =
+          try query
+          .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
+          .limit(limit, offset: offset)
+          .fetchAll(database)
+        return records.map { $0.toTaskActionItem() }
+      }
+
+      let dated = try filteredIncomplete(dueDateIsNull: false, limit: Int.max, offset: 0)
+      let noDeadlineLookahead = try filteredIncomplete(
+        dueDateIsNull: true,
+        limit: noDeadlineLimit + 1,
+        offset: noDeadlineOffset
+      )
+      return (
+        dated: dated,
+        noDeadline: Array(noDeadlineLookahead.prefix(noDeadlineLimit)),
+        hasMoreNoDeadline: noDeadlineLookahead.count > noDeadlineLimit
+      )
     }
   }
 
@@ -518,11 +598,12 @@ actor ActionItemStorage {
     try authorization.require()
     let db = try await ensureInitialized()
 
-    let (skipped, adopted) = try await authorization.withCommitLease {
-      try await db.write { database -> (Int, Int) in
+    let (skipped, adopted, visibilityChanged) = try await authorization.withCommitLease {
+      try await db.write { database -> (Int, Int, Bool) in
         try authorization.require()
         var skipped = 0
         var adopted = 0
+        var visibilityChanged = false
         for item in items {
           if var existingRecord =
             try ActionItemRecord
@@ -535,6 +616,14 @@ actor ActionItemStorage {
             // by stale auto-refresh data. Beyond 60s, trust the API as source
             // of truth — this prevents failed optimistic updates from persisting
             // forever (e.g. user toggled on desktop but API call failed/app crashed).
+            // A tombstone awaiting backend acknowledgement outranks anything the server
+            // says: the server still returning this task is precisely the condition the
+            // tombstone exists for. The 60s optimistic window below is not enough — the
+            // retry that flushes the deletion may run minutes or days later.
+            if existingRecord.deleted && !existingRecord.backendSynced {
+              skipped += 1
+              continue
+            }
             let incomingTimestamp = item.updatedAt ?? item.createdAt
             let isLocalStagedGuess = overrideStagedDeletions && existingRecord.deletedBy == "staged"
             let isRecentLocalChange = Date().timeIntervalSince(existingRecord.updatedAt) < 60
@@ -542,7 +631,10 @@ actor ActionItemStorage {
               skipped += 1
               continue
             }
+            let wasVisible = !existingRecord.completed && !existingRecord.deleted
             existingRecord.updateFrom(item)
+            visibilityChanged =
+              visibilityChanged || wasVisible != (!existingRecord.completed && !existingRecord.deleted)
             try existingRecord.update(database)
           } else if var orphan =
             try ActionItemRecord
@@ -559,9 +651,11 @@ actor ActionItemStorage {
             // and a stricter match here causes the orphan to never be adopted,
             // leaving the manual unsynced and producing a duplicate row on every
             // pull that returns the same task.
+            let wasVisible = !orphan.completed && !orphan.deleted
             orphan.backendId = item.id
             orphan.backendSynced = true
             orphan.updateFrom(item)
+            visibilityChanged = visibilityChanged || wasVisible != (!orphan.completed && !orphan.deleted)
             try orphan.update(database)
             adopted += 1
           } else {
@@ -578,23 +672,31 @@ actor ActionItemStorage {
               newRecord.relevanceScore = maxScore + 1
               newRecord.scoredAt = Date()
             }
-            try newRecord.insert(database)
+            if !newRecord.completed && !newRecord.deleted {
+              visibilityChanged = true
+            }
+            _ = try newRecord.inserted(database)
           }
         }
         try authorization.require()
-        return (skipped, adopted)
+        return (skipped, adopted, visibilityChanged)
       }
     }
 
+    let message: String
     if skipped > 0 || adopted > 0 {
-      log(
+      message =
         "ActionItemStorage: Synced \(items.count) task action items from backend (skipped \(skipped) newer local, adopted \(adopted) orphans)"
-      )
     } else {
-      log("ActionItemStorage: Synced \(items.count) task action items from backend")
+      message = "ActionItemStorage: Synced \(items.count) task action items from backend"
     }
+    if visibilityChanged {
+      HomeKnowledgeCountInvalidation.post(logMessage: message)
+    } else {
+      log(message)
+    }
+    SiriIndexHooks.tasksChanged(items.map(\.id))
   }
-
   /// Reconcile dashboard visibility fields from authoritative server rows without
   /// overwriting user-editable task content. This deliberately bypasses the
   /// 60-second optimistic-update guard in `syncTaskActionItems` only for completion
@@ -663,7 +765,10 @@ actor ActionItemStorage {
     }
 
     if reconciled > 0 {
-      log("ActionItemStorage: Reconciled \(reconciled) dashboard visibility fields from backend")
+      SiriIndexHooks.tasksChanged(items.map(\.id))
+      HomeKnowledgeCountInvalidation.post(
+        logMessage: "ActionItemStorage: Reconciled \(reconciled) dashboard visibility fields from backend"
+      )
     }
     return reconciled
   }
@@ -681,11 +786,9 @@ actor ActionItemStorage {
       log("ActionItemStorage: markAbsentTasksAsStaged skipped — empty API set")
       return
     }
-
     let db = try await ensureInitialized()
-
-    let deleted = try await authorization.withCommitLease {
-      try await db.write { database -> Int in
+    let deletedIds = try await authorization.withCommitLease {
+      try await db.write { database -> [String] in
         try authorization.require()
         let records =
           try ActionItemRecord
@@ -694,21 +797,24 @@ actor ActionItemStorage {
           .filter(Column("backendId") != nil)
           .fetchAll(database)
 
-        var count = 0
+        var deletedIds: [String] = []
         for record in records {
           guard let backendId = record.backendId, !backendId.isEmpty else { continue }
           if !apiIds.contains(backendId) {
             try record.delete(database)
-            count += 1
+            deletedIds.append(backendId)
           }
         }
         try authorization.require()
-        return count
+        return deletedIds
       }
     }
 
-    if deleted > 0 {
-      log("ActionItemStorage: Hard-deleted \(deleted) absent tasks during full sync")
+    if !deletedIds.isEmpty {
+      await SiriIndexHooks.tasksDeleted(deletedIds)
+      HomeKnowledgeCountInvalidation.post(
+        logMessage: "ActionItemStorage: Hard-deleted \(deletedIds.count) absent tasks during full sync"
+      )
     }
   }
 
@@ -732,9 +838,8 @@ actor ActionItemStorage {
     }
 
     let db = try await ensureInitialized()
-
-    let deleted = try await authorization.withCommitLease {
-      try await db.write { database -> Int in
+    let deletedIds = try await authorization.withCommitLease {
+      try await db.write { database -> [String] in
         try authorization.require()
         let records =
           try ActionItemRecord
@@ -744,7 +849,7 @@ actor ActionItemStorage {
           .filter(Column("backendSynced") == true)
           .fetchAll(database)
 
-        var count = 0
+        var deletedIds: [String] = []
         for record in records {
           guard let backendId = record.backendId, !backendId.isEmpty else { continue }
           if !apiIds.contains(backendId) {
@@ -752,19 +857,21 @@ actor ActionItemStorage {
               sql: "DELETE FROM action_items WHERE id = ?",
               arguments: [record.id]
             )
-            count += 1
+            deletedIds.append(backendId)
           }
         }
         try authorization.require()
-        return count
+        return deletedIds
       }
     }
 
-    if deleted > 0 {
-      log("ActionItemStorage: hard-deleted \(deleted) absent tasks")
+    if !deletedIds.isEmpty {
+      await SiriIndexHooks.tasksDeleted(deletedIds)
+      HomeKnowledgeCountInvalidation.post(
+        logMessage: "ActionItemStorage: hard-deleted \(deletedIds.count) absent tasks")
     }
 
-    return deleted
+    return deletedIds.count
   }
 
   /// Returns all active scored tasks for batch-syncing scores to backend
@@ -786,7 +893,6 @@ actor ActionItemStorage {
   ) async throws {
     try authorization.require()
     let db = try await ensureInitialized()
-
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
@@ -798,7 +904,9 @@ actor ActionItemStorage {
       }
     }
 
-    log("ActionItemStorage: Hard deleted action item with backendId \(backendId)")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Hard deleted action item with backendId \(backendId)")
+    await SiriIndexHooks.taskDeleted(backendId)
   }
 
   // MARK: - Local Extraction Operations
@@ -826,13 +934,14 @@ actor ActionItemStorage {
           return inserted
         }
       } catch {
-        guard await RewindDatabase.shared.isActionItemsFTSError(error) else {
+        guard RewindFTSDefinition.actionItems.matchesRepairableError(error) else {
           throw error
         }
 
         logError("ActionItemStorage: action_items_fts write failed; repairing FTS index and retrying once")
         try authorization.require()
-        try await RewindDatabase.shared.repairActionItemsFTS(
+        try await self.repository.repairFTS(
+          .actionItems,
           in: db,
           reason: "insertLocalActionItem"
         )
@@ -845,7 +954,8 @@ actor ActionItemStorage {
         }
       }
     }
-    log("ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
     return inserted
   }
 
@@ -898,6 +1008,7 @@ actor ActionItemStorage {
     }
 
     log("ActionItemStorage: Marked action item \(id) as synced (backendId: \(backendId))")
+    SiriIndexHooks.tasksChanged([backendId])
   }
 
   /// Get action items that haven't been synced to backend yet
@@ -924,9 +1035,7 @@ actor ActionItemStorage {
   }
 
   // MARK: - Update Operations
-
   /// Optimistically update completion status locally (before API call)
-  /// Sets updatedAt to Date() so auto-refresh timestamp check skips this record
   func updateCompletionStatus(
     backendId: String,
     completed: Bool,
@@ -938,12 +1047,7 @@ actor ActionItemStorage {
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
-        guard
-          var record =
-            try ActionItemRecord
-            .filter(Column("backendId") == backendId)
-            .fetchOne(database)
-        else {
+        guard var record = try Self.fetchRecord(database, surfacedId: backendId) else {
           throw ActionItemStorageError.recordNotFound
         }
         record.completed = completed
@@ -953,11 +1057,11 @@ actor ActionItemStorage {
       }
     }
 
-    log("ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
+    SiriIndexHooks.tasksChanged([backendId])
   }
-
   /// Optimistically update task fields locally (before API call)
-  /// Sets updatedAt to Date() so auto-refresh timestamp check skips this record
   func updateActionItemFields(
     backendId: String,
     description: String? = nil,
@@ -977,12 +1081,7 @@ actor ActionItemStorage {
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
-        guard
-          var record =
-            try ActionItemRecord
-            .filter(Column("backendId") == backendId)
-            .fetchOne(database)
-        else {
+        guard var record = try Self.fetchRecord(database, surfacedId: backendId) else {
           throw ActionItemStorageError.recordNotFound
         }
         if let description = description {
@@ -1012,6 +1111,7 @@ actor ActionItemStorage {
     }
 
     log("ActionItemStorage: Locally updated fields for \(backendId)")
+    SiriIndexHooks.tasksChanged([backendId])
   }
 
   /// Batch update sort orders and indent levels in SQLite
@@ -1026,10 +1126,18 @@ actor ActionItemStorage {
       try await db.write { database in
         try authorization.require()
         for update in updates {
-          try database.execute(
-            sql: "UPDATE action_items SET sortOrder = ?, indentLevel = ?, updatedAt = ? WHERE backendId = ?",
-            arguments: [update.sortOrder, update.indentLevel, Date(), update.backendId]
-          )
+          switch ActionItemTaskIdentity(surfacedId: update.backendId) {
+          case .localRow(let rowId):
+            try database.execute(
+              sql: "UPDATE action_items SET sortOrder = ?, indentLevel = ?, updatedAt = ? WHERE id = ?",
+              arguments: [update.sortOrder, update.indentLevel, Date(), rowId]
+            )
+          case .backend(let backendId):
+            try database.execute(
+              sql: "UPDATE action_items SET sortOrder = ?, indentLevel = ?, updatedAt = ? WHERE backendId = ?",
+              arguments: [update.sortOrder, update.indentLevel, Date(), backendId]
+            )
+          }
         }
         try authorization.require()
       }
@@ -1048,9 +1156,15 @@ actor ActionItemStorage {
     let count = try await authorization.withCommitLease {
       try await db.write { database -> Int in
         try authorization.require()
-        let count = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM action_items WHERE deleted = 1") ?? 0
+        // Pending tombstones are the durable record of an unacknowledged backend
+        // delete; purging them here would re-open the resurrection hole this purge
+        // is part of cleaning up.
+        let pendingClause = "NOT (backendSynced = 0 AND backendId IS NOT NULL AND backendId != '')"
+        let count =
+          try Int.fetchOne(
+            database, sql: "SELECT COUNT(*) FROM action_items WHERE deleted = 1 AND \(pendingClause)") ?? 0
         if count > 0 {
-          try database.execute(sql: "DELETE FROM action_items WHERE deleted = 1")
+          try database.execute(sql: "DELETE FROM action_items WHERE deleted = 1 AND \(pendingClause)")
         }
         try authorization.require()
         return count
@@ -1063,10 +1177,17 @@ actor ActionItemStorage {
     return count
   }
 
-  /// Hard-delete an action item by backend ID
-  func deleteActionItemByBackendId(
-    _ backendId: String,
-    deletedBy: String? = nil,
+  /// Mark a synced task deleted locally while the backend delete is still in flight.
+  ///
+  /// The previous shape was a local hard delete plus a fire-and-forget backend call: one
+  /// network failure and nothing anywhere remembered the deletion, so the next cloud
+  /// hydration re-inserted the task. (450 of Nik's deleted tasks came back exactly this
+  /// way.) A deletion the server has not acknowledged must leave a tombstone —
+  /// `deleted = 1, backendSynced = 0` — that hydration refuses to overwrite and a retry
+  /// pass can flush later.
+  func markActionItemDeletedPendingBackendSync(
+    backendId: String,
+    deletedBy: String? = "user",
     authorization: LocalMutationAuthorization
   ) async throws {
     try authorization.require()
@@ -1075,17 +1196,92 @@ actor ActionItemStorage {
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
-        try database.execute(
-          sql: "DELETE FROM action_items WHERE backendId = ?",
-          arguments: [backendId]
-        )
+        if var record = try Self.fetchRecord(database, surfacedId: backendId) {
+          record.deleted = true
+          record.deletedBy = deletedBy
+          record.backendSynced = false
+          record.updatedAt = Date()
+          try record.update(database)
+        }
         try authorization.require()
       }
     }
 
-    log("ActionItemStorage: Hard-deleted action item with backendId \(backendId)")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Tombstoned action item \(backendId) pending backend delete")
+    await SiriIndexHooks.taskDeleted(backendId)
+  }
+  /// The server acknowledged the delete: clear the pending flag but keep the tombstone.
+  ///
+  /// Hard-deleting the row here (the previous shape) threw away the only record of *who*
+  /// retired the task. The backend has no `deleted_by` field, so the row the Removed lane
+  /// re-fetches always reports `deletedBy: nil` — every user deletion came back attributed
+  /// to the AI, "Removed by me" was structurally empty, and `getRecentDeletedTasks(deletedBy:
+  /// "user")` returned nothing, so task extraction kept re-suggesting tasks the user had
+  /// explicitly removed. The retirement is already durable server-side; keeping the local
+  /// row costs one tombstone and preserves the provenance.
+  func markActionItemDeletionAcknowledged(
+    backendId: String,
+    authorization: LocalMutationAuthorization
+  ) async throws {
+    try authorization.require()
+    let db = try await ensureInitialized()
+
+    try await authorization.withCommitLease {
+      try await db.write { database in
+        try authorization.require()
+        if var record = try Self.fetchRecord(database, surfacedId: backendId) {
+          record.deleted = true
+          record.backendSynced = true
+          record.updatedAt = Date()
+          try record.update(database)
+        }
+        try authorization.require()
+      }
+    }
+
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Backend acknowledged deletion of \(backendId)")
+    await SiriIndexHooks.taskDeleted(backendId)
+  }
+  /// Backend IDs whose deletion the server has not yet acknowledged.
+  func getPendingBackendDeletionIds() async throws -> [String] {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      try ActionItemRecord
+        .filter(Column("deleted") == true)
+        .filter(Column("backendSynced") == false)
+        .filter(Column("backendId") != nil && Column("backendId") != "")
+        .fetchAll(database)
+        .compactMap { $0.backendId }
+    }
   }
 
+  /// Hard-delete a row. Only for rows that must leave no trace: a local-only task the
+  /// server never saw, and the undo purge before a restore re-inserts the task. A synced
+  /// deletion goes through `markActionItemDeletedPendingBackendSync` +
+  /// `markActionItemDeletionAcknowledged` instead, so its provenance survives.
+  func deleteActionItemByBackendId(
+    _ backendId: String,
+    authorization: LocalMutationAuthorization
+  ) async throws {
+    try authorization.require()
+    let db = try await ensureInitialized()
+
+    try await authorization.withCommitLease {
+      try await db.write { database in
+        try authorization.require()
+        if let record = try Self.fetchRecord(database, surfacedId: backendId) {
+          try record.delete(database)
+        }
+        try authorization.require()
+      }
+    }
+
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Hard-deleted action item with backendId \(backendId)")
+    await SiriIndexHooks.taskDeleted(backendId)
+  }
   // MARK: - FTS5 Search & Context Methods
 
   /// Full-text search on action item descriptions using FTS5 with BM25 ranking
@@ -1095,7 +1291,7 @@ actor ActionItemStorage {
     includeCompleted: Bool = true,
     includeDeleted: Bool = false
   ) async throws -> [(
-    id: Int64, description: String, completed: Bool, deleted: Bool, deletedBy: String?, relevanceScore: Int?
+    backendId: String?, description: String, completed: Bool, deleted: Bool, deletedBy: String?, relevanceScore: Int?
   )] {
     let db = try await ensureInitialized()
     // Sanitize FTS5 query: strip special characters that could be misinterpreted
@@ -1106,7 +1302,7 @@ actor ActionItemStorage {
 
     return try await db.read { database in
       var sql = """
-        SELECT a.id, a.description, a.completed, a.deleted, a.deletedBy, a.relevanceScore
+        SELECT a.backendId, a.description, a.completed, a.deleted, a.deletedBy, a.relevanceScore
         FROM action_items a
         JOIN action_items_fts fts ON fts.rowid = a.id
         WHERE action_items_fts MATCH ?
@@ -1125,7 +1321,7 @@ actor ActionItemStorage {
 
       return try Row.fetchAll(database, sql: sql, arguments: StatementArguments(arguments)).map { row in
         (
-          id: row["id"] as Int64,
+          backendId: row["backendId"] as String?,
           description: row["description"] as String,
           completed: row["completed"] as Bool,
           deleted: row["deleted"] as Bool,
@@ -1138,7 +1334,7 @@ actor ActionItemStorage {
 
   /// Get active tasks with the highest relevance (lowest score = most important)
   func getTopRelevanceTasks(limit: Int = 30) async throws -> [(
-    id: Int64, description: String, priority: String?, relevanceScore: Int?
+    backendId: String?, description: String, priority: String?, relevanceScore: Int?
   )] {
     let db = try await ensureInitialized()
 
@@ -1146,13 +1342,13 @@ actor ActionItemStorage {
       try Row.fetchAll(
         database,
         sql: """
-              SELECT id, description, priority, relevanceScore FROM action_items
+              SELECT backendId, description, priority, relevanceScore FROM action_items
               WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
               ORDER BY relevanceScore ASC LIMIT ?
           """, arguments: [limit]
       ).map { row in
         (
-          id: row["id"] as Int64,
+          backendId: row["backendId"] as String?,
           description: row["description"] as String,
           priority: row["priority"] as String?,
           relevanceScore: row["relevanceScore"] as Int?
@@ -1163,7 +1359,7 @@ actor ActionItemStorage {
 
   /// Get most recently created active tasks
   func getRecentActiveTasks(limit: Int = 30) async throws -> [(
-    id: Int64, description: String, priority: String?, relevanceScore: Int?
+    backendId: String?, description: String, priority: String?, relevanceScore: Int?
   )] {
     let db = try await ensureInitialized()
 
@@ -1171,13 +1367,13 @@ actor ActionItemStorage {
       try Row.fetchAll(
         database,
         sql: """
-              SELECT id, description, priority, relevanceScore FROM action_items
+              SELECT backendId, description, priority, relevanceScore FROM action_items
               WHERE completed = 0 AND deleted = 0
               ORDER BY createdAt DESC LIMIT ?
           """, arguments: [limit]
       ).map { row in
         (
-          id: row["id"] as Int64,
+          backendId: row["backendId"] as String?,
           description: row["description"] as String,
           priority: row["priority"] as String?,
           relevanceScore: row["relevanceScore"] as Int?
@@ -1240,9 +1436,12 @@ actor ActionItemStorage {
               FROM action_items
               WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
           """)
+      // GRDB decodes INTEGER (incl. MIN/MAX aggregates) as Int64, and
+      // `Int64 as? Int` is always nil — a bare `as? Int` would pin both bounds to
+      // 0. Match the typed-decode idiom used elsewhere in this file.
       return (
-        min: row?["minScore"] as? Int ?? 0,
-        max: row?["maxScore"] as? Int ?? 0
+        min: (row?["minScore"] as? Int64).map(Int.init) ?? 0,
+        max: (row?["maxScore"] as? Int64).map(Int.init) ?? 0
       )
     }
   }
@@ -1453,121 +1652,6 @@ actor ActionItemStorage {
         return nil
       }
       return record.toTaskActionItem()
-    }
-  }
-
-  // MARK: - Agent Session Persistence
-
-  /// Update agent state for an action item (keyed by backendId or local_ prefix)
-  func updateAgentState(
-    taskId: String,
-    status: String?,
-    sessionName: String?,
-    prompt: String?,
-    plan: String?,
-    startedAt: Date?,
-    completedAt: Date?,
-    editedFilesJson: String?,
-    authorization: LocalMutationAuthorization
-  ) async throws {
-    try authorization.require()
-    let db = try await ensureInitialized()
-
-    try await authorization.withCommitLease {
-      try await db.write { database in
-        try authorization.require()
-        // Find by backendId, or by local ID (local_<rowid>)
-        var record: ActionItemRecord?
-        if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
-          record = try ActionItemRecord.fetchOne(database, key: localId)
-        } else {
-          record =
-            try ActionItemRecord
-            .filter(Column("backendId") == taskId)
-            .fetchOne(database)
-        }
-
-        guard var rec = record else {
-          log("ActionItemStorage: updateAgentState - record not found for taskId \(taskId)")
-          return
-        }
-
-        rec.agentStatus = status
-        rec.agentSessionName = sessionName
-        rec.agentPrompt = prompt
-        rec.agentPlan = plan
-        rec.agentStartedAt = startedAt
-        rec.agentCompletedAt = completedAt
-        rec.agentEditedFilesJson = editedFilesJson
-        try rec.update(database)
-        try authorization.require()
-      }
-    }
-  }
-
-  /// Get action items with active (non-terminal) agent sessions for restore on startup
-  func getActiveAgentSessions() async throws -> [ActionItemRecord] {
-    let db = try await ensureInitialized()
-
-    return try await db.read { database in
-      try ActionItemRecord
-        .filter(Column("agentStatus") != nil)
-        .filter(!(["completed", "failed"].contains(Column("agentStatus"))))
-        .fetchAll(database)
-    }
-  }
-
-  /// Clear all agent fields for a task (when user stops/removes session)
-  func clearAgentState(
-    taskId: String,
-    authorization: LocalMutationAuthorization
-  ) async throws {
-    try authorization.require()
-    let db = try await ensureInitialized()
-
-    try await authorization.withCommitLease {
-      try await db.write { database in
-        try authorization.require()
-        var record: ActionItemRecord?
-        if taskId.hasPrefix("local_"), let localId = Int64(taskId.dropFirst(6)) {
-          record = try ActionItemRecord.fetchOne(database, key: localId)
-        } else {
-          record =
-            try ActionItemRecord
-            .filter(Column("backendId") == taskId)
-            .fetchOne(database)
-        }
-
-        guard var rec = record else { return }
-
-        rec.agentStatus = nil
-        rec.agentSessionName = nil
-        rec.agentPrompt = nil
-        rec.agentPlan = nil
-        rec.agentStartedAt = nil
-        rec.agentCompletedAt = nil
-        rec.agentEditedFilesJson = nil
-        try rec.update(database)
-        try authorization.require()
-      }
-    }
-  }
-
-  // MARK: - Recurring Tasks
-
-  /// Get incomplete recurring tasks that are due (dueAt <= now)
-  func getDueRecurringTasks() async throws -> [TaskActionItem] {
-    let db = try await ensureInitialized()
-
-    return try await db.read { database in
-      let records =
-        try ActionItemRecord
-        .filter(Column("completed") == false)
-        .filter(Column("deleted") == false)
-        .filter(Column("recurrenceRule") != nil && Column("recurrenceRule") != "")
-        .filter(Column("dueAt") != nil && Column("dueAt") <= Date())
-        .fetchAll(database)
-      return records.map { $0.toTaskActionItem() }
     }
   }
 

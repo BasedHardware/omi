@@ -1,8 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/validate_mobile_build_config_test.sh"
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/mobile_build_wrapper_test.sh"
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/build_provenance_dart_defines_test.sh"
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/check_hermetic_test_env_test.sh"
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/install_release_firebase_config_test.sh"
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test/shell/l10n_tool_test.sh"
+
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
+
+# INV-PERF-1 / #23400: never test a stale copy of production app wrappers.
+python3 tool/perf_shell.py --check
+python3 tool/test_perf_gate.py
+
+# Always refuse a stale .dev.env / pairing, even when generated files exist so
+# the bootstrap below is skipped. Never rewrite the file.
+bash "$ROOT_DIR/scripts/check_hermetic_test_env.sh" --app-dir "$ROOT_DIR"
 
 missing_files=()
 required_files=(
@@ -23,32 +38,40 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   echo "Running setup prerequisites..."
 
   mkdir -p android/app/src/dev/ ios/Config/Dev/ ios/Runner/ macos/ macos/Config/Dev
-  cp setup/prebuilt/firebase_options.dart lib/firebase_options_dev.dart
-  cp setup/prebuilt/google-services.json android/app/src/dev/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Config/Dev/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Runner/
-  cp setup/prebuilt/GoogleService-Info.plist macos/
-  cp setup/prebuilt/GoogleService-Info.plist macos/Config/Dev/
+  cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+  cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Runner/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist macos/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist macos/Config/Dev/GoogleService-Info.plist
 
   mkdir -p android/app/src/prod/ ios/Config/Prod/ macos/Config/Prod
-  cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
-  cp setup/prebuilt/google-services.json android/app/src/prod/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Config/Prod/
-  cp setup/prebuilt/GoogleService-Info.plist macos/Config/Prod/
+  cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
+  cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Prod/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist macos/Config/Prod/GoogleService-Info.plist
 
   if [[ -n "${OMI_APP_TEST_API_BASE_URL:-}" ]]; then
     echo "API_BASE_URL=${OMI_APP_TEST_API_BASE_URL}" > .dev.env
   elif [[ "${OMI_APP_TEST_USE_PROD_API_DEFAULT:-}" == "1" ]]; then
-    echo "API_BASE_URL=https://api.omiapi.com/" > .dev.env
+    echo "ERROR: OMI_APP_TEST_USE_PROD_API_DEFAULT=1 is not allowed for hermetic app/test.sh." >&2
+    exit 1
   else
     echo "API_BASE_URL=" > .dev.env
   fi
   echo "USE_WEB_AUTH=true" >> .dev.env
   echo "USE_AUTH_CUSTOM_TOKEN=true" >> .dev.env
-  echo "STAGING_API_URL=" >> .dev.env
 
   flutter pub get
   flutter pub run build_runner build --delete-conflicting-outputs
 fi
 
+bash "$ROOT_DIR/scripts/check_hermetic_test_env.sh" --app-dir "$ROOT_DIR"
+
+# Exercise the pinned native resource-error paths before Dart mocks.
+python3 scripts/test_whisper_cleanup.py
+
+# Execute registration with the real compile-time opt-in in a separate isolate.
+# Keep the ordinary suite (including the pinned fail-closed guard) unopted-in.
+flutter test --dart-define=OMI_DEV_CONTROLS=1 test/spine
 flutter test "$@"

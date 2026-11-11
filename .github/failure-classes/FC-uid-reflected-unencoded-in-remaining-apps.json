@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-uid-reflected-unencoded-in-remaining-apps",
+  "violated_contract": "A client-controlled query parameter embedded into outbound URLs - HTML form actions, hrefs, hidden input values, JSON payload fields consumed as links, and redirect targets - must be percent-encoded at the embedding site: a raw value containing a double quote breaks out of the HTML attribute (reflected XSS on an unauthenticated page) and a bare '&' or '#' corrupts the query handed to the next hop. Seven remaining plugin apps (dropbox, google-calendar, hive, ms365, shipbob, shopify, linear) embedded uid raw after the apps fixed in #13658 and #14350 were hardened (issue #14350 class).",
+  "canonical_prevention": "Compute the encoded value once per handler (urllib.parse.quote, safe='') and use it at every outbound-URL interpolation, HTML-escape value/text contexts, and pin each app with a manifest-registered hermetic suite that drives the real handlers through a hostile uid asserting percent-encoding and intact attributes and links.",
+  "canonical_prevention_artifact": [
+    "plugins/test_uid_reflection_remaining_apps.py",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/**"
+  ],
+  "status": "open"
+}

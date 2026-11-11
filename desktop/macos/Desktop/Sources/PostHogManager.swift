@@ -9,6 +9,7 @@ class PostHogManager {
   static let shared = PostHogManager()
 
   private var isInitialized = false
+  private var flagOwnerID: String?
 
   // PostHog configuration
   private let apiKey = "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
@@ -30,9 +31,27 @@ class PostHogManager {
     // lifecycle event (App Launched / First Launch) manually via AnalyticsManager.shared.
     config.captureApplicationLifecycleEvents = false
     config.captureScreenViews = true
-    config.preloadFeatureFlags = true
+    config.preloadFeatureFlags = false
+    config.urlSessionConfiguration = PostHogFlagRequestBlocker.sessionConfiguration()
 
     PostHogSDK.shared.setup(config)
+
+    // Remove the retired identity experiment's persisted super-properties.
+    for key in ["experiment_id", "variant", "experiment_forced"] {
+      PostHogSDK.shared.unregister(key)
+    }
+
+    // Release-identity super-properties (#10425): every captured event carries the
+    // app version + build + release channel, so PostHog (including
+    // `floating_bar_ptt_ended` and other per-event tracks that previously carried no
+    // identity) can be sliced by release cohort without per-event plumbing. These
+    // persist across sessions.
+    PostHogSDK.shared.register([
+      "platform": "macos",
+      "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
+      "update_channel": AppBuild.currentUpdateChannel,
+    ])
 
     isInitialized = true
     log("PostHog: Initialized successfully")
@@ -69,6 +88,8 @@ class PostHogManager {
     var properties: [String: Any] = [
       "platform": "macos",
       "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
+      "update_channel": AppBuild.currentUpdateChannel,
     ]
 
     if let email = email {
@@ -79,14 +100,19 @@ class PostHogManager {
       properties["name"] = name
     }
 
+    if flagOwnerID != uid {
+      OmiFlagStore.shared.reset()
+      flagOwnerID = uid
+    }
     PostHogSDK.shared.identify(uid, userProperties: properties)
     log("PostHog: Identified user \(uid)")
+    OmiFlagStore.shared.refresh()
   }
 
-  /// Set a specific user property
-  func setUserProperty(key: String, value: Any) {
+  /// Set person properties in one identify call.
+  func setUserProperties(_ properties: [String: Any]) {
     guard isInitialized else { return }
-    PostHogSDK.shared.identify(PostHogSDK.shared.getDistinctId(), userProperties: [key: value])
+    PostHogSDK.shared.identify(PostHogSDK.shared.getDistinctId(), userProperties: properties)
   }
 
   // MARK: - Event Tracking
@@ -176,27 +202,55 @@ class PostHogManager {
   func reset() {
     guard isInitialized else { return }
     PostHogSDK.shared.reset()
+    OmiFlagStore.shared.reset()
+    flagOwnerID = nil
     log("PostHog: Reset user")
   }
 
   // MARK: - Feature Flags
+  // Omi is the only flag authority; missing keys use the caller's default.
 
   /// Check if a feature flag is enabled
   func isFeatureEnabled(_ flag: String) -> Bool {
     guard isInitialized else { return false }
-    return PostHogSDK.shared.isFeatureEnabled(flag)
+    return OmiFlagStore.shared.flag(flag)?.enabled ?? false
   }
 
   /// Get feature flag value
   func getFeatureFlag(_ flag: String) -> Any? {
     guard isInitialized else { return nil }
-    return PostHogSDK.shared.getFeatureFlag(flag)
+    return OmiFlagStore.shared.value(flag)
   }
+
+  /// Get the JSON payload configured on a feature flag
+  func getFeatureFlagPayload(_ flag: String) -> Any? {
+    guard isInitialized else { return nil }
+    return OmiFlagStore.shared.payload(flag)
+  }
+
+  /// Posted by OmiFlagStore when its resolved snapshot changes.
+  static let featureFlagsDidLoad = Notification.Name("OmiFeatureFlagsDidLoad")
+
+  func screenTaskFrameTerminal(ownerID: String?, properties: [String: Any]) {
+    guard isInitialized else { return }
+    // A revocation outcome still belongs to its capture owner, never the account current at terminal time.
+    PostHogSDK.shared.capture(
+      "Screen Task Frame Terminal", distinctId: ownerID ?? "screen-task-unowned", properties: properties)
+  }
+
+  func screenTaskDeliveryCompleted(ownerID: String, completion: ScreenTaskDeliveryCompletion, deferred: Bool) {
+    guard isInitialized else { return }
+    PostHogSDK.shared.capture(
+      "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
+  }
+
+  /// Analytics opt-out also withholds the screen-task flag lease, as the retired fresh flag read did.
+  var screenTaskFlagWithheld: Bool { PostHogSDK.shared.isOptOut() }
 
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
-    PostHogSDK.shared.reloadFeatureFlags()
+    OmiFlagStore.shared.refresh()
   }
 }
 
@@ -257,50 +311,112 @@ extension PostHogManager {
     track("Signed Out")
   }
 
-  // MARK: - Monitoring Events
-
-  func monitoringStarted() {
-    track("Monitoring Started")
-  }
-
-  func monitoringStopped() {
-    track("Monitoring Stopped")
-  }
-
-  func distractionDetected(app: String, windowTitle: String?) {
-    track(
-      "Distraction Detected",
-      properties: [
-        "app": app,
-        "has_window_title": !(windowTitle?.isEmpty ?? true),
-      ])
-  }
-
-  func focusRestored(app: String) {
-    track(
-      "Focus Restored",
-      properties: [
-        "app": app
-      ])
-  }
-
   // MARK: - Recording Events
 
-  func transcriptionStarted() {
-    track(
-      "Desktop Recording Started",
-      properties: [
-        "platform": "macos"
-      ])
+  static func transcriptionStartedProperties(
+    attemptId: String? = nil,
+    mode: String? = nil,
+    intent: String? = nil
+  ) -> [String: Any] {
+    var properties: [String: Any] = [
+      "platform": "macos"
+    ]
+    if let attemptId {
+      properties["attempt_id"] = attemptId
+    }
+    if let mode {
+      properties["recording_mode"] = mode
+    }
+    if let intent {
+      properties["intent"] = intent
+    }
+    return properties
   }
 
-  func transcriptionStopped(wordCount: Int) {
+  func transcriptionStarted(attemptId: String? = nil, mode: String? = nil, intent: String? = nil) {
+    track(
+      "Desktop Recording Started",
+      properties: Self.transcriptionStartedProperties(attemptId: attemptId, mode: mode, intent: intent))
+  }
+
+  static func transcriptionStoppedProperties(
+    wordCount: Int, attemptId: String? = nil, reason: String? = nil
+  ) -> [String: Any] {
+    var properties: [String: Any] = [
+      "platform": "macos",
+      "word_count": wordCount,
+    ]
+    if let attemptId {
+      properties["attempt_id"] = attemptId
+    }
+    if let reason {
+      properties["finalization_reason"] = reason
+    }
+    return properties
+  }
+
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil, reason: String? = nil) {
     track(
       "Desktop Recording Stopped",
-      properties: [
-        "platform": "macos",
-        "word_count": wordCount,
-      ])
+      properties: Self.transcriptionStoppedProperties(
+        wordCount: wordCount, attemptId: attemptId, reason: reason))
+  }
+
+  // MARK: - Capture Attempt Outcome
+
+  /// Terminal record for one armed ambient-capture attempt. The authoritative
+  /// attempt/outcome funnel for the retention investigation; `Desktop Recording
+  /// Started` remains an arming signal, not a success KPI.
+  static let captureAttemptOutcomeEventName = "Desktop Capture Attempt Outcome"
+
+  /// Full outcome payload for an attempt that terminalized in-process. Every
+  /// field is a bounded boolean/enum/opaque id — no transcript, audio, device,
+  /// or path content (see `CaptureAttemptOutcomeState`).
+  static func captureAttemptOutcomeProperties(
+    _ attempt: CaptureAttemptOutcomeState,
+    finalizationReason: TranscriptionFinalizationReason
+  ) -> [String: Any] {
+    var properties: [String: Any] = [
+      "platform": "macos",
+      "attempt_id": attempt.attemptId,
+      "mode": attempt.mode,
+      "intent": attempt.intent.rawValue,
+      "launch_context": attempt.launchContext,
+      "seconds_since_launch": attempt.secondsSinceLaunch,
+      "update_attempt_id": attempt.updateAttemptID ?? "none",
+      "capture_eligible": attempt.captureEligible,
+      "first_audio_frame": attempt.firstAudioFrame,
+      "speech_observed": attempt.speechObserved,
+      "terminal_reason": attempt.terminalReason(for: finalizationReason).rawValue,
+      "finalization_reason": finalizationReason.rawValue,
+      "conversation_accepted": attempt.conversationAccepted,
+    ]
+    if let episodeID = attempt.armedEpisodeID {
+      properties["armed_retry"] = true
+      properties["armed_episode_id"] = episodeID
+    }
+    return properties
+  }
+
+  /// Minimal outcome payload for an attempt whose process died mid-flight:
+  /// the crash-recovery hook only knows the persisted join key, so every other
+  /// dimension is omitted rather than guessed.
+  static func captureAttemptPendingProperties(attemptId: String) -> [String: Any] {
+    [
+      "platform": "macos",
+      "attempt_id": attemptId,
+      "terminal_reason": CaptureAttemptOutcomeState.TerminalReason.pending.rawValue,
+    ]
+  }
+
+  func captureAttemptOutcome(properties: [String: Any]) {
+    track(Self.captureAttemptOutcomeEventName, properties: properties)
+  }
+
+  /// One local day's per-bundle call-audio counts. `track` already drops the
+  /// event when analytics is uninitialized or the user has opted out.
+  func callAppAudioSummary(_ summary: CallAppAudioSummary) {
+    track(CallAppAudioSummaryTelemetry.eventName, properties: CallAppAudioSummaryTelemetry.properties(summary))
   }
 
   func recordingError(
@@ -504,15 +620,58 @@ extension PostHogManager {
   // but it actually tracks when a conversation/recording is created, not a "memory".
   // This matches Flutter's naming for analytics consistency.
 
-  func conversationCreated(conversationId: String, source: String, durationSeconds: Int? = nil) {
+  static func conversationCreatedProperties(
+    source: String,
+    durationSeconds: Int?,
+    attemptId: String? = nil
+  ) -> [String: Any] {
     var properties: [String: Any] = [
-      "conversation_id": conversationId,
-      "source": source,
+      "conversation_source": source
     ]
     if let duration = durationSeconds {
       properties["duration_seconds"] = duration
     }
-    track("Memory Created", properties: properties)
+    if let attemptId {
+      properties["attempt_id"] = attemptId
+    }
+    return properties
+  }
+
+  func conversationCreated(
+    conversationId _: String,
+    source: String,
+    durationSeconds: Int? = nil,
+    attemptId: String? = nil
+  ) {
+    track(
+      "Memory Created",
+      properties: Self.conversationCreatedProperties(
+        source: source,
+        durationSeconds: durationSeconds,
+        attemptId: attemptId)
+    )
+  }
+
+  static func conversationProcessingProperties(elapsedSeconds: Int, outcome: String?) -> [String: Any] {
+    var properties: [String: Any] = ["elapsed_seconds": max(0, elapsedSeconds)]
+    if let outcome {
+      properties["outcome"] = outcome
+    }
+    return properties
+  }
+
+  func conversationProcessingCompleted(conversationId _: String, elapsedSeconds: Int, outcome: String) {
+    track(
+      "Conversation Processing Completed",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: outcome)
+    )
+  }
+
+  func conversationProcessingStalled(conversationId _: String, elapsedSeconds: Int) {
+    track(
+      "Conversation Processing Stalled",
+      properties: Self.conversationProcessingProperties(elapsedSeconds: elapsedSeconds, outcome: nil)
+    )
   }
 
   func memoryDeleted(conversationId: String) {
@@ -553,16 +712,20 @@ extension PostHogManager {
 
   // MARK: - Search Events
 
-  func searchQueryEntered(query: String) {
-    track(
-      "Search Query Entered",
-      properties: [
-        "query_length": query.count
-      ])
+  func searchQueryEntered(properties: [String: Any]) {
+    track("Search Query Entered", properties: properties)
   }
 
-  func searchBarFocused() {
-    track("Search Bar Focused")
+  func searchBarFocused(properties: [String: Any]) {
+    track("Search Bar Focused", properties: properties)
+  }
+
+  func searchResultOpened(properties: [String: Any]) {
+    track("Search Result Opened", properties: properties)
+  }
+
+  func conversationOpenedFromSearch(properties: [String: Any]) {
+    track("Conversation Opened From Search", properties: properties)
   }
 
   // MARK: - Settings Events
@@ -627,6 +790,17 @@ extension PostHogManager {
       ])
   }
 
+  /// Reprocess fired without a specific app (one-tap row affordance for
+  /// untitled/failed conversations). Separate event so we can distinguish
+  /// from the existing "reprocess-with-app" funnel in product metrics.
+  func conversationReprocessedDefault(conversationId: String) {
+    track(
+      "Conversation Reprocessed Default",
+      properties: [
+        "conversation_id": conversationId
+      ])
+  }
+
   // MARK: - Settings Events (Additional)
 
   func settingToggled(setting: String, enabled: Bool) {
@@ -671,6 +845,21 @@ extension PostHogManager {
       ])
   }
 
+  func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
+    var properties: [String: Any] = [
+      "rating": rating,
+      "trigger": "third_question",
+    ]
+    // The prompt revision the client saw, so copy experiments are separable.
+    // The comment NEVER travels to PostHog — Firestore only, admin-only read.
+    if let revision {
+      properties["revision"] = revision
+    }
+    track(
+      "Desktop Rating Submitted",
+      properties: properties)
+  }
+
   // MARK: - Rewind Events (Desktop-specific)
 
   func rewindSearchPerformed(queryLength: Int) {
@@ -708,29 +897,18 @@ extension PostHogManager {
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
-  func focusAlertShown(app: String) {
-    track(
-      "Focus Alert Shown",
-      properties: [
-        "app": app
-      ])
-  }
-
-  func focusAlertDismissed(app: String, action: String) {
-    track(
-      "Focus Alert Dismissed",
-      properties: [
-        "app": app,
-        "action": action,
-      ])
-  }
-
-  func taskExtracted(taskCount: Int) {
-    track(
-      "Task Extracted",
-      properties: [
-        "task_count": taskCount
-      ])
+  func taskExtracted(
+    taskCount: Int, gateOutcome: String? = nil, auditSample: Bool = false, candidateCount: Int = 0,
+    extractor: String? = nil
+  ) {
+    var properties: [String: Any] = ["task_count": taskCount]
+    if let gateOutcome {
+      properties["gate_outcome"] = ["passed", "rejected", "fail_open"].contains(gateOutcome) ? gateOutcome : "none"
+      properties["audit_sample"] = auditSample
+      properties["extracted_candidate_count"] = max(0, min(candidateCount, 8))
+    }
+    if let extractor { properties["extractor"] = ["gemini_3_8", "legacy"].contains(extractor) ? extractor : "none" }
+    track("Task Extracted", properties: properties)
   }
 
   func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {
@@ -787,10 +965,102 @@ extension PostHogManager {
       ])
   }
 
-  func insightGenerated(category: String?) {
-    var properties: [String: Any] = [:]
-    if let cat = category { properties["category"] = cat }
-    track("Advice Generated", properties: properties.isEmpty ? nil : properties)
+  // MARK: - Memory Assistant Telemetry (proactive screen-context assistant)
+
+  /// Emitted on a user-initiated persisted change to one of the two MemoryAssistant
+  /// settings that gate analysis (`enabled`, `notifications_enabled`). Makes the true
+  /// activation denominator (monitoring users who also enabled memory notifications)
+  /// measurable. Closed schema only — bounded `setting` + boolean `value`.
+  func memoryAssistantSettingChanged(setting: MemoryAssistantTelemetry.Setting, value: Bool) {
+    track(
+      MemoryAssistantTelemetry.settingChangedEventName,
+      properties: MemoryAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    )
+  }
+
+  /// Emitted once per actual Gemini analysis attempt (not per captured frame, and not
+  /// on disabled/gated paths) with a closed terminal `outcome`. Supplements — does not
+  /// replace — the existing `Memory Extracted` success terminal. Confidence is bucketed
+  /// to a coarse decile range; raw model material is never sent.
+  func memoryAssistantAnalysisRun(
+    outcome: MemoryAssistantTelemetry.AnalysisOutcome,
+    confidence: Double? = nil
+  ) {
+    track(
+      MemoryAssistantTelemetry.analysisRunEventName,
+      properties: MemoryAssistantTelemetry.analysisRunPayload(outcome: outcome, confidence: confidence)
+    )
+  }
+
+  // MARK: - Suggestion Assistant Telemetry
+
+  func suggestionAssistantSettingChanged(setting: SuggestionAssistantTelemetry.Setting, value: Bool) {
+    track(
+      SuggestionAssistantTelemetry.settingChangedEventName,
+      properties: SuggestionAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    )
+  }
+
+  func suggestionAssistantGateOutcome(_ outcome: SuggestionAssistantTelemetry.GateOutcome) {
+    guard outcome.emitsAnalytics else { return }
+    track(
+      SuggestionAssistantTelemetry.gateOutcomeEventName,
+      properties: SuggestionAssistantTelemetry.gateOutcomePayload(outcome)
+    )
+  }
+
+  func suggestionAssistantEvaluationStarted(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape
+  ) {
+    track(
+      SuggestionAssistantTelemetry.evaluationStartedEventName,
+      properties: SuggestionAssistantTelemetry.evaluationStartedPayload(identity: identity, shape: shape)
+    )
+  }
+
+  func suggestionAssistantEvaluationCompleted(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape,
+    latency: TimeInterval,
+    producedSuggestion: Bool
+  ) {
+    track(
+      SuggestionAssistantTelemetry.evaluationCompletedEventName,
+      properties: SuggestionAssistantTelemetry.evaluationCompletedPayload(
+        identity: identity,
+        shape: shape,
+        latency: latency,
+        producedSuggestion: producedSuggestion
+      )
+    )
+  }
+
+  func suggestionAssistantEvaluationFailed(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape,
+    latency: TimeInterval,
+    reason: SuggestionAssistantTelemetry.EvaluationFailureReason
+  ) {
+    track(
+      SuggestionAssistantTelemetry.evaluationFailedEventName,
+      properties: SuggestionAssistantTelemetry.evaluationFailedPayload(
+        identity: identity,
+        shape: shape,
+        latency: latency,
+        reason: reason
+      )
+    )
+  }
+
+  func suggestionAssistantDeliveryOutcome(
+    _ outcome: SuggestionAssistantTelemetry.DeliveryOutcome,
+    identity: SuggestionAssistantTelemetry.NotificationIdentity
+  ) {
+    track(
+      SuggestionAssistantTelemetry.deliveryOutcomeEventName,
+      properties: SuggestionAssistantTelemetry.deliveryOutcomePayload(outcome, identity: identity)
+    )
   }
 
   // MARK: - Apps Events
@@ -878,40 +1148,86 @@ extension PostHogManager {
 
   // MARK: - Notification Events
 
-  func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationSent(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties = notificationProperties(
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface
+    )
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Sent",
-      properties: [
-        "notification_id": notificationId,
-        "title_length": title.count,
-        "has_title": !title.isEmpty,
-        "assistant_id": assistantId,
-        "notification_surface": surface,
-      ])
+      properties: properties)
   }
 
-  func notificationClicked(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationClicked(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties = notificationProperties(
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface
+    )
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Clicked",
-      properties: [
-        "notification_id": notificationId,
-        "title_length": title.count,
-        "has_title": !title.isEmpty,
-        "assistant_id": assistantId,
-        "notification_surface": surface,
-      ])
+      properties: properties)
   }
 
-  func notificationDismissed(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationDismissed(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    dismissalKind: NotificationDismissalKind,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties = notificationProperties(
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface
+    )
+    properties["dismissal_kind"] = dismissalKind.rawValue
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",
-      properties: [
-        "notification_id": notificationId,
-        "title_length": title.count,
-        "has_title": !title.isEmpty,
-        "assistant_id": assistantId,
-        "notification_surface": surface,
-      ])
+      properties: properties)
+  }
+
+  private func notificationProperties(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String
+  ) -> [String: Any] {
+    [
+      "notification_id": notificationId,
+      "title_length": title.count,
+      "has_title": !title.isEmpty,
+      "assistant_id": assistantId,
+      "notification_surface": surface,
+    ]
+  }
+
+  private func appendSuggestionNotificationIdentity(
+    _ identity: SuggestionAssistantTelemetry.NotificationIdentity?,
+    to properties: inout [String: Any]
+  ) {
+    guard let identity else { return }
+    properties.merge(SuggestionAssistantTelemetry.notificationPayload(identity)) { _, new in new }
   }
 
   func notificationWillPresent(notificationId: String, title: String) {

@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'package:omi/utils/audio/background_location_cadence.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/notification_channel_strings.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -12,18 +14,50 @@ void _startForegroundCallback() {
 
 class _ForegroundFirstTaskHandler extends TaskHandler {
   DateTime? _locationUpdatedAt;
+  final _locationCadence = BackgroundLocationCadence();
+
+  static const Duration _lastKnownMaxAge = Duration(minutes: 5);
+
+  bool _isLastKnownFresh(Position position) {
+    final age = DateTime.now().toUtc().difference(position.timestamp.toUtc());
+    return !age.isNegative && age <= _lastKnownMaxAge;
+  }
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     Logger.debug("Starting foreground task");
-    _locationInBackground();
+    await _locationCadence.onStart(refreshLocation: _locationInBackground);
   }
 
   Future _locationInBackground() async {
+    // Periodic refresh from FOREGROUND_SERVICE_LOCATION. while-in-use is
+    // enough; do not request ACCESS_BACKGROUND_LOCATION (Play Store
+    // prominent-disclosure). This isolate has no Activity, so it never prompts.
     if (await Geolocator.isLocationServiceEnabled()) {
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        var locationData = await Geolocator.getCurrentPosition();
+        Position? lastKnown;
+        try {
+          lastKnown = await Geolocator.getLastKnownPosition() ??
+              await Geolocator.getLastKnownPosition(forceAndroidLocationManager: true);
+        } catch (_) {}
+        late final Position locationData;
+        if (lastKnown != null && _isLastKnownFresh(lastKnown)) {
+          locationData = lastKnown;
+        } else {
+          try {
+            locationData = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+            ).timeout(const Duration(seconds: 8));
+          } catch (e) {
+            if (lastKnown == null) {
+              Object loc = {'error': 'Location fix failed: $e'};
+              FlutterForegroundTask.sendDataToMain(loc);
+              return;
+            }
+            locationData = lastKnown;
+          }
+        }
         if (_locationUpdatedAt == null ||
             _locationUpdatedAt!.isBefore(DateTime.now().subtract(const Duration(minutes: 5)))) {
           Object loc = {
@@ -55,7 +89,16 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   void onRepeatEvent(DateTime timestamp) async {
     Logger.debug("Foreground repeat event triggered");
-    await _locationInBackground();
+    // The main isolate owns WAL state. A fresh headless capture engine must
+    // never be booted for this opportunistic recovery pass.
+    final now = DateTime.now();
+    await _locationCadence.onRepeat(
+      now: now,
+      sendSyncWake: () {
+        FlutterForegroundTask.sendDataToMain({'recordingSyncWake': true});
+      },
+      refreshLocation: _locationInBackground,
+    );
   }
 
   @override
@@ -105,11 +148,12 @@ class ForegroundUtil {
     Logger.debug('initializeForegroundService');
 
     try {
+      await NotificationChannelStrings.loadAppLocale();
       FlutterForegroundTask.init(
         androidNotificationOptions: AndroidNotificationOptions(
           channelId: 'foreground_service',
-          channelName: 'Foreground Service Notification',
-          channelDescription: 'Transcription service is running in the background.',
+          channelName: NotificationChannelStrings.foregroundServiceChannelName,
+          channelDescription: NotificationChannelStrings.foregroundServiceChannelDescription,
           channelImportance: NotificationChannelImportance.LOW,
           priority: NotificationPriority.HIGH,
           // iconData: const NotificationIconData(
@@ -146,16 +190,24 @@ class ForegroundUtil {
     Logger.debug('startForegroundTask');
 
     try {
-      ServiceRequestResult result;
+      // restartService() calls startForegroundService() again. A stop that
+      // lands before the new startForeground() crashes Android 14+ with
+      // ForegroundServiceDidNotStartInTimeException. An already-running
+      // service has already promoted; leave it alone.
       if (await FlutterForegroundTask.isRunningService) {
-        result = await FlutterForegroundTask.restartService();
-      } else {
-        result = await FlutterForegroundTask.startService(
-          notificationTitle: 'Your Omi Device is connected.',
-          notificationText: 'Transcription service is running in the background.',
-          callback: _startForegroundCallback,
-        );
+        Logger.debug('ForegroundTask already running');
+        return const ServiceRequestSuccess();
       }
+      final ServiceRequestResult result = await FlutterForegroundTask.startService(
+        // Explicit location. The manifest also lists shortService as the
+        // timeout fallback; omitting serviceTypes makes the plugin pass
+        // FOREGROUND_SERVICE_TYPE_MANIFEST and adopt both, which imposes
+        // the 3-minute shortService limit on this task.
+        serviceTypes: const [ForegroundServiceTypes.location],
+        notificationTitle: 'Your Omi Device is connected.',
+        notificationText: 'Transcription service is running in the background.',
+        callback: _startForegroundCallback,
+      );
       Logger.debug('ForegroundTask started successfully');
       return result;
     } catch (e) {

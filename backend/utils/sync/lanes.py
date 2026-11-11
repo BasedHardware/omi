@@ -9,6 +9,18 @@ from enum import Enum
 from typing import Iterable, Optional
 
 from utils.request_validation import parse_sync_filename_timestamp
+from utils.sync.capture_clock import maximum_future_skew_seconds, early_capture_clamp_enabled, is_early_capture_time
+
+__all__ = [
+    'CaptureTimeTrust',
+    'SyncLane',
+    'SyncLaneDecision',
+    'capture_times_within_window',
+    'classify_sync_lane',
+    'fresh_cutoff_seconds',
+    'maximum_backfill_age_seconds',
+    'maximum_future_skew_seconds',
+]
 
 
 class SyncLane(str, Enum):
@@ -41,10 +53,6 @@ def maximum_backfill_age_seconds() -> int:
     return max(fresh_cutoff_seconds(), int(os.getenv('SYNC_BACKFILL_MAX_AGE_SECONDS', str(30 * 24 * 60 * 60))))
 
 
-def maximum_future_skew_seconds() -> int:
-    return max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
-
-
 def capture_times_within_window(filenames: Iterable[str], lower: float, upper: float) -> bool:
     try:
         capture_times = [float(parse_sync_filename_timestamp(filename)) for filename in filenames]
@@ -58,6 +66,7 @@ def classify_sync_lane(
     *,
     client_device_id: Optional[str],
     now: Optional[float] = None,
+    allow_legacy_fresh: bool = False,
 ) -> SyncLaneDecision:
     """Classify a whole upload batch; mixed batches conservatively become backfill."""
     capture_times: list[float] = []
@@ -85,6 +94,9 @@ def classify_sync_lane(
         )
 
     effective_now = time.time() if now is None else now
+    early_clamped = early_capture_clamp_enabled() and any(is_early_capture_time(value) for value in capture_times)
+    if early_clamped:
+        capture_times = [effective_now if is_early_capture_time(value) else value for value in capture_times]
     oldest = min(capture_times)
     newest = max(capture_times)
     maximum_age = max(0, int(effective_now - oldest))
@@ -100,6 +112,12 @@ def classify_sync_lane(
             maximum_age_seconds=maximum_age,
         )
 
+    # Within-tolerance skew must not leak a future capture time into lane
+    # ordering or the backfill sequencer key; clamping keeps it admissible.
+    oldest = min(oldest, effective_now)
+    newest = min(newest, effective_now)
+    maximum_age = max(0, int(effective_now - oldest))
+
     if maximum_age > maximum_backfill_age_seconds():
         return SyncLaneDecision(
             lane=SyncLane.BACKFILL,
@@ -110,11 +128,30 @@ def classify_sync_lane(
             maximum_age_seconds=maximum_age,
             automatic_recovery_allowed=False,
         )
-    if not client_device_id:
+    if early_clamped:
+        # A reset clock proves no age: retain backfill pacing, never a fresh
+        # trust upgrade. Valid historical siblings still obey lookback above.
         return SyncLaneDecision(
             lane=SyncLane.BACKFILL,
+            trust=CaptureTimeTrust.UNTRUSTED,
+            reason='early_capture_clamped',
+            oldest_capture_at=oldest,
+            newest_capture_at=newest,
+            maximum_age_seconds=None,
+        )
+    if not client_device_id:
+        return SyncLaneDecision(
+            lane=(
+                SyncLane.FRESH
+                if allow_legacy_fresh and effective_now - oldest <= fresh_cutoff_seconds()
+                else SyncLane.BACKFILL
+            ),
             trust=CaptureTimeTrust.LEGACY,
-            reason='unbound_capture_time',
+            reason=(
+                'recent_legacy_capture'
+                if allow_legacy_fresh and effective_now - oldest <= fresh_cutoff_seconds()
+                else 'unbound_capture_time'
+            ),
             oldest_capture_at=oldest,
             newest_capture_at=newest,
             maximum_age_seconds=maximum_age,

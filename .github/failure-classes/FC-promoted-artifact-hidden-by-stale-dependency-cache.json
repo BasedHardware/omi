@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-promoted-artifact-hidden-by-stale-dependency-cache",
+  "violated_contract": "A successful release-pointer promotion must become readable immediately through every public projection. Invalidating only the pointer cache while leaving a cached pre-publication artifact listing can return success from promotion yet keep the promoted release absent from the update feed until cache expiry.",
+  "canonical_prevention": "After the authoritative promotion commits, the promotion boundary invalidates both its channel pointer cache and every cached dependency used to resolve that channel's artifacts; idempotent retries repair the same cache set, and route tests assert both invalidations.",
+  "canonical_prevention_artifact": [
+    "backend/routers/updates.py",
+    "backend/tests/unit/test_desktop_updates.py"
+  ],
+  "evidence_prs": [11951],
+  "scope_hints": [
+    "backend/routers/updates.py",
+    "backend/utils/desktop_update_resolver.py"
+  ],
+  "status": "open"
+}

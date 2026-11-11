@@ -1,5 +1,5 @@
 {
-  "max_skip_count": 4,
+  "max_skip_count": 3,
   "allowed_tests": [
     "ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest",
     "ChatDiscoverabilityTests/testDesktopCapabilitiesExistInAgentToolDeclarations",

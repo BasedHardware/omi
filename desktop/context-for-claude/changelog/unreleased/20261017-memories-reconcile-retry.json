@@ -1,0 +1,3 @@
+{
+  "change": "A deleted memory no longer reappears in Memories search until the app is restarted: when the server truncates the memories list, the cache reconcile now retries within the session instead of waiting for the next launch, so memories deleted on another device stop matching search the same session"
+}

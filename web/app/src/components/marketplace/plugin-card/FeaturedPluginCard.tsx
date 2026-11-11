@@ -2,8 +2,8 @@
 
 import { memo } from 'react';
 import { Star, Download } from 'lucide-react';
-import Link from 'next/link';
-import Image from 'next/image';
+import Link from '@tschk/moonshine-next/link';
+import Image from '@tschk/moonshine-next/image';
 import type { Plugin } from '../types';
 import { NewBadge } from '../NewBadge';
 import { formatInstalls } from '../utils/format';

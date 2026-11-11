@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, ShieldCheck, Zap } from 'lucide-react'
-import { getPreferences, setPreferences } from '../../../lib/preferences'
+import { Activity, EyeOff, Monitor, ShieldCheck } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import type { UsageSettings } from '../../../../../shared/types'
@@ -16,47 +15,47 @@ const RETENTION_OPTIONS: ReadonlyArray<{ days: number; label: string }> = [
 export function PrivacyTab(): React.JSX.Element {
   const [usage, setUsage] = useState<UsageSettings | null>(null)
   useEffect(() => {
-    window.omi.usageGetSettings().then(setUsage).catch(() => setUsage(null))
+    window.omi
+      .usageGetSettings()
+      .then(setUsage)
+      .catch(() => setUsage(null))
   }, [])
   const saveUsage = async (next: UsageSettings): Promise<void> => {
     setUsage(await window.omi.usageSetSettings(next))
   }
 
-  // Desktop-automation opt-in. The toggle writes the same `automationConsentedAt`
-  // preference the onboarding Automation step sets; useChat gates its action
-  // planner on it. `OMI_AUTOMATION=0` is a hard build kill-switch (exposed as
-  // automationEnabled) — when off, the feature can't run, so the toggle is shown
-  // disabled regardless of consent.
-  const automationAvailable = window.omi.automationEnabled
-  const [autoConsent, setAutoConsent] = useState<boolean>(!!getPreferences().automationConsentedAt)
-  const toggleAutomation = (on: boolean): void => {
-    setAutoConsent(on)
-    setPreferences({ automationConsentedAt: on ? Date.now() : undefined })
+  // Bar/HUD screen-share privacy: exclude the top-edge bar from captures
+  // (WDA_EXCLUDEFROMCAPTURE). Persisted in main's app settings; applied live.
+  const [hudProtected, setHudProtected] = useState<boolean | null>(null)
+  useEffect(() => {
+    window.omiBar
+      .getContentProtection()
+      .then(setHudProtected)
+      .catch(() => setHudProtected(null))
+  }, [])
+  const toggleHudProtection = (on: boolean): void => {
+    setHudProtected(on)
+    void window.omiBar.setContentProtection(on).then(setHudProtected)
+  }
+
+  // "Screen Sharing in Chat" (Mac's chatScreenshotSharingEnabled, default ON).
+  // The consent gate for the model-invoked capture_screen tool: on → Omi may
+  // capture the screen when you ask about it; off → the tool is refused. Turning
+  // it on captures nothing by itself — it only permits the tool.
+  const [screenShareInChat, setScreenShareInChat] = useState<boolean | null>(null)
+  useEffect(() => {
+    window.omi
+      .getChatScreenshotSharing()
+      .then(setScreenShareInChat)
+      .catch(() => setScreenShareInChat(null))
+  }, [])
+  const toggleScreenShareInChat = (on: boolean): void => {
+    setScreenShareInChat(on)
+    void window.omi.setChatScreenshotSharing(on).then(setScreenShareInChat)
   }
 
   return (
     <>
-      <SettingRow
-        icon={Zap}
-        dot={automationAvailable && autoConsent ? 'on' : 'off'}
-        title="Let Omi take actions"
-        subtitle={
-          !automationAvailable
-            ? 'Disabled in this build.'
-            : autoConsent
-              ? 'Omi can click and type in your apps when you ask — you approve each action first.'
-              : 'Turn on to let Omi act in your apps when you ask (you approve each action first).'
-        }
-        keywords="automation actions desktop control agent take action flaui approve"
-        control={
-          <Toggle
-            on={automationAvailable && autoConsent}
-            onChange={toggleAutomation}
-            disabled={!automationAvailable}
-            label="Let Omi take actions"
-          />
-        }
-      />
       <SettingRow
         icon={Activity}
         dot={usage?.enabled ? 'on' : 'off'}
@@ -89,6 +88,36 @@ export function PrivacyTab(): React.JSX.Element {
           </label>
         )}
       </SettingRow>
+      <SettingRow
+        icon={EyeOff}
+        dot={hudProtected ? 'on' : 'off'}
+        title="Hide the Omi bar from screen sharing"
+        subtitle="Excludes the top-edge bar from screenshots, recordings, and shared screens. Turn off if you want it visible in captures."
+        keywords="bar hud screen share capture protection privacy exclude recording"
+        control={
+          <Toggle
+            on={!!hudProtected}
+            onChange={toggleHudProtection}
+            disabled={hudProtected === null}
+            label="Hide the Omi bar from screen sharing"
+          />
+        }
+      />
+      <SettingRow
+        icon={Monitor}
+        dot={screenShareInChat ? 'on' : 'off'}
+        title="Screen Sharing in Chat"
+        subtitle="Let Omi capture your screen when you ask about what's on it. Omi only captures when you ask — turning this on doesn't share anything on its own."
+        keywords="screen sharing chat capture screenshot ask omi see my screen vision"
+        control={
+          <Toggle
+            on={!!screenShareInChat}
+            onChange={toggleScreenShareInChat}
+            disabled={screenShareInChat === null}
+            label="Screen Sharing in Chat"
+          />
+        }
+      />
       <SettingRow
         icon={ShieldCheck}
         title="On-device by default"

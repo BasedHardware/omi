@@ -60,13 +60,17 @@ final class WifiSyncService: ObservableObject {
   }
 
   private var tcpConnection: NWConnection?
-  private var syncTask: Task<Void, Never>?
+  private var syncTask: Task<Void, Error>?
   private var statusStreamTask: Task<Void, Never>?
 
   private var currentWal: WALEntry?
   private var downloadedFrames: [Data] = []
   private var totalBytesDownloaded = 0
   private var transferStartTime: Date?
+
+  /// Tracks the absolute stream position across chunks so 440-byte block
+  /// boundaries are computed from the stream start, not the per-chunk buffer.
+  private var frameParser = WifiFrameStreamParser()
 
   // Speed tracking
   private var speedSamples: [(timestamp: Date, bytes: Int)] = []
@@ -116,6 +120,29 @@ final class WifiSyncService: ObservableObject {
     isSyncing = true
     errorMessage = nil
     status = .off
+
+    // Run the transfer in an owned, cancellable task so stopSync() actually
+    // propagates cancellation into the awaiting steps (the handle used to be
+    // left nil, so Stop only tore down the TCP socket and left the flow
+    // running). The caller still awaits completion and receives thrown errors.
+    let task = Task { [weak self] () throws in
+      guard let self else { return }
+      try await self.performWifiSync(device: device, codec: codec, ssid: ssid, password: password)
+    }
+    syncTask = task
+    defer { syncTask = nil }
+    try await task.value
+  }
+
+  private func performWifiSync(
+    device: BtDevice,
+    codec: String,
+    ssid: String?,
+    password: String?
+  ) async throws {
+    guard let connection = deviceProvider.activeConnection else {
+      throw WifiSyncServiceError.deviceNotConnected
+    }
 
     do {
       // Step 1: Setup WiFi if credentials provided
@@ -185,6 +212,9 @@ final class WifiSyncService: ObservableObject {
       // For now, assume user has connected manually or use device's auto-generated AP
       logger.info("Connecting to device TCP server...")
 
+      // Bail before opening the socket if Stop was pressed during BLE setup.
+      try Task.checkCancellation()
+
       // Get device IP (typically 192.168.4.1 for ESP32 SoftAP)
       let deviceIP = "192.168.4.1"
 
@@ -200,11 +230,30 @@ final class WifiSyncService: ObservableObject {
       await finishSync()
 
     } catch {
+      // A user Stop (or a superseding sync) surfaces as a CancellationError —
+      // directly from our `Task.checkCancellation()` / thrown CancellationError
+      // steps, or indirectly as another error thrown from an await that the
+      // cancellation interrupted (hence the `Task.isCancelled` fallback). An
+      // intentional cancellation is NOT a failure: it must not set errorMessage
+      // and surface a "Recording Error"-style banner in StorageSyncView.
+      if Self.isCancellation(error, taskWasCancelled: Task.isCancelled) {
+        logger.info("WiFi sync cancelled by user")
+        await cleanup()
+        throw CancellationError()
+      }
       logger.error("WiFi sync failed: \(error.localizedDescription)")
       errorMessage = error.localizedDescription
       await cleanup()
       throw error
     }
+  }
+
+  /// Classifies a thrown sync error. A user-initiated Stop or a superseding sync
+  /// is a cancellation (never a user-facing error); everything else is a real
+  /// failure that should surface `errorMessage`. Pure so the intentional-Stop
+  /// vs. failure boundary is unit-testable without live BLE/TCP.
+  static func isCancellation(_ error: Error, taskWasCancelled: Bool) -> Bool {
+    error is CancellationError || taskWasCancelled
   }
 
   /// Stop WiFi sync
@@ -271,6 +320,9 @@ final class WifiSyncService: ObservableObject {
     self.tcpConnection = connection
 
     return try await withCheckedThrowingContinuation { continuation in
+      // Resume the continuation directly in each terminal case and clear the
+      // handler on first resume so it fires exactly once (no shared mutable
+      // state, which strict concurrency rejects across the @Sendable handler).
       connection.stateUpdateHandler = { [weak self] state in
         switch state {
         case .ready:
@@ -280,6 +332,15 @@ final class WifiSyncService: ObservableObject {
 
         case .failed(let error):
           self?.logger.error("TCP connection failed: \(error.localizedDescription)")
+          connection.stateUpdateHandler = nil
+          continuation.resume(throwing: WifiSyncServiceError.connectionFailed)
+
+        case .waiting(let error):
+          // The device AP is unreachable (e.g. the Mac never joined it).
+          // NWConnection would sit in `.waiting` and retry forever, hanging
+          // the sync in "syncing" with no exit but Stop. Fail fast so the
+          // user can retry instead.
+          self?.logger.error("TCP connection unreachable: \(error.localizedDescription)")
           connection.stateUpdateHandler = nil
           continuation.resume(throwing: WifiSyncServiceError.connectionFailed)
 
@@ -304,6 +365,7 @@ final class WifiSyncService: ObservableObject {
     downloadedFrames = []
     totalBytesDownloaded = 0
     speedSamples = []
+    frameParser = WifiFrameStreamParser()
 
     var buffer = Data()
     let startTime = Date()
@@ -323,7 +385,7 @@ final class WifiSyncService: ObservableObject {
       totalBytesDownloaded += chunk.count
 
       // Parse frames from buffer
-      let (frames, remaining) = parseFrames(from: buffer)
+      let (frames, remaining) = frameParser.parse(buffer)
       buffer = remaining
 
       downloadedFrames.append(contentsOf: frames)
@@ -333,7 +395,7 @@ final class WifiSyncService: ObservableObject {
     }
 
     // Parse any remaining data
-    let (finalFrames, _) = parseFrames(from: buffer)
+    let (finalFrames, _) = frameParser.parse(buffer)
     downloadedFrames.append(contentsOf: finalFrames)
 
     logger.info("Received \(self.totalBytesDownloaded) bytes, \(self.downloadedFrames.count) frames")
@@ -355,53 +417,6 @@ final class WifiSyncService: ObservableObject {
         continuation.resume(returning: data ?? Data())
       }
     }
-  }
-
-  private func parseFrames(from data: Data) -> (frames: [Data], remaining: Data) {
-    var frames: [Data] = []
-    var offset = 0
-
-    while offset < data.count {
-      // Need at least 1 byte for frame size
-      guard offset < data.count else { break }
-
-      let frameSize = Int(data[offset])
-
-      // Check for end marker or padding
-      if frameSize == 0 {
-        // Skip to next block boundary (440 bytes)
-        let blockSize = 440
-        let currentBlock = offset / blockSize
-        let nextBlockStart = (currentBlock + 1) * blockSize
-        if nextBlockStart <= data.count {
-          offset = nextBlockStart
-        } else {
-          break
-        }
-        continue
-      }
-
-      offset += 1
-
-      // Check if we have enough data for this frame
-      guard offset + frameSize <= data.count else {
-        // Incomplete frame - return remaining data
-        offset -= 1
-        break
-      }
-
-      let frameData = data.subdata(in: offset..<(offset + frameSize))
-
-      // Validate Opus frame
-      if OpusFrameValidator.startsWithValidFrame(frameData) {
-        frames.append(frameData)
-      }
-
-      offset += frameSize
-    }
-
-    let remaining = offset < data.count ? data.subdata(in: offset..<data.count) : Data()
-    return (frames, remaining)
   }
 
   private func updateProgress() {
@@ -472,6 +487,12 @@ final class WifiSyncService: ObservableObject {
     // Stop WiFi on device
     if let connection = deviceProvider.activeConnection {
       _ = await connection.stopWifiSync()
+    }
+
+    // Drop the reserved SD-card WAL if this sync downloaded nothing, so a
+    // failed/aborted transfer doesn't leave a permanent phantom 'pending' entry.
+    if let wal = currentWal {
+      activeWalService.removeSdCardWalIfEmpty(walId: wal.id)
     }
 
     isSyncing = false

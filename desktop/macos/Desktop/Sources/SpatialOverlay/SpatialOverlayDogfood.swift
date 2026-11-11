@@ -7,6 +7,7 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
   case claudeAddHeuristic = "claude-add-heuristic"
   case claudeConnectExplicit = "claude-connect-explicit"
   case claudeConnectHeuristic = "claude-connect-heuristic"
+  case screenRecordingDrag = "screen-recording-drag"
 
   var actionLabel: String {
     switch self {
@@ -14,6 +15,8 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
       return "Add"
     case .claudeConnectExplicit, .claudeConnectHeuristic:
       return "Connect"
+    case .screenRecordingDrag:
+      return "Screen Recording"
     }
   }
 
@@ -23,6 +26,21 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
       return CGRect(x: 0, y: 0, width: 1510, height: 1596)
     case .claudeConnectExplicit, .claudeConnectHeuristic:
       return CGRect(x: 0, y: 0, width: 1920, height: 1080)
+    case .screenRecordingDrag:
+      // A stable, window-sized frame keeps the bridge fixture deterministic while
+      // still fitting on the primary displays used by the visual dogfood harness.
+      return CGRect(x: 240, y: 120, width: 900, height: 700)
+    }
+  }
+
+  var visibleFrame: CGRect {
+    switch self {
+    case .claudeAddExplicit, .claudeAddInferredFromCancel, .claudeAddHeuristic:
+      return CGRect(x: 0, y: 0, width: 1510, height: 1596)
+    case .claudeConnectExplicit, .claudeConnectHeuristic:
+      return CGRect(x: 0, y: 0, width: 1920, height: 1080)
+    case .screenRecordingDrag:
+      return CGRect(x: 0, y: 0, width: 1512, height: 982)
     }
   }
 
@@ -44,6 +62,20 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
     case .claudeConnectHeuristic:
       let point = CloudConnectorFormAutomation.claudeConnectGuidanceAnchor(in: windowFrame)
       return CGRect(x: point.x - 66, y: point.y - 27, width: 132, height: 54)
+    case .screenRecordingDrag:
+      return CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: windowFrame)
+    }
+  }
+
+  /// Independently recorded target bounds for the synthetic Screen Recording
+  /// Settings fixture. Keep this oracle separate from the production estimator so
+  /// a regression in the estimator cannot make the fixture test self-consistent.
+  var recordedTargetRect: CGRect? {
+    switch self {
+    case .screenRecordingDrag:
+      return CGRect(x: 536, y: 486, width: 560, height: 180)
+    default:
+      return nil
     }
   }
 
@@ -59,6 +91,13 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
       return CGRect(x: 1_225, y: 641, width: 132, height: 54)
     case .claudeConnectHeuristic:
       return topLeftRect(appKitRect: targetRect)
+    case .screenRecordingDrag:
+      return CGRect(
+        x: targetRect.minX,
+        y: visibleFrame.maxY - targetRect.maxY,
+        width: targetRect.width,
+        height: targetRect.height
+      )
     }
   }
 
@@ -86,6 +125,17 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
         windowFrame: windowFrame,
         explicitTargetFrames: []
       )
+    case .screenRecordingDrag:
+      return []
+    }
+  }
+
+  var appName: String {
+    switch self {
+    case .screenRecordingDrag:
+      return "Omi Fixture"
+    default:
+      return ""
     }
   }
 

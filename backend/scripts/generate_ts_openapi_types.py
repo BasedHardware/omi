@@ -11,7 +11,7 @@ import argparse
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -29,6 +29,14 @@ IDENTIFIER_RE = re.compile(r'[^A-Za-z0-9_$]')
 
 def stable_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + '\n'
+
+
+def source_label_for_path(spec_path: PurePath, root_dir: PurePath = ROOT_DIR) -> str:
+    """Return a stable slash-separated label for generated-file headers."""
+    try:
+        return spec_path.relative_to(root_dir).as_posix()
+    except ValueError:
+        return spec_path.as_posix()
 
 
 def ts_identifier(name: str) -> str:
@@ -140,7 +148,9 @@ def object_schema_to_ts(schema: dict[str, Any]) -> str:
     properties = schema.get('properties')
     additional = schema.get('additionalProperties')
 
-    if not isinstance(properties, dict):
+    if not isinstance(properties, dict) or not properties:
+        if additional is False:
+            return 'Record<string, never>'
         if isinstance(additional, dict):
             return f'Record<string, {schema_to_ts(additional)}>'
         if additional is True:
@@ -181,7 +191,6 @@ SKIP_CONTENT_PREFIXES = (
     'text/html',
     'application/xml',
     'audio/',
-    'image/',
     'multipart/form-data',
 )
 
@@ -201,6 +210,8 @@ def _operation_return_type(operation: dict[str, Any]) -> str | None:
         json_content = content.get('application/json')
         if isinstance(json_content, dict):
             return schema_to_ts(json_content.get('schema', {}))
+        if any(isinstance(ct, str) and ct.startswith('image/') for ct in content):
+            return 'Blob'
         # Non-JSON success response → skip this operation
         for ct in content:
             if any(ct.startswith(p) or ct == p for p in SKIP_CONTENT_PREFIXES):
@@ -276,6 +287,7 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
 
             # Parse requestBody
             body_type: str | None = None
+            multipart_body = False
             req_body = operation.get('requestBody', {})
             if isinstance(req_body, dict):
                 content = req_body.get('content', {})
@@ -283,6 +295,11 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                     json_content = content.get('application/json')
                     if isinstance(json_content, dict):
                         body_type = schema_to_ts(json_content.get('schema', {}))
+                    elif isinstance(content.get('multipart/form-data'), dict):
+                        # Callers construct the bounded multipart payload so
+                        # the generated route remains usable for file uploads.
+                        body_type = 'FormData'
+                        multipart_body = True
 
             # Build function signature
             sig_parts: list[str] = []
@@ -322,7 +339,8 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             body_lines.append(f'    method: {string_literal(http_method.upper())},')
             body_lines.append('    headers: {')
             if body_type:
-                body_lines.append("      ...(body ? { 'Content-Type': 'application/json' } : {}),")
+                if not multipart_body:
+                    body_lines.append("      ...(body ? { 'Content-Type': 'application/json' } : {}),")
             body_lines.append("      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),")
             body_lines.append('      ...init?.headers,')
             for pname, _ptype, required in header_params:
@@ -335,11 +353,17 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                     )
             body_lines.append('    },')
             if body_type:
-                body_lines.append('    body: body ? JSON.stringify(body) : undefined,')
+                (
+                    body_lines.append('    body: body,')
+                    if multipart_body
+                    else body_lines.append('    body: body ? JSON.stringify(body) : undefined,')
+                )
             body_lines.append('  });')
             body_lines.append('  if (!_res.ok) throw new OmiApiError(_res.status, _res);')
             if return_type == 'void':
                 body_lines.append('  return;')
+            elif return_type == 'Blob':
+                body_lines.append('  return await _res.blob();')
             else:
                 body_lines.append('  return _res.status === 204 ? (undefined as any) : await _res.json();')
             body_lines.append('}')
@@ -431,31 +455,24 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     spec_path = args.spec if args.spec.is_absolute() else (Path.cwd() / args.spec)
-    spec = json.loads(spec_path.read_text())
-    try:
-        source_label = str(spec_path.relative_to(ROOT_DIR))
-    except ValueError:
-        source_label = str(spec_path)
-    rendered = generate(spec, source_label)
+    spec = json.loads(spec_path.read_text(encoding='utf-8'))
+    rendered = generate(spec, source_label_for_path(spec_path))
 
     outputs = args.output or DEFAULT_OUTPUTS
     stale: list[Path] = []
     for output in outputs:
         path = output if output.is_absolute() else (Path.cwd() / output)
         if args.check:
-            if not path.exists() or path.read_text() != rendered:
+            if not path.exists() or path.read_text(encoding='utf-8') != rendered:
                 stale.append(path)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(rendered)
-            print(f'wrote {path.relative_to(ROOT_DIR)}')
+            path.write_text(rendered, encoding='utf-8', newline='\n')
+            print(f'wrote {source_label_for_path(path)}')
 
     if stale:
         for path in stale:
-            try:
-                label = path.relative_to(ROOT_DIR)
-            except ValueError:
-                label = path
+            label = source_label_for_path(path)
             print(f'{label} is stale; run backend/scripts/generate_ts_openapi_types.py', file=sys.stderr)
         return 1
     return 0

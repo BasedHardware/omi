@@ -1,0 +1,30 @@
+{
+  "schema": "desktop-codemagic-recovery-profiles/v1",
+  "profiles": {
+    "Audit app bundle dependencies": {
+      "failure_profile": "bundle-audit",
+      "locally_reproducible": true,
+      "rehearsal_arguments": ["--clean", "--failed-step", "bundle-audit"]
+    },
+    "Smoke signed desktop artifact": {
+      "failure_profile": "stable-signed-smoke",
+      "locally_reproducible": true,
+      "rehearsal_arguments": ["--clean", "--failed-step", "stable-signed-smoke"]
+    },
+    "Smoke signed desktop beta artifact": {
+      "failure_profile": "beta-signed-smoke",
+      "locally_reproducible": true,
+      "rehearsal_arguments": ["--clean", "--failed-step", "beta-signed-smoke"]
+    },
+    "Notarize app": {
+      "failure_profile": "apple-notarization",
+      "locally_reproducible": false,
+      "rehearsal_arguments": []
+    },
+    "Sign, notarize, and staple DMG": {
+      "failure_profile": "apple-notarization",
+      "locally_reproducible": false,
+      "rehearsal_arguments": []
+    }
+  }
+}

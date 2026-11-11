@@ -30,13 +30,12 @@ from utils.stt.streaming import process_audio_dg
 from groq import Groq
 
 from utils.other.storage import upload_postprocessing_audio
-from utils.stt.pre_recorded import fal_whisperx, postprocess_words
 
 
 def add_model_result_segments(model: str, new_segments: List[Dict[str, Any]], result: Dict[str, Any]) -> None:
     segments = [TranscriptSegment(**s) for s in result[model]]
     new_seg_objs = [TranscriptSegment(**s) for s in new_segments]
-    segments, _, _ = TranscriptSegment.combine_segments(segments, new_seg_objs)
+    segments = TranscriptSegment.combine_segments(segments, new_seg_objs).segments
     result[model] = [s.dict() for s in segments]
 
 
@@ -107,16 +106,6 @@ async def _execute_single(file_path: str) -> None:
     print('Finished sending audio')
     groq_result: str = execute_groq(file_path)  # source of truth
     result['whisper-large-v3'] = groq_result
-
-    # whisperx
-    try:
-        signed_url = upload_postprocessing_audio(file_path)
-        words = fal_whisperx(signed_url)
-        fal_segments = postprocess_words(cast(List[Dict[str, Any]], words), int(duration))
-        result['fal_whisperx'] = [s.dict() for s in fal_segments]
-    except Exception as e:
-        print('fal_whisperx', e)
-        result['fal_whisperx'] = []
 
     print('Waiting for sockets to finish', min(60, duration), 'seconds')
     await asyncio.sleep(min(30, duration))

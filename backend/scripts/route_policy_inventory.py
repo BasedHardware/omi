@@ -29,7 +29,10 @@ from starlette.routing import Mount, Route, WebSocketRoute
 
 try:
     from scripts import export_openapi
-except ModuleNotFoundError:  # Direct CLI execution via scripts/openapi_runner.sh.
+except ImportError:  # Direct CLI execution via scripts/openapi_runner.sh.
+    # ImportError, not just ModuleNotFoundError: since #22936 a repo-root
+    # `scripts/` namespace package can shadow this name from sys.path and the
+    # failed `from scripts import ...` raises plain ImportError.
     import export_openapi
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -48,17 +51,29 @@ AUTH_MECHANISMS = {
     'public',
     'firebase_id_token',
     'admin_key',
+    'beta_promotion_token',
     'desktop_preview_publish_key',
     'admin_key_uid_prefix',
     'developer_api_key',
     'mcp_api_key',
     'mcp_oauth',
     'service_oidc',
+    'google_compute_identity_token',
     'webhook_signature',
+    'plugin_capability',
     'websocket_first_message',
     'unknown',
 }
-AUTH_PLACEMENTS = {'dependency', 'inline', 'middleware', 'external_gateway', 'first_message', 'unknown', 'none'}
+AUTH_PLACEMENTS = {
+    'dependency',
+    'inline',
+    'handler',
+    'middleware',
+    'external_gateway',
+    'first_message',
+    'unknown',
+    'none',
+}
 BYOK_POLICIES = {
     'not_applicable',
     'validated_when_headers_present',
@@ -66,9 +81,9 @@ BYOK_POLICIES = {
     'websocket_manual',
     'unknown',
 }
-RATE_LIMIT_KEY_SUBJECTS = {'uid', 'api_key', 'app_key', 'ip', 'custom', 'none', 'unknown'}
-RATE_LIMIT_ENFORCEMENTS = {'fail_open', 'fail_closed', 'shadow', 'none', 'unknown'}
-RATE_LIMIT_PLACEMENTS = {'dependency', 'inline', 'wrapper', 'websocket_lock', 'none', 'unknown'}
+RATE_LIMIT_KEY_SUBJECTS = {'uid', 'api_key', 'app_key', 'ip', 'custom', 'compute_instance', 'none', 'unknown'}
+RATE_LIMIT_ENFORCEMENTS = {'fail_open', 'fail_closed', 'provider', 'shadow', 'none', 'unknown'}
+RATE_LIMIT_PLACEMENTS = {'dependency', 'inline', 'handler', 'wrapper', 'websocket_lock', 'none', 'unknown'}
 TIMEOUT_CLASSES = {
     'default_method',
     'sync_job',
@@ -86,6 +101,7 @@ SURFACES = {
     'oauth',
     'admin',
     'internal_task',
+    'internal_control_plane',
     'desktop_update',
     'monitoring',
     'shared_public',

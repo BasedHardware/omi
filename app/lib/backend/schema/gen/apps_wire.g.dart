@@ -222,6 +222,26 @@ class GeneratedMcpAddServerResponse {
   }
 }
 
+class GeneratedMcpAuthorizeResponse {
+  final String authUrl;
+
+  const GeneratedMcpAuthorizeResponse({
+    required this.authUrl,
+  });
+
+  factory GeneratedMcpAuthorizeResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedMcpAuthorizeResponse(
+      authUrl: _required(_readFieldValue<String>(_readField(json, const ["auth_url"]), "auth_url", _readString, requiredField: true, nullable: false), "auth_url"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'auth_url': authUrl,
+    };
+  }
+}
+
 class GeneratedAppDescriptionGenerationResponse {
   final String description;
 
@@ -620,6 +640,8 @@ class GeneratedAppBaseModel {
   final DateTime? createdAt;
   final String description;
   final bool? disabled;
+  final String? disabledAt;
+  final String? disabledError;
   final String? disabledReason;
   final bool enabled;
   final GeneratedExternalIntegration? externalIntegration;
@@ -658,6 +680,8 @@ class GeneratedAppBaseModel {
     this.createdAt,
     required this.description,
     this.disabled = false,
+    this.disabledAt,
+    this.disabledError,
     this.disabledReason,
     this.enabled = false,
     this.externalIntegration,
@@ -698,6 +722,8 @@ class GeneratedAppBaseModel {
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
       disabled: _readFieldValue<bool>(_readField(json, const ["disabled"]), "disabled", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      disabledAt: _readFieldValue<String>(_readField(json, const ["disabled_at"]), "disabled_at", _readString, requiredField: false, nullable: true),
+      disabledError: _readFieldValue<String>(_readField(json, const ["disabled_error"]), "disabled_error", _readString, requiredField: false, nullable: true),
       disabledReason: _readFieldValue<String>(_readField(json, const ["disabled_reason"]), "disabled_reason", _readString, requiredField: false, nullable: true),
       enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "enabled"),
       externalIntegration: _readFieldValue<GeneratedExternalIntegration>(_readField(json, const ["external_integration"]), "external_integration", (value) => _readObject(value, GeneratedExternalIntegration.fromJson), requiredField: false, nullable: true),
@@ -739,6 +765,8 @@ class GeneratedAppBaseModel {
       'created_at': createdAt?.toUtc().toIso8601String(),
       'description': description,
       'disabled': disabled,
+      'disabled_at': disabledAt,
+      'disabled_error': disabledError,
       'disabled_reason': disabledReason,
       'enabled': enabled,
       'external_integration': externalIntegration?.toJson(),
@@ -865,6 +893,8 @@ class GeneratedApp {
   final DateTime? createdAt;
   final String description;
   final bool? disabled;
+  final String? disabledAt;
+  final String? disabledError;
   final String? disabledReason;
   final String? email;
   final bool enabled;
@@ -915,6 +945,8 @@ class GeneratedApp {
     this.createdAt,
     required this.description,
     this.disabled = false,
+    this.disabledAt,
+    this.disabledError,
     this.disabledReason,
     this.email,
     this.enabled = false,
@@ -967,6 +999,8 @@ class GeneratedApp {
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
       disabled: _readFieldValue<bool>(_readField(json, const ["disabled"]), "disabled", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      disabledAt: _readFieldValue<String>(_readField(json, const ["disabled_at"]), "disabled_at", _readString, requiredField: false, nullable: true),
+      disabledError: _readFieldValue<String>(_readField(json, const ["disabled_error"]), "disabled_error", _readString, requiredField: false, nullable: true),
       disabledReason: _readFieldValue<String>(_readField(json, const ["disabled_reason"]), "disabled_reason", _readString, requiredField: false, nullable: true),
       email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: false, nullable: true),
       enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "enabled"),
@@ -1020,6 +1054,8 @@ class GeneratedApp {
       'created_at': createdAt?.toUtc().toIso8601String(),
       'description': description,
       'disabled': disabled,
+      'disabled_at': disabledAt,
+      'disabled_error': disabledError,
       'disabled_reason': disabledReason,
       'email': email,
       'enabled': enabled,

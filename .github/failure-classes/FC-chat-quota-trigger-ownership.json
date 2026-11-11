@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "FC-chat-quota-trigger-ownership",
+  "violated_contract": "A post-chat quota refresh must not infer hosted-request completion from a shared busy flag whose lifecycle is also controlled by local automation, coding-agent, cancellation, and reset paths.",
+  "canonical_prevention": "Publish an explicit hosted-dispatch event only after the managed-cloud adapter writes its provider command, expose a monotonic completion signal from the chat hook, and consume that signal at the quota-trigger host through the canonical main-chat quota gate.",
+  "canonical_prevention_artifact": [
+    "desktop/windows/src/main/codingAgent/piMono.test.ts",
+    "desktop/windows/src/main/codingAgent/taskRunner.test.ts",
+    "desktop/windows/src/main/ipc/mainChat.test.ts",
+    "desktop/windows/src/renderer/src/components/settings/billing/UsageLimitTriggerHost.test.tsx",
+    "desktop/windows/src/renderer/src/hooks/useChat.test.tsx",
+    "desktop/windows/src/renderer/src/hooks/useChat.pimono.test.tsx"
+  ],
+  "evidence_prs": [10236],
+  "scope_hints": [
+    "desktop/windows/src/main/agentKernel/kernelSupport.ts",
+    "desktop/windows/src/main/codingAgent/interface.ts",
+    "desktop/windows/src/main/codingAgent/piMono.ts",
+    "desktop/windows/src/main/codingAgent/taskRunner.ts",
+    "desktop/windows/src/main/ipc/mainChat.ts",
+    "desktop/windows/src/renderer/src/components/settings/billing/UsageLimitTriggerHost.tsx",
+    "desktop/windows/src/renderer/src/hooks/useChat.ts",
+    "desktop/windows/src/shared/types.ts"
+  ],
+  "status": "open"
+}

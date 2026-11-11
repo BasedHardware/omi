@@ -9,6 +9,7 @@ Covers:
 5. Batch limit (commit triggers at BATCH_LIMIT=500)
 """
 
+import importlib.util
 import os
 import sys
 import types
@@ -18,9 +19,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
+# Preload the real api_core retry chain before the google.auth stub below: the
+# shared firestore no-retry policy (database.firestore_retry) imports it.
+from google.api_core import retry as api_retry  # noqa: F401
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
 # Paths
-# ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
@@ -63,6 +67,10 @@ def _ensure_package_path(name, path):
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies before any production imports
 # ---------------------------------------------------------------------------
+# The pure Dream policy depends on the shared registry, which is unavailable
+# once this legacy fixture replaces the utils package with its narrow stub.
+import config.dream_agent  # noqa: F401
+
 for module_prefix in [
     "database",
     "models",
@@ -112,6 +120,7 @@ usage_tracker_stub.track_usage = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]
+firestore_stub.DELETE_FIELD = "__delete_field__"
 firestore_stub.Increment = lambda x: f"__increment_{x}__"
 firestore_stub.ArrayRemove = lambda values: ("__array_remove__", tuple(values))
 firestore_stub.Query = MagicMock()
@@ -127,6 +136,8 @@ sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
 
 redis_stub = sys.modules["database.redis_db"]
 redis_stub.r = MagicMock()
+redis_stub.create_bounded_redis_client = MagicMock(return_value=redis_stub.r)
+redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
@@ -139,7 +150,13 @@ _ensure_package_path("database", BACKEND_DIR / "database")
 client_stub = _stub_module("database._client")
 mock_db = MagicMock()
 client_stub.db = mock_db
+client_stub.delete_collection_recursive = MagicMock()
 client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
+client_stub.get_firestore_client = MagicMock(return_value=mock_db)
+# database.screen_activity imports the data-plane seam's lazy proxy at its own
+# import site (see database/_client.py's get_data_plane_firestore_client()).
+client_stub.data_plane_db = mock_db
+client_stub.get_data_plane_firestore_client = MagicMock(return_value=mock_db)
 
 # Stub database.helpers (used by chat.py)
 helpers_stub = _stub_module("database.helpers")
@@ -154,11 +171,25 @@ models_users_stub.Subscription = MagicMock()
 models_users_stub.PlanLimits = MagicMock()
 models_users_stub.PlanType = MagicMock()
 models_users_stub.SubscriptionStatus = MagicMock()
+models_users_stub.LocationContextConsent = MagicMock()
+models_users_stub.LocationContextConsentStatus = MagicMock()
+models_users_stub.LOCATION_CONTEXT_DISCLOSED_PROVIDERS = ()
+models_users_stub.LOCATION_CONTEXT_PURPOSE = "city_context"
 
-_stub_package("utils")
-_stub_package("utils.other")
+# Resolve pure read-cache/lever helpers while retaining explicit heavy-dependency stubs.
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
+_ensure_package_path("utils.observability", BACKEND_DIR / "utils" / "observability")
+profile_authority_stub = _stub_module("database.speaker_profile_authority")
+profile_authority_stub.person_teaching_authorized = MagicMock(return_value=False)
+fallback_stub = _stub_module("utils.observability.fallback")
+fallback_stub.record_fallback = MagicMock()
 utils_sub_stub = _stub_module("utils.subscription")
 utils_sub_stub.get_default_basic_subscription = MagicMock()
+feedback_stub = _stub_module("utils.feedback")
+feedback_stub.record_chat_message_feedback = MagicMock()
+feedback_stub.record_conversation_summary_feedback = MagicMock()
+feedback_stub.record_memory_feedback = MagicMock()
 utils_enc_stub = _stub_module("utils.encryption")
 utils_enc_stub.encrypt = MagicMock(return_value="encrypted")
 utils_enc_stub.decrypt = MagicMock(return_value="decrypted")
@@ -167,9 +198,36 @@ endpoints_stub.get_current_user_uid = MagicMock()
 endpoints_stub.with_rate_limit = lambda dep, policy: dep
 endpoints_stub.with_rate_limit_context = lambda dep, policy: dep
 endpoints_stub.timeit = lambda f: f
-_stub_module("utils.observability")
-fallback_stub = _stub_module("utils.observability.fallback")
-fallback_stub.record_fallback = MagicMock()
+list_budget_stub = _stub_module("utils.other.list_budget")
+_list_budget_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "list_budget.py"
+_list_budget_spec = importlib.util.spec_from_file_location("_omi_real_list_budget", _list_budget_path)
+_list_budget_real = importlib.util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(_list_budget_real)
+
+
+def _list_budget_getattr(name):
+    # Delegate every symbol to the real module so tests collected after this
+    # hermetic stubber still exercise the real budget seam.
+    return getattr(_list_budget_real, name)
+
+
+list_budget_stub.__getattr__ = _list_budget_getattr
+portability_read_stub = _stub_module("utils.other.portability_read")
+_portability_read_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "portability_read.py"
+_portability_read_spec = importlib.util.spec_from_file_location("_omi_real_portability_read", _portability_read_path)
+_portability_read_real = importlib.util.module_from_spec(_portability_read_spec)
+_portability_read_spec.loader.exec_module(_portability_read_real)
+for _name in (
+    "PortabilityReadContext",
+    "PortabilityReadCancelled",
+    "PortabilityReadVerificationError",
+    "check_portability_read",
+    "current_portability_read",
+    "iter_portability_guarded",
+    "portability_read_scope",
+    "verified_encrypted_read",
+):
+    setattr(portability_read_stub, _name, getattr(_portability_read_real, _name))
 task_intelligence_stub = _stub_package("utils.task_intelligence")
 candidate_service_stub = _stub_module("utils.task_intelligence.candidate_service")
 candidate_service_stub.create_candidate = MagicMock()
@@ -181,6 +239,8 @@ request_validation_stub = _stub_module("utils.request_validation")
 request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
 redis_stub = _stub_module("database.redis_db")
 redis_stub.r = MagicMock()
+redis_stub.create_bounded_redis_client = MagicMock(return_value=redis_stub.r)
+redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
@@ -198,14 +258,17 @@ import database.staged_tasks as staged_tasks_db  # noqa: E402
 # ---------------------------------------------------------------------------
 from pydantic import BaseModel, Field, ValidationError  # noqa: E402
 
+# routers.chat_sessions imports utils.chat_rating_triage and utils.other.endpoints
+# at module scope, so the real utils package must be resolvable before it loads.
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
+
 from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa: E402
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
-
-_ensure_package_path("models", BACKEND_DIR / "models")
-_ensure_package_path("utils", BACKEND_DIR / "utils")
-_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
+import routers.staged_tasks as staged_router  # noqa: E402
 
 # Cannot import routers.users directly — it pulls in database.conversations → utils.other.hume
 # which has heavy deps. Mirror the models here and verify parity via AST test below.
@@ -222,7 +285,7 @@ class RecordLlmUsageBucketRequest(BaseModel):
     cache_read_tokens: int = Field(0, ge=0)
     cache_write_tokens: int = Field(0, ge=0)
     total_tokens: int = Field(0, ge=0)
-    cost_usd: float = Field(0.0, ge=0.0)
+    cost_usd: float | None = Field(None, ge=0.0)
     account: str = Field('omi', max_length=100)
 
 
@@ -314,14 +377,14 @@ class TestRecordDesktopLlmUsageValidation:
         r = RecordLlmUsageBucketRequest()
         assert r.account == 'omi'
 
-    def test_all_defaults_zero(self):
-        """All token fields default to 0."""
+    def test_cost_defaults_to_unmeasured(self):
+        """Missing cost is distinct from a measured zero."""
         r = RecordLlmUsageBucketRequest()
         assert r.input_tokens == 0
         assert r.output_tokens == 0
         assert r.cache_read_tokens == 0
         assert r.total_tokens == 0
-        assert r.cost_usd == 0.0
+        assert r.cost_usd is None
 
 
 class TestCreateFocusSessionValidation:
@@ -487,28 +550,15 @@ class TestDesktopMessagesWireCompat:
 
     def test_save_message_writes_expected_fields(self):
         """save_message writes plugin_id, chat_session_id, type='text', from_external_integration=False."""
-        mock_doc_ref = MagicMock()
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
-
-        # Mock the db.collection chain for messages and chat_sessions
-        def collection_side_effect(name):
-            col_mock = MagicMock()
-            doc_mock = MagicMock()
-            if name == 'users':
-                doc_mock.collection.return_value.document.return_value = mock_doc_ref
-            col_mock.document.return_value = doc_mock
-            return col_mock
+        store = StrictFirestore({('users', 'test-uid', 'chat_sessions', 'session-123'): {'message_count': 0}})
 
         with patch.object(chat_db, 'acquire_chat_session', return_value='session-123'):
-            with patch.object(chat_db, 'db') as patched_db:
-                patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                    mock_doc_ref
-                )
-                result = chat_db.save_message('test-uid', text='hello', sender='human', app_id='my-app')
+            result = chat_db.save_message(
+                'test-uid', text='hello', sender='human', app_id='my-app', firestore_client=store
+            )
 
         # Verify the doc written to Firestore
-        set_call = mock_doc_ref.set.call_args[0][0]
+        set_call = store.rows[('users', 'test-uid', 'messages', result['id'])]
         assert set_call['plugin_id'] == 'my-app'
         assert set_call['app_id'] == 'my-app'
         assert set_call['chat_session_id'] == 'session-123'
@@ -815,32 +865,20 @@ class TestAcquireChatSession:
 
     def test_reuses_existing_session(self):
         """acquire_chat_session returns existing session ID when one exists."""
-        mock_doc = MagicMock()
-        mock_doc.id = 'existing-session-id'
-        mock_query = MagicMock()
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = [mock_doc]
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
-                mock_query
-            )
+        with patch.object(chat_db, 'get_chat_session', return_value={'id': 'existing-session-id'}) as mock_get_session:
             result = chat_db.acquire_chat_session('uid', app_id='my-app')
 
         assert result == 'existing-session-id'
+        mock_get_session.assert_called_once_with('uid', app_id='my-app')
 
     def test_creates_new_session_when_none_exists(self):
         """acquire_chat_session creates a new session when no matching session found."""
-        mock_query = MagicMock()
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []  # No existing sessions
-
-        with patch.object(chat_db, 'db') as patched_db, patch.object(
-            chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
-        ) as mock_create:
-            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
-                mock_query
-            )
+        with (
+            patch.object(chat_db, 'get_chat_session', return_value=None),
+            patch.object(  # No existing sessions
+                chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
+            ) as mock_create,
+        ):
             result = chat_db.acquire_chat_session('uid', app_id='my-app')
 
         assert result == 'new-session-id'
@@ -951,6 +989,12 @@ class TestDeleteChatSessionCascade:
 class TestSaveMessageSessionBehavior:
     """Verify save_message session acquisition and preview behavior."""
 
+    @pytest.fixture(autouse=True)
+    def client_lookup(self, monkeypatch):
+        # Legacy wire/revision mocks remain local; new transaction guards use the
+        # shared strict fixture and real SDK in test_chat_message_save_atomic.py.
+        monkeypatch.setattr(chat_db, 'get_firestore_client', lambda: chat_db.db)
+
     def test_client_message_id_retry_returns_same_row_without_second_write(self):
         payload_hash = chat_db._message_idempotency_payload_hash(
             text='hello',
@@ -1024,6 +1068,10 @@ class TestSaveMessageSessionBehavior:
                 sender='ai',
                 session_id='session-1',
                 metadata=enriched_metadata,
+                content_blocks=[
+                    {'type': 'agentSpawn', 'id': 'spawn-1'},
+                    {'type': 'agentCompletion', 'id': 'completion-1'},
+                ],
                 client_message_id='turn-1',
                 journal_revision=11,
             )
@@ -1031,9 +1079,16 @@ class TestSaveMessageSessionBehavior:
         assert result['created'] is False
         assert result['updated'] is True
         assert result['journal_revision'] == 11
-        patched_db.transaction.return_value.update.assert_called_once()
-        update = patched_db.transaction.return_value.update.call_args.args[1]
+        assert patched_db.transaction.return_value.update.call_count == 3
+        assert patched_db.transaction.return_value.update.call_args_list[2].args[1] == {
+            'chat_context_generation': firestore_stub.Increment(1)
+        }
+        update = patched_db.transaction.return_value.update.call_args_list[1].args[1]
         assert update['metadata'] == enriched_metadata
+        assert update['content_blocks'] == [
+            {'type': 'agentSpawn', 'id': 'spawn-1'},
+            {'type': 'agentCompletion', 'id': 'completion-1'},
+        ]
         assert update['journal_revision'] == 11
 
     def test_equal_journal_revision_with_different_payload_fails_closed(self):
@@ -1143,7 +1198,10 @@ class TestSaveMessageSessionBehavior:
 
         assert result['updated'] is True
         assert result['journal_revision'] == 3
-        patched_db.transaction.return_value.update.assert_called_once()
+        assert patched_db.transaction.return_value.update.call_count == 3
+        assert patched_db.transaction.return_value.update.call_args_list[2].args[1] == {
+            'chat_context_generation': firestore_stub.Increment(1)
+        }
 
     def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self):
         payload_hash = chat_db._message_idempotency_payload_hash(
@@ -1259,14 +1317,17 @@ class TestSaveMessageSessionBehavior:
         }
         message_ref = MagicMock()
         message_ref.get.side_effect = [missing, winner]
-        message_ref.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
+        session_ref = MagicMock()
+        session_ref.get.return_value.exists = True
 
-        with patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'), patch.object(
-            chat_db, 'db'
-        ) as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
+        with (
+            patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'),
+            patch.object(chat_db, 'db') as patched_db,
+        ):
+            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda name: MagicMock(
+                document=MagicMock(return_value=session_ref if name == 'chat_sessions' else message_ref)
             )
+            patched_db.transaction.return_value.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
             result = chat_db.save_message(
                 'uid',
                 text='hello',
@@ -1277,46 +1338,26 @@ class TestSaveMessageSessionBehavior:
         assert result['id'] == 'turn-1'
         assert result['session_id'] == 'winner-session'
         assert result['created'] is False
-        message_ref.create.assert_called_once()
+        patched_db.transaction.return_value.create.assert_called_once()
 
     def test_explicit_session_id_skips_acquire(self):
         """save_message with explicit session_id doesn't call acquire_chat_session."""
-        mock_doc_ref = MagicMock()
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
+        store = StrictFirestore({('users', 'uid', 'chat_sessions', 'my-session'): {'message_count': 0}})
 
-        with patch.object(chat_db, 'acquire_chat_session') as mock_acquire, patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_doc_ref
-            )
-            # Make session ref accessible for the session update path
-            mock_doc_ref.set.return_value = None
-            chat_db.save_message('uid', text='hello', sender='human', session_id='my-session')
+        with patch.object(chat_db, 'acquire_chat_session') as mock_acquire:
+            chat_db.save_message('uid', text='hello', sender='human', session_id='my-session', firestore_client=store)
 
         mock_acquire.assert_not_called()
 
     def test_preview_truncated_to_100_chars(self):
         """save_message truncates preview to 100 characters."""
         long_text = 'x' * 200
-        mock_msg_ref = MagicMock()
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
+        store = StrictFirestore({('users', 'uid', 'chat_sessions', 'sess-1'): {'message_count': 0}})
 
-        with patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'), patch.object(
-            chat_db, 'db'
-        ) as patched_db:
-            # Mock message write
-            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda name: (
-                MagicMock(document=MagicMock(return_value=mock_session_ref))
-                if name == 'chat_sessions'
-                else MagicMock(document=MagicMock(return_value=mock_msg_ref))
-            )
-            chat_db.save_message('uid', text=long_text, sender='human')
+        with patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'):
+            chat_db.save_message('uid', text=long_text, sender='human', firestore_client=store)
 
-        # Check the session update call has truncated preview
-        if mock_session_ref.update.called:
-            update_call = mock_session_ref.update.call_args[0][0]
-            assert len(update_call['preview']) == 100
+        assert store.transactions[0].updates[0][1]['preview'] == 'x' * 100
 
 
 class TestDeleteMessagesCount:
@@ -1404,9 +1445,13 @@ class TestDeleteMessagesCount:
 
         assert result == 2
         mock_delete_query.limit.assert_called_with(chat_db.DELETE_MESSAGES_BATCH_LIMIT)
-        mock_batch.update.assert_called_once_with(
+        assert mock_batch.update.call_count == 2
+        mock_batch.update.assert_any_call(mock_user_ref, {'chat_context_generation': firestore_stub.Increment(1)})
+        mock_batch.update.assert_any_call(
             mock_session_ref,
             {
+                'shaped_context': firestore_stub.DELETE_FIELD,
+                'shaped_context_revision': firestore_stub.Increment(1),
                 'message_ids': firestore_stub.ArrayRemove(['logical-1', 'logical-2']),
                 'message_count': firestore_stub.Increment(-2),
                 'preview': None,
@@ -1514,13 +1559,15 @@ class TestLlmUsageBucketParam:
 
         set_call = mock_ref.set.call_args
         update_data = set_call[0][0]
-        # Primary bucket
-        assert 'custom_feature.input_tokens' in update_data
-        assert 'custom_feature.output_tokens' in update_data
-        assert 'custom_feature.call_count' in update_data
+        # Primary bucket. `set(merge=True)` reads a dot as a literal character, not as a
+        # field path, so the counters must arrive already nested for a reader that walks
+        # bucket -> counter to find them.
+        assert 'input_tokens' in update_data['custom_feature']
+        assert 'output_tokens' in update_data['custom_feature']
+        assert 'call_count' in update_data['custom_feature']
         # Per-account bucket
-        assert 'custom_feature_openai.input_tokens' in update_data
-        assert 'custom_feature_openai.output_tokens' in update_data
+        assert 'input_tokens' in update_data['custom_feature_openai']
+        assert 'output_tokens' in update_data['custom_feature_openai']
 
     def test_get_total_llm_cost_custom_bucket(self):
         """get_total_llm_cost with custom bucket reads from the specified bucket only."""
@@ -1579,175 +1626,172 @@ class TestDailyScoreWireCompat:
         assert result['score'] == 50
 
 
-class TestScoreComputation:
-    """Verify score computation logic."""
+class _ScoreDoc:
+    def __init__(self, doc_id, data):
+        self.id = doc_id
+        self._data = data
 
-    def _make_mock_doc(self, data):
-        doc = MagicMock()
-        doc.to_dict.return_value = data
-        doc.id = data.get('id', 'doc-1')
-        return doc
+    def to_dict(self):
+        return self._data
 
-    def test_weekly_uses_created_at_not_due_at(self):
-        """get_scores weekly query uses created_at field, not due_at."""
-        mock_col = MagicMock()
 
-        # Daily query (due_at) returns empty
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = []
+class _ScoreFilter:
+    def __init__(self, field_path, op_string, value):
+        self.field_path = field_path
+        self.op_string = op_string
+        self.value = value
 
-        # Weekly query (created_at) returns 1 completed task
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_doc = self._make_mock_doc({'completed': True, 'created_at': datetime.now(timezone.utc)})
-        weekly_query.stream.return_value = [weekly_doc]
 
-        # Overall stream returns same
-        mock_col.stream.return_value = [weekly_doc]
+class _ScoreCount:
+    def __init__(self, value):
+        self.value = value
 
-        # Track which field filters are created
-        captured_filters = []
-        original_ff = action_items_db.FieldFilter
 
-        def tracking_filter(field, op, value):
-            captured_filters.append(field)
-            return original_ff(field, op, value)
+class _ScoreAggregation:
+    def __init__(self, query):
+        self.query = query
 
-        call_count = [0]
+    def get(self):
+        return [[_ScoreCount(len(self.query._matching_docs()))]]
 
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
+
+class _ScoreQuery:
+    def __init__(self, docs, filters=(), tracker=None, cursor=None, page_limit=None):
+        self.docs = docs
+        self.filters = filters
+        self.tracker = tracker if tracker is not None else {'filters': [], 'streams': []}
+        self.cursor = cursor
+        self.page_limit = page_limit
+
+    def where(self, *, filter):
+        self.tracker['filters'].append((filter.field_path, filter.op_string, filter.value))
+        return _ScoreQuery(
+            self.docs,
+            self.filters + ((filter.field_path, filter.op_string, filter.value),),
+            self.tracker,
+            self.cursor,
+            self.page_limit,
+        )
+
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, value):
+        return _ScoreQuery(self.docs, self.filters, self.tracker, self.cursor, value)
+
+    def start_after(self, cursor):
+        return _ScoreQuery(self.docs, self.filters, self.tracker, cursor, self.page_limit)
+
+    def _matching_docs(self):
+        docs = self.docs
+        for field, op, value in self.filters:
+            if op == '==':
+                docs = [
+                    doc for doc in docs if type(doc._data.get(field)) is type(value) and doc._data.get(field) == value
+                ]
+            elif op == '>=':
+                docs = [doc for doc in docs if doc._data.get(field) is not None and doc._data[field] >= value]
+            elif op == '<':
+                docs = [doc for doc in docs if doc._data.get(field) is not None and doc._data[field] < value]
             else:
-                return weekly_query
+                raise AssertionError(f'unsupported fake filter: {op}')
+        if self.cursor is not None:
+            cursor_index = next(index for index, doc in enumerate(docs) if doc.id == self.cursor.id)
+            docs = docs[cursor_index + 1 :]
+        return docs[: self.page_limit]
 
-        mock_col.where = col_where
+    def count(self):
+        return _ScoreAggregation(self)
 
-        with patch.object(action_items_db, 'db') as patched_db, patch.object(
-            action_items_db, 'FieldFilter', side_effect=tracking_filter
-        ):
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+    def stream(self):
+        self.tracker['streams'].append(self.filters)
+        return self._matching_docs()
 
-        # Verify created_at was used in filter calls (for weekly query)
-        assert 'created_at' in captured_filters, f"Expected created_at in filters, got: {captured_filters}"
+
+class _ScoreFirestore:
+    def __init__(self, rows):
+        self.query = _ScoreQuery([_ScoreDoc(f'task-{index}', row) for index, row in enumerate(rows)])
+
+    def collection(self, _name):
+        if _name == action_items_db.action_items_collection:
+            return self.query
+        return self
+
+    def document(self, _doc_id):
+        return self
+
+
+class TestScoreComputation:
+    """Verify score computation logic through aggregate-query semantics."""
+
+    @pytest.fixture(autouse=True)
+    def _use_evaluable_field_filters(self, monkeypatch):
+        monkeypatch.setattr(action_items_db, 'FieldFilter', _ScoreFilter)
+
+    def test_weekly_uses_created_at_and_seven_day_window(self):
+        from datetime import timedelta
+
+        client = _ScoreFirestore([])
+        action_items_db.get_scores('test-uid', date='2026-07-19', firestore_client=client)
+
+        day = datetime(2026, 7, 19, tzinfo=timezone.utc)
+        filters = client.query.tracker['filters']
+        created_at_lower = [value for field, op, value in filters if field == 'created_at' and op == '>=']
+        assert created_at_lower == [day - timedelta(days=6)] * 2
 
     def test_default_tab_daily_when_highest(self):
-        """default_tab is 'daily' when daily has tasks and highest score."""
-        mock_col = MagicMock()
+        day = datetime(2025, 1, 15, 12, tzinfo=timezone.utc)
+        client = _ScoreFirestore(
+            [
+                {'completed': True, 'due_at': day, 'created_at': day},
+                {'completed': True, 'due_at': day, 'created_at': day},
+            ]
+        )
 
-        # Daily: 2/2 completed = 100%
-        daily_docs = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': True}),
-        ]
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = daily_docs
-
-        # Weekly: 1/2 = 50%
-        weekly_docs = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': False}),
-        ]
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_query.stream.return_value = weekly_docs
-
-        # Overall: same as weekly
-        mock_col.stream.return_value = weekly_docs
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        result = action_items_db.get_scores('test-uid', date='2025-01-15', firestore_client=client)
 
         assert result['default_tab'] == 'daily'
 
     def test_default_tab_weekly_when_no_daily_tasks(self):
-        """default_tab is 'weekly' when daily has no tasks."""
-        mock_col = MagicMock()
+        day = datetime(2025, 1, 15, 12, tzinfo=timezone.utc)
+        client = _ScoreFirestore(
+            [
+                {'completed': True, 'created_at': day},
+                {'completed': False, 'created_at': day},
+            ]
+        )
 
-        # Daily: 0 tasks
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = []
-
-        # Weekly: 1/1 = 100%
-        weekly_doc = self._make_mock_doc({'completed': True})
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_query.stream.return_value = [weekly_doc]
-
-        # Overall: 1/2 = 50%
-        overall_docs = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': False}),
-        ]
-        mock_col.stream.return_value = overall_docs
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        result = action_items_db.get_scores('test-uid', date='2025-01-15', firestore_client=client)
 
         assert result['default_tab'] == 'weekly'
 
-    def test_default_tab_overall_when_lowest_weekly(self):
-        """default_tab is 'overall' when overall score exceeds weekly."""
-        mock_col = MagicMock()
+    def test_default_tab_overall_when_weekly_is_lower(self):
+        client = _ScoreFirestore(
+            [
+                {'completed': False, 'created_at': datetime(2025, 1, 15, 12, tzinfo=timezone.utc)},
+                {'completed': True, 'created_at': datetime(2024, 1, 1, tzinfo=timezone.utc)},
+            ]
+        )
 
-        # Daily: 0 tasks
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = []
-
-        # Weekly: 0/1 = 0%
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_query.stream.return_value = [self._make_mock_doc({'completed': False})]
-
-        # Overall: 1/1 = 100%
-        mock_col.stream.return_value = [self._make_mock_doc({'completed': True})]
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        result = action_items_db.get_scores('test-uid', date='2025-01-15', firestore_client=client)
 
         assert result['default_tab'] == 'overall'
+
+    def test_soft_deleted_tasks_are_subtracted_without_full_document_scans(self):
+        day = datetime(2025, 1, 15, 12, tzinfo=timezone.utc)
+        client = _ScoreFirestore(
+            [
+                {'completed': True, 'due_at': day, 'created_at': day},
+                {'completed': True, 'deleted': True, 'due_at': day, 'created_at': day},
+            ]
+        )
+
+        result = action_items_db.get_scores('test-uid', date='2025-01-15', firestore_client=client)
+
+        assert result['daily'] == {'score': 100.0, 'completed_tasks': 1, 'total_tasks': 1}
+        assert result['weekly'] == {'score': 100.0, 'completed_tasks': 1, 'total_tasks': 1}
+        assert result['overall'] == {'score': 100.0, 'completed_tasks': 1, 'total_tasks': 1}
+        assert client.query.tracker['streams'] == [(('deleted', '==', True),)]
 
 
 # ===========================================================================
@@ -1777,15 +1821,13 @@ class TestLlmUsage:
         update_data = mock_ref.set.call_args[0][0]
         assert mock_ref.set.call_args[1] == {'merge': True}
 
-        # Must have both desktop_chat and desktop_chat_anthropic keys
-        desktop_chat_keys = [k for k in update_data if k.startswith('desktop_chat.')]
-        desktop_chat_acct_keys = [k for k in update_data if k.startswith('desktop_chat_anthropic.')]
-        assert len(desktop_chat_keys) > 0, "Missing desktop_chat.* keys"
-        assert len(desktop_chat_acct_keys) > 0, "Missing desktop_chat_anthropic.* keys"
+        # Must have both desktop_chat and desktop_chat_anthropic buckets
+        assert update_data.get('desktop_chat'), "Missing desktop_chat bucket"
+        assert update_data.get('desktop_chat_anthropic'), "Missing desktop_chat_anthropic bucket"
 
         # Verify input_tokens increment is present for both buckets
-        assert 'desktop_chat.input_tokens' in update_data
-        assert 'desktop_chat_anthropic.input_tokens' in update_data
+        assert 'input_tokens' in update_data['desktop_chat']
+        assert 'input_tokens' in update_data['desktop_chat_anthropic']
 
     def test_record_default_account_omi(self):
         """Default account produces desktop_chat_omi keys."""
@@ -1797,7 +1839,7 @@ class TestLlmUsage:
             llm_usage_db.record_llm_usage_bucket('test-uid', input_tokens=10, output_tokens=5)
 
         update_data = mock_ref.set.call_args[0][0]
-        assert 'desktop_chat_omi.input_tokens' in update_data
+        assert 'input_tokens' in update_data['desktop_chat_omi']
 
     def test_get_total_cost_only_sums_desktop_chat_bucket(self):
         """get_total_llm_cost only sums the desktop_chat bucket, not desktop_chat_{account}."""
@@ -1885,14 +1927,27 @@ class TestPromoteResponseWireCompat:
     """Verify promote endpoint returns PromoteResponse envelope expected by Swift client."""
 
     def test_promote_returns_envelope_when_task_exists(self):
-        """Router wraps promoted action_item in {promoted: true, reason: null, promoted_task: {...}}."""
+        """Router selects the first projection and builds the response envelope."""
         from routers.staged_tasks import promote_staged_task
 
         mock_action_item = {'id': 'ai-1', 'description': 'Test task', 'completed': False}
+        candidate = MagicMock(candidate_id='candidate-1')
 
-        with patch.object(staged_tasks_db, 'promote_staged_task', return_value=mock_action_item):
+        with (
+            patch.object(staged_router, '_merged_staged_projection', return_value=[{'id': 'candidate-1'}]),
+            patch.object(
+                staged_router,
+                '_control',
+                return_value=MagicMock(account_generation=7),
+            ),
+            patch.object(staged_router, '_candidate_for_public_id', return_value=candidate),
+            patch.object(staged_router, '_accept_candidate', return_value=mock_action_item) as accept_candidate,
+            patch.object(staged_router, '_retire_candidate_historical_rows') as retire_rows,
+        ):
             result = promote_staged_task(uid='test-uid')
 
+        accept_candidate.assert_called_once_with('test-uid', candidate, account_generation=7)
+        retire_rows.assert_called_once_with('test-uid', candidate)
         assert result['promoted'] is True
         assert result['reason'] is None
         assert result['promoted_task'] == mock_action_item
@@ -1901,7 +1956,7 @@ class TestPromoteResponseWireCompat:
         """Router wraps None in {promoted: false, reason: '...', promoted_task: null}."""
         from routers.staged_tasks import promote_staged_task
 
-        with patch.object(staged_tasks_db, 'promote_staged_task', return_value=None):
+        with patch.object(staged_router, '_merged_staged_projection', return_value=[]):
             result = promote_staged_task(uid='test-uid')
 
         assert result['promoted'] is False
@@ -1912,22 +1967,27 @@ class TestPromoteResponseWireCompat:
         """migrate endpoint returns {status: str} matching Swift StatusResponse."""
         from routers.staged_tasks import migrate_ai_tasks
 
-        with patch.object(staged_tasks_db, 'migrate_ai_tasks', return_value={'moved': 5, 'kept': 3}):
-            result = migrate_ai_tasks(uid='test-uid')
+        result = migrate_ai_tasks(uid='test-uid')
 
         assert 'status' in result
         assert isinstance(result['status'], str)
+        assert result['status'].startswith('legacy task migration retired')
 
     def test_migrate_conversation_items_returns_status_migrated_deleted(self):
         """migrate-conversation-items returns {status, migrated, deleted} matching Swift MigrateResponse."""
         from routers.staged_tasks import migrate_conversation_items
 
-        with patch.object(staged_tasks_db, 'migrate_conversation_items_to_staged', return_value={'moved': 10}):
-            result = migrate_conversation_items(uid='test-uid')
+        with patch.object(
+            staged_router.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            side_effect=AssertionError('retired compatibility route must not bulk-migrate'),
+        ):
+            result = migrate_conversation_items(uid='test-uid', limit=50, cursor=None)
 
         assert result['status'] == 'ok'
-        assert result['migrated'] == 10
+        assert result['migrated'] == 0
         assert 'deleted' in result
+        assert result['restored'] == 0
 
 
 # ===========================================================================
@@ -2068,49 +2128,312 @@ class TestRatingZeroBoundary:
 # ===========================================================================
 
 
-class TestMigrationBatchIntegration:
-    """Exercise migration functions with enough items to cross batch boundary."""
+class TestLegacyConversationRecovery:
+    """Exercise the recovery path for rows moved by the retired migration."""
 
-    def test_migrate_ai_tasks_commits_at_batch_boundary(self):
-        """migrate_ai_tasks with 260 AI tasks triggers batch commit (260*2=520 ops > 500)."""
+    def test_restore_legacy_conversation_items_recreates_exact_marked_rows(self):
+        """Recovery removes only its marker and atomically recreates the original action item."""
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.update_time = object()
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'conversation_id': 'conversation-1',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        ordinary_staged_snapshot = MagicMock()
+        ordinary_staged_snapshot.id = 'ordinary-staged-task'
+        ordinary_staged_snapshot.to_dict.return_value = {
+            'id': 'ordinary-staged-task',
+            'description': 'Keep this staged task',
+            'completed': False,
+            'source': 'screenshot',
+        }
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot, ordinary_staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        action_item_ref = MagicMock()
+        action_items_col.document.return_value = action_item_ref
+        staged_ref = MagicMock()
+        staged_col.document.return_value = staged_ref
+        batch = MagicMock()
+        delete_option = object()
 
-        def _make_doc(i, source='screenshot'):
-            doc = MagicMock()
-            doc.id = f'task-{i}'
-            doc.to_dict.return_value = {
-                'id': f'task-{i}',
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        firestore_client.write_option.return_value = delete_option
+        with patch.object(staged_tasks_db, 'get_firestore_client') as get_firestore_client:
+            result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        get_firestore_client.assert_not_called()
+
+        assert result == {
+            'restored': 1,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        batch.create.assert_called_once_with(
+            action_item_ref,
+            {
+                'description': 'Call supplier',
+                'conversation_id': 'conversation-1',
                 'completed': False,
-                'source': source,
-                'relevance_score': i,
+            },
+        )
+        firestore_client.write_option.assert_called_once_with(last_update_time=staged_snapshot.update_time)
+        batch.delete.assert_called_once_with(staged_ref, option=delete_option)
+        batch.commit.assert_called_once()
+
+    @pytest.mark.parametrize('conflict_error', ['already_exists', 'conflict'])
+    def test_restore_legacy_conversation_items_does_not_overwrite_an_existing_task(self, conflict_error):
+        """An identity collision preserves both copies instead of overwriting current task data."""
+        from google.api_core.exceptions import AlreadyExists, Conflict
+
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        batch = MagicMock()
+        batch.commit.side_effect = {
+            'already_exists': AlreadyExists('task already exists'),
+            'conflict': Conflict('task already exists'),
+        }[conflict_error]
+
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 1,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        batch.delete.assert_called_once()
+
+    def test_restore_legacy_conversation_items_skips_stale_row_and_continues(self):
+        """A staged-row precondition race refreshes the row and retries the restore."""
+        from google.api_core.exceptions import FailedPrecondition
+
+        snapshots = []
+        for index in range(2):
+            snapshot = MagicMock()
+            snapshot.id = f'legacy-task-{index}'
+            snapshot.update_time = object()
+            snapshot.to_dict.return_value = {
+                'id': snapshot.id,
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
             }
-            return doc
+            snapshots.append(snapshot)
 
-        ai_docs = [_make_doc(i) for i in range(260)]
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = snapshots
+        staged_col.where.return_value = recovery_query
+        batch = MagicMock()
+        batch.commit.side_effect = [FailedPrecondition('staged row changed'), None, None]
+        refreshed_snapshot = MagicMock()
+        refreshed_snapshot.id = snapshots[0].id
+        refreshed_snapshot.update_time = object()
+        refreshed_snapshot.exists = True
+        refreshed_snapshot.to_dict.return_value = {
+            'id': refreshed_snapshot.id,
+            'description': 'Updated supplier call',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
 
-        mock_action_col = MagicMock()
-        mock_query = MagicMock()
-        mock_query.stream.return_value = ai_docs
-        mock_action_col.where.return_value = mock_query
-        mock_action_col.document.return_value = MagicMock()
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
 
-        mock_staged_col = MagicMock()
-        mock_staged_col.document.return_value = MagicMock()
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        staged_col.document.return_value.get.return_value = refreshed_snapshot
 
-        batch1 = MagicMock()
-        batch2 = MagicMock()
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
 
-        def col_side_effect(col_name):
-            if col_name == 'action_items':
-                return mock_action_col
-            return mock_staged_col
+        assert result == {
+            'restored': 2,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        assert batch.commit.call_count == 3
+        assert batch.create.call_count == 3
+        assert batch.delete.call_count == 3
+        assert staged_col.document.return_value.get.call_count == 1
 
-        with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.batch.side_effect = [batch1, batch2]
-            patched_db.collection.return_value.document.return_value.collection.side_effect = col_side_effect
-            result = staged_tasks_db.migrate_ai_tasks('test-uid')
+    def test_restore_legacy_conversation_items_does_not_acknowledge_repeated_stale_rows(self):
+        """Repeated contention fails the sweep instead of marking the row recovered."""
+        from google.api_core.exceptions import FailedPrecondition
 
-        assert result['moved'] == 257  # 260 - 3 kept
-        batch1.commit.assert_called()  # intermediate commit at 500 ops
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.update_time = object()
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        refreshed_snapshots = []
+        for index in range(staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES):
+            refreshed = MagicMock()
+            refreshed.id = staged_snapshot.id
+            refreshed.update_time = object()
+            refreshed.exists = True
+            refreshed.to_dict.return_value = {
+                'id': staged_snapshot.id,
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            refreshed_snapshots.append(refreshed)
+
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        staged_ref = staged_col.document.return_value
+        staged_ref.get.side_effect = refreshed_snapshots
+        batch = MagicMock()
+        batch.commit.side_effect = [
+            FailedPrecondition(f'staged row changed {index}')
+            for index in range(staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1)
+        ]
+
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+
+        with pytest.raises(FailedPrecondition):
+            staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        assert batch.commit.call_count == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1
+        assert staged_ref.get.call_count == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES
+
+    def test_restore_legacy_conversation_items_pages_by_document_id(self):
+        """Recovery bounds each request and returns an exclusive continuation cursor."""
+        snapshots = []
+        for index in range(3):
+            snapshot = MagicMock()
+            snapshot.id = f'legacy-{index}'
+            snapshot.to_dict.return_value = {
+                'id': f'legacy-{index}',
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            snapshots.append(snapshot)
+
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = snapshots
+        staged_col.where.return_value = recovery_query
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', limit=2, firestore_client=firestore_client
+        )
+
+        recovery_query.order_by.assert_called_once_with('__name__')
+        recovery_query.limit.assert_called_once_with(3)
+        assert result == {
+            'restored': 2,
+            'skipped_existing': 0,
+            'has_more': True,
+            'next_cursor': 'legacy-1',
+        }
+
+    def test_restore_legacy_conversation_items_applies_exclusive_cursor(self):
+        """A continuation skips already-scanned collisions instead of retrying them forever."""
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.start_after.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = []
+        staged_col.where.return_value = recovery_query
+        cursor_ref = MagicMock()
+        staged_col.document.return_value = cursor_ref
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', cursor='legacy-1', firestore_client=firestore_client
+        )
+
+        recovery_query.start_after.assert_called_once_with({'__name__': cursor_ref})
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+
+    def test_released_recovery_route_is_inert_under_universal_candidate_authority(self):
+        """Released shape stays decodable without moving historical rows to action items."""
+        with patch.object(
+            staged_router.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            side_effect=AssertionError('retired recovery must not bypass Candidate authority'),
+        ):
+            result = staged_router.restore_legacy_conversation_items(uid='test-uid', limit=50, cursor=None)
+
+        assert result == {
+            'status': 'ok',
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
 
 
 # ============================================================================
@@ -2122,12 +2445,12 @@ class TestFocusStatsDurationBoundary:
     """Verify duration_seconds=0 and missing duration behavior."""
 
     def test_distracted_zero_duration_treated_as_default(self):
-        """duration_seconds=0 is treated as 60 via `or 60` in get_focus_stats."""
+        """Explicit duration_seconds=0 is preserved as 0 seconds in get_focus_stats."""
         sessions = [{'status': 'distracted', 'app_or_site': 'Twitter', 'duration_seconds': 0}]
         with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=sessions):
             result = focus_sessions_db.get_focus_stats('uid', '2026-04-06')
-        # duration_seconds=0 is falsy, so `or 60` defaults to 60
-        assert result['distracted_minutes'] == 1  # 60 seconds = 1 minute
+        assert result['distracted_minutes'] == 0
+        assert result['top_distractions'][0]['total_seconds'] == 0
 
     def test_distracted_missing_duration_treated_as_default(self):
         """Missing duration_seconds defaults to 60 via `or 60`."""
@@ -2271,8 +2594,8 @@ class TestLlmDualWritePayloadParity:
             'call_count',
         ]
         for field in expected_fields:
-            assert f'desktop_chat.{field}' in data, f"Missing desktop_chat.{field}"
-            assert f'desktop_chat_omi.{field}' in data, f"Missing desktop_chat_omi.{field}"
+            assert field in data['desktop_chat'], f"Missing desktop_chat.{field}"
+            assert field in data['desktop_chat_omi'], f"Missing desktop_chat_omi.{field}"
 
         # Verify shared metadata fields
         assert 'date' in data

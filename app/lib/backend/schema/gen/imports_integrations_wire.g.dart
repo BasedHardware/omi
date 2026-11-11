@@ -4,19 +4,23 @@
 
 class GeneratedImportJobResponse {
   final int? conversationsCreated;
+  final int? conversationsSkipped;
   final String? createdAt;
   final String? error;
   final String jobId;
   final int? processedFiles;
+  final String? sourceType;
   final String status;
   final int? totalFiles;
 
   const GeneratedImportJobResponse({
     this.conversationsCreated,
+    this.conversationsSkipped,
     this.createdAt,
     this.error,
     required this.jobId,
     this.processedFiles,
+    this.sourceType,
     required this.status,
     this.totalFiles,
   });
@@ -24,10 +28,12 @@ class GeneratedImportJobResponse {
   factory GeneratedImportJobResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedImportJobResponse(
       conversationsCreated: _readFieldValue<int>(_readField(json, const ["conversations_created"]), "conversations_created", _readInt, requiredField: false, nullable: true),
+      conversationsSkipped: _readFieldValue<int>(_readField(json, const ["conversations_skipped"]), "conversations_skipped", _readInt, requiredField: false, nullable: true),
       createdAt: _readFieldValue<String>(_readField(json, const ["created_at"]), "created_at", _readString, requiredField: false, nullable: true),
       error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
       jobId: _required(_readFieldValue<String>(_readField(json, const ["job_id"]), "job_id", _readString, requiredField: true, nullable: false), "job_id"),
       processedFiles: _readFieldValue<int>(_readField(json, const ["processed_files"]), "processed_files", _readInt, requiredField: false, nullable: true),
+      sourceType: _readFieldValue<String>(_readField(json, const ["source_type"]), "source_type", _readString, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
       totalFiles: _readFieldValue<int>(_readField(json, const ["total_files"]), "total_files", _readInt, requiredField: false, nullable: true),
     );
@@ -36,10 +42,12 @@ class GeneratedImportJobResponse {
   Map<String, dynamic> toJson() {
     return {
       'conversations_created': conversationsCreated,
+      'conversations_skipped': conversationsSkipped,
       'created_at': createdAt,
       'error': error,
       'job_id': jobId,
       'processed_files': processedFiles,
+      'source_type': sourceType,
       'status': status,
       'total_files': totalFiles,
     };

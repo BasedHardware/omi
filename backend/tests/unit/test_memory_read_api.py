@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.memory_contracts import L1MemoryArchiveItem, LifecycleState, WorkingMemoryObservation
+from models.memory_contracts import L1MemoryArchiveItem, WorkingMemoryObservation
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.memory_read_api import (
     query_archive_product_memory_items,
@@ -212,6 +212,104 @@ def test_query_default_product_memory_items_keeps_processed_short_term_visible()
     assert results[0]["processing_state"] == "processed"
 
 
+def test_query_default_product_memory_items_collapses_alias_to_canonical_survivor():
+    survivor = _product_item(
+        "canonical-survivor",
+        "Project Beacon uses weekly planning.",
+        canonical_memory_id="canonical-survivor",
+        tier=MemoryTier.long_term,
+        processing_state=ProcessingState.processed,
+        expires_at=None,
+        ledger_commit_id="commit-survivor",
+        ledger_sequence=1,
+        captured_at=NOW - timedelta(days=3),
+        updated_at=NOW - timedelta(days=2),
+    )
+    alias = _product_item(
+        "duplicate-short-term",
+        "Fresh duplicate: Project Beacon uses weekly planning.",
+        canonical_memory_id=survivor.memory_id,
+        processing_state=ProcessingState.processed,
+        updated_at=NOW - timedelta(hours=1),
+    )
+
+    results = query_default_product_memory_items(
+        "Project Beacon",
+        [alias, survivor],
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=NOW,
+    )
+
+    assert [result["memory_id"] for result in results] == [survivor.memory_id]
+    assert results[0]["tier"] == MemoryTier.long_term.value
+
+
+def test_query_default_product_memory_items_collapses_tail_entering_alias_cycle():
+    tail = _product_item(
+        "mem-a",
+        "Project Beacon tail",
+        canonical_memory_id="mem-b",
+        processing_state=ProcessingState.processed,
+    )
+    cycle_b = _product_item(
+        "mem-b",
+        "Project Beacon cycle B",
+        canonical_memory_id="mem-c",
+        processing_state=ProcessingState.processed,
+    )
+    cycle_c = _product_item(
+        "mem-c",
+        "Project Beacon cycle C",
+        canonical_memory_id="mem-b",
+        processing_state=ProcessingState.processed,
+    )
+
+    results = query_default_product_memory_items(
+        "Project Beacon",
+        [tail, cycle_b, cycle_c],
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=NOW,
+    )
+
+    assert [result["memory_id"] for result in results] == ["mem-b"]
+
+
+def test_query_default_product_memory_items_traverses_ineligible_alias_intermediate():
+    alias = _product_item(
+        "mem-a",
+        "Project Beacon recent alias",
+        canonical_memory_id="mem-b",
+        processing_state=ProcessingState.processed,
+    )
+    restricted_intermediate = _product_item(
+        "mem-b",
+        "Restricted intermediate must not be returned",
+        canonical_memory_id="mem-c",
+        processing_state=ProcessingState.processed,
+        sensitivity_labels=["financial"],
+    )
+    survivor = _product_item(
+        "mem-c",
+        "Project Beacon canonical survivor",
+        canonical_memory_id="mem-c",
+        tier=MemoryTier.long_term,
+        processing_state=ProcessingState.processed,
+        expires_at=None,
+        ledger_commit_id="commit-survivor",
+        ledger_sequence=2,
+    )
+
+    results = query_default_product_memory_items(
+        "Project Beacon",
+        [alias, restricted_intermediate, survivor],
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=NOW,
+    )
+
+    assert [result["memory_id"] for result in results] == [survivor.memory_id]
+    assert all(result["memory_id"] != restricted_intermediate.memory_id for result in results)
+
+
 def test_query_default_product_memory_items_excludes_tombstoned_and_restricted_sensitivity():
     tombstoned = _product_item(
         "tombstoned-short",
@@ -268,6 +366,32 @@ def test_query_archive_product_memory_items_is_explicit_and_capability_gated():
     assert denied_archive_results == []
     assert [result["memory_id"] for result in allowed_archive_results] == ["archive"]
     assert allowed_archive_results[0]["agent_use"] == "explicit_archive_memory"
+
+
+def test_query_archive_product_memory_items_filters_queries_made_only_of_short_words():
+    records = [
+        _product_item(
+            memory_id,
+            content,
+            tier=MemoryTier.archive,
+            processing_state=ProcessingState.processed,
+            expires_at=None,
+        )
+        for memory_id, content in (("ai", "Works on AI agents"), ("chinese", "正在学习中文"))
+    ]
+    policy = MemoryAccessPolicy.for_omi_chat(archive_capability=True)
+
+    def matched_ids(query):
+        return [
+            result["memory_id"] for result in query_archive_product_memory_items(query, records, policy=policy, now=NOW)
+        ]
+
+    # Only a blank query lists every memory; short words still filter and a query
+    # with no searchable word matches nothing.
+    assert matched_ids("AI") == ["ai"]
+    assert matched_ids("中文") == ["chinese"]
+    assert matched_ids("...") == []
+    assert matched_ids("") == ["ai", "chinese"]
 
 
 def test_query_memory_context_uses_l2_first_and_only_searches_l1_when_requested():

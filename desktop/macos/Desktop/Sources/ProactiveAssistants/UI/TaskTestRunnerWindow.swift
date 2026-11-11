@@ -55,7 +55,7 @@ struct TaskTestRunnerView: View {
       columnHeaders
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.xs)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Ink.rowFill)
 
       Divider()
 
@@ -86,7 +86,7 @@ struct TaskTestRunnerView: View {
         .padding(OmiSpacing.lg)
     }
     .frame(width: 1400, height: 900)
-    .background(Color(nsColor: .windowBackgroundColor))
+    .inkGlassPanel(cornerRadius: 0, shadow: nil)
   }
 
   // MARK: - Header
@@ -419,8 +419,13 @@ struct TaskTestRunnerView: View {
     elapsedTime = 0
     totalContextSwitches = 0
     cancellationRequested = false
-    statusMessage = "Finding context switches..."
+    statusMessage = "Finding context switches…"
 
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      statusMessage = "Sign in to run a screenshot test"
+      isRunning = false
+      return
+    }
     Task {
       log("TaskTestRunner: Starting test task")
       let startTime = Date()
@@ -518,25 +523,32 @@ struct TaskTestRunnerView: View {
 
       await MainActor.run {
         totalContextSwitches = sampled.count
-        statusMessage = "Found \(sampled.count) context switches, testing all..."
+        statusMessage = "Found \(sampled.count) context switches, testing all…"
       }
 
       // Process each departing frame
       for (i, screenshot) in sampled.enumerated() {
-        if cancellationRequested { break }
+        if cancellationRequested || !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) { break }
 
         await MainActor.run {
-          statusMessage = "Processing \(i + 1)/\(sampled.count)..."
+          statusMessage = "Processing \(i + 1)/\(sampled.count)…"
         }
 
+        guard let binding = ScreenTaskFrameBinding.capture(app: screenshot.appName, title: screenshot.windowTitle),
+          binding.authorization == authorization
+        else { continue }
         do {
+          // Bind the job owner/app before loading stored pixels; never rebind a replay after an account transition.
           // Load JPEG from video chunk
           let jpegData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
 
           // Run extraction pipeline
           let analyzeStart = Date()
-          let (allResults, searchCount) = try await taskAssistant.testAnalyze(
-            jpegData: jpegData, appName: screenshot.appName)
+          let (allResults, searchCount) = try await DesktopLogPrivacy.$suppressContent.withValue(
+            ScreenTaskFeature.isEnabled
+          ) {
+            try await taskAssistant.testAnalyze(jpegData: jpegData, appName: screenshot.appName, binding: binding)
+          }
           let duration = Date().timeIntervalSince(analyzeStart)
 
           // Pick the first task-bearing result for display; fall back to the first
@@ -544,6 +556,7 @@ struct TaskTestRunnerView: View {
           let result: TaskExtractionResult? = allResults.first(where: { $0.hasNewTask }) ?? allResults.first
 
           await MainActor.run {
+            guard binding.isCurrent() else { return }
             results.append(
               TaskTestResult(
                 index: i + 1,
@@ -558,7 +571,10 @@ struct TaskTestRunnerView: View {
             progress = Double(i + 1) / Double(sampled.count)
           }
         } catch {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { break }
+          guard binding.isCurrent() else { continue }
           await MainActor.run {
+            guard binding.isCurrent() else { return }
             results.append(
               TaskTestResult(
                 index: i + 1,
@@ -613,13 +629,17 @@ class TaskTestRunnerWindow: NSWindow {
 
     super.init(
       contentRect: contentRect,
-      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
       backing: .buffered,
       defer: false
     )
 
     self.title = "Task Extraction Test Runner"
     self.isReleasedWhenClosed = false
+    // The inside of a titled window is glass: transparent, light-pinned, and shadowed by its own
+    // frame (`WindowGlass.Kind.titled`). Without the pin the title bar and the traffic lights stay in
+    // the machine's appearance — a dark title bar on a white sheet on a Dark Mac.
+    WindowGlass.wear(self, as: .titled)
     self.delegate = self
     self.minSize = NSSize(width: 900, height: 600)
     self.center()

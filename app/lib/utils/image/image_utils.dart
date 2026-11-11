@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
@@ -41,4 +43,29 @@ Uint8List rotateImage(OrientedImage orientedImage) {
 
   // Re-encode the rotated image to JPEG format
   return Uint8List.fromList(img.encodeJpg(rotatedImage));
+}
+
+/// Split a base64 image into JSON chunks for the transcription socket.
+Future<void> emitBase64ImageChunks(
+  String base64Image, {
+  required String id,
+  required Future<void> Function(String payload) emit,
+  int chunkSize = 8192,
+  Duration delay = const Duration(milliseconds: 20),
+}) async {
+  final totalChunks = (base64Image.length / chunkSize).ceil();
+  for (int i = 0; i < totalChunks; i++) {
+    final start = i * chunkSize;
+    final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
+    await emit(
+      jsonEncode({
+        'type': 'image_chunk',
+        'id': id,
+        'index': i,
+        'total': totalChunks,
+        'data': base64Image.substring(start, end),
+      }),
+    );
+    await Future.delayed(delay);
+  }
 }

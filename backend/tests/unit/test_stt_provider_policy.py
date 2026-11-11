@@ -1,34 +1,164 @@
 """Regression coverage for the single source of truth governing STT serving."""
 
+from pathlib import Path
+
+import pytest
+import yaml
+
 from config.stt_provider_policy import (
     DEEPGRAM_CLOUD_PROVIDER,
     DEEPGRAM_SELF_HOSTED_PROVIDER,
+    HELD_RECOVERY_SECOND_PROVIDER,
     MODULATE_PROVIDER,
+    PARAKEET_MODEL_BY_SURFACE,
     PARAKEET_PROVIDER,
     STTServingSurface,
     canonical_model_config,
+    deepgram_provider_for_runtime,
+    model_is_enabled,
+    modulate_supports_language,
+    parakeet_supports_language,
     provider_for_model_token,
     provider_is_enabled,
+    supports_live_multilingual_mode,
+)
+
+ROOT = Path(__file__).resolve().parents[3]
+PARAKEET_VALUES_FILES = (
+    ROOT / 'backend/charts/parakeet/dev_omi_parakeet_values.yaml',
+    ROOT / 'backend/charts/parakeet/prod_omi_parakeet_values.yaml',
 )
 
 
-def test_hosted_deepgram_is_disabled_for_every_serving_surface():
-    assert all(not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, surface) for surface in STTServingSurface)
+def _chart_env_value(values_path: Path, name: str) -> str | None:
+    values = yaml.safe_load(values_path.read_text(encoding='utf-8'))
+    for entry in values.get('env', []) if isinstance(values, dict) else []:
+        if isinstance(entry, dict) and entry.get('name') == name:
+            return str(entry.get('value')) if 'value' in entry else None
+    return None
 
 
-def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
-    assert provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
+def test_deepgram_is_retired_on_every_surface():
+    # Deepgram retired 2026-08-27 (no contract); do not route or add keys.
+    # Absent from PROVIDER_SERVING_SURFACES, so both deployments answer False
+    # everywhere and no `dg-*` token can be admitted by an env edit.
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PTT)
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PRERECORDED)
+    assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PRERECORDED)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PTT)
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.HELD_RECOVERY)
+
+
+def test_soniox_async_is_limited_to_held_recovery_and_batch_failover():
+    from config.prerecorded_stt import (
+        DEFAULT_STT_PRERECORDED_MODELS,
+        provider_for_model_token as prerecorded_provider_for_model_token,
+        providers_for_model_config,
+    )
+
+    assert HELD_RECOVERY_SECOND_PROVIDER == 'soniox'
+    assert provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
+    # Admitted on prerecorded only so the batch route table may name it as failover capacity.
+    assert provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    assert not provider_is_enabled('soniox', STTServingSurface.PTT)
+    # General prerecorded selection can still never reach it, even when a deployment lists it.
+    assert 'soniox' not in DEFAULT_STT_PRERECORDED_MODELS
+    assert 'soniox' not in providers_for_model_config('soniox,parakeet,modulate-velma-2')
+    # Deployment validation maps no prerecorded token to Soniox; get_prerecorded_service
+    # matches only the parakeet and modulate-velma-2 tokens.
+    assert prerecorded_provider_for_model_token('soniox') is None
 
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
-    expected = 'parakeet,modulate-velma-2'
-    for surface in STTServingSurface:
-        assert canonical_model_config(surface) == expected
+    expected = {
+        STTServingSurface.STREAMING: 'modulate-velma-2,soniox',
+        STTServingSurface.PRERECORDED: 'parakeet,modulate-velma-2',
+        STTServingSurface.PTT: 'modulate-velma-2,parakeet',
+    }
+    for surface, model_order in expected.items():
+        assert canonical_model_config(surface) == model_order
         assert provider_is_enabled(PARAKEET_PROVIDER, surface)
         assert provider_is_enabled(MODULATE_PROVIDER, surface)
 
 
-def test_deepgram_model_tokens_are_classified_as_self_hosted_only():
-    assert provider_for_model_token('dg-nova-3') == DEEPGRAM_SELF_HOSTED_PROVIDER
+def test_deepgram_model_tokens_report_the_hosted_deployment_by_default():
+    assert provider_for_model_token('dg-nova-3') == DEEPGRAM_CLOUD_PROVIDER
+    assert deepgram_provider_for_runtime(False) == DEEPGRAM_CLOUD_PROVIDER
+    assert deepgram_provider_for_runtime(True) == DEEPGRAM_SELF_HOSTED_PROVIDER
+
+
+def test_retired_deepgram_tokens_are_never_admissible():
+    assert not model_is_enabled('dg-nova-3', STTServingSurface.STREAMING)
+    assert not model_is_enabled('dg-nova-3', STTServingSurface.PRERECORDED)
+    assert not model_is_enabled('nova-3', STTServingSurface.STREAMING)
+
+
+def test_parakeet_capability_tracks_the_model_selected_for_each_surface():
+    assert parakeet_supports_language(STTServingSurface.STREAMING, 'en')
+    assert not parakeet_supports_language(STTServingSurface.STREAMING, 'es')
+    assert parakeet_supports_language(STTServingSurface.PTT, 'en')
+    assert not parakeet_supports_language(STTServingSurface.PTT, 'multi')
+    assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'es')
+    assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'multi')
+
+
+@pytest.mark.parametrize('values_path', PARAKEET_VALUES_FILES)
+def test_parakeet_chart_models_match_the_capability_policy(values_path: Path):
+    """A model deployment swap must update the policy before routing can change (#10009)."""
+    assert _chart_env_value(values_path, 'PARAKEET_MODEL') == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]
+    stream_model = _chart_env_value(values_path, 'PARAKEET_STREAM_MODEL')
+    if values_path.name.startswith('prod_'):
+        # Prod serves /v3/stream with VAD + the TDT model; RNNT is not loaded there.
+        assert stream_model is None
+    else:
+        assert stream_model == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.STREAMING]
+    assert PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PTT] == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.STREAMING]
+
+
+def test_live_multilingual_policy_normalizes_supported_locales_and_rejects_unknown_languages():
+    assert supports_live_multilingual_mode('zh-TW')
+    assert supports_live_multilingual_mode('ar')
+    assert modulate_supports_language('es-419')
+    assert not supports_live_multilingual_mode('xx-unsupported')
+
+
+# ---------------------------------------------------------------------------
+# #10022: user language preference gate must follow the live policy
+# ---------------------------------------------------------------------------
+
+
+def test_user_language_route_gates_multilingual_mode_by_live_policy():
+    """Static tripwire (source order, not behavior): the PATCH /v1/users/language
+    preference gate derives single_language_mode from the live STT capability
+    policy, and the retired Deepgram Nova-3 multi-language list no longer
+    appears in the route module (#10022)."""
+    users_py = (Path(__file__).resolve().parents[2] / 'routers' / 'users.py').read_text(encoding='utf-8')
+    assert 'single_language_mode = not supports_live_multilingual_mode(language)' in users_py
+    assert 'deepgram_nova3_multi_languages' not in users_py
+
+
+@pytest.mark.parametrize('language', ['vi', 'vi-VN', 'ko', 'tr', 'ar', 'th', 'pt-BR', 'en'])
+def test_live_policy_admits_languages_beyond_the_retired_deepgram_list(language):
+    """vi/ko/tr/ar/th were wrongly locked into single-language mode by the old
+    19-locale Deepgram list; en/pt-BR keep their existing eligibility."""
+    assert supports_live_multilingual_mode(language) is True
+
+
+@pytest.mark.parametrize('language', ['my', 'am', 'lo'])
+def test_live_policy_rejects_languages_outside_modulate_auto_detection(language):
+    assert supports_live_multilingual_mode(language) is False
+
+
+def test_plain_streaming_slot_is_removed_but_window_and_ptt_remain(monkeypatch):
+    monkeypatch.delenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', raising=False)
+    assert not model_is_enabled('parakeet', STTServingSurface.STREAMING)
+    assert model_is_enabled('parakeet-window', STTServingSurface.STREAMING)
+    assert model_is_enabled('parakeet', STTServingSurface.PTT)
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
+    assert model_is_enabled('parakeet', STTServingSurface.STREAMING)
+    assert canonical_model_config(STTServingSurface.STREAMING) == 'modulate-velma-2,soniox,parakeet'
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    assert not model_is_enabled('parakeet', STTServingSurface.STREAMING)
+    assert canonical_model_config(STTServingSurface.STREAMING) == 'modulate-velma-2,soniox'

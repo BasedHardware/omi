@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-keyed-union-silently-drops-content",
+  "violated_contract": "A merge helper that claims to union keyed registry entries from both sides must not emit a document whose parsed key set is missing a key present on either side, and must not keep a shared key's body stale when only the other side edited it. Silent drop includes landing a new check inside exempt: so the id is in the file text and absent from checks:.",
+  "canonical_prevention": "scripts/resolve-registry-conflict unions git stages :1:/:2:/:3: by key, inserts into the named container, and verifies the parse before writing. RegistryConflictResolverTests.test_naive_append_lands_inside_exempt fails the EOF-append that puts a new id in exempt:, test_naive_union_reverts_main_edit_to_shared_id fails keeping --changed-files when only main edited the shared command, and test_cli_resolves_git_merge_stages drives the CLI on a real conflicted merge.",
+  "canonical_prevention_artifact": [
+    "scripts/test_resolve_registry_conflict.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "scripts/resolve-registry-conflict",
+    "scripts/test_resolve_registry_conflict.py",
+    ".github/checks-manifest.yaml",
+    "contracts/spine/files.json",
+    ".github/scripts/dead_code/flutter.allowlist.json"
+  ],
+  "status": "open"
+}

@@ -45,27 +45,48 @@ jobs:
           echo "Testing release: $TAG"
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
-          # Download DMG
+          DOWNLOAD_DIR="$RUNNER_TEMP/omi-install-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          DMG_PATH="$DOWNLOAD_DIR/omi.dmg"
+          mkdir -p "$DOWNLOAD_DIR"
+
+          # Download only the canonical disk image, never another release asset.
           gh release download "$TAG" \
             --repo BasedHardware/omi \
-            --pattern "Omi.Beta.dmg" \
-            --dir .
+            --pattern "omi.dmg" \
+            --dir "$DOWNLOAD_DIR"
+          test -f "$DMG_PATH"
+          echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT
 
           echo "## Release Under Test" >> $GITHUB_STEP_SUMMARY
           echo "**Tag:** \`$TAG\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Add quarantine attribute to simulate browser download
-          xattr -w com.apple.quarantine "0083;$(printf '%x' $(date +%s));Safari;$(uuidgen)" Omi.Beta.dmg
-
       - name: Mount DMG and Install
         run: |
-          hdiutil attach Omi.Beta.dmg -nobrowse -quiet
-          VOLUME=$(ls -d /Volumes/Omi* | head -1)
-          echo "Volume: $VOLUME"
+          set -euo pipefail
+          DMG_PATH="${{ steps.download.outputs.dmg_path }}"
+          MOUNTPOINT="$RUNNER_TEMP/omi-install-mount-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          DEVICE=""
 
-          # Use ditto to preserve extended attributes
-          ditto "$VOLUME/Omi Beta.app" "/Applications/Omi Beta.app"
+          cleanup() {
+            local exit_code=$?
+            if [[ -n "$DEVICE" ]]; then
+              hdiutil detach "$DEVICE" -quiet || true
+            fi
+            rm -rf "$MOUNTPOINT" "$(dirname "$DMG_PATH")"
+            exit "$exit_code"
+          }
+          trap cleanup EXIT
+
+          mkdir -p "$MOUNTPOINT"
+          xattr -d com.apple.quarantine "$DMG_PATH" 2>/dev/null || true
+          DEVICE=$(hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$MOUNTPOINT" | awk '/^\/dev\// { print $1; exit }')
+          [[ -n "$DEVICE" ]]
+          [[ -d "$MOUNTPOINT/Omi.app" ]]
+          echo "Mounted $DMG_PATH at $MOUNTPOINT ($DEVICE)"
+
+          # Use ditto to preserve extended attributes from the exact mounted image.
+          ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"
 
           echo "App installed to /Applications"
 
@@ -75,7 +96,7 @@ jobs:
           echo "## Code Signature" >> $GITHUB_STEP_SUMMARY
 
           # Get signing info
-          SIGNING_INFO=$(codesign -dv --verbose=2 "/Applications/Omi Beta.app" 2>&1)
+          SIGNING_INFO=$(codesign -dv --verbose=2 "/Applications/Omi.app" 2>&1)
           AUTHORITY=$(echo "$SIGNING_INFO" | grep "Authority=" | head -1 | cut -d= -f2)
           TEAM=$(echo "$SIGNING_INFO" | grep "TeamIdentifier=" | cut -d= -f2)
 
@@ -85,7 +106,7 @@ jobs:
           echo "| Team ID | $TEAM |" >> $GITHUB_STEP_SUMMARY
 
           # Deep verification (MUST pass)
-          if codesign --verify --deep --strict --verbose=2 "/Applications/Omi Beta.app" 2>&1; then
+          if codesign --verify --deep --strict --verbose=2 "/Applications/Omi.app" 2>&1; then
             echo "| Deep Verification | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Deep Verification | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
@@ -102,7 +123,7 @@ jobs:
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
 
           # Gatekeeper assessment (MUST pass)
-          GK_RESULT=$(spctl --assess --verbose=4 "/Applications/Omi Beta.app" 2>&1)
+          GK_RESULT=$(spctl --assess --verbose=4 "/Applications/Omi.app" 2>&1)
           if echo "$GK_RESULT" | grep -q "accepted"; then
             SOURCE=$(echo "$GK_RESULT" | grep "source=" | cut -d= -f2)
             echo "| Assessment | ✅ Accepted |" >> $GITHUB_STEP_SUMMARY
@@ -122,7 +143,7 @@ jobs:
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
 
           # Stapler validation (MUST pass - this was the bug!)
-          if xcrun stapler validate "/Applications/Omi Beta.app" 2>&1 | grep -q "valid"; then
+          if xcrun stapler validate "/Applications/Omi.app" 2>&1 | grep -q "valid"; then
             echo "| Stapled Ticket | ✅ Present |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Stapled Ticket | ❌ MISSING |" >> $GITHUB_STEP_SUMMARY
@@ -139,13 +160,13 @@ jobs:
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
 
           # Clear quarantine (simulates user clicking "Open" in Gatekeeper dialog)
-          xattr -cr "/Applications/Omi Beta.app"
+          xattr -cr "/Applications/Omi.app"
 
           # Register with LaunchServices
-          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/Omi Beta.app"
+          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/Omi.app"
 
           # Launch the app
-          open "/Applications/Omi Beta.app"
+          open "/Applications/Omi.app"
 
           # Wait for app to start
           sleep 5
@@ -187,6 +208,4 @@ jobs:
         if: always()
         run: |
           pkill -9 "Omi Computer" 2>/dev/null || true
-          hdiutil detach "/Volumes/Omi Beta" -quiet 2>/dev/null || true
-          hdiutil detach /Volumes/Omi* -quiet 2>/dev/null || true
-          rm -rf "/Applications/Omi Beta.app"
+          rm -rf "/Applications/Omi.app"

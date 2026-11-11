@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-empty-filter-result-read-as-no-filter",
+  "violated_contract": "A filtered view must decide whether a filter is active from the filter's selection, never from whether the filter's result set is empty. Using `!results.isEmpty` as the test for an applied filter turns a legitimate zero-match result into the unfiltered list, so the view shows every item under an active filter chip instead of an honest empty state.",
+  "canonical_prevention": "Branch on the selection state (for example `!selectedTags.isEmpty`) and let an empty result render the no-results state. Prove it with a hermetic test that selects a filter with no matches against a populated list and asserts the visible list is empty, plus a control that a filter with matches shows only those items.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/MemoriesCategoryFilterNoMatchTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift"
+  ],
+  "status": "open"
+}

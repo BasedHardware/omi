@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 
@@ -14,7 +13,12 @@ from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryItem, MemoryLayer
 from utils.llm.knowledge_graph import extract_knowledge_from_memory
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import (
+    CanonicalApplyStateUnavailable,
+    MemorySystem as MemorySystem,  # compatibility export for legacy test doubles
+    ensure_canonical_apply_control_state,
+    resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +77,7 @@ def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client: An
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     ref = client.document(path)
     try:
-        ref.update({"kg_extracted": True, "updated_at": datetime.now(timezone.utc)})
+        ref.update({"kg_extracted": True})
         return True
     except FirestoreNotFound:
         logger.warning(
@@ -111,8 +115,16 @@ def extract_kg_for_promoted_memory(
 ) -> CanonicalKgPromotionResult:
     """Extract KG nodes/edges for a newly promoted long_term memory."""
     client: Any = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
-        return CanonicalKgPromotionResult(skipped_reason="not_canonical_cohort")
+    try:
+        ensure_canonical_apply_control_state(uid, db_client=client)
+    except CanonicalApplyStateUnavailable as exc:
+        logger.warning(
+            "kg_extraction blocked by canonical apply state uid=%s reason=%s",
+            uid,
+            exc,
+            exc_info=True,
+        )
+        return CanonicalKgPromotionResult(skipped_reason="canonical_state_unavailable")
     if item.tier != MemoryLayer.long_term:
         return CanonicalKgPromotionResult(skipped_reason="not_long_term")
     if (item.promotion or {}).get("user_review") is False:

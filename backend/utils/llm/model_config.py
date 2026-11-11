@@ -11,6 +11,13 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, Union
 
 from utils.llm.gateway_client import is_auto_lane_id
+from utils.llm.model_constants import LUNA_MODEL
+from utils.llm.vertex_pt_routing import (
+    LANE_OVERFLOW_ORIGINS as FEATURE_PT_OVERFLOW_ORIGIN,
+    OVERFLOW_ORIGIN_OPTION,
+    is_prohibited_company_paid_model,
+    lane_overflow_origin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,206 +38,186 @@ class AutoLaneRouteRef:
 
 RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 
+# Canonical Luna model id. Feature defaults, scripts, and tests import this
+# instead of embedding a versioned string. A bump changes this constant plus
+# the gateway route artifacts and the provider rate card.
 # ---------------------------------------------------------------------------
 # Model QoS Profile System
 #
-# Each profile maps every feature to a (model, provider) tuple.
+# Each company-paid profile maps every feature to a (model, provider) tuple.
 # The profile is the SINGLE SOURCE OF TRUTH for both model and provider.
 # Provider is never inferred from model name — it is declared explicitly.
 #
-# This means the same model can be hosted by different providers:
-#   feature_a: ('gemini-2.5-flash', 'gemini')      → Google direct
-#   feature_b: ('gemini-2.5-flash', 'openrouter')   → OpenRouter
+# The provider is declared explicitly because the gateway owns routing for
+# company-paid work while BYOK profiles may still select provider-specific APIs.
 #
 # Global switch:     MODEL_QOS=premium        (selects entire profile)
 #
 # Profiles:
 #   premium  — maximize cost savings while preserving 80% of max quality
 #   max      — 100% quality, best models available, no cost optimization
-#   byok     — same models as max (BYOK users pay their own API costs)
+#   byok     — same managed defaults, with legacy Gemini-specialty routes kept
+#              only for requests carrying the user's own Gemini/OpenRouter key
 # ---------------------------------------------------------------------------
 
+# All QoS profiles deliberately share this two-tier map. Keeping independent
+# copies below retains profile selection semantics while preventing a higher
+# tier or BYOK route from reintroducing a retired OpenAI text model.
+_TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
+    # OpenAI — default intelligence
+    'conv_action_items': (LUNA_MODEL, 'openai'),
+    'wake_word_adjudication': (LUNA_MODEL, 'openai'),
+    'conv_structure': (LUNA_MODEL, 'openai'),
+    'conv_app_result': (LUNA_MODEL, 'openai'),
+    'daily_summary': (LUNA_MODEL, 'openai'),
+    'external_structure': (LUNA_MODEL, 'openai'),
+    'memories': (LUNA_MODEL, 'openai'),
+    'x_memory_extraction_flex': (LUNA_MODEL, 'openai'),
+    'learnings': (LUNA_MODEL, 'openai'),
+    'knowledge_graph': (LUNA_MODEL, 'openai'),
+    'memory_l1': (LUNA_MODEL, 'openai'),
+    'memory_l2': (LUNA_MODEL, 'openai'),
+    'memory_l2_flex': (LUNA_MODEL, 'openai'),
+    'chat_responses': (LUNA_MODEL, 'openai'),
+    'file_chat_vision': (LUNA_MODEL, 'openai'),
+    'file_chat_documents': (LUNA_MODEL, 'openai'),
+    'chat_agent': (LUNA_MODEL, 'openai'),
+    'chat_extraction': (LUNA_MODEL, 'openai'),
+    'chat_graph': (LUNA_MODEL, 'openai'),
+    'goals': (LUNA_MODEL, 'openai'),
+    'goals_advice': (LUNA_MODEL, 'openai'),
+    'notifications': (LUNA_MODEL, 'openai'),
+    'proactive_notification': (LUNA_MODEL, 'openai'),
+    'what_matters_now': (LUNA_MODEL, 'openai'),
+    'openglass': (LUNA_MODEL, 'openai'),
+    'app_generator': (LUNA_MODEL, 'openai'),
+    'persona_clone': (LUNA_MODEL, 'openai'),
+    'persona_chat_premium': (LUNA_MODEL, 'openai'),
+    # OpenAI — cheapest light/binary work
+    'conv_app_select': ('gpt-5-nano', 'openai'),
+    'conv_folder': ('gpt-5-nano', 'openai'),
+    'conv_discard': ('gpt-5-nano', 'openai'),
+    'daily_summary_simple': ('gpt-5-nano', 'openai'),
+    'memory_category': ('gpt-5-nano', 'openai'),
+    'smart_glasses': ('gpt-5-nano', 'openai'),
+    'persona_chat': ('gpt-5-nano', 'openai'),
+    # Open-loop review cards: one optional template-polish call per surfaced card.
+    'open_loop_card': ('gpt-5-nano', 'openai'),
+    # Open-loop daily pass: one structured status/ranking call per user per day.
+    'open_loop_daily': (LUNA_MODEL, 'openai'),
+    # Operator minimal sync redrive: one title + short overview per new row.
+    'sync_redrive_title': ('gpt-5-nano', 'openai'),
+    # Live episodes: one small call per moment over a few-hundred-token state.
+    'episode_incremental': ('gpt-5-nano', 'openai'),
+    # Closed episodes: one whole-episode summary over member summaries plus the transcript.
+    'episode_composer': (LUNA_MODEL, 'openai'),
+    # Backend utility Gemini generation moves to Luna. Desktop reserved-capacity
+    # generation is governed separately by vertex_pt_routing.
+    # The gateway owns Luna dispatch for these features, even when its optional
+    # rollout mode is disabled. BYOK retains the previous choices below.
+    'session_titles': (LUNA_MODEL, 'openai'),
+    'followup': (LUNA_MODEL, 'openai'),
+    'onboarding': (LUNA_MODEL, 'openai'),
+    'app_integration': (LUNA_MODEL, 'openai'),
+    'trends': (LUNA_MODEL, 'openai'),
+    'translation': (LUNA_MODEL, 'openai'),
+    'screen_frame_judge': (LUNA_MODEL, 'openai'),
+    'wrapped_analysis': (LUNA_MODEL, 'openai'),
+    'web_search': ('sonar-pro', 'perplexity'),
+}
+
+# AI Studio 404s gemini-2.5-* for projects that have not used them
+# ("This model models/gemini-2.5-flash..."). Vertex reservations still serve 2.5.
+BYOK_GEMINI_MODEL = 'gemini-3.5-flash-lite'
+_BYOK_GEMINI_ROUTES: Dict[str, Tuple[str, str]] = {
+    'session_titles': (BYOK_GEMINI_MODEL, 'gemini'),
+    'followup': (BYOK_GEMINI_MODEL, 'gemini'),
+    'onboarding': (BYOK_GEMINI_MODEL, 'gemini'),
+    'app_integration': (BYOK_GEMINI_MODEL, 'gemini'),
+    'trends': (BYOK_GEMINI_MODEL, 'gemini'),
+    'translation': (BYOK_GEMINI_MODEL, 'gemini'),
+    'screen_frame_judge': (BYOK_GEMINI_MODEL, 'gemini'),
+    'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
+}
+
+# chat_agent and its sibling interactive-chat features resolve to the internal
+# Luna gateway alias, which a BYOK OpenAI key's own account cannot serve (OpenAI
+# 404s an unrecognized model id — the same failure class as BYOK_GEMINI_MODEL
+# above). Route BYOK OpenAI traffic on these features to a real public model.
+BYOK_OPENAI_MODEL = 'gpt-4o-mini'
+_BYOK_OPENAI_ROUTES: Dict[str, Tuple[str, str]] = {
+    'chat_agent': (BYOK_OPENAI_MODEL, 'openai'),
+    'chat_responses': (BYOK_OPENAI_MODEL, 'openai'),
+    'chat_extraction': (BYOK_OPENAI_MODEL, 'openai'),
+    'chat_graph': (BYOK_OPENAI_MODEL, 'openai'),
+    'file_chat_vision': (BYOK_OPENAI_MODEL, 'openai'),
+    'file_chat_documents': (BYOK_OPENAI_MODEL, 'openai'),
+}
+
+_BYOK_MODEL_PROFILE = {**_TWO_TIER_MODEL_PROFILE, **_BYOK_OPENAI_ROUTES, **_BYOK_GEMINI_ROUTES}
 MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
-    # -----------------------------------------------------------------------
-    # premium — maximize cost savings while preserving 80% of max quality.
-    # Uses gpt-5.4-mini (not gpt-5.4) for core features, gpt-4.1-mini (not gpt-4.1)
-    # for quality-sensitive tasks, gpt-4.1-nano for simple routing/classification,
-    # and Gemini flash-lite for low-complexity free-text (titles, followups, onboarding).
-    # -----------------------------------------------------------------------
-    'premium': {
-        # OpenAI — conversation processing
-        'conv_action_items': ('gpt-5.4-mini', 'openai'),
-        'conv_structure': ('gpt-5.4-mini', 'openai'),
-        'conv_app_result': ('gpt-5.4-mini', 'openai'),
-        'conv_app_select': ('gpt-4.1-nano', 'openai'),
-        'conv_folder': ('gpt-4.1-nano', 'openai'),
-        'conv_discard': ('gpt-4.1-nano', 'openai'),
-        'daily_summary': ('gpt-5.4-mini', 'openai'),
-        'daily_summary_simple': ('gpt-4.1-nano', 'openai'),
-        'external_structure': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — memories & knowledge
-        'memories': ('gpt-4.1-mini', 'openai'),
-        'learnings': ('gpt-5.4-mini', 'openai'),
-        'memory_conflict': ('gpt-4.1-mini', 'openai'),
-        'memory_category': ('gpt-4.1-nano', 'openai'),
-        'knowledge_graph': ('gpt-4.1-mini', 'openai'),
-        'memory_l1': ('gpt-4.1-mini', 'openai'),
-        'memory_l2': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — chat
-        'chat_responses': ('gpt-5.4-mini', 'openai'),
-        'chat_extraction': ('gpt-4.1-mini', 'openai'),
-        'chat_graph': ('gpt-4.1-mini', 'openai'),
-        'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
-        # Features
-        'goals': ('gpt-4.1-mini', 'openai'),
-        'goals_advice': ('gpt-5.4-mini', 'openai'),
-        'notifications': ('gpt-5.4-mini', 'openai'),
-        'proactive_notification': ('gpt-4.1-mini', 'openai'),
-        'what_matters_now': ('gpt-4.1-mini', 'openai'),
-        'followup': ('gemini-2.5-flash-lite', 'gemini'),
-        'smart_glasses': ('gpt-4.1-nano', 'openai'),
-        'openglass': ('gpt-4.1-mini', 'openai'),
-        'onboarding': ('gemini-2.5-flash-lite', 'gemini'),
-        'app_generator': ('gpt-5.4-mini', 'openai'),
-        'app_integration': ('gemini-2.5-flash-lite', 'gemini'),
-        'persona_clone': ('gpt-5.4-mini', 'openai'),
-        'trends': ('gemini-2.5-flash-lite', 'gemini'),
-        # Anthropic (used via get_model() + anthropic_client)
-        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
-        # Persona
-        'persona_chat': ('gpt-4.1-nano', 'openai'),
-        'persona_chat_premium': ('gpt-5.4-mini', 'openai'),
-        # OpenRouter
-        'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
-        # Perplexity
-        'web_search': ('sonar-pro', 'perplexity'),
-    },
-    # -----------------------------------------------------------------------
-    # max — 100% quality, best models available, no cost optimization.
-    # Uses gpt-5.4 for all core features, o4-mini for reasoning (learnings),
-    # gpt-4.1 for chat graph. Pure OpenAI for highest accuracy.
-    # -----------------------------------------------------------------------
-    'max': {
-        # OpenAI — conversation processing
-        'conv_action_items': ('gpt-5.4', 'openai'),
-        'conv_structure': ('gpt-5.4', 'openai'),
-        'conv_app_result': ('gpt-5.4', 'openai'),
-        'conv_app_select': ('gpt-4.1-mini', 'openai'),
-        'conv_folder': ('gpt-4.1-mini', 'openai'),
-        'conv_discard': ('gpt-4.1-mini', 'openai'),
-        'daily_summary': ('gpt-5.4', 'openai'),
-        'daily_summary_simple': ('gpt-4.1-mini', 'openai'),
-        'external_structure': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — memories & knowledge
-        'memories': ('gpt-4.1-mini', 'openai'),
-        'learnings': ('o4-mini', 'openai'),
-        'memory_conflict': ('gpt-4.1-mini', 'openai'),
-        'memory_category': ('gpt-4.1-mini', 'openai'),
-        'knowledge_graph': ('gpt-4.1-mini', 'openai'),
-        'memory_l1': ('gpt-4.1-mini', 'openai'),
-        'memory_l2': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — chat
-        'chat_responses': ('gpt-5.4', 'openai'),
-        'chat_extraction': ('gpt-4.1-mini', 'openai'),
-        'chat_graph': ('gpt-4.1', 'openai'),
-        'session_titles': ('gpt-4.1-mini', 'openai'),
-        # Features
-        'goals': ('gpt-4.1-mini', 'openai'),
-        'goals_advice': ('gpt-5.4', 'openai'),
-        'notifications': ('gpt-5.4', 'openai'),
-        'proactive_notification': ('gpt-4.1-mini', 'openai'),
-        'what_matters_now': ('gpt-4.1-mini', 'openai'),
-        'followup': ('gpt-4.1-mini', 'openai'),
-        'smart_glasses': ('gpt-4.1-mini', 'openai'),
-        'openglass': ('gpt-4.1-mini', 'openai'),
-        'onboarding': ('gpt-4.1-mini', 'openai'),
-        'app_generator': ('gpt-5.4', 'openai'),
-        'app_integration': ('gpt-4.1-mini', 'openai'),
-        'persona_clone': ('gpt-5.4', 'openai'),
-        'trends': ('gpt-4.1-mini', 'openai'),
-        # Anthropic
-        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
-        # Persona
-        'persona_chat': ('gpt-4.1-nano', 'openai'),
-        'persona_chat_premium': ('gpt-5.4-mini', 'openai'),
-        # OpenRouter
-        'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
-        # Perplexity
-        'web_search': ('sonar-pro', 'perplexity'),
-    },
-    # -----------------------------------------------------------------------
-    # byok — same models as max. BYOK users pay their own API costs so they
-    # get the same best-quality routing as max subscribers.
-    # -----------------------------------------------------------------------
-    'byok': {
-        # OpenAI — conversation processing
-        'conv_action_items': ('gpt-5.4', 'openai'),
-        'conv_structure': ('gpt-5.4', 'openai'),
-        'conv_app_result': ('gpt-5.4', 'openai'),
-        'conv_app_select': ('gpt-4.1-mini', 'openai'),
-        'conv_folder': ('gpt-4.1-mini', 'openai'),
-        'conv_discard': ('gpt-4.1-mini', 'openai'),
-        'daily_summary': ('gpt-5.4', 'openai'),
-        'daily_summary_simple': ('gpt-4.1-mini', 'openai'),
-        'external_structure': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — memories & knowledge
-        'memories': ('gpt-4.1-mini', 'openai'),
-        'learnings': ('o4-mini', 'openai'),
-        'memory_conflict': ('gpt-4.1-mini', 'openai'),
-        'memory_category': ('gpt-4.1-mini', 'openai'),
-        'knowledge_graph': ('gpt-4.1-mini', 'openai'),
-        'memory_l1': ('gpt-4.1-mini', 'openai'),
-        'memory_l2': ('gpt-4.1-mini', 'openai'),
-        # OpenAI — chat
-        'chat_responses': ('gpt-5.4', 'openai'),
-        'chat_extraction': ('gpt-4.1-mini', 'openai'),
-        'chat_graph': ('gpt-4.1', 'openai'),
-        'session_titles': ('gpt-4.1-mini', 'openai'),
-        # Features
-        'goals': ('gpt-4.1-mini', 'openai'),
-        'goals_advice': ('gpt-5.4', 'openai'),
-        'notifications': ('gpt-5.4', 'openai'),
-        'proactive_notification': ('gpt-4.1-mini', 'openai'),
-        'what_matters_now': ('gpt-4.1-mini', 'openai'),
-        'followup': ('gpt-4.1-mini', 'openai'),
-        'smart_glasses': ('gpt-4.1-mini', 'openai'),
-        'openglass': ('gpt-4.1-mini', 'openai'),
-        'onboarding': ('gpt-4.1-mini', 'openai'),
-        'app_generator': ('gpt-5.4', 'openai'),
-        'app_integration': ('gpt-4.1-mini', 'openai'),
-        'persona_clone': ('gpt-5.4', 'openai'),
-        'trends': ('gpt-4.1-mini', 'openai'),
-        # Anthropic
-        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
-        # Persona
-        'persona_chat': ('gpt-4.1-nano', 'openai'),
-        'persona_chat_premium': ('gpt-5.4-mini', 'openai'),
-        # OpenRouter
-        'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
-        # Perplexity
-        'web_search': ('sonar-pro', 'perplexity'),
-    },
+    'premium': dict(_TWO_TIER_MODEL_PROFILE),
+    'max': dict(_TWO_TIER_MODEL_PROFILE),
+    'byok': dict(_BYOK_MODEL_PROFILE),
 }
 
 # Pinned features — (model, provider) fixed regardless of profile or env override.
 _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
-    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.1').strip() or 'gpt-5.1', 'openai'),
+    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', LUNA_MODEL).strip() or LUNA_MODEL, 'openai'),
 }
 
-# Resolve active profile once at startup.
+# BYOK QoS is request-scoped. It is selected only after a provider-scoped user
+# key is found and is never a valid managed profile.
+_byok_profile_name = 'byok'
+_byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
+
+# Resolve active managed profile once at startup. Older deploys could set
+# MODEL_QOS=byok and thereby make a keyless paid request resolve to a direct
+# Gemini route. BYOK routing is request-scoped, so normalize that value to the
+# safe managed default while retaining the separate BYOK profile above.
 _active_profile_name = os.environ.get('MODEL_QOS', 'premium').strip().lower()
-if _active_profile_name not in MODEL_QOS_PROFILES:
+if _active_profile_name == _byok_profile_name:
+    logger.warning('MODEL_QOS=byok is request-scoped; using premium for managed requests')
+    _active_profile_name = 'premium'
+elif _active_profile_name not in MODEL_QOS_PROFILES:
     logger.warning('MODEL_QOS=%s is not a valid profile, falling back to premium', _active_profile_name)
     _active_profile_name = 'premium'
 _active_profile = MODEL_QOS_PROFILES[_active_profile_name]
 
-# BYOK QoS — all BYOK users get routed to 'byok' profile (top-tier all-OpenAI).
-# BYOK users pay their own API costs, so we give them maximum quality models.
-_byok_profile_name = 'byok'
-_byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
 
+def validate_no_prohibited_company_paid_models(
+    profiles: Dict[str, Dict[str, Tuple[str, str]]], pinned: Dict[str, Tuple[str, str]]
+) -> None:
+    """Fail closed when a company-paid profile or pin resolves a Pro/image model (SCA-481).
+
+    Pro-text and image-output Gemini shapes are PayGo-only SKUs with no
+    reservation behind them; managed (company-paid) profiles and pinned
+    features — extraction, proactivity, summarization, every managed feature —
+    must never resolve one. BYOK pays for what it asks, so the byok profile is
+    exempt.
+    """
+    for profile_name, profile in profiles.items():
+        if profile_name == _byok_profile_name:
+            continue
+        for feature, (model, _provider) in profile.items():
+            if is_prohibited_company_paid_model(model):
+                raise RuntimeError(
+                    f'Model QoS profile {profile_name!r} feature {feature!r} resolves prohibited '
+                    f'company-paid model {model!r}; Pro/image-output SKUs cannot serve managed '
+                    'traffic (SCA-481)'
+                )
+    for feature, (model, _provider) in pinned.items():
+        if is_prohibited_company_paid_model(model):
+            raise RuntimeError(
+                f'Pinned feature {feature!r} resolves prohibited company-paid model {model!r}; '
+                'Pro/image-output SKUs cannot serve managed traffic (SCA-481)'
+            )
+
+
+validate_no_prohibited_company_paid_models(MODEL_QOS_PROFILES, _PINNED_FEATURES)
 # Features that can't go through get_llm() (non-ChatOpenAI providers).
-_ANTHROPIC_ONLY_FEATURES = {'chat_agent'}
+# chat_agent is OpenAI/Luna via get_llm(); the Anthropic Messages path is not a chat lane.
+_ANTHROPIC_ONLY_FEATURES: set[str] = set()
 _PERPLEXITY_ONLY_FEATURES = {'web_search'}
 
 
@@ -243,17 +230,19 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 # Prompt-cache capability detection.
 #
 # OpenAI prompt caching is a capability of whole model families, not of specific point
-# releases. Gating on exact names (e.g. {'gpt-5.4', 'gpt-5.4-mini'}) silently breaks the
-# moment a model is renamed or a new family member ships, so we detect by family prefix.
+# releases. Gating on exact model names silently breaks when a family member changes,
+# so we detect by family prefix.
 #
 #   prompt_cache_key             — prefix-cache request routing. Supported by the gpt-4o,
-#                                  gpt-4.1, gpt-5.x and o-series families.
+#                                  gpt-4o, gpt-5.x and o-series families, and by gpt-x-luna.
 #   prompt_cache_retention='24h' — extended (24h) cache retention. Supported by the
-#                                  gpt-5.x and o-series families.
-_CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4.1', 'gpt-4o', 'o1', 'o3', 'o4')
+#                                  gpt-5.x and o-series families, except gpt-5.6 and
+#                                  gpt-x-luna, which use the explicit prompt_cache_options
+#                                  contract instead (see supports_cache_retention).
+_CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4o', 'o1', 'o3', 'o4')
 _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 
-# Features that call .with_structured_output() — logged when resolving to Gemini for compat monitoring.
+# Features that call .with_structured_output().
 _STRUCTURED_OUTPUT_FEATURES = {
     'chat_extraction',
     'proactive_notification',
@@ -261,32 +250,73 @@ _STRUCTURED_OUTPUT_FEATURES = {
     'external_structure',
     'trends',
     'what_matters_now',
+    'translation',
+    'screen_frame_judge',
 }
 STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 
-_DEFAULT_CONFIG: Tuple[str, str] = ('gpt-4.1-mini', 'openai')
-DEFAULT_CONFIG = _DEFAULT_CONFIG
+# Features whose prompt summarizes a whole conversation (or a whole day) inside a request a
+# user is waiting on. They cannot answer inside the shared gateway transport deadline (15s to
+# first response byte, DEFAULT_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS), which is sized for
+# background feature calls, and a first-byte timeout there loses the user's summary outright.
+#
+# The deadline is declared per feature rather than per call site because the call-site version
+# of this rule failed three times: `daily_summary` on POST /test-prompt and `conv_structure` on
+# conversation finalization both died at ~15.2-15.8s in prod on 2026-08-19, and `conv_app_result`
+# — the app/template summary — was still on the background deadline on 2026-09-04, failing 128 of
+# 412 app-selected POST /v1/conversations/{id}/reprocess calls (31%) with
+# `httpcore.ReadTimeout` -> `Error executing app: Request timed out.` A new call site for one of
+# these features now inherits the deadline instead of having to remember it.
+FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
+_FOREGROUND_TIMEOUT_FEATURES = frozenset(
+    {
+        'conv_structure',
+        'conv_app_result',
+        'daily_summary',
+        # Fifth instance of the class, 2026-09-05: the L1 memory extractor
+        # (`get_llm('memory_l1')` behind extract_l1_memory_archive_items_from_text)
+        # runs in conversation finalization with strict=True, so every extraction
+        # that outlived the 15s background gateway deadline raised
+        # APITimeoutError and dropped that conversation's whole memory batch —
+        # prod pusher 2026-09-01..05: "Error extracting memory L1 archive items:
+        # invoke_failed:APITimeoutError" 9-21×/day, no retry. The extractor reads
+        # the whole transcript in one structured call, like its siblings above.
+        'memory_l1',
+    }
+)
 
-# Future migration point for features that should call the gateway via an auto
-# lane. Keep empty until a ticket explicitly wires and verifies shadow/live
-# traffic; existing direct LLM routing never consults this map.
+
+# Explicit ``get_route_ref`` overrides for callers that need a route reference
+# rather than constructing through ``get_llm``. Managed ``get_llm`` generation
+# already uses feature auto lanes and deliberately does not depend on this map.
 _AUTO_LANE_FEATURES: Dict[str, str] = {}
+
+
+class UnknownLLMFeature(KeyError):
+    """A feature has no explicit map entry. Fail closed; never fall through to luna."""
+
+    def __init__(self, feature: str) -> None:
+        self.feature = feature
+        super().__init__(f"Unknown LLM feature {feature!r}; explicit entries are required")
 
 
 def _get_model_config(feature: str) -> Tuple[str, str]:
     """Get the (model, provider) tuple for a feature. Internal — used by get_llm/get_model/get_provider.
 
-    Resolution order: pinned > active profile > fallback.
+    Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
     """
     if feature in _PINNED_FEATURES:
         return _PINNED_FEATURES[feature]
-    return _active_profile.get(feature, _DEFAULT_CONFIG)
+    try:
+        return _active_profile[feature]
+    except KeyError as exc:
+        raise UnknownLLMFeature(feature) from exc
 
 
 def get_model_config(feature: str) -> Tuple[str, str]:
     """Get the (model, provider) tuple for a feature.
 
-    Resolution order: pinned > active profile > fallback.
+    Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
     """
     return _get_model_config(feature)
 
@@ -294,13 +324,13 @@ def get_model_config(feature: str) -> Tuple[str, str]:
 def get_model(feature: str) -> str:
     """Get the model name for a feature from the active Model QoS profile.
 
-    Resolution order: pinned > active profile > fallback.
+    Resolution order: pinned > active profile. Unknown features raise UnknownLLMFeature.
 
     Args:
         feature: Feature name (e.g. 'conv_action_items', 'chat_agent').
 
     Returns:
-        Model name string (e.g. 'gpt-4.1-mini', 'claude-sonnet-4-6').
+        Model name string (e.g. 'gpt-x-luna', 'claude-sonnet-4-6').
     """
     return _get_model_config(feature)[0]
 
@@ -328,7 +358,26 @@ def get_route_options(feature: str, model: str, provider: str) -> Dict[str, obje
         # Structured-output features use .with_structured_output(), which routes through
         # Completions.parse() and rejects thinking_budget (issue #7898).
         options['thinking_budget'] = 0
+    # Price ceiling for a feature later admitted to PT. The map is data
+    # (FEATURE_PT_OVERFLOW_ORIGIN); an absent feature adds nothing, so every
+    # current route's options stay unchanged.
+    if feature in FEATURE_PT_OVERFLOW_ORIGIN:
+        origin = lane_overflow_origin(feature)
+        if origin:
+            options[OVERFLOW_ORIGIN_OPTION] = origin
     return options
+
+
+def feature_request_timeout(feature: str) -> float | None:
+    """Return the request deadline a feature needs, or None to use the client default.
+
+    Only features whose generation cannot finish inside the background gateway transport
+    deadline declare one (see _FOREGROUND_TIMEOUT_FEATURES). Callers may still pass an
+    explicit request_timeout to get_llm; this is the default when they do not.
+    """
+    if feature in _FOREGROUND_TIMEOUT_FEATURES:
+        return FOREGROUND_REQUEST_TIMEOUT_SECONDS
+    return None
 
 
 def get_route_ref(feature: str) -> RouteRef:
@@ -336,8 +385,12 @@ def get_route_ref(feature: str) -> RouteRef:
 
     Existing features resolve to explicit provider/model refs by default. Auto-lane
     refs are opt-in through _AUTO_LANE_FEATURES and are not used by get_model(),
-    get_provider(), or get_llm().
+    get_provider(), or get_llm(). Unknown features raise before the auto-lane map
+    is consulted, so an unmapped name cannot fail open onto a lane.
     """
+
+    if feature not in get_all_configured_features():
+        raise UnknownLLMFeature(feature)
 
     lane_id = _AUTO_LANE_FEATURES.get(feature)
     if lane_id is not None:
@@ -354,14 +407,32 @@ def get_route_ref(feature: str) -> RouteRef:
     )
 
 
+def uses_explicit_cache_and_chat_sanitizer(model: str) -> bool:
+    """True when a model keeps the explicit-cache fields and the chat-completions sanitizer.
+
+    gpt-5.6-sol and gpt-5.6-terra match the family prefix. The canonical Luna
+    id does not, so it is compared exactly. Callers attach prompt_cache_options,
+    keep cache breakpoints, skip legacy prompt_cache_retention, and sanitize
+    chat-completions tool effort and temperature.
+    """
+    return bool(model) and (model.startswith('gpt-5.6') or model == LUNA_MODEL)
+
+
 def supports_prompt_cache(model: str) -> bool:
     """Whether a model supports OpenAI prompt-cache routing (prompt_cache_key)."""
-    return bool(model) and model.startswith(_CACHE_KEY_MODEL_PREFIXES)
+    return bool(model) and (model.startswith(_CACHE_KEY_MODEL_PREFIXES) or model == LUNA_MODEL)
 
 
 def supports_cache_retention(model: str) -> bool:
     """Whether a model supports 24h OpenAI prompt-cache retention (prompt_cache_retention='24h')."""
-    return bool(model) and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
+    # GPT-5.6 and gpt-x-luna use the explicit cache contract (prompt_cache_options
+    # + a breakpoint) rather than the legacy prompt_cache_retention field. Sending
+    # both contracts in the same request is rejected by the provider.
+    return (
+        bool(model)
+        and not uses_explicit_cache_and_chat_sanitizer(model)
+        and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
+    )
 
 
 def is_structured_output_feature(feature: str) -> bool:
@@ -388,12 +459,16 @@ def get_all_configured_features() -> set[str]:
     return set(_active_profile.keys()) | set(_PINNED_FEATURES.keys())
 
 
-def get_default_config() -> Tuple[str, str]:
-    return _DEFAULT_CONFIG
-
-
 def get_byok_profile() -> Dict[str, Tuple[str, str]]:
     return _byok_profile
+
+
+def get_byok_provider(feature: str) -> str:
+    """Return the provider selected for this feature when an enrolled BYOK key is present."""
+    try:
+        return _byok_profile[feature][1]
+    except KeyError as exc:
+        raise UnknownLLMFeature(feature) from exc
 
 
 def get_byok_profile_name() -> str:

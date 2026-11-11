@@ -267,8 +267,15 @@ final class StorageSyncService: ObservableObject {
     } else if data.count == Self.packedPacketSize {
       processPackedPacket(data)
     } else {
-      // Variable size packet - try to parse as frames
+      // Variable size packet - try to parse as frames. Count its bytes too
+      // (mirroring processPackedPacket): without this, a packet whose length is
+      // neither the standard nor packed size contributes decoded frames but zero
+      // counted bytes, so totalBytesDownloaded (and the WAL storageOffset it
+      // advances) stays ~0 — progress reports ~0%/bogus B-s and the
+      // `storageOffset >= storageTotalBytes` completion check never fires even
+      // though the audio was actually downloaded.
       parseFramesFromData(data)
+      totalBytesDownloaded += data.count
     }
 
     // Update progress periodically

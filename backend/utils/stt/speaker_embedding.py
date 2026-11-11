@@ -3,20 +3,37 @@ import logging
 import os
 import struct
 import wave
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import httpx
 from scipy.spatial.distance import cdist
 
+from config.refactor_modes import shadow_or_serve
+from utils.speakers import embedding_cache
+
 from utils.executors import storage_executor, run_blocking
 from utils.http_client import get_stt_client
+from utils.log_sanitizer import sanitize_provider_error
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
-# Cosine distance threshold for speaker matching
-# Based on VoxCeleb 1 test set EER of 2.8%
-SPEAKER_MATCH_THRESHOLD = 0.45
+# The verification operating point lives in speaker_match.py (numpy-only) so the
+# decision policy can be shared and unit-tested without this module's HTTP client.
+# Re-exported here because callers and tests historically import it from this module.
+from utils.stt.speaker_match import SPEAKER_MATCH_THRESHOLD  # noqa: E402
+
+__all__ = [
+    'SPEAKER_MATCH_THRESHOLD',
+    'MIN_EMBEDDING_AUDIO_DURATION',
+    'speaker_embedding_configured',
+    'extract_embedding',
+    'extract_embedding_from_bytes',
+    'async_extract_embedding',
+    'async_extract_embedding_from_bytes',
+    'compare_embeddings',
+]
 
 # Minimum audio duration (seconds) for speaker embedding extraction.
 # Audio shorter than this crashes pyannote wespeaker fbank (see issue #4572).
@@ -35,10 +52,44 @@ def _get_wav_duration(audio_data: bytes) -> float:
         return 0.0
 
 
+_unconfigured_warned = False
+
+
+def _speaker_embedding_url() -> str:
+    url = os.getenv('HOSTED_SPEAKER_EMBEDDING_API_URL')
+    return url.strip() if url else ''
+
+
+def _warn_unconfigured() -> None:
+    """Emit one process-wide warning when speaker embedding is off due to config."""
+    global _unconfigured_warned
+    if _unconfigured_warned:
+        return
+    _unconfigured_warned = True
+    logger.warning('HOSTED_SPEAKER_EMBEDDING_API_URL is unset; speaker embedding is disabled on this process')
+    record_fallback(
+        component='other',
+        from_mode='speaker_embedding',
+        to_mode='unlabeled',
+        reason='config_incomplete',
+        outcome='degraded',
+        log=logger,
+    )
+
+
+def speaker_embedding_configured() -> bool:
+    """Return whether this process can call the hosted speaker-embedding API."""
+    if _speaker_embedding_url():
+        return True
+    _warn_unconfigured()
+    return False
+
+
 def _get_api_url() -> str:
     """Get the speaker embedding API URL from environment."""
-    url = os.getenv('HOSTED_SPEAKER_EMBEDDING_API_URL')
+    url = _speaker_embedding_url()
     if not url:
+        _warn_unconfigured()
         raise ValueError("HOSTED_SPEAKER_EMBEDDING_API_URL environment variable not set")
     return url
 
@@ -55,7 +106,11 @@ def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     """
     api_url = _get_api_url()
 
-    with open(audio_path, 'rb') as f:
+    audio_data = _read_file(audio_path)
+    cache_key, cached = _cached(audio_data, api_url)
+    if cached is not None:
+        return cached
+    with io.BytesIO(audio_data) as f:
         files = {'file': (os.path.basename(audio_path), f, 'audio/wav')}
         response = httpx.post(f"{api_url}/v2/embedding", files=files, timeout=300.0)
         response.raise_for_status()
@@ -72,16 +127,27 @@ def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     if embedding.ndim == 1:
         embedding = embedding.reshape(1, -1)
 
+    if cache_key is not None:
+        embedding_cache.put(cache_key, embedding)
     return embedding
 
 
-def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray[Any, Any]:
+def extract_embedding_from_bytes(
+    audio_data: bytes,
+    filename: str = "audio.wav",
+    *,
+    client: httpx.Client | None = None,
+    timeout: float = 300.0,
+    use_cache: bool = True,
+) -> np.ndarray[Any, Any]:
     """
     Extract speaker embedding from audio bytes using hosted API.
 
     Args:
         audio_data: Raw audio bytes (wav format)
         filename: Filename to use in the request
+        client: Reused connection pool for callers embedding many clips in a row
+        timeout: Per-request timeout in seconds
 
     Returns:
         numpy array of shape (1, D) where D is embedding dimension
@@ -95,8 +161,12 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
 
     api_url = _get_api_url()
 
+    cache_key, cached = _cached(audio_data, api_url) if use_cache else (None, None)
+    if cached is not None:
+        return cached
     files = {'file': (filename, audio_data, 'audio/wav')}
-    response = httpx.post(f"{api_url}/v2/embedding", files=files, timeout=300.0)
+    post = client.post if client is not None else httpx.post
+    response = post(f"{api_url}/v2/embedding", files=files, timeout=timeout)
     response.raise_for_status()
 
     result = response.json()
@@ -111,7 +181,16 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
     if embedding.ndim == 1:
         embedding = embedding.reshape(1, -1)
 
+    if cache_key is not None:
+        embedding_cache.put(cache_key, embedding)
     return embedding
+
+
+def _cached(audio_data: bytes, api_url: str):
+    if not shadow_or_serve('SPEAKER_EVIDENCE_MODE'):
+        return None, None
+    cache_key = embedding_cache.key(audio_data, f'{api_url}:{embedding_cache.MODEL_ID}')
+    return cache_key, embedding_cache.get(cache_key)
 
 
 def _read_file(path: str) -> bytes:
@@ -126,12 +205,15 @@ async def async_extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
 
     file_data = await run_blocking(storage_executor, _read_file, audio_path)
 
+    cache_key, cached = _cached(file_data, api_url)
+    if cached is not None:
+        return cached
     files = {'file': (os.path.basename(audio_path), file_data, 'audio/wav')}
     try:
         response = await client.post(f"{api_url}/v2/embedding", files=files)
         response.raise_for_status()
     except Exception as e:
-        logger.error(f"async_extract_embedding failed for {audio_path}: {e}")
+        logger.error('async_extract_embedding failed: %s', sanitize_provider_error(e))
         raise
 
     result = response.json()
@@ -142,6 +224,8 @@ async def async_extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
 
     if embedding.ndim == 1:
         embedding = embedding.reshape(1, -1)
+    if cache_key is not None:
+        embedding_cache.put(cache_key, embedding)
     return embedding
 
 
@@ -154,12 +238,15 @@ async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = 
     api_url = _get_api_url()
     client = get_stt_client()
 
+    cache_key, cached = _cached(audio_data, api_url)
+    if cached is not None:
+        return cached
     files = {'file': (filename, audio_data, 'audio/wav')}
     try:
         response = await client.post(f"{api_url}/v2/embedding", files=files)
         response.raise_for_status()
     except Exception as e:
-        logger.error(f"async_extract_embedding_from_bytes failed: {e}")
+        logger.error('async_extract_embedding_from_bytes failed: %s', sanitize_provider_error(e))
         raise
 
     result = response.json()
@@ -170,6 +257,8 @@ async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = 
 
     if embedding.ndim == 1:
         embedding = embedding.reshape(1, -1)
+    if cache_key is not None:
+        embedding_cache.put(cache_key, embedding)
     return embedding
 
 
@@ -190,83 +279,3 @@ def compare_embeddings(embedding1: np.ndarray[Any, Any], embedding2: np.ndarray[
         return 2.0
     distance = cdist(embedding1, embedding2, metric="cosine")[0, 0]
     return float(distance)
-
-
-def is_same_speaker(
-    embedding1: np.ndarray[Any, Any], embedding2: np.ndarray[Any, Any], threshold: float = SPEAKER_MATCH_THRESHOLD
-) -> Tuple[bool, float]:
-    """
-    Determine if two embeddings belong to the same speaker.
-
-    Args:
-        embedding1: First embedding array
-        embedding2: Second embedding array
-        threshold: Cosine distance threshold for matching
-
-    Returns:
-        Tuple of (is_match, distance)
-    """
-    distance = compare_embeddings(embedding1, embedding2)
-    return distance < threshold, distance
-
-
-def embedding_to_bytes(embedding: np.ndarray[Any, Any]) -> bytes:
-    """
-    Serialize embedding to bytes for storage.
-
-    Args:
-        embedding: numpy array embedding
-
-    Returns:
-        Bytes representation of the embedding
-    """
-    return embedding.astype(np.float32).tobytes()
-
-
-def bytes_to_embedding(data: bytes, dim: int = 512) -> np.ndarray[Any, Any]:
-    """
-    Deserialize embedding from bytes.
-
-    Args:
-        data: Bytes representation of embedding
-        dim: Embedding dimension (default 512 for pyannote/embedding)
-
-    Returns:
-        numpy array of shape (1, D)
-    """
-    embedding = np.frombuffer(data, dtype=np.float32)
-    return embedding.reshape(1, -1)
-
-
-def find_best_match(
-    query_embedding: np.ndarray[Any, Any],
-    candidate_embeddings: List[np.ndarray[Any, Any]],
-    threshold: float = SPEAKER_MATCH_THRESHOLD,
-) -> Optional[Tuple[int, float]]:
-    """
-    Find the best matching speaker from a list of candidates.
-
-    Args:
-        query_embedding: Embedding to match
-        candidate_embeddings: List of candidate embeddings
-        threshold: Maximum distance for a valid match
-
-    Returns:
-        Tuple of (best_index, distance) or None if no match found
-    """
-    if not candidate_embeddings:
-        return None
-
-    best_idx = -1
-    best_distance = float('inf')
-
-    for idx, candidate in enumerate(candidate_embeddings):
-        distance = compare_embeddings(query_embedding, candidate)
-        if distance < best_distance:
-            best_distance = distance
-            best_idx = idx
-
-    if best_distance < threshold:
-        return best_idx, best_distance
-
-    return None

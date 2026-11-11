@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: "standalone",
   // Pin the file-tracing root to this app dir. Next 15+ otherwise infers the
   // workspace root from sibling lockfiles (monorepo) and nests the standalone
   // output under that path, which breaks the Dockerfile's
@@ -10,17 +10,22 @@ const nextConfig = {
   async redirects() {
     return [
       // Analytics moved to be the default Dashboard. Keep old bookmarks alive.
-      { source: '/dashboard/analytics', destination: '/dashboard', permanent: false },
+      {
+        source: "/dashboard/analytics",
+        destination: "/dashboard",
+        permanent: false,
+      },
     ];
   },
   async headers() {
     // Prevent clickjacking: disallow embedding any page (incl. /login) in a frame.
+    // Exception: the proxied Grafana may be framed by the dashboard page itself.
     return [
       {
-        source: '/(.*)?',
+        source: "/(.*)?",
         headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
         ],
       },
     ];

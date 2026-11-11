@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from typing import Protocol
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
-from llm_gateway.gateway.accounting import AccountingEvent
-from llm_gateway.gateway.errors import GatewayError
+from llm_gateway.gateway.accounting import AccountingEvent, rate_card_for
+from llm_gateway.gateway.config_loader import GatewayConfig
+from llm_gateway.gateway.errors import GatewayError, GatewayErrorCode, INVALID_REQUEST_REJECTION_CODES
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, output_budget_bucket
-from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.schemas import FailureClass, ProviderRejection, RouteServingClass
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +29,15 @@ _REQUEST_LABELS = [
     'api_surface',
     'streaming',
     'phase',
+    'route_serving_class',
     'used_lkg',
     'fallback_used',
     'fallback_reason',
+    'fallback_from_route_artifact_id',
+    'fallback_to_route_artifact_id',
     'outcome',
     'error_class',
+    'provider_rejection',
     'budget_source',
     'output_budget',
     'completion_size',
@@ -48,7 +54,7 @@ REQUEST_LATENCY_SECONDS = Histogram(
 REQUESTS_TOTAL = Counter(
     'llm_gateway_requests_total',
     'LLM gateway requests by route selection and terminal outcome',
-    _REQUEST_LABELS,
+    [*_REQUEST_LABELS, 'upstream_http_status'],
 )
 
 AUTH_REJECTIONS_TOTAL = Counter(
@@ -63,6 +69,22 @@ REQUEST_REJECTIONS_TOTAL = Counter(
     ['api_surface', 'error_class'],
 )
 
+# A zero must be scraped before the first rejection for increase() to see it.
+for _surface in ('openai_chat_completions', 'openai_embeddings', 'openrouter_systemone', 'anthropic_messages'):
+    REQUEST_REJECTIONS_TOTAL.labels(api_surface=_surface, error_class='invalid_request')
+
+LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL = Counter(
+    'llm_gateway_luna_unsupported_params_dropped_total',
+    'OpenAI request parameters omitted because gpt-6-luna does not accept them',
+    ['param'],
+)
+
+FLEX_FIRST_TOTAL = Counter(
+    'llm_gateway_flex_first_total',
+    'Flex-first attempts on background lanes by outcome (flex served, or fell back to standard)',
+    ['lane_id', 'outcome'],
+)
+
 STREAM_TTFB_SECONDS = Histogram(
     'llm_gateway_stream_ttfb_seconds',
     'Time to first non-empty stream chunk by bounded API surface, provider, and credential source',
@@ -74,6 +96,33 @@ ACCOUNTING_EVENTS_TOTAL = Counter(
     'llm_gateway_accounting_events_total',
     'LLM gateway accounting-event delivery by bounded provider and accounting state',
     ['api_surface', 'provider', 'payer', 'usage_status', 'cost_status', 'delivery'],
+)
+
+# Only newly persisted events contribute. Delivery failures/drops remain visible
+# in ACCOUNTING_EVENTS_TOTAL; duplicate persistence never bills a second time.
+_SPEND_LABELS = ['lane_id', 'api_surface', 'provider', 'model', 'payer', 'traffic_type']
+_spend_lane_ids: frozenset[str] = frozenset()
+_spend_model_ids: frozenset[tuple[str, str]] = frozenset()
+ACCOUNTED_ATTEMPTS_TOTAL = Counter(
+    'llm_gateway_accounted_attempts_total',
+    'Newly persisted provider attempts by usage and cost coverage (not vendor invoices)',
+    [*_SPEND_LABELS, 'usage_status', 'cost_status'],
+)
+ACCOUNTED_TOKENS_TOTAL = Counter(
+    'llm_gateway_accounted_tokens_total',
+    'Reported token classes on newly persisted attempts; reasoning overlaps billable output',
+    [*_SPEND_LABELS, 'token_type'],
+)
+ESTIMATED_COST_MICRO_USD_TOTAL = Counter(
+    'llm_gateway_estimated_cost_micro_usd_total',
+    'Rate-card estimated Omi cost on newly persisted attempts, never invoice-backed savings',
+    [*_SPEND_LABELS, 'rate_card_id'],
+)
+
+GATEWAY_CONFIG_INFO = Gauge(
+    'llm_gateway_config_info',
+    'Immutable gateway build and route/config artifact identity',
+    ['build_identity', 'lane_id', 'route_role', 'route_artifact_id', 'artifact_digest'],
 )
 
 
@@ -97,7 +146,16 @@ class ExecutorResultLike(Protocol):
     def fallback_reason(self) -> FailureClass | None: ...
 
     @property
+    def fallback_from_route_artifact_id(self) -> str | None: ...
+
+    @property
+    def fallback_to_route_artifact_id(self) -> str | None: ...
+
+    @property
     def used_lkg(self) -> bool: ...
+
+    @property
+    def route_serving_class(self) -> RouteServingClass: ...
 
     @property
     def output_budget(self) -> OutputBudgetDecision: ...
@@ -120,9 +178,12 @@ def observe_success(
         provider=result.selected_provider,
         model=result.selected_model,
         credential_source=credential_source,
+        route_serving_class=result.route_serving_class,
         used_lkg=result.used_lkg,
         fallback_used=result.fallback_used,
         fallback_reason=result.fallback_reason,
+        fallback_from_route_artifact_id=result.fallback_from_route_artifact_id,
+        fallback_to_route_artifact_id=result.fallback_to_route_artifact_id,
         outcome='success',
         error_class='none',
         request_id=request_id,
@@ -146,23 +207,31 @@ def observe_error(
     request_id: str,
     api_surface: str = 'openai_chat_completions',
     streaming: bool = False,
+    used_lkg: bool = False,
+    route_serving_class: RouteServingClass | str = RouteServingClass.ACTIVE,
 ) -> None:
     observe_route_result(
         started_at,
         lane_id=lane_id,
         route_artifact_id=route_artifact_id,
-        provider='none',
-        model='none',
+        provider=error.provider,
+        model=error.model,
         credential_source=credential_source,
-        used_lkg=False,
+        route_serving_class=route_serving_class,
+        used_lkg=used_lkg,
         fallback_used=False,
         fallback_reason=error.failure_class,
+        fallback_from_route_artifact_id=None,
+        fallback_to_route_artifact_id=None,
         outcome='error',
         error_class=error.code.value,
+        provider_rejection=error.provider_rejection,
         request_id=request_id,
         api_surface=api_surface,
         streaming=streaming,
         phase='before_output',
+        rejection_reason=invalid_request_reason(error),
+        upstream_http_status=error.upstream_http_status,
     )
 
 
@@ -174,20 +243,26 @@ def observe_route_result(
     provider: str,
     model: str,
     credential_source: str,
+    route_serving_class: RouteServingClass | str = RouteServingClass.ACTIVE,
     used_lkg: bool,
     fallback_used: bool,
     fallback_reason: FailureClass | str | None,
+    fallback_from_route_artifact_id: str | None = None,
+    fallback_to_route_artifact_id: str | None = None,
     outcome: str,
     error_class: str,
     request_id: str,
     api_surface: str,
     streaming: bool,
     phase: str,
+    provider_rejection: ProviderRejection | str = ProviderRejection.NONE,
     ttfb_seconds: float | None = None,
     budget_source: str = 'none',
     output_budget: str = 'none',
     completion_size: str = 'unknown',
     finish_reason: str = 'unknown',
+    rejection_reason: str = 'none',
+    upstream_http_status: int | None = None,
 ) -> None:
     labels = {
         'lane_id': _bounded(lane_id),
@@ -198,17 +273,21 @@ def observe_route_result(
         'api_surface': _bounded(api_surface),
         'streaming': _bool_label(streaming),
         'phase': _bounded(phase),
+        'route_serving_class': _route_serving_class_label(route_serving_class),
         'used_lkg': _bool_label(used_lkg),
         'fallback_used': _bool_label(fallback_used),
         'fallback_reason': _enum_label(fallback_reason, default='none'),
+        'fallback_from_route_artifact_id': _optional_identity_label(fallback_from_route_artifact_id),
+        'fallback_to_route_artifact_id': _optional_identity_label(fallback_to_route_artifact_id),
         'outcome': _bounded(outcome),
         'error_class': _bounded(error_class),
+        'provider_rejection': _provider_rejection_label(provider_rejection),
         'budget_source': _budget_source_label(budget_source),
         'output_budget': _output_budget_label(output_budget),
         'completion_size': _completion_size_label(completion_size),
         'finish_reason': _finish_reason_label(finish_reason),
     }
-    REQUESTS_TOTAL.labels(**labels).inc()
+    REQUESTS_TOTAL.labels(**labels, upstream_http_status=_http_status_label(upstream_http_status)).inc()
     REQUEST_LATENCY_SECONDS.labels(**labels).observe(time.monotonic() - started_at)
     if streaming and ttfb_seconds is not None:
         STREAM_TTFB_SECONDS.labels(
@@ -219,8 +298,11 @@ def observe_route_result(
     terminal_log = logger.warning if outcome == 'error' else logger.info
     terminal_log(
         'llm_gateway_terminal request_id=%s surface=%s streaming=%s phase=%s lane=%s route=%s provider=%s '
-        'model=%s credential_source=%s outcome=%s error_class=%s failure_class=%s fallback_used=%s '
-        'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s',
+        'model=%s credential_source=%s outcome=%s error_class=%s route_serving_class=%s failure_class=%s '
+        'fallback_used=%s fallback_from=%s fallback_to=%s '
+        'provider_rejection=%s '
+        'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s rejection_reason=%s '
+        'upstream_http_status=%s',
         request_id,
         _bounded(api_surface),
         _bool_label(streaming),
@@ -232,13 +314,19 @@ def observe_route_result(
         labels['credential_source'],
         labels['outcome'],
         labels['error_class'],
+        labels['route_serving_class'],
         labels['fallback_reason'],
         labels['fallback_used'],
+        labels['fallback_from_route_artifact_id'],
+        labels['fallback_to_route_artifact_id'],
+        labels['provider_rejection'],
         labels['budget_source'],
         labels['output_budget'],
         labels['completion_size'],
         labels['finish_reason'],
         f'{ttfb_seconds:.6f}' if ttfb_seconds is not None else 'none',
+        _safe_rejection_reason(rejection_reason) if error_class == 'invalid_request' else 'none',
+        (upstream_http_status if type(upstream_http_status) is int and 100 <= upstream_http_status <= 599 else 'none'),
     )
 
 
@@ -246,15 +334,22 @@ def observe_auth_rejection(reason: str) -> None:
     AUTH_REJECTIONS_TOTAL.labels(reason=_bounded(reason)).inc()
 
 
-def observe_request_rejection(*, api_surface: str, error_class: str, request_id: str) -> None:
+def observe_request_rejection(
+    *, api_surface: str, error_class: str, request_id: str, error: GatewayError | None = None
+) -> None:
     surface_label = _bounded(api_surface)
     error_label = _bounded(error_class)
     REQUEST_REJECTIONS_TOTAL.labels(api_surface=surface_label, error_class=error_label).inc()
     logger.warning(
-        'llm_gateway_request_rejected request_id=%s surface=%s error_class=%s',
+        'llm_gateway_request_rejected request_id=%s surface=%s error_class=%s rejection_reason=%s',
         request_id,
         surface_label,
         error_label,
+        (
+            invalid_request_reason(error)
+            if error is not None
+            else ('unknown' if error_class == 'invalid_request' else 'none')
+        ),
     )
 
 
@@ -269,6 +364,103 @@ def observe_accounting_event(event: AccountingEvent, *, delivery: str) -> None:
         cost_status=_bounded(event.cost_status.value),
         delivery=delivery_label,
     ).inc()
+    if delivery_label == 'written':
+        observe_accounted_spend(event)
+
+
+def observe_accounted_spend(event: AccountingEvent) -> None:
+    """Expose ledger coverage and reported units without customer identifiers.
+
+    This runs after persistence, outside response latency. Missing usage/cost
+    stays a coverage count, never an invented zero-dollar estimate. The existing
+    LLM_GATEWAY_ACCOUNTING_ENABLED switch also disables this observation path.
+    """
+    model = (event.resolved_model or event.configured_model).strip()
+    known_model = (event.provider, model) in _spend_model_ids or rate_card_for(event.provider, model) is not None
+    complete = event.unit_type != 'tokens' or event.billable_usage_complete
+    labels = {
+        'lane_id': event.lane_id if event.lane_id in _spend_lane_ids else 'unknown',
+        'api_surface': (
+            event.api_surface
+            if event.api_surface
+            in {
+                'openai_chat_completions',
+                'openai_embeddings',
+                'openai_images_generations',
+                'openrouter_systemone',
+                'anthropic_messages',
+            }
+            else 'unknown'
+        ),
+        'provider': (
+            event.provider
+            if event.provider in {'openai', 'gemini', 'anthropic', 'openrouter', 'perplexity'}
+            else 'unknown'
+        ),
+        'model': model if known_model else 'unknown',
+        'payer': event.payer if event.payer in {'omi', 'byok'} else 'unknown',
+        'traffic_type': (
+            event.traffic_type.lower()
+            if event.traffic_type
+            and event.traffic_type.lower()
+            in {'default', 'standard', 'flex', 'batch', 'priority', 'on_demand', 'provisioned_throughput'}
+            else 'unknown'
+        ),
+    }
+    ACCOUNTED_ATTEMPTS_TOTAL.labels(
+        **labels,
+        usage_status=(
+            event.usage_status.value if complete or event.usage_status.value != 'confirmed' else 'indeterminate'
+        ),
+        cost_status=event.cost_status.value if complete or event.cost_status.value != 'estimated' else 'indeterminate',
+    ).inc()
+    if complete and event.usage_status.value == 'confirmed' and event.unit_type == 'tokens':
+        for token_type, value in {
+            'prompt': event.prompt_tokens,
+            'uncached_input': event.uncached_input_tokens,
+            'cached_input': event.cached_input_tokens,
+            'cache_write': event.cache_write_tokens,
+            'tool_use_prompt': event.tool_use_prompt_tokens,
+            'output': (
+                event.output_tokens
+                if event.output_tokens_include_reasoning
+                else event.output_tokens + event.reasoning_tokens
+            ),
+            'reasoning': event.reasoning_tokens,
+        }.items():
+            ACCOUNTED_TOKENS_TOTAL.labels(**labels, token_type=token_type).inc(max(value, 0))
+    if (
+        complete
+        and event.payer == 'omi'
+        and event.cost_status.value == 'estimated'
+        and event.estimated_cost_micro_usd is not None
+    ):
+        ESTIMATED_COST_MICRO_USD_TOTAL.labels(**labels, rate_card_id=_bounded(event.rate_card_id or 'unknown')).inc(
+            max(event.estimated_cost_micro_usd, 0)
+        )
+
+
+def observe_gateway_config_identity(config: GatewayConfig, *, build_identity: str) -> None:
+    """Publish one bounded info series per lane pointer, never per request."""
+    global _spend_lane_ids, _spend_model_ids
+    _spend_lane_ids = frozenset(config.lanes)
+    _spend_model_ids = frozenset(
+        (provider.provider, provider.model)
+        for route in config.route_artifacts.values()
+        for provider in (route.primary, *route.fallbacks)
+    )
+    build_label = _build_identity_label(build_identity)
+    GATEWAY_CONFIG_INFO.clear()
+    for lane_id, lane in sorted(config.lanes.items()):
+        for route_role, route_id in (('active', lane.active_route), ('lkg', lane.last_known_good)):
+            route = config.route_artifacts[route_id]
+            GATEWAY_CONFIG_INFO.labels(
+                build_identity=build_label,
+                lane_id=_bounded(lane_id),
+                route_role=route_role,
+                route_artifact_id=_bounded(route.route_artifact_id),
+                artifact_digest=_artifact_digest_label(route.artifact_digest or route.content_digest),
+            ).set(1)
 
 
 def report_observation_failure(*, api_surface: str, request_id: str) -> None:
@@ -293,11 +485,79 @@ def time_request() -> float:
     return time.monotonic()
 
 
+_REJECTION_PARAM_ROOTS = frozenset(
+    {
+        'model',
+        'messages',
+        'response_format',
+        'stream',
+        'max_tokens',
+        'max_completion_tokens',
+        'state',
+        'questions',
+        'input',
+        'reasoning_effort',
+        'service_tier',
+        'prompt_cache_options',
+        'prompt_cache_breakpoint',
+        'task_type',
+        'title',
+    }
+)
+REJECTION_REASON_MAX_LENGTH = 64
+
+
+def _safe_rejection_reason(value: str) -> str:
+    allowed = INVALID_REQUEST_REJECTION_CODES | {f'parameter_{root}' for root in _REJECTION_PARAM_ROOTS}
+    return value[:REJECTION_REASON_MAX_LENGTH] if value in allowed else 'unknown'
+
+
+def invalid_request_reason(error: GatewayError) -> str:
+    if error.code != GatewayErrorCode.INVALID_REQUEST:
+        return 'none'
+    if error.rejection_reason is not None:
+        return _safe_rejection_reason(error.rejection_reason)
+    # Validators sometimes put caller-supplied question names or unsupported
+    # keys in param. Only emit a recognized root, never that dynamic suffix.
+    root = re.split(r'[.\[]', error.param or '', maxsplit=1)[0]
+    return _safe_rejection_reason(f'parameter_{root}')
+
+
 def _enum_label(value: object, *, default: str = 'unknown') -> str:
     raw_value = getattr(value, 'value', value)
     if raw_value is None:
         return default
     return _bounded(str(raw_value))
+
+
+def _route_serving_class_label(value: object) -> str:
+    raw_value = getattr(value, 'value', value)
+    try:
+        return RouteServingClass(str(raw_value)).value
+    except ValueError:
+        return 'unknown'
+
+
+def _optional_identity_label(value: str | None) -> str:
+    return 'none' if value is None else _bounded(value)
+
+
+def _build_identity_label(value: str) -> str:
+    normalized = value.strip().lower()
+    return normalized if re.fullmatch(r'[0-9a-f]{7,64}', normalized) else 'unknown'
+
+
+def _artifact_digest_label(value: str) -> str:
+    normalized = value.strip().lower()
+    return normalized if re.fullmatch(r'sha256:[0-9a-f]{64}', normalized) else 'unknown'
+
+
+def _provider_rejection_label(value: object) -> str:
+    raw_value = getattr(value, 'value', value)
+    try:
+        return ProviderRejection(str(raw_value)).value
+    except ValueError:
+        return ProviderRejection.OTHER_4XX.value
 
 
 def _bounded(value: str) -> str:
@@ -328,3 +588,12 @@ def _finish_reason_label(value: str) -> str:
 
 def _bool_label(value: bool) -> str:
     return 'true' if value else 'false'
+
+
+def _http_status_label(value: int | None) -> str:
+    """A fixed status vocabulary, without multiplying latency histogram series."""
+    if type(value) is not int or not 100 <= value <= 599:
+        return 'none'
+    if value in {400, 401, 403, 404, 408, 409, 422, 429, 500, 502, 503, 504}:
+        return str(value)
+    return f'{value // 100}xx'

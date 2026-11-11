@@ -1,0 +1,50 @@
+{
+  "version": "1.0.561",
+  "date": "2026-10-11",
+  "changes": [
+    "Setup progress now retries saving after connection problems, so you do not have to repeat onboarding on another device.",
+    "After your first conversation summary, Omi asks once if you are enjoying it, with a quick way to rate the app.",
+    "Fix the microphone staying on after leaving the voice-introduction step if you tapped Back or Skip right after Start Speaking.",
+    "If your pendant stays connected but audio stops arriving, Omi notices and tries to reconnect.",
+    "Review: a Dream Report for early testers showing what Omi's background cleanup looked at and would change",
+    "Phone calls are hidden in the app for now.",
+    "Fixes memories failing to load on very large accounts: a slow memory read now retries instead of showing your memories as empty.",
+    "Confirm your voice once per conversation, with answers applied only to the clip you played",
+    "Fix the pendant tutorial's Ask Omi a Question step getting stuck on \"Processing your question\" forever when you pressed twice without speaking or Omi didn't catch what you said.",
+    "Omi now asks once whether you are enjoying it when you open a conversation, with a quick way to rate the app.",
+    {
+      "change": "Long Apple Watch recordings no longer build up in your phone's memory, so the app is less likely to be closed partway through one",
+      "platforms": [
+        "ios"
+      ]
+    },
+    "Relabel as many speakers as you want in one pass: label lines, pick names with one tap, and update the summary once when you're done. Short transcript lines also stay left-aligned.",
+    "Chat app connections recognize every paid plan when enabled for your account.",
+    "Clearer descriptions for Pin, speaker confidence, notification frequency, and transcription settings",
+    "Review: approve or dismiss Omi's suggested cleanups, like closing a finished task or merging two people",
+    "Enjoy a cleaner recording screen and home header, with tappable speaker labels and storage alerts only when phone space is low or unavailable.",
+    "Prevent repeated Android sync keep-alive restarts for a 24-hour rolling window after its foreground-service time limit is reached, including after the app restarts.",
+    "Setup progress now retries saving after connection problems, so you do not have to repeat onboarding on another device.",
+    "After your first conversation summary, Omi asks once if you are enjoying it, with a quick way to rate the app.",
+    "Fix the microphone staying on after leaving the voice-introduction step if you tapped Back or Skip right after Start Speaking.",
+    "If your pendant stays connected but audio stops arriving, Omi notices and tries to reconnect.",
+    "Review: a Dream Report for early testers showing what Omi's background cleanup looked at and would change",
+    "Phone calls are hidden in the app for now.",
+    "Fixes memories failing to load on very large accounts: a slow memory read now retries instead of showing your memories as empty.",
+    "Confirm your voice once per conversation, with answers applied only to the clip you played",
+    "Fix the pendant tutorial's Ask Omi a Question step getting stuck on \"Processing your question\" forever when you pressed twice without speaking or Omi didn't catch what you said.",
+    "Omi now asks once whether you are enjoying it when you open a conversation, with a quick way to rate the app.",
+    {
+      "change": "Long Apple Watch recordings no longer build up in your phone's memory, so the app is less likely to be closed partway through one",
+      "platforms": [
+        "ios"
+      ]
+    },
+    "Relabel as many speakers as you want in one pass: label lines, pick names with one tap, and update the summary once when you're done. Short transcript lines also stay left-aligned.",
+    "Chat app connections recognize every paid plan when enabled for your account.",
+    "Clearer descriptions for Pin, speaker confidence, notification frequency, and transcription settings",
+    "Review: approve or dismiss Omi's suggested cleanups, like closing a finished task or merging two people",
+    "Enjoy a cleaner recording screen and home header, with tappable speaker labels and storage alerts only when phone space is low or unavailable.",
+    "Prevent repeated Android sync keep-alive restarts for a 24-hour rolling window after its foreground-service time limit is reached, including after the app restarts."
+  ]
+}

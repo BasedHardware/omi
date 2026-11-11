@@ -17,6 +17,14 @@ private struct AutomationErrorEnvelope: Decodable {
   let error: String?
 }
 
+private actor NavigationWaitCallCounter {
+  private(set) var mountedCalls = 0
+
+  func recordMountedCall() {
+    mountedCalls += 1
+  }
+}
+
 @MainActor
 private final class StubPresentationCoordinator: DesktopAutomationPresentationCoordinating {
   private(set) var calls: [(target: DesktopAutomationPresentationTarget, gate: DesktopAutomationPresentationGate)] = []
@@ -40,6 +48,137 @@ private final class StubPresentationCoordinator: DesktopAutomationPresentationCo
 
 @MainActor
 final class DesktopAutomationBridgeRouteTests: XCTestCase {
+  func testReadOnlyActionRequestRejectsWriterBeforeItsHandler() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    let name = "__read_only_route_probe__"
+    var writes = 0
+    registry.register(name: name, effects: [.remoteWrite], summary: "Injected remote writer") { _ in
+      writes += 1
+      return nil
+    }
+    defer { registry.unregister(name) }
+    let body = try JSONSerialization.data(withJSONObject: ["name": name, "readOnly": true])
+    let response = await DesktopAutomationBridge.shared.response(
+      for: authorizedRequest(method: "POST", path: "/action", body: body))
+    let envelope = try JSONDecoder().decode(AutomationErrorEnvelope.self, from: response.body)
+    XCTAssertEqual(response.statusCode, 400)
+    XCTAssertFalse(envelope.ok)
+    XCTAssertEqual(envelope.error, "action_requires_effects: \(name)")
+    XCTAssertEqual(writes, 0)
+  }
+
+  func testMalformedReadOnlyPolicyCannotFallBackToOrdinaryExecution() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    let name = "__malformed_policy_probe__"
+    var writes = 0
+    registry.register(name: name, effects: [.remoteWrite], summary: "Injected remote writer") { _ in
+      writes += 1
+      return nil
+    }
+    defer { registry.unregister(name) }
+    for policy in ["true", 1, NSNull()] as [Any] {
+      let body = try JSONSerialization.data(withJSONObject: ["name": name, "readOnly": policy])
+      let response = await DesktopAutomationBridge.shared.response(
+        for: authorizedRequest(method: "POST", path: "/action", body: body))
+      let envelope = try JSONDecoder().decode(AutomationErrorEnvelope.self, from: response.body)
+      XCTAssertEqual(response.statusCode, 400)
+      XCTAssertEqual(envelope.error, "invalid_action_request")
+    }
+    XCTAssertEqual(writes, 0)
+  }
+
+  func testOpenAskOmiIsRegisteredOnTheMainChatSurface() throws {
+    DesktopAutomationActionRegistry.shared.registerBuiltins()
+    let descriptor = try XCTUnwrap(
+      DesktopAutomationActionRegistry.shared.descriptors().first { $0.name == "open_ask_omi" })
+    XCTAssertEqual(descriptor.surfaces, ["main_chat"])
+    XCTAssertTrue(descriptor.summary.contains("quiet"))
+    XCTAssertFalse(descriptor.summary.contains("Ask Omi input panel"))
+  }
+
+  func testQuietNavigationKeepsItsNonActivatingContractAcrossTheNotificationHandoff() {
+    let payload = DesktopAutomationNavigationRequest(
+      target: "settings",
+      settingsSection: "rewind",
+      highlightedSettingId: nil,
+      activateApp: false,
+      settleMs: nil,
+      waitForVisibility: false)
+    let activates = DesktopAutomationNavigationDelivery.resolvesActivation(
+      explicit: payload.activateApp)
+    let userInfo = DesktopAutomationNavigationDelivery.userInfo(
+      for: payload,
+      activateApp: activates)
+
+    XCTAssertFalse(activates)
+    XCTAssertEqual(userInfo["activateApp"] as? Bool, false)
+    XCTAssertEqual(userInfo["target"] as? String, "settings")
+    XCTAssertEqual(userInfo["settingsSection"] as? String, "rewind")
+  }
+
+  func testAutomationNavigationOnlyActivatesWithExplicitOptIn() {
+    XCTAssertFalse(
+      DesktopAutomationNavigationDelivery.resolvesActivation(
+        explicit: nil))
+    XCTAssertFalse(
+      DesktopAutomationNavigationDelivery.resolvesActivation(
+        explicit: false))
+    XCTAssertTrue(
+      DesktopAutomationNavigationDelivery.resolvesActivation(
+        explicit: true))
+  }
+
+  func testNavigationAcknowledgementReturnsCachedRouteWithoutMountedWait() async throws {
+    let calls = NavigationWaitCallCounter()
+    let response = try await DesktopAutomationNavigationResponseMode.snapshot(
+      waitForVisibility: false,
+      cached: { "route-acknowledged" },
+      mounted: {
+        await calls.recordMountedCall()
+        return "mounted"
+      }
+    )
+
+    XCTAssertEqual(response, "route-acknowledged")
+    let mountedCalls = await calls.mountedCalls
+    XCTAssertEqual(mountedCalls, 0)
+  }
+
+  func testNavigationAcknowledgementDefaultsToMountedVisibilityWait() async throws {
+    let calls = NavigationWaitCallCounter()
+    let response = try await DesktopAutomationNavigationResponseMode.snapshot(
+      waitForVisibility: nil,
+      cached: { "route-acknowledged" },
+      mounted: {
+        await calls.recordMountedCall()
+        return "mounted"
+      }
+    )
+
+    XCTAssertEqual(response, "mounted")
+    let mountedCalls = await calls.mountedCalls
+    XCTAssertEqual(mountedCalls, 1)
+  }
+
+  func testNavigationAcknowledgementRejectsUnknownTarget() async throws {
+    let unknownPayload = DesktopAutomationNavigationRequest(
+      target: "nonexistent-destination",
+      settingsSection: nil,
+      highlightedSettingId: nil,
+      activateApp: nil,
+      settleMs: nil,
+      waitForVisibility: false
+    )
+    do {
+      _ = try await DesktopAutomationBridge.shared.navigationSnapshot(for: unknownPayload)
+      XCTFail("unknown target must not return a cached acknowledgement")
+    } catch DesktopAutomationActionError.invalidParams(let message) {
+      XCTAssertEqual(message, "unknown_navigation_target")
+    } catch {
+      XCTFail("unknown target must be rejected with invalidParams, got: \(error)")
+    }
+  }
+
   func testUnauthenticatedHealthReportsBackendAndRuntimeProtocolIdentity() async throws {
     let response = await DesktopAutomationBridge.shared.response(
       for: DesktopAutomationHTTPRequest(
@@ -55,6 +194,10 @@ final class DesktopAutomationBridgeRouteTests: XCTestCase {
       JSONSerialization.jsonObject(with: response.body) as? [String: Any]
     )
     XCTAssertEqual(object["requiresAuth"] as? Bool, true)
+    let sourceIdentity = try XCTUnwrap(object["sourceIdentity"] as? [String: Any])
+    XCTAssertEqual(sourceIdentity["schemaVersion"] as? Int, 1)
+    XCTAssertEqual(sourceIdentity["revision"] as? String, "unknown")
+    XCTAssertEqual(sourceIdentity["workingTreeState"] as? String, "unknown")
     XCTAssertNotNil(object["backendEnvironment"] as? String)
     XCTAssertNotNil(object["pythonBackendURL"] as? String)
     XCTAssertNotNil(object["rustBackendURL"] as? String)
@@ -70,6 +213,43 @@ final class DesktopAutomationBridgeRouteTests: XCTestCase {
       XCTAssertNotNil(object["agentRuntimeProtocolVersion"] as? Int)
       XCTAssertNotNil(object["agentRuntimeVersion"] as? String)
     }
+  }
+
+  func testChatActionsUseProviderAdmissionForAttachmentOnlyTurns() async throws {
+    let provider = ChatProvider()
+    provider.isSending = true
+    provider.pendingAttachments = [
+      ChatAttachment(fileName: "notes.pdf", mimeType: "application/pdf", data: Data("%PDF".utf8))
+    ]
+    let previousProvider = ChatProvider.mainInstance
+    ChatProvider.mainInstance = provider
+    defer { ChatProvider.mainInstance = previousProvider }
+
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    for action in ["ask_main_chat", "ask_main_chat_no_wait"] {
+      let result = try await registry.perform(action, params: ["query": ""])
+      let detail = try XCTUnwrap(result, "\(action) should return a provider admission result")
+      XCTAssertEqual(detail["accepted"], "false", "\(action) should report the provider's busy refusal")
+      XCTAssertEqual(detail["reason"], "already_sending", "\(action) must reach provider admission")
+      XCTAssertNil(detail["error"], "\(action) must not reject an attachment-only subject as missing text")
+    }
+
+    provider.pendingAttachments.removeAll()
+    provider.pendingComposerReferences = [
+      ChatComposerReference(kind: .conversation, sourceID: "conversation-1", title: "Standup")
+    ]
+    let referenceResult = try await registry.perform("ask_main_chat", params: ["query": ""])
+    let referenceDetail = try XCTUnwrap(
+      referenceResult, "reference-only subject should return a provider admission result")
+    XCTAssertEqual(referenceDetail["reason"], "already_sending")
+    XCTAssertNil(referenceDetail["error"])
+
+    provider.pendingComposerReferences.removeAll()
+    let emptyResult = try await registry.perform("ask_main_chat", params: ["query": " "])
+    let emptyDetail = try XCTUnwrap(
+      emptyResult, "an empty subject with no staged content should return an admission error")
+    XCTAssertEqual(emptyDetail["error"], "missing 'query'")
   }
 
   func testPresentationReadinessDefersAndPreservesTheExactActiveCommand() {

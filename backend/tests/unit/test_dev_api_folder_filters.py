@@ -5,11 +5,13 @@ Verifies that:
 2. GET /v1/dev/user/conversations passes folder_id / starred to DB
 """
 
+from database.ports.folders import FolderEntity
+
 import os
 import sys
 from datetime import datetime, timezone
 from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -105,11 +107,23 @@ _mock_populate_speaker_names = MagicMock()
 # ---- Prepare controllable mocks for database modules ----
 
 import database.conversations as conversations_db
+import database.daily_summaries as daily_summaries_db
 import database.folders as folders_db
-from dependencies import ApiKeyAuth, get_api_key_auth, get_auth_with_conversations_read, get_uid_with_conversations_read
+from dependencies import (
+    ApiKeyAuth,
+    get_api_key_auth,
+    get_auth_with_conversation_detail_read,
+    get_auth_with_conversations_read,
+    get_uid_with_conversations_read,
+)
 
 _mock_get_conversations = MagicMock(return_value=[])
-conversations_db.get_conversations = _mock_get_conversations
+conversations_db.get_conversations_without_photos = _mock_get_conversations
+
+_mock_get_daily_summaries = MagicMock(return_value=[])
+_mock_get_daily_summary = MagicMock(return_value=None)
+daily_summaries_db.get_daily_summaries = _mock_get_daily_summaries
+daily_summaries_db.get_daily_summary = _mock_get_daily_summary
 
 _mock_get_folders = MagicMock(return_value=[])
 _mock_initialize_system_folders = MagicMock(return_value=[])
@@ -131,20 +145,22 @@ def _read_auth():
 
 def _make_folder(folder_id='f1', name='Work'):
     now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
-    return {
-        'id': folder_id,
-        'name': name,
-        'description': 'Work folder',
-        'color': '#3B82F6',
-        'icon': '💼',
-        'created_at': now,
-        'updated_at': now,
-        'order': 0,
-        'is_default': False,
-        'is_system': True,
-        'category_mapping': 'work',
-        'conversation_count': 5,
-    }
+    return FolderEntity.model_construct(
+        **{
+            'id': folder_id,
+            'name': name,
+            'description': 'Work folder',
+            'color': '#3B82F6',
+            'icon': '💼',
+            'created_at': now,
+            'updated_at': now,
+            'order': 0,
+            'is_default': False,
+            'is_system': True,
+            'category_mapping': 'work',
+            'conversation_count': 5,
+        }
+    )
 
 
 def _make_conversation(conv_id='conv-1'):
@@ -194,7 +210,7 @@ class TestDevGetFolders:
 
         result = get_user_folders(uid='uid1')
 
-        assert result == folder_list
+        assert result == [f.model_dump(exclude_unset=True) for f in folder_list]
         _mock_get_folders.assert_called_once_with('uid1')
         _mock_initialize_system_folders.assert_not_called()
 
@@ -299,20 +315,15 @@ class TestDevGetConversationsFolderFilters:
         assert call_kwargs.get('starred') is True
 
     def test_dev_get_conversations_default_passes_none_for_folder_filters(self):
-        """When folder_id/starred are not specified via HTTP, DB receives None for both.
-
-        This test uses the HTTP layer (TestClient) so FastAPI resolves Query(None) -> None.
-        """
+        """Default list reads use the projected MCP page path without folder filters."""
         _, client = _build_test_app()
 
         client.get('/v1/dev/user/conversations')
 
-        call_kwargs = _mock_get_conversations.call_args[1]
-        assert call_kwargs.get('folder_id') is None
-        assert call_kwargs.get('starred') is None
+        _mock_get_conversations.assert_not_called()
 
     def test_dev_get_conversations_preserves_existing_params(self):
-        """Regression: all 8 params (6 existing + 2 new) are forwarded to DB."""
+        """Transcript and folder-filter reads preserve the existing DB parameters."""
         from routers.developer import get_conversations
         from datetime import datetime, timezone
 
@@ -337,7 +348,7 @@ class TestDevGetConversationsFolderFilters:
 
         # Positional args: uid, limit, offset
         assert call_positional[0] == 'uid1'
-        assert call_positional[1] == 10
+        assert call_positional[1] == 11  # one bounded lookahead row reports has_more
         assert call_positional[2] == 5
 
         # Keyword args: all existing + new params
@@ -377,6 +388,7 @@ def _build_test_app():
     app.include_router(developer_router)
     app.dependency_overrides[get_uid_with_conversations_read] = lambda: 'uid1'
     app.dependency_overrides[get_auth_with_conversations_read] = _read_auth
+    app.dependency_overrides[get_auth_with_conversation_detail_read] = _read_auth
     return app, TestClient(app)
 
 
@@ -387,6 +399,7 @@ def _build_memories_test_app():
     from routers.developer import router as developer_router
     import routers.developer as developer_module
     from dependencies import get_developer_memory_default_memory_read_context
+    from utils.memory.default_read_rollout import MemoryReadDecision
     from utils.memory.product_authorization import ProductAuthorizationDecision
 
     auth_context = developer_module.ProductAuthorizationContext(
@@ -397,25 +410,12 @@ def _build_memories_test_app():
             allowed=True,
             context=auth_context,
             db_client=None,
-            read_decision=developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
-            reason='test_legacy_safe',
+            read_decision=MemoryReadDecision.USE_MEMORY,
+            reason='universal_memory',
             observability={'enabled': True},
             status_code=200,
         )
     )
-    developer_module.search_memory_default_developer_memories = MagicMock(
-        return_value=type(
-            'LegacySafeMemoryResult',
-            (),
-            {
-                'read_decision': developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
-                'memories': [],
-                'fallback_reason': 'test_legacy_safe',
-                'should_use_legacy_fallback': True,
-            },
-        )()
-    )
-
     app = FastAPI()
     app.include_router(developer_router)
     app.dependency_overrides[get_developer_memory_default_memory_read_context] = lambda: auth_context
@@ -430,6 +430,10 @@ class TestDevApiHttpLayer:
         _mock_get_conversations.return_value = []
         _mock_get_folders.reset_mock()
         _mock_get_folders.return_value = [_make_folder('f1', 'Work')]
+        _mock_get_daily_summaries.reset_mock()
+        _mock_get_daily_summaries.return_value = []
+        _mock_get_daily_summary.reset_mock()
+        _mock_get_daily_summary.return_value = None
         _mock_initialize_system_folders.reset_mock()
         _mock_populate_folder_names.reset_mock()
         _mock_populate_speaker_names.reset_mock()
@@ -521,6 +525,60 @@ class TestDevApiHttpLayer:
         assert body[0]['id'] == 'f1'
         assert body[0]['name'] == 'Work'
 
+    def test_daily_summary_list_exposes_date_filters_and_pagination(self):
+        _mock_get_daily_summaries.return_value = [
+            {'id': 'recap-1', 'date': '2026-08-20', 'headline': 'A productive day'}
+        ]
+        _, client = _build_test_app()
+
+        response = client.get(
+            '/v1/dev/user/daily-summaries?limit=10&offset=2&start_date=2026-08-01&end_date=2026-08-20'
+        )
+
+        assert response.status_code == 200
+        assert response.json()['summaries'][0]['id'] == 'recap-1'
+        _mock_get_daily_summaries.assert_called_once_with(
+            'uid1',
+            limit=10,
+            offset=2,
+            start_date='2026-08-01',
+            end_date='2026-08-20',
+            record_filter=ANY,
+            read_budget=ANY,
+        )
+        # The store pages readable records under the same bounded request, rather than
+        # dropping corrupt rows after a raw limit and hiding later valid recaps.
+        from utils.other.list_budget import ListReadBudget
+
+        kwargs = _mock_get_daily_summaries.call_args.kwargs
+        assert isinstance(kwargs['read_budget'], ListReadBudget)
+        assert kwargs['record_filter']({'id': 'valid', 'date': '2026-08-20'}) is True
+        assert kwargs['record_filter']({'id': 'bad', 'memories_learned': [{'content': 'missing id'}]}) is False
+
+    def test_daily_summary_detail_returns_404_for_unknown_id(self):
+        _, client = _build_test_app()
+
+        response = client.get('/v1/dev/user/daily-summaries/missing')
+
+        assert response.status_code == 404
+        assert response.json() == {'detail': 'Daily summary not found'}
+        _mock_get_daily_summary.assert_called_once_with('uid1', 'missing')
+
+    def test_daily_summaries_require_conversations_read_scope(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from routers.developer import router as developer_router
+
+        app = FastAPI()
+        app.include_router(developer_router)
+        app.dependency_overrides[get_api_key_auth] = lambda: ApiKeyAuth(
+            uid='uid1', scopes=['memories:read'], app_id='test-app', key_id='test-key'
+        )
+
+        response = TestClient(app, raise_server_exceptions=False).get('/v1/dev/user/daily-summaries')
+
+        assert response.status_code == 403
+
 
 class TestDevApiMemoriesHttpLayer:
     """HTTP layer tests for Developer API memory list resilience."""
@@ -532,10 +590,10 @@ class TestDevApiMemoriesHttpLayer:
 
     def test_memories_page_tolerates_legacy_malformed_record(self):
         """A single legacy record must not turn an offset page into HTTP 500."""
-        import database.memories as memories_db
+        import routers.developer as developer_module
 
         now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
-        memories_db.get_memories.return_value = [
+        page = [
             {
                 'id': 'mem-ok',
                 'content': 'normal memory',
@@ -573,8 +631,17 @@ class TestDevApiMemoriesHttpLayer:
             },
         ]
 
-        _, client = _build_memories_test_app()
-        resp = client.get('/v1/dev/user/memories?limit=3&offset=7')
+        normalized = []
+        for raw in page:
+            try:
+                normalized.append(developer_module.CleanerMemory.model_validate(raw))
+            except ValueError:
+                continue
+        memory_service = MagicMock()
+        memory_service.read.return_value = normalized
+        with patch.object(developer_module, 'MemoryService', return_value=memory_service):
+            _, client = _build_memories_test_app()
+            resp = client.get('/v1/dev/user/memories?limit=3&offset=7')
 
         assert resp.status_code == 200
         body = resp.json()
@@ -597,6 +664,9 @@ class TestDevApiMemoriesHttpLayer:
         assert locked_legacy['content'] == ''
         assert locked_legacy['category'] == 'interesting'
         assert locked_legacy['scoring'] == '123'
+        memory_service.read.assert_called_once_with(
+            'uid1', limit=4, offset=7, include_pending_processing=True, budget=ANY, reuse_compatibility_reads=True
+        )
 
     def test_cleaner_memory_coerces_edge_values(self):
         """CleanerMemory validators should be resilient outside the endpoint pre-filter too."""

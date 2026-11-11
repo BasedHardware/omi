@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from utils.env_loader import (
+    firebase_admin_options,
     STAGE_ENV_FILENAMES,
     load_backend_env,
     resolve_stage_from_env,
@@ -13,6 +14,75 @@ from utils.env_loader import (
     stage_env_path,
     stage_from_env,
 )
+from utils.firebase_admin_runtime import (
+    firebase_verify_only_credential,
+    install_firebase_auth_mutation_guard,
+    install_google_adc_guard,
+)
+
+
+def test_firebase_admin_options_uses_explicit_auth_project_only() -> None:
+    assert firebase_admin_options({"FIREBASE_AUTH_PROJECT_ID": " based-hardware "}) == {"projectId": "based-hardware"}
+    assert firebase_admin_options({"FIREBASE_PROJECT_ID": "data-project"}) is None
+
+
+def test_isolated_local_stack_firebase_is_verify_only() -> None:
+    from google.auth.credentials import AnonymousCredentials
+
+    credential = firebase_verify_only_credential({"OMI_ISOLATED_LOCAL_STACK": "1"})
+    assert credential is not None
+    assert isinstance(credential.get_credential(), AnonymousCredentials)
+    assert firebase_verify_only_credential({}) is None
+
+
+def test_isolated_local_stack_blocks_firebase_auth_mutations() -> None:
+    class FakeAuth:
+        pass
+
+    fake = FakeAuth()
+    from utils.firebase_admin_runtime import _AUTH_MUTATORS
+
+    for name in _AUTH_MUTATORS:
+        setattr(fake, name, lambda: None)
+    assert install_firebase_auth_mutation_guard({"OMI_ISOLATED_LOCAL_STACK": "1"}, auth_module=fake)
+    with pytest.raises(RuntimeError, match="mutations are disabled"):
+        fake.delete_user("real-user")
+
+
+def test_isolated_local_stack_blocks_real_firebase_auth_module_before_network() -> None:
+    from firebase_admin import auth as firebase_auth
+    from utils.firebase_admin_runtime import _AUTH_MUTATORS
+
+    originals = {name: getattr(firebase_auth, name) for name in _AUTH_MUTATORS}
+    try:
+        assert install_firebase_auth_mutation_guard({"OMI_ISOLATED_LOCAL_STACK": "1"}, auth_module=firebase_auth)
+        with pytest.raises(RuntimeError, match="mutations are disabled"):
+            firebase_auth.delete_user("must-not-reach-firebase")
+    finally:
+        for name, function in originals.items():
+            setattr(firebase_auth, name, function)
+
+
+def test_isolated_local_stack_google_adc_guard_blocks_discovery() -> None:
+    class FakeGoogleAuth:
+        @staticmethod
+        def default():
+            return object(), "unsafe"
+
+    assert install_google_adc_guard({"OMI_ISOLATED_LOCAL_STACK": "1"}, google_auth_module=FakeGoogleAuth)
+    with pytest.raises(RuntimeError, match="Google ADC is disabled"):
+        FakeGoogleAuth.default()
+
+
+def test_google_adc_guard_is_inert_outside_local_jit() -> None:
+    class FakeGoogleAuth:
+        @staticmethod
+        def default():
+            return object(), "unchanged"
+
+    original = FakeGoogleAuth.default
+    assert not install_google_adc_guard({}, google_auth_module=FakeGoogleAuth)
+    assert FakeGoogleAuth.default is original
 
 
 def test_stage_from_env_explicit() -> None:
@@ -110,16 +180,22 @@ def test_load_backend_env_offline_ignores_provider_keys_in_personal_dotenv(
 def test_load_backend_env_skips_adc_when_auth_emulator_active(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env.local-dev").write_text(
-        "FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099\n" "GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json\n",
+        "FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099\n"
+        "GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json\n"
+        "FIREBASE_AUTH_CREDENTIALS_PATH=firebase-auth.json\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("OMI_ENV_STAGE", "local")
-    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/inherited-google-credentials.json")
+    monkeypatch.setenv("SERVICE_ACCOUNT_JSON", '{"type":"service_account"}')
+    monkeypatch.setenv("FIREBASE_AUTH_CREDENTIALS_PATH", "/tmp/inherited-firebase-auth.json")
 
     load_backend_env(tmp_path)
 
     assert os.environ["FIREBASE_AUTH_EMULATOR_HOST"] == "127.0.0.1:9099"
     assert "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ
+    assert "SERVICE_ACCOUNT_JSON" not in os.environ
+    assert "FIREBASE_AUTH_CREDENTIALS_PATH" not in os.environ
 
 
 def test_load_backend_env_invalid_stage_uses_legacy_dotenv_only(

@@ -1,121 +1,98 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin } from '@/lib/auth';
-import { getOptionalStripe } from '@/lib/stripe';
-import { getPayload, setPayload } from '@/lib/payload-cache';
-export const dynamic = 'force-dynamic';
+import { NextRequest, NextResponse } from "next/server";
+import { requireScope } from "@/lib/auth";
+import { getOptionalStripeRead } from "@/lib/stripe";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
+import {
+  AllSubscriptionSourcesFailedError,
+  MRR_STATUSES,
+  PIPELINE_STATUSES,
+  countNonUsdSubscriptions,
+  fetchOmiSubscriptions,
+  groupByProduct,
+  isAnnual,
+  OMI_PLAN_PRODUCTS,
+} from "@/lib/stripe-subscriptions";
+export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
 function cacheKey(): string {
-  return `subscriptions:v1`;
+  // v3: `trialing` can now be null, and `nonUsdSkipped` was added.
+  return `subscriptions:v3`;
 }
 
 export { cacheKey as subscriptionsCacheKey };
 
-// Thrown when every Stripe leg fails — GET maps it to a 502.
-class AllSourcesFailedError extends Error {}
-
 export async function computeSubscriptions() {
-    const stripe = getOptionalStripe();
-    const priceIdOne = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
-    const priceIdTwo = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
+  const stripe = getOptionalStripeRead();
 
-    if (!stripe || !priceIdOne || !priceIdTwo) {
-      return {
-        totalSubscriptions: 0,
-        priceIdOne: { count: 0, priceId: priceIdOne || '' },
-        priceIdTwo: { count: 0, priceId: priceIdTwo || '' },
-        unavailable: true,
-      };
-    }
-
-    // Fetch all active subscriptions for both price IDs with pagination
-    const fetchAllSubscriptions = async (priceId: string) => {
-      let allSubscriptions: any[] = [];
-      let hasMore = true;
-      let startingAfter: string | undefined = undefined;
-
-      while (hasMore) {
-        const params: any = {
-          status: 'active',
-          price: priceId,
-          limit: 100, // Stripe's maximum per request
-        };
-
-        if (startingAfter) {
-          params.starting_after = startingAfter;
-        }
-
-        const subscriptions = await stripe.subscriptions.list(params);
-        allSubscriptions = allSubscriptions.concat(subscriptions.data);
-        
-        hasMore = subscriptions.has_more;
-        if (hasMore && subscriptions.data.length > 0) {
-          startingAfter = subscriptions.data[subscriptions.data.length - 1].id;
-        }
-      }
-
-      return allSubscriptions;
-    };
-
-    const results = await Promise.allSettled([
-      fetchAllSubscriptions(priceIdOne),
-      fetchAllSubscriptions(priceIdTwo),
-    ]);
-
-    const subscriptionsOne = results[0].status === 'fulfilled' ? results[0].value : [];
-    const subscriptionsTwo = results[1].status === 'fulfilled' ? results[1].value : [];
-
-    if (results[0].status === 'rejected') {
-      console.error('Error fetching monthly subscriptions:', results[0].reason);
-    }
-    if (results[1].status === 'rejected') {
-      console.error('Error fetching annual subscriptions:', results[1].reason);
-    }
-
-    // If ALL legs failed, throw — don't serve fabricated zeros (GET maps to 502)
-    if (results.every((r) => r.status === 'rejected')) {
-      throw new AllSourcesFailedError('All subscription data sources failed');
-    }
-
-    const partial = results.some((r) => r.status === 'rejected');
-    const totalSubscriptions = subscriptionsOne.length + subscriptionsTwo.length;
-
+  if (!stripe) {
     return {
-      totalSubscriptions,
-      partial,
-      priceIdOne: {
-        count: subscriptionsOne.length,
-        priceId: priceIdOne,
-      },
-      priceIdTwo: {
-        count: subscriptionsTwo.length,
-        priceId: priceIdTwo,
-      },
+      totalSubscriptions: 0,
+      monthly: 0,
+      annual: 0,
+      trialing: null,
+      nonUsdSkipped: 0,
+      byProduct: [],
+      unavailable: true,
     };
+  }
+
+  const { subscriptions, partial } = await fetchOmiSubscriptions(
+    stripe,
+    MRR_STATUSES
+  );
+
+  const annual = subscriptions.filter(isAnnual).length;
+
+  // A trial is pipeline, not a paid subscription: counted, but never mixed into the paid totals.
+  // Null on failure, so a fetch error can never render as a real "0 trials".
+  let trialing: number | null = null;
+  let trialPartial = false;
+  try {
+    const trials = await fetchOmiSubscriptions(stripe, PIPELINE_STATUSES);
+    trialing = trials.subscriptions.length;
+    trialPartial = trials.partial;
+  } catch (error) {
+    console.error("Error fetching trialing subscriptions:", error);
+    trialPartial = true;
+  }
+
+  return {
+    totalSubscriptions: subscriptions.length,
+    monthly: subscriptions.length - annual,
+    annual,
+    trialing,
+    /** Subscriptions whose prices are non-USD, so they are excluded from every MRR total. */
+    nonUsdSkipped: countNonUsdSubscriptions(subscriptions),
+    byProduct: groupByProduct(subscriptions, OMI_PLAN_PRODUCTS),
+    partial: partial || trialPartial,
+  };
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
     const key = cacheKey();
 
-    const cached = await getPayload<Awaited<ReturnType<typeof computeSubscriptions>>>(key);
+    const cached = await getPayload<
+      Awaited<ReturnType<typeof computeSubscriptions>>
+    >(key);
     if (cached) {
-      return NextResponse.json(cached.data);
+      return authResult.json(withFreshness(cached.data, cached.freshAt));
     }
 
     const payload = await computeSubscriptions();
     await setPayload(key, payload);
-    return NextResponse.json(payload);
+    return authResult.json(withFreshness(payload, Date.now()));
   } catch (error) {
-    if (error instanceof AllSourcesFailedError) {
-      return NextResponse.json({ error: error.message }, { status: 502 });
+    if (error instanceof AllSubscriptionSourcesFailedError) {
+      return authResult.json({ error: error.message }, { status: 502 });
     }
-    console.error('Error fetching subscription stats:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch subscription data' },
+    console.error("Error fetching subscription stats:", error);
+    return authResult.json(
+      { error: "Failed to fetch subscription data" },
       { status: 500 }
     );
   }

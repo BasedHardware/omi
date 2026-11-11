@@ -1,0 +1,39 @@
+{
+  "id": "product-review",
+  "kind": "meeting",
+  "started_at": "2026-09-04T15:45:00-04:00",
+  "timezone": "America/New_York",
+  "language": "en",
+  "transcript": "[s1 0] The harness should refuse customer transcripts in git.\n[s2 1] Synthetic only. Judge filler and playback.\n[s3 2] Cost note after the matrix, no prompt change without a before/after.",
+  "expected_facts": ["refuse customer transcripts", "Judge filler and playback", "no prompt change without a before/after"],
+  "must_not_contain": ["Speaker 3", "rewind"],
+  "owner_threads": ["harness contract"],
+  "token_estimate": {"input": 820, "output": 200},
+  "recorded": {
+    "notes_v2": {
+      "title": "Summary Lab Stays Synthetic and Comparable",
+      "overview": "The harness must refuse customer transcripts in git, judge filler and playback, and withhold prompt changes until a before/after exists.",
+      "sections": [
+        {
+          "heading": "Contract",
+          "body_markdown": "- Refuse customer transcripts in git; synthetic only.\n- Judge filler and playback.\n- No prompt change without a before/after."
+        }
+      ],
+      "action_items": []
+    },
+    "legacy": {
+      "title": "Review",
+      "overview": "Talked about a harness.",
+      "sections": [],
+      "action_items": []
+    },
+    "defective": {
+      "title": "Speaker 3 Review",
+      "overview": "Speaker 3 said rewind and then some process stuff.",
+      "sections": [
+        {"heading": "Noise", "body_markdown": "- Speaker 3 wants to rewind.\n- Something about git."}
+      ],
+      "action_items": []
+    }
+  }
+}

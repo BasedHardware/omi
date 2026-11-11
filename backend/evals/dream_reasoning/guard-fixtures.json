@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "near_empty_untitled",
+      "records": {
+        "conversations/near_empty_untitled": {
+          "id": "near_empty_untitled",
+          "structured": {
+            "title": "",
+            "overview": ""
+          },
+          "transcript_segments": [
+            {
+              "text": "um yes",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "clusters": [
+        {
+          "refs": [
+            "conversations/near_empty_untitled"
+          ],
+          "problem": "quality"
+        }
+      ],
+      "expect_no_edits": true
+    },
+    {
+      "id": "good_markdown_overview",
+      "records": {
+        "conversations/good_markdown_overview": {
+          "id": "good_markdown_overview",
+          "structured": {
+            "title": "Garden boat test",
+            "overview": "## Boat preparation\n\n- Paint the hull and test the solar panel.\n\n## First launch\n\n- Bring water and tools to the garden basin on Saturday."
+          },
+          "transcript_segments": [
+            {
+              "text": "We will build a solar powered toy boat for the garden basin. The hull needs paint and the panel needs testing before Saturday. Our group will bring water and tools then check the steering and photograph the first launch together.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "clusters": [
+        {
+          "refs": [
+            "conversations/good_markdown_overview"
+          ],
+          "problem": "quality"
+        }
+      ],
+      "expect_no_overview_edits": true,
+      "expect_no_edits": true
+    },
+    {
+      "id": "clean_bilingual",
+      "records": {
+        "conversations/clean_bilingual": {
+          "id": "clean_bilingual",
+          "structured": {
+            "title": "Chuẩn bị thử thuyền",
+            "overview": "## Buổi thử thuyền\n\n- Chuẩn bị chậu nước và dụng cụ để thử thuyền vào thứ bảy."
+          },
+          "transcript_segments": [
+            {
+              "text": "Chúng ta sẽ thử thuyền đồ chơi chạy bằng năng lượng mặt trời vào thứ bảy. The boat is ready for testing in the garden basin. Tôi sẽ mang chậu nước và dụng cụ. We can photograph the first launch together.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "clusters": [
+        {
+          "refs": [
+            "conversations/clean_bilingual"
+          ],
+          "problem": "quality"
+        }
+      ],
+      "expect_no_feedback": true,
+      "expect_no_edits": true
+    },
+    {
+      "id": "grounded_empty_title",
+      "records": {
+        "conversations/grounded_empty_title": {
+          "id": "grounded_empty_title",
+          "structured": {
+            "title": "",
+            "overview": "## Boat preparation\n\n- Paint the hull and test the solar panel before the garden launch."
+          },
+          "transcript_segments": [
+            {
+              "text": "We will build a solar powered toy boat for the garden basin. The hull needs paint and the panel needs testing before Saturday. Our group will bring water and tools then check the steering and photograph the first launch together.",
+              "is_user": true
+            }
+          ]
+        }
+      },
+      "clusters": [
+        {
+          "refs": [
+            "conversations/grounded_empty_title"
+          ],
+          "problem": "quality"
+        }
+      ],
+      "expected_kind": "title"
+    }
+  ]
+}

@@ -104,12 +104,20 @@ enum RealtimeHubProviderLogTag {
 /// OpenAI's transport can also surface an already-retired socket as an ENOTCONN
 /// ("Socket is not connected") write race, typically right after the 60-minute
 /// rotation. All of these expected lifecycle paths should re-warm quietly rather
-/// than page Sentry as production errors. Fast 1008 closes are different: they
+/// than surface as production errors. Fast 1008 closes are different: they
 /// usually mean provider policy/auth/config rejection and should still be
 /// reported, but with a stable category instead of raw provider text.
 enum RealtimeHubCloseCategory: String {
   case expectedIdleTeardown = "expected_idle_teardown"
   case expectedSessionRotation = "expected_session_rotation"
+  case localAddressUnavailable = "local_address_unavailable"
+  case transportConfiguration = "transport_configuration"
+  case transportConnect = "transport_connect"
+  case transportHandshake = "transport_handshake"
+  case transportReceive = "transport_receive"
+  case transportSend = "transport_send"
+  case transportProtocolViolation = "transport_protocol_violation"
+  case providerError = "provider_error"
   case providerAuthFailed = "provider_auth_failed"
   case providerQuotaExceeded = "provider_quota_exceeded"
   case providerPolicyCloseFast = "provider_policy_close_fast"
@@ -122,6 +130,100 @@ enum RealtimeHubCloseCategory: String {
 enum RealtimeHubSessionRotationPlan: Equatable {
   case rewarmIdleTransport
   case terminateActiveTurnAndRewarm
+}
+
+struct RealtimeHubFailureReportingPlan: Equatable {
+  let localMessage: String
+  let boundedErrorMessage: String
+
+  static func make(
+    failure: RealtimeHubTransportFailure,
+    category: RealtimeHubCloseCategory?,
+    provider: String,
+    aliveFor: TimeInterval,
+    activeTurn: Bool
+  ) -> Self {
+    let categoryText = category?.rawValue ?? "unclassified"
+    let bounded =
+      "RealtimeHub: session error"
+      + " category=\(categoryText)"
+      + " provider=\(provider)"
+      + " activeTurn=\(activeTurn)"
+    return Self(
+      localMessage:
+        "RealtimeHub: session closed"
+        + " category=\(categoryText)"
+        + " provider=\(provider)"
+        + " aliveFor=\(Int(aliveFor))s"
+        + " detail=\(failure.message)",
+      boundedErrorMessage: bounded)
+  }
+}
+
+/// Serializes physical transport replacement. The old transport must finish
+/// close before `start` can create its successor, and duplicate replacement
+/// requests coalesce behind the one authoritative drain.
+@MainActor
+final class RealtimeHubTransportReplacementGate {
+  private var task: Task<Void, Never>?
+  private var generation: UInt64 = 0
+  private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+
+  var isPending: Bool { task != nil }
+
+  @discardableResult
+  func replace(
+    reconnectDelayNanoseconds: UInt64 = 0,
+    stop: @escaping @MainActor () async -> Void,
+    start: @escaping @MainActor () -> Void
+  ) -> Bool {
+    guard task == nil else { return false }
+    generation &+= 1
+    let admittedGeneration = generation
+    task = Task { @MainActor [weak self] in
+      await stop()
+      guard let self else { return }
+      guard !Task.isCancelled, self.generation == admittedGeneration else {
+        self.finish()
+        return
+      }
+      if reconnectDelayNanoseconds > 0 {
+        do {
+          try await Task.sleep(nanoseconds: reconnectDelayNanoseconds)
+        } catch {
+          self.finish()
+          return
+        }
+      }
+      guard !Task.isCancelled, self.generation == admittedGeneration else {
+        self.finish()
+        return
+      }
+      self.finish()
+      start()
+    }
+    return true
+  }
+
+  func waitUntilIdle() async {
+    guard task != nil else { return }
+    await withCheckedContinuation { idleWaiters.append($0) }
+  }
+
+  func cancel() {
+    generation &+= 1
+    task?.cancel()
+  }
+
+  private func finish() {
+    guard task != nil else { return }
+    task = nil
+    let waiters = idleWaiters
+    idleWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume()
+    }
+  }
 }
 
 /// Realtime provider tool schemas are immutable per physical session. A
@@ -149,6 +251,66 @@ enum RealtimeHubSchemaRefreshPolicy {
 
 enum RealtimeHubCloseClassifier {
   static let idleTeardownThreshold: TimeInterval = 60
+
+  /// Errnos a socket reports once the peer (or an intermediary) has dropped it.
+  /// Read from the typed errno rather than the localized failure text.
+  private static let idleDisconnectPOSIXCodes: Set<Int> = [
+    Int(POSIXErrorCode.ECONNABORTED.rawValue),
+    Int(POSIXErrorCode.ECONNRESET.rawValue),
+    Int(POSIXErrorCode.ENOTCONN.rawValue),
+    Int(POSIXErrorCode.ETIMEDOUT.rawValue),
+  ]
+
+  /// A warm socket that outlived the idle window while owning no turn is dropped by
+  /// the peer as an ordinary idle teardown — the recovery path already reads
+  /// `aliveFor > 60` that way and re-warms the same provider. On the read/write side
+  /// that arrives as ECONNRESET/ENOTCONN rather than a provider close, so the
+  /// failure-kind switch used to label it a transport error and report it. A fast
+  /// disconnect, or one during an active turn, is a genuine transport failure and
+  /// still falls through as reportable.
+  private static func isAgedIdleDisconnect(
+    _ failure: RealtimeHubTransportFailure,
+    aliveFor: TimeInterval,
+    hasActiveTurn: Bool
+  ) -> Bool {
+    guard !hasActiveTurn, aliveFor >= idleTeardownThreshold else { return false }
+    guard failure.systemDomain == "posix", let code = failure.systemCode else { return false }
+    return idleDisconnectPOSIXCodes.contains(code)
+  }
+
+  static func category(
+    failure: RealtimeHubTransportFailure,
+    aliveFor: TimeInterval,
+    hasActiveTurn: Bool = false,
+    provider: RealtimeHubProvider = .openai
+  ) -> RealtimeHubCloseCategory? {
+    switch failure.kind {
+    case .localAddressUnavailable:
+      return .localAddressUnavailable
+    case .configuration:
+      return .transportConfiguration
+    case .connect:
+      return .transportConnect
+    case .handshake:
+      return .transportHandshake
+    case .receive, .send:
+      if isAgedIdleDisconnect(failure, aliveFor: aliveFor, hasActiveTurn: hasActiveTurn) {
+        return .expectedIdleTeardown
+      }
+      return failure.kind == .receive ? .transportReceive : .transportSend
+    case .protocolViolation:
+      return .transportProtocolViolation
+    case .providerError:
+      return .providerError
+    case .providerClose, .unknown:
+      break
+    }
+    return category(
+      message: failure.message,
+      aliveFor: aliveFor,
+      hasActiveTurn: hasActiveTurn,
+      provider: provider)
+  }
 
   static func category(
     message: String,
@@ -203,7 +365,7 @@ enum RealtimeHubCloseClassifier {
     category == .expectedIdleTeardown || category == .expectedSessionRotation
   }
 
-  static func shouldReportToSentry(_ category: RealtimeHubCloseCategory?) -> Bool {
+  static func isActionableClose(_ category: RealtimeHubCloseCategory?) -> Bool {
     !isExpectedLifecycleClose(category)
   }
 }
@@ -230,9 +392,14 @@ struct RealtimeProviderToolResult: Equatable {
   let output: String
   let originalByteCount: Int
   let wasOversized: Bool
+  let wasTruncated: Bool
+  /// Whether the kernel already delivered a canonical envelope. An oversized
+  /// result that still carries one was projected, not left unprojected.
+  let hasCanonicalEnvelope: Bool
 }
 
 enum RealtimeProviderToolResultPolicy {
+  /// Transport invariant only. Projection policy belongs to the Node kernel manifest.
   static let maximumByteCount = 48 * 1024
 
   /// The sole model-visible result boundary for both realtime providers.
@@ -243,7 +410,6 @@ enum RealtimeProviderToolResultPolicy {
     name: String,
     output: String
   ) -> RealtimeProviderToolResult {
-    let originalByteCount = output.utf8.count
     var providerOutput = output
     if name == HubTool.spawnAgent.rawValue,
       let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any],
@@ -254,25 +420,75 @@ enum RealtimeProviderToolResultPolicy {
     {
       providerOutput = compact
     }
-    guard providerOutput.utf8.count <= maximumByteCount else {
-      return oversizedFailure(
-        provider: provider,
-        name: name,
-        originalOutput: output,
-        originalByteCount: originalByteCount)
-    }
+    // Presence must be measured before `finalize`, which wraps unprojected
+    // payloads in a synthetic envelope of its own.
+    let hasCanonicalEnvelope = parsedCanonicalToolResultEnvelope(from: providerOutput) != nil
     let finalized = finalize(provider: provider, name: name, output: providerOutput)
-    guard finalized.utf8.count <= maximumByteCount else {
-      return oversizedFailure(
-        provider: provider,
-        name: name,
-        originalOutput: output,
-        originalByteCount: originalByteCount)
-    }
+    let wasOversized = finalized.utf8.count > maximumByteCount
+    let bounded =
+      wasOversized
+      ? clampOversizedResult(provider: provider, name: name, output: finalized)
+      : finalized
+    let envelope = parsedCanonicalToolResultEnvelope(from: bounded)
+    let originalByteCount = envelope?["originalBytes"] as? Int ?? output.utf8.count
+    let wasTruncated = envelope?["truncated"] as? Bool ?? false
     return RealtimeProviderToolResult(
-      output: finalized,
+      output: bounded,
       originalByteCount: originalByteCount,
-      wasOversized: false)
+      wasOversized: wasOversized,
+      wasTruncated: wasTruncated,
+      hasCanonicalEnvelope: hasCanonicalEnvelope)
+  }
+
+  /// Defence in depth for a kernel invariant breach. The provider still receives a successful,
+  /// bounded envelope; Swift records the breach but never crashes a dogfood build or forwards an
+  /// unbounded payload. The Node-owned artifact reference is preserved when one exists.
+  private static func clampOversizedResult(
+    provider: RealtimeHubProvider,
+    name: String,
+    output: String
+  ) -> String {
+    let sourceEnvelope = parsedCanonicalToolResultEnvelope(from: output)
+    let status = sourceEnvelope?["status"] as? String ?? "succeeded"
+    let message =
+      "Tool result was truncated at the realtime transport invariant; use fullOutputRef for complete output."
+    let projectedPayload: [String: Any] = ["ok": status == "succeeded", "text": message]
+    let projectedBytes =
+      (try? JSONSerialization.data(withJSONObject: projectedPayload, options: [.sortedKeys]))?.count
+      ?? message.utf8.count
+    let originalBytes = max(
+      sourceEnvelope?["originalBytes"] as? Int ?? output.utf8.count,
+      output.utf8.count,
+      projectedBytes + 1)
+    let provenance =
+      sourceEnvelope?["provenance"] as? [String: Any] ?? [
+        "invocationId": "realtime-\(provider.rawValue)-transport-clamp-\(String(name.prefix(64)))",
+        "runId": "unknown",
+        "attemptId": "unknown",
+        "toolName": String(name.prefix(128)),
+      ]
+    let fullOutputRef = sourceEnvelope?["fullOutputRef"] as? String ?? "artifact:unavailable"
+    let payload: [String: Any] = [
+      "ok": status == "succeeded",
+      "text": message,
+      "toolResultEnvelope": [
+        "version": 1,
+        "status": status,
+        "truncated": true,
+        "originalBytes": originalBytes,
+        "projectedBytes": projectedBytes,
+        "fullOutputRef": fullOutputRef,
+        "provenance": provenance,
+      ],
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      data.count <= maximumByteCount,
+      let result = String(data: data, encoding: .utf8)
+    else {
+      return
+        #"{"ok":true,"text":"Tool result truncated.","toolResultEnvelope":{"version":1,"status":"succeeded","truncated":true,"originalBytes":49153,"projectedBytes":40,"fullOutputRef":"artifact:unavailable","provenance":{"invocationId":"realtime-transport-clamp","runId":"unknown","attemptId":"unknown","toolName":"unknown"}}}"#
+    }
+    return result
   }
 
   static func rejectedOutput(
@@ -296,34 +512,6 @@ enum RealtimeProviderToolResultPolicy {
     let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     return data.flatMap { String(data: $0, encoding: .utf8) }
       ?? #"{"ok":false,"error":{"code":"realtime_tool_rejected","message":"The tool could not be completed."}}"#
-  }
-
-  private static func oversizedFailure(
-    provider: RealtimeHubProvider,
-    name: String,
-    originalOutput: String,
-    originalByteCount: Int
-  ) -> RealtimeProviderToolResult {
-    let error: [String: Any] = [
-      "code": "tool_result_too_large",
-      "message": "The tool returned too much detail. Retry with narrower filters.",
-      "tool": String(name.prefix(128)),
-      "originalBytes": originalByteCount,
-    ]
-    let payload: [String: Any] = [
-      "ok": false,
-      "error": error,
-      "toolResultEnvelope": providerFailureEnvelope(
-        provider: provider, name: name, error: error, originalOutput: originalOutput),
-    ]
-    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-    let bounded =
-      data.flatMap { String(data: $0, encoding: .utf8) }
-      ?? #"{"ok":false,"error":{"code":"tool_result_too_large"}}"#
-    return RealtimeProviderToolResult(
-      output: bounded,
-      originalByteCount: originalByteCount,
-      wasOversized: true)
   }
 
   private static func finalize(provider: RealtimeHubProvider, name: String, output: String) -> String {
@@ -480,6 +668,27 @@ enum RealtimeHubLifecyclePolicy {
     !replacementPending
   }
 
+  /// Whether the persistence-fence refresh loop may retry after a kernel
+  /// snapshot failed to resolve.
+  ///
+  /// Retrying is only safe while the fence still owns the authenticated scope it
+  /// started under. Once the owner changes or signs out (session invalidation),
+  /// the kernel snapshot can never resolve — the agent bridge refuses to start
+  /// without a current authorization — so the snapshot fails *instantly* on
+  /// every iteration. Looping in that state spins agent-bridge startup at full
+  /// speed (thousands of "sign in to use AI chat" failures per minute). Signed-in
+  /// snapshot failures are naturally rate-limited by their network round-trip, so
+  /// this owner-scope gate is what prevents the busy-loop.
+  static func canRetryPersistenceFence(
+    taskCancelled: Bool,
+    fenceOwnerScope: RealtimeHubOwnerScope,
+    currentOwnerScope: RealtimeHubOwnerScope
+  ) -> Bool {
+    guard !taskCancelled else { return false }
+    guard case .authenticated = currentOwnerScope else { return false }
+    return fenceOwnerScope == currentOwnerScope
+  }
+
 }
 
 /// Immutable account identity attached to a realtime socket, its context, and
@@ -614,7 +823,8 @@ enum RealtimeHubToolFailureKind: String, Equatable {
         default:
           return .backendTransport
         }
-      case .unsupportedTierScopedBulkMutation, .syncUploadRejected:
+      case .unsupportedTierScopedBulkMutation, .syncUploadRejected, .accountCutoverOfflineQueueBlocked,
+        .memoryDeleteGateBusy:
         return .backendClientRejected
       }
     }
@@ -676,10 +886,24 @@ struct RealtimeHubToolFailure: Equatable {
 enum RealtimeHubReconnectIdentityPolicy {
   static func responseIDAfterSessionDetach(
     preservingReconnectAudio: Bool,
-    pendingReconnect: RealtimeReconnectAudioBuffer?
+    pendingReconnect: RealtimeReconnectAudioBuffer?,
+    preservingBargeInReplacement: Bool,
+    pendingBargeInReplacement: RealtimeReplacementAudioBuffer?
   ) -> VoiceResponseID? {
-    guard preservingReconnectAudio, let pendingReconnect else { return nil }
-    return pendingReconnect.responseID
+    let reconnectResponseID =
+      preservingReconnectAudio ? pendingReconnect?.responseID : nil
+    let replacementResponseID =
+      preservingBargeInReplacement ? pendingBargeInReplacement?.responseID : nil
+    switch (reconnectResponseID, replacementResponseID) {
+    case (.some(let reconnect), .some(let replacement)):
+      // These buffers should never coexist. If they ever do, only an exact
+      // shared identity is safe to retain across the physical handoff.
+      return reconnect == replacement ? reconnect : nil
+    case (.some(let responseID), .none), (.none, .some(let responseID)):
+      return responseID
+    case (.none, .none):
+      return nil
+    }
   }
 
   /// Production boundary that admits/fences provider session callbacks before
@@ -705,13 +929,36 @@ enum RealtimeHubReconnectIdentityPolicy {
 }
 
 enum RealtimeHubEventOwnership {
+  enum Admission: Equatable {
+    case accept
+    case dropStaleTurn
+    case rejectCurrentTurnResponse
+  }
+
+  static func admission(
+    _ identity: RealtimeHubEventIdentity?,
+    activeTurnID: VoiceTurnID?,
+    activeResponseID: VoiceResponseID?
+  ) -> Admission {
+    guard let identity, identity.turnID == activeTurnID else {
+      return .dropStaleTurn
+    }
+    guard identity.responseID == activeResponseID else {
+      return .rejectCurrentTurnResponse
+    }
+    return .accept
+  }
+
   static func accepts(
     _ identity: RealtimeHubEventIdentity?,
     activeTurnID: VoiceTurnID?,
     activeResponseID: VoiceResponseID?
   ) -> Bool {
-    guard let identity else { return false }
-    return identity.turnID == activeTurnID && identity.responseID == activeResponseID
+    admission(
+      identity,
+      activeTurnID: activeTurnID,
+      activeResponseID: activeResponseID
+    ) == .accept
   }
 }
 
@@ -870,4 +1117,61 @@ enum RealtimeHubBargeInContinuity {
     }
     return Task.isCancelled ? .cancelled : .contextUnavailable
   }
+}
+
+/// Presence-gated warming. The warm hub socket exists so PTT answers instantly
+/// while the user is at the machine. Gemini idle-closes a silent socket every
+/// ~150s, and each re-warm re-bills the full session context (~18.5k tokens
+/// measured on a 37k-char context) — 24/7, per running app, whether or not the
+/// user is even at the computer. Fleet-wide that loop is what tripped the
+/// project's Gemini spend throttle (close 1011 "exceeded your current quota")
+/// and flipped every user's voice to OpenAI. Deferring re-warm while the user
+/// is away keeps the latency guarantee whenever they are present: warming
+/// resumes on the first returned input event, seconds before any realistic PTT
+/// press, and a cold PTT still has the bounded warm-wait + cascade fallback.
+enum RealtimeHubWarmPresencePolicy {
+  /// User-input idle time after which an idle-teardown re-warm is deferred.
+  static let idleThreshold: TimeInterval = 10 * 60
+  /// While deferred, how often the controller re-samples for returned input.
+  static let presencePollInterval: TimeInterval = 10
+  /// Slack added to the measured inter-poll gap: a poll that fires late must
+  /// still accept input that arrived any time since the previous sample, or a
+  /// brief return between delayed polls is missed permanently.
+  static let presencePollSlack: TimeInterval = 2
+
+  /// `nil` = the idle query failed → warm (fail-open to today's behavior).
+  static func shouldRewarmAfterIdleTeardown(secondsSinceLastUserInput: TimeInterval?) -> Bool {
+    guard let idle = secondsSinceLastUserInput else { return true }
+    return idle < idleThreshold
+  }
+
+  /// While deferred: input newer than the freshness window → resume warming.
+  /// The poll loop passes its MEASURED elapsed time (+ slack) so scheduler
+  /// delay widens the window instead of losing the return; passive
+  /// `ensureWarm` callers use the default one-interval window.
+  static func shouldResumeWarming(
+    secondsSinceLastUserInput: TimeInterval?,
+    freshnessWindow: TimeInterval = presencePollInterval
+  ) -> Bool {
+    guard let idle = secondsSinceLastUserInput else { return true }
+    return idle < freshnessWindow
+  }
+}
+enum RealtimeProviderCloseRecoveryAction: String {
+  case none
+  case sessionRewarm = "session_rewarm"
+  case providerFailover = "provider_failover"
+  case cascade
+}
+
+enum RealtimeProviderCloseRecoveryResult: String {
+  case notNeeded = "not_needed"
+  case started
+  case exhausted
+  /// Idle-teardown re-warm deferred because the user is away from the machine
+  /// (RealtimeHubWarmPresencePolicy); warming resumes on returned input.
+  case deferredUserAway = "deferred_user_away"
+  /// Automatic managed re-warm skipped because the plan is gated or the
+  /// server returned typed 402 `plan_gated`. User-initiated PTT still attempts.
+  case deferredPlanGated = "deferred_plan_gated"
 }

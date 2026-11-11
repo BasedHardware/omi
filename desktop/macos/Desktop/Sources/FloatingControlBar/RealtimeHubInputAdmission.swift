@@ -115,6 +115,7 @@ enum RealtimeHubSessionHandoffReason: String, Equatable {
   case providerSettings = "provider_settings"
   case systemWake = "system_wake"
   case voiceLanguages = "voice_languages_changed"
+  case assistantVoice = "assistant_voice"
   case transportFailure = "transport_failure"
 }
 
@@ -176,11 +177,40 @@ enum RealtimeInputAdmissionPolicy {
 }
 
 enum RealtimeVoiceContextRefreshPolicy {
+  enum HandoffDecision: Equatable {
+    case keepCurrentSession
+    case debounceIdleHandoff
+    case replacePreservingBufferedTurn
+  }
+
+  /// A streaming text turn can update the voice context several times per
+  /// second. Replacing an otherwise-idle realtime socket for every update
+  /// makes the next PTT press race a chain of redundant reconnects. The
+  /// controller coalesces those idle updates, while a captured press still
+  /// replaces immediately and keeps its audio buffer.
+  static let idleHandoffDebounceNanoseconds: UInt64 = 600_000_000
+
   static func requiresRefresh(
     currentSnapshotIdentity: String,
     sessionSnapshotIdentity: String
   ) -> Bool {
     currentSnapshotIdentity != sessionSnapshotIdentity
+  }
+
+  static func handoffDecision(
+    currentSnapshotIdentity: String,
+    sessionSnapshotIdentity: String,
+    hasBufferedTurn: Bool
+  ) -> HandoffDecision {
+    guard
+      requiresRefresh(
+        currentSnapshotIdentity: currentSnapshotIdentity,
+        sessionSnapshotIdentity: sessionSnapshotIdentity
+      )
+    else {
+      return .keepCurrentSession
+    }
+    return hasBufferedTurn ? .replacePreservingBufferedTurn : .debounceIdleHandoff
   }
 }
 

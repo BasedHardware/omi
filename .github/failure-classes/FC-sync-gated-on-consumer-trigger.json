@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-gated-on-consumer-trigger",
+  "violated_contract": "A durable state sync whose authority is cheap to read (a snapshot plus its receipt) must be driven by the lifecycle event of the scope that owns it \u2014 signed-in admitted startup, owner change \u2014 never only by the opportunistic consumer path that happens to need it next. Binding the sync to the consumer's trigger silently couples availability to an unrelated subsystem: the JIT trigger snapshot download only ran inside JITProactivityRuntime.admission, reached solely after a notify-worthy screen-capture context visit, so an allowlisted owner whose TCC Screen Recording grant dropped (Sparkle replaced the signed binary) held a valid authority, kept the routes it did hit green, and stayed at zero jit_trigger_snapshot_receipts forever \u2014 the client fix in #12381 shipped in Beta 12240 but could never execute. No decode error, no failing test, and the server log looks healthy because the gating read simply never happens.",
+  "canonical_prevention": "Hook the same flag \u2192 fetch \u2192 reconcile chain the consumer uses onto the owner-ready startup path: DesktopHomeSignedInStartup.runProductServicesIfAdmitted fires JITProactivityRuntime.syncTriggerSnapshot once after isProductShellAdmitted, and the .task(id: productShellAdmissionToken) restart supplies the owner-change retry. Fire-and-forget so a slow authority route never gates startup; keep the consumer's fail-closed gate (permitsNewLane) and the complete-empty-snapshot receipt contract. Behavioral coverage: a runtime test that fetches and persists a receipt with zero context visits, fail-closed tests that every non-permitting authority performs no snapshot read, and URLProtocol-level wire tests asserting the GET sequence rollout-decision \u2192 trigger-snapshot. The legacy Insight/context-director/JIT proactivity producer was retired on 2026-10-03; its deleted instance guards are historical evidence, not live prevention artifacts. Retained feature instances still require this contract.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/AccountCutover/DesktopHomeSignedInStartup.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/**",
+    "desktop/windows/src/main/jit/**"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-watch-stop.png",
+      "platform": "mobile-ios",
+      "description": "Actual WatchRecorderView on the 40 mm Watch simulator, synthetic active capture and 40 pending parts; Stop and Retry transfer fit. No physical microphone or radio claim.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-watch-idle-pending.png",
+      "platform": "mobile-ios",
+      "description": "Actual 40 mm Watch simulator stopped state with synthetic pending files; the 44 pt Record target leaves Retry transfer fully visible. No physical transfer or microphone claim.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-watch-accessibility-stop.png",
+      "platform": "mobile-ios",
+      "description": "Actual 40 mm Watch view at accessibility3 text size with synthetic active capture and saved-audio error. Stop recording remains readable; longer recovery content scrolls. No real microphone or transfer claim.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

@@ -5,10 +5,10 @@ A manually runnable integration test suite that imports the **real omi FastAPI b
 Current dogfood status:
 
 ```text
-80 passed, 6 skipped, 49 warnings
+141 passed, 3 skipped, 2 xfailed
 ```
 
-The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking. The runner also wraps pytest in a process-level timeout (`E2E_PYTEST_TIMEOUT`, default `120s`) so websocket/provider-seam regressions fail instead of hanging indefinitely.
+The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking. The runner also wraps pytest in a process-level timeout (`E2E_PYTEST_TIMEOUT`, default `120s`) so websocket/provider-seam regressions fail instead of hanging indefinitely; that budget covers interpreter start, collection, the test session, and interpreter exit together. At session end the conftest stops the Redis pub/sub manager and shared executors explicitly (see `_teardown_hermetic_process_state`) with a hard budget, so slow teardown or leaked non-daemon threads fail the run by name instead of silently consuming the wrapper budget at process exit.
 
 Run it with:
 
@@ -39,7 +39,7 @@ This version proves the backend can boot hermetically and that selected core CRU
 | Storage / speech profile | ✅ Green | `google.cloud.storage.Client` is patched to a temp-dir fake; speech-profile presence, signed URL, sample list, and delete paths run through real routes/helpers. |
 | Webhooks | ✅ Partial | Developer webhook config/status routes, disabled no-op behavior, realtime delivery payload, non-2xx failure health recording, timeout/exception health recording, and threshold auto-disable are covered with `httpx.MockTransport`. Marketplace app webhook retry/circuit-breaker behavior remains v2. |
 | Task integrations | ✅ Green | CRUD/default/delete paths plus connected/disconnected/no-token and Todoist success, provider 500, 401 disconnect, and timeout failure paths exercise real task-integration database helpers against fake Firestore. |
-| User/auth/profile/account | ✅ Green | Auth guard, profile, onboarding, language/transcription prefs, people CRUD, notification/assistant settings, AI profile, and BYOK activation/deactivation routes are covered. |
+| User/auth/profile/account | ✅ Green | Auth guard, profile, onboarding, language/transcription prefs, people CRUD, notification/assistant settings, AI profile, and BYOK activation/deactivation routes are covered. Account deletion additionally exercises its real admission route, durable marker, opaque Cloud Tasks payload, worker claim, required-purge retry, and idempotent redelivery against local fakes. Firebase deletion, billing lookup, Twilio, and derived-data purge stay controlled test seams. |
 | Retrieval/search | ✅ Partial | Memory, action-item, conversation summary, and transcript-chunk retrieval routes run through real public APIs with Firestore-backed records and a deterministic in-memory replacement for Pinecone/OpenAI embeddings at the `database.vector_db` client seam. Full Pinecone/Typesense service compatibility remains out of scope. |
 | Failure / edge modes | ✅ Partial | Invalid input and edge-case coverage runs. Redis-unavailable, LLM 500, and STT timeout cases are explicitly skipped or deferred until per-test failure fakes are wired. |
 | Legacy shape compatibility | ✅ Green | Exercises legacy conversation/memory shapes and deterministic fake-store repeated writes. It does not execute production migration scripts. |
@@ -51,9 +51,10 @@ This version proves the backend can boot hermetically and that selected core CRU
 | Firestore | `fake-firestore` `MockFirestore` | In-memory datastore backing the real database modules. |
 | Redis | `fakeredis` | In-memory Redis replacement. |
 | Google Cloud Storage | `google.cloud.storage.Client` patched to a filesystem-backed fake | Enables storage-backed routes without GCS credentials/network. |
+| Cloud Tasks / OIDC | Strict in-memory `tasks_v2.CloudTasksClient` plus a local token-verification seam in the account-deletion lifecycle test | Exercises the production task protobuf, queue payload, OIDC identity/audience, and retry headers without a Cloud Tasks control plane or Google token verification. |
 | Google ADC | `google.auth.default` returns anonymous credentials | Prevents real credential lookup at import time. |
 | Pinecone | `PINECONE_API_KEY` removed globally; targeted retrieval/search tests monkeypatch `database.vector_db.index` to a deterministic in-memory fake | Keeps app import hermetic while allowing route-level vector upsert/query/delete assertions without real Pinecone. |
-| Typesense | Dummy host/port/API key | Lets import-time Typesense client construction succeed; retrieval/search tests rely on vector results and fail-open keyword search rather than real Typesense compatibility. |
+| Typesense | Dummy host/port/API key for import-time construction; conftest routes the runtime seams hermetically (configured-guards return False, the shared lazy `search.client` raises a transient `connection refused`) | Ungated index deletes and lazy keyword-search calls used to attempt real HTTP against the refused dummy port — ~4s of urllib3 retries per call, ~60s across the suite. Fail-open keyword-search semantics are preserved; real Typesense behavior is covered by `tests/unit/test_conversation_typesense_index.py`. |
 | Google Translate | Anonymous Google credentials | Allows import-time client construction; v1 tests do not call live translation. |
 | LLM/STT/VAD/embeddings | Fake modules scaffolded; route and custom-STT suggested-transcript seams covered where deterministic patching is practical | Kept as v2 work where scenarios need real outbound HTTP/WS/provider assertions. |
 | Webhook/task external HTTP | `httpx.MockTransport` in targeted tests | Captures outbound payloads without network. |
@@ -94,6 +95,9 @@ bash backend/testing/e2e/run.sh -k "search or retrieval or embedding or vector"
 # User/auth/profile/account routes
 bash backend/testing/e2e/run.sh -k "user_auth_profile"
 
+# Durable account-deletion Cloud Tasks lifecycle
+bash backend/testing/e2e/run.sh -k "account_deletion_cloud_tasks"
+
 # Mobile-facing lifecycle / client compatibility
 bash backend/testing/e2e/run.sh -k "mobile_lifecycle"
 
@@ -126,6 +130,7 @@ run.sh
         ├── test_crud.py
         ├── test_conversation_processing.py
         ├── test_conversation_processing_deterministic.py
+        ├── test_account_deletion_cloud_tasks.py
         ├── test_failure_modes.py
         ├── test_harness_guards.py
         ├── test_listen_stt.py

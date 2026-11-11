@@ -2,6 +2,7 @@ import os
 import sys
 import types
 from importlib.util import find_spec
+from importlib import import_module
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -68,6 +69,9 @@ def _install_optional_import_stubs(monkeypatch):
         websockets_stub.WebSocket = MagicMock()
         monkeypatch.setitem(sys.modules, 'starlette.websockets', websockets_stub)
 
+    # Warm shared imports during setup so callback timing measures callback work.
+    import_module('utils.llm.clients')
+
 
 class _HTTPError(Exception):
     def __init__(self, message: str, status_code: int):
@@ -105,14 +109,18 @@ def test_classify_byok_llm_error_ignores_transient_rate_limit():
 def test_handle_llm_error_logs_byok_source(mock_send_notification, mock_get_key, mock_get_uid):
     from utils.llm.byok_errors import handle_llm_error
 
-    with patch('utils.llm.byok_errors.logger.error') as mock_log:
-        handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature='memories', model='gpt-test')
+    # A user-actionable BYOK failure is account state, not a server fault: one
+    # structured WARNING, never ERROR, and never the provider error body.
+    with patch('utils.llm.byok_errors.logger.error') as mock_error:
+        with patch('utils.llm.byok_errors.logger.warning') as mock_warn:
+            handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature='memories', model='gpt-test')
 
-    log_args = mock_log.call_args.args
-    assert 'LLM error source=%s' in log_args[0]
-    assert log_args[1] == 'byok'
-    assert log_args[2] == 'openai'
-    assert log_args[8] == 'quota'
+    mock_error.assert_not_called()
+    warn_args = mock_warn.call_args.args
+    assert 'byok=true' in warn_args[0]
+    assert warn_args[1] == 'byok_quota'
+    assert warn_args[2] == 'openai'
+    assert warn_args[3] == 'memories'
     mock_send_notification.assert_called_once_with('user-1', 'openai', 'quota')
 
 
@@ -168,6 +176,8 @@ def test_llm_error_callback_uses_provider_context():
 
     google_genai_stub = types.ModuleType('langchain_google_genai')
     google_genai_stub.ChatGoogleGenerativeAI = _DummyClient
+    langchain_anthropic_stub = types.ModuleType('langchain_anthropic')
+    langchain_anthropic_stub.ChatAnthropic = _DummyClient
     openai_stub = types.ModuleType('langchain_openai')
     openai_stub.ChatOpenAI = _DummyClient
     openai_stub.OpenAIEmbeddings = _DummyClient
@@ -184,6 +194,7 @@ def test_llm_error_callback_uses_provider_context():
         'langchain_core.callbacks': callbacks_stub,
         'langchain_core.language_models': language_models_stub,
         'langchain_core.output_parsers': output_parsers_stub,
+        'langchain_anthropic': langchain_anthropic_stub,
         'langchain_google_genai': google_genai_stub,
         'langchain_openai': openai_stub,
         'tiktoken': tiktoken_stub,
@@ -244,6 +255,8 @@ def test_openai_embeddings_proxy_notifies_on_sync_byok_failure():
 
     google_genai_stub = types.ModuleType('langchain_google_genai')
     google_genai_stub.ChatGoogleGenerativeAI = _DummyClient
+    langchain_anthropic_stub = types.ModuleType('langchain_anthropic')
+    langchain_anthropic_stub.ChatAnthropic = _DummyClient
     openai_stub = types.ModuleType('langchain_openai')
     openai_stub.ChatOpenAI = _DummyClient
     openai_stub.OpenAIEmbeddings = _DummyClient
@@ -260,6 +273,7 @@ def test_openai_embeddings_proxy_notifies_on_sync_byok_failure():
         'langchain_core.callbacks': callbacks_stub,
         'langchain_core.language_models': language_models_stub,
         'langchain_core.output_parsers': output_parsers_stub,
+        'langchain_anthropic': langchain_anthropic_stub,
         'langchain_google_genai': google_genai_stub,
         'langchain_openai': openai_stub,
         'tiktoken': tiktoken_stub,
@@ -315,6 +329,8 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
     output_parsers_stub.PydanticOutputParser = _DummyClient
     google_genai_stub = types.ModuleType('langchain_google_genai')
     google_genai_stub.ChatGoogleGenerativeAI = _DummyClient
+    langchain_anthropic_stub = types.ModuleType('langchain_anthropic')
+    langchain_anthropic_stub.ChatAnthropic = _DummyClient
     openai_stub = types.ModuleType('langchain_openai')
     openai_stub.ChatOpenAI = _DummyClient
     openai_stub.OpenAIEmbeddings = _DummyClient
@@ -331,6 +347,7 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
         'langchain_core.callbacks': callbacks_stub,
         'langchain_core.language_models': language_models_stub,
         'langchain_core.output_parsers': output_parsers_stub,
+        'langchain_anthropic': langchain_anthropic_stub,
         'langchain_google_genai': google_genai_stub,
         'langchain_openai': openai_stub,
         'tiktoken': tiktoken_stub,
@@ -350,11 +367,11 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
         byok_inst.aembed_query = AsyncMock(side_effect=_HTTPError('invalid_api_key', 401))
 
         with patch.object(_OpenAIEmbeddingsProxy, '_resolve', return_value=byok_inst), patch(
-            'utils.llm.clients.handle_llm_error'
+            'utils.llm.clients.handle_llm_error_async', new_callable=AsyncMock
         ) as mock_handle:
             result = asyncio.run(proxy.aembed_query('hello world'))
 
-        mock_handle.assert_called_once()
+        mock_handle.assert_awaited_once()
         assert mock_handle.call_args.kwargs.get('operation') == 'aembed_query'
         default.aembed_query.assert_awaited_once_with('hello world')
         assert result == [0.3, 0.4]

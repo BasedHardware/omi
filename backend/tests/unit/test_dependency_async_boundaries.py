@@ -14,6 +14,13 @@ from testing.import_isolation import load_module_fresh, stub_modules
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(autouse=True)
+def directory_routing_enabled(monkeypatch):
+    # These witnesses exercise resolver offloading; off-mode bypass is covered
+    # separately by test_directory_router's auth dependency regressions.
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
+
+
 def _module(name: str, **attributes: Any) -> ModuleType:
     module = ModuleType(name)
     for key, value in attributes.items():
@@ -56,7 +63,12 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType,
         'database.dev_api_key',
         get_api_key_auth_result=lambda _token: SimpleNamespace(context=None, repairs=frozenset()),
     )
-    endpoints = _module('utils.other.endpoints', check_api_key_rate_limit=lambda **_kwargs: None)
+    endpoints = _module(
+        'utils.other.endpoints',
+        check_api_key_rate_limit=lambda **_kwargs: None,
+        enforce_account_deletion_http_access=lambda _uid: None,
+        _resolve_request_plane_or_503=lambda _uid, **_kwargs: None,
+    )
     mcp_memories = _module(
         'utils.mcp_memories',
         McpVerifiedAuth=_McpVerifiedAuth,
@@ -119,7 +131,27 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
         result = asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')))
 
         assert result == 'user-1'
-        assert calls == [(dependencies.critical_executor, verify_id_token, ('firebase-token',), {})]
+        assert calls == [
+            (dependencies.critical_executor, verify_id_token, ('firebase-token',), {}),
+            (
+                dependencies.db_executor,
+                dependencies.enforce_account_deletion_http_access,
+                ('user-1',),
+                {},
+            ),
+            (
+                dependencies.db_executor,
+                dependencies._enforce_cutover_http_if_request,
+                ('user-1', None),
+                {},
+            ),
+            (
+                dependencies.db_executor,
+                dependencies.auth_endpoints._resolve_request_plane_or_503,
+                ('user-1',),
+                {'request': None},
+            ),
+        ]
 
 
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
@@ -128,14 +160,14 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
         rate_limit_calls: list[dict[str, Any]] = []
 
         def lookup_mcp(token: str) -> SimpleNamespace:
-            assert token == 'omi_mcp_secret'
+            assert token == 'omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
             return SimpleNamespace(
                 context={'user_id': 'mcp-user', 'scopes': [], 'app_id': 'mcp-app', 'key_id': 'mcp-key'},
                 repairs=frozenset(),
             )
 
         def lookup_dev(token: str) -> SimpleNamespace:
-            assert token == 'omi_dev_secret'
+            assert token == 'omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
             return SimpleNamespace(
                 context={'user_id': 'dev-user', 'scopes': [], 'app_id': 'dev-app', 'key_id': 'dev-key'},
                 repairs=frozenset(),
@@ -153,15 +185,21 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
         dependencies.check_api_key_rate_limit = check_rate_limit
         dependencies.run_blocking = tracking_run_blocking
 
-        mcp_uid = asyncio.run(dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_secret'))
-        dev_auth = asyncio.run(dependencies.get_api_key_auth('Bearer omi_dev_secret'))
+        mcp_uid = asyncio.run(dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
+        dev_auth = asyncio.run(dependencies.get_api_key_auth('Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
 
         assert mcp_uid == 'mcp-user'
         assert dev_auth.uid == 'dev-user'
         assert [(executor, fn) for executor, fn, _args, _kwargs in calls] == [
-            (dependencies.critical_executor, lookup_mcp),
+            (dependencies.db_executor, lookup_mcp),
+            (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
+            (dependencies.db_executor, dependencies._enforce_cutover_http_if_request),
+            (dependencies.db_executor, dependencies.auth_endpoints._resolve_request_plane_or_503),
             (dependencies.critical_executor, check_rate_limit),
-            (dependencies.critical_executor, lookup_dev),
+            (dependencies.db_executor, lookup_dev),
+            (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
+            (dependencies.db_executor, dependencies._enforce_cutover_http_if_request),
+            (dependencies.db_executor, dependencies.auth_endpoints._resolve_request_plane_or_503),
         ]
         assert rate_limit_calls == [
             {
@@ -183,7 +221,7 @@ def test_auth_repair_metadata_is_emitted_from_the_dependency_layer() -> None:
         events: list[dict[str, Any]] = []
         dependencies.record_api_key_repairs = lambda **kwargs: events.append(kwargs)
 
-        auth = asyncio.run(dependencies.get_mcp_api_key_auth('Bearer omi_mcp_secret'))
+        auth = asyncio.run(dependencies.get_mcp_api_key_auth('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))
 
         assert auth.uid == 'mcp-user'
         assert events == [
@@ -192,6 +230,45 @@ def test_auth_repair_metadata_is_emitted_from_the_dependency_layer() -> None:
                 'operation': 'auth',
                 'repairs': frozenset({'cache_write'}),
                 'log': dependencies.logger,
+            }
+        ]
+
+
+def test_mcp_scope_dependency_enforces_scope_and_rate_limits_by_key_identity() -> None:
+    with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
+        rate_limit_calls: list[dict[str, Any]] = []
+
+        async def record_rate_limit(**kwargs: Any) -> None:
+            rate_limit_calls.append(kwargs)
+
+        dependencies._check_api_key_rate_limit_async = record_rate_limit
+        require_cleanup = dependencies.require_mcp_scope('people.cleanup')
+        allowed = dependencies.ApiKeyAuth(
+            uid='user-1',
+            scopes=['people.cleanup'],
+            app_id='mcp-api',
+            key_id='key-1',
+        )
+        denied = dependencies.ApiKeyAuth(
+            uid='user-1',
+            scopes=['people.read', 'people.rename'],
+            app_id='mcp-api',
+            key_id='key-1',
+        )
+
+        assert asyncio.run(require_cleanup(allowed)) == 'user-1'
+        with pytest.raises(HTTPException) as caught:
+            asyncio.run(require_cleanup(denied))
+
+        assert caught.value.status_code == 403
+        assert caught.value.detail == 'Insufficient permissions. Required scope: people.cleanup'
+        assert rate_limit_calls == [
+            {
+                'prefix': 'mcp',
+                'uid': 'user-1',
+                'app_id': 'mcp-api',
+                'key_id': 'key-1',
+                'policy_name': 'mcp:read',
             }
         ]
 
@@ -250,6 +327,7 @@ def test_all_api_key_scope_dependencies_route_rate_limits_through_the_critical_e
             write_context = dependencies.get_developer_memory_default_memory_write_auth_context(auth)
             assert write_context.surface == 'developer_default_memory_write'
             assert await dependencies.get_developer_memory_default_memory_write_context(write_context) is write_context
+            assert await dependencies.get_developer_memory_default_memory_create_context(write_context) is write_context
             assert (
                 await dependencies.get_developer_memory_default_memory_batch_write_context(write_context)
                 is write_context
@@ -260,7 +338,10 @@ def test_all_api_key_scope_dependencies_route_rate_limits_through_the_critical_e
         assert policies == [
             'mcp:memories_read',
             'mcp:memories_write',
+            # Each conversation read charges the shared ceiling before its per-route budget.
+            'dev:conversation_reads_total',
             'dev:conversations_read',
+            'dev:conversation_reads_total',
             'dev:conversation_detail_read',
             'dev:conversations',
             'dev:memories_read',
@@ -271,6 +352,7 @@ def test_all_api_key_scope_dependencies_route_rate_limits_through_the_critical_e
             'dev:goals_write',
             'dev:memories_read',
             'dev:memories',
+            'dev:memories_write_burst',
             'dev:memories_batch',
         ]
         assert len(executor_calls) == len(policies)
@@ -333,7 +415,7 @@ def test_persisted_api_key_lookup_keeps_the_event_loop_responsive() -> None:
             safety_release.start()
             try:
                 result = await _assert_loop_responsive_while_worker_waits(
-                    dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_secret'),
+                    dependencies.get_uid_from_mcp_api_key('Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
                     entered,
                     release,
                 )
@@ -410,3 +492,108 @@ def test_authentication_and_scope_failures_preserve_public_http_semantics() -> N
             asyncio.run(dependencies.get_auth_with_goals_write(no_scope))
         assert scope_exc.value.status_code == 403
         assert dependencies.Scopes.GOALS_WRITE in scope_exc.value.detail
+
+
+def test_firebase_verification_saturation_is_retryable_503() -> None:
+    with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
+        dependencies.run_blocking = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            dependencies.ExecutorSaturatedError('critical executor is saturated')
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')))
+
+        assert exc.value.status_code == 503
+        assert exc.value.headers == {'Retry-After': '1'}
+
+
+def test_dev_write_paths_check_burst_and_dedicated_rate_budgets() -> None:
+    """GH #13505: the abused /v1/dev/* write paths must ride dedicated limits.
+
+    - POST /v1/dev/user/memories: hourly dev:memories plus the per-minute
+      dev:memories_write_burst ceiling — the hourly window alone admits the
+      whole quota inside one minute (the scripted 69/min burst shape). The
+      burst budget is POST-only: PATCH/DELETE ride just the hourly context.
+    - POST /v1/dev/user/conversations/from-segments: shared dev:conversations
+      plus the dedicated dev:conversations_from_segments budget, mirroring the
+      first-party route's conversations:from-segments policy.
+    """
+    with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
+        policies: list[str] = []
+
+        def check_rate_limit(**kwargs: Any) -> None:
+            policies.append(kwargs['policy_name'])
+
+        async def inline_run_blocking(_executor: Any, fn: Any, *args: Any, **kwargs: Any) -> Any:
+            return fn(*args, **kwargs)
+
+        dependencies.check_api_key_rate_limit = check_rate_limit
+        dependencies.run_blocking = inline_run_blocking
+
+        auth = dependencies.ApiKeyAuth(
+            uid='user-1',
+            scopes=[dependencies.Scopes.CONVERSATIONS_WRITE],
+            app_id='developer_api',
+            key_id='key-1',
+        )
+
+        # Verify the declared Depends() composition itself, not a hand-picked
+        # call order: the POST create context must chain the shared hourly
+        # write context (so PATCH/DELETE never touch the burst budget), and
+        # the from-segments wrapper must chain get_auth_with_conversations_write.
+        create_default = dependencies.get_developer_memory_default_memory_create_context.__defaults__[0]
+        assert create_default.dependency is dependencies.get_developer_memory_default_memory_write_context
+        write_default = dependencies.get_developer_memory_default_memory_write_context.__defaults__[0]
+        assert write_default.dependency is dependencies.get_developer_memory_default_memory_write_auth_context
+        from_segments_default = dependencies.get_uid_with_conversations_from_segments_write.__defaults__[0]
+        assert from_segments_default.dependency is dependencies.get_auth_with_conversations_write
+
+        async def exercise() -> None:
+            write_context = dependencies.ProductAuthorizationContext(
+                uid='user-1', app_id='developer_api', key_id='key-1'
+            )
+            # PATCH/DELETE path: shared hourly ceiling only, no burst budget.
+            hourly = await dependencies.get_developer_memory_default_memory_write_context(write_context)
+            assert hourly is write_context
+            # POST path: the create context composes on top of the hourly one.
+            assert await dependencies.get_developer_memory_default_memory_create_context(hourly) is write_context
+            # POST /v1/dev/user/conversations/from-segments: the wrapper's
+            # Depends(get_auth_with_conversations_write) resolves the shared
+            # ceiling before adding its per-route budget.
+            assert await dependencies.get_auth_with_conversations_write(auth) is auth
+            assert await dependencies.get_uid_with_conversations_from_segments_write(auth) == 'user-1'
+
+        asyncio.run(exercise())
+
+        assert policies == [
+            'dev:memories',
+            'dev:memories_write_burst',
+            'dev:conversations',
+            'dev:conversations_from_segments',
+        ]
+
+
+def test_directory_resolution_keeps_the_event_loop_responsive() -> None:
+    with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
+
+        async def exercise() -> None:
+            entered = asyncio.Event()
+            release = threading.Event()
+            loop = asyncio.get_running_loop()
+
+            def blocking_resolve(_uid: str, *, request=None) -> None:
+                loop.call_soon_threadsafe(entered.set)
+                assert release.wait(timeout=2)
+
+            dependencies.auth_endpoints._resolve_request_plane_or_503 = blocking_resolve
+            safety_release = threading.Timer(1, release.set)
+            safety_release.start()
+            try:
+                result = await _assert_loop_responsive_while_worker_waits(
+                    dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')), entered, release
+                )
+            finally:
+                safety_release.cancel()
+            assert result == 'user-1'
+
+        asyncio.run(exercise())

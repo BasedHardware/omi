@@ -1,3 +1,5 @@
+import AVFoundation
+import Flutter
 import Foundation
 
 /// Pigeon adapter: forwards host-API calls to the controller. No logic lives
@@ -10,8 +12,8 @@ final class PhoneMicHostApiImpl: PhoneMicHostApi {
         self.controller = controller
     }
 
-    func start(mode: PhoneMicCaptureMode, completion: @escaping (Result<Void, Error>) -> Void) {
-        controller.start(mode: mode, completion: completion)
+    func start(mode: PhoneMicCaptureMode, sessionId: Int64, completion: @escaping (Result<Void, Error>) -> Void) {
+        controller.start(mode: mode, sessionId: sessionId, completion: completion)
     }
 
     func stop(completion: @escaping (Result<Void, Error>) -> Void) {
@@ -23,80 +25,107 @@ final class PhoneMicHostApiImpl: PhoneMicHostApi {
     func isRecording() throws -> Bool {
         return controller.isRecording
     }
+}
 
-    /// DEBUG VERIFICATION ONLY (removed before merge). Standalone of the live
-    /// session: a fresh encoder + writer, so it validates the encode+WAL round-trip
-    /// without touching capture. Real work is compiled only into DEBUG builds.
-    func debugEncodeWavToBin(wavPath: String, marker: String, completion: @escaping (Result<String, Error>) -> Void) {
-        #if DEBUG
-            PhoneMicHostApiImpl.debugQueue.async {
-                completion(PhoneMicHostApiImpl.runDebugEncode(wavPath: wavPath, marker: marker))
-            }
-        #else
-            completion(.failure(PhoneMicPigeonError(
-                code: "debug_disabled", message: "debugEncodeWavToBin is DEBUG-only", details: nil)))
-        #endif
+// MARK: - Live environment wiring (app target)
+//
+// The production implementations of the controller seams: the Pigeon sink,
+// the AVAudioEngine stack, the OS permission/session/monitor surfaces and the
+// opus batch pipeline. The replay harness compiles the controller against
+// fakes instead (ios/test/phone_mic_lifecycle_replay_test.rb) — nothing in
+// this file is policy.
+
+extension PhoneMicFlutterApi: PhoneMicEventSink {
+    func onAudioFrame(pcm16leMono16k: Data, sessionId: Int64) {
+        onAudioFrame(pcm16leMono16k: FlutterStandardTypedData(bytes: pcm16leMono16k), sessionId: sessionId) { _ in }
     }
 
-    #if DEBUG
-        private static let debugQueue = DispatchQueue(label: "com.omi.phonemic.debugEncode")
+    func onStateChanged(state: PhoneMicCaptureState, sessionId: Int64) {
+        onStateChanged(state: state, sessionId: sessionId) { _ in }
+    }
 
-        /// Synchronous on debugQueue (== the writer's queue): parse a canonical 16kHz
-        /// mono PCM16 WAV, encode its samples, write one finalized .bin, return its path.
-        private static func runDebugEncode(wavPath: String, marker: String) -> Result<String, Error> {
-            guard let wav = FileManager.default.contents(atPath: wavPath), wav.count > 44 else {
-                return .failure(PhoneMicPigeonError(
-                    code: "debug_bad_wav", message: "missing or too small to be a WAV: \(wavPath)", details: nil))
-            }
-            func u16(_ off: Int) -> UInt16 { UInt16(wav[off]) | (UInt16(wav[off + 1]) << 8) }
-            func u32(_ off: Int) -> UInt32 {
-                UInt32(wav[off]) | (UInt32(wav[off + 1]) << 8) | (UInt32(wav[off + 2]) << 16) | (UInt32(wav[off + 3]) << 24)
-            }
-            let tag = { (r: Range<Int>) in String(bytes: wav[r], encoding: .ascii) }
-            guard tag(0 ..< 4) == "RIFF", tag(8 ..< 12) == "WAVE", tag(12 ..< 16) == "fmt ", tag(36 ..< 40) == "data",
-                u16(20) == 1, u16(22) == 1, u32(24) == 16000, u16(34) == 16
-            else {
-                return .failure(PhoneMicPigeonError(
-                    code: "debug_bad_wav", message: "expected a canonical 16kHz mono PCM16 WAV", details: nil))
-            }
+    func onCaptureError(code: String, message: String, sessionId: Int64) {
+        onCaptureError(code: code, message: message, sessionId: sessionId) { _ in }
+    }
 
-            guard let dir = resolveDebugDir(wavPath: wavPath) else {
-                return .failure(PhoneMicPigeonError(
-                    code: "batch_dir_unavailable", message: "no flutter.batchAudioDir and WAV has no directory", details: nil))
-            }
-            guard let encoder = PhoneMicOpusEncoder() else {
-                return .failure(PhoneMicPigeonError(code: "opus_init_failed", message: "encoder create failed", details: nil))
-            }
+    func onBatchProgress(capturedSeconds: Double, sessionId: Int64) {
+        onBatchProgress(capturedSeconds: capturedSeconds, sessionId: sessionId) { _ in }
+    }
+}
 
-            let writer = PhoneMicBatchAudioWriter(dir: dir, queue: debugQueue)
-            writer.append(opusPackets: encoder.encode(wav.subdata(in: 44 ..< wav.count)), marker: marker)
-            writer.closeNowLocked("debug")
+extension PhoneMicCaptureEngine: PhoneMicEngineControlling {
+    var audioEngineForMonitor: AVAudioEngine? { engine }
+}
 
-            if let produced = newestBin(dir: dir, marker: marker) {
-                return .success(produced)
-            }
-            return .failure(PhoneMicPigeonError(
-                code: "debug_no_output", message: "no .bin produced (empty input or muted?)", details: nil))
+extension PhoneMicInterruptionMonitor: PhoneMicInterruptionSource {
+    func bindEngine(_ engine: AVAudioEngine?) {
+        guard let engine else { return }
+        bindEngine(engine)
+    }
+}
+
+extension PhoneMicOpusEncoder: PhoneMicBatchEncoding {}
+
+extension PhoneMicBatchAudioWriter: PhoneMicBatchWriting {}
+private final class PhoneMicLivePermission: PhoneMicPermissionChecking {
+    func current() -> PhoneMicPermissionStatus {
+        switch PhoneMicPermissionGate.current() {
+        case .granted: return .granted
+        case .denied: return .denied
+        case .undetermined: return .undetermined
         }
+    }
 
-        private static func resolveDebugDir(wavPath: String) -> String? {
-            if let d = UserDefaults.standard.string(forKey: "flutter.batchAudioDir"), !d.isEmpty { return d }
-            let dir = (wavPath as NSString).deletingLastPathComponent
-            return dir.isEmpty ? nil : dir
-        }
+    func request(_ completion: @escaping (Bool) -> Void) {
+        PhoneMicPermissionGate.request(completion)
+    }
+}
 
-        private static func newestBin(dir: String, marker: String) -> String? {
-            let url = URL(fileURLWithPath: dir, isDirectory: true)
-            guard let items = try? FileManager.default.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
-            let prefix = "audio_\(marker)_"
-            return items
-                .filter { $0.lastPathComponent.hasPrefix(prefix) && $0.lastPathComponent.hasSuffix(".bin") }
-                .max { a, b in
-                    let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                    let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                    return da < db
-                }?.path
-        }
-    #endif
+enum PhoneMicLiveEnvironment {
+    /// The production controller environment: real AVAudioSession/Engine,
+    /// OS permission gate, OS interruption monitor, opus batch pipeline.
+    static func make(sink: PhoneMicEventSink) -> PhoneMicControllerEnvironment {
+        PhoneMicControllerEnvironment(
+            sink: sink,
+            permission: PhoneMicLivePermission(),
+            configureSession: { try PhoneMicSessionConfigurator.configureAndActivate() },
+            describeRoute: { PhoneMicSessionConfigurator.describeCurrentRoute() },
+            makeMonitor: { controlQueue, onSignal in
+                PhoneMicInterruptionMonitor(controlQueue: controlQueue) { event in
+                    switch event {
+                    case .interruptionBegan:
+                        onSignal(.interruptionBegan)
+                    case .interruptionEnded(let shouldResume):
+                        onSignal(.interruptionEnded(shouldResume: shouldResume))
+                    case .routeChanged(let reason):
+                        onSignal(.routeChanged(reasonDescription: "\(reason.rawValue)"))
+                    case .engineConfigChanged:
+                        onSignal(.engineConfigChanged)
+                    case .mediaServicesReset:
+                        onSignal(.mediaServicesReset)
+                    case .allCallsEnded:
+                        onSignal(.allCallsEnded)
+                    case .appBecameActive:
+                        onSignal(.appBecameActive)
+                    }
+                }
+            },
+            makeEngine: { audioQueue, onConvertedData, onConvertError in
+                PhoneMicCaptureEngine(
+                    audioQueue: audioQueue,
+                    onConvertedData: onConvertedData,
+                    onConvertError: onConvertError
+                )
+            },
+            batchDirectory: {
+                let dir = UserDefaults.standard.string(forKey: "flutter.batchAudioDir")
+                return (dir?.isEmpty == false) ? dir : nil
+            },
+            batchAutoMarker: { UserDefaults.standard.bool(forKey: "flutter.phoneBatchAuto") },
+            makeEncoder: { PhoneMicOpusEncoder() },
+            makeWriter: { directory, audioQueue in
+                PhoneMicBatchAudioWriter(dir: directory, queue: audioQueue)
+            }
+        )
+    }
 }

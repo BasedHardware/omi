@@ -204,9 +204,8 @@ def default_provider_specs(repo_root: Path) -> tuple[ProviderSpec, ...]:
             allowed_endpoints=(
                 "http://127.0.0.1:8001/v2/embedding",
                 "http://127.0.0.1:8001/v1/vad",
-                "http://127.0.0.1:8001/v1/speaker-identification",
             ),
-            allowed_capabilities=("speaker.embedding", "vad.read", "speaker.identification"),
+            allowed_capabilities=("speaker.embedding", "vad.read"),
             budget=ProviderBudget(max_requests_per_session=120, max_requests_per_day=600, timeout_seconds=30.0),
             fake_module="embeddings",
             fake_source_path=str(fake_root / "embeddings.py"),

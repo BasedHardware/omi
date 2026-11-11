@@ -1,20 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildRewindSearchQuery,
-  escapeRewindSearchLikeToken,
+  buildRewindFtsMatch,
+  expandRewindSearchWord,
   REWIND_SEARCH_QUERY_CHAR_LIMIT,
   REWIND_SEARCH_TOKEN_LIMIT,
+  splitCamelCase,
+  splitOnDigits,
   tokenizeRewindSearchQuery
 } from './rewindSearchQuery'
 
-describe('rewindSearchQuery', () => {
-  it('normalizes whitespace and caps the number of SQL terms', () => {
+describe('rewindSearchQuery — tokenizer', () => {
+  it('normalizes whitespace and caps the number of tokens', () => {
     expect(tokenizeRewindSearchQuery('  visual   studio  code ')).toEqual([
       'visual',
       'studio',
       'code'
     ])
-
     const many = Array.from({ length: REWIND_SEARCH_TOKEN_LIMIT + 3 }, (_, i) => `term${i}`).join(
       ' '
     )
@@ -30,27 +31,55 @@ describe('rewindSearchQuery', () => {
     const padded = `${' '.repeat(REWIND_SEARCH_QUERY_CHAR_LIMIT + 20)}visual studio`
     expect(tokenizeRewindSearchQuery(padded)).toEqual(['visual', 'studio'])
   })
+})
 
-  it('escapes LIKE wildcards and the escape character itself', () => {
-    expect(escapeRewindSearchLikeToken('100%_done\\today')).toBe('100\\%\\_done\\\\today')
+describe('rewindSearchQuery — compound splitting', () => {
+  it('splits camelCase on uppercase boundaries, dropping <2-char parts', () => {
+    expect(splitCamelCase('ActivityPerformance')).toEqual(['Activity', 'Performance'])
+    // Leading single-cap fragment "A" is dropped (length < 2).
+    expect(splitCamelCase('AButton')).toEqual(['Button'])
+    expect(splitCamelCase('lowercase')).toEqual(['lowercase'])
   })
 
-  it('builds an all-token search across OCR text, app, and window title', () => {
-    const sql = buildRewindSearchQuery('visual studio')
+  it('splits on digit/non-digit boundaries, dropping <2-char parts', () => {
+    expect(splitOnDigits('test123')).toEqual(['test', '123'])
+    // "v2" -> ["v", "2"] both dropped (length < 2).
+    expect(splitOnDigits('v2')).toEqual([])
+    expect(splitOnDigits('plain')).toEqual(['plain'])
+  })
+})
 
-    expect(sql?.where).toBe(
-      "(ocr_text LIKE ? ESCAPE '\\' OR window_title LIKE ? ESCAPE '\\' OR app LIKE ? ESCAPE '\\') AND (ocr_text LIKE ? ESCAPE '\\' OR window_title LIKE ? ESCAPE '\\' OR app LIKE ? ESCAPE '\\')"
+describe('rewindSearchQuery — FTS5 MATCH builder', () => {
+  it('quotes a single token as an FTS5 prefix phrase', () => {
+    expect(expandRewindSearchWord('visual')).toBe('"visual"*')
+    expect(buildRewindFtsMatch('visual studio')).toBe('"visual"* "studio"*')
+  })
+
+  it('expands camelCase into an OR of prefix terms (original first, deduped, ordered)', () => {
+    expect(buildRewindFtsMatch('ActivityPerformance')).toBe(
+      '("ActivityPerformance"* OR "Activity"* OR "Performance"*)'
     )
-    expect(sql?.params).toEqual(Array(3).fill('%visual%').concat(Array(3).fill('%studio%')))
   })
 
-  it('treats percent and underscore as literal search characters', () => {
-    const sql = buildRewindSearchQuery('100% done_')
-
-    expect(sql?.params).toEqual(Array(3).fill('%100\\%%').concat(Array(3).fill('%done\\_%')))
+  it('expands digit boundaries into an OR of prefix terms', () => {
+    expect(buildRewindFtsMatch('test123')).toBe('("test123"* OR "test"* OR "123"*)')
   })
 
-  it('returns null for an empty query', () => {
-    expect(buildRewindSearchQuery('   ')).toBeNull()
+  it('AND-joins multiple tokens (space is implicit AND in FTS5)', () => {
+    expect(buildRewindFtsMatch('pelican reservoir')).toBe('"pelican"* "reservoir"*')
+  })
+
+  it('escapes embedded double quotes so MATCH syntax cannot be broken', () => {
+    // A literal " is doubled inside the phrase; the surrounding grammar is intact.
+    expect(buildRewindFtsMatch('foo"bar')).toBe('"foo""bar"*')
+    // Parens / operators from user input are neutralized by quoting.
+    expect(buildRewindFtsMatch('a) OR b(')).toBe('"a)"* "OR"* "b("*')
+  })
+
+  it('drops pure-punctuation tokens and returns null for an empty query', () => {
+    expect(buildRewindFtsMatch('   ')).toBeNull()
+    expect(buildRewindFtsMatch('!!! @@')).toBeNull()
+    // One punctuation token dropped, the real one kept.
+    expect(buildRewindFtsMatch('!!! budget')).toBe('"budget"*')
   })
 })

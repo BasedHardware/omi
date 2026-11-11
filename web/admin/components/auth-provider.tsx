@@ -1,11 +1,25 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase/client';
-import { DEV_BYPASS_ENABLED, DEV_BYPASS_TOKEN, DEV_BYPASS_UID } from '@/lib/dev-auth';
-import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import {
+  User,
+  onAuthStateChanged,
+  signOut as firebaseSignOut,
+} from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase/client";
+import {
+  DEV_BYPASS_ENABLED,
+  DEV_BYPASS_TOKEN,
+  DEV_BYPASS_UID,
+} from "@/lib/dev-auth";
+import { usePathname, useRouter } from "next/navigation"; // Use next/navigation for App Router
 
 interface AuthContextProps {
   user: User | null;
@@ -30,19 +44,25 @@ function createBypassUser(): User {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const bypassAuth = DEV_BYPASS_ENABLED;
-  const [user, setUser] = useState<User | null>(bypassAuth ? createBypassUser() : null);
+  const [user, setUser] = useState<User | null>(
+    bypassAuth ? createBypassUser() : null
+  );
   const [isAdmin, setIsAdmin] = useState<boolean>(bypassAuth);
   const [loading, setLoading] = useState<boolean>(!bypassAuth);
   const router = useRouter();
+  const pathname = usePathname();
+  const isTvKiosk = pathname?.startsWith("/tv/view/") ?? false;
+  const isTvKioskRef = React.useRef(isTvKiosk);
+  isTvKioskRef.current = isTvKiosk;
 
   const signOut = async () => {
     try {
       await firebaseSignOut(getFirebaseAuth());
       setUser(null);
       setIsAdmin(false);
-      router.push('/login'); // Redirect to login after sign out
+      router.push("/login"); // Redirect to login after sign out
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error("Error signing out:", error);
     }
   };
 
@@ -59,9 +79,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setLoading(true);
       if (currentUser) {
-        console.log('currentUser', currentUser);
+        console.log("currentUser", currentUser);
         // Check if user is an Omi admin by looking for their UID in the specific product path
-        const adminDocRef = doc(db, 'adminData', currentUser.uid);
+        const adminDocRef = doc(db, "adminData", currentUser.uid);
         try {
           const adminDoc = await getDoc(adminDocRef);
           if (adminDoc.exists()) {
@@ -69,18 +89,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsAdmin(true);
             console.log(`Admin user ${currentUser.email} signed in.`);
           } else {
-            console.warn(`User ${currentUser.email} is not an admin. Signing out.`);
-            await firebaseSignOut(auth);
+            console.warn(
+              `User ${currentUser.email} is not an admin. Signing out.`
+            );
             setUser(null);
             setIsAdmin(false);
-            router.push('/login?error=unauthorized'); // Redirect non-admin to login
+            // Kiosk must not sign out or redirect — a TV may share a browser
+            // with an admin session, and kiosk→dashboard must not bounce login.
+            if (!isTvKioskRef.current) {
+              await firebaseSignOut(auth);
+              router.push("/login?error=unauthorized");
+            }
           }
         } catch (error) {
-          console.error('Error checking admin status:', error);
-          await firebaseSignOut(auth);
+          console.error("Error checking admin status:", error);
           setUser(null);
           setIsAdmin(false);
-          router.push('/login?error=check_failed'); // Redirect on error
+          if (!isTvKioskRef.current) {
+            await firebaseSignOut(auth);
+            router.push("/login?error=check_failed");
+          }
         }
       } else {
         setUser(null);
@@ -91,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Cleanup subscription on unmount
     return () => unsubscribe();
-  }, [bypassAuth, router]); // Add router to dependency array
+  }, [bypassAuth, router]);
 
   return (
     <AuthContext.Provider value={{ user, isAdmin, loading, signOut }}>
@@ -100,4 +128,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext); 
+export const useAuth = () => useContext(AuthContext);

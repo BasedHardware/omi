@@ -29,6 +29,8 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       "set_transcription_language",
       "transcription_language_snapshot",
       "memory_graph_snapshot",
+      "open_memory_atlas",
+      "memory_atlas_set_viewport",
       "open_quick_note",
       "about_snapshot",
       "settings_notifications_snapshot",
@@ -38,12 +40,38 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       "advanced_settings_snapshot",
       "settings_aichat_snapshot",
       "assign_speaker_fixture",
+      "local_summary_benchmark",
     ] {
       XCTAssertTrue(
         source.contains("name: \"\(action)\""),
         "expected bridge action \(action) to be registered"
       )
     }
+  }
+
+  func testGoogleProbeActionsPassExplicitUserIntentToTheirReaders() throws {
+    // omi-test-quality: source-inspection -- static contract: the bridge action
+    // must pass the user-consent boundary to the concrete reader; exercising it
+    // would require live browser cookies and Keychain state.
+    let source = try bridgeSource()
+    XCTAssertTrue(
+      try actionBody(named: "calendar_read_probe", in: source).contains("userInitiated: true")
+    )
+    XCTAssertTrue(
+      try actionBody(named: "gmail_read_probe", in: source).contains("userInitiated: true")
+    )
+  }
+
+  func testLocalSummaryBenchmarkReturnsReportPath() throws {
+    let source = try bridgeSource()
+    let body = try actionBody(named: "local_summary_benchmark", in: source)
+    for key in ["path", "schema_valid_count", "kind", "MemoryLocalProjectionStore"] {
+      XCTAssertTrue(body.contains(key), "local_summary_benchmark should expose \(key)")
+    }
+    XCTAssertTrue(
+      body.contains("AppBuild.isNonProduction"),
+      "benchmark action must stay off production bundles"
+    )
   }
 
   func testConversationListSnapshotIncludesFolderFields() throws {
@@ -102,6 +130,42 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(body.contains("extractedFixture: OnboardingMemoryLogImportService.ExtractedMemoryLog"))
     XCTAssertFalse(body.contains("OnboardingImportEvidenceService.save"))
     XCTAssertFalse(body.contains("ConnectorImportOperations.memoryLogOutcome"))
+  }
+
+  @MainActor
+  func testMutatingActionsExposeAccurateDiscoveryMetadata() throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let descriptors = registry.descriptors()
+
+    let importProbe = try XCTUnwrap(
+      descriptors.first { $0.name == "memory_log_import_probe" })
+    XCTAssertEqual(importProbe.category, "write")
+    XCTAssertEqual(importProbe.surfaces, ["import_connectors"])
+    XCTAssertEqual(importProbe.safety, "remote_write")
+    XCTAssertEqual(
+      importProbe.sideEffects,
+      [
+        "mutates local app, UI, or stored state",
+        "may call agent runtime, model, or backend services",
+        "may mutate remote user data",
+        "may call model/backend services", "may save imported memory data",
+      ])
+
+    let clearState = try XCTUnwrap(
+      descriptors.first { $0.name == "clear_owner_surface_state" })
+    XCTAssertEqual(clearState.category, "write")
+    XCTAssertEqual(clearState.surfaces, ["main_chat"])
+    XCTAssertEqual(clearState.safety, "remote_write")
+    XCTAssertEqual(
+      clearState.sideEffects,
+      [
+        "mutates local app, UI, or stored state",
+        "may call agent runtime, model, or backend services",
+        "may mutate remote user data",
+        "clears the local non-production main-chat projection",
+        "may delete the active owner's main-chat journal turns from the backend",
+      ])
   }
 
   func testFloatingIdleWaitRequiresObservedSubmission() throws {
@@ -167,6 +231,20 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(source.contains("filteredFromDatabase.first(where:"))
   }
 
+  func testMemorySearchRefreshesTheVisibleMemoriesProjection() throws {
+    let pageURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/MemoriesPage.swift")
+    // omi-test-quality: source-inspection -- static contract: bridge search must refresh its projection before lifecycle-scoped SQLite search
+    let source = try String(contentsOf: pageURL, encoding: .utf8)
+    let body = try actionBody(named: "memories_search", in: source)
+    XCTAssertTrue(
+      body.contains("await self.refreshMemoriesIfNeeded()"),
+      "A bridge search must refresh the active MemoriesViewModel before it reads lifecycle-scoped local cache."
+    )
+  }
+
   func testMemoryCrudActionsUseNonProdGuard() throws {
     let source = try bridgeSource()
     for action in [
@@ -191,6 +269,25 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(body.contains("getPrivateCloudSync"))
     XCTAssertTrue(body.contains("store_recordings"))
     XCTAssertTrue(body.contains("cloud_sync"))
+  }
+
+  func testNotificationBridgeRetiresActivePeriodContract() throws {
+    let source = try bridgeSource()
+    for retiredSurface in [
+      "set_notification_active_period",
+      "notification_active_period_start_minute",
+      "notification_active_period_end_minute",
+      "active_period_start",
+      "active_period_end",
+    ] {
+      XCTAssertFalse(source.contains(retiredSurface), "retired notification surface remains: \(retiredSurface)")
+    }
+
+    let snapshotBody = try actionBody(named: "settings_notifications_snapshot", in: source)
+    for key in ["enabled", "frequency", "frequency_label", "has_permission", "banners_disabled"] {
+      XCTAssertTrue(snapshotBody.contains("\"\(key)\""))
+    }
+    XCTAssertTrue(snapshotBody.contains("\"schema\""))
   }
 
   func testSubscriptionSnapshotReadsBillingAPI() throws {
@@ -236,10 +333,24 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
   func testMemoryGraphSnapshotUsesKnowledgeGraphAPI() throws {
     let source = try bridgeSource()
     let body = try actionBody(named: "memory_graph_snapshot", in: source)
-    for key in ["node_count", "edge_count", "is_empty"] {
+    for key in ["node_count", "edge_count", "catalog_memory_count", "atlas_mark_count", "is_empty"] {
       XCTAssertTrue(body.contains("\"\(key)\""), "memory_graph_snapshot should return \(key)")
     }
     XCTAssertTrue(body.contains("getKnowledgeGraph"))
+    XCTAssertTrue(body.contains("MemoryAtlasProjection"))
+  }
+
+  func testMemoryAtlasHarnessActionsPostBoundedViewportNotifications() throws {
+    let openBody = try actionBody(named: "open_memory_atlas", in: try bridgeSource())
+    XCTAssertTrue(openBody.contains("desktopAutomationOpenMemoryAtlasRequested"))
+    XCTAssertTrue(openBody.contains("\"target\": \"page\""))
+
+    let viewportBody = try actionBody(named: "memory_atlas_set_viewport", in: try bridgeSource())
+    XCTAssertTrue(viewportBody.contains("desktopAutomationMemoryAtlasViewportRequested"))
+    XCTAssertTrue(viewportBody.contains("\"page\""))
+    for parameter in ["target", "zoom", "pan_x", "pan_y", "reset"] {
+      XCTAssertTrue(viewportBody.contains("\"\(parameter)\""))
+    }
   }
 
   func testNavigateViaShortcutPostsSidebarNotification() throws {
@@ -315,7 +426,8 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     let source = try bridgeSource()
     let body = try actionBody(named: "sign_out", in: source)
     XCTAssertTrue(body.contains("DesktopLocalProfile.isEnabled"))
-    XCTAssertTrue(body.contains("AuthService.shared.signOut()"))
+    XCTAssertTrue(body.contains("boolParam(params[\"accepted_account_deletion\"], default: false)"))
+    XCTAssertTrue(body.contains("AuthService.shared.signOut(acceptedAccountDeletion: acceptedAccountDeletion)"))
   }
 
   func testEditTestMemorySupportsMarkerParam() throws {
@@ -383,11 +495,24 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
   }
 
   private func bridgeSource() throws -> String {
-    let url = URL(fileURLWithPath: #filePath)
+    // Every DesktopAutomationBridge*.swift, not just the base file. The registry is
+    // split across extensions to satisfy a line-count ratchet, so reading only the
+    // base file makes this contract fail the moment an action is relocated -- which
+    // is what happened when the notification actions moved to
+    // DesktopAutomationBridge+Notifications.swift. Globbing keeps the contract about
+    // "is this action registered" rather than "is it registered in one exact file".
+    let sourcesDir = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/DesktopAutomationBridge.swift")
-    return try String(contentsOf: url, encoding: .utf8)
+      .appendingPathComponent("Sources")
+    let names = try FileManager.default.contentsOfDirectory(atPath: sourcesDir.path)
+      .filter { $0.hasPrefix("DesktopAutomationBridge") && $0.hasSuffix(".swift") }
+      .sorted()
+    XCTAssertFalse(names.isEmpty, "expected at least one DesktopAutomationBridge source")
+    return
+      try names
+      .map { try String(contentsOf: sourcesDir.appendingPathComponent($0), encoding: .utf8) }
+      .joined(separator: "\n")
   }
 
   private func actionBody(named action: String, in source: String) throws -> String {

@@ -1,0 +1,423 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { testIdentity } from "./support/test-identity";
+
+/**
+ * Query-capture coverage for every platform-aware PostHog route the platform
+ * dashboards use. The dashboard-side tests only pin URL parameters — these
+ * execute each route and assert the HogQL it actually sends is scoped, so a
+ * route that silently ignored `platform=` fails here (the "macOS board shows
+ * all-platform DAU" class of bug).
+ */
+
+const captured: string[] = [];
+const releaseRows: [string, string, string][] = [];
+let releaseBoundaryTimestamp: string | null = null;
+let releasePosthogFailure = false;
+
+vi.mock("@/lib/auth", () => ({
+  requireScope: vi.fn(async () => testIdentity(undefined, "test")),
+}));
+vi.mock("@/lib/payload-cache", () => ({
+  getPayload: vi.fn(async () => null),
+  setPayload: vi.fn(async () => undefined),
+  withFreshness: (data: Record<string, unknown>, freshAt: number) => ({
+    ...data,
+    freshAt,
+  }),
+}));
+vi.mock("@/lib/posthog", () => ({
+  posthogResults: vi.fn(
+    async (_h: string, _p: string, _k: string, query: string) => {
+      captured.push(query);
+      if (releasePosthogFailure && query.includes("properties.$app_build")) {
+        throw new Error("PostHog unavailable");
+      }
+      if (releaseBoundaryTimestamp && query.includes("properties.$app_build")) {
+        const timestamp = new Date(releaseBoundaryTimestamp);
+        const day = query.includes(
+          "toDate(toTimeZone(timestamp, 'America/New_York'))"
+        )
+          ? timestamp.toLocaleDateString("en-CA", {
+              timeZone: "America/New_York",
+            })
+          : timestamp.toISOString().slice(0, 10);
+        return [["iOS", "boundary-build", day]];
+      }
+      return query.includes("properties.$app_build") ? releaseRows : [];
+    }
+  ),
+  POSTHOG_SERVED_MAX_ROWS: 50_000,
+}));
+// k-factor reads the Firestore referral ledger alongside PostHog.
+vi.mock("@/lib/firebase/admin", () => ({
+  getDb: () => ({
+    collection: () => ({
+      where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
+    }),
+  }),
+}));
+
+const MACOS_FILTER = "$os_name = 'macOS'";
+const MOBILE_FILTER = "$os_name IN ('iOS', 'Android', 'iPadOS')";
+
+function request(url: string) {
+  return { nextUrl: new URL(`http://localhost${url}`) } as any;
+}
+
+async function capture(
+  loadRoute: () => Promise<{ GET: (r: any) => Promise<any> }>,
+  url: string
+) {
+  captured.length = 0;
+  vi.resetModules(); // defeat each route's module-level response cache
+  const { GET } = await loadRoute();
+  await GET(request(url));
+  expect(captured.length).toBeGreaterThan(0);
+  return [...captured];
+}
+
+function expectScoped(queries: string[], scope: "macos" | "mobile" | "all") {
+  for (const q of queries) {
+    if (scope === "macos") {
+      expect(q).toContain(MACOS_FILTER);
+      expect(q).not.toContain(MOBILE_FILTER);
+    } else if (scope === "mobile") {
+      expect(q).toContain(MOBILE_FILTER);
+      expect(q).not.toContain(MACOS_FILTER);
+    } else {
+      expect(q).not.toContain(MACOS_FILTER);
+      expect(q).not.toContain(MOBILE_FILTER);
+    }
+  }
+}
+
+beforeEach(() => {
+  releaseRows.length = 0;
+  releaseBoundaryTimestamp = null;
+  releasePosthogFailure = false;
+  process.env.POSTHOG_PERSONAL_API_KEY = "phx_test";
+  process.env.POSTHOG_PROJECT_ID = "1";
+  process.env.POSTHOG_HOST = "https://posthog.test";
+});
+
+const ROUTES: [string, () => Promise<any>, string][] = [
+  [
+    "dau-trends",
+    () => import("@/app/api/omi/stats/dau-trends/route"),
+    "/api/omi/stats/dau-trends?days=30",
+  ],
+  [
+    "macos-versions",
+    () => import("@/app/api/omi/stats/macos-versions/route"),
+    "/api/omi/stats/macos-versions?",
+  ],
+  [
+    "viral-metrics",
+    () => import("@/app/api/omi/stats/viral-metrics/route"),
+    "/api/omi/stats/viral-metrics?days=30",
+  ],
+  [
+    "retention",
+    () => import("@/app/api/omi/stats/retention/posthog/route"),
+    "/api/omi/stats/retention/posthog?days=14&intervals=10",
+  ],
+];
+
+describe.each(ROUTES)("%s route", (_name, loadRoute, baseUrl) => {
+  it("scopes every query to macOS for platform=macos", async () => {
+    expectScoped(
+      await capture(loadRoute, `${baseUrl}&platform=macos`),
+      "macos"
+    );
+  });
+
+  it("scopes every query to the mobile OS list for platform=mobile", async () => {
+    expectScoped(
+      await capture(loadRoute, `${baseUrl}&platform=mobile`),
+      "mobile"
+    );
+  });
+
+  it("applies no OS constraint for platform=all", async () => {
+    expectScoped(await capture(loadRoute, `${baseUrl}&platform=all`), "all");
+  });
+
+  it("defaults to macOS when the param is absent (legacy classic-page compat)", async () => {
+    // retention predates the shared scope helper and historically defaulted
+    // to all-platforms; every newer route keeps the classic /dashboard page's
+    // macOS semantics when unparameterized. The boards always pass platform=.
+    const queries = await capture(loadRoute, baseUrl);
+    expectScoped(queries, _name === "retention" ? "all" : "macos");
+  });
+});
+
+describe("k-factor route", () => {
+  it("scopes client viral signals to the board's OS but never the server-emitted events", async () => {
+    const queries = await capture(
+      () => import("@/app/api/omi/stats/k-factor/posthog/route"),
+      "/api/omi/stats/k-factor/posthog?days=30&platform=macos"
+    );
+    // Client-side signals (friend answer, share actions, first-seen new
+    // users) carry the macOS scope…
+    const friend = queries.filter((q) =>
+      q.includes("Onboarding How Did You Hear")
+    );
+    expect(friend.length).toBeGreaterThan(0);
+    for (const q of friend) expect(q).toContain(MACOS_FILTER);
+    expect(
+      queries.some((q) => q.includes("min_ts") && q.includes(MACOS_FILTER))
+    ).toBe(true);
+    // …while the server-emitted referral funnel and share-email events have
+    // no client OS and must not be OS-filtered.
+    const funnel = queries.filter((q) =>
+      q.includes("desktop_operator_month_v1")
+    );
+    expect(funnel).toHaveLength(3);
+    for (const q of funnel) expect(q).not.toContain("$os_name");
+  });
+});
+
+describe("dau-trends response cache", () => {
+  it("never serves one platform's cached data to another", async () => {
+    captured.length = 0;
+    vi.resetModules();
+    const { GET } = await import("@/app/api/omi/stats/dau-trends/route");
+    await GET(request("/api/omi/stats/dau-trends?days=30&platform=macos"));
+    const afterMacos = captured.length;
+    await GET(request("/api/omi/stats/dau-trends?days=30&platform=mobile"));
+    // A days-only cache key would return the macOS payload without querying.
+    expect(captured.length).toBeGreaterThan(afterMacos);
+    expect(captured[captured.length - 1]).toContain(MOBILE_FILTER);
+  });
+});
+
+describe("person identity consistency", () => {
+  it("deduplicates DAU and rolling DAU by person_id with a distinct_id fallback", async () => {
+    const queries = await capture(
+      () => import("@/app/api/omi/stats/dau-trends/route"),
+      "/api/omi/stats/dau-trends?days=30&platform=macos"
+    );
+    expect(queries).toHaveLength(2);
+    for (const query of queries) {
+      expect(query).toContain("COALESCE(person_id, distinct_id)");
+      expect(query).not.toContain("count(DISTINCT distinct_id)");
+    }
+  });
+
+  it("deduplicates macOS active-today by person_id with a distinct_id fallback", async () => {
+    const queries = await capture(
+      () => import("@/app/api/omi/stats/macos-versions/route"),
+      "/api/omi/stats/macos-versions?platform=macos"
+    );
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain(
+      "COALESCE(person_id, distinct_id) AS actor_id"
+    );
+  });
+
+  it("uses an exact grouped all-time count for the cumulative user population", async () => {
+    const queries = await capture(
+      () => import("@/app/api/omi/stats/viral-metrics/route"),
+      "/api/omi/stats/viral-metrics?days=30&platform=macos"
+    );
+    const allTime = queries.find(
+      (query) =>
+        query.includes("GROUP BY actor") &&
+        query.includes("SELECT count(*)") &&
+        !query.includes("min(timestamp)")
+    );
+    expect(allTime).toBeTruthy();
+    expect(allTime).toContain("COALESCE(person_id, distinct_id)");
+    expect(allTime).not.toContain("uniq(COALESCE(person_id, distinct_id))");
+  });
+});
+
+describe("viral-metrics definitions", () => {
+  it("uses the person identity and success filters for meaningful usage", async () => {
+    const queries = await capture(
+      () => import("@/app/api/omi/stats/viral-metrics/route"),
+      "/api/omi/stats/viral-metrics?days=30&platform=macos"
+    );
+    const saved = queries.find((query) =>
+      query.includes("event = 'Memory Created'")
+    );
+    expect(saved).toBeTruthy();
+    expect(saved).toContain("COALESCE(person_id, distinct_id)");
+    expect(saved).toContain("properties.memory_result = 'saved'");
+    expect(saved).toContain("properties.memory_discarded = false");
+
+    const speech = queries.find((query) =>
+      query.includes("event = 'Desktop Recording Stopped'")
+    );
+    expect(speech).toBeTruthy();
+    expect(speech).toContain("properties.word_count > 0");
+    expect(speech).not.toContain("Recording Started");
+
+    const assistant = queries.find((query) =>
+      query.includes("event = 'chat_agent_query_completed'")
+    );
+    expect(assistant).toBeTruthy();
+    expect(assistant).toContain("COALESCE(person_id, distinct_id)");
+  });
+
+  it("does not use a partial calendar week as growth history", async () => {
+    const queries = await capture(
+      () => import("@/app/api/omi/stats/viral-metrics/route"),
+      "/api/omi/stats/viral-metrics?days=30&platform=mobile"
+    );
+    const weekly = queries.filter((query) =>
+      query.includes("toMonday(toDate(timestamp))")
+    );
+    expect(weekly.length).toBeGreaterThan(0);
+    for (const query of weekly) {
+      expect(query).toContain("toMonday(now() - interval 30 day)");
+    }
+  });
+});
+
+describe("releases route", () => {
+  it("counts first-seen builds separately for iOS and Android", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T12:00:00Z"));
+    releaseRows.push(
+      ["iOS", "1270", "2026-09-27"],
+      ["iOS", "1271", "2026-09-27"],
+      ["Android", "1270", "2026-09-27"],
+      ["Android", "1271", "2026-09-28"]
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => [] } as any))
+    );
+    try {
+      captured.length = 0;
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=3"));
+      const data = await response.json();
+      expect(response.status).toBe(200);
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toContain(
+        "properties.$os_name IN ('iOS', 'Android')"
+      );
+      expect(captured[0]).toContain(
+        "min(toDate(toTimeZone(timestamp, 'America/New_York'))) AS first_seen_day"
+      );
+      expect(captured[0]).toContain("GROUP BY platform, build");
+      expect(captured[0]).not.toContain("$app_version");
+      expect(captured[0]).not.toContain("HAVING");
+      expect(data.daily.find((row: any) => row.date === "2026-09-27")).toEqual({
+        date: "2026-09-27",
+        macos: 0,
+        ios: 2,
+        android: 1,
+      });
+      expect(data.daily.find((row: any) => row.date === "2026-09-28")).toEqual({
+        date: "2026-09-28",
+        macos: 0,
+        ios: 0,
+        android: 1,
+      });
+      await GET(request("/api/omi/stats/releases?days=3"));
+      expect(captured).toHaveLength(1); // 15-minute in-process response cache
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a 01:00 UTC mobile build on the previous New York day", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T01:00:00Z"));
+    releaseBoundaryTimestamp = "2026-09-28T01:00:00Z";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => [] } as any))
+    );
+    try {
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=1"));
+      expect(response.status).toBe(200);
+      expect((await response.json()).daily).toEqual([
+        { date: "2026-09-27", macos: 0, ios: 1, android: 0 },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns 500 when PostHog fails even if GitHub and iTunes succeed", async () => {
+    releasePosthogFailure = true;
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        new URL(url).host === "itunes.apple.com"
+          ? {
+              results: [
+                {
+                  version: "1.2",
+                  currentVersionReleaseDate: "2026-09-27T12:00:00Z",
+                },
+              ],
+            }
+          : [],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=3"));
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: "PostHog unavailable" });
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+        expect.stringContaining(
+          "api.github.com/repos/BasedHardware/omi/releases"
+        ),
+        expect.stringContaining("itunes.apple.com/lookup"),
+      ]);
+    } finally {
+      errorLog.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps iTunes failure optional but returns 500 for a GitHub failure", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (new URL(url).host === "itunes.apple.com")
+        throw new Error("iTunes unavailable");
+      return { ok: true, json: async () => [] };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=3"));
+      expect(response.status).toBe(200);
+      expect((await response.json()).latest.ios.display).toBe(
+        "no releases found"
+      );
+
+      fetchMock.mockImplementation(async (url: string) => {
+        if (new URL(url).host === "api.github.com")
+          return { ok: false, status: 503, json: async () => [] };
+        return { ok: true, json: async () => [] };
+      });
+      vi.resetModules();
+      const failingRoute = await import("@/app/api/omi/stats/releases/route");
+      const failed = await failingRoute.GET(
+        request("/api/omi/stats/releases?days=3")
+      );
+      expect(failed.status).toBe(500);
+      expect((await failed.json()).error).toContain(
+        "GitHub releases fetch failed: 503"
+      );
+    } finally {
+      errorLog.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+});

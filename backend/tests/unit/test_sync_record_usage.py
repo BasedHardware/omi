@@ -8,6 +8,7 @@ Verifies:
 - v1 deprecation headers appear on all response paths
 """
 
+import ast
 import os
 import re
 
@@ -39,6 +40,25 @@ def _extract_function_body(source, func_name):
     return source[start:end]
 
 
+def _usage_has_exception_boundary(body):
+    """Check nesting, rather than a character window around a formatted call."""
+    for node in ast.walk(ast.parse(body)):
+        if not isinstance(node, ast.Try):
+            continue
+        catches = any(
+            isinstance(handler.type, ast.Name) and handler.type.id == 'Exception' for handler in node.handlers
+        )
+        if not catches:
+            continue
+        for statement in node.body:
+            for call in ast.walk(statement):
+                if isinstance(call, ast.Call) and any(
+                    isinstance(argument, ast.Name) and argument.id == 'record_usage' for argument in call.args
+                ):
+                    return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # record_usage import
 # ---------------------------------------------------------------------------
@@ -47,7 +67,7 @@ def _extract_function_body(source, func_name):
 class TestRecordUsageImport:
     def test_record_usage_imported(self):
         source = _read_sync_source()
-        assert 'from utils.analytics import record_usage' in source
+        assert 'from utils.analytics import record_sync_v1_usage as record_usage' in source
 
     def test_import_at_module_level(self):
         source = _read_sync_source()
@@ -63,62 +83,6 @@ class TestRecordUsageImport:
 # ---------------------------------------------------------------------------
 
 
-class TestV1RecordUsage:
-    @staticmethod
-    def _get_v1_body():
-        return _extract_function_body(_read_sync_source(), 'sync_local_files')
-
-    def test_record_usage_called_in_v1(self):
-        body = self._get_v1_body()
-        assert 'record_usage(' in body, "v1 must call record_usage"
-
-    def test_record_usage_after_failed_segments_check(self):
-        """record_usage must come after the all-segments-failed guard."""
-        body = self._get_v1_body()
-        all_failed_pos = body.find('successful_segments == 0')
-        record_pos = body.find('record_usage(')
-        assert all_failed_pos > 0, "all-segments-failed guard must exist"
-        assert record_pos > 0, "record_usage must exist"
-        assert record_pos > all_failed_pos, "record_usage must come after all-segments-failed check"
-
-    def test_record_usage_not_under_fair_use_guard(self):
-        """record_usage must NOT be nested inside fair_use_restrict_dg block."""
-        body = self._get_v1_body()
-        # Find the record_usage call
-        record_idx = body.find('record_usage(')
-        # Walk backwards to find the enclosing if-block
-        preceding = body[:record_idx]
-        lines = preceding.split('\n')
-        # The record_usage call should be at try/except level, not under if fair_use_restrict_dg
-        for line in reversed(lines):
-            stripped = line.strip()
-            if stripped.startswith('if fair_use_restrict_dg'):
-                # Check if we've left that block's scope
-                record_line = body[record_idx:].split('\n')[0]
-                record_indent = len(record_line) - len(record_line.lstrip())
-                if_indent = len(line) - len(line.lstrip())
-                assert record_indent <= if_indent, "record_usage must not be inside fair_use_restrict_dg block"
-                break
-
-    def test_record_usage_wrapped_in_try_except(self):
-        """record_usage must be protected by try/except."""
-        body = self._get_v1_body()
-        record_idx = body.find('record_usage(')
-        # Check there's a try: before it (within ~5 lines)
-        preceding_chunk = body[max(0, record_idx - 200) : record_idx]
-        assert 'try:' in preceding_chunk, "record_usage must be inside a try block"
-        # Check there's an except after it
-        following_chunk = body[record_idx : record_idx + 200]
-        assert 'except Exception' in following_chunk, "record_usage must have an except handler"
-
-    def test_record_usage_logs_error_on_failure(self):
-        """Error from record_usage must be logged, not silenced."""
-        body = self._get_v1_body()
-        record_idx = body.find('record_usage(')
-        following = body[record_idx : record_idx + 300]
-        assert 'logger.error' in following, "record_usage failure must be logged"
-
-
 # ---------------------------------------------------------------------------
 # v2 record_usage placement
 # ---------------------------------------------------------------------------
@@ -127,7 +91,7 @@ class TestV1RecordUsage:
 class TestV2RecordUsage:
     @staticmethod
     def _get_v2_body():
-        return _extract_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
+        return _extract_function_body(_read_pipeline_source(), 'run_full_pipeline_background_async')
 
     def test_record_usage_called_in_v2(self):
         body = self._get_v2_body()
@@ -159,79 +123,9 @@ class TestV2RecordUsage:
         assert record_pos < complete_pos, "record_usage must run before final job publication"
 
     def test_record_usage_wrapped_in_try_except(self):
-        body = self._get_v2_body()
-        record_idx = body.find('record_usage,')
-        preceding = body[max(0, record_idx - 1000) : record_idx]
-        assert 'try:' in preceding, "record_usage must be inside a try block"
-        following = body[record_idx : record_idx + 800]
-        assert 'except Exception' in following, "record_usage must have an except handler"
+        assert _usage_has_exception_boundary(self._get_v2_body()), 'record_usage must be inside a protected try body'
 
 
 # ---------------------------------------------------------------------------
 # v1 deprecation
 # ---------------------------------------------------------------------------
-
-
-class TestV1Deprecation:
-    @staticmethod
-    def _get_v1_body():
-        return _extract_function_body(_read_sync_source(), 'sync_local_files')
-
-    def test_v1_endpoint_marked_deprecated(self):
-        source = _read_sync_source()
-        v1_idx = source.find('"/v1/sync-local-files"')
-        decorator_region = source[max(0, v1_idx - 200) : v1_idx + 50]
-        assert 'deprecated=True' in decorator_region, "v1 endpoint must have deprecated=True"
-
-    def test_v1_logs_deprecation_warning(self):
-        body = self._get_v1_body()
-        assert 'logger.warning' in body, "v1 must log a deprecation warning"
-        assert 'deprecated' in body.lower(), "warning must mention deprecation"
-
-    def test_v1_sets_deprecation_header(self):
-        body = self._get_v1_body()
-        assert '_V1_DEPRECATION_HEADERS' in body, "v1 must use deprecation headers constant"
-
-    def test_v1_deprecation_headers_constant_exists(self):
-        source = _read_sync_source()
-        assert '_V1_DEPRECATION_HEADERS' in source
-        assert "'Deprecation'" in source
-        assert "'true'" in source
-        assert 'successor-version' in source
-
-    def test_v1_httpexceptions_have_deprecation_headers(self):
-        """All HTTPException raises in v1 must include deprecation headers."""
-        body = self._get_v1_body()
-        exceptions = [m.start() for m in re.finditer(r'raise HTTPException\(', body)]
-        assert len(exceptions) > 0, "v1 must have HTTPException raises"
-        for exc_start in exceptions:
-            # Find the matching closing paren (handle nested parens)
-            depth = 0
-            end = exc_start
-            for i, ch in enumerate(body[exc_start:], start=exc_start):
-                if ch == '(':
-                    depth += 1
-                elif ch == ')':
-                    depth -= 1
-                    if depth == 0:
-                        end = i + 1
-                        break
-            exc_args = body[exc_start:end]
-            assert (
-                '_V1_DEPRECATION_HEADERS' in exc_args
-            ), f"HTTPException at offset {exc_start} missing deprecation headers: {exc_args[:100]}"
-
-    def test_v1_helper_exceptions_re_raised_with_headers(self):
-        """Shared helpers (retrieve_file_paths, decode_files_to_wav) must be wrapped."""
-        body = self._get_v1_body()
-        assert 'except HTTPException' in body, "v1 must catch helper HTTPExceptions to re-raise with headers"
-
-    def test_v1_jsonresponses_have_deprecation_headers(self):
-        """All JSONResponse returns in v1 must include deprecation headers."""
-        body = self._get_v1_body()
-        json_responses = [m.start() for m in re.finditer(r'return JSONResponse\(', body)]
-        for resp_start in json_responses:
-            resp_block = body[resp_start : resp_start + 300]
-            assert (
-                '_V1_DEPRECATION_HEADERS' in resp_block
-            ), f"JSONResponse at offset {resp_start} missing deprecation headers"

@@ -1,9 +1,10 @@
+import { ModelCredentialRelay } from "./runtime/model-credentials.js";
 /**
  * ACP Bridge — translates between OMI's JSON-lines protocol and the
  * Agent Client Protocol (ACP) used by claude-code-acp.
  *
- * THIS IS THE DESKTOP APP FLOW. It is unrelated to the VM/agent-cloud flow
- * (agent-cloud/agent.mjs), which runs Claude Code SDK on a remote VM for
+ * THIS IS THE DESKTOP APP FLOW. It is unrelated to the VM agent flow, which
+ * runs the Claude Agent SDK on a remote VM for
  * the Omi Agent feature. This bridge runs locally on the user's Mac.
  *
  * Session lifecycle:
@@ -21,7 +22,7 @@
  * 1. Create Unix socket server for omi-tools relay
  * 2. Spawn claude-code-acp as subprocess (JSON-RPC over stdio)
  * 3. Initialize ACP connection
- * 4. Handle auth if required (forward to Swift, wait for user action)
+ * 4. Handle auth if required (forward to Swift; never await OAuth inside a query/run)
  * 5. On query: reuse or create session, send prompt, translate notifications → JSON-lines
  * 6. On interrupt: cancel the session
  */
@@ -56,15 +57,24 @@ import type {
   JournalImportRemoteTurnMessage,
   JournalUpdateTurnMessage,
   JournalTerminalizeTurnMessage,
+  JournalRepairTurnsMessage,
   JournalListTurnsMessage,
   JournalClearTurnsMessage,
+  AppendChatFirstBlocksMessage,
+  AppendChatFirstEvidenceMessage,
+  RecordQuestionInteractionReplyMessage,
+  MaterializeChatFirstIntentsMessage,
+  ListChatFirstMaterializationReceiptsMessage,
+  AcknowledgeChatFirstMaterializationReceiptsMessage,
   EnsureAgentSpawnJournalMessage,
   JournalBackendSyncResultMessage,
   JournalBackendDeleteResultMessage,
   JournalBackendReconcileResultMessage,
+  ChatFirstDeferralDeliveryResultMessage,
+  ChatFirstHarnessExecutorBeginMessage,
   RefreshOwnerMessage,
   RevokeOwnerRuntimeMessage,
-  RefreshTokenMessage,
+  ModelHeadersResultMessage,
   AuthMethod,
 } from "./protocol.js";
 import {
@@ -80,10 +90,20 @@ import {
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
-import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "./adapters/acp.js";
+import {
+  AcpError,
+  AcpRuntimeAdapter,
+  beginProviderAuthWithoutBlocking,
+  requestProviderAuthFromHost,
+  isAcpProviderAuthFailure,
+} from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
+import { backendOutboxRetryAtMs } from "./runtime/durable-queue.js";
+import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
+import { pumpJournalOutboxDeliveries } from "./runtime/journal-outbox-pump.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
+import { OMI_TOOLS_MCP_SERVER_NAME } from "./runtime/kernel-support.js";
 import {
   adapterActivationError,
   adapterIdForHarnessMode,
@@ -120,12 +140,13 @@ import { LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY } from "./runtime/surface-sessio
 import {
   ackBackendConversationDeleteOutbox,
   ackBackendTurnOutboxWithWakes,
+  appendChatFirstBlocksToProducingTurn,
+  appendChatFirstEvidenceToProducingTurn,
   applyBackendReconcilePage,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
+  chatFirstMaterializationDeferrals,
   classifyBackendTurnResultDisposition,
-  drainBackendConversationDeleteOutbox,
-  drainBackendTurnOutbox,
   failBackendConversationDeleteOutbox,
   failBackendReconcile,
   failBackendTurnOutbox,
@@ -133,16 +154,21 @@ import {
   journalTurnChangedWakes,
   importRemoteJournalTurn,
   listJournalTurns,
+  listChatFirstMaterializationReceipts,
+  acknowledgeChatFirstMaterializationReceipts,
+  materializeChatFirstIntents,
   recordJournalExchange,
+  recordQuestionInteractionReply,
   recordJournalTurn,
+  repairOrphanedJournalTurns,
   settleClearedBackendTurnClaim,
   assertPublicJournalUpdatePolicy,
   terminalizeJournalTurn,
+  settleChatFirstDeferralOutbox,
   updateJournalTurn,
 } from "./runtime/conversation-journal.js";
 import { DirectControlExecutionBroker } from "./runtime/direct-control-execution.js";
 import {
-  authorizeRuntimeTokenRefresh,
   establishRuntimeOwner,
   requireActiveRuntimeOwner,
   runRuntimeOwnerRevocationBarrier,
@@ -156,6 +182,12 @@ import type {
   ConversationTurnOrigin,
   ConversationTurnStatus,
 } from "./runtime/types.js";
+import {
+  conversationEvidenceRelayDiagnostic,
+  type ConversationEvidence,
+} from "./runtime/conversation-evidence.js";
+import { createStdoutLineSender } from "./stdout-line-sender.js";
+import { loadLocalMcpConfig, type UserMcpServer } from "./runtime/user-extensions.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -173,12 +205,30 @@ const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
 
 // --- Helpers ---
 
-function send(msg: OutboundMessageDraft): void {
+function logErr(msg: string): void {
+  // Wrap to swallow EPIPE/ERR_STREAM_DESTROYED so a closed parent pipe
+  // doesn't bubble out as an uncaughtException and re-enter our handlers.
   try {
-    process.stdout.write(JSON.stringify(ensureOutboundProtocolVersion(msg)) + "\n");
-  } catch (err) {
+    process.stderr.write(`[agent] ${msg}\n`);
+  } catch {
+    // ignore — parent pipe is gone; we'll exit shortly anyway
+  }
+}
+
+// Queue stdout lines so a full parent pipe waits on `drain` instead of
+// blocking the event loop inside kernel subscribers / query completion.
+const writeStdoutLine = createStdoutLineSender(
+  (chunk) => process.stdout.write(chunk),
+  (listener) => {
+    process.stdout.once("drain", listener);
+  },
+  (err) => {
     logErr(`Failed to write to stdout: ${err}`);
   }
+);
+
+function send(msg: OutboundMessageDraft): void {
+  writeStdoutLine(JSON.stringify(ensureOutboundProtocolVersion(msg)) + "\n");
 }
 
 function runtimeErrorEnvelope(error: unknown): { message: string; failure: ReturnType<typeof failureFromError> } {
@@ -191,16 +241,6 @@ function runtimeErrorEnvelope(error: unknown): { message: string; failure: Retur
     userMessage: message,
   };
   return { message: failure.userMessage, failure };
-}
-
-function logErr(msg: string): void {
-  // Wrap to swallow EPIPE/ERR_STREAM_DESTROYED so a closed parent pipe
-  // doesn't bubble out as an uncaughtException and re-enter our handlers.
-  try {
-    process.stderr.write(`[agent] ${msg}\n`);
-  } catch {
-    // ignore — parent pipe is gone; we'll exit shortly anyway
-  }
 }
 
 function agentStateDir(): string {
@@ -286,6 +326,41 @@ const pendingExternalToolCalls = new Map<
   }
 >();
 
+/**
+ * This exists solely for the local/offline desktop E2E fixture. Unlike the
+ * external-surface bridge, it cannot accept a user/model-selected tool or
+ * capability: the kernel derives the one permitted capability from an
+ * already-mounted Main Chat session.
+ */
+const pendingChatFirstHarnessExecutors = new Map<
+  string,
+  {
+    requestId: string;
+    clientId: string;
+    invocation: AuthorizedRunToolInvocation;
+    timeout: ReturnType<typeof setTimeout>;
+  }
+>();
+
+const CHAT_FIRST_HARNESS_TASK_ID = "chat-first-e2e-task-v1";
+
+function isLocalChatFirstExecutorHarnessEnabled(): boolean {
+  return (process.env.OMI_ENV_STAGE === "local" || process.env.OMI_ENV_STAGE === "offline")
+    && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY === "1";
+}
+
+function isBoundedChatFirstHarnessInput(input: unknown): input is Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const outer = input as Record<string, unknown>;
+  if (Object.keys(outer).length !== 1 || !Array.isArray(outer.blocks) || outer.blocks.length !== 1) return false;
+  const block = outer.blocks[0];
+  if (!block || typeof block !== "object" || Array.isArray(block)) return false;
+  const taskCard = block as Record<string, unknown>;
+  return Object.keys(taskCard).length === 2
+    && taskCard.type === "taskCard"
+    && taskCard.taskId === CHAT_FIRST_HARNESS_TASK_ID;
+}
+
 const TERMINAL_RUN_TOOL_EVENTS = new Set([
   "run.succeeded",
   "run.failed",
@@ -317,6 +392,8 @@ function relayResultIdentity(
       runId: invocation.runId,
       attemptId: invocation.attemptId,
       toolName: invocation.canonicalToolName,
+      surfaceKind: invocation.surfaceKind,
+      purpose: invocation.originatingUserText,
     };
   }
   // Capability rejection occurs before a kernel-owned invocation exists. It
@@ -343,12 +420,112 @@ function finalizeRelayResult(
     outcome,
     kernel: runtimeKernel,
     artifactRoot: agentArtifactsDir(),
+    onDegraded: (record) => {
+      // Projecting a large-but-successful result down to its model budget is
+      // the intended path here, not an error. logErr keeps the write pipe-safe
+      // (a destroyed stderr during shutdown must not throw) and off the
+      // error-level stream.
+      logErr(`fallback area=tool_result_projection outcome=degraded ${JSON.stringify(record)}`);
+    },
   });
 }
 
 /** Resolve a pending tool call with a result from Swift */
 function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
   const key = toolCallPendingKey(msg);
+  const chatFirstHarness = pendingChatFirstHarnessExecutors.get(key);
+  if (chatFirstHarness) {
+    pendingChatFirstHarnessExecutors.delete(key);
+    clearTimeout(chatFirstHarness.timeout);
+    const invocation = chatFirstHarness.invocation;
+    const identityMatches = msg.ownerId === invocation.ownerId
+      && msg.sessionId === invocation.sessionId
+      && msg.runId === invocation.runId
+      && msg.attemptId === invocation.attemptId
+      && msg.profileGeneration === invocation.profileGeneration
+      && msg.manifestVersion === invocation.manifestVersion
+      && msg.manifestDigest === invocation.manifestDigest
+      && msg.daemonBootEpoch === invocation.daemonBootEpoch
+      && msg.executionGeneration === invocation.executionGeneration
+      && msg.inputHash === invocation.inputHash;
+    let validated = false;
+    try {
+      if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
+      if (!identityMatches) {
+        runtimeKernel.markRunToolInvocationOutcomeUnknown(invocation, "chat_first_e2e_result_mismatch");
+      } else {
+        runtimeKernel.completeRunToolInvocation({
+          invocationId: invocation.invocationId,
+          ownerId: invocation.ownerId,
+          sessionId: invocation.sessionId,
+          runId: invocation.runId,
+          attemptId: invocation.attemptId,
+          profileGeneration: invocation.profileGeneration,
+          manifestVersion: invocation.manifestVersion,
+          manifestDigest: invocation.manifestDigest,
+          daemonBootEpoch: invocation.daemonBootEpoch,
+          executionGeneration: invocation.executionGeneration,
+          inputHash: invocation.inputHash,
+          capabilityRef: invocation.capabilityRef,
+          activeOwnerId: currentOwnerId,
+          outcome: msg.outcome,
+          result: msg.result,
+        });
+        const result = JSON.parse(msg.result) as Record<string, unknown>;
+        validated = msg.outcome === "succeeded" && result.ok === true && result.rendered === 1;
+      }
+      runtimeKernel.completeChatFirstHarnessExecutor({
+        ownerId: invocation.ownerId,
+        sessionId: invocation.sessionId,
+        runId: invocation.runId,
+        attemptId: invocation.attemptId,
+        succeeded: validated,
+      });
+      send({
+        type: "chat_first_harness_executor_result",
+        requestId: chatFirstHarness.requestId,
+        clientId: chatFirstHarness.clientId,
+        ownerId: invocation.ownerId,
+        sessionId: invocation.sessionId,
+        runId: invocation.runId,
+        attemptId: invocation.attemptId,
+        ok: validated,
+        executorInvoked: true,
+        validated,
+        journalBlockRendered: validated,
+        ...(validated ? {} : { error: { code: "chat_first_e2e_executor_failed", message: "The executor did not render the fixture block" } }),
+      });
+    } catch (error) {
+      logErr(`Rejected Chat-first E2E executor result invocation=${msg.invocationId}: ${error}`);
+      try {
+        runtimeKernel?.markRunToolInvocationOutcomeUnknown(invocation, "chat_first_e2e_result_rejected");
+        runtimeKernel?.completeChatFirstHarnessExecutor({
+          ownerId: invocation.ownerId,
+          sessionId: invocation.sessionId,
+          runId: invocation.runId,
+          attemptId: invocation.attemptId,
+          succeeded: false,
+        });
+      } catch (terminalizeError) {
+        logErr(`Failed to terminalize rejected Chat-first E2E executor: ${terminalizeError}`);
+      }
+      send({
+        type: "chat_first_harness_executor_result",
+        requestId: chatFirstHarness.requestId,
+        clientId: chatFirstHarness.clientId,
+        ownerId: invocation.ownerId,
+        sessionId: invocation.sessionId,
+        runId: invocation.runId,
+        attemptId: invocation.attemptId,
+        ok: false,
+        executorInvoked: true,
+        validated: false,
+        journalBlockRendered: false,
+        error: externalAuthorityError(error, "chat_first_e2e_result_rejected"),
+      });
+    }
+    return;
+  }
   const pending = pendingToolCalls.get(key);
   if (pending) {
     try {
@@ -376,6 +553,21 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
       writeFinalizedRelayToolResult(pending.client, pending.callId, result);
     } catch (error) {
       logErr(`Rejected authorized tool execution result invocation=${msg.invocationId}: ${error}`);
+      pendingToolCalls.delete(key);
+      clearTimeout(pending.timeout);
+      const failure = finalizeRelayResult(
+        pending.callId,
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "tool_result_finalization_failed",
+            message: "The authorized tool result could not be finalized.",
+          },
+        }),
+        pending.invocation,
+        "failed",
+      );
+      writeFinalizedRelayToolResult(pending.client, pending.callId, failure);
     }
     return;
   }
@@ -420,6 +612,32 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
       });
     } catch (error) {
       logErr(`Rejected external authorized tool result invocation=${msg.invocationId}: ${error}`);
+      pendingExternalToolCalls.delete(key);
+      clearTimeout(external.timeout);
+      const failure = finalizeRelayResult(
+        external.request.requestId,
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "tool_result_finalization_failed",
+            message: "The authorized tool result could not be finalized.",
+          },
+        }),
+        external.invocation,
+        "failed",
+      );
+      send({
+        type: "external_surface_tool_result",
+        requestId: external.request.requestId,
+        clientId: external.request.clientId,
+        ownerId: external.invocation.ownerId,
+        sessionId: external.invocation.sessionId,
+        runId: external.invocation.runId,
+        attemptId: external.invocation.attemptId,
+        invocationId: external.invocation.invocationId,
+        ok: true,
+        result: failure,
+      });
     }
     return;
   }
@@ -473,6 +691,69 @@ function registerPendingExternalToolCall(
   };
   pendingExternalToolCalls.set(key, pending);
   return pending;
+}
+
+function finishPendingChatFirstHarnessExecutor(
+  pending: {
+    requestId: string;
+    clientId: string;
+    invocation: AuthorizedRunToolInvocation;
+    timeout: ReturnType<typeof setTimeout>;
+  },
+  errorCode: string,
+  message: string,
+): void {
+  try {
+    runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, errorCode);
+    runtimeKernel?.completeChatFirstHarnessExecutor({
+      ownerId: pending.invocation.ownerId,
+      sessionId: pending.invocation.sessionId,
+      runId: pending.invocation.runId,
+      attemptId: pending.invocation.attemptId,
+      succeeded: false,
+    });
+  } catch (error) {
+    logErr(`Failed to terminalize Chat-first E2E executor: ${error}`);
+  }
+  send({
+    type: "chat_first_harness_executor_result",
+    requestId: pending.requestId,
+    clientId: pending.clientId,
+    ownerId: pending.invocation.ownerId,
+    sessionId: pending.invocation.sessionId,
+    runId: pending.invocation.runId,
+    attemptId: pending.invocation.attemptId,
+    ok: false,
+    executorInvoked: true,
+    validated: false,
+    journalBlockRendered: false,
+    error: { code: errorCode, message },
+  });
+}
+
+function registerPendingChatFirstHarnessExecutor(input: {
+  requestId: string;
+  clientId: string;
+  invocation: AuthorizedRunToolInvocation;
+}): void {
+  const key = toolCallPendingKey(input.invocation);
+  if (pendingChatFirstHarnessExecutors.has(key) || pendingExternalToolCalls.has(key) || pendingToolCalls.has(key)) {
+    throw Object.assign(new Error("Duplicate tool invocation"), { code: "invocation_replayed" });
+  }
+  const pending = {
+    ...input,
+    timeout: setTimeout(() => {
+      const active = pendingChatFirstHarnessExecutors.get(key);
+      if (!active) return;
+      pendingChatFirstHarnessExecutors.delete(key);
+      finishPendingChatFirstHarnessExecutor(
+        active,
+        "swift_tool_timeout",
+        "Timed out waiting for the authorized Chat-first block executor",
+      );
+    }, 120_000),
+  };
+  pendingChatFirstHarnessExecutors.set(key, pending);
 }
 
 function cancelPendingExternalToolCallsForAttempt(input: {
@@ -543,6 +824,12 @@ function rejectPendingToolCallsForOwner(
       error: { code: errorCode, message },
     });
   }
+  for (const [key, pending] of pendingChatFirstHarnessExecutors) {
+    if (pending.invocation.ownerId !== ownerId) continue;
+    pendingChatFirstHarnessExecutors.delete(key);
+    clearTimeout(pending.timeout);
+    finishPendingChatFirstHarnessExecutor(pending, errorCode, message);
+  }
 }
 
 /** The broker terminalizes the ledger before subscribers see terminal events. */
@@ -582,6 +869,16 @@ function rejectPendingToolCallsForKernelEvent(event: AgentEvent): void {
       error: { code: errorCode, message: "Run tool authority ended before Swift returned a result" },
     });
   }
+  for (const [key, pending] of pendingChatFirstHarnessExecutors) {
+    if (!matches(pending.invocation)) continue;
+    pendingChatFirstHarnessExecutors.delete(key);
+    clearTimeout(pending.timeout);
+    finishPendingChatFirstHarnessExecutor(
+      pending,
+      errorCode,
+      "Run tool authority ended before Swift returned a result",
+    );
+  }
 }
 
 function resolveClientToolCalls(client: Socket, result: string): void {
@@ -600,6 +897,18 @@ function resolveClientToolCalls(client: Socket, result: string): void {
 
 function relayError(code: string, message: string): string {
   return JSON.stringify({ ok: false, error: { code, message } });
+}
+
+function journalLocalReadToolRelayFailure(
+  canonicalToolName: string,
+): { code: string; message: string } {
+  if (canonicalToolName === "search_chat_history") {
+    return { code: "chat_history_search_failed", message: "Chat history search could not be completed" };
+  }
+  if (canonicalToolName === "read_conversation_evidence") {
+    return conversationEvidenceRelayDiagnostic("read_conversation_evidence");
+  }
+  return conversationEvidenceRelayDiagnostic("search_conversation_evidence");
 }
 
 function controlToolInvocationOutcome(result: string): "succeeded" | "failed" {
@@ -625,6 +934,15 @@ function writeFinalizedRelayToolResult(client: Socket, callId: string, result: s
     logErr(`Failed to write relay tool result: ${error}`);
   }
 }
+
+const modelCredentialRelay = new ModelCredentialRelay(
+  (capabilityRef, ownerId) => {
+    if (!runtimeKernel) throw new Error("runtime unavailable");
+    const capability = runtimeKernel.assertLiveRunToolCapability({ capabilityRef, activeOwnerId: ownerId });
+    if (capability.adapterId !== "pi-mono") throw new Error("model credentials require pi-mono");
+  },
+  request => send(request),
+);
 
 /** Start Unix socket server for omi-tools stdio processes to connect to */
 function startOmiToolsRelay(): Promise<string> {
@@ -658,8 +976,13 @@ function startOmiToolsRelay(): Promise<string> {
               name: string;
               input: Record<string, unknown>;
               capabilityRef?: string;
+              forceRefresh?: boolean;
             };
 
+            if (msg.type === "model_headers") {
+              modelCredentialRelay.request(client, msg.callId, msg.capabilityRef ?? "", currentOwnerId, msg.forceRefresh === true);
+              continue;
+            }
             if (msg.type === "tool_use") {
               const capabilityRef = msg.capabilityRef?.trim();
               const invocationId = msg.invocationId?.trim() || msg.callId?.trim();
@@ -742,6 +1065,8 @@ function startOmiToolsRelay(): Promise<string> {
                           runId: authorized.runId,
                           attemptId: authorized.attemptId,
                           toolName: authorized.canonicalToolName,
+                          surfaceKind: authorized.surfaceKind,
+                          purpose: authorized.originatingUserText,
                         },
                         getOwnerId: establishedOwnerId,
                         executionLease,
@@ -783,6 +1108,70 @@ function startOmiToolsRelay(): Promise<string> {
                     });
                   } catch (error) {
                     logErr(`Failed to complete runtime control invocation ${authorized.invocationId}: ${error}`);
+                  }
+                  writeFinalizedRelayToolResult(client, msg.callId, finalizedResult);
+                })();
+                continue;
+              }
+
+              if (
+                authorized.canonicalToolName === "search_chat_history" ||
+                authorized.canonicalToolName === "read_conversation_evidence" ||
+                authorized.canonicalToolName === "search_conversation_evidence"
+              ) {
+                void (async () => {
+                  let result: string;
+                  let outcome: "succeeded" | "failed" = "succeeded";
+                  try {
+                    if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
+                    runtimeKernel.markRunToolInvocationDispatched(authorized);
+                    const value = authorized.canonicalToolName === "search_chat_history"
+                      ? runtimeKernel.searchAuthorizedChatHistory({
+                        invocation: authorized,
+                        toolInput: routedProposal.toolInput,
+                        activeOwnerId: () => currentOwnerId,
+                      })
+                      : authorized.canonicalToolName === "read_conversation_evidence"
+                        ? runtimeKernel.readAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        })
+                        : runtimeKernel.searchAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        });
+                    result = JSON.stringify(value);
+                  } catch {
+                    outcome = "failed";
+                    // Search results and journal details are transcript data.
+                    // Keep relay diagnostics shape-only even on malformed input.
+                    const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+                    result = relayError(failure.code, failure.message);
+                  }
+                  const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
+                  const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+                  try {
+                    runtimeKernel?.completeRunToolInvocation({
+                      invocationId: authorized.invocationId,
+                      ownerId: authorized.ownerId,
+                      sessionId: authorized.sessionId,
+                      runId: authorized.runId,
+                      attemptId: authorized.attemptId,
+                      profileGeneration: authorized.profileGeneration,
+                      manifestVersion: authorized.manifestVersion,
+                      manifestDigest: authorized.manifestDigest,
+                      daemonBootEpoch: authorized.daemonBootEpoch,
+                      executionGeneration: authorized.executionGeneration,
+                      inputHash: authorized.inputHash,
+                      capabilityRef: authorized.capabilityRef,
+                      activeOwnerId: currentOwnerId,
+                      outcome: finalizedOutcome,
+                      result: finalizedResult,
+                    });
+                  } catch (error) {
+                    logErr(`Failed to complete chat-history invocation ${authorized.invocationId}: ${error}`);
                   }
                   writeFinalizedRelayToolResult(client, msg.callId, finalizedResult);
                 })();
@@ -840,6 +1229,7 @@ function startOmiToolsRelay(): Promise<string> {
                 manifestDigest: authorized.manifestDigest,
                 daemonBootEpoch: authorized.daemonBootEpoch,
                 executionGeneration: authorized.executionGeneration,
+                capabilityRef: authorized.capabilityRef,
                 toolName: authorized.canonicalToolName,
                 input: routedProposal.toolInput,
                 inputHash: authorized.inputHash,
@@ -852,6 +1242,9 @@ function startOmiToolsRelay(): Promise<string> {
                 precedingAssistantText: authorized.precedingAssistantText,
                 runMode: authorized.runMode,
                 chatMode: authorized.chatMode,
+                ...(authorized.chatFirstControlGeneration !== null
+                  ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
+                  : {}),
               });
             }
           } catch {
@@ -861,6 +1254,7 @@ function startOmiToolsRelay(): Promise<string> {
       });
 
       client.on("close", () => {
+        modelCredentialRelay.disconnect(client);
         omiToolsClients = omiToolsClients.filter((c) => c !== client);
         resolveClientToolCalls(client, "Error: omi-tools relay client disconnected");
       });
@@ -942,6 +1336,12 @@ async function restartAcpProcess(): Promise<void> {
  *
  * Idempotent: if a flow is already running, returns the same promise.
  */
+/** Notify Swift that provider auth is required without blocking the active turn. */
+function signalProviderAuthRequired(): void {
+  logErr("ACP provider auth required; signaling Swift without in-band OAuth");
+  send({ type: "auth_required", methods: authMethods });
+}
+
 async function startAuthFlow(): Promise<void> {
   if (activeAuthPromise) {
     logErr("Auth flow already in progress, waiting for it...");
@@ -1038,10 +1438,16 @@ async function initializeAcp(): Promise<void> {
         }));
       }
       logErr(`ACP requires authentication: ${JSON.stringify(authMethods)}`);
-      await startAuthFlow();
-
-      // Retry initialization after auth (ACP subprocess already restarted)
-      await initializeAcp();
+      // Terminalize-first, same contract the active turn already follows: signal
+      // Swift and return instead of awaiting OAuth in-band. `isInitialized` stays
+      // false, so the pending send reaches the ACP request, hits the same -32000,
+      // and terminalizes as `authentication` via the kernel's recoverable-error
+      // path rather than hanging behind this init (#10407).
+      beginProviderAuthWithoutBlocking({
+        signalAuthRequired: signalProviderAuthRequired,
+        startAuthFlow,
+        logErr,
+      });
       return;
     }
     throw err;
@@ -1062,7 +1468,7 @@ function buildMcpServers(
   cwd?: string,
   sessionKey?: string,
   context?: McpServerBuildContext
-): McpServerConfig[] {
+): Array<McpServerConfig | UserMcpServer> {
   const servers: McpServerConfig[] = [];
 
   if (context?.includeSwiftBackedTools !== false) {
@@ -1081,12 +1487,24 @@ function buildMcpServers(
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
     }
+    // Keep the exact surface marker for every typed chat run. Legacy typed
+    // chat uses it to project coordinator-only writes (such as create_memory),
+    // while the optional chat-first flags remain main-chat rollout-gated below.
+    if (context?.surfaceKind === "main_chat" || context?.surfaceKind === "floating_chat") {
+      omiToolsEnv.push({ name: "OMI_SURFACE_KIND", value: context.surfaceKind });
+      if (context.surfaceKind === "main_chat" && context.chatFirstUi === true) {
+        omiToolsEnv.push({ name: "OMI_CHAT_FIRST_UI", value: "true" });
+        if (context.chatFirstControlGeneration !== undefined && context.chatFirstControlGeneration !== null) {
+          omiToolsEnv.push({ name: "OMI_CHAT_FIRST_CONTROL_GENERATION", value: String(context.chatFirstControlGeneration) });
+        }
+      }
+    }
     omiToolsEnv.push({
       name: "OMI_EXECUTION_ROLE",
       value: context?.executionRole === "leaf" ? "leaf" : "coordinator",
     });
     servers.push({
-      name: "omi-tools",
+      name: OMI_TOOLS_MCP_SERVER_NAME,
       command: process.execPath,
       args: [omiToolsStdioScript],
       env: omiToolsEnv,
@@ -1116,7 +1534,16 @@ function buildMcpServers(
     });
   }
 
-  return servers;
+  // User-added MCP servers from ~/.omi/mcp.json (standard Claude Desktop
+  // format: stdio commands, plain URLs, API keys, and OAuth tokens the app
+  // keeps fresh). Read per session so changes apply without a restart.
+  const localServers = loadLocalMcpConfig(
+    process.env.OMI_LOCAL_MCP_FILE,
+    new Set(servers.map((s) => s.name)),
+    logErr,
+  );
+
+  return [...servers, ...localServers];
 }
 
 function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
@@ -1239,17 +1666,19 @@ async function main(): Promise<void> {
   registry.register("acp", () => acpAdapter, 1);
   const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
   logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
+  const prunedToolOutputs = artifactStorage.pruneExpiredToolOutputs();
+  if (prunedToolOutputs.deletedFiles > 0) {
+    logErr(
+      `Pruned ${prunedToolOutputs.deletedFiles} expired tool-output files (${prunedToolOutputs.freedBytes} bytes)`,
+    );
+  }
   const recoverRunInput = (adapterId: string) => {
     if (adapterId !== "acp") return {};
-    let recoveries = 0;
     return {
-      maxAttempts: 3,
       recoverAfterError: async (error: unknown) => {
-        if (recoveries >= 2 || !isRecoverableAcpAuthError(error)) return false;
-        recoveries += 1;
-        logErr("ACP auth required during run; starting OAuth flow before retry");
-        await startAuthFlow();
-        return true;
+        if (!isAcpProviderAuthFailure(error)) return false;
+        signalProviderAuthRequired();
+        return false;
       },
     };
   };
@@ -1267,21 +1696,19 @@ async function main(): Promise<void> {
   kernel.subscribe(rejectPendingToolCallsForKernelEvent);
   runtimeKernel = kernel;
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
-  let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
   const localAcpAdapters = new Set<RuntimeAdapter>();
   const stopLocalAcpAdapters = async (): Promise<void> => {
     await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
   };
-  const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
-    if (!authToken) return false;
-    piMonoAuthToken = authToken;
+  const ensurePiMonoAdapter = async (): Promise<boolean> => {
+    if (process.env.OMI_MODEL_CREDENTIALS !== "on_demand") return false;
     piMonoClasses ??= await import("./adapters/pi-mono.js");
     if (!registry.has("pi-mono")) {
       registry.register("pi-mono", () => {
         const harness = new piMonoClasses!.PiMonoAdapter({
           omiApiBaseUrl: process.env.OMI_API_BASE_URL,
-          authToken: piMonoAuthToken,
+          onDisposed: () => piMonoAdapters.delete(harness),
         });
         piMonoAdapters.add(harness);
         return new piMonoClasses!.PiMonoRuntimeAdapter(harness);
@@ -1291,7 +1718,7 @@ async function main(): Promise<void> {
     return true;
   };
 
-  const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  const piMonoAvailable = await ensurePiMonoAdapter();
   const ensureHermesAdapter = async (): Promise<boolean> => {
     return ensureRegisteredAdapter(registry, "hermes", {
       log: logErr,
@@ -1309,7 +1736,7 @@ async function main(): Promise<void> {
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
-    const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    const msg = "pi-mono mode requires on-demand model credentials; refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -1343,11 +1770,10 @@ async function main(): Promise<void> {
     log: logErr,
     defaultAdapterId,
     buildMcpServers,
-    isRecoverableError: (error, adapterId) => adapterId === "acp" && isRecoverableAcpAuthError(error),
+    isRecoverableError: (error, adapterId) => adapterId === "acp" && isAcpProviderAuthFailure(error),
     onRecoverableError: async (_error, adapterId) => {
       if (adapterId !== "acp") return;
-      logErr("ACP auth required during query; starting OAuth flow before retry");
-      await startAuthFlow();
+      signalProviderAuthRequired();
     },
     maxRecoverableRetries: 2,
     activeOwnerId: establishedOwnerId,
@@ -1457,53 +1883,52 @@ async function main(): Promise<void> {
     }
   };
   let pumpingJournalOutbox = false;
-  const pumpJournalOutbox = () => {
-    if (!ownerAuthorityEstablished || pumpingJournalOutbox) return;
+  // Returns true when the pump ran (or was safely skipped) without throwing, so
+  // the timer can back off while it keeps failing instead of hot-looping.
+  const pumpJournalOutbox = (): boolean => {
+    if (!ownerAuthorityEstablished || pumpingJournalOutbox) return true;
     pumpingJournalOutbox = true;
     try {
       const activeOwnerId = currentOwnerId;
-      for (const deletion of drainBackendConversationDeleteOutbox(store, {
+      pumpJournalOutboxDeliveries({
+        store,
         ownerId: activeOwnerId,
-        limit: 20,
-      })) {
-        send({
-          type: "journal_backend_delete",
-          requestId: `journal-delete:${deletion.operationId}:${deletion.deliveryGeneration}`,
-          clientId: "kernel-journal",
-          ownerId: deletion.ownerId,
-          operationId: deletion.operationId,
-          conversationId: deletion.conversationId,
-          conversationGeneration: deletion.conversationGeneration,
-          attemptCount: deletion.attemptCount,
-          deliveryGeneration: deletion.deliveryGeneration,
-          payloadHash: deletion.payloadHash,
-          targetKind: deletion.targetKind,
-          targetId: deletion.targetId,
-        });
-      }
-      for (const delivery of drainBackendTurnOutbox(store, { ownerId: activeOwnerId, limit: 20 })) {
-        send({
-          type: "journal_backend_sync",
-          requestId: `journal:${delivery.turnId}:${delivery.deliveryGeneration}`,
-          clientId: "kernel-journal",
-          ownerId: delivery.ownerId,
-          ...delivery.payload,
-          turnId: delivery.turnId,
-          conversationId: delivery.conversationId,
-          conversationGeneration: delivery.conversationGeneration,
-          attemptCount: delivery.attemptCount,
-          deliveryGeneration: delivery.deliveryGeneration,
-          payloadHash: delivery.payloadHash,
-        });
-      }
+        hasChatFirstMainCapability: kernel.hasChatFirstMainCapability(activeOwnerId),
+        send,
+        onQuarantine: (turnId) =>
+          logErr(`Journal outbox parked turn ${turnId}: canonical payload hash mismatch (not re-delivered)`),
+      });
+      return true;
     } catch (error) {
       logErr(`Journal outbox pump failed: ${error}`);
+      return false;
     } finally {
       pumpingJournalOutbox = false;
     }
   };
-  const journalPumpTimer = setInterval(pumpJournalOutbox, 1_000);
-  journalPumpTimer.unref();
+  // Self-rescheduling timer with exponential backoff: a poisoned outbox row can
+  // make the pump throw indefinitely, so a fixed interval would re-throw every
+  // second forever. Back off on consecutive failures (capped at ~1/min) and snap
+  // back to base cadence the moment a pump completes cleanly.
+  let journalPumpTimer: ReturnType<typeof setTimeout> | undefined;
+  let journalPumpFailureStreak = 0;
+  const scheduleJournalPumpTick = (delayMs: number): void => {
+    journalPumpTimer = setTimeout(runJournalPumpTick, delayMs);
+    journalPumpTimer.unref();
+  };
+  const runJournalPumpTick = (): void => {
+    const clean = pumpJournalOutbox();
+    if (clean) {
+      if (journalPumpFailureStreak > 0) {
+        logErr(`Journal outbox pump recovered after ${journalPumpFailureStreak} consecutive failure(s)`);
+        journalPumpFailureStreak = 0;
+      }
+    } else {
+      journalPumpFailureStreak += 1;
+    }
+    scheduleJournalPumpTick(nextJournalPumpDelayMs(journalPumpFailureStreak));
+  };
+  scheduleJournalPumpTick(nextJournalPumpDelayMs(0));
   // 3. Signal readiness
   send({
     type: "init",
@@ -1548,7 +1973,9 @@ async function main(): Promise<void> {
             await startAcpProcess();
             await initializeAcp();
           } else if (adapterId === "pi-mono") {
-            await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+            if (!(await ensurePiMonoAdapter())) {
+              throw new Error(adapterActivationError("pi-mono"));
+            }
           } else if (adapterId === "hermes") {
             if (!(await ensureHermesAdapter())) {
               throw new Error(adapterActivationError("hermes"));
@@ -1637,6 +2064,19 @@ async function main(): Promise<void> {
           }
         }
         const selectedProfile = creationProfile ?? preference;
+        const chatFirstCapability = resolve.chatFirstCapability;
+        if (chatFirstCapability !== undefined) {
+          if (
+            typeof chatFirstCapability.chatFirstUi !== "boolean"
+            || !Number.isSafeInteger(chatFirstCapability.controlGeneration)
+            || chatFirstCapability.controlGeneration < 0
+          ) {
+            throw new Error("Invalid chat-first capability projection");
+          }
+          if (resolve.surfaceKind !== "main_chat" && chatFirstCapability.chatFirstUi) {
+            throw new Error("Chat-first capability may only be projected to main_chat");
+          }
+        }
         const resolved = kernel.resolveSurfaceSession({
           ownerId,
           surfaceRef: {
@@ -1650,6 +2090,7 @@ async function main(): Promise<void> {
           defaultCwd: selectedProfile.workingDirectory,
           executionRole: executionRoleForSurface(resolve),
           title: resolve.title ?? null,
+          chatFirstCapability,
         });
         const profile = kernel.sessionExecutionProfile(resolved.agentSessionId, ownerId);
         send({
@@ -1750,6 +2191,79 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "chat_first_harness_executor_begin": {
+        const request = msg as ChatFirstHarnessExecutorBeginMessage;
+        const requestId = request.requestId?.trim();
+        const clientId = request.clientId?.trim();
+        try {
+          if (!isLocalChatFirstExecutorHarnessEnabled()) {
+            throw new Error("Chat-first executor harness is available only to local/offline debug runtime");
+          }
+          if (!requestId || !clientId) {
+            throw new Error("Chat-first executor harness requires requestId and clientId");
+          }
+          if (!isBoundedChatFirstHarnessInput(request.input)) {
+            throw new Error("Chat-first executor harness accepts only the static fixture task card");
+          }
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const authorized = kernel.beginChatFirstHarnessExecutor({
+            ownerId,
+            sessionId: request.sessionId,
+            producingTurnId: request.producingTurnId,
+            controlGeneration: request.controlGeneration,
+            clientId,
+            requestId,
+            toolInput: request.input,
+          });
+          registerPendingChatFirstHarnessExecutor({ requestId, clientId, invocation: authorized });
+          send({
+            type: "authorized_tool_execution",
+            invocationId: authorized.invocationId,
+            ownerId: authorized.ownerId,
+            sessionId: authorized.sessionId,
+            runId: authorized.runId,
+            attemptId: authorized.attemptId,
+            profileGeneration: authorized.profileGeneration,
+            manifestVersion: authorized.manifestVersion,
+            manifestDigest: authorized.manifestDigest,
+            daemonBootEpoch: authorized.daemonBootEpoch,
+            executionGeneration: authorized.executionGeneration,
+            capabilityRef: authorized.capabilityRef,
+            toolName: authorized.canonicalToolName,
+            input: request.input,
+            inputHash: authorized.inputHash,
+            effectClass: authorized.effectClass,
+            retryPolicy: authorized.retryPolicy,
+            surfaceKind: authorized.surfaceKind,
+            externalRefKind: authorized.externalRefKind,
+            externalRefId: authorized.externalRefId,
+            originatingUserText: authorized.originatingUserText,
+            precedingAssistantText: authorized.precedingAssistantText,
+            runMode: authorized.runMode,
+            chatMode: authorized.chatMode,
+            ...(authorized.chatFirstControlGeneration !== null
+              ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
+              : {}),
+          });
+        } catch (error) {
+          send({
+            type: "chat_first_harness_executor_result",
+            requestId: requestId ?? "",
+            clientId: clientId ?? "",
+            ownerId: request.ownerId ?? "",
+            sessionId: request.sessionId ?? "",
+            runId: "",
+            attemptId: "",
+            ok: false,
+            executorInvoked: false,
+            validated: false,
+            journalBlockRendered: false,
+            error: externalAuthorityError(error, "chat_first_e2e_executor_rejected"),
+          });
+        }
+        break;
+      }
+
       case "authorized_tool_execution_result":
         resolveToolCall(msg);
         break;
@@ -1766,6 +2280,7 @@ async function main(): Promise<void> {
             sessionId: request.sessionId,
             turnId: request.turnId,
             prompt: request.prompt,
+            promptIsSynthetic: request.promptIsSynthetic === true,
             mode: request.mode,
             clientId,
             requestId,
@@ -1776,6 +2291,7 @@ async function main(): Promise<void> {
             clientId,
             ownerId,
             sessionId: result.sessionId,
+            surfaceKind: result.surfaceKind,
             turnId: result.turnId,
             ok: true,
             runId: result.runId,
@@ -1854,6 +2370,8 @@ async function main(): Promise<void> {
                     runId: authorized.runId,
                     attemptId: authorized.attemptId,
                     toolName: authorized.canonicalToolName,
+                    surfaceKind: authorized.surfaceKind,
+                    purpose: authorized.originatingUserText,
                   },
                   getOwnerId: establishedOwnerId,
                   executionLease,
@@ -1916,6 +2434,65 @@ async function main(): Promise<void> {
             break;
           }
 
+          if (
+            authorized.canonicalToolName === "read_conversation_evidence" ||
+            authorized.canonicalToolName === "search_conversation_evidence"
+          ) {
+            kernel.markRunToolInvocationDispatched(authorized);
+            let result: string;
+            let outcome: "succeeded" | "failed" = "succeeded";
+            try {
+              const value = authorized.canonicalToolName === "read_conversation_evidence"
+                ? kernel.readAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                })
+                : kernel.searchAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                });
+              result = JSON.stringify(value);
+            } catch {
+              outcome = "failed";
+              const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+              result = relayError(failure.code, failure.message);
+            }
+            const finalizedResult = finalizeRelayResult(requestId, result, authorized, outcome);
+            const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+            kernel.completeRunToolInvocation({
+              invocationId: authorized.invocationId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              profileGeneration: authorized.profileGeneration,
+              manifestVersion: authorized.manifestVersion,
+              manifestDigest: authorized.manifestDigest,
+              daemonBootEpoch: authorized.daemonBootEpoch,
+              executionGeneration: authorized.executionGeneration,
+              inputHash: authorized.inputHash,
+              capabilityRef: authorized.capabilityRef,
+              activeOwnerId: currentOwnerId,
+              outcome: finalizedOutcome,
+              result: finalizedResult,
+            });
+            send({
+              type: "external_surface_tool_result",
+              requestId,
+              clientId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              invocationId: authorized.invocationId,
+              ok: true,
+              result: finalizedResult,
+            });
+            break;
+          }
+
           kernel.markRunToolInvocationDispatched(authorized);
           registerPendingExternalToolCall(request, authorized);
           send({
@@ -1930,6 +2507,7 @@ async function main(): Promise<void> {
             manifestDigest: authorized.manifestDigest,
             daemonBootEpoch: authorized.daemonBootEpoch,
             executionGeneration: authorized.executionGeneration,
+            capabilityRef: authorized.capabilityRef,
             toolName: authorized.canonicalToolName,
             input: routed.toolInput,
             inputHash: authorized.inputHash,
@@ -1942,6 +2520,9 @@ async function main(): Promise<void> {
             precedingAssistantText: authorized.precedingAssistantText,
             runMode: authorized.runMode,
             chatMode: authorized.chatMode,
+            ...(authorized.chatFirstControlGeneration !== null
+              ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
+              : {}),
             ...(routed.recoveredFromDelegation
               ? { policyRecovery: "permission_delegation_to_native" as const }
               : {}),
@@ -1984,6 +2565,7 @@ async function main(): Promise<void> {
             runId: request.runId,
             attemptId: request.attemptId,
             terminalStatus: request.terminalStatus,
+            finalText: request.finalText,
             errorCode: request.errorCode,
           });
           send({
@@ -1997,7 +2579,28 @@ async function main(): Promise<void> {
             ok: true,
             terminalStatus: result.terminalStatus,
             duplicate: result.duplicate,
+            finalTextPersisted: result.finalTextPersisted,
+            journalMaterialized: result.journalMaterialized,
           });
+          for (const change of result.journalChanges) {
+            const range = listJournalTurns(store, {
+              ownerId: change.ownerId,
+              conversationId: change.conversationId,
+              afterTurnSeq: Math.max(0, change.turn.turnSeq - 1),
+              limit: 1,
+            });
+            send({
+              type: "journal_turn_changed",
+              ownerId: change.ownerId,
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: change.surfaceKind,
+              externalRefKind: change.externalRefKind,
+              externalRefId: change.externalRefId,
+              turn: journalTurnProjection(change.turn),
+            });
+          }
+          if (result.journalChanges.length > 0) pumpJournalOutbox();
         } catch (error) {
           send({
             type: "external_surface_run_complete_result",
@@ -2267,7 +2870,11 @@ async function main(): Promise<void> {
             appendResources: Array.isArray(update.appendResources)
               ? update.appendResources as ConversationResource[]
               : undefined,
+            appendEvidence: Array.isArray(update.appendEvidence)
+              ? update.appendEvidence as ConversationEvidence[]
+              : undefined,
             metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
+            terminalRevision: update.terminalRevision === true,
           };
           assertPublicJournalUpdatePolicy(store, parsedUpdate);
           const turn = updateJournalTurn(store, parsedUpdate);
@@ -2316,6 +2923,431 @@ async function main(): Promise<void> {
             clientId: request.clientId,
             message: envelope.message,
             failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "append_chat_first_blocks": {
+        const request = msg as AppendChatFirstBlocksMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (!Array.isArray(request.blocks) || request.blocks.length < 1 || request.blocks.length > 8) {
+            throw new Error("Chat-first append requires one to eight blocks");
+          }
+          if (!Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0) {
+            throw new Error("Chat-first append requires a valid control generation");
+          }
+          const capability = kernel.assertLiveRunToolCapability({
+            capabilityRef: request.capabilityRef,
+            activeOwnerId: ownerId,
+          });
+          if (
+            capability.ownerId !== ownerId
+            || capability.sessionId !== request.sessionId
+            || capability.runId !== request.runId
+            || capability.attemptId !== request.attemptId
+            || capability.surfaceKind !== "main_chat"
+            || capability.chatFirstUi !== true
+            || capability.chatFirstControlGeneration !== request.controlGeneration
+            || !capability.allowedToolNames.includes("render_chat_blocks")
+          ) {
+            throw new Error("Chat-first append capability does not match the producing run");
+          }
+          const turn = appendChatFirstBlocksToProducingTurn(store, {
+            ownerId,
+            sessionId: request.sessionId,
+            runId: request.runId,
+            attemptId: request.attemptId,
+            blocks: request.blocks as ConversationContentBlock[],
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: turn.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "append_chat_first_blocks",
+            conversationId: turn.conversationId,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+          });
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "append_chat_first_evidence": {
+        const request = msg as AppendChatFirstEvidenceMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (!request.resource || typeof request.resource !== "object") {
+            throw new Error("Chat-first evidence append requires one resource");
+          }
+          if (!Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0) {
+            throw new Error("Chat-first evidence append requires a valid control generation");
+          }
+          const capability = kernel.assertLiveRunToolCapability({
+            capabilityRef: request.capabilityRef,
+            activeOwnerId: ownerId,
+          });
+          if (
+            capability.ownerId !== ownerId
+            || capability.sessionId !== request.sessionId
+            || capability.runId !== request.runId
+            || capability.attemptId !== request.attemptId
+            || capability.surfaceKind !== "main_chat"
+            || capability.chatFirstUi !== true
+            || capability.chatFirstControlGeneration !== request.controlGeneration
+            || !capability.allowedToolNames.includes("show_rewind_evidence")
+          ) {
+            throw new Error("Chat-first evidence capability does not match the producing run");
+          }
+          const turn = appendChatFirstEvidenceToProducingTurn(store, {
+            ownerId,
+            sessionId: request.sessionId,
+            runId: request.runId,
+            attemptId: request.attemptId,
+            resource: request.resource as ConversationResource,
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: turn.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "append_chat_first_evidence",
+            conversationId: turn.conversationId,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+          });
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "record_question_interaction_reply": {
+        const request = msg as RecordQuestionInteractionReplyMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || typeof request.questionId !== "string" || !request.questionId.trim()
+            || typeof request.optionId !== "string" || !request.optionId.trim()
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+          ) {
+            throw new Error("Question interaction request is invalid");
+          }
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const receipt = recordQuestionInteractionReply(store, {
+            ownerId,
+            sessionId: request.sessionId,
+            questionId: request.questionId,
+            optionId: request.optionId,
+            controlGeneration: request.controlGeneration,
+          });
+          const conversationId = receipt.parentTurn?.conversationId
+            ?? store.getOptionalRow(
+              `SELECT conversation_id FROM surface_conversations
+               WHERE owner_id = ? AND agent_session_id = ? AND surface_kind = 'main_chat'
+               ORDER BY last_active_at_ms DESC LIMIT 1`,
+              [ownerId, request.sessionId],
+            )?.conversation_id;
+          if (typeof conversationId !== "string" || !conversationId) {
+            throw new Error("Question interaction has no canonical main Chat conversation");
+          }
+          const surface = store.getRow(
+            `SELECT external_ref_kind, external_ref_id FROM surface_conversations
+             WHERE owner_id = ? AND agent_session_id = ? AND surface_kind = 'main_chat'
+             ORDER BY last_active_at_ms DESC LIMIT 1`,
+            [ownerId, request.sessionId],
+          );
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId,
+            afterTurnSeq: 0,
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "record_question_interaction_reply",
+            conversationId,
+            surfaceKind: "main_chat",
+            externalRefKind: String(surface.external_ref_kind),
+            externalRefId: String(surface.external_ref_id),
+            turn: receipt.parentTurn ? journalTurnProjection(receipt.parentTurn) : undefined,
+            turns: [receipt.userTurn, receipt.assistantTurn]
+              .filter((turn): turn is ConversationTurn => turn !== null)
+              .map(journalTurnProjection),
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+            accepted: receipt.accepted,
+            duplicate: receipt.duplicate,
+            continuityKey: receipt.continuityKey,
+          });
+          if (receipt.accepted && !receipt.duplicate) {
+            for (const turn of [receipt.parentTurn, receipt.userTurn, receipt.assistantTurn]) {
+              if (!turn) continue;
+              for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+                send({ type: "journal_turn_changed", ...wake, turn: journalTurnProjection(wake.turn) });
+              }
+            }
+            pumpJournalOutbox();
+          }
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "materialize_chat_first_intents": {
+        const request = msg as MaterializeChatFirstIntentsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || !Array.isArray(request.intents) || request.intents.length < 1 || request.intents.length > 8
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+          ) throw new Error("Chat-first materialization request is invalid");
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const resolved = resolveJournalSurface({
+            ownerId, surfaceKind: "main_chat",
+            externalRefKind: request.externalRefKind, externalRefId: request.externalRefId,
+          });
+          if (resolved.agentSessionId !== request.sessionId) throw new Error("Chat-first materialization session is stale");
+          const intents = request.intents.map((intent) => {
+            if (
+              !intent || typeof intent.intentId !== "string" || !intent.intentId.trim()
+              || typeof intent.continuityKey !== "string" || !intent.continuityKey.trim()
+              || !Array.isArray(intent.blocks)
+            ) throw new Error("Chat-first materialization intent is invalid");
+            return {
+              ownerId, conversationId: resolved.conversationId, controlGeneration: request.controlGeneration,
+              intentId: intent.intentId, continuityKey: intent.continuityKey,
+              source: intent.source, blocks: intent.blocks,
+            };
+          });
+          const result = materializeChatFirstIntents(store, intents);
+          const committedTurns = result.results
+            .filter((candidate) => candidate.accepted && !candidate.duplicate && candidate.turn)
+            .map((candidate) => candidate.turn!);
+          const range = listJournalTurns(store, {
+            ownerId, conversationId: resolved.conversationId,
+            afterTurnSeq: 0, limit: 1,
+          });
+          send({
+            type: "journal_operation_result", protocolVersion: request.protocolVersion,
+            requestId: request.requestId, clientId: request.clientId,
+            operation: "materialize_chat_first_intents", conversationId: resolved.conversationId,
+            surfaceKind: "main_chat", externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: committedTurns.at(-1) ? journalTurnProjection(committedTurns.at(-1)!) : undefined,
+            turns: committedTurns.map(journalTurnProjection), clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+            accepted: result.results.some((candidate) => candidate.accepted),
+            duplicate: result.results.every((candidate) => candidate.duplicate),
+            suppressedByTailQuestion: result.results.some((candidate) => candidate.suppressedByTailQuestion),
+            suppressedByStreamingTail: result.results.some((candidate) => candidate.suppressedByStreamingTail),
+            materializationStoppedByTail: result.stoppedByTail,
+            materializationReceipts: result.results.flatMap((candidate) => candidate.receipt ? [candidate.receipt] : []),
+            materializationRejections: result.results.flatMap((candidate, index) => candidate.rejected ? [{
+              intentId: intents[index]!.intentId,
+              code: candidate.rejectionCode ?? "kernel_materialization_failed",
+              message: candidate.rejectionMessage ?? "Chat-first intent materialization failed",
+            }] : []),
+            materializationDeferrals: chatFirstMaterializationDeferrals(intents, result),
+          });
+          if (committedTurns.length > 0) {
+            for (const turn of committedTurns) for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+              send({ type: "journal_turn_changed", ...wake, turn: journalTurnProjection(wake.turn) });
+            }
+            pumpJournalOutbox();
+          }
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error", protocolVersion: request.protocolVersion, requestId: request.requestId,
+            clientId: request.clientId, message: envelope.message, failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "list_chat_first_materialization_receipts": {
+        const request = msg as ListChatFirstMaterializationReceiptsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+          ) throw new Error("Chat-first receipt listing request is invalid");
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const resolved = resolveJournalSurface({
+            ownerId, surfaceKind: "main_chat",
+            externalRefKind: request.externalRefKind, externalRefId: request.externalRefId,
+          });
+          if (resolved.agentSessionId !== request.sessionId) throw new Error("Chat-first receipt session is stale");
+          const range = listJournalTurns(store, {
+            ownerId, conversationId: resolved.conversationId, afterTurnSeq: 0, limit: 1,
+          });
+          send({
+            type: "journal_operation_result", protocolVersion: request.protocolVersion,
+            requestId: request.requestId, clientId: request.clientId,
+            operation: "list_chat_first_materialization_receipts", conversationId: resolved.conversationId,
+            surfaceKind: "main_chat", externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId, turns: [], clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+            ...listChatFirstMaterializationReceipts(store, {
+              ownerId, controlGeneration: request.controlGeneration, limit: request.limit,
+            }),
+          });
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error", protocolVersion: request.protocolVersion, requestId: request.requestId,
+            clientId: request.clientId, message: envelope.message, failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "acknowledge_chat_first_materialization_receipts": {
+        const request = msg as AcknowledgeChatFirstMaterializationReceiptsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+            || !Array.isArray(request.receipts) || request.receipts.length > 16
+            || !Array.isArray(request.coldStartSequenceTerminalReceipts)
+            || request.coldStartSequenceTerminalReceipts.length > 16
+          ) throw new Error("Chat-first receipt acknowledgement request is invalid");
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const resolved = resolveJournalSurface({
+            ownerId, surfaceKind: "main_chat",
+            externalRefKind: request.externalRefKind, externalRefId: request.externalRefId,
+          });
+          if (resolved.agentSessionId !== request.sessionId) throw new Error("Chat-first receipt session is stale");
+          const receipts = request.receipts.map((receipt) => ({
+            intentId: typeof receipt?.intentId === "string" ? receipt.intentId : "",
+            receiptId: typeof receipt?.receiptId === "string" ? receipt.receiptId : "",
+          }));
+          const coldStartSequenceTerminalReceipts = request.coldStartSequenceTerminalReceipts.map((receipt) => {
+            if (receipt?.terminalState !== "completed" && receipt?.terminalState !== "abandoned") {
+              throw new Error("Cold-start terminal receipt is invalid");
+            }
+            return {
+              sequenceId: typeof receipt.sequenceId === "string" ? receipt.sequenceId : "",
+              receiptId: typeof receipt.receiptId === "string" ? receipt.receiptId : "",
+              terminalState: receipt.terminalState,
+            };
+          });
+          const acknowledgedReceiptCount = acknowledgeChatFirstMaterializationReceipts(store, {
+            ownerId,
+            controlGeneration: request.controlGeneration,
+            receipts,
+            coldStartSequenceTerminalReceipts,
+          });
+          const range = listJournalTurns(store, {
+            ownerId, conversationId: resolved.conversationId, afterTurnSeq: 0, limit: 1,
+          });
+          send({
+            type: "journal_operation_result", protocolVersion: request.protocolVersion,
+            requestId: request.requestId, clientId: request.clientId,
+            operation: "acknowledge_chat_first_materialization_receipts", conversationId: resolved.conversationId,
+            surfaceKind: "main_chat", externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId, turns: [], clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation, acknowledgedReceiptCount,
+          });
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error", protocolVersion: request.protocolVersion, requestId: request.requestId,
+            clientId: request.clientId, message: envelope.message, failure: envelope.failure,
           });
         }
         break;
@@ -2407,6 +3439,55 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "journal_repair_turns": {
+        const request = msg as JournalRepairTurnsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const turns = repairOrphanedJournalTurns(store, {
+            ownerId,
+            turnIds: Array.isArray(request.turnIds)
+              ? request.turnIds.filter((turnId): turnId is string => typeof turnId === "string")
+              : [],
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "repair",
+            conversationId: turns[0]?.conversationId ?? "",
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turns: turns.map(journalTurnProjection),
+            clearedCount: 0,
+            highWaterTurnSeq: 0,
+            generationBaseTurnSeq: 0,
+            conversationGeneration: 1,
+          });
+          for (const turn of turns) {
+            for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+              send({
+                type: "journal_turn_changed",
+                ...wake,
+              });
+            }
+          }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
       case "journal_list_turns": {
         const request = msg as JournalListTurnsMessage;
         const ownerId = resolveActiveOwner(request.ownerId);
@@ -2459,6 +3540,7 @@ async function main(): Promise<void> {
           ownerId,
           conversationId: resolved.conversationId,
           expectedGeneration: request.expectedGeneration,
+          deleteBackend: request.deleteBackend,
         });
         send({
           type: "journal_operation_result",
@@ -2580,19 +3662,11 @@ async function main(): Promise<void> {
             conversationGeneration: result.conversationGeneration,
             payloadHash: result.payloadHash,
             errorCode: result.errorCode ?? "backend_sync_failed",
-            retryAtMs: result.attemptCount < 5
-              && [
-                "backend_sync_failed",
-                "backend_sync_owner_changed",
-                "backend_sync_http_retryable",
-                "network_unavailable",
-                "timeout",
-                "connection_lost",
-              ].includes(
-                result.errorCode ?? "backend_sync_failed",
-              )
-              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
-              : undefined,
+            retryAtMs: backendOutboxRetryAtMs({
+              attemptCount: result.attemptCount,
+              errorCode: result.errorCode ?? "backend_sync_failed",
+              nowMs: Date.now(),
+            }),
           });
         }
         pumpJournalOutbox();
@@ -2631,17 +3705,11 @@ async function main(): Promise<void> {
             deliveryGeneration: result.deliveryGeneration,
             payloadHash: result.payloadHash,
             errorCode,
-            retryAtMs: result.attemptCount < 5
-              && [
-                "backend_delete_failed",
-                "backend_sync_owner_changed",
-                "backend_sync_http_retryable",
-                "network_unavailable",
-                "timeout",
-                "connection_lost",
-              ].includes(errorCode)
-              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
-              : undefined,
+            retryAtMs: backendOutboxRetryAtMs({
+              attemptCount: result.attemptCount,
+              errorCode,
+              nowMs: Date.now(),
+            }),
           });
         }
         pumpJournalOutbox();
@@ -2877,6 +3945,16 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "start_provider_auth": {
+        requestProviderAuthFromHost({
+          activeAuthUrl: () => activeOAuthFlow?.authUrl,
+          announceAuthUrl: (authUrl) => send({ type: "auth_required", methods: authMethods, authUrl }),
+          startAuthFlow,
+          logErr,
+        });
+        break;
+      }
+
       case "refresh_owner": {
         const owner = msg as RefreshOwnerMessage;
         const transition = establishRuntimeOwner(
@@ -2898,36 +3976,35 @@ async function main(): Promise<void> {
         break;
       }
 
-      case "refresh_token": {
-        const rtm = msg as RefreshTokenMessage;
-        const transition = authorizeRuntimeTokenRefresh(
-          { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
-          rtm.ownerId,
-          () => { process.env.OMI_AUTH_TOKEN = rtm.token; },
-        );
-        if (transition.changed) {
-          directControlExecutions.transitionOwner(transition.previousOwnerId, transition.ownerId);
-          kernel.revokeRunToolCapabilitiesForOwner(transition.previousOwnerId, "owner_changed");
-          rejectPendingToolCallsForOwner(transition.previousOwnerId);
+      case "chat_first_deferral_delivery_result": {
+        const result = msg as ChatFirstDeferralDeliveryResultMessage;
+        const ownerId = resolveActiveOwner(result.ownerId);
+        if (
+          typeof result.continuityKey !== "string" || !result.continuityKey
+          || !Number.isSafeInteger(result.deliveryGeneration) || result.deliveryGeneration <= 0
+          || typeof result.payloadHash !== "string" || !result.payloadHash
+          || typeof result.ok !== "boolean"
+        ) {
+          throw new Error("Chat-first deferral delivery result is invalid");
         }
-        currentOwnerId = transition.ownerId;
-        ownerAuthorityEstablished = true;
-        lastOwnerRuntimeRevocation = null;
-        if (transition.changed || transition.firstEstablishment) {
-          triggerBackendReconcile({ ownerId: currentOwnerId });
-          pumpJournalOutbox();
+        const settled = settleChatFirstDeferralOutbox(store, {
+          ownerId,
+          continuityKey: result.continuityKey,
+          deliveryGeneration: result.deliveryGeneration,
+          payloadHash: result.payloadHash,
+          ok: result.ok,
+          errorCode: result.errorCode,
+        });
+        if (!settled) {
+          logErr(`Ignoring stale chat-first deferral delivery result key=${result.continuityKey}`);
         }
-        try {
-          await ensurePiMonoAdapter(rtm.token);
-          for (const adapter of piMonoAdapters) {
-            const restarted = await adapter.updateAuthToken(rtm.token);
-            if (restarted) {
-              logErr("Pi-mono: token refresh restarted subprocess");
-            }
-          }
-        } catch (err) {
-          logErr(`Pi-mono token refresh error: ${err}`);
-        }
+        pumpJournalOutbox();
+        break;
+      }
+
+      case "model_headers_result": {
+        const result = msg as ModelHeadersResultMessage;
+        modelCredentialRelay.receive(result.requestId, result.result, currentOwnerId);
         break;
       }
 
@@ -2940,7 +4017,7 @@ async function main(): Promise<void> {
           "runtime_stopped",
           "Agent runtime stopped during tool execution",
         );
-        clearInterval(journalPumpTimer);
+        if (journalPumpTimer) clearTimeout(journalPumpTimer);
         store.close();
         await acpAdapter.stop();
         await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));

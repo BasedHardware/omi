@@ -1,0 +1,10 @@
+{
+  "version": "0.12.242",
+  "date": "2026-08-29",
+  "changes": [
+    "Fixed chat responses sometimes stopping before the complete answer appeared",
+    "Unified conversation, task, app, and settings navigation around one familiar UI, with working transcript playback and durable attach-to-chat conversation references",
+    "Chat can now save playbooks, standing watches, and durable facts to your knowledge ledger",
+    "Fixed onboarding permission guidance so working access is never requested twice, Omi returns to the foreground after a successful drag, and the draggable app icon and arrow are easier to spot"
+  ]
+}

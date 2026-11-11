@@ -414,7 +414,7 @@ extension APIClient {
     // not-completed (consistent with the invalid-URL and network-failure paths
     // below). Returning true here would wrongly mark an unconfigured app as set up.
     guard !url.isEmpty else { return false }
-    guard let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return false }
+    guard let fullUrl = AppSetupURL.withUID(url, uid: uid) else { return false }
     var request = URLRequest(url: fullUrl)
     request.httpMethod = "GET"
     do {
@@ -422,7 +422,10 @@ extension APIClient {
       if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
         return json["is_setup_completed"] as? Bool ?? false
       }
-    } catch {}
+      log("APIClient: app setup status response was not JSON")
+    } catch {
+      logError("APIClient: failed to check app setup status", error: error)
+    }
     return false
   }
 
@@ -449,17 +452,78 @@ extension APIClient {
 
   // MARK: - Conversation Reprocessing
 
-  /// Reprocess a conversation with a specific app
-  func reprocessConversation(conversationId: String, appId: String) async throws {
-    struct ReprocessRequest: Encodable {
-      let app_id: String
+  /// Reprocess a conversation with a specific app.
+  ///
+  /// The route returns the updated conversation (backend
+  /// `response_model=Conversation`); the caller adopts it so the summary pane
+  /// re-renders with the reprocessed app as primary. Decoding a synthetic
+  /// `{success, message}` envelope here used to throw on every successful call.
+  func reprocessConversation(conversationId: String, appId: String) async throws -> ServerConversation {
+    // `app_id` is declared as a QUERY parameter on the route, so a JSON body is silently
+    // ignored and the reprocess runs with no explicit app. Under the apps-opt-in pipeline
+    // mode that means picking an app returns the first-party note instead of the chosen app.
+    let encoded =
+      appId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? appId
+    return try await post(
+      "v1/conversations/\(conversationId)/reprocess?app_id=\(encoded)",
+      body: EmptyBody())
+  }
+
+  /// Reprocess a conversation through the default pipeline (no specific app).
+  /// Returns the refreshed conversation, which now has a regenerated title
+  /// and structured payload.
+  func reprocessConversation(conversationId: String) async throws -> ServerConversation {
+    return try await post(
+      "v1/conversations/\(conversationId)/reprocess", body: EmptyBody())
+  }
+
+  /// Same explicit restore intent as mobile. The server carries `user_kept`
+  /// from the stored discarded state through reprocessing and persists it;
+  /// this endpoint does not accept a client `user_kept` body/query field.
+  func restoreConversation(conversationId: String) async throws -> ServerConversation {
+    // Reprocessing may take minutes; match the phone's bounded restore timeout.
+    let restored: ServerConversation = try await post(
+      "v1/conversations/\(conversationId)/reprocess", body: EmptyBody(), requestTimeout: 180)
+    invalidateConversationsCountCache()
+    return restored
+  }
+
+  private struct EmptyBody: Encodable {}
+
+  /// Sets the user's preferred summarization app; the backend keys future
+  /// conversation processing on it (mobile uses the same route).
+  func setPreferredSummarizationApp(appId: String) async throws {
+    struct StatusResponse: Decodable {
+      let status: String?
+      let message: String?
     }
-    struct ReprocessResponse: Decodable {
-      let success: Bool
-      let message: String
+    let _: StatusResponse = try await put("v1/users/preferences/app?app_id=\(appId)")
+  }
+
+  /// Bodyless PUT counterpart of the `post`/`patch` helpers, kept in this
+  /// extension so the oversized core transport file stays net-neutral.
+  func put<T: Decodable>(
+    _ endpoint: String,
+    requireAuth: Bool = true,
+    customBaseURL: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
+    let base = customBaseURL ?? baseURL
+    guard let url = URL(string: base + endpoint) else {
+      throw APIError.invalidResponse
     }
-    let body = ReprocessRequest(app_id: appId)
-    let _: ReprocessResponse = try await post(
-      "v1/conversations/\(conversationId)/reprocess", body: body)
+    var request = URLRequest(url: url)
+    request.httpMethod = "PUT"
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
+    return try await performRequest(request, authPolicy: authPolicy)
   }
 }

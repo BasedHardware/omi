@@ -61,13 +61,13 @@ def test_equal_dates_are_allowed():
     same = datetime(2024, 6, 1)
     with patch.object(ai.action_items_db, 'get_action_items', return_value=[]):
         result = _call(start_date=same, end_date=same)
-    assert result == {"action_items": [], "has_more": False}
+    assert result == {"action_items": [], "has_more": False, "truncated": False}
 
 
 def test_valid_range_passes_through():
     with patch.object(ai.action_items_db, 'get_action_items', return_value=[]):
         result = _call(start_date=datetime(2024, 1, 1), end_date=datetime(2024, 12, 31))
-    assert result == {"action_items": [], "has_more": False}
+    assert result == {"action_items": [], "has_more": False, "truncated": False}
 
 
 def test_mixed_timezone_awareness_inverted_returns_400():
@@ -83,4 +83,4 @@ def test_mixed_timezone_awareness_valid_passes():
     # A valid range with mixed awareness must not raise TypeError either.
     with patch.object(ai.action_items_db, 'get_action_items', return_value=[]):
         result = _call(start_date=datetime(2024, 1, 1), end_date=datetime(2024, 12, 31, tzinfo=timezone.utc))
-    assert result == {"action_items": [], "has_more": False}
+    assert result == {"action_items": [], "has_more": False, "truncated": False}

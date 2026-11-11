@@ -23,6 +23,58 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     XCTAssertEqual(command.canonicalToolName, "semantic_search")
   }
 
+  func testChatFirstToolRequiresMainChatCapabilityAndDynamicManifest() throws {
+    let command = try AuthorizedToolExecution.parse(
+      payload(
+        toolName: "render_chat_blocks",
+        overrides: [
+          "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+          "surfaceKind": "main_chat",
+          "chatFirstControlGeneration": 7,
+        ]),
+      currentOwnerID: "owner-1")
+
+    XCTAssertEqual(command.canonicalToolName, "render_chat_blocks")
+    XCTAssertEqual(command.chatFirstControlGeneration, 7)
+
+    let ordinaryChatFirstTool = try AuthorizedToolExecution.parse(
+      payload(
+        toolName: "get_memories",
+        overrides: [
+          "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+          "surfaceKind": "main_chat",
+          "chatFirstControlGeneration": 7,
+        ]),
+      currentOwnerID: "owner-1")
+    XCTAssertEqual(ordinaryChatFirstTool.canonicalToolName, "get_memories")
+    XCTAssertEqual(ordinaryChatFirstTool.chatFirstControlGeneration, 7)
+
+    XCTAssertThrowsError(
+      try AuthorizedToolExecution.parse(
+        payload(
+          toolName: "render_chat_blocks",
+          overrides: [
+            "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+            "surfaceKind": "main_chat",
+          ]),
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidChatFirstCapability)
+    }
+    XCTAssertThrowsError(
+      try AuthorizedToolExecution.parse(
+        payload(
+          overrides: [
+            "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+            "surfaceKind": "floating_chat",
+            "chatFirstControlGeneration": 7,
+          ]),
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidChatFirstCapability)
+    }
+  }
+
   func testWrongOwnerAndManifestFailClosed() {
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(payload(), currentOwnerID: "owner-other")
@@ -87,6 +139,27 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     XCTAssertEqual(command.executor, .realtimeHub)
   }
 
+  func testWebSearchOnTypedChatUsesThePublicWebLane() throws {
+    for surface in ["floating_chat", "main_chat"] {
+      let command = try AuthorizedToolExecution.parse(
+        payload(
+          toolName: "web_search",
+          overrides: ["surfaceKind": surface]),
+        currentOwnerID: "owner-1")
+
+      XCTAssertEqual(command.canonicalToolName, "web_search")
+      XCTAssertEqual(command.surfaceKind, surface)
+      XCTAssertEqual(command.executor, .chatToolExecutor)
+    }
+
+    let voice = try AuthorizedToolExecution.parse(
+      payload(
+        toolName: "web_search",
+        overrides: ["surfaceKind": "realtime_voice"]),
+      currentOwnerID: "owner-1")
+    XCTAssertEqual(voice.executor, .realtimeHub)
+  }
+
   func testRealtimeHandlerRejectionUsesExactFailedLedgerWireTuple() throws {
     let command = try AuthorizedToolExecution.parse(
       payload(
@@ -149,6 +222,7 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     let binding = ExternalSurfaceRunBinding(
       ownerID: "owner-1",
       sessionID: "session-1",
+      surfaceKind: "floating_chat",
       turnID: turnID.rawValue.uuidString.lowercased(),
       runID: "run-1",
       attemptID: "attempt-1",
@@ -260,6 +334,18 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     )
   }
 
+  func testCanonicalInputHashMatchesKernelWhenTextContainsForwardSlashes() throws {
+    let input: [String: Any] = [
+      "context": "Use memories/conversations from https://omi.me",
+      "query": "Think carefully",
+    ]
+
+    XCTAssertEqual(
+      try AuthorizedToolExecution.inputHash(for: input),
+      "sha256:8a78b524b6be791ca7d4bad17e2e9ab8f902cabefdf8294c2e99b0409ab71749"
+    )
+  }
+
   private func payload(
     toolName: String = "get_memories",
     overrides: [String: Any] = [:]
@@ -278,6 +364,7 @@ final class AuthorizedToolExecutionTests: XCTestCase {
       "manifestDigest": GeneratedToolExecutors.manifestDigest,
       "daemonBootEpoch": "boot-1",
       "executionGeneration": 3,
+      "capabilityRef": "capability-1",
       "toolName": toolName,
       "input": input,
       "inputHash": try! AuthorizedToolExecution.inputHash(for: input),

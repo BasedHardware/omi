@@ -85,8 +85,11 @@ def process_user(uid: str, dry_run: bool = False) -> dict:
         batch = eligible[i : i + BATCH_SIZE]
         batch_items = [{'action_item_id': item['id'], 'description': item['description']} for item in batch]
         try:
+            # The helper is best-effort for request paths (it returns 0 instead of raising),
+            # so a backfill has to read the shortfall to keep its error count honest.
             written = upsert_action_item_vectors_batch(uid, batch_items)
             results['success'] += written
+            results['errors'] += len(batch) - written
         except Exception as e:
             results['errors'] += len(batch)
             logger.error(f"  Batch error at offset {i}: {e}")

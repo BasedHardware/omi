@@ -1,0 +1,8 @@
+{
+  "version": "0.12.309",
+  "date": "2026-09-07",
+  "changes": [
+    "Chat answers no longer run the pre-tool sentence and the post-tool continuation together when Omi pauses to think or search mid-turn (\"...handle it.Capture the context...\" now renders as two properly separated sentences)",
+    "Fixed the remaining scrunched-notch states: closing a conversation over a notification card, a card auto-dismissing under an open chat, card replacements, and the moment a voice hold releases no longer collapse the notch to its resting width while wider content is still showing."
+  ]
+}

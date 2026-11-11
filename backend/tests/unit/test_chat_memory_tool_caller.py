@@ -24,9 +24,9 @@ def test_agent_execute_tool_route_guards_memory_tool_result_before_returning_to_
 
     assert 'from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary' in contents
     assert 'result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))' in contents
-    assert contents.index('result = target.invoke(params, config=config)') < contents.index(
-        'result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))'
-    )
+    assert contents.index(
+        'result = await run_blocking(db_executor, target.invoke, params, config=config)'
+    ) < contents.index('result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))')
     assert contents.index(
         'result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))'
     ) < contents.index('return {"result": result}')
@@ -44,13 +44,13 @@ def test_tools_rest_memory_routes_guard_results_before_response_envelope():
     )
     assert contents.index(
         "result = preserve_chat_memory_tool_result_boundary('get_memories_tool', result)"
-    ) < contents.index('return _ok("get_memories", result)')
+    ) < contents.index('return _ok("get_memories", result')
     assert contents.index('result = search_memories_text(') < contents.index(
         "result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)"
     )
     assert contents.index(
         "result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)"
-    ) < contents.index('return _ok("search_memories", result)')
+    ) < contents.index('return _ok("search_memories", result')
 
 
 def test_chat_memory_tool_caller_preserves_memory_quoted_evidence_without_unwrapping():

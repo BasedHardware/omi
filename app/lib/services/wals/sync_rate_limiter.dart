@@ -13,7 +13,11 @@ import 'package:omi/backend/preferences.dart';
 ///                   saturated and never picked it up. In-memory only — once
 ///                   the app restarts, the cooldown clears so the user sees
 ///                   fresh state if the server has since recovered.
-enum RateLimitReason { fairUse, backfillPaced, backendBusy }
+/// - [dispatchHold]: a per-account maintenance fence asked this account to
+///                   wait. Not a capacity problem: uploads resume on their own
+///                   when the fence lifts, so its copy must not say the
+///                   servers are busy.
+enum RateLimitReason { fairUse, backendBusy, dispatchHold, edgeThrottle }
 
 /// Account-global cooldown for rate limiting (HTTP 429) on sync uploads.
 ///
@@ -36,21 +40,38 @@ class SyncRateLimiter extends ChangeNotifier {
       SharedPreferencesUtil().saveInt(_prefKeyUntil, 0);
       SharedPreferencesUtil().saveString(_prefKeyReason, '');
     }
+    // Migration: the retired backfill lane persisted its own cooldown, and a
+    // live value there gates uploads with no way left to clear it.
+    SharedPreferencesUtil().saveInt(_prefKeyRetiredBackfillUntil, 0);
     _scheduleExpiryNotification();
   }
+  DateTime Function() _clock = DateTime.now;
+
+  @visibleForTesting
+  set clockForTesting(DateTime Function()? clock) {
+    _clock = clock ?? DateTime.now;
+    _scheduleExpiryNotification();
+  }
+
   static final SyncRateLimiter instance = SyncRateLimiter._();
 
   static const String _prefKeyUntil = 'syncRateLimitedUntilMs';
   static const String _prefKeyReason = 'syncRateLimitedReason';
-  static const String _prefKeyBackfillUntil = 'syncBackfillLimitedUntilMs';
+  static const String _prefKeyRetiredBackfillUntil = 'syncBackfillLimitedUntilMs';
   static const int _defaultCooldownSeconds = 1800; // 30 minutes
   static const int _maxFairUseCooldownSeconds = 30 * 24 * 60 * 60;
   static const int _maxBackendBusyCooldownSeconds = 24 * 60 * 60;
+  static const int _defaultDispatchHoldCooldownSeconds = 60;
+  static const int _maxDispatchHoldCooldownSeconds = 60 * 60;
 
   // In-memory cooldown for backendBusy. Intentionally not persisted so an
   // app restart re-probes the backend state instead of trusting a stale
   // local timer.
   int _backendBusyUntilMs = 0;
+  RateLimitReason _inMemoryReason = RateLimitReason.backendBusy;
+  int _dispatchHoldBackoffLevel = 0;
+  int _dispatchHoldUntilMs = 0;
+  int _dispatchHoldLastCooldownMs = 0;
   Timer? _expiryTimer;
 
   /// Whether a server-confirmed fair-use cooldown is persisted, including an
@@ -62,53 +83,39 @@ class SyncRateLimiter extends ChangeNotifier {
   bool get isFairUseLimited {
     if (!hasPersistedFairUseState) return false;
     final until = SharedPreferencesUtil().getInt(_prefKeyUntil);
-    return until > DateTime.now().millisecondsSinceEpoch;
+    return until > _clock().millisecondsSinceEpoch;
   }
 
-  bool get isBackendBusyLimited => _backendBusyUntilMs > DateTime.now().millisecondsSinceEpoch;
+  bool get isBackendBusyLimited =>
+      _inMemoryReason == RateLimitReason.backendBusy && _backendBusyUntilMs > _clock().millisecondsSinceEpoch;
 
-  bool get isBackfillLimited =>
-      SharedPreferencesUtil().getInt(_prefKeyBackfillUntil) > DateTime.now().millisecondsSinceEpoch;
-
-  bool isLimitedForLane(String lane) {
-    if (isBackendBusyLimited) return true;
-    return lane == 'backfill' ? isBackfillLimited : isFairUseLimited;
-  }
+  @visibleForTesting
+  int get dispatchHoldBackoffLevelForTesting => _dispatchHoldBackoffLevel;
 
   bool get isLimited {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     if (_backendBusyUntilMs > now) return true;
-    return isFairUseLimited || isBackfillLimited;
+    return isFairUseLimited;
   }
 
   DateTime? get until {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     final persisted = hasPersistedFairUseState ? SharedPreferencesUtil().getInt(_prefKeyUntil) : 0;
     final inMemory = _backendBusyUntilMs;
-    final backfill = SharedPreferencesUtil().getInt(_prefKeyBackfillUntil);
-    final candidates = <int>[
-      if (inMemory > now) inMemory,
-      if (persisted > now) persisted,
-      if (backfill > now) backfill,
-    ];
+    final candidates = <int>[if (inMemory > now) inMemory, if (persisted > now) persisted];
     if (candidates.isEmpty) return null;
     return DateTime.fromMillisecondsSinceEpoch(candidates.reduce((a, b) => a > b ? a : b));
   }
 
   RateLimitReason? get reason {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     final persisted = hasPersistedFairUseState ? SharedPreferencesUtil().getInt(_prefKeyUntil) : 0;
     final busyActive = _backendBusyUntilMs > now;
     final rateActive = persisted > now;
-    final backfill = SharedPreferencesUtil().getInt(_prefKeyBackfillUntil);
-    final backfillActive = backfill > now;
-    if (!busyActive && !rateActive && !backfillActive) return null;
+    if (!busyActive && !rateActive) return null;
     // Match `until`'s max-based pick so reason and deadline refer to the same cooldown.
-    if (busyActive && _backendBusyUntilMs >= persisted && _backendBusyUntilMs >= backfill) {
-      return RateLimitReason.backendBusy;
-    }
-    if (backfillActive && backfill >= persisted && backfill >= _backendBusyUntilMs) {
-      return RateLimitReason.backfillPaced;
+    if (busyActive && (!rateActive || _backendBusyUntilMs >= persisted)) {
+      return _inMemoryReason;
     }
     return RateLimitReason.fairUse;
   }
@@ -123,11 +130,12 @@ class SyncRateLimiter extends ChangeNotifier {
         (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultCooldownSeconds;
     final maxCooldown = reason == RateLimitReason.fairUse ? _maxFairUseCooldownSeconds : _maxBackendBusyCooldownSeconds;
     final secs = requested > maxCooldown ? maxCooldown : requested;
-    final untilMs = DateTime.now().add(Duration(seconds: secs)).millisecondsSinceEpoch;
-    if (reason == RateLimitReason.backendBusy) {
-      _backendBusyUntilMs = untilMs;
-    } else if (reason == RateLimitReason.backfillPaced) {
-      SharedPreferencesUtil().saveInt(_prefKeyBackfillUntil, untilMs);
+    final untilMs = _clock().add(Duration(seconds: secs)).millisecondsSinceEpoch;
+    if (reason != RateLimitReason.fairUse) {
+      if (untilMs >= _backendBusyUntilMs) {
+        _inMemoryReason = reason;
+        _backendBusyUntilMs = untilMs;
+      }
     } else {
       SharedPreferencesUtil().saveInt(_prefKeyUntil, untilMs);
       SharedPreferencesUtil().saveString(_prefKeyReason, reason.name);
@@ -136,10 +144,42 @@ class SyncRateLimiter extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Pause after a scoped destructive-operation fence. Each further hold
+  /// doubles the server's Retry-After, up to one hour. The next upload can only
+  /// run after a cooldown expires, so a hold that arrives soon after expiry is
+  /// the same fence still held and keeps the backoff. A successful upload
+  /// resets it, and so does a quiet gap of twice the last cooldown.
+  void markDispatchHoldLimited({int? retryAfterSeconds}) {
+    final nowMs = _clock().millisecondsSinceEpoch;
+    if (_dispatchHoldUntilMs > 0 && nowMs - _dispatchHoldUntilMs > 2 * _dispatchHoldLastCooldownMs) {
+      _dispatchHoldBackoffLevel = 0;
+    }
+
+    var seconds =
+        (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultDispatchHoldCooldownSeconds;
+    for (var i = 0; i < _dispatchHoldBackoffLevel && seconds < _maxDispatchHoldCooldownSeconds; i++) {
+      seconds = seconds > _maxDispatchHoldCooldownSeconds ~/ 2 ? _maxDispatchHoldCooldownSeconds : seconds * 2;
+    }
+    if (seconds > _maxDispatchHoldCooldownSeconds) seconds = _maxDispatchHoldCooldownSeconds;
+    if (_dispatchHoldBackoffLevel < 16) _dispatchHoldBackoffLevel++;
+
+    _dispatchHoldLastCooldownMs = Duration(seconds: seconds).inMilliseconds;
+    _dispatchHoldUntilMs = nowMs + _dispatchHoldLastCooldownMs;
+    final untilMs = _dispatchHoldUntilMs;
+    if (untilMs >= _backendBusyUntilMs) {
+      // The fence's own reason, so cooldown copy never blames server capacity
+      // for what is a per-account hold that lifts on its own.
+      _inMemoryReason = RateLimitReason.dispatchHold;
+      _backendBusyUntilMs = untilMs;
+    }
+    _scheduleExpiryNotification();
+    notifyListeners();
+  }
+
   int? get activeRetryAfterSeconds {
     final deadline = until;
     if (deadline == null) return null;
-    final remainingMs = deadline.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
+    final remainingMs = deadline.millisecondsSinceEpoch - _clock().millisecondsSinceEpoch;
     if (remainingMs <= 0) return null;
     return (remainingMs / 1000).ceil();
   }
@@ -147,9 +187,11 @@ class SyncRateLimiter extends ChangeNotifier {
   /// Clear the cooldown after any successful upload.
   void clear() {
     _backendBusyUntilMs = 0;
+    _dispatchHoldBackoffLevel = 0;
+    _dispatchHoldUntilMs = 0;
+    _dispatchHoldLastCooldownMs = 0;
     SharedPreferencesUtil().saveInt(_prefKeyUntil, 0);
     SharedPreferencesUtil().saveString(_prefKeyReason, '');
-    SharedPreferencesUtil().saveInt(_prefKeyBackfillUntil, 0);
     _scheduleExpiryNotification();
     notifyListeners();
   }
@@ -165,25 +207,11 @@ class SyncRateLimiter extends ChangeNotifier {
     notifyListeners();
   }
 
-  void clearForLane(String lane) {
-    _backendBusyUntilMs = 0;
-    if (lane == 'backfill') {
-      SharedPreferencesUtil().saveInt(_prefKeyBackfillUntil, 0);
-    } else {
-      SharedPreferencesUtil().saveInt(_prefKeyUntil, 0);
-      SharedPreferencesUtil().saveString(_prefKeyReason, '');
-    }
-    _scheduleExpiryNotification();
-    notifyListeners();
-  }
-
   void _scheduleExpiryNotification() {
     _expiryTimer?.cancel();
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     final deadlines = <int>[
       if (_backendBusyUntilMs > now) _backendBusyUntilMs,
-      if (SharedPreferencesUtil().getInt(_prefKeyBackfillUntil) > now)
-        SharedPreferencesUtil().getInt(_prefKeyBackfillUntil),
       if (hasPersistedFairUseState && SharedPreferencesUtil().getInt(_prefKeyUntil) > now)
         SharedPreferencesUtil().getInt(_prefKeyUntil),
     ];

@@ -3,18 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 
-PREDICATE = Path(__file__).resolve().parents[2] / 'scripts' / 'needs-typecheck.sh'
+from testing.shell import bash_command
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = BACKEND_ROOT.parent
+PREDICATE = BACKEND_ROOT / 'scripts' / 'needs-typecheck.sh'
 
 
 def _needs_typecheck(paths: list[str]) -> bool:
     result = subprocess.run(
-        ['bash', str(PREDICATE)],
-        input=''.join(f'{path}\n' for path in paths),
-        text=True,
+        bash_command(PREDICATE, cwd=REPOSITORY_ROOT),
+        input=''.join(f'{path}\n' for path in paths).encode(),
         check=False,
         capture_output=True,
     )
-    assert result.returncode in {0, 1}, result.stderr
+    assert result.returncode in {0, 1}, result.stderr.decode(errors='replace')
     return result.returncode == 0
 
 

@@ -5,14 +5,16 @@ import Foundation
 class AssistantSettings {
   static let shared = AssistantSettings()
 
-  /// Controls when system audio (audio from other apps — calls, videos, music) is captured
-  /// during a recording. `always` = capture for the whole recording; `onlyDuringMeetings` =
-  /// capture only while a conferencing call is detected (default); `never` = never.
-  enum SystemAudioCaptureMode: String {
+  /// The one user-owned policy for ambient audio recording.
+  /// Runtime permission/provider failures may prevent the selected policy from running, but no
+  /// second preference is allowed to override it.
+  enum AudioRecordingMode: String, CaseIterable {
+    case off
     case always
-    case onlyDuringMeetings
-    case never
+    case onlyMeetings
   }
+
+  nonisolated static let audioRecordingModeDefaultsKey = "audioRecordingMode"
 
   // MARK: - UserDefaults Keys
 
@@ -20,14 +22,19 @@ class AssistantSettings {
   private let glowOverlayEnabledKey = "assistantsGlowOverlayEnabled"
   private let analysisDelayKey = "assistantsAnalysisDelay"
   private let screenAnalysisEnabledKey = "screenAnalysisEnabled"
-  private let transcriptionEnabledKey = "transcriptionEnabled"
   private let transcriptionLanguageKey = "transcriptionLanguage"
   private let transcriptionAutoDetectKey = "transcriptionAutoDetect"
   private let voiceLanguagesKey = "voiceAssistantLanguages"
   private let transcriptionVocabularyKey = "transcriptionVocabulary"
   private let vadGateEnabledKey = "vadGateEnabled"
   private let batchTranscriptionEnabledKey = "batchTranscriptionEnabled"
-  private let systemAudioCaptureModeKey = "systemAudioCaptureMode"
+  private let legacyTranscriptionEnabledKey = "transcriptionEnabled"
+  private let legacySystemAudioCaptureModeKey = "systemAudioCaptureMode"
+  private let wakeWordEnabledKey = "wakeWordEnabled"
+  private let wakeWordPhraseKey = "wakeWordPhrase"
+  private let wakeWordCooldownKey = "wakeWordCooldown"
+  private let wakeWordUsesRealtimeKey = "wakeWordUsesRealtime"
+  private let wakeWordPrefersCloudSTTKey = "wakeWordPrefersCloudSTT"
 
   // MARK: - Default Values
 
@@ -35,30 +42,69 @@ class AssistantSettings {
   private let defaultGlowOverlayEnabled = false
   private let defaultAnalysisDelay = 60  // seconds (1 minute)
   private let defaultScreenAnalysisEnabled = true
-  private let defaultTranscriptionEnabled = true
   private let defaultTranscriptionLanguage = "en"
   private let defaultTranscriptionAutoDetect = true
   private let defaultTranscriptionVocabulary: [String] = []
   private let defaultVadGateEnabled = false
   private let defaultBatchTranscriptionEnabled = false
-  private let defaultSystemAudioCaptureMode: SystemAudioCaptureMode = .onlyDuringMeetings
+  private let defaultAudioRecordingMode: AudioRecordingMode = .onlyMeetings
   private(set) var transcriptionVocabularyRevision: UInt64 = 0
+  private let defaultWakeWordEnabled = false
+  private let defaultWakeWordPhrase = "Omi"
+  private let defaultWakeWordCooldown: TimeInterval = 30
 
   private init() {
+    migrateLegacyAudioRecordingSettings()
     // Register defaults
     UserDefaults.standard.register(defaults: [
       cooldownIntervalKey: defaultCooldownInterval,
       glowOverlayEnabledKey: defaultGlowOverlayEnabled,
       analysisDelayKey: defaultAnalysisDelay,
       screenAnalysisEnabledKey: defaultScreenAnalysisEnabled,
-      transcriptionEnabledKey: defaultTranscriptionEnabled,
+      Self.audioRecordingModeDefaultsKey: defaultAudioRecordingMode.rawValue,
       transcriptionLanguageKey: defaultTranscriptionLanguage,
       transcriptionAutoDetectKey: defaultTranscriptionAutoDetect,
       transcriptionVocabularyKey: defaultTranscriptionVocabulary,
       vadGateEnabledKey: defaultVadGateEnabled,
       batchTranscriptionEnabledKey: defaultBatchTranscriptionEnabled,
-      systemAudioCaptureModeKey: defaultSystemAudioCaptureMode.rawValue,
+      wakeWordEnabledKey: defaultWakeWordEnabled,
+      wakeWordPhraseKey: defaultWakeWordPhrase,
+      wakeWordCooldownKey: defaultWakeWordCooldown,
+      wakeWordUsesRealtimeKey: false,
+      wakeWordPrefersCloudSTTKey: false,
     ])
+  }
+
+  /// Collapses the former enable switch + system-audio picker into one policy. A user who had
+  /// system audio disabled but ambient microphone recording enabled remains in Always rather than
+  /// being silently turned off; system-audio permission is now a runtime capability, not a mode.
+  static func migratedAudioRecordingMode(
+    legacyTranscriptionEnabled: Bool?,
+    legacySystemAudioModeRaw: String?
+  ) -> AudioRecordingMode {
+    if legacyTranscriptionEnabled == false { return .off }
+    switch legacySystemAudioModeRaw {
+    case "always", "never": return .always
+    case "onlyDuringMeetings": return .onlyMeetings
+    default: return .onlyMeetings
+    }
+  }
+
+  private func migrateLegacyAudioRecordingSettings() {
+    let defaults = UserDefaults.standard
+    if defaults.object(forKey: Self.audioRecordingModeDefaultsKey) == nil {
+      let legacyEnabled = defaults.object(forKey: legacyTranscriptionEnabledKey) as? Bool
+      let legacyMode = defaults.string(forKey: legacySystemAudioCaptureModeKey)
+      defaults.set(
+        Self.migratedAudioRecordingMode(
+          legacyTranscriptionEnabled: legacyEnabled,
+          legacySystemAudioModeRaw: legacyMode
+        ).rawValue,
+        forKey: Self.audioRecordingModeDefaultsKey
+      )
+    }
+    defaults.removeObject(forKey: legacyTranscriptionEnabledKey)
+    defaults.removeObject(forKey: legacySystemAudioCaptureModeKey)
   }
 
   // MARK: - Properties
@@ -90,13 +136,23 @@ class AssistantSettings {
   }
 
   /// Delay in seconds before analyzing after an app switch (0 = instant, 60 = 1 min, 300 = 5 min)
+  ///
+  /// Zero is a real setting here — "Instant" — so the floor is `0`, not `1`. Below it there is no
+  /// meaning, and a negative value is refused on write and healed on read for the reason spelled out
+  /// on `TaskAssistantSettings.extractionInterval`: normalising only on read let the store hold a
+  /// number the app never honoured, which the next push to the account then overwrote.
   var analysisDelay: Int {
     get {
-      let value = UserDefaults.standard.integer(forKey: analysisDelayKey)
-      return value >= 0 ? value : defaultAnalysisDelay
+      let stored = UserDefaults.standard.integer(forKey: analysisDelayKey)
+      guard stored >= 0 else {
+        UserDefaults.standard.set(defaultAnalysisDelay, forKey: analysisDelayKey)
+        return defaultAnalysisDelay
+      }
+      return stored
     }
     set {
-      UserDefaults.standard.set(newValue, forKey: analysisDelayKey)
+      let delay = newValue >= 0 ? newValue : defaultAnalysisDelay
+      UserDefaults.standard.set(delay, forKey: analysisDelayKey)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }
@@ -110,12 +166,81 @@ class AssistantSettings {
     }
   }
 
-  /// Whether transcription should be enabled
-  var transcriptionEnabled: Bool {
-    get { UserDefaults.standard.bool(forKey: transcriptionEnabledKey) }
+  /// The single persisted source of truth for whether and when ambient audio is recorded.
+  var audioRecordingMode: AudioRecordingMode {
+    get {
+      let raw = UserDefaults.standard.string(forKey: Self.audioRecordingModeDefaultsKey)
+      return AudioRecordingMode(rawValue: raw ?? "") ?? defaultAudioRecordingMode
+    }
     set {
-      UserDefaults.standard.set(newValue, forKey: transcriptionEnabledKey)
+      UserDefaults.standard.set(newValue.rawValue, forKey: Self.audioRecordingModeDefaultsKey)
+      NotificationCenter.default.post(name: .audioRecordingModeDidChange, object: nil)
+    }
+  }
+
+  var wakeWordEnabled: Bool {
+    get { UserDefaults.standard.bool(forKey: wakeWordEnabledKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordEnabledKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  var wakeWordPhrase: String {
+    get {
+      let stored = UserDefaults.standard.string(forKey: wakeWordPhraseKey) ?? defaultWakeWordPhrase
+      let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? defaultWakeWordPhrase : trimmed
+    }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordPhraseKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  var wakeWordCooldown: TimeInterval {
+    get {
+      let stored = UserDefaults.standard.double(forKey: wakeWordCooldownKey)
+      return stored > 0 ? stored : defaultWakeWordCooldown
+    }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordCooldownKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Transcribe ambient audio in the cloud while the wake word is on, so the recognizer can
+  /// be told the wake phrase.
+  ///
+  /// Default off, and only consulted when the wake word is enabled. See
+  /// `STTSessionState.resolveMode` for the measurement behind it.
+  var wakeWordPrefersCloudSTT: Bool {
+    get { UserDefaults.standard.bool(forKey: wakeWordPrefersCloudSTTKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordPrefersCloudSTTKey)
       NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Whether the wake word currently needs a recognizer that can be told its name.
+  ///
+  /// Both halves matter: the opt-in only means anything while the wake word is on, and
+  /// leaving it off keeps ambient transcription on-device exactly as today.
+  var wakeWordNeedsRecognizableName: Bool {
+    wakeWordEnabled && wakeWordPrefersCloudSTT
+  }
+
+  /// Route a fired wake word into the realtime session instead of the text chat path.
+  ///
+  /// Default off. The text path is what has live measurement behind it; this is the
+  /// alternative under evaluation — the model speaks its own answer, barge-in is native
+  /// rather than text-matched, and a follow-up continues in the same session. Detection is
+  /// unchanged either way: both read the same ambient transcript.
+  var wakeWordUsesRealtime: Bool {
+    get { UserDefaults.standard.bool(forKey: wakeWordUsesRealtimeKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordUsesRealtimeKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }
 
@@ -209,6 +334,11 @@ class AssistantSettings {
     return transcriptionLanguage
   }
 
+  /// Effective + selected language together; on-device model routing needs both (`STTLanguageCapability`).
+  var transcriptionLanguageSelection: STTLanguageCapability.Selection {
+    STTLanguageCapability.Selection(effective: effectiveTranscriptionLanguage, primary: transcriptionLanguage)
+  }
+
   /// Custom vocabulary for improved transcription accuracy
   /// Array of words/terms that DeepGram should recognize (Nova-3 limit: 500 tokens total)
   var transcriptionVocabulary: [String] {
@@ -260,23 +390,6 @@ class AssistantSettings {
     }
   }
 
-  /// When system audio (audio from other apps) is captured during a recording.
-  /// Default `.onlyDuringMeetings` limits system audio capture to detected conferencing calls.
-  /// The hidden `disableSystemAudioCapture` debug UserDefault still forces "never" — see `AppState.effectiveSystemAudioMode`.
-  /// Posts `.systemAudioCaptureModeDidChange` so an active recording can re-apply the gate live.
-  var systemAudioCaptureMode: SystemAudioCaptureMode {
-    get {
-      let raw =
-        UserDefaults.standard.string(forKey: systemAudioCaptureModeKey)
-        ?? defaultSystemAudioCaptureMode.rawValue
-      return SystemAudioCaptureMode(rawValue: raw) ?? defaultSystemAudioCaptureMode
-    }
-    set {
-      UserDefaults.standard.set(newValue.rawValue, forKey: systemAudioCaptureModeKey)
-      NotificationCenter.default.post(name: .systemAudioCaptureModeDidChange, object: nil)
-    }
-  }
-
   /// Returns vocabulary with "Omi" always included (for DeepGram)
   var effectiveVocabulary: [String] {
     var vocab = Set(transcriptionVocabulary)
@@ -290,13 +403,12 @@ class AssistantSettings {
     glowOverlayEnabled = defaultGlowOverlayEnabled
     analysisDelay = defaultAnalysisDelay
     screenAnalysisEnabled = defaultScreenAnalysisEnabled
-    transcriptionEnabled = defaultTranscriptionEnabled
+    audioRecordingMode = defaultAudioRecordingMode
     transcriptionLanguage = defaultTranscriptionLanguage
     transcriptionAutoDetect = defaultTranscriptionAutoDetect
     transcriptionVocabulary = defaultTranscriptionVocabulary
     vadGateEnabled = defaultVadGateEnabled
     batchTranscriptionEnabled = defaultBatchTranscriptionEnabled
-    systemAudioCaptureMode = defaultSystemAudioCaptureMode
   }
 
   // MARK: - Supported Languages
@@ -485,10 +597,13 @@ class AssistantSettings {
 
 extension Notification.Name {
   static let assistantSettingsDidChange = Notification.Name("assistantSettingsDidChange")
+  /// Posted after server-authoritative assistant settings have been applied.
+  /// Runtime services use this to restore or stop work from the persisted intent.
+  static let assistantSettingsDidSyncFromServer = Notification.Name("assistantSettingsDidSyncFromServer")
   static let assistantMonitoringStateDidChange = Notification.Name("assistantMonitoringStateDidChange")
   static let assistantMonitoringToggleRequested = Notification.Name("assistantMonitoringToggleRequested")
   static let transcriptionSettingsDidChange = Notification.Name("transcriptionSettingsDidChange")
-  static let systemAudioCaptureModeDidChange = Notification.Name("systemAudioCaptureModeDidChange")
+  static let audioRecordingModeDidChange = Notification.Name("audioRecordingModeDidChange")
   static let voiceLanguagesDidChange = Notification.Name("voiceLanguagesDidChange")
 }
 

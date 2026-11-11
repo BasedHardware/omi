@@ -1,0 +1,427 @@
+# Cloud Run application metrics ingestion
+
+## Decision
+
+Send one scrape from every Cloud Run instance to Google Managed Service for Prometheus (GMP), then bridge the resulting Cloud Monitoring time series into the self-managed Prometheus that Grafana already uses:
+
+```text
+backend / desktop-backend process registry
+  -> 127.0.0.1:9090/metrics
+  -> Cloud Run GMP sidecar (one per instance, 30s default / 60s sync + startup/shutdown scrape)
+  -> Cloud Monitoring: prometheus.googleapis.com/omi_*
+  -> isolated prometheus-stackdriver-exporter on GKE (Cloud Monitoring read every 30s)
+  -> kube-prometheus-stack Prometheus (job=cloud-run-application-metrics)
+  -> Grafana unified alerting -> Telegram
+```
+
+This is the only option considered here that preserves per-instance counters across Cloud Run autoscaling and ends in the existing Prometheus datasource. It cannot be verified end to end until the Cloud Run revisions and the new Helm release are deployed after merge.
+
+## Evidence
+
+Repository evidence:
+
+- `backend/charts/monitoring/README.md` and the prod values define only GKE pod pulls plus the Stackdriver bridge. Before this change the exporter prefixes were only the two `loadbalancing.googleapis.com` metrics.
+- `backend/routers/metrics.py` rejects a missing or wrong `METRICS_SECRET`. The main backend deploy currently binds that secret. `desktop_backend.py` did not mount the metrics router, and neither desktop Cloud Run workflow bound the secret.
+- `backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml` scrape the existing Stackdriver exporter every second. Importing per-instance application series through that release would multiply Cloud Monitoring API reads unnecessarily, so this change adds a separate 30-second exporter.
+
+Live evidence collected on 2026-08-21:
+
+- `gcloud container clusters describe` reports `managedPrometheusConfig.enabled: true` for both `dev-omi-gke` and `prod-omi-gke`. Both clusters contain `gmp-system` and `gmp-public`; dev has a running operator and 10 managed collector pods, while prod has a running operator and 26 collectors.
+- `gmp-public` contains the GKE-managed DCGM exporter and kube-state-metrics `ClusterPodMonitoring` resources in both environments. This proves the operator and Kubernetes discovery path are active, but those collectors discover Kubernetes targets, not Cloud Run instances.
+- `backend` and `desktop-backend` each had one Cloud Run container with max scale 100. Backend had `METRICS_SECRET` and always-allocated CPU; desktop-backend had neither. A public URL scrape therefore cannot enumerate either service's instances.
+- The Cloud Monitoring API already contained `prometheus.googleapis.com/*` descriptors from GKE's managed collector, proving GMP storage is active, but it contained zero `prometheus.googleapis.com/omi_*` descriptors.
+- The live prod Stackdriver exporter is v0.18.0. Its deployed arguments contain only the two load-balancer prefixes from the repository values, and its GSA has `roles/monitoring.viewer`.
+- Live Helm ownership is asymmetric: dev Prometheus is release `dev-kube-prometheus-stack`, while prod is `prod-omi-kube-prometheus-stack`; the existing exporters are `dev/prod-omi-prometheus-stackdriver-exporter`. The deployment workflow encodes these observed names instead of deriving a nonexistent dev release.
+- Grafana's GSA has `roles/monitoring.viewer`, but the live provisioned datasource list contains only Prometheus and Alertmanager. A direct Cloud Monitoring datasource is possible but is not the requested Prometheus ingestion path.
+- Both projects have the Run, Monitoring, Logging, and Secret Manager APIs enabled. Both Cloud Run services use the Compute Engine default service account; each runtime account has project-level `roles/secretmanager.secretAccessor`, and its current `roles/editor` includes `monitoring.timeSeries.create`. A future least-privilege service account must receive `roles/monitoring.metricWriter`, `roles/logging.logWriter`, and access to `cloud-run-gmp-config` explicitly.
+- Before the initial rollout, `cloud-run-gmp-config` did not exist in either project; the original helper created it and cached a content-hash label. The 2026-10-18 re-land below uses revision-local env configuration for the backend stack; legacy desktop/job callers require the existing secret and pin exact version IDs.
+- `gcloud run services replace --dry-run` accepted the patched live dev exports for both `backend` and `desktop-backend`, including gen2, 1-vCPU collector resources, probes, secret volume, explicit traffic, and multi-container dependency annotations. No revision or traffic mutation occurred.
+
+Google documents the Cloud Run GMP sidecar as its recommended Prometheus path. It performs a scrape after startup and at shutdown, which matters for short-lived instances, and writes metrics as `prometheus.googleapis.com/<name>/<type>`. The sidecar's `RunMonitoring` schema does not support authorization headers. Sources:
+
+- [Google: Use the Prometheus sidecar for Cloud Run](https://cloud.google.com/stackdriver/docs/managed-prometheus/cloudrun-sidecar)
+- [GoogleCloudPlatform/run-gmp-sidecar RunMonitoring implementation](https://github.com/GoogleCloudPlatform/run-gmp-sidecar/blob/main/confgenerator/config.go)
+- [prometheus-community/stackdriver_exporter naming and metric-type behavior](https://github.com/prometheus-community/stackdriver_exporter#readme)
+- [Google Cloud Observability pricing](https://cloud.google.com/stackdriver/pricing)
+- [Google: Configure Cloud Run CPU limits](https://cloud.google.com/run/docs/configuring/services/cpu)
+
+## Why the sidecar scrapes port 9090
+
+The public port 8080 `/metrics` route stays fail-closed with bearer authentication. The Google sidecar cannot add that bearer token because `RunMonitoring.ScrapeEndpoint` exposes port, scheme, path, params, proxy, interval, timeout, and metric relabeling, but no authorization field.
+
+The application therefore starts a second Prometheus HTTP listener bound specifically to `127.0.0.1:9090` when `PROMETHEUS_SIDECAR_PORT=9090`. Cloud Run containers in one instance share a network namespace, so the collector can reach it. Cloud Run ingress cannot. This avoids weakening the public route or trusting proxy-derived client IPs.
+
+`backend/deploy/cloud_run_gmp_sidecar.yaml` keeps only `omi_.*`, includes only the service metadata label (the per-instance label is mandatory), and sets scrape limits. The deploy helper pins the collector image by digest, uses the service allocation below, preserves existing containers and ingress settings, refuses a service whose traffic follows `latestRevision`, and creates the final sidecar revision at zero traffic. Candidate acceptance still happens before any traffic shift.
+
+## Backend collector CPU
+
+The `backend` service collector uses **0.25 vCPU / 512Mi** with its existing broad
+**30s** scrape configuration. Seven days of native Cloud Monitoring
+`run.googleapis.com/container/cpu/usage` (2026-10-19..25, `container_name=collector`,
+hourly `ALIGN_PERCENTILE_99`, then `REDUCE_MAX` across revisions) peaked at
+**1.60 CPU-seconds per 60s sample**; 0.25 CPU supplies 15 CPU-seconds/minute.
+The matching memory p99 peaked at **211 MiB**, so its 512Mi limit stays.
+Application resources, billing mode, probes, scrape configuration and metric
+families keep their existing settings. Desktop uses its separately qualified
+profile below; jobs retain 1 CPU / 512Mi and sync retains its own profile.
+
+On the 2026-10-24 billed backend CPU line ($14.80/day, total allocation 3 CPU),
+the fixed-instance estimate is **$3.70/day, $111/30 days**. This is a model:
+reducing the total instance CPU denominator can increase autoscaling and absorb
+some savings. Book only the net service bill after instance growth is measured.
+
+The lead owns rollout. Qualify a zero-traffic candidate in dev first, verifying
+collector readiness and fresh metric timestamps at the same 30s cadence. Then
+route production **5% -> 25% -> 100%**, holding each step for **one hour**, through
+one peak-load window. Before expanding, compare the candidate with the old
+revision for application request p95, live first-text p95, 5xx, collector probe
+failures/restarts, and freshness of every currently consumed metric family.
+Any p95 regression, new metric gap (>2 scrape intervals), readiness failure or
+resource exhaustion stops expansion and routes traffic back to the prior
+revision. Do not accept a latency/accuracy/speaker-label or Free-plan tradeoff.
+
+Rollback immediately to the prior traffic-selected revision. For a subsequent
+attachment, pass **`--backend-collector-cpu 1`** to
+`attach_cloud_run_gmp_sidecar.py`; this restores the collector allocation without
+changing the application. The default applies to the service named `backend`
+in either project, so qualify dev before the production train. The lead must
+use a candidate traffic ramp rather than the automatic 100% promotion path for
+the first rollout. Complete the production ramp by **2026-10-28**, owned by the
+lead, only if every gate passes; otherwise retain the old revision and report
+the blocked saving. No production mutation is part of the sizing PR.
+
+## Desktop collector CPU
+
+The service named `desktop-backend` defaults to **0.25 vCPU / 512Mi** in either
+project. The existing application allocation, broad 30s scrape configuration,
+metric families, probes, secret delivery, billing mode and warm floor remain.
+Other service/job profiles are independent. Pass **`--desktop-collector-cpu 1`**
+on a subsequent attachment to restore the old collector allocation.
+
+Native per-container metrics for 2026-10-20..26 (seven complete UTC days), hourly
+`ALIGN_PERCENTILE_99` then `REDUCE_MAX` across revisions, peaked at **1.144
+CPU-seconds per 60s sample** and **72.2 MiB** for the collector. The new CPU
+allocation provides 15 CPU-seconds/minute. These are hourly p99 measurements,
+not absolute burst bounds or runtime acceptance at the smaller allocation.
+The application's matching CPU peak was 20.96 CPU-seconds/minute; do not reduce
+its 1 CPU or 1Gi memory from this evidence.
+
+The 10-24/25 **production** desktop CPU bill averaged **$2.7009/day** for app
+1 CPU + collector 1 CPU. At fixed instance time,
+`(1 - 0.25) / 2 * 2.7009` models **$1.0128/day, $30.4/30 days**. The separate
+dev CPU bill averaged $3.0471/day, but its starting resource profile was not
+readable under ro-prod; no dev saving is sized here. Smaller total CPU can
+trigger earlier autoscaling. This is an estimate; book only D+1 settled total
+service cost after checking instance time, CPU/memory and network give-back
+against that baseline.
+
+The lead owns the first rollout, **after the 2026-10-27 batch soak freeze clears**.
+Merging the helper change triggers the existing desktop development workflow;
+do not merge during the freeze. First validate the exact **app 1 + collector
+0.25 CPU**, gen2, always-allocated CPU service shape in dev and qualify its
+candidate readiness, fresh metrics and a representative load window. The
+backend/sync control-plane receipts below do not validate this desktop shape.
+Use the same **5% -> 25% -> 100%, one hour per step, including peak load**
+production acceptance gates as backend above, with the desktop request p95 as
+an additional gate. The first rollout needs the lead's candidate traffic ramp;
+the normal automatic full-promotion path is not that qualification.
+Complete by **2026-10-29** if every gate passes; otherwise retain the old
+revision and report the blocked saving. No metric gap, live p95 regression,
+accuracy or speaker-label regression, or Free-plan change is acceptable.
+
+Before any candidate apply, capture every `status.traffic` revision/percentage
+and keep its immutable revision. On regression restore that exact split with
+`gcloud run services update-traffic desktop-backend --project=based-hardware
+--region=us-central1 --to-revisions=<captured-revision=percent,...>`.
+For the 2026-10-27 09:2xZ readback, the split was
+`desktop-backend-00961-tsz=100`; refresh it before the lead's rollout. Preserve
+the 1-CPU option for the next attachment. No production apply was run for this
+proposal.
+
+## Sync fleet cost profile
+
+Only `backend-sync`, `backend-sync-backfill`, and `backend-integration` use
+`backend/deploy/cloud_run_gmp_sync.yaml` as revision-local, non-secret collector
+configuration. Their collectors use **0.08 vCPU / 128Mi**,
+scrape every **60s**, and keep the existing sync exporter families plus direct
+sentinel consumers: `omi_batch_pipeline_*`, `omi_accept_to_summary_seconds*`,
+`omi_summary_terminal_total`, `omi_summary_debt_*`, and
+`omi_live_session_transcript_outcome_total`, plus the Firestore reads loop's
+`omi_firestore_billed_reads_by_{caller,origin}_total`,
+`omi_firestore_caller_label_overflow_total` and `omi_fsr_leader_lease_total`
+(about 270 series per instance on 2026-10-18). Since #23388 the fleet also keeps
+that fix's cap-enforcement watch counters
+`omi_stt_cap_dispatch_decisions_total{path,outcome,reason}` and
+`omi_stt_cap_provider_audio_seconds_total{path,outcome,provider,allowance}`
+(`backend/docs/stt-cap-dispatch.md`): every label is a closed enum, outcome is a
+function of reason, and only the `sync` lane meters audio seconds on this fleet,
+so they add at most ~70 series per instance (label-product bound 160 + 90),
+realistically 20–30. Sync/summary/storage fallback series
+remain; eagerly initialized live-STT fallback components are dropped. Backend
+keeps its broad 30s configuration with the CPU allocation above; desktop uses
+its own CPU profile above, while listen and jobs retain their existing profiles.
+
+The fleet and David gates currently read projection logs and durable job state;
+the fleet gate also reads native `run.googleapis.com/request_count`. These paths
+are unaffected by metric relabeling. Consumer changes must update the allowlist
+and the coverage in `test_attach_cloud_run_gmp_sidecar.py` together.
+
+[CPU guidance](https://docs.cloud.google.com/run/docs/configuring/services/cpu)
+lists 0.08 vCPU as the minimum and additional restrictions for instances below
+1 vCPU. [Multi-container allocation](https://docs.cloud.google.com/run/docs/about-instance-autoscaling#autoscaling_and_multiple_containers_sidecars)
+is the sum of container limits. On 2026-10-18, dev `backend-sync` passed
+`gcloud run services replace --dry-run` with the existing app **2 vCPU / 8Gi**,
+collector **0.08 vCPU / 128Mi**, total **2.08 vCPU**, gen2, concurrency 20,
+and `cpu-throttling=false`. 0.1 and 0.25 vCPU also passed; 64Mi was rejected
+(minimum 128Mi). The exported service was identical before/after validation.
+This is control-plane validation, not runtime scrape/load acceptance.
+
+The backend-stack action validates both configs locally and checks the required
+application secrets before any revision, binding, or traffic mutation. A missing
+required secret stops the action; it is never auto-created. This catches the
+late-discovered prerequisite class behind the #22089 failure without new IAM.
+
+Backend and all three sync collectors use `--config-env`: the helper puts the
+literal RunMonitoring YAML in `OMI_GMP_RUN_MONITORING_CONFIG` on the collector only.
+The digest-pinned image includes `/bin/sh` and `/run-gmp-entrypoint`. Its entrypoint
+reads `/etc/rungmp/config.yaml`, not an OTel `--config=env:...` argument. A shell
+wrapper writes the quoted env value to that instance-local file with `printf`,
+then `exec`s the unchanged entrypoint. There is no `eval`, shared config object,
+Secret Manager write, new image, or IAM requirement. The inherited config-secret
+volume and its unused annotations are removed from the new candidate only.
+Other application secret bindings and old serving revisions remain unchanged.
+
+Concurrent deployments cannot overwrite one another's configuration because the
+YAML belongs to each immutable Cloud Run revision. The backend keeps its broad
+30s config; sync receives the filtered 60s config. Desktop and job callers retain
+the existing-secret path: the helper requires that secret to exist and pins the
+numeric resource returned by `versions add`, never a shared label or `latest`
+lookup. They do not create secrets either. No collector config is sensitive;
+future migrations should use the revision-local path rather than add secrets.
+
+Instance billing (`cpu-throttling=false`) and application resources are unchanged.
+Smaller total CPU changes the autoscaling utilization denominator; actual instance
+counts and savings can therefore differ. Before production promotion, verify
+collector readiness, memory/OOM/restarts and fresh retained metric samples under
+load, including sentinel histograms and summary-debt timestamps. A 60s interval
+adds up to 30s steady scrape delay; startup/shutdown scrapes still apply.
+
+Rollback: restore the prior traffic-selected revisions, which retain their
+original config and allocation. For the next deployment, restore the sync
+1 vCPU / 512Mi allocation and broad 30s config while retaining `--config-env`.
+Do not mutate or delete historical secret versions or change CPU billing as a
+rollback shortcut.
+
+## Options considered
+
+### Scrape the public Cloud Run URL from GKE — rejected
+
+Cloud Run load balances each request to one arbitrary instance. A scrape sees one process registry, misses the others, and can jump between instances on successive scrapes. Counter rates and histogram populations become wrong as soon as the service has more than one instance. Authentication does not fix target discovery.
+
+### Use the GKE managed collectors directly — rejected
+
+GMP is enabled in both clusters, but its managed collectors discover GKE workloads through `PodMonitoring`. They cannot discover Cloud Run instance-local targets. GMP is still useful as the remote storage/export API when each Cloud Run instance runs its own sidecar.
+
+### Cloud Run GMP sidecar, query Cloud Monitoring from Grafana — viable fallback
+
+Grafana can provision its built-in Google Cloud Monitoring datasource, and the prod Grafana GSA already has read access. This removes the second exporter and preserves PromQL support in Cloud Monitoring. It does not put the series in the kube-prometheus-stack Prometheus, so existing Prometheus-only alert and recording-rule contracts would split across datasources. Use this fallback if Stackdriver exporter API cost or metric conversion proves unacceptable.
+
+### Pushgateway — rejected
+
+Pushgateway is intended for short-lived batch jobs, not autoscaled services. Instance grouping keys require deletion on shutdown, stale series survive crashes, and pushed cumulative counters do not have the same lifecycle semantics as per-instance Prometheus targets.
+
+### Extend the existing 1-second Stackdriver exporter — rejected on cost, not capability
+
+The exporter accepts `prometheus.googleapis.com/` prefixes and converts Cloud Monitoring cumulative metrics to Prometheus counters and distributions to histograms, reconstructing `_sum` as distribution mean multiplied by count. But it calls Cloud Monitoring on each Prometheus scrape. Adding many per-instance application series to the existing 1-second release would cause roughly 30 times the API reads of a 30-second bridge. The chosen implementation reuses the same chart, GSA, and monitored project in an isolated release.
+
+### Dedicated isolated Stackdriver exporter — selected
+
+The new release imports only `prometheus.googleapis.com/omi_*` and filters monitored resources to `cluster=__run__` with namespace `backend` or `desktop-backend`. The namespace disjunction must be written as `resource.labels.namespace=one_of("backend","desktop-backend")`: Cloud Monitoring rejects a filter that mixes `AND` with `OR` across `resource.labels` restrictions (`AND and OR cannot be mixed for 'resource.labels' restrictions`, HTTP 400), and the exporter absorbs that rejection per descriptor without ever going unready. It reuses the existing exporter Kubernetes service account, so no new Workload Identity binding is required. Prometheus scrapes it every 30 seconds. The original load-balancer exporter and its HPA-sensitive cadence are unchanged.
+
+## Metric names are rewritten back at scrape time
+
+The Stackdriver exporter renames everything it imports to
+`stackdriver_<monitored resource>_<metric type>_<value type>`. Left alone,
+`omi_journey_accepted_total` would arrive from Cloud Run as
+`stackdriver_prometheus_target_prometheus_googleapis_com_omi_journey_accepted_total_counter`,
+and every existing alert, recording rule, and dashboard would go on matching nothing while the
+metrics were demonstrably flowing.
+
+**Ingested-but-unmatched is the same outage as never-ingested.** It is what kept
+`omi-journey-chat-fail` armed and unfirable through a 19-hour incident, and importing metrics under
+names nothing queries would reproduce it in a new form.
+
+The `cloud-run-application-metrics` job therefore rewrites `__name__` back to the plain form:
+
+```yaml
+metric_relabel_configs:
+  - source_labels: [__name__]
+    regex: "stackdriver_prometheus_target_prometheus_googleapis_com_(omi_.+?)_(counter|gauge|histogram|summary|untyped|unknown)(_bucket|_sum|_count)?"
+    target_label: __name__
+    replacement: "${1}${3}"
+```
+
+Group 3 preserves the `_bucket` / `_sum` / `_count` suffixes so histograms stay queryable, and the
+non-greedy group 1 with full anchoring survives metric names that themselves contain a value-type
+word. `test_monitoring_telemetry_contract.py` pins the regex and its recovered names in both
+environments.
+
+After the rewrite, a GKE-sourced and a Cloud Run-sourced `omi_journey_accepted_total` are the same
+metric, told apart by their `service_name` label. That is deliberate: it means the existing alert
+corpus works against Cloud Run traffic with no query changes.
+
+### If the regex is wrong, you will be told
+
+The exact exporter naming cannot be confirmed until the pipeline is live, so the rewrite is a
+prediction. `omi-cloud-run-metric-names-unnormalized` fires when any un-normalized `stackdriver_*`
+`omi_` series survives on this job:
+
+```promql
+count({job="cloud-run-application-metrics", __name__=~"stackdriver_.*_omi_.*"}) or vector(0)
+```
+
+Correct the regex and re-upgrade the release. **Do not** write alerts against the mangled names —
+that hard-codes the defect into the alert corpus.
+
+## Counter, histogram, and label semantics
+
+Every Cloud Run instance produces a distinct mandatory `instance` series. Counter queries must aggregate rates, never sum raw counters across time:
+
+```promql
+sum by (service_name, journey, outcome) (
+  rate(omi_client_journey_terminal_total[5m])
+)
+```
+
+(The name above is the rewritten one. Query the plain `omi_*` names, not the exporter's.)
+
+Confirm the exact normalized name in Prometheus before installing an alert; Stackdriver exporter builds names from `stackdriver`, monitored resource type, Cloud Monitoring metric type, and value type. It retains metric and monitored-resource labels. Cloud Monitoring distributions become Prometheus histograms; the exporter reconstructs `_sum` as distribution mean multiplied by count. Both bucket-based `histogram_quantile` and `_sum / _count` queries are available, but verify the normalized series names after deployment.
+
+Do not add uid, conversation, request, or configuration labels. The runtime rollout
+adoption families are the explicit revision-label exception; see
+[runtime rollout export](runtime-rollout-export.md). `service_name`, bounded journey/outcome labels, and the required instance identity are sufficient. Revision/configuration target labels are explicitly disabled in the checked-in `RunMonitoring` config to avoid rollout-driven series churn.
+
+## Cost and cardinality
+
+There are three costs:
+
+1. GMP ingestion: at a 30-second interval, `S` exported series across `I` average active instances produce approximately `86,400 * S * I` samples per 30-day month. At the documented first-tier $0.06/million samples, 100 series across 10 instances is about $5.18/month.
+2. Cloud Monitoring reads: the isolated 30-second exporter reduces API series reads by about 30x compared with the existing 1-second exporter. Keep the `omi_` metric relabel and service filter narrow.
+3. Cloud Run resources: backend and desktop-backend default to a 0.25-vCPU / 512Mi collector with independent 1-CPU rollback options; the three sync/integration services use their smaller profile above. Always-allocated CPU is retained because Google warns request-based CPU can miss low-QPS scrapes. Instance CPU is the sum of container limits; the general fractional-instance restrictions do not alone establish that a fractional collector is invalid on a multi-container instance above 1 vCPU. The recorded sync control-plane validation is configuration evidence for that shape, not desktop qualification or runtime load acceptance. With prod min scale 1, desktop's application and sidecar are billed while idle; measure total service cost after the rollout.
+
+The 10,000-sample and 30-label scrape limits cap accidental explosions. A limit breach fails the scrape and should be treated as an observability incident, not raised without a label review.
+
+## Deploy and verify
+
+Run the focused repository contracts first:
+
+```bash
+cd backend
+pytest -q tests/unit/test_attach_cloud_run_gmp_sidecar.py \
+  tests/unit/test_metrics_sidecar_server.py \
+  tests/unit/test_desktop_backend_cors.py \
+  tests/unit/test_render_backend_runtime_env.py \
+  tests/unit/test_backend_runtime_env_validator.py \
+  tests/unit/test_monitoring_telemetry_contract.py \
+  tests/unit/test_monitoring_alert_rule_contract.py \
+  tests/unit/test_cloud_run_metrics_egress_workflow.py
+python3 deploy/compose_runtime_env.py --check
+```
+
+After merge, platform deployment is still required; repository changes alone do not mutate Cloud Run or GKE. The repository now owns both halves instead of leaving Helm commands as an undocumented manual release:
+
+- `.github/workflows/gcp_cloud_run_metrics_egress.yml` runs automatically for relevant changes on `main` and atomically installs the dev exporter plus the dev Prometheus scrape configuration. It uses the live release name `dev-kube-prometheus-stack`, not the failed historical `dev-omi-kube-prometheus-stack` release.
+- Production is an explicit protected-environment dispatch from `main`. It atomically upgrades `prod-omi-cloud-run-sync-metrics-exporter`, `prod-omi-cloud-run-metrics-exporter` and the live `prod-omi-kube-prometheus-stack` release with pinned chart versions. The stack upgrade passes Grafana's `omi-stats-proxy-sha256` annotation computed from the checked-out `stats_proxy.py`; the `grafana-stats-proxy` ConfigMap stays parent-applied and must match it.
+- Both paths render first, install the isolated exporter before its scrape target, wait for Helm readiness, and verify the exporter Deployment and Service.
+
+1. Confirm the automatic `Deploy Cloud Run Metrics Egress` development run succeeded after merge. If it must be retried, dispatch it from `main`:
+
+```bash
+gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=development
+```
+
+2. Run the normal backend and desktop-backend deployment workflows in dev. They require the existing `cloud-run-gmp-config` and add immutable versions from the checked-in non-sensitive config, pin that numeric secret version into a two-container no-traffic candidate, and run the existing acceptance gates before promotion.
+3. Confirm each Cloud Run revision has two containers without displaying environment values:
+
+```bash
+gcloud run services describe desktop-backend --project=based-hardware-dev --region=us-central1 --format='value(spec.template.spec.containers.name)'
+gcloud run services describe backend --project=based-hardware-dev --region=us-central1 --format='value(spec.template.spec.containers.name)'
+```
+
+4. Confirm the collector has successful scrapes and no export errors:
+
+```bash
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="desktop-backend" AND labels."run.googleapis.com/container_name"="collector"' \
+  --project=based-hardware-dev --freshness=30m --limit=50
+```
+
+5. In Cloud Monitoring Metrics Explorer, use PromQL and query an idle, zero-initialized metric such as `omi_journey_accepted_total`. Confirm both `service_name="backend"` and `service_name="desktop-backend"` exist and instances are distinct.
+6. Confirm data actually crossed the bridge. `up` is not that proof: it reports only that Prometheus reached the exporter's own `/metrics`, and it stayed 1 for 21 hours while every Cloud Monitoring query returned HTTP 400 and not one series was imported. Require all three, in this order:
+
+```promql
+up{job="cloud-run-application-metrics"}                                  # exporter reachable  — necessary, not sufficient
+stackdriver_monitoring_last_scrape_error{job="cloud-run-application-metrics"}   # MUST be 0: the upstream query was accepted
+count({job="cloud-run-application-metrics", __name__=~"omi_.*"})         # MUST be > 0: series arrived, under their plain names
+```
+
+Query the plain `omi_*` names, not the `stackdriver_prometheus_target_...` form. The scrape job rewrites `__name__` back to the plain name, so on a healthy deployment the mangled form returns zero — reading it as a health check inverts the signal. The mangled form is what `omi-cloud-run-metric-names-unnormalized` watches for, and it should be empty.
+
+The target stays `coverage_status: declared` until both prod services serve the sidecar and a per-service freshness alert can be written against a real series.
+
+7. Generate one known dev client journey, then confirm the corresponding counter increases in Cloud Monitoring and in kube-prometheus-stack after the one-minute exporter offset. Compare `sum(rate(...[5m]))` by service between both stores.
+8. Dispatch the production metrics egress workflow from `main`, then deploy the prod Cloud Run revisions and repeat the checks before enabling any new Grafana alert:
+
+```bash
+gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=prod
+```
+
+9. Confirm the public route remains protected without printing the token: unauthenticated and invalid-bearer requests to `/metrics` must return 401; only the loopback listener is unauthenticated.
+
+Rollback Cloud Run traffic with the existing recovery workflows. Rolling back to a pre-sidecar revision removes new ingestion for that service but does not affect request serving. Roll back the monitoring changes with Helm rollback of both environment-specific releases; do not change the original load-balancer exporter.
+
+## Notifications job metrics
+
+`gcp_notifications_job.yml` uses the same pinned collector/config-secret helper
+with `--job`. A Job has a nested task template and no revision traffic.
+[Job YAML](https://docs.cloud.google.com/run/docs/reference/yaml/v1#cloud_run_job_yaml)
+puts secrets/start-order annotations on the outer execution template and
+containers/volumes on its inner task template; the helper preserves this split. GMP
+reads `K_SERVICE` for its namespace (see [upstream metadata mapping](https://github.com/GoogleCloudPlatform/run-gmp-sidecar/blob/main/confgenerator/util.go));
+Cloud Run Jobs supply `CLOUD_RUN_JOB` instead, so the helper explicitly gives
+only the collector process `K_SERVICE=$CLOUD_RUN_JOB` inside its wrapper
+(without deploying a reserved service env name). The resulting GMP target
+has `namespace=notifications-job` and `cluster=__run__`. Both environments'
+`<env>_omi_cloud_run_metrics_exporter.yaml` add this exact namespace to `one_of`;
+the sync services are imported by the separate `<env>_sync_omi_cloud_run_metrics_exporter.yaml`
+release, limited to consumed families.
+The kube-prometheus-stack values own the scrape and name normalization, not
+the monitored-resource namespace filter.
+
+The pinned collector image contains `/bin/sh` and `/run-gmp-entrypoint`.
+A shared in-memory completion marker bounds its lifetime: the application
+keeps 127.0.0.1:9090 alive for 45 seconds after marking completion, and the
+collector waits 35 seconds (at least one 30-second scrape) before SIGTERM and
+flush. This avoids leaving a successful Job waiting on an infinite collector.
+Job executions carry no startup probe: probes cannot reach the loopback metrics
+listener. The collector shares the instance network namespace and can scrape
+127.0.0.1:9090. The task timeout and 480-second cohort budget remain the stop
+conditions for cohort work.
+Check execution completion as well as collector export errors after rollout.
+
+Measured 2026-10-12: Cloud Monitoring held no `notifications-job` series for
+`omi_daily_summary_*`; the only series came from `backend`, which imports the
+module and exports its zero-initialized children. The collector scraped the
+job but every export failed with `Permission monitoring.timeSeries.create
+denied`, because prod runs the job as `backend-jobs-runtime`, which has no
+`roles/monitoring.metricWriter`. A rejected export never fails the execution.
+Grant the role, then confirm that collector logs show no `PermissionDenied`.
+Recap outcome health does not wait for this: it reads Cloud Logging metrics
+(see the daily-summary runbook).
+
+Dispatch the notifications job and production metrics-egress workflows after
+merge. The Core Features daily-recap row stays No-data until both ship.
+The two log-based Cloud Monitoring alerts require only the notifications
+workflow: sustained incomplete cohort rate for three hours, or a summary
+heartbeat absent for 60 minutes under the always-on 15-minute schedule.
+Absence policies need a previously observed heartbeat series; verify one
+healthy execution after provisioning before treating that alert as armed.

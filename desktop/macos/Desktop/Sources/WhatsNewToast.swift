@@ -37,6 +37,9 @@ final class WhatsNewToast: ObservableObject {
   }
 
   func present(version: String) {
+    // The card slides in from the corner unasked; the swoosh is what makes it read as arriving
+    // rather than as having been there. Suppressed with the slide itself under Reduce Motion.
+    OmiUISound.play(.reveal)
     self.version = version
   }
 
@@ -57,7 +60,8 @@ final class WhatsNewToast: ObservableObject {
 /// `.overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }`.
 struct WhatsNewToastOverlay: View {
   @ObservedObject private var model = WhatsNewToast.shared
-  private let autoDismissSeconds: UInt64 = 12
+  /// Informational, so it uses the shared informational time and waits while the pointer is on it.
+  @State private var isHovered = false
 
   var body: some View {
     ZStack(alignment: .bottomTrailing) {
@@ -72,10 +76,12 @@ struct WhatsNewToastOverlay: View {
           },
           onClose: { model.dismiss() }
         )
+        .onHover { isHovered = $0 }
         .padding(OmiSpacing.xl)
         .transition(.move(edge: .trailing).combined(with: .opacity))
-        .task(id: version) {
-          try? await Task.sleep(nanoseconds: autoDismissSeconds * 1_000_000_000)
+        .task(id: "\(version)-\(isHovered)") {
+          guard !isHovered else { return }
+          try? await Task.sleep(nanoseconds: UInt64(OmiFeedbackTiming.informational * 1_000_000_000))
           if !Task.isCancelled { model.dismiss() }
         }
       }
@@ -97,41 +103,39 @@ private struct WhatsNewToastCard: View {
 
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(alignment: .top, spacing: OmiSpacing.sm) {
-          Text("omi updated")
-            .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+          Text("Omi updated")
+            .inkStyle(.rowCopy, color: Ink.primary)
           Spacer(minLength: 0)
           closeButton
         }
 
         Text(version.isEmpty ? "A new version is installed" : "Now on version \(version)")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          // `secondary` and never the glance rung: this card is glass, which carries two rungs.
+          .inkStyle(.statusLabel, color: Ink.secondary)
 
         HStack(spacing: OmiSpacing.xxs) {
           Text("See what's new")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.accent)
+            .inkStyle(.statusLabel, color: Ink.accent)
           Image(systemName: "arrow.up.right")
             .scaledFont(size: OmiType.micro, weight: .semibold)
-            .foregroundColor(OmiColors.accent)
+            // The one accent, spent on the one thing here that is actionable and is not a button.
+            .foregroundColor(Ink.accent)
         }
         .padding(.top, OmiSpacing.hairline)
       }
     }
     .padding(OmiSpacing.md)
     .frame(width: 304, alignment: .topLeading)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-        .fill(OmiColors.backgroundRaised)
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-        .stroke(OmiColors.border, lineWidth: 1)
-    )
-    .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
-    .contentShape(RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous))
+    // The toast paints no ground of its own — the glass owns it, and brings the 22 pt corner, the
+    // faint edge and the one ambient shadow with it. It used to draw all three itself, at a different
+    // radius and a heavier shadow than every other floating object in the app.
+    .inkGlassPanel()
+    .contentShape(RoundedRectangle(cornerRadius: InkGlass.cornerRadius, style: .continuous))
     .onTapGesture { onOpen() }
+    .pointingHandOnHover()
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityHint("Opens the release notes")
   }
 
   private var logo: some View {
@@ -142,21 +146,13 @@ private struct WhatsNewToastCard: View {
         Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
       } else {
         Image(systemName: "sparkles").resizable().aspectRatio(contentMode: .fit)
-          .foregroundColor(OmiColors.accent)
+          .foregroundColor(Ink.primary)
       }
     }
     .frame(width: 34, height: 34)
   }
 
   private var closeButton: some View {
-    Button(action: onClose) {
-      Image(systemName: "xmark")
-        .scaledFont(size: OmiType.micro, weight: .bold)
-        .foregroundColor(OmiColors.textTertiary)
-        .padding(OmiSpacing.xxs)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .help("Dismiss")
+    DismissButton(action: onClose, showBackground: false, accessibilityLabel: "Dismiss", size: .compact)
   }
 }

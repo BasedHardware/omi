@@ -1,3 +1,5 @@
+from utils.observability.sync_phases import sync_phase
+from datetime import datetime, timezone
 import logging
 import os
 import re
@@ -11,7 +13,9 @@ from fastapi import HTTPException, UploadFile
 from models.conversation_enums import ConversationSource
 from utils.log_sanitizer import sanitize
 from utils.request_validation import parse_sync_filename_timestamp
+from utils.sync.capture_clock import capture_time_rejection
 from utils.sync import playback as sync_playback
+from utils.sync.input_limits import BackfillStoragePressure, raise_sync_storage_pressure, sync_pcm_format
 
 try:
     from opuslib import Decoder
@@ -35,8 +39,19 @@ def _get_opus_decoder_class() -> Any:
     return Decoder
 
 
+def _opus_raw_frame_writes_enabled() -> bool:
+    # Kill switch (synceff, 2026-11-04): '0' restores per-frame writeframes(). The WAV bytes
+    # are identical either way; only the per-frame header rewrites (about 55% of decode CPU) differ.
+    return os.getenv('SYNC_OPUS_RAW_FRAME_WRITES', '1').strip() != '0'
+
+
 def decode_opus_file_to_wav(
-    opus_file_path: str, wav_file_path: str, sample_rate: int = 16000, channels: int = 1, frame_size: int = 160
+    opus_file_path: str,
+    wav_file_path: str,
+    sample_rate: int = 16000,
+    channels: int = 1,
+    frame_size: int = 160,
+    decoded_frame_samples: Optional[list[int]] = None,
 ) -> bool:
     """Decode an Opus file with length-prefixed frames to WAV format.
 
@@ -49,12 +64,16 @@ def decode_opus_file_to_wav(
     decoder = _get_opus_decoder_class()(sample_rate, channels)
     frame_count = 0
     corrupt_stream = False
+    raw_frame_writes = _opus_raw_frame_writes_enabled()
 
     try:
         with open(opus_file_path, 'rb') as f, wave.open(wav_file_path, 'wb') as wav_file:
             wav_file.setnchannels(channels)
             wav_file.setsampwidth(2)
             wav_file.setframerate(sample_rate)
+            # writeframes() re-patches the RIFF header after every 10 ms frame (seek, write,
+            # seek back); writeframesraw() leaves that to close(), which writes the same header.
+            write_frame = wav_file.writeframesraw if raw_frame_writes else wav_file.writeframes
 
             while True:
                 length_bytes = f.read(4)
@@ -77,15 +96,24 @@ def decode_opus_file_to_wav(
                     break
                 try:
                     pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
-                    wav_file.writeframes(pcm_frame)
+                    write_frame(pcm_frame)
+                    if decoded_frame_samples is not None:
+                        decoded_frame_samples.append(len(pcm_frame) // (2 * channels))
                     frame_count += 1
                 except Exception as e:
+                    # A full volume is capacity pressure, never a corrupt frame:
+                    # keeping the decoded prefix would complete a truncated recording.
+                    raise_sync_storage_pressure(e)
                     logger.warning('Opus decode: frame failed exception_type=%s', type(e).__name__)
                     corrupt_stream = True
                     break
 
-        if frame_count > 0 and not corrupt_stream:
-            logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")
+        if frame_count > 0:
+            if corrupt_stream:
+                logger.warning(
+                    'Opus decode: keeping %d frames decoded before the stream became unreadable', frame_count
+                )
+            logger.debug(f"Decoded audio saved to {sanitize(wav_file_path)}")
             return True
 
         logger.info("No PCM data was decoded.")
@@ -93,14 +121,27 @@ def decode_opus_file_to_wav(
             os.remove(wav_file_path)
         return False
     except Exception as e:
+        # Capacity pressure must leave as itself (never as a corrupt-stream
+        # False) so the worker defers instead of consuming the staged audio.
+        pressure = e if isinstance(e, BackfillStoragePressure) else None
+        if pressure is None:
+            try:
+                raise_sync_storage_pressure(e)
+            except BackfillStoragePressure as mapped:
+                pressure = mapped
         logger.error(f"Error during decode: {e}")
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
+        if pressure is not None:
+            raise pressure
         return False
 
 
 def get_timestamp_from_path(path: str) -> int | float:
-    return parse_sync_filename_timestamp(path)
+    # Internal WAL/VAD clock read, not an admission check: a segment name is
+    # the admitted source capture time plus a speech offset, so it can sit
+    # past the future-skew window. Staging boundaries own the window check.
+    return parse_sync_filename_timestamp(path, enforce_window=False)
 
 
 def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
@@ -120,8 +161,21 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
         if '_' not in filename:
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, missing timestamp")
         try:
-            get_timestamp_from_path(filename)
+            timestamp = get_timestamp_from_path(filename)
         except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
+        # The internal clock read above is window-free (derived names); this
+        # staging boundary owns the capture-time admission window. V1 (and the
+        # chat/desktop transcribe seams sharing it) keep the pre-skew-admission
+        # contract — any future time is rejected — because their pipelines run
+        # at capture-time offset 0, so an admitted future stamp would store and
+        # compare ahead of the server clock. V2 staging owns skew admission.
+        if (
+            capture_time_rejection(
+                datetime.fromtimestamp(timestamp, tz=timezone.utc), future_skew_seconds=0, allow_early_clamp=False
+            )
+            is not None
+        ):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
         path = os.path.join(directory, filename)
@@ -132,7 +186,8 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
         except Exception as e:
             if os.path.exists(path):
                 os.remove(path)
-            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}: {str(e)}")
+            logger.error(f"Failed to write file {filename}: {type(e).__name__}")
+            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}") from e
     return paths
 
 
@@ -149,7 +204,12 @@ def get_wav_duration(wav_path: str) -> float:
 
 
 def decode_pcm_file_to_wav(
-    pcm_file_path: str, wav_file_path: str, sample_rate: int = 16000, channels: int = 1, sample_width: int = 2
+    pcm_file_path: str,
+    wav_file_path: str,
+    sample_rate: int = 16000,
+    channels: int = 1,
+    sample_width: int = 2,
+    decoded_frame_samples: Optional[list[int]] = None,
 ) -> bool:
     """Decode a length-prefixed PCM .bin file to WAV.
 
@@ -182,13 +242,17 @@ def decode_pcm_file_to_wav(
                     corrupt_stream = True
                     break
                 pcm_data.extend(frame_data)
+                if decoded_frame_samples is not None:
+                    decoded_frame_samples.append(frame_length // (sample_width * channels))
 
-        if not pcm_data or corrupt_stream:
+        if not pcm_data:
             logger.info('PCM decode: stream is empty or malformed')
-            pcm_data.clear()
             if os.path.exists(wav_file_path):
                 os.remove(wav_file_path)
             return False
+
+        if corrupt_stream:
+            logger.warning('PCM decode: keeping %d bytes decoded before the stream became unreadable', len(pcm_data))
 
         wav_data = sync_playback.pcm_to_wav(
             bytes(pcm_data), sample_rate=sample_rate, channels=channels, sample_width=sample_width
@@ -198,6 +262,7 @@ def decode_pcm_file_to_wav(
         pcm_data.clear()
         return True
     except Exception as e:
+        raise_sync_storage_pressure(e)
         logger.error('PCM decode failed exception_type=%s', type(e).__name__)
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
@@ -228,51 +293,72 @@ def detect_source_from_filenames(filenames: List[Optional[str]]) -> Conversation
     return ConversationSource.omi
 
 
-def decode_files_to_wav(files_path: List[str]) -> List[str]:
+@sync_phase('decode_vad')
+def decode_files_to_wav(files_path: List[str], decoded_frames: Optional[dict[str, list[int]]] = None) -> List[str]:
+    """Decode each uploaded sync file, isolating unreadable files from their batch.
+
+    A batch shares one sync job, so failing the whole batch on a single bad file
+    discards every sibling recording and leaves the client retrying the same
+    doomed set forever. Unreadable files are dropped individually; the request
+    only fails when nothing in the batch decoded.
+    """
     wav_files: List[str] = []
+    unreadable: List[str] = []
     for path in files_path:
         wav_path = path.replace('.bin', '.wav')
+        frame_samples: Optional[list[int]] = [] if decoded_frames is not None else None
         filename = os.path.basename(path)
         frame_size = 160
         match = re.search(r'_fs(\d+)', filename)
         if match:
             try:
                 frame_size = int(match.group(1))
-                logger.info(f"Found frame size {frame_size} in filename: {filename}")
+                logger.debug(f"Found frame size {frame_size} in filename: {filename}")
             except ValueError:
                 logger.error(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
 
         if _is_pcm_codec(filename):
-            sample_rate_match = re.search(r'_pcm(?:8|16)_(\d+)_', filename)
-            sample_rate = (
-                int(sample_rate_match.group(1)) if sample_rate_match else (16000 if '_pcm16_' in filename else 8000)
+            pcm_format = sync_pcm_format(filename)
+            assert pcm_format is not None
+            sample_rate, sample_width = pcm_format
+            success = decode_pcm_file_to_wav(
+                path,
+                wav_path,
+                sample_rate=sample_rate,
+                sample_width=sample_width,
+                decoded_frame_samples=frame_samples,
             )
-            sample_width = 1 if '_pcm8_' in filename else 2
-            success = decode_pcm_file_to_wav(path, wav_path, sample_rate=sample_rate, sample_width=sample_width)
         else:
-            success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
+            success = decode_opus_file_to_wav(
+                path,
+                wav_path,
+                frame_size=frame_size,
+                decoded_frame_samples=frame_samples,
+            )
 
-        if not success:
-            for decoded_wav in wav_files:
-                if os.path.exists(decoded_wav):
-                    os.remove(decoded_wav)
-            if os.path.exists(path):
-                os.remove(path)
-            raise HTTPException(status_code=400, detail='Audio decode failed')
+        if success and decoded_frames is not None and frame_samples is not None:
+            decoded_frames[wav_path] = frame_samples
 
         if os.path.exists(path):
             os.remove(path)
 
-        duration = get_wav_duration(wav_path)
-        if duration == 0:
+        if success and get_wav_duration(wav_path) == 0:
+            success = False
+
+        if not success:
+            unreadable.append(filename)
             if os.path.exists(wav_path):
                 os.remove(wav_path)
-            for decoded_wav in wav_files:
-                if os.path.exists(decoded_wav):
-                    os.remove(decoded_wav)
-            raise HTTPException(status_code=400, detail='Invalid audio input')
+            continue
 
         # Short, successfully decoded audio is not proof of silence. Preserve it
         # for the authoritative VAD stage instead of silently acknowledging it.
         wav_files.append(wav_path)
+
+    if unreadable:
+        logger.warning('Sync decode dropped %d of %d unreadable files', len(unreadable), len(files_path))
+
+    if not wav_files:
+        raise HTTPException(status_code=400, detail='Audio decode failed')
+
     return wav_files

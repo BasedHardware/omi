@@ -1,0 +1,25 @@
+image:
+  repository: gcr.io/based-hardware/backend
+  tag: ""
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  name: neg-coverage-exporter
+  gcpServiceAccount: neg-coverage-exporter@based-hardware.iam.gserviceaccount.com
+
+project: based-hardware
+backendService: custom-domains-api-omi-me-backend-listen-49a4-be
+negName: prod-backend-listen-neg
+backendNamespace: prod-omi-backend
+podSelector: app.kubernetes.io/instance=prod-omi-backend-listen
+zones: us-central1-a,us-central1-b,us-central1-c,us-central1-f
+intervalSeconds: 60
+port: 8080
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

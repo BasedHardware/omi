@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import os
 import sys
 import types
 import uuid
 from types import ModuleType
-from typing import Callable, Iterable, Mapping, MutableMapping, Sequence
+from typing import Callable, Iterable, Mapping, Sequence
 from unittest.mock import MagicMock
 
 _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -71,7 +73,33 @@ def drop_stale_module(module_name: str, expected_file: str) -> None:
 def make_database_client_stub() -> ModuleType:
     client_mod = types.ModuleType("database._client")
     client_mod.db = MagicMock()
+    client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_customer_firestore_client = lambda: client_mod.db
+    in_body = ContextVar("memory_test_transaction_body", default=False)
+
+    @contextmanager
+    def transaction_body():
+        token = in_body.set(True)
+        try:
+            yield
+        finally:
+            in_body.reset(token)
+
+    def run_transactional(client, operation, *args, transient=False, **kwargs):
+        with transaction_body():
+            return operation(client.transaction(), *args, **kwargs)
+
+    client_mod.run_transactional = run_transactional
+    client_mod.transaction_body = transaction_body
+    client_mod.in_transaction_body = in_body.get
+    # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
+    # memory_apply_store and screen/frame sync import
+    # `data_plane_db` at their module boundary instead of the shared `db` above.
+    # Default it to the same stub client so callers that never set
+    # OMI_FIRESTORE_DATA_PLANE_PROJECT see identical behavior under test too.
+    client_mod.data_plane_db = client_mod.db
+    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
@@ -101,8 +129,9 @@ def install_canonical_write_runtime_stubs() -> list[str]:
 
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
-    subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
+    subscription_mod.request_has_llm_byok_key = lambda: False
+    subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False
     sys.modules["utils.subscription"] = subscription_mod
     touched.append("utils.subscription")
 
@@ -130,12 +159,57 @@ def install_canonical_write_runtime_stubs() -> list[str]:
     return touched
 
 
+# `from ._client import db` binds the Firestore handle into the importing module's
+# own namespace at import time, so replacing sys.modules["database._client"] later
+# cannot reach an already-imported copy. Any test that re-imports code calling into
+# these must drop them first or it silently runs against a live client that retries
+# with backoff.
+CLIENT_BINDING_DATABASE_MODULES = (
+    "database.notifications",
+    "database.conversations",
+    "database.transcript_pointer",
+    "database.conversation_terminal_title",
+    "database.redis_db",
+    "database.users",
+    "database.memories",
+    "database.action_items",
+    "database.tasks",
+)
+
+
+def drop_client_binding_modules(names: Sequence[str] = CLIENT_BINDING_DATABASE_MODULES) -> None:
+    """Evict modules that captured a live client at import time.
+
+    Call before install_*_stubs() so the stub install actually takes effect. Pair
+    with snapshot_sys_modules()/restore_sys_modules() on the same names.
+    """
+    for name in names:
+        module = sys.modules.pop(name, None)
+        if module is None or "." not in name:
+            continue
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+            delattr(parent, child_name)
+
+
 def install_ws_i_heavy_import_stubs() -> list[str]:
     """Install heavy-import stubs used by WS-I process_conversation / memories router tests."""
     touched: list[str] = []
 
     def _set(name: str, module: ModuleType) -> None:
         sys.modules[name] = module
+        # Rebinding sys.modules alone is not enough. `import database.notifications
+        # as notification_db` resolves through getattr(database, "notifications")
+        # and only falls back to sys.modules on AttributeError, so a parent package
+        # still holding the real submodule hands it straight back and the stub never
+        # takes effect. restore_sys_modules() already unwinds the parent attribute on
+        # teardown; this is the matching half on the way in.
+        if "." in name:
+            parent_name, child_name = name.rsplit(".", 1)
+            parent = sys.modules.get(parent_name)
+            if isinstance(parent, ModuleType):
+                setattr(parent, child_name, module)
         touched.append(name)
 
     firebase_admin = types.ModuleType("firebase_admin")
@@ -147,9 +221,13 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     langchain_core.output_parsers.PydanticOutputParser = MagicMock()
     langchain_core.prompts = types.ModuleType("langchain_core.prompts")
     langchain_core.prompts.ChatPromptTemplate = MagicMock()
+    langchain_core.messages = types.ModuleType("langchain_core.messages")
+    langchain_core.messages.HumanMessage = MagicMock()
+    langchain_core.messages.SystemMessage = MagicMock()
     _set("langchain_core", langchain_core)
     _set("langchain_core.output_parsers", langchain_core.output_parsers)
     _set("langchain_core.prompts", langchain_core.prompts)
+    _set("langchain_core.messages", langchain_core.messages)
 
     langchain_core.callbacks = types.ModuleType("langchain_core.callbacks")
     langchain_core.callbacks.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
@@ -157,6 +235,9 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
 
     usage_tracker_mod = types.ModuleType("utils.llm.usage_tracker")
     usage_tracker_mod.track_usage = lambda *args, **kwargs: None
+    # must accept the token-based setters without touching real contextvars.
+    usage_tracker_mod.set_usage_context = lambda *args, **kwargs: object()
+    usage_tracker_mod.reset_usage_context = lambda *args, **kwargs: None
 
     class _Features:
         pass
@@ -202,7 +283,7 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     _set("pinecone", pinecone_mod)
 
     auth_mod = AutoMockModule("database.auth")
-    auth_mod.get_user_name = lambda uid: "Test User"
+    auth_mod.get_user_name = lambda uid, use_default=True: "Test User"
     auth_mod.get_current_user_uid = MagicMock()
     auth_mod.with_rate_limit = lambda fn, *args, **kwargs: fn
     _set("database.auth", auth_mod)
@@ -214,8 +295,9 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
 
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
-    subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
+    subscription_mod.request_has_llm_byok_key = lambda: False
+    subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False
     _set("utils.subscription", subscription_mod)
 
     vector_db_mod = AutoMockModule("database.vector_db")
@@ -283,6 +365,9 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
         "utils.conversations.transcript_chunks",
         "utils.retrieval.tools.memory_tools",
     ):
+        # Deliberately does not displace an already-imported real module: several
+        # callers depend on the real one being kept. A caller that needs the stub to
+        # win must drop the real module first -- see drop_client_binding_modules().
         if name not in sys.modules:
             _set(name, AutoMockModule(name))
 
@@ -294,6 +379,7 @@ WS_I_HEAVY_STUB_MODULE_NAMES = (
     "langchain_core",
     "langchain_core.output_parsers",
     "langchain_core.prompts",
+    "langchain_core.messages",
     "langchain_core.callbacks",
     "langchain_core.runnables",
     "utils.llm.usage_tracker",
@@ -395,7 +481,7 @@ def install_ws_j_heavy_import_stubs() -> list[str]:
     vector_db_mod.find_similar_memories = MagicMock(return_value=[])
     vector_db_mod.upsert_memory_vector = MagicMock()
     vector_db_mod.delete_memory_vector = MagicMock()
-    vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
+    vector_db_mod.delete_canonical_memory_vectors = MagicMock(return_value=True)
     vector_db_mod.delete_memory_vectors_batch = MagicMock()
     sys.modules["database.vector_db"] = vector_db_mod
     touched.append("database.vector_db")
@@ -418,6 +504,7 @@ def install_ws_j_heavy_import_stubs() -> list[str]:
         "utils.conversations.factory",
         "utils.conversations.process_conversation",
         "utils.conversations.search",
+        "utils.conversations.mcp_transcript_search",
         "utils.conversations.calendar_linking",
         "utils.speaker_identification",
         "utils.app_integrations",
@@ -476,7 +563,7 @@ def install_ws_m_heavy_import_stubs() -> list[str]:
     vector_db_mod = AutoMockModule("database.vector_db")
     vector_db_mod.find_similar_memories = MagicMock(return_value=[])
     vector_db_mod.query_memory_vector_candidates = MagicMock(return_value=_EmptyVectorResult())
-    vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
+    vector_db_mod.delete_canonical_memory_vectors = MagicMock(return_value=True)
     sys.modules["database.vector_db"] = vector_db_mod
     touched.append("database.vector_db")
 
@@ -606,7 +693,7 @@ def install_consolidation_apply_stubs() -> list[str]:
     touched.append("database.review_queue")
 
     jobs_mod = AutoMockModule("jobs.short_term_lifecycle_worker")
-    jobs_mod.fetch_short_term_memory_items_firestore = MagicMock(return_value=[])
+    jobs_mod.fetch_expired_short_term_memory_items_firestore = MagicMock(return_value=[])
     sys.modules["jobs.short_term_lifecycle_worker"] = jobs_mod
     touched.append("jobs.short_term_lifecycle_worker")
 
@@ -678,13 +765,18 @@ def install_mcp_search_memories_stubs(backend_dir: str) -> list[str]:
     drop_stale_module("models.memories", os.path.join(backend_dir, "models", "memories.py"))
     drop_stale_module("models.conversation_enums", os.path.join(backend_dir, "models", "conversation_enums.py"))
     drop_stale_module("models.mcp_api_key", os.path.join(backend_dir, "models", "mcp_api_key.py"))
+    drop_stale_module("utils.mcp_data", os.path.join(backend_dir, "utils", "mcp_data.py"))
+    drop_stale_module("utils.mcp_memories", os.path.join(backend_dir, "utils", "mcp_memories.py"))
+    drop_stale_module("database.screen_activity", os.path.join(backend_dir, "database", "screen_activity.py"))
 
     stub_names = [
         "database._client",
         "database.redis_db",
         "database.conversations",
+        "database.mcp_conversation_pages",
         "database.memories",
         "database.action_items",
+        "database.action_item_sync",
         "database.folders",
         "database.users",
         "database.user_usage",
@@ -699,6 +791,7 @@ def install_mcp_search_memories_stubs(backend_dir: str) -> list[str]:
         "database.fair_use",
         "database.auth",
         "database.dev_api_key",
+        "database.screen_activity",
         "firebase_admin",
         "firebase_admin.messaging",
         "firebase_admin.auth",
@@ -792,14 +885,18 @@ def install_memory_product_router_stubs(
 ) -> list[str]:
     sys.modules["fastapi"] = fastapi_stub
     sys.modules["database._client"] = MagicMock()
-    vector_db_stub = types.ModuleType("database.vector_db")
+    memories_stub = AutoMockModule("database.memories")
+    memories_stub.get_memories = MagicMock(return_value=[])
+    sys.modules["database.memories"] = memories_stub
+    vector_db_stub = AutoMockModule("database.vector_db")
     vector_db_stub.query_memory_vector_candidates = MagicMock(return_value=[])
     sys.modules["database.vector_db"] = vector_db_stub
     sys.modules["utils.other.endpoints"] = auth_stub
     database_pkg = sys.modules.get("database")
     if isinstance(database_pkg, ModuleType):
+        setattr(database_pkg, "memories", memories_stub)
         setattr(database_pkg, "vector_db", vector_db_stub)
-    return ["fastapi", "database._client", "database.vector_db", "utils.other.endpoints"]
+    return ["fastapi", "database._client", "database.memories", "database.vector_db", "utils.other.endpoints"]
 
 
 _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = False

@@ -1,8 +1,8 @@
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
+import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 import { OmiArtifactStorage } from "../src/runtime/artifact-storage.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
@@ -15,6 +15,35 @@ afterEach(() => {
 });
 
 describe("AgentRuntimeKernel run and attempt lifecycle", () => {
+  it("persists served model ids for hermes when the adapter reports model_used", async () => {
+    const { store, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "hermes",
+      4,
+      undefined,
+      undefined,
+      () => {
+        const fake = new FakeRuntimeAdapter("hermes");
+        const baseExecute = fake.executeAttempt.bind(fake);
+        fake.executeAttempt = async (context, sink, signal) => {
+          sink({ type: "model_used", model: "gpt-5.5" });
+          return baseExecute(context, sink, signal);
+        };
+        return fake;
+      },
+    );
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "hermes",
+      defaultAdapterId: "hermes",
+    });
+
+    expect(result.run.status).toBe("succeeded");
+    expect(store.getRow("SELECT requested_model_id FROM runs WHERE run_id = ?", [result.run.runId]).requested_model_id)
+      .toBe("gpt-5.5");
+    store.close();
+  });
+
   it("creates one run per accepted query and one attempt per adapter execution", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
 
@@ -119,6 +148,45 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     expect(JSON.parse(readFileSync(openedContextFile!, "utf8"))).toEqual({
       capabilityRef: adapter.executed[1].toolCapabilityRef,
     });
+    store.close();
+  });
+
+  it("hands the tool relay socket to Omi's tools server only", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const servers = (pipe: string) => [
+      {
+        name: "omi-tools",
+        command: "node",
+        args: ["omi-tools-stdio.js"],
+        env: [
+          { name: "OMI_BRIDGE_PIPE", value: pipe },
+          { name: "OMI_REQUEST_ID", value: "request-scoped" },
+        ],
+      },
+      {
+        name: "notes",
+        command: "node",
+        args: ["notes.js"],
+        env: [
+          { name: "OMI_BRIDGE_PIPE", value: pipe },
+          { name: "NOTES_TOKEN", value: "user-configured" },
+        ],
+      },
+    ];
+
+    await kernel.executeRun({ ...baseRunInput, mcpServers: servers("/tmp/omi-tools-1.sock") });
+    await kernel.executeRun({ ...baseRunInput, requestId: "request-2", mcpServers: servers("/tmp/omi-tools-2.sock") });
+
+    // A new socket path is not a new binding; the resumed binding gets the current socket.
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
+    expect(serverEnv(adapter.opened[0].mcpServers, "omi-tools")).toMatchObject({ OMI_BRIDGE_PIPE: "/tmp/omi-tools-1.sock" });
+    expect(serverEnv(adapter.resumed[0].mcpServers, "omi-tools")).toMatchObject({ OMI_BRIDGE_PIPE: "/tmp/omi-tools-2.sock" });
+    for (const opened of [adapter.opened[0], adapter.resumed[0]]) {
+      expect(serverEnv(opened.mcpServers, "omi-tools")).not.toHaveProperty("OMI_REQUEST_ID");
+      expect(serverEnv(opened.mcpServers, "notes")).not.toHaveProperty("OMI_BRIDGE_PIPE");
+      expect(serverEnv(opened.mcpServers, "notes")).toMatchObject({ NOTES_TOKEN: "user-configured" });
+    }
     store.close();
   });
 
@@ -339,12 +407,67 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("keeps leaf deliverables in the managed workspace when a delegated objective invents Desktop", async () => {
+    const artifactRoot = mkdtempTracked("omi-agent-artifacts-");
+    const inventedDesktop = mkdtempTrackedIn(process.cwd(), "omi-invented-desktop-");
+    const artifactStorage = new OmiArtifactStorage({ rootDir: artifactRoot });
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 4, artifactStorage);
+    adapter.writeFileOnExecute = { name: "omi-artifact-smoke.txt", contents: "hello from managed workspace" };
+
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      executionRole: "leaf",
+      cwd: inventedDesktop,
+      prompt: "Create omi-artifact-smoke.txt on the Desktop.",
+      mcpServers: [{
+        name: "omi-tools",
+        command: "node",
+        args: ["tools.js"],
+        env: [{ name: "OMI_WORKSPACE", value: inventedDesktop }],
+      }],
+    });
+    const artifacts = kernel.inspectArtifacts({ runId: result.run.runId });
+    const assignedWorkspace = adapter.opened[0]!.cwd;
+    const workspaceFromMcp = adapter.opened[0]!.mcpServers
+      .flatMap((server) => Array.isArray(server.env) ? server.env : [])
+      .find((entry) => entry && typeof entry === "object" && (entry as { name?: unknown }).name === "OMI_WORKSPACE") as
+        | { value?: unknown }
+        | undefined;
+
+    expect(assignedWorkspace).toContain(result.run.runId);
+    expect(assignedWorkspace).not.toBe(inventedDesktop);
+    expect(adapter.opened[0]!.systemPrompt).toContain("Do not default to Desktop");
+    expect(workspaceFromMcp?.value).toBe(assignedWorkspace);
+    expect(artifacts).toEqual([
+      expect.objectContaining({
+        sessionId: result.session.sessionId,
+        runId: result.run.runId,
+        attemptId: result.attempt.attemptId,
+        displayName: "omi-artifact-smoke.txt",
+        uri: expect.stringContaining("omi-artifact-smoke.txt"),
+      }),
+    ]);
+    expect(result.artifacts).toEqual(artifacts);
+    expect(readFileSync(new URL(artifacts[0]!.uri), "utf8")).toBe("hello from managed workspace");
+    expect(JSON.parse(artifacts[0]!.metadataJson)).toMatchObject({
+      omiManaged: true,
+      discoveredFromRunDirectory: true,
+    });
+    store.close();
+  });
+
   it("projects verified temporary and managed-root deliverables reported by OpenClaw and Hermes terminal prose", async () => {
     for (const provider of ["openclaw", "hermes"] as const) {
       const artifactRoot = mkdtempTracked(`omi-${provider}-artifacts-`);
       const externalDirectory = mkdtempTracked(`omi-${provider}-reported-`);
-      const desktopDirectory = mkdtempTrackedIn(process.cwd(), `omi-${provider}-desktop-`);
-      const nonTemporaryDirectory = mkdtempTrackedIn(process.cwd(), `omi-${provider}-non-temp-`);
+      // Keep Desktop-like fixtures outside temporary roots: a linked worktree
+      // can itself be under /private/tmp, which would otherwise bypass the
+      // Desktop-specific delivery grammar.
+      const desktopDirectory = mkdtempTrackedIn(homedir(), `omi-${provider}-desktop-`);
+      // This must remain outside the temporary roots even when the test
+      // checkout itself lives under /private/tmp (as it does in isolated
+      // worktrees), otherwise it accidentally becomes a valid deliverable.
+      const nonTemporaryDirectory = mkdtempTrackedIn(homedir(), `omi-${provider}-non-temp-`);
       const reportedPath = join(externalDirectory, "dog_facts.html");
       const desktopPath = join(desktopDirectory, "cool_cat_facts.html");
       const nonTemporaryPath = join(nonTemporaryDirectory, "not_a_deliverable.html");
@@ -1104,6 +1227,12 @@ function mkdtempTrackedIn(parent: string, prefix: string): string {
   const dir = mkdtempSync(join(parent, prefix));
   createdDirs.push(dir);
   return dir;
+}
+
+function serverEnv(mcpServers: Record<string, unknown>[] | undefined, serverName: string): Record<string, string> {
+  const env = mcpServers?.find((server) => server.name === serverName)?.env;
+  if (!Array.isArray(env)) throw new Error(`no env for MCP server ${serverName}`);
+  return Object.fromEntries(env.map((entry: { name?: unknown; value?: unknown }) => [String(entry.name), String(entry.value)]));
 }
 
 function mcpEnvValue(mcpServers: Record<string, unknown>[] | undefined, name: string): string | undefined {

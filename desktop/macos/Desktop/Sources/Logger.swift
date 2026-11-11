@@ -1,5 +1,5 @@
 import Foundation
-import Sentry
+import OSLog
 
 enum OmiLogPathResolver {
   static func launchID(processID: Int32) -> String { "pid-\(processID)" }
@@ -9,7 +9,12 @@ enum OmiLogPathResolver {
     bundleIdentifier: String?,
     processID: Int32
   ) -> String {
-    guard isNonProduction else { return "/tmp/omi.log" }
+    // Stable and Omi Beta can run at the same time; interleaving one shared log file
+    // would corrupt both transcripts, so each production identity owns its own path.
+    guard isNonProduction else {
+      return bundleIdentifier == AppBuild.betaProductionBundleIdentifier
+        ? "/tmp/omi-beta.log" : "/tmp/omi.log"
+    }
     let rawBundleID = bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
     let safeBundleID = rawBundleID.replacingOccurrences(
       of: #"[^A-Za-z0-9._-]+"#,
@@ -21,6 +26,7 @@ enum OmiLogPathResolver {
 
 private let logBundleIdentifier = Bundle.main.bundleIdentifier ?? "unknown"
 private let logProcessID = getpid()
+
 private let logFile: String = OmiLogPathResolver.logPath(
   isNonProduction: AppBuild.isNonProduction,
   bundleIdentifier: logBundleIdentifier,
@@ -33,11 +39,68 @@ func omiLogFilePath() -> String { logFile }
 func omiLogLaunchID() -> String { logLaunchID }
 
 private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
+private let logFailureDiagnostics = Logger(subsystem: "me.omi.desktop", category: "file-logger")
 private let dateFormatter: DateFormatter = {
   let formatter = DateFormatter()
   formatter.dateFormat = "HH:mm:ss.SSS"  // Added milliseconds for perf tracking
   return formatter
 }()
+
+/// Appends to a file using Foundation's throwing APIs. Legacy `FileHandle.write(_:)`
+/// raises an Objective-C exception for I/O failures, which aborts a Swift process.
+enum OmiLogFileAppender {
+  static func append(
+    _ data: Data,
+    to file: URL,
+    openFile: (URL) throws -> FileHandle = { try FileHandle(forWritingTo: $0) },
+    seekToEnd: (FileHandle) throws -> Void = { try $0.seekToEnd() },
+    write: (FileHandle, Data) throws -> Void = { try $0.write(contentsOf: $1) },
+    close: (FileHandle) throws -> Void = { try $0.close() }
+  ) -> Result<Void, Error> {
+    var handle: FileHandle?
+    do {
+      let openedHandle = try openFile(file)
+      handle = openedHandle
+      try seekToEnd(openedHandle)
+      try write(openedHandle, data)
+      try close(openedHandle)
+      return .success(())
+    } catch {
+      // A failed seek or write can leave the handle open; closing is best-effort
+      // here because the original I/O failure is the useful diagnostic.
+      if let handle {
+        try? close(handle)
+      }
+      return .failure(error)
+    }
+  }
+}
+
+/// Bounds diagnostics when every file write fails (for example, on a full disk).
+/// Instances are confined to the serial log queue.
+final class OmiLogFileFailureReporter: @unchecked Sendable {
+  private var didReport = false
+  private let emit: (Error) -> Void
+
+  init(emit: @escaping (Error) -> Void) {
+    self.emit = emit
+  }
+
+  func report(_ error: Error) {
+    guard !didReport else { return }
+    didReport = true
+    emit(error)
+  }
+}
+
+/// Records a local-log failure without recursing into the unavailable file logger.
+private func reportLogFileWriteFailure(_ error: Error) {
+  let nsError = error as NSError
+  let diagnostic = "Local log write failed; dropped entry (domain=\(nsError.domain), code=\(nsError.code))"
+  logFailureDiagnostics.error("\(diagnostic, privacy: .public)")
+}
+
+private let logFileFailureReporter = OmiLogFileFailureReporter(emit: reportLogFileWriteFailure)
 
 /// Append data to the log file on a background queue (non-blocking)
 private func appendToLogFile(_ line: String) {
@@ -124,7 +187,19 @@ private func ensureLogParentDirectories() -> Bool {
 }
 
 private func logLine(timestamp: String, category: String, message: String) -> String {
-  "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
+  return
+    "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
+}
+
+func writeToLogFile(
+  _ data: Data,
+  to file: URL,
+  appendFile: (Data, URL) -> Result<Void, Error>,
+  reportFailure: (Error) -> Void
+) {
+  if case .failure(let error) = appendFile(data, file) {
+    reportFailure(error)
+  }
 }
 
 /// Shared file-write implementation (must be called on logQueue)
@@ -138,15 +213,18 @@ private func writeToLogFile(_ data: Data) {
       && ensureLogFileOwnerOnly(atPath: logFile)
   }
   if FileManager.default.fileExists(atPath: logFile) {
-    if let handle = FileHandle(forWritingAtPath: logFile) {
-      handle.seekToEndOfFile()
-      handle.write(data)
-      handle.closeFile()
-    }
+    writeToLogFile(
+      data,
+      to: URL(fileURLWithPath: logFile),
+      appendFile: { data, file in OmiLogFileAppender.append(data, to: file) },
+      reportFailure: { logFileFailureReporter.report($0) })
   } else {
     // Recreate owner-only if the file was removed mid-session.
-    FileManager.default.createFile(
+    let created = FileManager.default.createFile(
       atPath: logFile, contents: data, attributes: [.posixPermissions: 0o600])
+    if !created {
+      logFileFailureReporter.report(CocoaError(.fileWriteUnknown))
+    }
   }
 }
 
@@ -154,6 +232,11 @@ private func writeToLogFile(_ data: Data) {
 
 /// Log a performance event with timing info - writes to omi.log with [perf] tag
 func logPerf(_ message: String, duration: Double? = nil, cpu: Bool = false) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   var parts = [logLine(timestamp: timestamp, category: "perf", message: message)]
 
@@ -224,39 +307,38 @@ private let isDevBuild: Bool = AppBuild.isNonProduction
 /// Write to log file synchronously — guaranteed to persist even if the app terminates immediately after.
 /// Use sparingly (blocks the calling thread); prefer `log()` for normal logging.
 func logSync(_ message: String) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
   fflush(stdout)
-
-  if !isDevBuild {
-    let breadcrumb = Breadcrumb(level: .info, category: "app")
-    breadcrumb.message = message
-    SentrySDK.addBreadcrumb(breadcrumb)
-  }
 
   appendToLogFileSync(line)
 }
 
-/// Write to log file, stdout, and Sentry breadcrumbs
+/// Write to log file and stdout
 func log(_ message: String) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
   fflush(stdout)
 
-  if !isDevBuild {
-    let breadcrumb = Breadcrumb(level: .info, category: "app")
-    breadcrumb.message = message
-    SentrySDK.addBreadcrumb(breadcrumb)
-  }
+  // Free-form messages stay in the local log. Cloud incidents carry a bounded,
+  // redacted diagnostic attachment when an error is captured instead.
 
   appendToLogFile(line)
 }
 
-// MARK: - Sentry Error Noise Control
-
-/// Network/IO error codes that are transient and not actionable as Sentry errors:
+/// Network/IO error codes that are transient and not actionable as error reports:
 /// offline, timeouts, dropped connections, cancellations. These dominate event
 /// volume (timeouts, "no internet", socket resets) without indicating an app bug.
 /// We still write them to the local log + breadcrumbs for debugging context.
@@ -268,7 +350,7 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
   // Benign sign-out race: background loops (conversation/advice/goals refresh,
   // upload retries) pass an isSignedIn guard, then the token is cleared mid-cycle
   // and the awaited request throws AuthError.notSignedIn. Expected when the user
-  // signs out or runs signed-out — floods Sentry without indicating a bug.
+  // signs out or runs signed-out — expected, not an app bug.
   if case AuthError.notSignedIn = error { return true }
   // Transient AI backend-capacity errors (rate limit, quota, overload, 5xx) from
   // the Gemini proxy, surfaced by the proactive assistants (task/memory/advice/
@@ -281,9 +363,9 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
   }
   // Embedding backfills/searches can hit expected backend/product states (trial
   // expired/BYOK required, rate limit, 5xx). Keep those local-only so screenshot
-  // backfill loops don't create high-volume Sentry issues.
+  // backfill loops stay local-only diagnostics.
   if let embeddingError = error as? EmbeddingService.EmbeddingError,
-    embeddingError.isNonActionableForSentry
+    embeddingError.isExpectedProductState || embeddingError.isTransient
   {
     return true
   }
@@ -313,7 +395,7 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
   case NSCocoaErrorDomain:
     // Environmental file-write failures (disk full / read-only volume / no write
     // permission) surface here as "The file couldn't be saved". Not app bugs —
-    // keep them as local logs + breadcrumbs instead of Sentry error clusters.
+    // keep them as local logs instead of error-report clusters.
     let storageExhausted: Set<Int> = [
       NSFileWriteOutOfSpaceError,  // 640 — disk full
       NSFileWriteVolumeReadOnlyError,  // 642 — read-only volume
@@ -333,35 +415,34 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
   }
 }
 
-/// Rate-limit identical Sentry error captures. High-frequency loops (per-frame
-/// ffmpeg writes, per-cycle assistant failures, repeated DB-constraint hits) can
-/// emit the same error thousands of times. We collapse them by a digit-normalized
-/// key so a single root cause produces ~one Sentry event per window, not thousands.
-private let sentryDedupLock = NSLock()
-private nonisolated(unsafe) var sentryLastCaptured: [String: Date] = [:]
-private let sentryDedupWindow: TimeInterval = 300  // 5 minutes per unique error
+/// Bounded, non-PII fields that may accompany a shared `logError` diagnostic.
+/// Callers must construct these from enums, booleans, and numeric measurements;
+/// paths, exception messages, identifiers, and user content do not belong here.
+/// `Sendable` because these are produced on whichever actor detected the
+/// failure and consumed on another (`AgentRuntimeProcess` -> `@MainActor`
+/// ChatProvider). The element type is `any Sendable` rather than `Any` so the
+/// compiler enforces the scalar-only contract above at every construction site.
+struct DesktopErrorDiagnosticContext: Sendable {
+  let values: [String: any Sendable]
 
-private func shouldCaptureToSentry(_ message: String) -> Bool {
-  // Normalize: strip digits so "(3/5)", frame counts, IDs collapse to one key.
-  let key = String(message.prefix(160)).replacingOccurrences(
-    of: "[0-9]+", with: "#", options: .regularExpression)
-  let now = Date()
-  sentryDedupLock.lock()
-  defer { sentryDedupLock.unlock() }
-  if let last = sentryLastCaptured[key], now.timeIntervalSince(last) < sentryDedupWindow {
-    return false
+  init(_ values: [String: any Sendable]) {
+    self.values = values
   }
-  sentryLastCaptured[key] = now
-  // Bound the map so it can't grow unbounded over a long session.
-  if sentryLastCaptured.count > 500 {
-    let cutoff = now.addingTimeInterval(-sentryDedupWindow)
-    sentryLastCaptured = sentryLastCaptured.filter { $0.value > cutoff }
-  }
-  return true
 }
 
-/// Log an error and capture it in Sentry
-func logError(_ message: String, error: Error? = nil) {
+/// Log an error to stdout and the local log file (plus the beta diagnostics trail).
+func logError(
+  _ message: String,
+  error: Error? = nil,
+  context: DesktopErrorDiagnosticContext? = nil,
+  fileID: StaticString = #fileID,
+  function: StaticString = #function
+) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(error.map { "\(message): \($0.localizedDescription)" } ?? message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let errorDesc = error?.localizedDescription ?? ""
   let fullMessage = error != nil ? "\(message): \(errorDesc)" : message
@@ -369,43 +450,12 @@ func logError(_ message: String, error: Error? = nil) {
   print(line)
   fflush(stdout)
 
-  if !isDevBuild {
-    let breadcrumb = Breadcrumb(level: .error, category: "error")
-    breadcrumb.message = fullMessage
-    SentrySDK.addBreadcrumb(breadcrumb)
-  }
-
-  // Always persist locally; only the Sentry capture is filtered/rate-limited below.
   appendToLogFile(line)
 
-  // Transient network/IO errors (offline, timeouts, cancellations, socket resets)
-  // are not actionable bugs — keep them as local logs + breadcrumbs only.
-  if isNonActionableTransient(error) { return }
-
-  guard !isDevBuild else { return }
-
-  // Collapse repeated identical errors so a single root cause doesn't flood Sentry.
-  guard shouldCaptureToSentry(fullMessage) else { return }
-
-  // Capture error context in Sentry without passing the raw Swift Error object.
-  // Some Swift-native error payloads can crash inside Sentry's reflection path.
-  if let error = error {
-    let nsError = error as NSError
-    let errorType = String(reflecting: type(of: error))
-    SentrySDK.capture(message: fullMessage) { scope in
-      scope.setLevel(.error)
-      scope.setContext(
-        value: [
-          "message": message,
-          "error_type": errorType,
-          "error_domain": nsError.domain,
-          "error_code": nsError.code,
-          "localized_description": errorDesc,
-        ], key: "app_context")
-    }
-  } else {
-    SentrySDK.capture(message: fullMessage) { scope in
-      scope.setLevel(.error)
-    }
-  }
+  let enhancedBetaDiagnostics = BetaEnhancedDiagnosticsConfiguration.isEnabled
+  DesktopDiagnosticsManager.shared.recordBetaLogError(
+    message: message,
+    error: error,
+    failureDiagnostics: context?.values,
+    enabled: enhancedBetaDiagnostics)
 }

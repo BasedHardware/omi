@@ -9,10 +9,11 @@ testing.import_isolation.load_module_fresh.
 
 import os
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from google.api_core import retry as api_retry
 
 from testing.import_isolation import load_module_fresh, stub_modules
 
@@ -22,9 +23,21 @@ _BACKEND = Path(__file__).resolve().parents[2]
 @pytest.fixture(scope="module")
 def users_db():
     """Load a fresh database.users against stubbed database._client + firestore chain."""
+    # Resolve the import-pure codec before this fixture closes SDK package paths.
+    from database import transcript_pointer
+
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
+    client_stub.delete_collection_recursive = MagicMock(name="delete_collection_recursive")
     client_stub.document_id_from_seed = MagicMock(name="document_id_from_seed")
+    client_stub.get_firestore_client = MagicMock(name="get_firestore_client", return_value=client_stub.db)
+    client_stub.get_customer_firestore_client = MagicMock(
+        name="get_customer_firestore_client", return_value=client_stub.db
+    )
+    client_stub.get_data_plane_firestore_client = MagicMock(
+        name="get_data_plane_firestore_client", return_value=client_stub.db
+    )
+    client_stub.data_plane_db = client_stub.db
 
     firestore_stub = ModuleType("google.cloud.firestore")
     google_pkg = ModuleType("google")
@@ -40,14 +53,18 @@ def users_db():
     google_exceptions_stub.NotFound = NotFound
 
     firestore_stub.transactional = lambda func: func
+    firestore_stub.DELETE_FIELD = object()
+    firestore_stub.Increment = MagicMock()
 
     fv1_stub = ModuleType("google.cloud.firestore_v1")
     fv1_stub.FieldFilter = MagicMock()
     fv1_stub.transactional = lambda func: func
 
     fakes = {
+        "database.transcript_pointer": transcript_pointer,
         "database._client": client_stub,
         "google": google_pkg,
+        "google.api_core.retry": api_retry,
         "google.cloud": google_cloud_pkg,
         "google.cloud.firestore": firestore_stub,
         "google.cloud.exceptions": google_exceptions_stub,
@@ -77,6 +94,7 @@ class _FakePersonRef:
     def __init__(self, data, exists=True):
         self._data = data
         self._exists = exists
+        self.parent = SimpleNamespace(parent=MagicMock())
 
     def get(self, transaction=None):
         return _FakeSnapshot(self._data, exists=self._exists)
@@ -95,6 +113,15 @@ class _FakeTransaction:
     def update(self, person_ref, update_data):
         self.updated_ref = person_ref
         self.updated_data = update_data
+
+    def set(self, person_ref, update_data, merge=False):
+        if set(update_data) == {'generation'}:
+            self.generation_ref = person_ref
+            self.generation_data = update_data
+        else:
+            self.updated_ref = person_ref
+            self.updated_data = update_data
+            self.merge = merge
 
     def _clean_up(self):
         self._id = None
@@ -117,7 +144,7 @@ def test_add_sample_transaction_pads_transcripts_for_v1_samples(users_db):
     person_ref = _FakePersonRef(person_data)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "sample-c.wav",
@@ -148,7 +175,7 @@ def test_add_sample_transaction_already_aligned_transcripts(users_db):
     person_ref = _FakePersonRef(person_data)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "sample-c.wav",
@@ -170,6 +197,24 @@ def test_add_sample_transaction_already_aligned_transcripts(users_db):
     assert transaction.updated_data["speech_samples_version"] == 3
 
 
+def test_byok_activation_replaces_existing_provider_fingerprints(users_db):
+    user_ref = _FakePersonRef(
+        {'byok': {'fingerprints': {'openai': 'openai-fingerprint', 'gemini': 'gemini-fingerprint'}}}
+    )
+    transaction = _FakeTransaction()
+
+    users_db._set_byok_active_transaction(transaction, user_ref, {'openrouter': 'openrouter-fingerprint'})
+
+    assert transaction.updated_ref is user_ref
+    assert transaction.merge is True
+    fingerprints = transaction.updated_data['byok']['fingerprints']
+    assert fingerprints['openrouter'] == 'openrouter-fingerprint'
+    assert fingerprints['openai'] is users_db.firestore.DELETE_FIELD
+    assert fingerprints['gemini'] is users_db.firestore.DELETE_FIELD
+    assert set(fingerprints) == {'openrouter', 'openai', 'gemini'}
+    assert transaction.updated_data['byok']['active'] is True
+
+
 def test_add_sample_transaction_max_samples_reached(users_db):
     person_data = {
         "speech_samples": ["a.wav", "b.wav"],
@@ -178,7 +223,7 @@ def test_add_sample_transaction_max_samples_reached(users_db):
     person_ref = _FakePersonRef(person_data)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "c.wav",
@@ -194,7 +239,7 @@ def test_add_sample_transaction_person_not_found(users_db):
     person_ref = _FakePersonRef({}, exists=False)
     transaction = _FakeTransaction()
 
-    result = users_db._add_sample_transaction(
+    result = users_db.add_sample_transaction(
         transaction,
         person_ref,
         "sample-x.wav",

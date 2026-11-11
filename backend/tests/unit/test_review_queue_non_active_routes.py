@@ -111,14 +111,19 @@ def test_review_queue_reject_persists_non_active_route_store_outcome(review_queu
     outcome = captured[0]
     assert outcome.uid == "u1"
     assert outcome.route == NonActiveRoute.reject
-    assert outcome.idempotency_key == "review_queue:review_1:reject"
-    assert outcome.source_ids == ["commit_src", "conv_1", "ev_1", "fact_1", "review_1", "stm_1"]
-    assert outcome.reason == "not true"
-    assert outcome.run_id == "review_queue:review_1"
+    assert outcome.idempotency_key.startswith("review_queue:") and outcome.idempotency_key.endswith(":reject")
+    assert "review_1" not in outcome.idempotency_key
+    assert len(outcome.source_ids) == 1 and len(outcome.source_ids[0]) == 64
+    assert "review_1" not in outcome.source_ids[0]
+    assert outcome.reason == "review_queue_reject"
+    assert outcome.run_id.startswith("review_queue:") and "review_1" not in outcome.run_id
     assert outcome.patch_id is None
     assert outcome.audit_metadata["route_store_source"] == "review_queue"
     assert outcome.audit_metadata["decision"] == "reject"
     assert outcome.audit_metadata["resolution_commit_id"] == "commit_reject"
+    assert "review_id" not in outcome.audit_metadata
+    assert "fact_id" not in outcome.audit_metadata
+    assert "source_commit_id" not in outcome.audit_metadata
 
 
 def test_review_queue_timeout_drop_persists_skip_route_without_memory_commit(review_queue, monkeypatch):
@@ -140,7 +145,8 @@ def test_review_queue_timeout_drop_persists_skip_route_without_memory_commit(rev
     assert len(captured) == 1
     outcome = captured[0]
     assert outcome.route == NonActiveRoute.skip
-    assert outcome.idempotency_key == "review_queue:review_1:drop"
-    assert outcome.reason == "review_timeout"
+    assert outcome.idempotency_key.startswith("review_queue:") and outcome.idempotency_key.endswith(":drop")
+    assert "review_1" not in outcome.idempotency_key
+    assert outcome.reason == "review_queue_drop"
     assert outcome.audit_metadata["decision"] == "drop"
     assert outcome.audit_metadata["route_store_source"] == "review_queue"

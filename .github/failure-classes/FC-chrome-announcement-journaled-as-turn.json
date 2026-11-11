@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-chrome-announcement-journaled-as-turn",
+  "violated_contract": "A presentation-only announcement whose content already owns a dedicated transcript surface must not enter the chat journal. The daily recap announcement routed through generic notification delivery with the default assistant identity, whose derived kind (.functional) journals: the recap became a bell-card turn in the transcript — a truncated, stat-less duplicate of the dedicated ChatDailyRecapRow day boundary the thread already renders, against INV-CHAT-1 (the recap is chrome, not a turn).",
+  "canonical_prevention": "Every producer that must never journal carries a dedicated ProactiveNotificationKind whose isJournaled is false and passes its own assistantId through delivery, so the floating bar's kind derivation lands on it. The journaling gate stays single (persistNotificationMessageIfNeeded consulting kind.isJournaled), and a producer-identity test pins each never-journaled producer's mapping.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift",
+    "desktop/macos/Desktop/Tests/ProactiveNotificationKindTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MainWindow/Dashboard/**",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/**"
+  ],
+  "status": "open"
+}

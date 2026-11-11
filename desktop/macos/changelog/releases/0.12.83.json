@@ -1,0 +1,7 @@
+{
+  "version": "0.12.83",
+  "date": "2026-07-19",
+  "changes": [
+    "Improved beta chat recovery when authentication fault checks run"
+  ]
+}

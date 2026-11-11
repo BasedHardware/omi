@@ -111,7 +111,7 @@ class BleDisconnectEvent {
   /// RSSI trajectory over the ~15s before this event. One of:
   ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
   ///   "sudden"  — signal stable then link died (interference/stall/device off)
-  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "gap"     — no recent RSSI samples (radio read unavailable)
   ///   "unknown" — insufficient samples to classify
   /// Empty string on legacy records written before this field existed.
   final String rssiTrend;
@@ -148,11 +148,20 @@ class BleDeviceDiagnostics {
   /// silent-failure path separately from established-then-dropped disconnects.
   final int failToConnectCount;
 
+  /// BLE bytes consumed by native offline writers since the app most recently
+  /// entered the background. These packets intentionally never reach Dart.
+  final int nativeBackgroundBytesConsumed;
+
+  /// BLE notification packets represented by [nativeBackgroundBytesConsumed].
+  final int nativeBackgroundPacketsConsumed;
+
   BleDeviceDiagnostics({
     required this.disconnectHistory,
     required this.reconnectionCount,
     required this.connectedAt,
     required this.failToConnectCount,
+    required this.nativeBackgroundBytesConsumed,
+    required this.nativeBackgroundPacketsConsumed,
   });
 }
 
@@ -167,6 +176,10 @@ abstract class BleHostApi {
 
   @SwiftFunction('manageDevice(uuid:requiresBond:)')
   void manageDevice(String uuid, bool requiresBond);
+
+  /// Saved pairing authorizes cold-start retries; false restores legacy policy.
+  @SwiftFunction('configureSavedReconnect(uuid:enabled:)')
+  void configureSavedReconnect(String uuid, bool enabled);
 
   @SwiftFunction('unmanageDevice(uuid:)')
   void unmanageDevice(String uuid);
@@ -184,11 +197,16 @@ abstract class BleHostApi {
   @SwiftFunction('writeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:data:)')
   void writeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List data);
 
+  @async
   @SwiftFunction('subscribeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
   void subscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid);
 
   @SwiftFunction('unsubscribeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
   void unsubscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid);
+
+  /// iOS Omi ingress recovery; Android leaves this cut disabled.
+  @SwiftFunction('setCaptureAuthorized(uuid:authorized:)')
+  void setCaptureAuthorized(String uuid, bool authorized);
 
   // State
   @SwiftFunction('getBluetoothState()')
@@ -214,6 +232,11 @@ abstract class BleHostApi {
   @SwiftFunction('getDeviceDiagnostics(uuid:)')
   BleDeviceDiagnostics getDeviceDiagnostics(String uuid);
 
+  /// Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads.
+  @async
+  @SwiftFunction('getExtendedDeviceDiagnostics(uuid:)')
+  String getExtendedDeviceDiagnostics(String uuid);
+
   @async
   @SwiftFunction('getBatteryHistory(uuid:)')
   List<BleBatteryPoint> getBatteryHistory(String uuid);
@@ -232,6 +255,8 @@ abstract class BleHostApi {
 abstract class BleFlutterApi {
   void onBluetoothStateChanged(String state);
 
+  void onSavedReconnect(String peripheralUuid, int attempt, String result, int disconnectedMs);
+
   void onPeripheralDiscovered(BlePeripheral peripheral);
 
   void onDeviceReady(String peripheralUuid, List<BleService> services);
@@ -249,9 +274,16 @@ abstract class BleFlutterApi {
 
   void onStateRestored(List<String> peripheralUuids);
 
+  /// Native ingress evidence and bounded recovery. Contains no audio payload.
+  void onCaptureHealth(String peripheralUuid, String snapshot);
+
   /// Native batch writer finalized a recording file (rotation / gap / stop) so
   /// Dart can rescan the recordings dir without waiting for a disconnect.
   void onBatchRecordingFinalized(String fileName);
+
+  /// Android `startScan` returned before discovery started.
+  /// `reason` is `no_adapter`, `bluetooth_off`, `nearby_devices_denied`, or `scanner_unavailable`.
+  void onScanBlocked(String reason);
 }
 
 // =============================================================================
@@ -264,6 +296,14 @@ class RayBanMetaGlasses {
   final String name;
 
   RayBanMetaGlasses({required this.id, required this.name});
+}
+
+/// A Bluetooth Hands-Free Profile input exposed by iOS.
+class BluetoothHfpInput {
+  final String uid;
+  final String name;
+
+  BluetoothHfpInput({required this.uid, required this.name});
 }
 
 /// Dart → native. Camera/photo capture goes through the Meta Wearables Device
@@ -318,8 +358,8 @@ abstract class RayBanMetaHostAPI {
 
   /// Starts capturing the glasses microphone over the Bluetooth HFP route and
   /// streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
-  @SwiftFunction('startAudioCapture()')
-  void startAudioCapture();
+  @SwiftFunction('startAudioCapture(inputUid:)')
+  void startAudioCapture(String? inputUid);
 
   @SwiftFunction('stopAudioCapture()')
   void stopAudioCapture();
@@ -328,10 +368,11 @@ abstract class RayBanMetaHostAPI {
   @SwiftFunction('isGlassesAudioRouteActive()')
   bool isGlassesAudioRouteActive();
 
-  /// Bluetooth HFP input port names currently available, for the audio-only
-  /// fallback when the DAT SDK is not part of this build.
-  @SwiftFunction('getBluetoothHfpInputNames()')
-  List<String> getBluetoothHfpInputNames();
+  /// Bluetooth HFP input ports currently available, for the audio-only
+  /// fallback when the DAT SDK is not part of this build. The UID is the
+  /// stable identity; the user-visible name may change.
+  @SwiftFunction('getBluetoothHfpInputs()')
+  List<BluetoothHfpInput> getBluetoothHfpInputs();
 
   /// Starts the DAT camera stream session so photo capture is ready. While
   /// active the glasses' capture LED is on (hardware-enforced by Meta).

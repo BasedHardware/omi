@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DESKTOP_SOURCES = REPO_ROOT / "desktop" / "macos" / "Desktop" / "Sources"
@@ -51,7 +52,7 @@ def test_desktop_importers_pair_legacy_payloads_with_import_evidence_calls():
 
 def test_import_evidence_client_targets_import_endpoint():
     source = "\n".join(path.read_text(encoding="utf-8") for path in sorted(DESKTOP_SOURCES.rglob("APIClient*.swift")))
-    assert 'post("v3/memory-imports/batch"' in source
+    assert re.search(r'post\(\s*"v3/memory-imports/batch"', source)
     assert "func createMemoryImportBatch" in source
 
 

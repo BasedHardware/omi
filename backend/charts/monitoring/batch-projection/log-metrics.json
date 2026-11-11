@@ -1,0 +1,50 @@
+[
+  {
+    "name": "omi_pipeline_upload_admission_503",
+    "description": "Backend-sync upload-admission 266-byte 503 size class; custody-wait proxy, not response body attribution. Alert-only.",
+    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.project_id=\"based-hardware\" AND resource.labels.service_name=\"backend-sync\" AND logName=\"projects/based-hardware/logs/run.googleapis.com%2Frequests\" AND httpRequest.requestMethod=\"POST\" AND httpRequest.requestUrl=~\"^https?://[^/]+/v2/sync-local-files/?([?].*)?$\" AND httpRequest.status=503 AND httpRequest.responseSize=266",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  },
+  {
+    "name": "omi_pipeline_firestore_contention_exhausted",
+    "description": "FirestoreContentionExhausted log entries on batch sync/integration services. No IDs or free-text labels. Alert-only.",
+    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.project_id=\"based-hardware\" AND resource.labels.service_name=(\"backend-sync\" OR \"backend-sync-backfill\" OR \"backend-integration\") AND (textPayload:\"FirestoreContentionExhausted\" OR jsonPayload.message:\"FirestoreContentionExhausted\")",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  },
+  {
+    "name": "omi_pipeline_owner_drain_advanced",
+    "description": "Advanced rows per completed serving or dedicated-pump owner_drain turn, including zero-progress turns. _sum gives rows, _count gives turns. Alert-only.",
+    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.project_id=\"based-hardware\" AND resource.labels.service_name=(\"backend-sync\" OR \"backend-sync-backfill\" OR \"backend-integration\" OR \"backend-projection-pump\") AND textPayload:\"event=batch_projection action=owner_drain outcome=turn \"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "DISTRIBUTION",
+      "unit": "1"
+    },
+    "valueExtractor": "REGEXP_EXTRACT(textPayload, \" advanced=([0-9]+) \")",
+    "bucketOptions": {
+      "exponentialBuckets": {
+        "numFiniteBuckets": 20,
+        "growthFactor": 2,
+        "scale": 1
+      }
+    }
+  },
+  {
+    "name": "omi_pipeline_owner_drain_claim_busy",
+    "description": "Completed serving or dedicated-pump owner_drain turns ending stop=claim_busy; denominator is advanced distribution _count. Alert-only.",
+    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.project_id=\"based-hardware\" AND resource.labels.service_name=(\"backend-sync\" OR \"backend-sync-backfill\" OR \"backend-integration\" OR \"backend-projection-pump\") AND textPayload:\"event=batch_projection action=owner_drain outcome=turn \" AND textPayload=~\" stop=claim_busy([[:space:]]|$)\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    }
+  }
+]

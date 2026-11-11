@@ -1,0 +1,8 @@
+{
+  "version": "0.12.235",
+  "date": "2026-08-28",
+  "changes": [
+    "Fixed the main window occasionally ignoring clicks after reopening",
+    "Fixed the post-rating referral button so its label remains readable"
+  ]
+}

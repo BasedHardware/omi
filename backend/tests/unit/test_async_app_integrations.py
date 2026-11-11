@@ -4,6 +4,8 @@ Verifies that trigger_realtime_audio_bytes and trigger_realtime_integrations
 use asyncio.gather + httpx instead of Thread+join + requests.
 """
 
+import inspect
+import logging
 import os
 import sys
 import types
@@ -21,6 +23,7 @@ _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 _database_stubs = [
     "database",
     "database._client",
+    "database.account_deletion_marker",
     "database.mem_db",
     "database.redis_db",
     "database.memories",
@@ -48,10 +51,10 @@ _utils_stubs = [
     "utils.llm",
     "utils.llm.clients",
     "utils.llm.proactive_notification",
+    "utils.llm.temporal",
     "utils.llm.usage_tracker",
     "utils.llms",
     "utils.llms.memory",
-    "utils.mentor_notifications",
     "utils.log_sanitizer",
     "utils.http_client",
     "utils.subscription",
@@ -116,6 +119,9 @@ _db_pkg = types.ModuleType("database")
 _db_pkg.__path__ = [os.path.join(_BACKEND_DIR, "database")]
 _install_module("database", _db_pkg)
 _install_module("database._client", MagicMock())
+_deletion_marker_stub = types.ModuleType("database.account_deletion_marker")
+_deletion_marker_stub.account_deletion_blocks_user_work = lambda _uid: False
+_install_module("database.account_deletion_marker", _deletion_marker_stub)
 
 for submod in [
     "redis_db",
@@ -150,6 +156,7 @@ sys.modules["database.redis_db"].set_proactive_noti_sent_at = MagicMock()
 sys.modules["database.redis_db"].get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
 sys.modules["database.redis_db"].incr_daily_notification_count = MagicMock()
 sys.modules["database.redis_db"].get_daily_notification_count = MagicMock(return_value=0)
+sys.modules["database.redis_db"].publish_proactive_message = MagicMock()
 sys.modules["database.vector_db"].query_vectors_by_metadata = MagicMock(return_value=[])
 sys.modules["database.apps"].record_app_usage = MagicMock()
 sys.modules["database.apps"].get_app_by_id_db = MagicMock(return_value=None)
@@ -168,6 +175,13 @@ sys.modules["database.webhook_health"].disable_app_in_firestore = MagicMock()
 sys.modules["database.webhook_health"].record_dev_webhook_failure = MagicMock(return_value=False)
 sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
 sys.modules["database.webhook_health"]._DEV_FAILURE_THRESHOLD = 100
+# Graduated-response action codes; mirror database.webhook_health. utils.app_integrations
+# imports these by name, so the stub has to carry them or the module fails to import.
+sys.modules["database.webhook_health"].ACTION_NONE = 0
+sys.modules["database.webhook_health"].ACTION_WARN_DAY1 = 1
+sys.modules["database.webhook_health"].ACTION_WARN_DAY2 = 2
+sys.modules["database.webhook_health"].ACTION_DISABLE = 3
+sys.modules["database.webhook_health"].ACTION_REDIRECT_NOT_FOLLOWED = 4
 
 _utils_pkg = sys.modules.get("utils")
 if _utils_pkg is None:
@@ -182,6 +196,9 @@ for name in _utils_stubs:
     _install_module(name, module)
 
 sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
+# The real utils.llm package is imported as a package (utils.llm.temporal).
+# A ModuleType stub without __path__ makes that import fail collection.
+sys.modules["utils.llm"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "llm")]
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
@@ -189,15 +206,24 @@ sys.modules["utils.notifications"].send_notification_async = AsyncMock()
 sys.modules["utils.conversations.factory"].deserialize_conversations = MagicMock(return_value=[])
 sys.modules["utils.conversations.render"].conversations_to_string = MagicMock(return_value="")
 sys.modules["utils.conversations.render"].conversation_to_dict = MagicMock(return_value={})
+
+
+def _stub_redact_conversation_for_integration(conv):
+    redacted = dict(conv)
+    redacted.pop('geolocation', None)
+    return redacted
+
+
+sys.modules["utils.conversations.render"].redact_conversation_for_integration = (
+    _stub_redact_conversation_for_integration
+)
 sys.modules["utils.conversations.render"].populate_speaker_names = MagicMock()
 sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
 sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)
 sys.modules["utils.llm.clients"].generate_embedding = MagicMock(return_value=[0] * 3072)
 sys.modules["utils.llm.clients"].get_llm = MagicMock()
-sys.modules["utils.mentor_notifications"].process_mentor_notification = MagicMock(return_value=None)
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
-sys.modules["utils.subscription"].is_trial_paywalled = MagicMock(return_value=False)
 
 # Stub proactive_notification named imports
 _proactive_mod = sys.modules["utils.llm.proactive_notification"]
@@ -207,6 +233,11 @@ _proactive_mod.validate_notification = MagicMock(return_value=False)
 _proactive_mod.FREQUENCY_TO_BASE_THRESHOLD = {1: 0.5, 2: 0.4, 3: 0.3}
 _proactive_mod.MAX_DAILY_NOTIFICATIONS = 10
 _proactive_mod.Record = MagicMock
+
+# Stub the current-date helper imported by utils.app_integrations. Keeping it
+# inside this harness avoids pulling the real timezone/database path into this
+# otherwise hermetic unit test.
+sys.modules["utils.llm.temporal"].current_date_for_uid = MagicMock(return_value="2026-01-01")
 
 # Stub usage tracker
 _usage_mod = sys.modules["utils.llm.usage_tracker"]
@@ -245,6 +276,12 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
     _http_mod.get_webhook_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
     _http_mod.latest_wins_start = MagicMock(return_value=1)
     _http_mod.latest_wins_check = MagicMock(return_value=True)
+    _http_mod.safe_request_target = MagicMock(side_effect=lambda url: (url, {'headers': {}, 'extensions': {}}))
+
+    class _UnsafeWebhookURLError(Exception):
+        pass
+
+    _http_mod.UnsafeWebhookURLError = _UnsafeWebhookURLError
 
 # Stub executors — must use real ThreadPoolExecutor because asyncio's
 # run_in_executor calls executor.submit() and wraps the returned Future.
@@ -291,6 +328,33 @@ class TestDurableExternalIntegrationFanout:
     async def test_finalization_delivery_sends_the_durable_idempotency_key(self):
         app = _make_app('app-1', 'https://app.test/hook')
         app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(
+            id='conversation-1', discarded=False, is_locked=False, source=None, client_platform='ios'
+        )
+        response = MagicMock(status_code=200)
+        response.json.return_value = {}
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+        attempt = MagicMock()
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
+            app_integrations, 'ClientJourneyAttempt', return_value=attempt
+        ) as journey_factory:
+            await app_integrations.trigger_external_integrations(
+                'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
+            )
+
+        assert client.post.call_args.kwargs['headers'] == {'X-Omi-Idempotency-Key': 'fanout-1'}
+        journey_factory.assert_called_once_with('app_webhook_delivery', 'mobile_ios')
+        attempt.succeed.assert_called_once_with()
+        attempt.fail.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_creation_webhook_payload_strips_geolocation(self):
+        app = _make_app('app-1', 'https://app.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
         conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
         response = MagicMock(status_code=200)
         response.json.return_value = {}
@@ -299,28 +363,162 @@ class TestDurableExternalIntegrationFanout:
 
         with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
             app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(
+            app_integrations,
+            'conversation_to_dict',
+            return_value={'id': 'conversation-1', 'geolocation': {'latitude': 1.0, 'longitude': 2.0}},
         ):
-            await app_integrations.trigger_external_integrations(
-                'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
-            )
+            await app_integrations.trigger_external_integrations('uid-1', conversation)
 
-        assert client.post.call_args.kwargs['headers'] == {'X-Omi-Idempotency-Key': 'fanout-1'}
+        payload = client.post.call_args.kwargs['json']
+        assert 'geolocation' not in payload
 
     @pytest.mark.asyncio
     async def test_finalization_delivery_failure_remains_retryable(self):
         app = _make_app('app-1', 'https://app.test/hook')
         app.triggers_on_conversation_creation.return_value = True
-        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        conversation = types.SimpleNamespace(
+            id='conversation-1', discarded=False, is_locked=False, source=None, client_platform='ios'
+        )
         response = MagicMock(status_code=503, text='unavailable')
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+        attempt = MagicMock()
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
+            app_integrations, 'ClientJourneyAttempt', return_value=attempt
+        ), pytest.raises(
+            app_integrations.ExternalIntegrationFanoutError
+        ):
+            await app_integrations.trigger_external_integrations(
+                'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
+            )
+
+        attempt.fail.assert_called_once_with('upstream_rejected')
+        attempt.succeed.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('status_code', [400, 401, 404])
+    async def test_permanent_delivery_rejection_does_not_fail_finalization(self, status_code):
+        """A user's broken app (expired token, deleted target) must not strand the conversation."""
+        app = _make_app('app-1', 'https://app.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        response = MagicMock(status_code=status_code, text='rejected')
         client = AsyncMock()
         client.post = AsyncMock(return_value=response)
 
         with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
             app_integrations, 'get_webhook_client', return_value=client
-        ), pytest.raises(app_integrations.ExternalIntegrationFanoutError):
-            await app_integrations.trigger_external_integrations(
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}):
+            messages = await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
+
+        assert messages == []
+        assert client.post.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_retryable_delivery_failure_is_dropped_on_the_last_attempt(self):
+        """A webhook stuck on 5xx must not dead-letter the user's conversation.
+
+        Webhook health only auto-disables an endpoint after 72h, and the
+        terminal attempt dead-letters the job whatever this delivery does, so
+        keeping it retryable only costs the conversation its fanout.
+        """
+        app = _make_app('app-1', 'https://app.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        response = MagicMock(status_code=530, text='origin unreachable')
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
+            app_integrations, 'record_fallback'
+        ) as fallback:
+            messages = await app_integrations.trigger_external_integrations(
+                'uid-1',
+                conversation,
+                idempotency_key='fanout-1',
+                require_delivery=True,
+                last_delivery_attempt=True,
+            )
+
+        assert messages == []
+        assert fallback.call_args.kwargs == {
+            'component': 'webhook',
+            'from_mode': 'durable_delivery',
+            'to_mode': 'dropped',
+            'reason': 'provider_5xx',
+            'outcome': 'exhausted',
+        }
+
+
+class TestSSRFConfigRejection:
+    """A developer-configured webhook URL that resolves to a non-public
+    (private/loopback/link-local/metadata) address is a *configuration*
+    error, not a delivery failure. It must be rejected silently per-app
+    without recording a webhook failure, tripping the circuit breaker, or
+    — on the durable path — raising ExternalIntegrationFanoutError (which
+    would retry the whole batch and punish a misconfigured app's
+    neighbours)."""
+
+    @pytest.mark.asyncio
+    async def test_durable_fanout_private_url_is_config_error_not_delivery_failure(self):
+        app = _make_app('app-1', 'https://internal.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        client = AsyncMock()
+        cb = MagicMock()
+        cb.allow_request.return_value = True
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(
+            app_integrations, 'safe_request_target', side_effect=app_integrations.UnsafeWebhookURLError('private')
+        ), patch.object(
+            app_integrations, 'get_webhook_circuit_breaker', return_value=cb
+        ), patch.object(
+            app_integrations, 'record_app_webhook_failure'
+        ) as record_failure:
+            # Must not raise ExternalIntegrationFanoutError even with require_delivery.
+            result = await app_integrations.trigger_external_integrations(
+                'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
+            )
+
+        assert result == []  # no app message produced
+        client.post.assert_not_called()  # never reached the network
+        cb.record_failure.assert_not_called()  # circuit breaker untouched
+        cb.allow_request.assert_not_called()  # rejected before the breaker was even consulted
+        record_failure.assert_not_called()  # no webhook-health failure recorded
+
+    @pytest.mark.asyncio
+    async def test_realtime_audio_private_url_does_not_trip_breaker(self):
+        app = _make_app('a1', 'https://internal.test/hook', triggers_audio=True)
+        client = AsyncMock()
+        cb = MagicMock()
+        cb.allow_request.return_value = True
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(
+            app_integrations, 'safe_request_target', side_effect=app_integrations.UnsafeWebhookURLError('private')
+        ), patch.object(
+            app_integrations, 'get_webhook_circuit_breaker', return_value=cb
+        ), patch.object(
+            app_integrations, 'record_app_webhook_failure'
+        ) as record_failure:
+            result = await app_integrations.trigger_realtime_audio_bytes('uid-1', 8000, bytearray(b'\x00' * 10))
+
+        assert result == {}
+        client.post.assert_not_called()
+        cb.record_failure.assert_not_called()
+        cb.allow_request.assert_not_called()
+        record_failure.assert_not_called()
 
 
 class TestAsyncTriggerRealtimeAudioBytes:
@@ -351,6 +549,32 @@ class TestAsyncTriggerRealtimeAudioBytes:
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
 
         assert mock_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_success_status_is_debug_and_http_error_stays_warning(self, caplog):
+        app = _make_app("a1", "https://app1.test/hook", triggers_audio=True)
+        ok = MagicMock()
+        ok.status_code = 200
+        failed = MagicMock()
+        failed.status_code = 502
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=[ok, failed])
+
+        with caplog.at_level(logging.DEBUG, logger="utils.app_integrations"):
+            with patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
+                app_integrations, "get_webhook_client", return_value=mock_client
+            ):
+                await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
+                await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
+
+        status_records = [record for record in caplog.records if "status:" in record.getMessage()]
+        assert any(
+            record.levelno == logging.DEBUG and "status: 200" in record.getMessage() for record in status_records
+        )
+        assert any(
+            record.levelno == logging.WARNING and "status: 502" in record.getMessage() for record in status_records
+        )
+        assert not any(record.levelno == logging.INFO for record in status_records)
 
     @pytest.mark.asyncio
     async def test_audio_url_with_existing_query_string_uses_ampersand(self):
@@ -424,7 +648,13 @@ class TestAsyncTriggerRealtimeAudioBytes:
 
     @pytest.mark.asyncio
     async def test_no_threading_used(self):
-        """Verify threading.Thread is NOT used in the async path."""
+        """Verify realtime audio fan-out stays async (no threading import/use)."""
+        # Static tripwire on the real fan-out implementation (not the thin wrapper).
+        code = app_integrations._async_trigger_realtime_audio_bytes.__code__
+        assert "threading" not in code.co_names
+        assert "Thread" not in code.co_names
+        assert "gather_safe" in code.co_names
+
         app1 = _make_app("a1", "https://app1.test/hook", triggers_audio=True)
 
         mock_response = MagicMock()
@@ -435,9 +665,9 @@ class TestAsyncTriggerRealtimeAudioBytes:
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
             app_integrations, "get_webhook_client", return_value=mock_client
-        ), patch.object(app_integrations, "threading") as mock_threading:
+        ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00'))
-            mock_threading.Thread.assert_not_called()
+            mock_client.post.assert_awaited()
 
 
 class TestAudioBytesChunkedFanOut:
@@ -475,9 +705,7 @@ class TestAsyncTriggerRealtimeIntegrations:
     @pytest.mark.asyncio
     async def test_no_apps_returns_empty(self):
         """No apps and no mentor → empty result."""
-        with patch.object(app_integrations, "get_available_apps", return_value=[]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ):
+        with patch.object(app_integrations, "get_available_apps", return_value=[]):
             result = await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
         assert result == {}
 
@@ -496,8 +724,8 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client):
+            app_integrations, "get_webhook_client", return_value=mock_client
+        ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
         assert mock_client.post.call_count == 2
@@ -516,8 +744,8 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client), patch.object(
+            app_integrations, "get_webhook_client", return_value=mock_client
+        ), patch.object(
             app_integrations, "send_app_notification_async", new_callable=AsyncMock
         ) as mock_notify, patch.object(
             app_integrations, "add_app_message", return_value={"id": "msg-1"}
@@ -541,8 +769,8 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client):
+            app_integrations, "get_webhook_client", return_value=mock_client
+        ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], None)
 
         call_url = mock_client.post.call_args[0][0]

@@ -14,6 +14,8 @@ final class DeviceProviderTests: XCTestCase {
   private var defaultsToRemove: [UserDefaults] = []
 
   override func tearDown() async throws {
+    AnalyticsManager.shared.setDevicePairingTelemetryCaptureForTests(nil)
+    AnalyticsManager.shared.setDeviceConnectionTelemetryCaptureForTests(nil)
     for defaults in defaultsToRemove {
       removeDefaults(defaults)
     }
@@ -22,9 +24,9 @@ final class DeviceProviderTests: XCTestCase {
 
   func testLoadsPersistedPairedDeviceFromInjectedDefaults() {
     let defaults = makeDefaults()
-    defaults.set(testDevice.id, forKey: "pairedDeviceId")
-    defaults.set(testDevice.name, forKey: "pairedDeviceName")
-    defaults.set(testDevice.type.rawValue, forKey: "pairedDeviceType")
+    defaults.set(testDevice.id, forKey: .pairedDeviceId)
+    defaults.set(testDevice.name, forKey: .pairedDeviceName)
+    defaults.set(testDevice.type.rawValue, forKey: .pairedDeviceType)
     defer { removeDefaults(defaults) }
 
     let provider = makeProvider(defaults: defaults)
@@ -42,9 +44,72 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertTrue(provider.isConnected)
     XCTAssertEqual(provider.connectedDevice, testDevice)
     XCTAssertEqual(provider.pairedDevice, testDevice)
-    XCTAssertEqual(defaults.string(forKey: "pairedDeviceId"), testDevice.id)
-    XCTAssertEqual(defaults.string(forKey: "pairedDeviceName"), testDevice.name)
-    XCTAssertEqual(defaults.string(forKey: "pairedDeviceType"), testDevice.type.rawValue)
+    XCTAssertEqual(defaults.string(forKey: .pairedDeviceId), testDevice.id)
+    XCTAssertEqual(defaults.string(forKey: .pairedDeviceName), testDevice.name)
+    XCTAssertEqual(defaults.string(forKey: .pairedDeviceType), testDevice.type.rawValue)
+  }
+
+  func testFirstSuccessfulPairEmitsOnceAndReconnectOnlyRefreshesPersonProperties() async {
+    let defaults = makeDefaults()
+    defer { removeDefaults(defaults) }
+    var capturedEvents: [String] = []
+    var capturedEventProperties: [[String: Any]] = []
+    var capturedUserProperties: [[String: Any]] = []
+    AnalyticsManager.shared.setDevicePairingTelemetryCaptureForTests {
+      event, eventProperties, userProperties in
+      if let event {
+        capturedEvents.append(event)
+        capturedEventProperties.append(eventProperties)
+      }
+      capturedUserProperties.append(userProperties)
+    }
+    let provider = makeProvider(defaults: defaults)
+
+    await provider.connect(to: testDevice)
+    await provider.disconnect()
+    await provider.connect(to: testDevice)
+
+    XCTAssertEqual(capturedEvents, ["Device Paired"])
+    XCTAssertEqual(capturedEventProperties[0]["device_vendor"] as? String, "omi")
+    XCTAssertEqual(capturedEventProperties[0]["device_type"] as? String, "omi")
+    XCTAssertEqual(capturedEventProperties[0]["model"] as? String, "omi")
+    XCTAssertEqual(capturedEventProperties[0]["is_first_pair"] as? Bool, true)
+    XCTAssertEqual(capturedUserProperties.count, 2)
+    XCTAssertEqual(capturedUserProperties[0]["has_paired_device"] as? Bool, true)
+    XCTAssertEqual(capturedUserProperties[0]["paired_device_type"] as? String, "omi")
+    XCTAssertEqual(capturedUserProperties[0]["device_vendor"] as? String, "omi")
+    XCTAssertNotNil(capturedUserProperties[0]["first_paired_at"] as? String)
+    XCTAssertEqual(
+      capturedUserProperties[1]["first_paired_at"] as? String,
+      capturedUserProperties[0]["first_paired_at"] as? String
+    )
+  }
+
+  func testPersistedPairReconnectDoesNotEmitDevicePaired() async {
+    let defaults = makeDefaults()
+    defaults.set(testDevice.id, forKey: .pairedDeviceId)
+    defaults.set(testDevice.name, forKey: .pairedDeviceName)
+    defaults.set(testDevice.type.rawValue, forKey: .pairedDeviceType)
+    defer { removeDefaults(defaults) }
+    var capturedEventNames: [String] = []
+    var latestUserProperties: [String: Any] = [:]
+    AnalyticsManager.shared.setDevicePairingTelemetryCaptureForTests {
+      event, _, userProperties in
+      if let event {
+        capturedEventNames.append(event)
+      }
+      latestUserProperties = userProperties
+    }
+    let provider = makeProvider(defaults: defaults, autoReconnectEnabled: true)
+
+    provider.startReconnecting()
+    await waitUntil { provider.isConnected }
+    provider.stopReconnecting()
+
+    XCTAssertEqual(capturedEventNames, [])
+    XCTAssertEqual(latestUserProperties["has_paired_device"] as? Bool, true)
+    XCTAssertEqual(latestUserProperties["paired_device_type"] as? String, "omi")
+    XCTAssertEqual(latestUserProperties["device_vendor"] as? String, "omi")
   }
 
   func testFailedConnectionCleansUpTransientStateAndDoesNotPersistPairing() async {
@@ -72,7 +137,7 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertNil(provider.connectedDevice)
     XCTAssertNil(provider.activeConnection)
     XCTAssertNil(provider.pairedDevice)
-    XCTAssertNil(defaults.string(forKey: "pairedDeviceId"))
+    XCTAssertNil(defaults.string(forKey: .pairedDeviceId))
     XCTAssertEqual(provider.errorMessage, "Failed to connect: Connection failed: boom")
   }
 
@@ -99,7 +164,7 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertNil(provider.errorMessage)
   }
 
-  func testUnexpectedDisconnectFromActiveSessionClearsPresentationButKeepsPairing() async {
+  func testUnexpectedDisconnectFromActiveSessionClearsPresentationButKeepsPairing() async throws {
     var connection: FakeDeviceConnection?
     let provider = DeviceProvider(
       bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
@@ -117,7 +182,7 @@ final class DeviceProviderTests: XCTestCase {
     await provider.connect(to: testDevice)
     XCTAssertTrue(provider.isConnected)
 
-    let activeConnection = try! XCTUnwrap(connection)
+    let activeConnection = try XCTUnwrap(connection)
     activeConnection.delegate?.deviceConnection(
       activeConnection,
       didDisconnectUnexpectedly: testDevice
@@ -129,6 +194,62 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertEqual(provider.batteryLevel, -1)
     XCTAssertFalse(provider.isDeviceStorageSupported)
     XCTAssertEqual(provider.pairedDevice, testDevice)
+  }
+
+  func testUnexpectedDisconnectArmsReconnectNotification() async throws {
+    var connection: FakeDeviceConnection?
+    let provider = DeviceProvider(
+      bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
+      userDefaults: makeDefaults(),
+      notificationCenter: NotificationCenter(),
+      connectionFactory: { device, generation in
+        let created = FakeDeviceConnection(device: device, sessionGeneration: generation)
+        connection = created
+        return created
+      },
+      storageDataChecker: { nil },
+      autoReconnectEnabled: false
+    )
+
+    await provider.connect(to: testDevice)
+    let activeConnection = try XCTUnwrap(connection)
+    activeConnection.delegate?.deviceConnection(
+      activeConnection, didDisconnectUnexpectedly: testDevice)
+
+    XCTAssertTrue(
+      provider.hasScheduledDisconnectNotification,
+      "An unexpected disconnect should arm the reconnect prompt")
+  }
+
+  func testUnpairCancelsAndDoesNotArmReconnectNotification() async throws {
+    var connection: FakeDeviceConnection?
+    let provider = DeviceProvider(
+      bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
+      userDefaults: makeDefaults(),
+      notificationCenter: NotificationCenter(),
+      connectionFactory: { device, generation in
+        let created = FakeDeviceConnection(device: device, sessionGeneration: generation)
+        connection = created
+        return created
+      },
+      storageDataChecker: { nil },
+      autoReconnectEnabled: false
+    )
+
+    await provider.connect(to: testDevice)
+    // Simulate a drop that arms the "please reconnect" prompt...
+    let activeConnection = try XCTUnwrap(connection)
+    activeConnection.delegate?.deviceConnection(
+      activeConnection, didDisconnectUnexpectedly: testDevice)
+    XCTAssertTrue(provider.hasScheduledDisconnectNotification)
+
+    // ...then an intentional unpair must cancel it and not schedule a new one.
+    await provider.unpair()
+
+    XCTAssertFalse(
+      provider.hasScheduledDisconnectNotification,
+      "Intentional unpair must not tell the user to reconnect a device they removed")
+    XCTAssertNil(provider.pairedDevice)
   }
 
   func testLateDisconnectFromSupersededSessionDoesNotClearReplacement() async {
@@ -239,9 +360,9 @@ final class DeviceProviderTests: XCTestCase {
 
   func testStartReconnectingAttemptsPersistedPairingImmediately() async {
     let defaults = makeDefaults()
-    defaults.set(testDevice.id, forKey: "pairedDeviceId")
-    defaults.set(testDevice.name, forKey: "pairedDeviceName")
-    defaults.set(testDevice.type.rawValue, forKey: "pairedDeviceType")
+    defaults.set(testDevice.id, forKey: .pairedDeviceId)
+    defaults.set(testDevice.name, forKey: .pairedDeviceName)
+    defaults.set(testDevice.type.rawValue, forKey: .pairedDeviceType)
     defer { removeDefaults(defaults) }
     var attemptedDevices: [BtDevice] = []
     let provider = DeviceProvider(
@@ -288,6 +409,27 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertFalse(provider.isConnected)
   }
 
+  func testDisconnectAndUnpairEmitDeviceDisconnectedOnce() async {
+    let defaults = makeDefaults()
+    defer { removeDefaults(defaults) }
+    var events: [String] = []
+    AnalyticsManager.shared.setDeviceConnectionTelemetryCaptureForTests { events.append($0) }
+    let provider = makeProvider(defaults: defaults)
+
+    await provider.connect(to: testDevice)
+    await provider.disconnect()
+    XCTAssertEqual(events, ["Device Connected", "Device Disconnected"])
+
+    events.removeAll()
+    await provider.connect(to: testDevice)
+    await provider.unpair()
+    XCTAssertEqual(events, ["Device Connected", "Device Disconnected"])
+
+    events.removeAll()
+    await provider.unpair()
+    XCTAssertEqual(events, [], "Unpair of a disconnected device must not emit Device Disconnected")
+  }
+
   func testUnpairDisconnectsAndClearsPersistedPairing() async {
     let defaults = makeDefaults()
     defer { removeDefaults(defaults) }
@@ -315,9 +457,9 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertFalse(provider.isConnected)
     XCTAssertNil(provider.connectedDevice)
     XCTAssertNil(provider.pairedDevice)
-    XCTAssertNil(defaults.string(forKey: "pairedDeviceId"))
-    XCTAssertNil(defaults.string(forKey: "pairedDeviceName"))
-    XCTAssertNil(defaults.string(forKey: "pairedDeviceType"))
+    XCTAssertNil(defaults.string(forKey: .pairedDeviceId))
+    XCTAssertNil(defaults.string(forKey: .pairedDeviceName))
+    XCTAssertNil(defaults.string(forKey: .pairedDeviceType))
   }
 
   private var testDevice: BtDevice {

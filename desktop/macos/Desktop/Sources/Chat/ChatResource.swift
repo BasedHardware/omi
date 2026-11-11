@@ -2,9 +2,10 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
-enum ChatResourceOrigin: Equatable {
+enum ChatResourceOrigin: String, Equatable {
   case userAttachment
   case generatedArtifact
+  case conversationReference
 }
 
 /// Surface-neutral resource shown in chat. User attachments and agent artifacts
@@ -31,6 +32,40 @@ struct ChatResource: Identifiable, Equatable {
   let sessionId: String?
   let runId: String?
   let state: State
+  /// Typed source metadata for a conversation attached to a user turn. This
+  /// stays distinct from file URIs and generated-artifact identifiers while
+  /// sharing the journal resource lifecycle and transcript rendering path.
+  let conversationReference: ChatComposerReference?
+
+  init(
+    id: String,
+    origin: ChatResourceOrigin,
+    title: String,
+    subtitle: String?,
+    mimeType: String?,
+    thumbnailURL: String?,
+    imageData: Data?,
+    uri: String?,
+    artifactId: String?,
+    sessionId: String?,
+    runId: String?,
+    state: State,
+    conversationReference: ChatComposerReference? = nil
+  ) {
+    self.id = id
+    self.origin = origin
+    self.title = title
+    self.subtitle = subtitle
+    self.mimeType = mimeType
+    self.thumbnailURL = thumbnailURL
+    self.imageData = imageData
+    self.uri = uri
+    self.artifactId = artifactId
+    self.sessionId = sessionId
+    self.runId = runId
+    self.state = state
+    self.conversationReference = conversationReference
+  }
 
   var isImage: Bool {
     if let mimeType {
@@ -45,6 +80,9 @@ struct ChatResource: Identifiable, Equatable {
   }
 
   var canOpen: Bool {
+    if let conversationReference {
+      return !conversationReference.sourceID.isEmpty
+    }
     guard let fileURL else { return false }
     return FileManager.default.fileExists(atPath: fileURL.path)
   }
@@ -101,6 +139,42 @@ struct ChatResource: Identifiable, Equatable {
       runId: nil,
       state: state
     )
+  }
+
+  static func conversation(_ reference: ChatComposerReference) -> ChatResource {
+    ChatResource(
+      id: "reference:\(reference.id)",
+      origin: .conversationReference,
+      title: reference.displayTitle,
+      subtitle: reference.displaySubtitle,
+      mimeType: nil,
+      thumbnailURL: nil,
+      imageData: nil,
+      uri: nil,
+      artifactId: nil,
+      sessionId: nil,
+      runId: nil,
+      state: .ready,
+      conversationReference: reference
+    )
+  }
+
+  static func userMessageResources(
+    attachments: [ChatAttachment],
+    references: [ChatComposerReference]
+  ) -> [ChatResource] {
+    attachments.map(ChatResource.attachment) + references.map(ChatResource.conversation)
+  }
+
+  /// Re-attach in-memory image bytes, matched by resource id, from rows the
+  /// journal cannot carry them through (see `carryingImageData(from:)`).
+  static func carryingImageData(_ resources: [ChatResource], from local: [ChatResource]) -> [ChatResource] {
+    guard !resources.isEmpty, !local.isEmpty else { return resources }
+    // omi-collection-safety: explicit-non-trapping-merge -- duplicate local ids
+    // (a legacy row echoed twice) keep the first entry; ids are otherwise unique.
+    let localByID = Dictionary(
+      local.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    return resources.map { $0.carryingImageData(from: localByID[$0.id]) }
   }
 
   static func artifact(_ artifact: AgentArtifactProjection) -> ChatResource {
@@ -193,6 +267,37 @@ struct ChatResource: Identifiable, Equatable {
     return markingUnavailableOnDisk()
   }
 
+  /// Returns `self` with in-memory image bytes that this (replayed) resource
+  /// lost at the persistence boundary re-attached from a same-id local row.
+  ///
+  /// The journal and message metadata persist resource metadata only —
+  /// `imageData` is never encoded — so every replayed row arrives with nil
+  /// bytes even when the row it replaces was rendering its thumbnail from
+  /// memory. Without those bytes the tile falls back to the original file path
+  /// (which for a temp export may already be gone) or the server thumbnail,
+  /// and a sent attachment can go blank mid-session. The replay stays the
+  /// authority for every field it does carry; only the bytes come back.
+  func carryingImageData(from local: ChatResource?) -> ChatResource {
+    guard imageData == nil, let local, local.id == id, let bytes = local.imageData else {
+      return self
+    }
+    return ChatResource(
+      id: id,
+      origin: origin,
+      title: title,
+      subtitle: subtitle,
+      mimeType: mimeType,
+      thumbnailURL: thumbnailURL,
+      imageData: bytes,
+      uri: uri,
+      artifactId: artifactId,
+      sessionId: sessionId,
+      runId: runId,
+      state: state,
+      conversationReference: conversationReference
+    )
+  }
+
   func markingUnavailableOnDisk() -> ChatResource {
     ChatResource(
       id: id,
@@ -206,7 +311,8 @@ struct ChatResource: Identifiable, Equatable {
       artifactId: artifactId,
       sessionId: sessionId,
       runId: runId,
-      state: .failed(Self.unavailableOnDiskMessage)
+      state: .failed(Self.unavailableOnDiskMessage),
+      conversationReference: conversationReference
     )
   }
 
@@ -224,9 +330,24 @@ struct ChatResource: Identifiable, Equatable {
         let title = dict["title"] as? String
       else { return nil }
       let origin =
-        (dict["origin"] as? String) == "generatedArtifact"
-        ? ChatResourceOrigin.generatedArtifact
-        : ChatResourceOrigin.userAttachment
+        (dict["origin"] as? String).flatMap(ChatResourceOrigin.init(rawValue:))
+        ?? .userAttachment
+      let conversationReference: ChatComposerReference?
+      if origin == .conversationReference,
+        let rawKind = dict["referenceKind"] as? String,
+        let kind = ChatComposerReference.Kind(rawValue: rawKind),
+        let sourceID = dict["sourceID"] as? String
+      {
+        conversationReference = ChatComposerReference(
+          kind: kind,
+          sourceID: sourceID,
+          title: title,
+          preview: dict["preview"] as? String ?? "",
+          momentTimestampMs: dict["momentTimestampMs"] as? Int
+        )
+      } else {
+        conversationReference = nil
+      }
       return ChatResource(
         id: id,
         origin: origin,
@@ -239,7 +360,8 @@ struct ChatResource: Identifiable, Equatable {
         artifactId: dict["artifactId"] as? String,
         sessionId: dict["sessionId"] as? String,
         runId: dict["runId"] as? String,
-        state: persistenceState(from: dict["state"] as? String)
+        state: persistenceState(from: dict["state"] as? String),
+        conversationReference: conversationReference
       )
     }
   }
@@ -247,7 +369,7 @@ struct ChatResource: Identifiable, Equatable {
   private static func persistenceDictionary(for resource: ChatResource) -> [String: Any] {
     var dict: [String: Any] = [
       "id": resource.id,
-      "origin": resource.origin == .generatedArtifact ? "generatedArtifact" : "userAttachment",
+      "origin": resource.origin.rawValue,
       "title": resource.title,
       "state": persistenceStateString(resource.state),
     ]
@@ -260,6 +382,14 @@ struct ChatResource: Identifiable, Equatable {
     if let artifactId = resource.artifactId { dict["artifactId"] = artifactId }
     if let sessionId = resource.sessionId { dict["sessionId"] = sessionId }
     if let runId = resource.runId { dict["runId"] = runId }
+    if let reference = resource.conversationReference {
+      dict["referenceKind"] = reference.kind.rawValue
+      dict["sourceID"] = reference.sourceID
+      dict["preview"] = reference.preview
+      if let momentTimestampMs = reference.momentTimestampMs {
+        dict["momentTimestampMs"] = momentTimestampMs
+      }
+    }
     return dict
   }
 
@@ -341,12 +471,19 @@ struct ChatResourceStrip: View {
       // "d...ml" / "te...KB", which looked broken with 2+ artifacts.
       VStack(alignment: alignment, spacing: OmiSpacing.xs) {
         ForEach(resources) { resource in
-          ChatResourceCard(
-            resource: resource,
-            density: density,
-            onOpen: onOpen ?? ChatResourceActions.open,
-            onReveal: onReveal ?? ChatResourceActions.revealInFinder
-          )
+          if let reference = resource.conversationReference {
+            ChatConversationReferencePill(
+              reference: reference,
+              onOpen: { (onOpen ?? ChatResourceActions.open)(resource) }
+            )
+          } else {
+            ChatResourceCard(
+              resource: resource,
+              density: density,
+              onOpen: onOpen ?? ChatResourceActions.open,
+              onReveal: onReveal ?? ChatResourceActions.revealInFinder
+            )
+          }
         }
       }
       .frame(maxWidth: maxWidth, alignment: frameAlignment)
@@ -408,7 +545,7 @@ private struct ChatResourceCard: View {
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(resource.title)
           .scaledFont(size: isCompact ? OmiType.caption : OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .lineLimit(1)
           .truncationMode(.middle)
         if let subtitle = resource.subtitle, !subtitle.isEmpty {
@@ -440,23 +577,26 @@ private struct ChatResourceCard: View {
     .frame(width: isCompact ? 30 : 36, height: isCompact ? 30 : 36)
   }
 
-  /// Generated artifacts get a slightly brighter, warmer badge so "the agent
-  /// made this" reads differently from a file the user attached, without any
-  /// off-brand accent color.
+  /// Generated artifacts get a slightly stronger badge so "the agent made this" reads differently
+  /// from a file the user attached, without reaching for a hue.
+  ///
+  /// These were white washes, which is what made the badge disappear on the light panel: white at
+  /// 8% over glass is glass. The two glass row washes carry the same one-step difference and
+  /// composite correctly on any ground.
   private var iconBadgeFill: Color {
-    let boost: Double = resource.origin == .generatedArtifact ? 0.05 : 0
-    return Color.white.opacity((isHovering ? 0.14 : 0.08) + boost)
+    let isEmphasized = isHovering || resource.origin == .generatedArtifact
+    return isEmphasized ? Ink.rowFillHover : Ink.rowFill
   }
 
   private var iconTint: Color {
-    resource.origin == .generatedArtifact ? OmiColors.textPrimary : OmiColors.textSecondary
+    resource.origin == .generatedArtifact ? Ink.primary : Ink.secondary
   }
 
   private var subtitleColor: Color {
     if case .failed = resource.state {
-      return OmiColors.warning
+      return PageGlass.warning
     }
-    return OmiColors.textTertiary
+    return Ink.secondary
   }
 
   @ViewBuilder
@@ -467,7 +607,7 @@ private struct ChatResourceCard: View {
     case .failed:
       Image(systemName: "exclamationmark.triangle.fill")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.warning)
+        .foregroundColor(PageGlass.warning)
         .help(resource.subtitle ?? "Unavailable")
     default:
       if resource.canOpen {
@@ -485,7 +625,7 @@ private struct ChatResourceCard: View {
   private var openIndicator: some View {
     Image(systemName: "arrow.up.right")
       .scaledFont(size: isCompact ? OmiType.micro : OmiType.caption, weight: .semibold)
-      .foregroundColor(isHovering ? OmiColors.textSecondary : OmiColors.textQuaternary)
+      .foregroundColor(isHovering ? Ink.primary : Ink.secondary)
       .frame(width: 18, height: 26)
       .omiAnimation(.easeInOut(duration: 0.12), value: isHovering)
   }
@@ -496,11 +636,11 @@ private struct ChatResourceCard: View {
     } label: {
       Image(systemName: didCopyPath ? "checkmark" : "doc.on.clipboard")
         .scaledFont(size: isCompact ? OmiType.caption : OmiType.body, weight: .medium)
-        .foregroundColor(didCopyPath ? OmiColors.success : OmiColors.textTertiary)
+        .foregroundColor(didCopyPath ? Ink.listeningGreen : Ink.secondary)
         .frame(width: 26, height: 26)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
-            .fill(Color.white.opacity(isHovering ? 0.08 : 0))
+            .fill(isHovering ? Ink.rowFill : Color.clear)
         )
         .contentShape(RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous))
     }
@@ -571,6 +711,8 @@ private struct ChatResourceCard: View {
   private var resourceImage: some View {
     if let data = resource.imageData, let img = NSImage(data: data) {
       Image(nsImage: img).resizable().scaledToFill()
+    } else if let fileURL = resource.fileURL, let image = NSImage(contentsOf: fileURL) {
+      Image(nsImage: image).resizable().scaledToFill()
     } else if let urlString = resource.thumbnailURL, let url = URL(string: urlString) {
       AsyncImage(url: url) { phase in
         switch phase {
@@ -581,7 +723,7 @@ private struct ChatResourceCard: View {
         default:
           ProgressView()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
+            .background(Ink.rowFill)
         }
       }
     } else {
@@ -591,26 +733,27 @@ private struct ChatResourceCard: View {
 
   private var fallbackPlaceholder: some View {
     ZStack {
-      OmiColors.backgroundTertiary.opacity(0.6)
+      Ink.rowFill
       Image(systemName: iconName)
         .scaledFont(size: 26)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
   }
 
   // MARK: Styling
 
+  /// The card itself, as a row on the glass rather than an opaque tile over it.
+  ///
+  /// `PageGlass.rowFill` is the shared answer for exactly this state pair, so a resource card and a
+  /// task row are visibly the same object. Only the hoverable card lifts: a card that cannot be
+  /// opened has nothing to promise.
   private var fillColor: Color {
-    let base = OmiColors.backgroundTertiary.opacity(isCompact ? 0.72 : 0.9)
-    return isHovering && resource.canOpen
-      ? OmiColors.backgroundQuaternary.opacity(0.85)
-      : base
+    PageGlass.rowFill(isHovering && resource.canOpen ? .hover : .rest)
   }
 
+  /// Was a white hairline at 14% / 5% — a white line on white glass, i.e. no border at all.
   private var borderColor: Color {
-    isHovering && resource.canOpen
-      ? Color.white.opacity(0.14)
-      : Color.white.opacity(0.05)
+    isHovering && resource.canOpen ? Ink.hairline : Ink.separator
   }
 
   // MARK: Menu
@@ -654,9 +797,8 @@ enum ChatResourceActions {
     NSWorkspace.shared.activateFileViewerSelecting([url])
   }
 
-  static func copyPath(_ resource: ChatResource) {
+  @MainActor static func copyPath(_ resource: ChatResource) {
     guard let uri = resource.uri, !uri.isEmpty else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(resource.fileURL?.path ?? uri, forType: .string)
+    OmiToastCenter.shared.copy(resource.fileURL?.path ?? uri, confirming: "Path copied")
   }
 }

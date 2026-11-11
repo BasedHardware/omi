@@ -3,6 +3,14 @@ import Combine
 import OmiTheme
 import SwiftUI
 
+extension Notification.Name {
+  /// Automation-only: opens a memory's detail panel by backend id, or closes it
+  /// when no id is supplied.
+  static let desktopAutomationMemoryDetailOpenRequested = Notification.Name(
+    "desktopAutomationMemoryDetailOpenRequested"
+  )
+}
+
 /// Memory categories for filtering. Mirrors the mobile app: filtering is driven
 /// purely by the backend `category` field (no tag-derived pseudo-categories), so
 /// desktop and mobile stay in lockstep. Labels match mobile exactly.
@@ -32,7 +40,7 @@ enum MemoryTag: String, CaseIterable, Identifiable {
     }
   }
 
-  var color: Color { OmiColors.textSecondary }
+  var color: Color { Ink.secondary }
 
   /// Backend category this filter maps to.
   var category: MemoryCategory {
@@ -70,7 +78,7 @@ enum MemoryLayerFilter: String, CaseIterable, Identifiable {
   var description: String {
     switch self {
     case .defaultAccess: return "Short-term + Long-term"
-    case .shortTerm: return "Fresh source-backed memories"
+    case .shortTerm: return "Recent memories, not yet confirmed as lasting"
     case .longTerm: return "Stable memories"
     case .archive: return "Explicit archive search"
     }
@@ -93,6 +101,33 @@ enum MemoryLayerFilter: String, CaseIterable, Identifiable {
 /// Reversible alias during WS-G client rename (Wave 36).
 typealias MemoryTierFilter = MemoryLayerFilter
 
+/// Selects which snapshot is allowed to populate the visible memory page.
+/// A successful server response is authoritative even when it is empty; the
+/// local cache remains durable sync state, not an implicit extension of the
+/// account projection.
+enum MemoryPageProjection {
+  enum Source {
+    case cache
+    case authoritativeServer
+  }
+
+  static func visibleMemories(
+    cachedMemories: [ServerMemory],
+    serverMemories: [ServerMemory],
+    source: Source,
+    lifecycleExposed: Bool
+  ) -> [ServerMemory] {
+    let values: [ServerMemory]
+    switch source {
+    case .cache:
+      values = cachedMemories
+    case .authoritativeServer:
+      values = serverMemories
+    }
+    return values.filter { $0.tierIsExplicit == lifecycleExposed }
+  }
+}
+
 // MARK: - Memories View Model
 
 @MainActor
@@ -100,8 +135,12 @@ class MemoriesViewModel: ObservableObject {
   @Published var memories: [ServerMemory] = [] {
     didSet { recomputeCaches() }
   }
-  @Published var isLoading = false
-  @Published var isLoadingMore = false
+  @Published var isLoading = false {
+    didSet { resumeMemoryLoadLifecycleWaitersIfIdle() }
+  }
+  @Published var isLoadingMore = false {
+    didSet { resumeMemoryLoadLifecycleWaitersIfIdle() }
+  }
   @Published var hasMoreMemories = true
   @Published var errorMessage: String?
   @Published var searchText = "" {
@@ -109,20 +148,38 @@ class MemoriesViewModel: ObservableObject {
       if oldValue != searchText {
         bumpScopeGeneration()
         displayLimit = pageSize
-        Task { await performSearch() }
+        searchCoordinator.submit(searchText) { [weak self] _ in
+          await self?.performSearch()
+        }
       }
     }
   }
   @Published private(set) var isSearching = false
   @Published private(set) var searchResults: [ServerMemory] = []
+  private let searchCoordinator = DebouncedSearchCoordinator()
   @Published var selectedLayerFilter: MemoryLayerFilter = .defaultAccess {
     didSet {
       guard oldValue != selectedLayerFilter else { return }
       bumpScopeGeneration()
       displayLimit = pageSize
+      // Drop the previous layer's projection immediately so an in-flight fetch
+      // cannot leave stale rows visible after the user switches layers.
+      memories = []
+      currentOffset = 0
+      rawBackendOffset = 0
+      hasMoreMemories = true
       Task { await reloadForCurrentLayerFilter() }
     }
   }
+
+  /// Whether the lifecycle capability is known at all yet.
+  ///
+  /// `canonicalLifecycleExposed` is a Bool, so on its own it cannot tell
+  /// "this account is not canonical" apart from "no authoritative response has
+  /// arrived". Surfaces that pick a whole presentation from the capability
+  /// need the difference: guessing wrong for one frame means mounting the
+  /// surface they are about to discard.
+  @Published private(set) var canonicalLifecycleCapabilityEstablished = false
 
   @Published private(set) var canonicalLifecycleExposed = false {
     didSet {
@@ -147,8 +204,8 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// Whether the backend supports device_scope filtering for this user.
-  /// Canonical memory users support it; legacy users get a 400. Legacy rows
-  /// have no capture provenance, so after that fallback we preserve the
+  /// Universal memory supports it; historical rows can lack capture provenance,
+  /// so after that fallback we preserve the
   /// unscoped list rather than falsely filtering every row out locally.
   private var deviceScopeSupported = true
 
@@ -185,6 +242,13 @@ class MemoriesViewModel: ObservableObject {
   private(set) var refreshInvocations: Int = 0
   /// Bumped at the top of `handleConversationDeleted()` for observer wiring tests.
   private(set) var conversationDeleteInvocations: Int = 0
+  /// Owner verdicts recorded this session, keyed by memory id.
+  ///
+  /// `ServerMemory` is immutable and a rejected memory only disappears on the next
+  /// load (the backend drops it from default reads), so the card needs somewhere to
+  /// show the verdict immediately while triaging a screenful.
+  @Published var reviewVerdicts: [String: Bool] = [:]
+
   @Published var showingAddMemory = false
   @Published var newMemoryText = ""
   @Published var editingMemory: ServerMemory? = nil
@@ -195,8 +259,23 @@ class MemoriesViewModel: ObservableObject {
   @Published var pendingDeleteMemory: ServerMemory? = nil
   @Published var undoTimeRemaining: Double = 0
   private var deleteTask: Task<Void, Never>? = nil
+  private var finalizingDeleteMemoryIDs = Set<String>()
   private var cancellables = Set<AnyCancellable>()
   private var hasLoadedInitially = false
+  /// Once a v3 page succeeds, the visible list must advance through server
+  /// pages only. This prevents a newer/stale SQLite row from being appended as
+  /// though it were part of the account projection.
+  private var hasAuthoritativeServerProjection = false
+
+  /// A cache-first initial load can clear `isLoading` while its authoritative
+  /// API projection is still syncing. Automation search must wait for that
+  /// lifecycle to finish instead of treating the temporarily hidden spinner as
+  /// an idle projection.
+  private var inFlightInitialMemoryLoads = 0
+  private var memoryLoadLifecycleWaiters: [CheckedContinuation<Void, Never>] = []
+  private(set) var memoryLoadLifecycleWaiterCount = 0
+  /// Set when a scope-driven reload arrives while `loadMemories()` is active.
+  private var pendingScopeReload = false
 
   /// Whether the memories page is currently visible.
   /// Auto-refresh only runs when active to avoid unnecessary API calls.
@@ -217,15 +296,17 @@ class MemoriesViewModel: ObservableObject {
   // backend offset by only the visible count would re-request part of the same
   // raw page on the next loadMore(), causing overlapping pages and duplicates.
   private var rawBackendOffset = 0
+  private var backendCursor: String?
   private let pageSize = 100  // Reduced from 500 for better performance
+
+  /// Test-only read of the pagination cursor committed by the latest
+  /// authoritative page. Refresh-consistency tests prove which server
+  /// response `loadMore()` would resume from; the UI never reads this.
+  var backendCursorForTesting: String? { backendCursor }
 
   // Bulk operations state
   @Published var showingDeleteAllConfirmation = false
   @Published var isBulkOperationInProgress = false
-
-  // Conversation linking state
-  @Published var linkedConversation: ServerConversation? = nil
-  @Published var isLoadingConversation = false
 
   // Visibility toggle state
   @Published var isTogglingVisibility = false
@@ -234,6 +315,9 @@ class MemoriesViewModel: ObservableObject {
 
   /// Cached filtered and sorted memories - only recomputed when inputs change
   @Published private(set) var filteredMemories: [ServerMemory] = []
+
+  /// Guardrailed only — no search term, no tags. See `MemoryPageProjection.guardrailed`.
+  @Published private(set) var streamMemories: [ServerMemory] = []
 
   /// Cached tag counts - only recomputed when memories change
   @Published private(set) var tagCounts: [MemoryTag: Int] = [:]
@@ -272,7 +356,7 @@ class MemoriesViewModel: ObservableObject {
       generation: scopeGeneration,
       layerFilter: selectedLayerFilter,
       searchText: searchText.trimmingCharacters(in: .whitespacesAndNewlines),
-      selectedTags: selectedTags
+      selectedTags: selectedTags,
     )
   }
 
@@ -301,7 +385,11 @@ class MemoriesViewModel: ObservableObject {
   }
 
   private func displayMemories(_ values: [ServerMemory], lifecycleExposed: Bool) -> [ServerMemory] {
-    values.filter { $0.tierIsExplicit == lifecycleExposed }
+    MemoryPageProjection.visibleMemories(
+      cachedMemories: [],
+      serverMemories: values,
+      source: .authoritativeServer,
+      lifecycleExposed: lifecycleExposed)
   }
 
   private struct MemoryPageFetchResult {
@@ -326,6 +414,7 @@ class MemoriesViewModel: ObservableObject {
       return false
     }
     canonicalLifecycleExposed = exposed
+    canonicalLifecycleCapabilityEstablished = true
     return true
   }
 
@@ -343,6 +432,8 @@ class MemoriesViewModel: ObservableObject {
     guard isCurrentScope(token) else { return false }
     if let expectedOffset, currentOffset != expectedOffset { return false }
     canonicalLifecycleExposed = page.canonicalLifecycleExposed
+    canonicalLifecycleCapabilityEstablished = true
+    defaultMemoryDeleteSupported = page.defaultMemoryDeleteSupported
     persistCanonicalLifecycleExposure(page.canonicalLifecycleExposed)
     if let deviceScopeCapability = deviceScopeSupportedOverride ?? page.deviceScopeSupported {
       deviceScopeSupported = deviceScopeCapability
@@ -358,6 +449,12 @@ class MemoriesViewModel: ObservableObject {
 
   private func reloadForCurrentLayerFilter() async {
     let token = currentScopeToken
+    if hasAuthoritativeServerProjection && token.searchText.isEmpty && token.selectedTags.isEmpty {
+      await loadMemories()
+      guard isCurrentScope(token) else { return }
+      await loadTagCountsFromDatabase()
+      return
+    }
     if !token.searchText.isEmpty {
       await performSearch()
       guard isCurrentScope(token) else { return }
@@ -374,9 +471,14 @@ class MemoriesViewModel: ObservableObject {
           scope: recordReadScope(for: token)
         )
         guard isCurrentScope(token) else { return }
-        memories = displayCacheMemories(loaded, for: token)
+        memories = MemoryPageProjection.visibleMemories(
+          cachedMemories: loaded,
+          serverMemories: [],
+          source: .cache,
+          lifecycleExposed: canonicalLifecycleExposed
+        )
         currentOffset = loaded.count
-        hasMoreMemories = loaded.count >= pageSize
+        hasMoreMemories = ServerPaging.hasMore(received: loaded.count)
         recomputeFilteredMemories()
       } catch {
         guard isCurrentScope(token) else { return }
@@ -388,12 +490,33 @@ class MemoriesViewModel: ObservableObject {
     await loadTagCountsFromDatabase()
   }
 
+  /// Visibility bulk mutations still use an unscoped legacy endpoint and stay
+  /// disabled. Default-scope deletion is enabled only after the current server
+  /// advertises the scoped-delete contract.
   private var bulkServerMutationsAvailable: Bool { false }
+  private var bulkDeletionServerMutationAvailable: Bool { defaultMemoryDeleteSupported }
   var areBulkServerMutationsAvailable: Bool { bulkServerMutationsAvailable }
+  var isBulkDeletionAvailable: Bool { bulkDeletionServerMutationAvailable }
+
+  @Published private(set) var defaultMemoryDeleteSupported = false
 
   // MARK: - Initialization
 
-  init() {
+  private let deleteMemoryRequest: (String) async throws -> Void
+  private(set) var deferredDeleteRetry: MemoryDeleteRetryScheduler
+  private(set) var reconcileRetry: MemoryReconcileRetryScheduler
+
+  init(
+    deleteMemoryRequest: ((String) async throws -> Void)? = nil,
+    deferredRetrySleeper: MemoryDeleteRetryScheduler.Sleeper? = nil,
+    reconcileRetrySleeper: MemoryReconcileRetryScheduler.Sleeper? = nil
+  ) {
+    self.deleteMemoryRequest =
+      deleteMemoryRequest ?? { id in
+        try await APIClient.shared.deleteMemory(id: id)
+      }
+    deferredDeleteRetry = MemoryDeleteRetryScheduler(sleeper: deferredRetrySleeper)
+    reconcileRetry = MemoryReconcileRetryScheduler(sleeper: reconcileRetrySleeper)
     // Owner fencing: an in-place account switch posts only
     // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
     // previous owner's memories keep rendering until the container's deferred
@@ -456,6 +579,7 @@ class MemoriesViewModel: ObservableObject {
   /// Catches promoted memories whose projection dropped `conversation_id`.
   private func refreshMemoriesAfterConversationCascade() async {
     let token = currentScopeToken
+    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     var offset = 0
     let batchSize = 500
     var allFetched: [ServerMemory] = []
@@ -463,7 +587,10 @@ class MemoriesViewModel: ObservableObject {
 
     do {
       while true {
-        let page = try await APIClient.shared.getMemoriesPage(limit: batchSize, offset: offset)
+        let page = try await APIClient.shared.getMemoriesPage(
+          limit: batchSize,
+          offset: offset,
+          authorizationSnapshot: authorizationSnapshot)
         fetchedLifecycleExposure = page.canonicalLifecycleExposed
         let batch = page.memories
         if batch.isEmpty { break }
@@ -483,21 +610,22 @@ class MemoriesViewModel: ObservableObject {
         log("MemoriesViewModel: Pruned \(pruned) server-backed orphans after conversation delete")
       }
 
-      let reloadLimit = max(pageSize, memories.count)
-      let mergedMemories = try await MemoryStorage.shared.getLocalMemories(
-        limit: reloadLimit,
-        offset: 0,
-        tiers: layers(for: token),
-        scope: recordReadScope(for: token)
-      )
       guard isCurrentScope(token) else { return }
       if let fetchedLifecycleExposure {
         canonicalLifecycleExposed = fetchedLifecycleExposure
+        canonicalLifecycleCapabilityEstablished = true
         guard isCurrentScope(token) else { return }
       }
-      memories = displayCacheMemories(mergedMemories, for: token)
-      currentOffset = mergedMemories.count
-      hasMoreMemories = mergedMemories.count >= reloadLimit
+      hasAuthoritativeServerProjection = true
+      memories = MemoryPageProjection.visibleMemories(
+        cachedMemories: [],
+        serverMemories: allFetched,
+        source: .authoritativeServer,
+        lifecycleExposed: canonicalLifecycleExposed
+      )
+      currentOffset = allFetched.count
+      rawBackendOffset = allFetched.count
+      hasMoreMemories = false
       recomputeFilteredMemories()
       await loadTagCountsFromDatabase()
     } catch {
@@ -509,6 +637,18 @@ class MemoriesViewModel: ObservableObject {
   func resetSessionState() {
     deleteTask?.cancel()
     deleteTask = nil
+    // A retry armed under the previous owner must never delete the next
+    // owner's server rows after the switch reopens the session.
+    deferredDeleteRetry.cancelAll()
+    // Same fence for a truncated-reconcile retry: it re-checks the owner
+    // anyway, but the new owner's own reconcile owns the next run. The dying
+    // run still reports `aborted_owner_changed` — with its pre-reset token and
+    // attempt count, before the reset invalidates them — so real owner
+    // switches stay visible on the reconcile telemetry instead of vanishing
+    // when the reset drops the run without a terminal report.
+    endRunReportingOwnerChange()
+    // Fence late cache/API completions from the previous signed-in owner.
+    bumpScopeGeneration()
     memories = []
     isLoading = false
     isLoadingMore = false
@@ -518,6 +658,8 @@ class MemoriesViewModel: ObservableObject {
     isSearching = false
     searchResults = []
     canonicalLifecycleExposed = false
+    canonicalLifecycleCapabilityEstablished = false
+    defaultMemoryDeleteSupported = false
     selectedLayerFilter = .defaultAccess
     selectedTags = []
     filteredFromDatabase = []
@@ -531,13 +673,13 @@ class MemoriesViewModel: ObservableObject {
     pendingDeleteMemory = nil
     undoTimeRemaining = 0
     hasLoadedInitially = false
+    hasAuthoritativeServerProjection = false
     isActive = false
     currentOffset = 0
     rawBackendOffset = 0
+    backendCursor = nil
     showingDeleteAllConfirmation = false
     isBulkOperationInProgress = false
-    linkedConversation = nil
-    isLoadingConversation = false
     isTogglingVisibility = false
     totalMemoriesCount = 0
     hasMoreFilteredResults = false
@@ -545,49 +687,96 @@ class MemoriesViewModel: ObservableObject {
     displayLimit = pageSize
   }
 
-  /// Refresh memories if already loaded (for auto-refresh)
-  private func refreshMemoriesIfNeeded() async {
+  /// Refresh memories if already loaded (for auto-refresh).
+  ///
+  /// The automation bridge invokes this immediately before a lifecycle-scoped
+  /// SQLite search. Await an active initial/paginated load first so that search
+  /// cannot observe the stale capability projection which that load is about to
+  /// replace.
+  func refreshMemoriesIfNeeded() async {
     refreshInvocations += 1
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
     // Skip if page is not visible
     guard isActive else { return }
 
-    // Skip if currently loading or haven't loaded initially
+    await waitForMemoryLoadLifecycleToSettle()
+
+    // An initial request may fail, in which case there is no authoritative
+    // projection to refresh yet.
     guard !isLoading, !isLoadingMore, hasLoadedInitially else { return }
 
     // Skip if there's a pending delete (avoid interfering with undo)
     guard pendingDeleteMemory == nil else { return }
 
-    // Silently sync from API and reload from local cache (local-first pattern)
+    // Silently sync from the authoritative API page.
     let token = currentScopeToken
+    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     do {
       let reloadLimit = max(pageSize, memories.count)
-      let page = try await APIClient.shared.getMemoriesPage(limit: reloadLimit, offset: 0)
+      // Route through the same device-scope-aware funnel as the initial load.
+      let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
+        limit: reloadLimit,
+        offset: 0,
+        includeArchive: token.layerFilter.layerScope.includesArchive,
+        authorizationSnapshot: authorizationSnapshot)
+      let page = fetchResult.page
       let apiMemories = page.memories
-      guard commitMemoryPageCapabilities(page, for: token) else { return }
+      guard
+        commitMemoryPageCapabilities(
+          page,
+          for: token,
+          deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
+        )
+      else { return }
+      hasAuthoritativeServerProjection = true
 
       // Sync API results to local cache
       try await MemoryStorage.shared.syncServerMemories(apiMemories)
 
-      // Reload from local cache to get merged data (local + synced)
-      let mergedMemories = try await MemoryStorage.shared.getLocalMemories(
-        limit: reloadLimit,
-        offset: 0,
-        tiers: layers(for: token),
-        scope: recordReadScope(for: token)
-      )
       guard isCurrentScope(token) else { return }
       log(
-        "MemoriesViewModel: Auto-refresh showing \(mergedMemories.count) memories (API had \(apiMemories.count))"
+        "MemoriesViewModel: Auto-refresh showing \(apiMemories.count) authoritative memories"
       )
-      memories = displayCacheMemories(mergedMemories, for: token)
-      currentOffset = mergedMemories.count
+      memories = MemoryPageProjection.visibleMemories(
+        cachedMemories: [],
+        serverMemories: apiMemories,
+        source: .authoritativeServer,
+        lifecycleExposed: page.canonicalLifecycleExposed
+      )
+      currentOffset = memories.count
       rawBackendOffset = apiMemories.count
-      hasMoreMemories = mergedMemories.count >= reloadLimit
+      hasMoreMemories = Self.hasMoreAfterPage(page, received: apiMemories.count)
+      backendCursor = page.nextCursor
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
+    }
+  }
+
+  private var isMemoryLoadLifecycleActive: Bool {
+    inFlightInitialMemoryLoads > 0 || isLoading || isLoadingMore || pendingScopeReload
+  }
+
+  private func waitForMemoryLoadLifecycleToSettle() async {
+    guard isMemoryLoadLifecycleActive else { return }
+    await withCheckedContinuation { continuation in
+      guard isMemoryLoadLifecycleActive else {
+        continuation.resume()
+        return
+      }
+      memoryLoadLifecycleWaiters.append(continuation)
+      memoryLoadLifecycleWaiterCount = memoryLoadLifecycleWaiters.count
+    }
+  }
+
+  private func resumeMemoryLoadLifecycleWaitersIfIdle() {
+    guard !isMemoryLoadLifecycleActive else { return }
+    let waiters = memoryLoadLifecycleWaiters
+    memoryLoadLifecycleWaiters.removeAll()
+    memoryLoadLifecycleWaiterCount = 0
+    for waiter in waiters {
+      waiter.resume()
     }
   }
 
@@ -599,6 +788,34 @@ class MemoriesViewModel: ObservableObject {
     // Load true tag counts and unread tips count from SQLite asynchronously
     Task {
       await loadTagCountsFromDatabase()
+    }
+  }
+
+  /// Whether another page is worth asking for. A truncated page is an honest
+  /// partial response with no resumable cursor, so callers must not continue.
+  private static func hasMoreAfterPage(_ page: APIClient.MemoryListPage, received: Int) -> Bool {
+    if page.truncated { return false }
+    if page.nextCursor != nil { return true }
+    return ServerPaging.hasMore(received: received)
+  }
+
+  /// Resolve specific memories by id for surfaces that cite them — today the
+  /// Brain Map inspector, which asks for the memories behind an entity.
+  ///
+  /// Reads the local cache rather than `memories`. The visible array is one
+  /// page of a tier-filtered, device-scoped browse, so a cited memory is
+  /// routinely absent from it even though it is fully synced: the inspector
+  /// reported "not loaded yet" for evidence that was on disk the whole time.
+  /// Unsynced local-only rows still resolve because the cache holds them too;
+  /// the visible page is only a last-resort fallback for a cache read failure.
+  func memories(withIDs ids: [String]) async -> [ServerMemory] {
+    guard !ids.isEmpty else { return [] }
+    do {
+      return try await MemoryStorage.shared.getMemories(backendIds: ids)
+    } catch {
+      logError("MemoriesViewModel: Failed to resolve cited memories from cache", error: error)
+      let wanted = Set(ids)
+      return memories.filter { wanted.contains($0.id) }
     }
   }
 
@@ -681,6 +898,14 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// Recompute filtered memories when search/tags/layer change
+  /// The guardrails, bound to this page's state. One definition, two readers, so they cannot drift.
+  private func guardrailed(_ values: [ServerMemory]) -> [ServerMemory] {
+    MemoryPageProjection.guardrailed(
+      values, allowedLayers: activeLayerFilter, thisDeviceOnly: filterThisDeviceOnly,
+      deviceScopeSupported: deviceScopeSupported,
+      matchesThisDevice: { ClientDeviceService.shared.memoryMatchesThisDevice($0) })
+  }
+
   private func recomputeFilteredMemories() {
     // Must match the isInFilteredMode property so pagination routing is
     // consistent. Layer-only views and device-scoped views are excluded from
@@ -701,30 +926,19 @@ class MemoriesViewModel: ObservableObject {
           selectedTags.contains { tag in tag.matches(memory) }
         }
       }
-    } else if !filteredFromDatabase.isEmpty {
-      // Tag filters applied: use SQLite filtered results
+    } else if !selectedTags.isEmpty {
+      // Tag filters applied: use SQLite filtered results, even when none match
       result = filteredFromDatabase
     } else {
       // No filters: use loaded memories
       result = memories
     }
 
-    // Guardrail: Archive is never part of the default list unless the user explicitly selects Archive.
-    if let allowedLayers = activeLayerFilter {
-      let allowedTiers = Set(allowedLayers)
-      result = result.filter { allowedTiers.contains($0.tier) }
-    }
-
-    // A canonical response has already been filtered server-side and its
-    // provenance is authoritative. Legacy rows cannot identify their capture
-    // device, so keeping them visible is the only honest fallback; filtering
-    // them client-side would turn the list into a misleading empty state.
-    if filterThisDeviceOnly && deviceScopeSupported {
-      result = result.filter { ClientDeviceService.shared.memoryMatchesThisDevice($0) }
-    }
+    result = guardrailed(result)
 
     // Sort by date (newest first)
     result.sort { $0.createdAt > $1.createdAt }
+    streamMemories = guardrailed(memories).sorted { $0.createdAt > $1.createdAt }
 
     if isInFilteredMode {
       // Store full results for pagination, apply display cap
@@ -783,9 +997,21 @@ class MemoriesViewModel: ObservableObject {
     guard isCurrentScope(token) else { return }
     isSearching = false
     recomputeFilteredMemories()
+    SearchAnalytics.queryEntered(surface: .memories, query: query, resultsCount: searchResults.count)
   }
 
   // MARK: - API Actions
+
+  /// The single server-page read behind the browse surface (initial load,
+  /// refresh, load-more). Tests replace this; production uses the shared client.
+  var memoriesPageFetch:
+    (
+      @MainActor (
+        _ limit: Int, _ offset: Int, _ cursor: String?, _ includeArchive: Bool,
+        _ deviceScope: String?,
+        _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+      ) async throws -> APIClient.MemoryListPage
+    )? = nil
 
   /// Fetch memories from the API, honoring the device-scope filter only when
   /// the backend supports it for this user. Legacy (non-canonical) memory users
@@ -793,25 +1019,66 @@ class MemoriesViewModel: ObservableObject {
   /// and return the capability update to the guarded page commit. Legacy rows
   /// lack capture provenance, so recomputeFilteredMemories keeps that fallback
   /// list visible.
-  private func fetchMemoriesPageDeviceScopeAware(limit: Int, offset: Int) async throws -> MemoryPageFetchResult {
+  private func fetchMemoriesPageDeviceScopeAware(
+    limit: Int,
+    offset: Int,
+    cursor: String? = nil,
+    includeArchive: Bool,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> MemoryPageFetchResult {
     let scope = (filterThisDeviceOnly && deviceScopeSupported) ? "current" : nil
     do {
-      let page = try await APIClient.shared.getMemoriesPage(limit: limit, offset: offset, deviceScope: scope)
+      let page = try await performMemoriesPageFetch(
+        limit: limit,
+        offset: offset,
+        cursor: cursor,
+        includeArchive: includeArchive,
+        deviceScope: scope,
+        authorizationSnapshot: authorizationSnapshot)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: nil)
     } catch APIError.httpError(let statusCode, _) where statusCode == 400 && scope != nil {
       // Backend rejected device_scope for a non-canonical user — retry unscoped.
       log("MemoriesViewModel: device_scope unsupported by backend, retrying unscoped")
       DesktopDiagnosticsManager.shared.recordFallback(
-        area: "other",
+        area: "memory_scope",
         from: "device_scoped",
         to: "unscoped",
         reason: "capability_mismatch",
         outcome: .degraded,
         extra: ["user_visible": false]
       )
-      let page = try await APIClient.shared.getMemoriesPage(limit: limit, offset: offset, deviceScope: nil)
+      let page = try await performMemoriesPageFetch(
+        limit: limit,
+        offset: offset,
+        cursor: cursor,
+        includeArchive: includeArchive,
+        deviceScope: nil,
+        authorizationSnapshot: authorizationSnapshot)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: false)
     }
+  }
+
+  /// The transport under `fetchMemoriesPageDeviceScopeAware`. Falls back to
+  /// the shared client unless a test installed `memoriesPageFetch`.
+  private func performMemoriesPageFetch(
+    limit: Int,
+    offset: Int,
+    cursor: String?,
+    includeArchive: Bool,
+    deviceScope: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> APIClient.MemoryListPage {
+    if let memoriesPageFetch {
+      return try await memoriesPageFetch(
+        limit, offset, cursor, includeArchive, deviceScope, authorizationSnapshot)
+    }
+    return try await APIClient.shared.getMemoriesPage(
+      limit: limit,
+      offset: offset,
+      cursor: cursor,
+      includeArchive: includeArchive,
+      deviceScope: deviceScope,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Load memories using local-first pattern:
@@ -820,7 +1087,22 @@ class MemoriesViewModel: ObservableObject {
   /// 3. Update UI with API data
   /// 4. Sync to local cache in background
   func loadMemories() async {
-    guard !isLoading else { return }
+    if isLoading {
+      pendingScopeReload = true
+      return
+    }
+
+    // Keep the lifecycle marked active until this replacement load actually
+    // starts. Waiters must not observe the handoff gap as a completed refresh.
+    pendingScopeReload = false
+    inFlightInitialMemoryLoads += 1
+    defer {
+      inFlightInitialMemoryLoads -= 1
+      resumeMemoryLoadLifecycleWaitersIfIdle()
+      if pendingScopeReload {
+        Task { await loadMemories() }
+      }
+    }
 
     isLoading = true
     errorMessage = nil
@@ -829,13 +1111,19 @@ class MemoriesViewModel: ObservableObject {
     let token = currentScopeToken
     let tokenTiers = layers(for: token)
     let hasRememberedLifecycleExposure = restoreCanonicalLifecycleExposure()
+    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     // Step 1: Load from local cache first for instant display
     // A cache alone cannot establish an account's lifecycle capability. On a
     // first launch, wait for the authoritative response rather than flash
     // untiered legacy/local-pending records in a canonical user experience.
     // Use timeout to avoid blocking UI if database is initializing (e.g. recovery).
-    if hasRememberedLifecycleExposure {
+    // A remembered canonical account must wait for the current server page:
+    // cached rows may be newer local edits or a stale projection and cannot be
+    // presented as the signed-in account's complete memory set.
+    let canRenderCacheBeforeAuthoritativeFetch =
+      hasRememberedLifecycleExposure && !canonicalLifecycleExposed && !hasAuthoritativeServerProjection
+    if canRenderCacheBeforeAuthoritativeFetch {
       do {
         let cachedMemories = try await withThrowingTaskGroup(of: [ServerMemory].self) { group in
           group.addTask {
@@ -858,7 +1146,7 @@ class MemoriesViewModel: ObservableObject {
         if !cachedMemories.isEmpty, isCurrentScope(token) {
           memories = displayCacheMemories(cachedMemories, for: token)
           currentOffset = cachedMemories.count
-          hasMoreMemories = cachedMemories.count >= pageSize
+          hasMoreMemories = ServerPaging.hasMore(received: cachedMemories.count)
           isLoading = false  // Show cached data immediately
           log("MemoriesViewModel: Loaded \(cachedMemories.count) memories from local cache")
         }
@@ -874,7 +1162,9 @@ class MemoriesViewModel: ObservableObject {
     do {
       let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: pageSize,
-        offset: 0
+        offset: 0,
+        includeArchive: token.layerFilter.layerScope.includesArchive,
+        authorizationSnapshot: authorizationSnapshot
       )
       let page = fetchResult.page
       let fetchedMemories = page.memories
@@ -894,43 +1184,29 @@ class MemoriesViewModel: ObservableObject {
         isLoading = false
         return
       }
+
+      hasAuthoritativeServerProjection = true
       hasLoadedInitially = true
       log("MemoriesViewModel: Fetched \(fetchedMemories.count) memories from API")
 
-      // Step 3: Sync API results to local cache, then reload from cache
-      // This ensures we show ALL local data (including locally-created memories)
-      // merged with any updates from the server
+      // Step 3: Sync API results to local cache. The successful API page remains
+      // the display authority; local rows are durable sync state only.
       do {
         try await MemoryStorage.shared.syncServerMemories(fetchedMemories)
         log("MemoriesViewModel: Synced \(fetchedMemories.count) memories to local cache")
 
-        // For device-scoped loads the server already filtered to this device.
-        // Reloading from the unscoped SQLite cache can surface other devices'
-        // newer memories that recomputeFilteredMemories() then strips, leaving
-        // an empty/short initial page that cannot paginate. Display the fetched
-        // page directly instead. (If device_scope 400'd, the committed
-        // capability override is false so we take the merged-cache path with
-        // client-side filtering.)
-        let wasDeviceScoped = filterThisDeviceOnly && deviceScopeSupported
-        let displayMemories: [ServerMemory]
-        if wasDeviceScoped {
-          displayMemories = fetchedMemories.filter { layerAllowed($0, for: token) }
-        } else {
-          // Reload from local cache to get merged data
-          displayMemories = try await MemoryStorage.shared.getLocalMemories(
-            limit: pageSize,
-            offset: 0,
-            tiers: layers(for: token),
-            scope: recordReadScope(for: token)
-          )
-        }
+        let visibleMemories = MemoryPageProjection.visibleMemories(
+          cachedMemories: [],
+          serverMemories: fetchedMemories,
+          source: .authoritativeServer,
+          lifecycleExposed: page.canonicalLifecycleExposed
+        )
         guard isCurrentScope(token) else {
           // Scope changed mid-merge; reset loading state so the replacement
           // load is not permanently blocked.
           isLoading = false
           return
         }
-        let visibleMemories = self.displayCacheMemories(displayMemories, for: token)
         memories = visibleMemories
         currentOffset = visibleMemories.count
         // Track the raw backend cursor for subsequent loadMore() fetches.
@@ -942,17 +1218,24 @@ class MemoriesViewModel: ObservableObject {
         // hasMoreMemories from the filtered count would disable scrolling and
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
-        hasMoreMemories = fetchedMemories.count >= pageSize
+        hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
+        backendCursor = page.nextCursor
         log(
-          "MemoriesViewModel: Showing \(visibleMemories.count) memories from \(wasDeviceScoped ? "device-scoped API" : "merged local cache")"
+          "MemoriesViewModel: Showing \(visibleMemories.count) memories from authoritative API page (raw: \(fetchedMemories.count))"
         )
       } catch {
         logError("MemoriesViewModel: Failed to sync/reload from local cache", error: error)
-        // Fall back to API data if sync fails, preserving the desktop default-access guardrail.
-        memories = displayMemories(fetchedMemories.filter { layerAllowed($0, for: token) }, for: token)
+        // Fall back to the API page if local persistence fails.
+        memories = MemoryPageProjection.visibleMemories(
+          cachedMemories: [],
+          serverMemories: fetchedMemories,
+          source: .authoritativeServer,
+          lifecycleExposed: page.canonicalLifecycleExposed
+        )
         currentOffset = memories.count
         rawBackendOffset = fetchedMemories.count
-        hasMoreMemories = fetchedMemories.count >= pageSize
+        hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
+        backendCursor = page.nextCursor
       }
     } catch {
       // Only show error if we don't have cached data
@@ -964,10 +1247,11 @@ class MemoriesViewModel: ObservableObject {
 
     isLoading = false
 
-    // Kick off one-time full sync, then a one-time cache reconcile, in background.
+    // Kick off one-time full sync, cache reconcile, and stale local-only purge.
     Task {
       await performFullSyncIfNeeded()
       await reconcileCacheIfNeeded()
+      await purgeStaleLocalOnlyMemoriesIfNeeded()
     }
   }
 
@@ -976,58 +1260,141 @@ class MemoriesViewModel: ObservableObject {
     await loadMemories()
   }
 
-  /// One-time cache reconcile. The local SQLite cache can diverge from the
-  /// backend (the source of truth): stale categories after the server-side
-  /// category cleanup, plus "orphan" rows whose backendId no longer exists on
-  /// the backend. This re-pulls every backend memory (fixing categories via the
-  /// normal upsert) and soft-deletes synced local rows the backend no longer
-  /// has. Local-only unsynced memories are preserved. Runs once per user.
-  private func reconcileCacheIfNeeded() async {
+  /// Reconcile the local SQLite cache against the backend, the source of truth.
+  ///
+  /// The cache diverges two ways: stale categories after the server-side category
+  /// cleanup, and "orphan" rows whose backendId no longer exists because the
+  /// memory was deleted somewhere else. Re-pulling fixes categories through the
+  /// normal upsert; pruning fixes orphans, and is the only thing that makes a
+  /// delete performed on another device take effect here.
+  ///
+  /// Pruning is scoped, not blanket. The earlier version pulled the default scope
+  /// and then refused to prune, because pruning a default-scope pull would delete
+  /// Archive rows the endpoint omits by design. The fix is to make the pull cover
+  /// what the prune claims: `includeArchive` widens it to every tier, so the
+  /// keep-set and `MemoryLayerScope.allIncludingArchive` describe the same
+  /// population. `softDeleteSyncedOrphans` only touches rows with a non-nil
+  /// backendId, so local-only memories that were never synced are never pruned.
+  ///
+  /// Absence is authoritative whenever the pull was complete — including a
+  /// complete pull that returned nothing. A failed or unauthorized read throws
+  /// and never reaches the prune; a truncated pull returns early above. An
+  /// empty complete pull means the account is empty, and an empty keep-set is
+  /// what clears zombie rows a wiped account keeps rendering from the cache.
+  ///
+  /// Every write is fenced to the owner that captured the authorization
+  /// snapshot: an account switch mid-pull reopens `databasePool()` for the new
+  /// owner, so an unfenced sync or prune would write the previous owner's rows
+  /// into — or tombstone them out of — the new owner's store. A fence mismatch
+  /// aborts without pruning and without latching, so the new owner's own
+  /// reconcile runs clean.
+  ///
+  /// Runs once per launch rather than once per user: a delete on another device
+  /// can happen at any time, so a permanent one-shot latch would converge the
+  /// cache once and then let it drift again for the life of the install.
+  ///
+  /// A truncated pull no longer parks the prune until the next launch: the run
+  /// schedules a bounded in-launch retry (see
+  /// `MemoriesViewModel+ReconcileRetry.swift`) that re-enters this function, so
+  /// every guard — latch, fresh cursor, owner fencing — runs again per attempt.
+  /// Only a complete run latches; an exhausted run is held until next launch.
+  func reconcileCacheIfNeeded() async {
     let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-    let reconcileKey = "memoriesCacheReconcile_v2_defaultScopeNoPrune_\(userId)"
 
-    guard !UserDefaults.standard.bool(forKey: reconcileKey) else { return }
+    guard !Self.reconciledUserIDsThisLaunch.contains(userId) else { return }
+    // Single-flight admission: nil while another attempt is in flight or a
+    // bounded retry is pending (see beginReconcileAttempt). The returned token
+    // fences every terminal report of this attempt to the run that started it.
+    guard let run = beginReconcileAttempt(userId: userId) else { return }
 
-    log("MemoriesViewModel: Starting one-time cache reconcile for user \(userId)")
+    log("MemoriesViewModel: Starting cache reconcile for user \(userId)")
 
-    var offset = 0
+    var cursor: String? = nil
     let batchSize = 500
     var backendIds = Set<String>()
+    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    // A nil snapshot means the owner was mid-transition when the reconcile
+    // started; no owner can then authorize the prune.
+    func ownerStillAuthorized() -> Bool {
+      guard let authorizationSnapshot else { return false }
+      return RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    }
 
     do {
+      var truncated = false
       while true {
-        let page = try await APIClient.shared.getMemoriesPage(limit: batchSize, offset: offset)
+        let page = try await fetchReconcilePage(
+          limit: batchSize,
+          cursor: cursor,
+          authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
-        if batch.isEmpty { break }
+        if page.truncated {
+          truncated = true
+          log("MemoriesViewModel: Cache reconcile stopped because the server returned a truncated list")
+          break
+        }
+        if batch.isEmpty && page.nextCursor == nil { break }
 
+        // The fetch awaited: the owner may have switched while it was in
+        // flight. Syncing now would write the previous owner's rows into the
+        // new owner's reopened store.
+        guard ownerStillAuthorized() else {
+          log("MemoriesViewModel: Cache reconcile aborted because the signed-in owner changed mid-pull")
+          reconcileRunAbortedByOwnerChange(run: run)
+          return
+        }
         try await MemoryStorage.shared.syncServerMemories(batch)
         for memory in batch { backendIds.insert(memory.id) }
-        offset += batch.count
 
-        if batch.count < batchSize { break }
+        guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else { break }
+        cursor = nextCursor
       }
 
-      // Guard against pruning on a partial/failed pull: only reconcile when the
-      // backend actually returned memories. An empty result here would otherwise
-      // wrongly delete the entire local cache.
-      guard !backendIds.isEmpty else {
-        log("MemoriesViewModel: Cache reconcile skipped pruning (no backend memories returned)")
+      // A truncated pull saw only part of the backend, so absence proves nothing.
+      // Leave the cache alone this attempt; the bounded in-launch retry
+      // re-runs the reconcile, and only an exhausted run waits for next launch.
+      guard !truncated else {
+        log("MemoriesViewModel: Cache reconcile skipped pruning because the list was truncated")
+        reconcileAttemptTruncated(run: run)
         return
       }
 
-      // The current API does not return authoritative tier-scope/completeness metadata.
-      // Fail closed: sync returned default-scope rows, but do not prune orphans until the
-      // backend can prove this page set is complete for an explicit scope. This preserves
-      // Archive rows when the default endpoint omits them by design.
-      UserDefaults.standard.set(true, forKey: reconcileKey)
-      log("MemoriesViewModel: Cache reconcile skipped orphan pruning because backend completeness is unknown")
+      // The keep-set belongs to the owner that pulled it. Pruning after a
+      // switch would judge the new owner's rows against the previous owner's
+      // keep-set — an empty set would tombstone every synced row the new
+      // account still has.
+      guard ownerStillAuthorized() else {
+        log("MemoriesViewModel: Cache reconcile aborted before pruning because the signed-in owner changed")
+        reconcileRunAbortedByOwnerChange(run: run)
+        return
+      }
+      let pruned = try await MemoryStorage.shared.softDeleteSyncedOrphans(
+        keepingBackendIds: backendIds,
+        within: .allIncludingArchive
+      )
+      Self.reconciledUserIDsThisLaunch.insert(userId)
+      if backendIds.isEmpty {
+        log("MemoriesViewModel: Cache reconcile pruned all \(pruned) synced orphans (account empty)")
+      } else if pruned > 0 {
+        log("MemoriesViewModel: Cache reconcile pruned \(pruned) memories deleted on another device")
+      }
+      reconcileRunCompleted(run: run, pruned: pruned)
 
       await loadTagCountsFromDatabase()
       await loadMemories()
     } catch {
       logError("MemoriesViewModel: Cache reconcile failed (will retry next launch)", error: error)
+      reconcileRunFailed(run: run)
     }
   }
+
+  /// Reconcile's server page read. Injectable so the prune contract can be tested
+  /// without a network: the guards that decide whether absence is authoritative
+  /// are the risky part of this function, not the transport.
+  var reconcilePageFetch: ((Int, String?, RuntimeOwnerAuthorizationSnapshot?) async throws -> APIClient.MemoryListPage)?
+
+  /// Reconcile runs once per launch per user; see `reconcileCacheIfNeeded`.
+  private static var reconciledUserIDsThisLaunch: Set<String> = []
 
   /// One-time background sync for the backend default memory scope.
   /// Archive requires an explicit backend contract before desktop syncs or reconciles it.
@@ -1042,24 +1409,40 @@ class MemoriesViewModel: ObservableObject {
 
     log("MemoriesViewModel: Starting one-time default-scope sync for user \(userId)")
 
-    var offset = 0
+    var cursor: String? = nil
     var totalSynced = 0
     let batchSize = 500
+    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     do {
+      var truncated = false
       while true {
-        let page = try await APIClient.shared.getMemoriesPage(limit: batchSize, offset: offset)
+        let page = try await APIClient.shared.getMemoriesPage(
+          limit: batchSize,
+          cursor: cursor,
+          authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
-        if batch.isEmpty { break }
+        if page.truncated {
+          truncated = true
+          log("MemoriesViewModel: Full sync stopped because the server returned a truncated list")
+          break
+        }
+        if batch.isEmpty && page.nextCursor == nil { break }
 
         try await MemoryStorage.shared.syncServerMemories(batch)
         totalSynced += batch.count
-        offset += batch.count
         log("MemoriesViewModel: Full sync progress - \(totalSynced) additional memories synced")
 
-        if batch.count < batchSize { break }
+        guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else { break }
+        cursor = nextCursor
       }
 
+      // A truncated sync is incomplete; do not mark it completed so the next
+      // launch retries the full default-scope pull.
+      guard !truncated else {
+        log("MemoriesViewModel: Full sync did not mark completion because the list was truncated")
+        return
+      }
       UserDefaults.standard.set(true, forKey: syncKey)
       log("MemoriesViewModel: Default-scope sync completed - \(totalSynced) additional memories synced")
 
@@ -1114,43 +1497,50 @@ class MemoriesViewModel: ObservableObject {
     isLoadingMore = true
     // Clear the flag on every exit path, including stale-scope guard returns,
     // so pagination is not permanently blocked by `guard !isLoadingMore`.
-    defer { isLoadingMore = false }
+    defer {
+      isLoadingMore = false
+      resumeMemoryLoadLifecycleWaitersIfIdle()
+    }
     let token = currentScopeToken
     let requestedOffset = currentOffset
     let requestedRawOffset = rawBackendOffset
 
-    // Step 1: Try to load more from local cache first
-    do {
-      let moreFromCache = try await MemoryStorage.shared.getLocalMemories(
-        limit: pageSize,
-        offset: requestedOffset,
-        tiers: layers(for: token),
-        scope: recordReadScope(for: token)
-      )
-
-      guard isCurrentScope(token), currentOffset == requestedOffset else { return }
-      if !moreFromCache.isEmpty {
-        let visibleMemories = displayCacheMemories(moreFromCache, for: token)
-        memories.append(contentsOf: visibleMemories)
-        // Advance the SQLite paging cursor by the RAW row count returned by the
-        // query, not the tier-filtered visible count. getLocalMemories(offset:)
-        // pages over raw rows, so advancing by the smaller filtered count makes the
-        // next page re-fetch the filtered-out rows — duplicate/stuck paging once
-        // hasMoreMemories (below) correctly stays true on a filtered page.
-        currentOffset += moreFromCache.count
-        // Derive hasMoreMemories from the RAW cache count, not the tier-filtered
-        // visible count. A full raw page whose visible subset is < pageSize still
-        // has more cached rows to page; using the filtered count here disabled
-        // scrolling and permanently hid those memories (the initial-load path
-        // already documents this exact raw-vs-filtered pagination rule).
-        hasMoreMemories = moreFromCache.count >= pageSize
-        log(
-          "MemoriesViewModel: Loaded \(visibleMemories.count) more from local cache (total: \(memories.count))"
+    // Step 1: Before any successful server page, a cache read can provide an
+    // offline fallback. Once the account projection is authoritative, cache
+    // rows must not extend it or turn a partial page into a different list.
+    if !hasAuthoritativeServerProjection {
+      do {
+        let moreFromCache = try await MemoryStorage.shared.getLocalMemories(
+          limit: pageSize,
+          offset: requestedOffset,
+          tiers: layers(for: token),
+          scope: recordReadScope(for: token)
         )
-        return
+
+        guard isCurrentScope(token), currentOffset == requestedOffset else { return }
+        if !moreFromCache.isEmpty {
+          let visibleMemories = displayCacheMemories(moreFromCache, for: token)
+          memories = ServerPaging.appending(visibleMemories, to: memories, by: \.id)
+          // Advance the SQLite paging cursor by the RAW row count returned by the
+          // query, not the tier-filtered visible count. getLocalMemories(offset:)
+          // pages over raw rows, so advancing by the smaller filtered count makes the
+          // next page re-fetch the filtered-out rows — duplicate/stuck paging once
+          // hasMoreMemories (below) correctly stays true on a filtered page.
+          currentOffset += moreFromCache.count
+          // Derive hasMoreMemories from the RAW cache count, not the tier-filtered
+          // visible count. A full raw page whose visible subset is < pageSize still
+          // has more cached rows to page; using the filtered count here disabled
+          // scrolling and permanently hid those memories (the initial-load path
+          // already documents this exact raw-vs-filtered pagination rule).
+          hasMoreMemories = ServerPaging.hasMore(received: moreFromCache.count)
+          log(
+            "MemoriesViewModel: Loaded \(visibleMemories.count) more from local cache (total: \(memories.count))"
+          )
+          return
+        }
+      } catch {
+        log("MemoriesViewModel: Local cache pagination failed, trying API")
       }
-    } catch {
-      log("MemoriesViewModel: Local cache pagination failed, trying API")
     }
 
     // Step 2: If local cache is exhausted, fetch from API
@@ -1159,9 +1549,13 @@ class MemoriesViewModel: ObservableObject {
     // Use the raw backend offset (not the visible/SQLite offset) so that layer
     // filtering does not cause overlapping pages or duplicate appends.
     do {
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
       let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: pageSize,
-        offset: requestedRawOffset
+        offset: requestedRawOffset,
+        cursor: backendCursor,
+        includeArchive: token.layerFilter.layerScope.includesArchive,
+        authorizationSnapshot: authorizationSnapshot
       )
       let page = fetchResult.page
       let newMemories = page.memories
@@ -1173,19 +1567,20 @@ class MemoriesViewModel: ObservableObject {
           deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
         )
       else { return }
-
+      hasAuthoritativeServerProjection = true
       // Sync to local cache first
       try await MemoryStorage.shared.syncServerMemories(newMemories)
 
       let visibleNewMemories = displayMemories(newMemories.filter { layerAllowed($0, for: token) }, for: token)
 
       // Then append to display
-      memories.append(contentsOf: visibleNewMemories)
+      memories = ServerPaging.appending(visibleNewMemories, to: memories, by: \.id)
       currentOffset += visibleNewMemories.count
       // Advance the raw backend cursor by the raw page size so the next fetch
       // starts after all items in this page, not just the visible subset.
       rawBackendOffset += newMemories.count
-      hasMoreMemories = newMemories.count >= pageSize
+      hasMoreMemories = Self.hasMoreAfterPage(page, received: newMemories.count)
+      backendCursor = page.nextCursor
       log(
         "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
       )
@@ -1193,12 +1588,12 @@ class MemoriesViewModel: ObservableObject {
       logError("Failed to load more memories", error: error)
     }
   }
-
   func createMemory() async {
     guard !newMemoryText.isEmpty else { return }
-
     do {
-      _ = try await APIClient.shared.createMemory(content: newMemoryText, category: .manual)
+      let saved = try await APIClient.shared.createMemory(content: newMemoryText, category: .manual)
+      let cached = (try? await MemoryStorage.shared.syncServerMemory(saved)) != nil
+      if cached, #available(macOS 27, *) { SiriDonations.memoryCreated(saved.id) }
       showingAddMemory = false
       newMemoryText = ""
       await loadMemories()
@@ -1206,30 +1601,52 @@ class MemoriesViewModel: ObservableObject {
       logError("Failed to create memory", error: error)
     }
   }
+  /// Records the owner's keep/reject verdict for a memory.
+  ///
+  /// Rejecting hides the memory from default reads server-side and drops it from the
+  /// keyword index and knowledge graph, so the row will be gone after the next load.
+  /// The verdict is kept locally until then rather than removing the row immediately,
+  /// so a review pass stays legible while it is in progress.
+  func reviewMemory(_ memory: ServerMemory, keep: Bool) async {
+    let previous = reviewVerdicts[memory.id]
+    reviewVerdicts[memory.id] = keep
+    do {
+      try await APIClient.shared.reviewMemory(id: memory.id, keep: keep)
+    } catch {
+      reviewVerdicts[memory.id] = previous
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memories)
+      logError("MemoriesViewModel: Failed to review memory", error: error)
+    }
+  }
 
   func deleteMemory(_ memory: ServerMemory) async {
     // Cancel any existing pending delete
     deleteTask?.cancel()
     if let existingPending = pendingDeleteMemory {
+      // Drop only this row's deferred retry (a gate-busy failure armed while
+      // its undo window was still open); retries pending for other rows keep
+      // their slots. The direct delete below supersedes the retry.
+      deferredDeleteRetry.cancel(memoryID: existingPending.id)
       // Immediately delete the previous pending memory
       await performActualDelete(existingPending)
     }
 
     do {
-      try await MemoryStorage.shared.deleteMemoryByBackendId(memory.id)
+      try await MemoryStorage.shared.deleteMemory(surfacedId: memory.id)
     } catch {
       logError("Failed to soft-delete memory locally", error: error)
     }
 
-    // Remove from UI immediately (optimistic) — must also remove from filter source arrays
-    // so recomputeFilteredMemories() doesn't resurrect the deleted memory.
+    // Remove from UI immediately (optimistic) from every filter source array, then recompute:
+    // the `memories` didSet ran before the search/category sources were pruned.
     OmiMotion.withGated(.easeInOut(duration: 0.2)) {
       memories.removeAll { $0.id == memory.id }
       filteredFromDatabase.removeAll { $0.id == memory.id }
       allFilteredResults.removeAll { $0.id == memory.id }
       searchResults.removeAll { $0.id == memory.id }
+      recomputeFilteredMemories()
       pendingDeleteMemory = memory
-      undoTimeRemaining = 4
+      undoTimeRemaining = OmiFeedbackTiming.undo
     }
 
     // The soft-delete above immediately drops this row from getLocalMemories(), so
@@ -1245,7 +1662,7 @@ class MemoriesViewModel: ObservableObject {
     // Start countdown timer
     deleteTask = Task {
       // Update countdown every 100ms
-      for _ in 0..<40 {
+      for _ in 0..<Int(OmiFeedbackTiming.undo * 10) {
         try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
         if Task.isCancelled { return }
         await MainActor.run {
@@ -1256,9 +1673,7 @@ class MemoriesViewModel: ObservableObject {
       if Task.isCancelled { return }
 
       // Timer expired, perform actual delete
-      await MainActor.run {
-        confirmDelete()
-      }
+      await MainActor.run { _ = confirmDelete() }
     }
   }
 
@@ -1269,6 +1684,13 @@ class MemoriesViewModel: ObservableObject {
     deleteTask?.cancel()
     deleteTask = nil
 
+    // Cancel this row's deferred retry before restoring, or a gate-busy retry
+    // would delete the server row the user just put back. If the retry's (or
+    // the confirm's) delete request is already in flight there is nothing to
+    // un-send: the server delete completes and the next server pull
+    // re-aligns the row. Do not attempt an un-delete.
+    deferredDeleteRetry.cancel(memoryID: memory.id)
+
     OmiMotion.withGated(.easeInOut(duration: 0.2)) {
       pendingDeleteMemory = nil
       undoTimeRemaining = 0
@@ -1276,7 +1698,7 @@ class MemoriesViewModel: ObservableObject {
 
     Task {
       do {
-        try await MemoryStorage.shared.restoreMemoryByBackendId(memory.id)
+        try await MemoryStorage.shared.restoreMemory(surfacedId: memory.id)
       } catch {
         logError("Failed to restore memory locally", error: error)
       }
@@ -1284,26 +1706,35 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
-  func confirmDelete() {
-    guard let memory = pendingDeleteMemory else { return }
+  @discardableResult
+  func confirmDelete() -> Task<Void, Never> {
+    guard let memory = pendingDeleteMemory else { return Task {} }
 
     // Cancel timer if still running
     deleteTask?.cancel()
     deleteTask = nil
 
-    Task {
+    return Task { [weak self] in
+      guard let self else { return }
       await performActualDelete(memory)
-    }
-
-    OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-      pendingDeleteMemory = nil
-      undoTimeRemaining = 0
+      guard self.pendingDeleteMemory?.id == memory.id else { return }
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+        self.pendingDeleteMemory = nil
+        self.undoTimeRemaining = 0
+      }
     }
   }
 
-  private func performActualDelete(_ memory: ServerMemory) async {
+  private func performActualDelete(_ memory: ServerMemory, allowsDeferredRetry: Bool = true) async {
+    guard finalizingDeleteMemoryIDs.insert(memory.id).inserted else { return }
+    defer { finalizingDeleteMemoryIDs.remove(memory.id) }
+
+    if MemoryIdentity(surfacedId: memory.id).isLocalOnly {
+      return
+    }
+
     do {
-      try await APIClient.shared.deleteMemory(id: memory.id)
+      try await deleteMemoryRequest(memory.id)
       AnalyticsManager.shared.memoryDeleted(conversationId: memory.id)
       // The backend row is now gone, so the raw backend paging cursor is one
       // position too high — decrement it so the next API-backed loadMore() doesn't
@@ -1312,9 +1743,28 @@ class MemoriesViewModel: ObservableObject {
       // undo window; decrementing earlier would re-fetch and duplicate it.
       rawBackendOffset = max(0, rawBackendOffset - 1)
     } catch {
+      // A gate-busy 409 asks for a short backoff, not a refusal: restoring made
+      // every delete during a retention-cleanup window resurrect seconds after
+      // confirmation. Keep the row soft-deleted; the initial attempt arms this
+      // row's one deferred retry (keyed by memory id, so another row's delete
+      // cannot cancel it), and a still-busy retry stops without restoring.
+      if let retryDelay = MemoryDeleteRecovery.retryDelay(for: error) {
+        logError("MemoriesViewModel: Delete deferred by busy account gate", error: error)
+        errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryDeletion)
+        if allowsDeferredRetry {
+          deferredDeleteRetry.schedule(after: retryDelay, memoryID: memory.id) { [weak self] in
+            await self?.performActualDelete(memory, allowsDeferredRetry: false)
+          }
+        }
+        return
+      }
       logError("Failed to delete memory", error: error)
+      // Restoring the row without saying why is indistinguishable from the delete
+      // being ignored: the memory vanishes, comes back seconds later, and the user
+      // is told nothing. Every other mutation on this model reports its failure.
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryDeletion)
       do {
-        try await MemoryStorage.shared.restoreMemoryByBackendId(memory.id)
+        try await MemoryStorage.shared.restoreMemory(surfacedId: memory.id)
       } catch {
         logError("Failed to restore memory after delete failure", error: error)
       }
@@ -1334,9 +1784,47 @@ class MemoriesViewModel: ObservableObject {
       editingMemory = nil
       editText = ""
       await loadMemories()
+      await refreshSelectedMemory()
     } catch {
       logError("Failed to edit memory", error: error)
     }
+  }
+
+  /// Re-reads the open memory after it changes on the server.
+  ///
+  /// `selectedMemory` holds a value copy, and `ServerMemory.content` is
+  /// immutable, so a successful edit left the detail panel rendering the text
+  /// the user had just replaced. As a modal that dismissed on save this was
+  /// invisible; as a persistent side panel it reads as "Save did nothing".
+  func refreshSelectedMemory() async {
+    guard let current = selectedMemory else { return }
+    if let refreshed = memories.first(where: { $0.id == current.id }) {
+      selectedMemory = refreshed
+      return
+    }
+    // The reloaded page is scope-filtered and may not contain it; the cache is
+    // authoritative for a single known id.
+    if let cached = await self.memories(withIDs: [current.id]).first {
+      selectedMemory = cached
+    }
+  }
+
+  /// Opens one memory in the detail panel by id, from anywhere in the app.
+  ///
+  /// Resolves through the cache rather than the visible page: the Brain Map
+  /// cites memories from the whole graph, and the page on screen is a
+  /// tier-filtered, device-scoped slice of it. Returns whether the memory was
+  /// found, so a caller that also switches surfaces does not navigate away to
+  /// an empty panel.
+  @discardableResult
+  func openMemory(id: String) async -> Bool {
+    if let onPage = memories.first(where: { $0.id == id }) {
+      selectedMemory = onPage
+      return true
+    }
+    guard let cached = await self.memories(withIDs: [id]).first else { return false }
+    selectedMemory = cached
+    return true
   }
 
   func toggleVisibility(_ memory: ServerMemory) async {
@@ -1435,13 +1923,31 @@ class MemoriesViewModel: ObservableObject {
     guard !didRegisterAutomationActions else { return }
     didRegisterAutomationActions = true
     let registry = DesktopAutomationActionRegistry.shared
-
+    // The Add Memory sheet's Save button is only reachable by clicking, and cursor
+    // synthesis is barred, so its filled and empty states were unverifiable outside
+    // production. This presents the real sheet with the real draft text.
+    registry.register(
+      name: "memories_open_add_sheet",
+      effects: [.localState],
+      summary: "Present the Add Memory sheet, optionally pre-filled with draft text",
+      params: ["text"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "memories view model deallocated"] }
+      self.newMemoryText = params["text"] ?? ""
+      self.showingAddMemory = true
+      return [
+        "presented": "true",
+        "draft_is_empty": self.newMemoryText.isEmpty ? "true" : "false",
+      ]
+    }
     registry.register(
       name: "memories_search",
+      effects: [.localState, .networkOrModel],
       summary: "Set memories search query and return filtered result count",
       params: ["query"]
     ) { [weak self] params in
       guard let self else { return ["error": "memories view model deallocated"] }
+      await self.refreshMemoriesIfNeeded()
       let query = params["query"] ?? ""
       self.searchText = query
       let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1465,6 +1971,7 @@ class MemoriesViewModel: ObservableObject {
 
     registry.register(
       name: "memories_set_tag_filter",
+      effects: [.localState],
       summary: "Set memory tag/category filters and return filtered count",
       params: ["tags"]
     ) { [weak self] params in
@@ -1500,6 +2007,7 @@ class MemoriesViewModel: ObservableObject {
 
     registry.register(
       name: "toggle_memory_visibility",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Toggle a memory's public/private visibility via the real API path",
       params: ["id", "marker"]
     ) { [weak self] params in
@@ -1542,51 +2050,59 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
-  // MARK: - Conversation Linking
-
-  func navigateToConversation(id: String) async {
-    isLoadingConversation = true
-    do {
-      linkedConversation = try await APIClient.shared.getConversation(id: id)
-    } catch {
-      logError("Failed to load conversation", error: error)
-    }
-    isLoadingConversation = false
-  }
-
-  func dismissConversation() {
-    linkedConversation = nil
-  }
 }
 
 // MARK: - Memories Page
 
 struct MemoriesPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
-  let graphViewModel: MemoryGraphViewModel
+  var brainDestination: MemoryHubDestination? = nil
+  var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  var onOpenConversation: ((String) -> Void)? = nil
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
-  @State private var showManagementMenu = false
 
   var body: some View {
-    Group {
-      if let conversation = viewModel.linkedConversation {
-        // Show conversation detail view
-        ConversationDetailView(
-          conversation: conversation,
-          onBack: { viewModel.dismissConversation() }
-        )
-      } else {
-        // Main memories view
-        mainMemoriesView
-      }
+    pageSurface
+      .glassContent()
+  }
+
+  @ViewBuilder
+  private var pageSurface: some View {
+    if let brainDestination, let onSelectBrainDestination {
+      BrainSectionPageLayout(
+        selected: brainDestination,
+        onSelect: onSelectBrainDestination,
+        onReselect: {
+          if viewModel.selectedMemory != nil {
+            viewModel.selectedMemory = nil
+          } else {
+            viewModel.searchText = ""
+          }
+        },
+        search: {
+          QuerySearchBar(
+            text: $viewModel.searchText,
+            accessibilityID: "memories-search-field",
+            placeholder: "Search memories", searchSurface: .memories
+          )
+        },
+        content: { pageContent }
+      )
+    } else {
+      pageContent
     }
   }
 
-  private var mainMemoriesView: some View {
+  @ViewBuilder
+  private var pageContent: some View {
+    mainMemoriesView
+  }
+
+  private var memoriesColumn: some View {
     VStack(spacing: 0) {
-      // Header (includes search, filters, and action buttons)
+      // Compact query/actions row. Brain navigation already identifies the page.
       header
 
       // Content
@@ -1594,6 +2110,8 @@ struct MemoriesPage: View {
         loadingView
       } else if let error = viewModel.errorMessage {
         errorView(error)
+      } else if hasActiveMemoryQueryScope && viewModel.filteredMemories.isEmpty {
+        noResultsView
       } else if viewModel.memories.isEmpty {
         emptyState
       } else if viewModel.filteredMemories.isEmpty {
@@ -1602,6 +2120,60 @@ struct MemoriesPage: View {
         memoryList
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private func memoryDetailPanel(_ memory: ServerMemory) -> some View {
+    MemoryDetailPanel(
+      memory: memory,
+      viewModel: viewModel,
+      categoryIcon: categoryIcon,
+      categoryColor: categoryColor,
+      tagColorFor: tagColorFor,
+      formatDate: formatDate,
+      onDismiss: { viewModel.selectedMemory = nil },
+      onOpenConversation: openSourceConversation
+    )
+    // Identity per memory: the panel holds edit state, and without this
+    // SwiftUI reuses the same instance across selections, carrying one
+    // memory's unsaved draft into the next memory's editor.
+    .id(memory.id)
+    // The panel sizes to this column rather than carrying its own width, which
+    // is what kept the old sheet's 450pt content clipped inside it.
+    .frame(width: 360)
+    .frame(maxHeight: .infinity)
+    .background(Ink.rowFill)
+    .overlay(alignment: .leading) {
+      Rectangle().fill(Ink.separator.opacity(0.25)).frame(width: 1)
+    }
+    .accessibilityIdentifier("memory_detail_panel")
+  }
+
+  private func openSourceConversation(_ conversationID: String) {
+    if let onOpenConversation {
+      onOpenConversation(conversationID)
+      return
+    }
+    ConversationDetailAutomationState.shared.requestOpen(
+      conversationId: conversationID,
+      showTranscript: false
+    )
+    NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
+  }
+
+  private var mainMemoriesView: some View {
+    // A memory opens into a side panel, not a modal. The Brain Map's inspector
+    // works the same way, so reading one thing never covers the list you were
+    // reading it from, and the two Memory surfaces behave identically.
+    HStack(spacing: 0) {
+      memoriesColumn
+
+      if let memory = viewModel.selectedMemory {
+        memoryDetailPanel(memory)
+          .transition(.move(edge: .trailing).combined(with: .opacity))
+      }
+    }
+    .animation(OmiMotion.gated(.easeOut(duration: 0.18)), value: viewModel.selectedMemory?.id)
     .background(Color.clear)
     .dismissableSheet(isPresented: $viewModel.showingAddMemory) {
       AddMemorySheet(viewModel: viewModel, onDismiss: { viewModel.showingAddMemory = false })
@@ -1613,35 +2185,44 @@ struct MemoriesPage: View {
       )
       .frame(width: 400)
     }
-    .dismissableSheet(item: $viewModel.selectedMemory) { memory in
-      MemoryDetailSheet(
-        memory: memory,
-        viewModel: viewModel,
-        categoryIcon: categoryIcon,
-        categoryColor: categoryColor,
-        tagColorFor: tagColorFor,
-        formatDate: formatDate,
-        onDismiss: { viewModel.selectedMemory = nil }
-      )
-      .frame(width: 450, height: 600)
-    }
     .overlay(alignment: .bottom) {
       undoDeleteToast
     }
-    .overlay {
-      // Loading overlay for conversation fetch
-      if viewModel.isLoadingConversation {
-        Color.black.opacity(0.3)
-          .ignoresSafeArea()
-          .overlay {
-            ProgressView()
-              .scaleEffect(1.2)
-              .tint(.white)
-          }
+    .shellConfirmation(
+      isPresented: $viewModel.showingDeleteAllConfirmation,
+      title: "Delete Default Memories?",
+      message: viewModel.canonicalLifecycleExposed
+        ? "This permanently deletes your Short-term and Long-term memories. Archive is not included."
+        : "This permanently deletes your default memories.",
+      confirmTitle: "Delete Memories"
+    ) {
+      Task { await viewModel.deleteMemories(scope: .defaultAccess) }
+    }
+    // Esc closes the memory panel, then clears the search, before the shell sees it.
+    .onEscapeKey(priority: .content) {
+      if viewModel.selectedMemory != nil {
+        viewModel.selectedMemory = nil
+        return true
       }
+      if !viewModel.searchText.isEmpty {
+        viewModel.searchText = ""
+        return true
+      }
+      return false
     }
     .task {
       await viewModel.loadMemoriesIfNeeded()
+    }
+    // Opening a memory is a click on a card, so the detail panel is otherwise
+    // unreachable to cursor-free QA. This is the same entry point the card uses.
+    .onReceive(
+      NotificationCenter.default.publisher(for: .desktopAutomationMemoryDetailOpenRequested)
+    ) { note in
+      guard let memoryId = note.userInfo?["memory_id"] as? String, !memoryId.isEmpty else {
+        viewModel.selectedMemory = nil
+        return
+      }
+      Task { await viewModel.openMemory(id: memoryId) }
     }
   }
 
@@ -1649,49 +2230,10 @@ struct MemoriesPage: View {
 
   @ViewBuilder
   private var undoDeleteToast: some View {
-    if viewModel.pendingDeleteMemory != nil {
-      HStack(spacing: OmiSpacing.md) {
-        Image(systemName: "trash")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
-
-        Text("Memory deleted")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textPrimary)
-
-        Spacer()
-
-        // Progress indicator
-        Text(String(format: "%.0fs", viewModel.undoTimeRemaining))
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
-          .monospacedDigit()
-
-        Button {
-          viewModel.undoDelete()
-        } label: {
-          Text("Undo")
-            .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-        }
-        .buttonStyle(.plain)
-
-        Button {
-          // Dismiss immediately and delete now
-          viewModel.confirmDelete()
-        } label: {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-        .buttonStyle(.plain)
+    if let memory = viewModel.pendingDeleteMemory {
+      UndoToast(message: "Memory deleted", detail: memory.content) {
+        viewModel.undoDelete()
       }
-      .padding(.horizontal, OmiSpacing.lg)
-      .padding(.vertical, OmiSpacing.md)
-      .omiPanel(
-        fill: OmiColors.backgroundSecondary, radius: 20, stroke: OmiColors.border.opacity(0.18),
-        shadowOpacity: 0.18, shadowRadius: 14, shadowY: 8
-      )
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.bottom, OmiSpacing.xxl)
       .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -1701,42 +2243,75 @@ struct MemoriesPage: View {
   }
 
   // MARK: - Header
-
   private var header: some View {
-    HStack(spacing: OmiSpacing.md) {
-      // Search field
-      HStack(spacing: OmiSpacing.sm) {
-        if viewModel.isSearching || viewModel.isLoadingFiltered {
-          ProgressView()
-            .scaleEffect(0.7)
-            .frame(width: 14, height: 14)
-        } else {
-          Image(systemName: "magnifyingglass")
-            .foregroundColor(OmiColors.textTertiary)
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      if brainDestination != nil {
+        memoriesQueryToolbar
+          .pagePanelSubsequentRowInsets()
+      } else {
+        // A pill row and a text field cannot share one line in a narrow column.
+        // The pills hold their intrinsic width so their own labels stay readable,
+        // which used to leave the search field squeezed to "Sea" whenever the
+        // detail panel was open. Below the width where both fit, the search field
+        // takes its own line instead of being the thing that loses.
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: OmiSpacing.sm) {
+            searchField.frame(minWidth: 200)
+            memoriesQueryToolbar
+          }
+
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+            searchField
+            memoriesQueryToolbar
+          }
         }
+        .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
+        .padding(.vertical, OmiSpacing.xs)
+      }
+    }
+  }
 
-        TextField("Search memories...", text: $viewModel.searchText)
-          .textFieldStyle(.plain)
-          .foregroundColor(OmiColors.textPrimary)
+  private var searchField: some View {
+    OmiSearchField(
+      placeholder: "Search memories",
+      text: $viewModel.searchText,
+      isLoading: viewModel.isSearching || viewModel.isLoadingFiltered, searchSurface: .memories
+    )
+  }
 
-        if !viewModel.searchText.isEmpty {
+  private var memoriesQueryToolbar: some View {
+    PageQueryToolbar(
+      refinement: {
+        filterControls
+      },
+      activeFilters: {
+        ActivePageFilterStrip(filters: activeMemoryFilters, onClearAll: clearMemoryFilters)
+      },
+      actions: {
+        HStack(spacing: OmiSpacing.sm) {
+          // `[More] [primary]`, the order every page's toolbar uses.
+          PageMoreMenu(help: "More memory actions", accessibilityIdentifier: "memories-more-actions") {
+            managementMenuItems
+          }
+
           Button {
-            viewModel.searchText = ""
+            viewModel.showingAddMemory = true
           } label: {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(OmiColors.textTertiary)
+            PageQueryActionLabel(icon: "plus", title: "New Memory", isPrimary: true)
           }
           .buttonStyle(.plain)
+          .help("New memory (⌘N)").keyboardShortcut("n", modifiers: .command)
+          .accessibilityIdentifier("memories-add-memory")
         }
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
-      .frame(minHeight: 46)
-      .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 18)
+    )
+  }
 
+  @ViewBuilder
+  private var filterControls: some View {
+    Menu {
       if viewModel.canonicalLifecycleExposed {
-        // Layer filter dropdown. Default is product default access: Short-term + Long-term.
-        Menu {
+        Section("Lifecycle") {
           ForEach(MemoryLayerFilter.allCases) { filter in
             Button {
               viewModel.selectedLayerFilter = filter
@@ -1750,136 +2325,111 @@ struct MemoriesPage: View {
             }
             .help(filter.description)
           }
+        }
+      }
+
+      Section("Source") {
+        Button {
+          viewModel.filterThisDeviceOnly.toggle()
         } label: {
-          HStack(spacing: OmiSpacing.xs) {
-            Image(systemName: viewModel.selectedLayerFilter == .archive ? "archivebox" : "clock.badge.checkmark")
-              .scaledFont(size: OmiType.caption)
-            Text(viewModel.selectedLayerFilter.displayName)
-              .scaledFont(
-                size: OmiType.body, weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium)
-            Image(systemName: "chevron.down")
-              .scaledFont(size: OmiType.micro)
+          Label(
+            viewModel.filterThisDeviceOnly ? "All devices" : "This device",
+            systemImage: "desktopcomputer")
+        }
+      }
+
+      Section("Type") {
+        Button {
+          pendingSelectedTags = viewModel.selectedTags
+          categorySearchText = ""
+          // Let the menu dismiss before presenting its anchored popover.
+          DispatchQueue.main.async {
+            showCategoryFilter = true
           }
-          .foregroundColor(
-            viewModel.selectedLayerFilter == .defaultAccess ? OmiColors.textSecondary : OmiColors.textPrimary
-          )
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.md)
-          .frame(minHeight: 46)
-          .omiControlSurface(
-            fill: viewModel.selectedLayerFilter == .defaultAccess
-              ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
-            radius: 18,
-            stroke: viewModel.selectedLayerFilter == .defaultAccess ? nil : OmiColors.border.opacity(0.6)
-          )
+        } label: {
+          Label(
+            viewModel.selectedTags.isEmpty ? "Choose types…" : "Change types…",
+            systemImage: "tag")
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .help("Default shows Short-term + Long-term. Archive is explicit.")
       }
 
-      Button {
-        viewModel.filterThisDeviceOnly.toggle()
-      } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "desktopcomputer")
-            .scaledFont(size: OmiType.caption)
-          Text("This device")
-            .scaledFont(size: OmiType.body, weight: viewModel.filterThisDeviceOnly ? .medium : .regular)
-        }
-        .foregroundColor(
-          viewModel.filterThisDeviceOnly ? OmiColors.textPrimary : OmiColors.textSecondary
-        )
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.md)
-        .frame(minHeight: 46)
-        .omiControlSurface(
-          fill: viewModel.filterThisDeviceOnly
-            ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary,
-          radius: 18,
-          stroke: viewModel.filterThisDeviceOnly ? OmiColors.border.opacity(0.6) : nil
-        )
+      if memoryActiveFilterCount > 0 {
+        Divider()
+        Button("Clear all filters", action: clearMemoryFilters)
       }
-      .buttonStyle(.plain)
-      .help("Show memories captured on this Mac")
-
-      // Category filter dropdown
-      Button {
-        pendingSelectedTags = viewModel.selectedTags
-        categorySearchText = ""
-        showCategoryFilter = true
-      } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "line.3.horizontal.decrease")
-            .scaledFont(size: OmiType.caption)
-          Text(categoryFilterLabel)
-            .scaledFont(size: OmiType.body, weight: viewModel.selectedTags.isEmpty ? .regular : .medium)
-          Image(systemName: "chevron.down")
-            .scaledFont(size: OmiType.micro)
-        }
-        .foregroundColor(
-          viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary
-        )
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.md)
-        .frame(minHeight: 46)
-        .omiControlSurface(
-          fill: viewModel.selectedTags.isEmpty
-            ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
-          radius: 18,
-          stroke: viewModel.selectedTags.isEmpty ? nil : OmiColors.border.opacity(0.6)
-        )
-      }
-      .buttonStyle(.plain)
-      .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
-        categoryFilterPopover
-      }
-
-      // Add Memory button (icon only)
-      Button {
-        viewModel.showingAddMemory = true
-      } label: {
-        Image(systemName: "plus")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(.black)
-          .frame(width: 42, height: 42)
-          .background(OmiColors.textPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-      }
-      .buttonStyle(.plain)
-      .help("Add Memory")
-
-      // Management menu
-      Button {
-        showManagementMenu = true
-      } label: {
-        Image(systemName: "chevron.down")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.black)
-          .frame(width: 42, height: 42)
-          .background(OmiColors.textPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-      }
-      .buttonStyle(.plain)
-      .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
-        managementMenuPopover
-      }
+    } label: {
+      PageQueryControlLabel(
+        icon: "line.3.horizontal.decrease",
+        dimension: memoryActiveFilterCount == 0 ? nil : "Filter",
+        value: memoryActiveFilterCount == 0 ? "Filter" : "\(memoryActiveFilterCount)",
+        isActive: memoryActiveFilterCount > 0,
+        dimensionSeparator: " ·")
     }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.top, OmiSpacing.xxl)
-    .padding(.bottom, OmiSpacing.xl)
-    .alert("Delete Default Memories?", isPresented: $viewModel.showingDeleteAllConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete Default Memories", role: .destructive) {
-        Task { await viewModel.deleteMemories(scope: .defaultAccess) }
-      }
-    } message: {
-      Text(
-        viewModel.canonicalLifecycleExposed
-          ? "This would delete Short-term and Long-term memories only. Archive is not included. Bulk deletion remains disabled until the backend supports layer-scoped mutation semantics."
-          : "This would delete default memories. Bulk deletion remains disabled until the backend supports scoped mutation semantics."
-      )
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
+      categoryFilterPopover
     }
+    .help("Filter memories by status, source, or type")
+    .accessibilityIdentifier("memories-filter-menu")
+  }
+
+  private var memoryActiveFilterCount: Int {
+    let lifecycle =
+      viewModel.canonicalLifecycleExposed && viewModel.selectedLayerFilter != .defaultAccess ? 1 : 0
+    return lifecycle + (viewModel.filterThisDeviceOnly ? 1 : 0) + viewModel.selectedTags.count
+  }
+
+  private var activeMemoryFilters: [PageActiveFilter] {
+    let hasLifecycleFilter =
+      viewModel.canonicalLifecycleExposed
+      && viewModel.selectedLayerFilter != .defaultAccess
+    var filters: [PageActiveFilter] = []
+
+    if hasLifecycleFilter {
+      filters.append(
+        PageActiveFilter(
+          id: "lifecycle", title: viewModel.selectedLayerFilter.displayName,
+          onRemove: { viewModel.selectedLayerFilter = .defaultAccess }))
+    }
+
+    if viewModel.filterThisDeviceOnly {
+      filters.append(
+        PageActiveFilter(
+          id: "device", title: "This device",
+          onRemove: { viewModel.filterThisDeviceOnly = false }))
+    }
+
+    filters.append(
+      contentsOf: viewModel.selectedTags.sorted { $0.displayName < $1.displayName }.map { tag in
+        PageActiveFilter(id: "tag-\(tag.id)", title: tag.displayName) {
+          viewModel.selectedTags.remove(tag)
+        }
+      })
+
+    return filters
+  }
+
+  private func clearMemoryFilters() {
+    if viewModel.canonicalLifecycleExposed {
+      viewModel.selectedLayerFilter = .defaultAccess
+    }
+    if viewModel.filterThisDeviceOnly {
+      viewModel.filterThisDeviceOnly = false
+    }
+    if !viewModel.selectedTags.isEmpty {
+      viewModel.selectedTags = []
+    }
+  }
+
+  /// A scoped request is not an empty account. This intentionally includes
+  /// lifecycle and device scope even though `MemoriesViewModel.isInFilteredMode`
+  /// excludes them for pagination routing.
+  private var hasActiveMemoryQueryScope: Bool {
+    !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || viewModel.selectedLayerFilter != .defaultAccess
+      || viewModel.filterThisDeviceOnly
+      || !viewModel.selectedTags.isEmpty
   }
 
   // MARK: - Filter Bar
@@ -1914,28 +2464,21 @@ struct MemoriesPage: View {
       // Search field
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "magnifyingglass")
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .scaledFont(size: OmiType.caption)
 
-        TextField("Search categories...", text: $categorySearchText)
+        TextField("Search categories…", text: $categorySearchText)
           .textFieldStyle(.plain)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         if !categorySearchText.isEmpty {
-          Button {
-            categorySearchText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(OmiColors.textTertiary)
-              .scaledFont(size: OmiType.caption)
-          }
-          .buttonStyle(.plain)
+          ClearFieldButton { categorySearchText = "" }
         }
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundTertiary)
+      .background(Ink.rowFillHover)
       .cornerRadius(OmiChrome.badgeRadius)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.top, OmiSpacing.md)
@@ -1960,22 +2503,22 @@ struct MemoriesPage: View {
               Spacer()
               Text("\(viewModel.totalMemoriesCount)")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .padding(.horizontal, OmiSpacing.xs)
                 .padding(.vertical, OmiSpacing.hairline)
-                .background(OmiColors.backgroundTertiary)
+                .background(Ink.rowFillHover)
                 .cornerRadius(OmiChrome.stripRadius)
               if pendingSelectedTags.isEmpty {
                 Image(systemName: "checkmark")
                   .scaledFont(size: OmiType.caption, weight: .medium)
-                  .foregroundColor(.white)
+                  .foregroundColor(Ink.primary)
               }
             }
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
             .background(
-              pendingSelectedTags.isEmpty ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear
+              pendingSelectedTags.isEmpty ? Ink.rowFillHover.opacity(0.5) : Color.clear
             )
             .cornerRadius(OmiChrome.badgeRadius)
             .contentShape(Rectangle())
@@ -2006,21 +2549,21 @@ struct MemoriesPage: View {
                 Spacer()
                 Text("\(count)")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                   .padding(.horizontal, OmiSpacing.xs)
                   .padding(.vertical, OmiSpacing.hairline)
-                  .background(OmiColors.backgroundTertiary)
+                  .background(Ink.rowFillHover)
                   .cornerRadius(OmiChrome.stripRadius)
                 if isSelected {
                   Image(systemName: "checkmark")
                     .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(.white)
+                    .foregroundColor(Ink.primary)
                 }
               }
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .padding(.horizontal, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.sm)
-              .background(isSelected ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+              .background(isSelected ? Ink.rowFillHover.opacity(0.5) : Color.clear)
               .cornerRadius(OmiChrome.badgeRadius)
               .contentShape(Rectangle())
             }
@@ -2037,140 +2580,54 @@ struct MemoriesPage: View {
 
       // Action buttons
       HStack(spacing: OmiSpacing.sm) {
-        Button {
-          pendingSelectedTags.removeAll()
-        } label: {
-          Text("Clear")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
-            .padding(.horizontal, OmiSpacing.lg)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(OmiChrome.badgeRadius)
-        }
-        .buttonStyle(.plain)
+        Button("Clear") { pendingSelectedTags.removeAll() }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
-        Button {
+        Button("Apply") {
           viewModel.selectedTags = pendingSelectedTags
           showCategoryFilter = false
-        } label: {
-          Text("Apply")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(.black)
-            .padding(.horizontal, OmiSpacing.lg)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(Color.white)
-            .cornerRadius(OmiChrome.badgeRadius)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
       .padding(OmiSpacing.md)
     }
     .frame(width: 280)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
   }
 
   // MARK: - Management Menu Popover
 
-  private var managementMenuPopover: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      // Visibility section
-      Text("Visibility")
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.top, OmiSpacing.md)
-        .padding(.bottom, OmiSpacing.xs)
-
+  @ViewBuilder
+  private var managementMenuItems: some View {
+    let bulkUnavailable =
+      !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty
+      || viewModel.isBulkOperationInProgress
+    Section("Visibility") {
       Button {
-        showManagementMenu = false
         Task { await viewModel.makeMemoriesPrivate(scope: .defaultAccess) }
       } label: {
-        HStack(spacing: OmiSpacing.sm) {
-          Image(systemName: "lock")
-            .scaledFont(size: OmiType.body)
-            .frame(width: 20)
-          Text("Make Default Memories Private")
-            .scaledFont(size: OmiType.body)
-          Spacer()
-        }
-        .foregroundColor(OmiColors.textPrimary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .contentShape(Rectangle())
+        Label("Make Default Memories Private", systemImage: "lock")
       }
-      .buttonStyle(.plain)
-      .disabled(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-      )
-      .opacity(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-          ? 0.5 : 1
-      )
-      .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
+      .disabled(bulkUnavailable)
 
       Button {
-        showManagementMenu = false
         Task { await viewModel.makeMemoriesPublic(scope: .defaultAccess) }
       } label: {
-        HStack(spacing: OmiSpacing.sm) {
-          Image(systemName: "globe")
-            .scaledFont(size: OmiType.body)
-            .frame(width: 20)
-          Text("Make Default Memories Public")
-            .scaledFont(size: OmiType.body)
-          Spacer()
-        }
-        .foregroundColor(OmiColors.textPrimary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .contentShape(Rectangle())
+        Label("Make Default Memories Public", systemImage: "globe")
       }
-      .buttonStyle(.plain)
-      .disabled(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-      )
-      .opacity(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-          ? 0.5 : 1
-      )
-      .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
-
-      Divider()
-        .padding(.vertical, OmiSpacing.sm)
-        .padding(.horizontal, OmiSpacing.md)
-
-      // Danger section
-      Button {
-        showManagementMenu = false
-        viewModel.showingDeleteAllConfirmation = true
-      } label: {
-        HStack(spacing: OmiSpacing.sm) {
-          Image(systemName: "trash")
-            .scaledFont(size: OmiType.body)
-            .frame(width: 20)
-          Text("Delete Default Memories")
-            .scaledFont(size: OmiType.body)
-          Spacer()
-        }
-        .foregroundColor(OmiColors.error)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .disabled(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-      )
-      .opacity(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
-          ? 0.5 : 1
-      )
-      .help("Bulk memory deletion is disabled until the backend supports layer-scoped operations.")
+      .disabled(bulkUnavailable)
     }
-    .padding(.vertical, OmiSpacing.xxs)
-    .frame(width: 200)
-    .background(OmiColors.backgroundSecondary)
+
+    Divider()
+
+    Button(role: .destructive) {
+      viewModel.showingDeleteAllConfirmation = true
+    } label: {
+      Label("Delete Default Memories…", systemImage: "trash")
+    }
+    .disabled(
+      !viewModel.isBulkDeletionAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+    )
   }
 
   // MARK: - Memory List
@@ -2178,19 +2635,26 @@ struct MemoriesPage: View {
   private var memoryList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
-        MemoryGraphInlineCard(viewModel: graphViewModel)
-
-        LazyVStack(spacing: OmiSpacing.sm) {
+        // Brain Map lives in its own hub tab (beside Memories/Conversations)
+        // and nowhere else. Both the legacy graph and the canonical atlas were
+        // previously embedded at the top of the memory list too; a second entry
+        // point to the same surface only competed with the memories the page
+        // exists to show.
+        LazyVStack(spacing: 0) {
           ForEach(viewModel.filteredMemories) { memory in
             MemoryCardView(
               memory: memory,
-              onTap: {
-                viewModel.selectedMemory = memory
+              onTap: { viewModel.openMemoryFromSearch(memory) },
+              verdict: viewModel.reviewVerdicts[memory.id]
+                ?? (memory.reviewed ? memory.userReview : nil),
+              onReview: { keep in
+                Task { await viewModel.reviewMemory(memory, keep: keep) }
               },
               categoryIcon: categoryIcon,
               categoryColor: categoryColor,
               tagColorFor: tagColorFor,
-              formatDate: formatDate
+              formatDate: formatDate,
+              onDelete: { Task { await viewModel.deleteMemory(memory) } }
             )
             .onAppear {
               // Load more when approaching the end of the list
@@ -2203,10 +2667,10 @@ struct MemoriesPage: View {
         if viewModel.isLoadingMore {
           HStack(spacing: OmiSpacing.sm) {
             ProgressView()
-              .scaleEffect(0.8)
-            Text("Loading more...")
+              .controlSize(.small)
+            Text("Loading more…")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .frame(maxWidth: .infinity)
           .padding(.vertical, OmiSpacing.lg)
@@ -2223,10 +2687,10 @@ struct MemoriesPage: View {
                 Text("Load more memories")
               }
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
-              .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 16)
+              .glassChip()
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
@@ -2240,10 +2704,10 @@ struct MemoriesPage: View {
                 Text("Load more memories")
               }
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
-              .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 16)
+              .glassChip()
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
@@ -2251,9 +2715,11 @@ struct MemoriesPage: View {
           }
         }
       }
-      .padding(.horizontal, OmiSpacing.xxl)
-      .padding(.bottom, OmiSpacing.xxl)
+      .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+      .padding(.top, PagePanelVerticalRhythm.contentGap)
+      .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
     }
+    .glassScrollFade()
   }
 
   private func tagBadge(_ title: String, _ icon: String, _ color: Color) -> some View {
@@ -2263,7 +2729,7 @@ struct MemoriesPage: View {
       Text(title)
         .scaledFont(size: OmiType.caption, weight: .medium)
     }
-    .foregroundColor(OmiColors.textSecondary)
+    .foregroundColor(Ink.secondary)
   }
 
   private func categoryIcon(_ category: MemoryCategory) -> String {
@@ -2271,11 +2737,11 @@ struct MemoriesPage: View {
   }
 
   private func categoryColor(_ category: MemoryCategory) -> Color {
-    OmiColors.textSecondary
+    Ink.secondary
   }
 
   private func tagColorFor(_ tag: String) -> Color {
-    return OmiColors.textSecondary
+    return Ink.secondary
   }
 
   private func formatDate(_ date: Date) -> String {
@@ -2293,114 +2759,65 @@ struct MemoriesPage: View {
   // MARK: - Empty States
 
   private var emptyState: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "brain.head.profile")
-        .scaledFont(size: 48)
-        .foregroundColor(OmiColors.textTertiary)
-
-      Text("No Memories Yet")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
-
-      Text(
-        "Your memories and tips will appear here.\nMemories are extracted from your conversations."
-      )
-      .scaledFont(size: OmiType.body)
-      .foregroundColor(OmiColors.textTertiary)
-      .multilineTextAlignment(.center)
-
+    GlassEmptyState(
+      systemImage: "brain.head.profile",
+      title: "No Memories Yet",
+      message: "Your memories and tips will appear here.\nMemories are extracted from your conversations."
+    ) {
       Button {
         viewModel.showingAddMemory = true
       } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "plus")
-          Text("Add Your First Memory")
-        }
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.backgroundPrimary)
-        .padding(.horizontal, OmiSpacing.xl)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.accent)
-        .cornerRadius(OmiChrome.elementRadius)
+        Label("New Memory", systemImage: "plus")
       }
-      .buttonStyle(.plain)
-      .padding(.top, OmiSpacing.sm)
+      .buttonStyle(OmiButtonStyle(.primary, size: .compact))
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private var noResultsView: some View {
-    VStack(spacing: OmiSpacing.md) {
-      Image(systemName: "magnifyingglass")
-        .scaledFont(size: 36)
-        .foregroundColor(OmiColors.textTertiary)
-
-      Text("No Results")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
-
-      Text("Try a different search or filter")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
-
-      if !viewModel.selectedTags.isEmpty {
-        Button {
-          viewModel.selectedTags.removeAll()
-        } label: {
-          Text("Clear Filters")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
-        }
-        .buttonStyle(.plain)
+    GlassEmptyState(
+      systemImage: "magnifyingglass",
+      title: "No Matching Memories",
+      message: memoryNoResultsDescription
+    ) {
+      if !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Button("Clear Search") { viewModel.searchText = "" }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+      }
+      if hasActiveMemoryFilterScope {
+        Button("Clear Filters") { clearMemoryFilters() }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .accessibilityIdentifier("memories-filtered-empty")
+  }
+
+  private var hasActiveMemoryFilterScope: Bool {
+    viewModel.selectedLayerFilter != .defaultAccess
+      || viewModel.filterThisDeviceOnly
+      || !viewModel.selectedTags.isEmpty
+  }
+
+  private var memoryNoResultsDescription: String {
+    let hasSearch = !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    if hasSearch && hasActiveMemoryFilterScope {
+      return "Nothing matches your search and active filters."
+    }
+    if hasSearch {
+      return "Nothing matches your search. Try a different term."
+    }
+    return "Nothing matches the selected filters."
   }
 
   private var loadingView: some View {
-    VStack(spacing: OmiSpacing.md) {
-      ProgressView()
-        .progressViewStyle(.circular)
-        .scaleEffect(1.2)
-
-      Text("Loading memories...")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassLoadingState(label: "Loading memories…")
   }
 
   private func errorView(_: String) -> some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "exclamationmark.triangle")
-        .scaledFont(size: 36)
-        .foregroundColor(OmiColors.error)
-
-      Text("Failed to Load Memories")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
-
-      Text("Check your connection and try again.")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
-
-      Button {
-        Task { await viewModel.loadMemories() }
-      } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "arrow.clockwise")
-          Text("Retry")
-        }
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.backgroundPrimary)
-        .padding(.horizontal, OmiSpacing.xl)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.accent)
-        .cornerRadius(OmiChrome.elementRadius)
-      }
-      .buttonStyle(.plain)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassErrorState(
+      title: "Couldn't Load Memories",
+      message: "Check your connection and try again.",
+      retry: { Task { await viewModel.loadMemories() } }
+    )
   }
 
   // MARK: - Sheets
@@ -2423,10 +2840,10 @@ private struct MemoryLayerBadge: View {
         Text(layer.displayName)
           .scaledFont(size: OmiType.micro, weight: .medium)
       }
-      .foregroundColor(layer == .archive ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .foregroundColor(layer == .archive ? Ink.primary : Ink.secondary)
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.vertical, OmiSpacing.hairline)
-      .background(layer == .archive ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary)
+      .background(layer == .archive ? Ink.rowFill : Ink.rowFillHover)
       .clipShape(Capsule())
     }
     .buttonStyle(.plain)
@@ -2435,10 +2852,10 @@ private struct MemoryLayerBadge: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         Text(layer.displayName)
           .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Text(layer.layerInfoText)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
       .padding(OmiSpacing.md)
@@ -2453,10 +2870,17 @@ private typealias MemoryTierBadge = MemoryLayerBadge
 private struct MemoryCardView: View {
   let memory: ServerMemory
   let onTap: () -> Void
+  /// nil = not yet judged. Session verdicts win over the server's, so a card
+  /// reflects the click immediately instead of waiting for the next load.
+  let verdict: Bool?
+  let onReview: (Bool) -> Void
   let categoryIcon: (MemoryCategory) -> String
   let categoryColor: (MemoryCategory) -> Color
   let tagColorFor: (String) -> Color
   let formatDate: (Date) -> String
+  /// Right-click parity with the detail panel's menu, so a memory's actions are reachable without
+  /// opening it first — the same as a conversation row.
+  var onDelete: (() -> Void)? = nil
 
   @State private var isHovered = false
 
@@ -2467,16 +2891,16 @@ private struct MemoryCardView: View {
 
   var body: some View {
     Button(action: onTap) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         HStack(alignment: .top, spacing: OmiSpacing.sm) {
           Group {
             if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
               Text("Protected memory")
                 .italic()
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             } else {
               Text(memory.content)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
             }
           }
           .scaledFont(size: 13.5)
@@ -2492,15 +2916,15 @@ private struct MemoryCardView: View {
         HStack(spacing: OmiSpacing.sm) {
           Text(formatDate(memory.createdAt))
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
 
           if let deviceLabel = ClientDeviceService.shared.deviceProvenanceLabel(for: memory) {
             Text(deviceLabel)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
-          // Badge when the server sent an authoritative layer (canonical cohort always does).
+          // Badge when the server sent an authoritative lifecycle layer.
           // Only badge memories the backend actually tiered; legacy/untiered
           // records carry no real tier, so we show no badge for them.
           if memory.tierIsExplicit {
@@ -2510,218 +2934,128 @@ private struct MemoryCardView: View {
           if let sourceName = memory.sourceName {
             Text("From \(sourceName)")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
 
           Spacer(minLength: 4)
 
-          MemoryDetailButton(
-            memory: memory,
-            categoryIcon: categoryIcon,
-            categoryColor: categoryColor,
-            tagColorFor: tagColorFor
+          MemoryReviewControls(
+            verdict: verdict,
+            isRevealed: isHovered || verdict != nil,
+            onReview: onReview
           )
 
+          // Opens the side panel, so it points to the side — not the external-link glyph.
           if isHovered {
-            Image(systemName: "arrow.up.right")
+            Image(systemName: "chevron.right")
               .scaledFont(size: OmiType.micro, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
-      .padding(.horizontal, OmiSpacing.lg)
-      .padding(.vertical, OmiSpacing.md)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.xs)
       .background(
-        isHovered
-          ? OmiColors.backgroundRaised
-          : (isNewlyCreated ? OmiColors.userBubble.opacity(0.24) : OmiColors.backgroundSecondary)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+          .fill(isHovered || isNewlyCreated ? Ink.rowFillHover : Color.clear)
       )
+      .overlay(alignment: .bottom) {
+        GlassSeparator()
+          .padding(.leading, OmiSpacing.md)
+      }
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-      .shadow(
-        color: .black.opacity(isHovered ? 0.14 : 0.08), radius: isHovered ? 12 : 8, x: 0,
-        y: isHovered ? 8 : 5)
     }
     .buttonStyle(.plain)
     .contentShape(Rectangle())
-    .onHover { hovering in
+    .pointingHandOnHover { hovering in
       // No animation wrapper - simple state update for instant response
       isHovered = hovering
-      if hovering {
-        NSCursor.pointingHand.push()
-      } else {
-        NSCursor.pop()
-      }
     }
-  }
-}
-
-// MARK: - Memory Detail Button (info icon with hover popover)
-
-/// Small inline info button with hover preview showing memory metadata.
-/// Follows the same pattern as TaskDetailButton in TaskDetailViews.swift.
-private struct MemoryDetailButton: View {
-  let memory: ServerMemory
-  let categoryIcon: (MemoryCategory) -> String
-  let categoryColor: (MemoryCategory) -> Color
-  let tagColorFor: (String) -> Color
-
-  @State private var showTooltip = false
-  @State private var isButtonHovered = false
-  @State private var isPopoverHovered = false
-  @State private var dismissWork: DispatchWorkItem?
-
-  var body: some View {
-    Image(systemName: "info.circle")
-      .scaledFont(size: OmiType.micro)
-      .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
-      .frame(width: 20, height: 20)
-      .contentShape(Rectangle())
-      .onHover { hovering in
-        isButtonHovered = hovering
-        scheduleHoverUpdate()
+    .contextMenu {
+      Button(action: onTap) {
+        Label("Open", systemImage: "sidebar.right")
       }
-      .popover(isPresented: $showTooltip, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
-        MemoryDetailTooltip(
-          memory: memory,
-          categoryIcon: categoryIcon,
-          categoryColor: categoryColor,
-          tagColorFor: tagColorFor
-        )
-        .onHover { hovering in
-          isPopoverHovered = hovering
-          scheduleHoverUpdate()
+      Button {
+        OmiToastCenter.shared.copy(memory.content, confirming: "Memory copied")
+      } label: {
+        Label("Copy Text", systemImage: "doc.on.doc")
+      }
+      if let onDelete {
+        Divider()
+        Button(role: .destructive, action: onDelete) {
+          Label("Delete Memory", systemImage: "trash")
         }
       }
-  }
-
-  private func scheduleHoverUpdate() {
-    dismissWork?.cancel()
-    if isButtonHovered || isPopoverHovered {
-      showTooltip = true
-    } else {
-      let work = DispatchWorkItem { showTooltip = false }
-      dismissWork = work
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
     }
   }
 }
 
-// MARK: - Memory Detail Tooltip
+// MARK: - Memory Review Controls
 
-/// Compact hover preview showing memory metadata (category, tags, source, etc.)
-private struct MemoryDetailTooltip: View {
-  let memory: ServerMemory
-  let categoryIcon: (MemoryCategory) -> String
-  let categoryColor: (MemoryCategory) -> Color
-  let tagColorFor: (String) -> Color
+/// Keep / reject verdict for one memory.
+///
+/// This is the owner's only way to tell the backend a memory is wrong: rejecting
+/// hides it from default reads and drops it from the keyword index and knowledge
+/// graph. The controls stay hidden until hover so a long list reads cleanly, but a
+/// judged card keeps showing its verdict — during a review pass you need to see
+/// what you have already done.
+private struct MemoryReviewControls: View {
+  let verdict: Bool?
+  let isRevealed: Bool
+  let onReview: (Bool) -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-      if memory.tierIsExplicit, memory.tier == .shortTerm, let expiresAt = memory.expiresAt {
-        tooltipRow("Layer", memory.tier.displayName)
-        tooltipRow("Expires", expiresAt.formatted(date: .abbreviated, time: .shortened))
-      } else if memory.tierIsExplicit {
-        tooltipRow("Layer", memory.tier.displayName)
-      }
-
-      // Category
-      if memory.isTip {
-        tooltipRow("Category", "Tips")
-        if let tipCat = memory.tipCategory {
-          tooltipRow("Subcategory", tipCat.capitalized)
-        }
-      } else {
-        tooltipRow("Category", memory.category.displayName)
-      }
-
-      // Tags
-      let displayTags = memory.tags.filter { tag in
-        let lower = tag.lowercased()
-        if lower == memory.category.rawValue { return false }
-        if lower == "tips" || lower == (memory.tipCategory ?? "") { return false }
-        if lower == "has-message" { return false }
-        return true
-      }
-      if !displayTags.isEmpty {
-        tooltipRow("Tags", displayTags.joined(separator: ", "))
-      }
-
-      // Source
-      if let sourceApp = memory.sourceApp {
-        tooltipRow("App", sourceApp)
-      }
-      if let sourceName = memory.sourceName {
-        tooltipRow("Source", sourceName)
-      }
-      if let window = memory.windowTitle {
-        tooltipRow("Window", window)
-      }
-
-      // Context
-      if let ctx = memory.contextSummary, !ctx.isEmpty {
-        tooltipBlock("Context", ctx)
-      }
-      if let activity = memory.currentActivity, !activity.isEmpty {
-        tooltipBlock("Activity", activity)
-      }
-
-      // Confidence
-      if let conf = memory.confidenceString {
-        tooltipRow("Confidence", conf)
-      }
-
-      // Reasoning
-      if let reasoning = memory.reasoning, !reasoning.isEmpty {
-        tooltipBlock("Reasoning", reasoning)
-      }
-
-      // Created date
-      tooltipRow(
-        "Created",
-        {
-          let f = DateFormatter()
-          f.dateStyle = .medium
-          f.timeStyle = .short
-          return f.string(from: memory.createdAt)
-        }())
+    HStack(spacing: OmiSpacing.xs) {
+      reviewButton(
+        keep: true,
+        symbol: verdict == true ? "hand.thumbsup.fill" : "hand.thumbsup",
+        tint: verdict == true ? Ink.listeningGreen : Ink.secondary,
+        label: "Keep this memory"
+      )
+      reviewButton(
+        keep: false,
+        symbol: verdict == false ? "hand.thumbsdown.fill" : "hand.thumbsdown",
+        tint: verdict == false ? Ink.errorRed : Ink.secondary,
+        label: "Reject this memory"
+      )
     }
-    .padding(OmiSpacing.sm)
-    .frame(maxWidth: 350, maxHeight: 400)
+    .opacity(isRevealed ? 1 : 0)
+    // Keep the row from reflowing as controls appear and disappear on hover.
+    .allowsHitTesting(isRevealed)
   }
 
-  private func tooltipRow(_ label: String, _ value: String) -> some View {
-    HStack(alignment: .top, spacing: OmiSpacing.xs) {
-      Text(label)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
-        .frame(width: 70, alignment: .trailing)
-
-      Text(value)
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textPrimary)
+  private func reviewButton(keep: Bool, symbol: String, tint: Color, label: String)
+    -> some View
+  {
+    Button {
+      onReview(keep)
+    } label: {
+      Image(systemName: symbol)
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundColor(tint)
+        .frame(width: 18, height: 18)
+        .contentShape(Rectangle())
     }
-  }
-
-  private func tooltipBlock(_ label: String, _ value: String) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-      Text(label)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
-        .padding(.leading, 76)
-
-      Text(value)
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textPrimary)
-        .padding(.leading, 76)
-        .lineLimit(3)
-    }
+    .buttonStyle(.plain)
+    .help(label)
+    .accessibilityLabel(label)
   }
 }
 
-// MARK: - Memory Detail Sheet
+// MARK: - Memory Detail Panel
 
-struct MemoryDetailSheet: View {
+/// Right-hand inspector for one memory.
+///
+/// Deliberately unsized: it fills whatever column the Memories page gives it.
+/// The earlier version was a modal sheet pinned to 450×600, and reusing it as
+/// a panel meant its content laid out at 450pt inside a 360pt column and was
+/// clipped mid-word, while its 600pt background stopped short of the window.
+///
+/// Structurally a sibling of the Brain Map's inspector — same header, same
+/// uppercase section rhythm — because they are two views of the same thing and
+/// switching between them should not feel like switching apps.
+struct MemoryDetailPanel: View {
   let memory: ServerMemory
   @ObservedObject var viewModel: MemoriesViewModel
   let categoryIcon: (MemoryCategory) -> String
@@ -2729,10 +3063,12 @@ struct MemoryDetailSheet: View {
   let tagColorFor: (String) -> Color
   let formatDate: (Date) -> String
   var onDismiss: (() -> Void)? = nil
+  var onOpenConversation: ((String) -> Void)? = nil
 
   @Environment(\.dismiss) private var environmentDismiss
   @State private var isEditingContent = false
   @State private var editContentText = ""
+  @State private var isConfirmingPublic = false
 
   private func dismissSheet() {
     if let onDismiss = onDismiss {
@@ -2743,289 +3079,311 @@ struct MemoryDetailSheet: View {
   }
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: OmiSpacing.xl) {
-        // Header with tags, visibility toggle, delete, and dismiss
-        HStack(spacing: OmiSpacing.sm) {
-          if memory.isTip {
-            tagBadge("Tips", "lightbulb.fill", OmiColors.textSecondary)
-            if let tipCat = memory.tipCategory {
-              tagBadge(tipCat.capitalized, memory.tipCategoryIcon, tagColorFor(tipCat))
-            }
-          } else {
-            tagBadge(
-              memory.category.displayName, categoryIcon(memory.category),
-              categoryColor(memory.category))
-          }
+    VStack(alignment: .leading, spacing: 0) {
+      header
 
-          Spacer()
+      Divider().overlay(Ink.separator.opacity(0.2))
 
-          // Public toggle
-          HStack(spacing: OmiSpacing.xs) {
-            Text("Public")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
-            if viewModel.isTogglingVisibility {
-              ProgressView()
-                .scaleEffect(0.7)
-            } else {
-              Toggle(
-                "",
-                isOn: Binding(
-                  get: { memory.isPublic },
-                  set: { _ in
-                    Task { await viewModel.toggleVisibility(memory) }
-                  }
-                )
-              )
-              .toggleStyle(OmiToggleStyle())
-              .labelsHidden()
-            }
-          }
+      ScrollView {
+        VStack(alignment: .leading, spacing: OmiSpacing.xl) {
+          content
 
-          // Delete icon
-          Button {
-            NSApp.keyWindow?.makeFirstResponder(nil)
-            Task { @MainActor in
-              try? await Task.sleep(nanoseconds: 100_000_000)
-              dismissSheet()
-              await viewModel.deleteMemory(memory)
-            }
-          } label: {
-            Image(systemName: "trash")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.error)
-          }
-          .buttonStyle(.plain)
+          provenance
 
-          DismissButton(action: dismissSheet)
-        }
-
-        // Content (click to edit)
-        if isEditingContent {
-          VStack(alignment: .trailing, spacing: OmiSpacing.sm) {
-            TextEditor(text: $editContentText)
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textPrimary)
-              .scrollContentBackground(.hidden)
-              .padding(OmiSpacing.sm)
-              .background(OmiColors.backgroundTertiary)
-              .cornerRadius(OmiChrome.elementRadius)
-              .frame(minHeight: 80)
-
-            HStack(spacing: OmiSpacing.sm) {
-              Button {
-                isEditingContent = false
-              } label: {
-                Text("Cancel")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textSecondary)
-              }
-              .buttonStyle(.plain)
-
-              Button {
-                viewModel.editText = editContentText
-                Task {
-                  await viewModel.saveEditedMemory(memory)
-                  isEditingContent = false
+          if !displayTags.isEmpty {
+            section("Tags") {
+              FlowLayout(spacing: OmiSpacing.xxs) {
+                ForEach(displayTags, id: \.self) { tag in
+                  chip(tag, icon: nil, tint: tagColorFor(tag))
                 }
-              } label: {
-                Text("Save")
-                  .scaledFont(size: OmiType.body, weight: .medium)
-                  .foregroundColor(.black)
-                  .padding(.horizontal, OmiSpacing.md)
-                  .padding(.vertical, OmiSpacing.xxs)
-                  .background(Color.white)
-                  .cornerRadius(OmiChrome.badgeRadius)
               }
-              .buttonStyle(.plain)
-              .disabled(editContentText.isEmpty)
             }
           }
-        } else if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
-          Text("Protected memory")
-            .italic()
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.textTertiary)
-            .fixedSize(horizontal: false, vertical: true)
-        } else {
-          Text(memory.content)
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
-            .contentShape(Rectangle())
-            .onTapGesture {
-              editContentText = memory.content
-              isEditingContent = true
-            }
-        }
 
-        // Reasoning
-        if let reasoning = memory.reasoning, !reasoning.isEmpty {
-          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-            Text("Why this tip?")
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textSecondary)
-
-            Text(reasoning)
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textPrimary)
-              .textSelection(.enabled)
-          }
-          .padding(OmiSpacing.md)
-          .background(OmiColors.backgroundTertiary)
-          .cornerRadius(OmiChrome.elementRadius)
-        }
-
-        // Context
-        if memory.currentActivity != nil || memory.contextSummary != nil {
-          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-            Text("Context")
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textSecondary)
-
-            if let activity = memory.currentActivity {
-              HStack(spacing: OmiSpacing.xs) {
-                Image(systemName: "figure.walk")
-                  .scaledFont(size: OmiType.caption)
-                Text(activity)
-                  .scaledFont(size: OmiType.body)
-                  .textSelection(.enabled)
-              }
-              .foregroundColor(OmiColors.textTertiary)
-            }
-
-            if let context = memory.contextSummary {
-              Text(context)
+          if let reasoning = memory.reasoning, !reasoning.isEmpty {
+            section(memory.isTip ? "Why this tip" : "Reasoning") {
+              Text(reasoning)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             }
           }
-          .padding(OmiSpacing.md)
-          .background(OmiColors.backgroundTertiary)
-          .cornerRadius(OmiChrome.elementRadius)
-        }
 
-        // Metadata
-        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-          if let confidence = memory.confidenceString {
-            HStack {
-              Text("Confidence")
-                .foregroundColor(OmiColors.textSecondary)
-              Spacer()
-              Text(confidence)
-                .foregroundColor(OmiColors.textPrimary)
-            }
-            .scaledFont(size: OmiType.body)
-          }
-
-          if let sourceApp = memory.sourceApp {
-            HStack {
-              Text("Source App")
-                .foregroundColor(OmiColors.textSecondary)
-              Spacer()
-              Text(sourceApp)
-                .foregroundColor(OmiColors.textPrimary)
-            }
-            .scaledFont(size: OmiType.body)
-          }
-
-          if let sourceName = memory.sourceName {
-            HStack {
-              Text("Device")
-                .foregroundColor(OmiColors.textSecondary)
-              Spacer()
-              HStack(spacing: OmiSpacing.xxs) {
-                Image(systemName: memory.sourceIcon)
-                Text(sourceName)
-              }
-              .foregroundColor(OmiColors.textPrimary)
-            }
-            .scaledFont(size: OmiType.body)
-          }
-
-          if let micName = memory.inputDeviceName, memory.source == "desktop" {
-            HStack {
-              Text("Microphone")
-                .foregroundColor(OmiColors.textSecondary)
-              Spacer()
-              HStack(spacing: OmiSpacing.xxs) {
-                Image(systemName: "mic")
-                Text(micName)
-              }
-              .foregroundColor(OmiColors.textPrimary)
-            }
-            .scaledFont(size: OmiType.body)
-          }
-
-          HStack {
-            Text("Created")
-              .foregroundColor(OmiColors.textSecondary)
-            Spacer()
-            Text(formatDate(memory.createdAt))
-              .foregroundColor(OmiColors.textPrimary)
-          }
-          .scaledFont(size: OmiType.body)
-
-          if !memory.tags.isEmpty {
-            HStack(alignment: .top) {
-              Text("Tags")
-                .foregroundColor(OmiColors.textSecondary)
-                .scaledFont(size: OmiType.body)
-              Spacer()
-              FlowLayout(spacing: OmiSpacing.xxs) {
-                ForEach(memory.tags, id: \.self) { tag in
-                  Text(tag)
-                    .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(tagColorFor(tag))
+          if hasContext {
+            section("Context") {
+              VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+                if let activity = memory.currentActivity, !activity.isEmpty {
+                  contextLine("figure.walk", activity)
+                }
+                if let window = memory.windowTitle, !window.isEmpty {
+                  contextLine("macwindow", window)
+                }
+                if let summary = memory.contextSummary, !summary.isEmpty {
+                  Text(summary)
+                    .scaledFont(size: OmiType.body)
+                    .foregroundColor(Ink.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
                 }
               }
             }
           }
-        }
-        .padding(OmiSpacing.md)
-        .background(OmiColors.backgroundTertiary)
-        .cornerRadius(OmiChrome.elementRadius)
 
-        // Action Buttons
-        VStack(spacing: OmiSpacing.sm) {
-          // View conversation (if linked)
           if let conversationId = memory.conversationId {
             MemoryActionRow(
               icon: "bubble.left.and.bubble.right",
               title: "View Source Conversation",
-              iconColor: OmiColors.textPrimary,
-              textColor: OmiColors.textPrimary,
-              backgroundColor: OmiColors.backgroundTertiary,
+              iconColor: Ink.primary,
+              textColor: Ink.primary,
+              backgroundColor: Ink.rowFillHover,
               trailingIcon: "arrow.up.right"
             ) {
               NSApp.keyWindow?.makeFirstResponder(nil)
-              Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 100_000_000)
-                dismissSheet()
-                await viewModel.navigateToConversation(id: conversationId)
-              }
+              // The memory stays selected: the conversation's `‹ Memories` returns to this panel,
+              // not to a list the reader has to search again.
+              onOpenConversation?(conversationId)
             }
           }
         }
-        .padding(.top, OmiSpacing.sm)
+        .padding(OmiSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .padding(OmiSpacing.xxl)
     }
-    .frame(width: 450)
-    .frame(maxHeight: 600)
-    .background(OmiColors.backgroundSecondary)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .accessibilityIdentifier("memory_detail_panel_body")
+    .siriMemoryIdentifier(memory.id)
   }
 
-  private func tagBadge(_ title: String, _ icon: String, _ color: Color) -> some View {
+  // MARK: Header
+
+  private var header: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      if memory.isTip {
+        chip("Tips", icon: "lightbulb.fill", tint: Ink.secondary)
+        if let tipCategory = memory.tipCategory {
+          chip(
+            tipCategory.capitalized, icon: memory.tipCategoryIcon, tint: tagColorFor(tipCategory))
+        }
+      } else {
+        chip(
+          memory.category.displayName,
+          icon: categoryIcon(memory.category),
+          tint: categoryColor(memory.category)
+        )
+      }
+
+      if memory.isPublic {
+        chip("Public", icon: "person.2.fill", tint: Ink.secondary)
+      }
+
+      Spacer(minLength: OmiSpacing.xs)
+
+      if viewModel.isTogglingVisibility {
+        ProgressView().controlSize(.small)
+      }
+
+      // Publishing and deleting are both one-way-feeling acts, so neither gets
+      // a control sitting under the cursor. A public memory feeds the user's
+      // shareable persona; a switch beside a trash can made that a slip.
+      OmiIconMenu(systemName: "ellipsis", help: "Memory Actions") {
+        Button("Edit Text") {
+          editContentText = memory.content
+          isEditingContent = true
+        }
+        if memory.isPublic {
+          Button("Make Private") {
+            Task { await viewModel.toggleVisibility(memory) }
+          }
+        } else {
+          Button("Make Public…") { isConfirmingPublic = true }
+        }
+        Divider()
+        Button("Delete Memory", role: .destructive) {
+          NSApp.keyWindow?.makeFirstResponder(nil)
+          Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            dismissSheet()
+            await viewModel.deleteMemory(memory)
+          }
+        }
+      }
+      .accessibilityIdentifier("memory_detail_actions_menu")
+
+      DismissButton(action: dismissSheet)
+    }
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.md)
+    .shellConfirmation(
+      isPresented: $isConfirmingPublic,
+      title: "Make This Memory Public?",
+      message: "Public memories build your shareable persona, so anyone you share it with can see "
+        + "what this memory says. Everything else stays private to you.",
+      confirmTitle: "Make Public",
+      isDestructive: false
+    ) {
+      Task { await viewModel.toggleVisibility(memory) }
+    }
+  }
+
+  // MARK: Content
+
+  @ViewBuilder
+  private var content: some View {
+    if isEditingContent {
+      VStack(alignment: .trailing, spacing: OmiSpacing.sm) {
+        // Memories run to a full paragraph, and the panel is a tall column
+        // with room to spare. An 80pt box showed roughly three lines of a
+        // twelve-line memory and made editing a scroll-and-hunt exercise.
+        TextEditor(text: $editContentText)
+          .scaledFont(size: OmiType.subheading)
+          .foregroundColor(Ink.primary)
+          .scrollContentBackground(.hidden)
+          .padding(OmiSpacing.sm)
+          .background(Ink.rowFillHover)
+          .cornerRadius(OmiChrome.elementRadius)
+          .frame(minHeight: 260)
+
+        HStack(spacing: OmiSpacing.sm) {
+          Button("Cancel") { isEditingContent = false }
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+
+          Button("Save") {
+            viewModel.editText = editContentText
+            Task {
+              await viewModel.saveEditedMemory(memory)
+              isEditingContent = false
+            }
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(editContentText.isEmpty)
+        }
+      }
+    } else if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
+      Text("Protected memory")
+        .italic()
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(Ink.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    } else {
+      Text(memory.content)
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture {
+          editContentText = memory.content
+          isEditingContent = true
+        }
+        .help("Click to edit")
+    }
+  }
+
+  // MARK: Provenance
+
+  /// Where a memory came from, as chips rather than a label/value table.
+  ///
+  /// The table version put every value on its own right-aligned row, so
+  /// answering "where did this come from" meant reading five rows and the
+  /// longest values were the ones that got truncated. Chips wrap, stay on the
+  /// left margin, and read in one pass.
+  private var provenance: some View {
+    section("Where this came from") {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        if !provenanceFacts.isEmpty {
+          FlowLayout(spacing: OmiSpacing.xxs) {
+            ForEach(provenanceFacts) { fact in
+              chip(fact.label, icon: fact.icon, tint: Ink.secondary)
+            }
+          }
+        }
+
+        HStack(spacing: OmiSpacing.xxs) {
+          Image(systemName: "clock")
+            .scaledFont(size: OmiType.micro)
+          Text(formatDate(memory.createdAt))
+            .scaledFont(size: OmiType.caption)
+        }
+        .foregroundColor(Ink.secondary)
+      }
+      .accessibilityIdentifier("memory_detail_provenance")
+    }
+  }
+
+  private var provenanceFacts: [MemoryProvenanceFact] {
+    MemoryProvenance.facts(
+      for: memory,
+      deviceLabel: ClientDeviceService.shared.deviceProvenanceLabel(for: memory)
+    )
+  }
+
+  private var hasContext: Bool {
+    let values = [memory.currentActivity, memory.contextSummary, memory.windowTitle]
+    return values.contains { ($0?.isEmpty == false) }
+  }
+
+  /// Tags already shown as the header chip would repeat themselves here.
+  private var displayTags: [String] {
+    memory.tags.filter { tag in
+      let lower = tag.lowercased()
+      if lower == memory.category.rawValue { return false }
+      if lower == "tips" || lower == (memory.tipCategory ?? "") { return false }
+      if lower == "has-message" { return false }
+      // The app now reads as a provenance chip, so leaving `app:Codex` in the
+      // tag row would say the same thing twice in a rawer form.
+      if tag.hasPrefix(MemoryProvenance.appTagPrefix) { return false }
+      return true
+    }
+  }
+
+  // MARK: Building blocks
+
+  @ViewBuilder
+  private func section<Content: View>(
+    _ title: String,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      Text(title.uppercased())
+        .scaledFont(size: OmiType.micro, weight: .semibold)
+        .foregroundColor(Ink.secondary)
+        .tracking(0.6)
+      content()
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func chip(_ title: String, icon: String?, tint: Color) -> some View {
     HStack(spacing: OmiSpacing.xxs) {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.micro)
+      if let icon {
+        Image(systemName: icon)
+          .scaledFont(size: OmiType.micro)
+      }
       Text(title)
         .scaledFont(size: OmiType.caption, weight: .medium)
+        .lineLimit(1)
     }
-    .foregroundColor(OmiColors.textSecondary)
+    .foregroundColor(tint)
+    .padding(.horizontal, OmiSpacing.xs)
+    .padding(.vertical, 3)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
+        .fill(Ink.rowFillHover)
+    )
+  }
+
+  private func contextLine(_ icon: String, _ text: String) -> some View {
+    HStack(alignment: .top, spacing: OmiSpacing.xxs) {
+      Image(systemName: icon)
+        .scaledFont(size: OmiType.micro)
+        .padding(.top, 2)
+      Text(text)
+        .scaledFont(size: OmiType.body)
+        .fixedSize(horizontal: false, vertical: true)
+        .textSelection(.enabled)
+    }
+    .foregroundColor(Ink.secondary)
   }
 }
 
@@ -3052,7 +3410,7 @@ private struct MemoryActionRow: View {
       if let trailing = trailingIcon {
         Image(systemName: trailing)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .scaledFont(size: OmiType.body)
@@ -3093,151 +3451,5 @@ private struct MemoryActionRow: View {
       // Execute the action (which should handle its own delays for dismiss)
       action()
     }
-  }
-}
-
-// MARK: - Add Memory Sheet
-
-struct AddMemorySheet: View {
-  @ObservedObject var viewModel: MemoriesViewModel
-  var onDismiss: (() -> Void)? = nil
-
-  @Environment(\.dismiss) private var environmentDismiss
-
-  private func dismissSheet() {
-    viewModel.newMemoryText = ""
-    if let onDismiss = onDismiss {
-      onDismiss()
-    } else {
-      environmentDismiss()
-    }
-  }
-
-  var body: some View {
-    VStack(spacing: OmiSpacing.xl) {
-      // Header with close button
-      HStack {
-        Text("Add Memory")
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-        Spacer()
-        DismissButton(action: dismissSheet)
-      }
-
-      TextEditor(text: $viewModel.newMemoryText)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
-        .scrollContentBackground(.hidden)
-        .padding(OmiSpacing.md)
-        .background(OmiColors.backgroundTertiary)
-        .cornerRadius(OmiChrome.elementRadius)
-        .frame(height: 150)
-
-      HStack(spacing: OmiSpacing.md) {
-        // Cancel button
-        Button(action: dismissSheet) {
-          Text("Cancel")
-            .foregroundColor(OmiColors.textSecondary)
-        }
-
-        Spacer()
-
-        Button {
-          Task { await viewModel.createMemory() }
-        } label: {
-          Text("Save")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(viewModel.newMemoryText.isEmpty ? OmiColors.textTertiary : .black)
-            .padding(.horizontal, OmiSpacing.xl)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(
-              viewModel.newMemoryText.isEmpty ? OmiColors.backgroundTertiary : Color.white
-            )
-            .cornerRadius(OmiChrome.elementRadius)
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .stroke(
-                  viewModel.newMemoryText.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.newMemoryText.isEmpty)
-      }
-    }
-    .padding(OmiSpacing.xxl)
-    .frame(width: 400)
-    .background(OmiColors.backgroundSecondary)
-  }
-}
-
-// MARK: - Edit Memory Sheet
-
-struct EditMemorySheet: View {
-  let memory: ServerMemory
-  @ObservedObject var viewModel: MemoriesViewModel
-  var onDismiss: (() -> Void)? = nil
-
-  @Environment(\.dismiss) private var environmentDismiss
-
-  private func dismissSheet() {
-    viewModel.editText = ""
-    if let onDismiss = onDismiss {
-      onDismiss()
-    } else {
-      environmentDismiss()
-    }
-  }
-
-  var body: some View {
-    VStack(spacing: OmiSpacing.xl) {
-      // Header with close button
-      HStack {
-        Text("Edit Memory")
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-        Spacer()
-        DismissButton(action: dismissSheet)
-      }
-
-      TextEditor(text: $viewModel.editText)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
-        .scrollContentBackground(.hidden)
-        .padding(OmiSpacing.md)
-        .background(OmiColors.backgroundTertiary)
-        .cornerRadius(OmiChrome.elementRadius)
-        .frame(height: 150)
-
-      HStack(spacing: OmiSpacing.md) {
-        // Cancel button
-        Button(action: dismissSheet) {
-          Text("Cancel")
-            .foregroundColor(OmiColors.textSecondary)
-        }
-
-        Spacer()
-
-        Button {
-          Task { await viewModel.saveEditedMemory(memory) }
-        } label: {
-          Text("Save")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(viewModel.editText.isEmpty ? OmiColors.textTertiary : .black)
-            .padding(.horizontal, OmiSpacing.xl)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(viewModel.editText.isEmpty ? OmiColors.backgroundTertiary : Color.white)
-            .cornerRadius(OmiChrome.elementRadius)
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .stroke(viewModel.editText.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.editText.isEmpty)
-      }
-    }
-    .padding(OmiSpacing.xxl)
-    .frame(width: 400)
-    .background(OmiColors.backgroundSecondary)
   }
 }

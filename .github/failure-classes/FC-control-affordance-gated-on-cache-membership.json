@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-control-affordance-gated-on-cache-membership",
+  "violated_contract": "A rendered control's affordance must gate on the capability of its action path, never on membership in a client-side cache the action does not read. The recap card's review controls trigger id-addressed mutations (POST /v3/memories/{id}/review, PATCH /v3/memories/{id}), yet their onTap required the id to be present in MemoriesProvider.memories; on a cold provider, a truncated bulk list, or an id the client never paged in, the chrome rendered untappable and silent, and MemoriesProvider.reviewMemory() duplicated the gate by returning before the request when the row was not loaded. The visible failure mode is fake affordance: labels painted, taps ignored, no error surfaced.",
+  "canonical_prevention": "Gate affordance on the action's own capability: controls stay live from the item's identity (id plus recap text), and mutations persist by id through the single provider mutation owner. A failed write reverts the optimistic paint and shows the inline error; a successful one settles the row for the session while the live row stays authoritative once loaded. Guard with widget tests that pump the card without preloading the id into the provider (cold start, loading == true initially; truncated bulk list) and assert non-null onTap on every control plus a review/edit request carrying exactly that id.",
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/widgets/components/**", "app/lib/providers/**"],
+  "status": "open",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/memory_review_card_test.dart",
+    "app/test/widgets/daily_summary_detail_page_test.dart"
+  ]
+}

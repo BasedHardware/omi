@@ -32,22 +32,42 @@ def users_service():
     """Load a fresh services.users.account_deletion against stubbed database/utils namespaces."""
     fakes = {
         "database": _pkg("database"),
+        "database.directory": _pkg("database.directory"),
+        "database.directory.wipe": AutoMockModule("database.directory.wipe"),
+        "database.sync_jobs": AutoMockModule("database.sync_jobs"),
         "database.users": AutoMockModule("database.users"),
         "database.action_items": AutoMockModule("database.action_items"),
         "database.conversations": AutoMockModule("database.conversations"),
         "database.memories": AutoMockModule("database.memories"),
         "database.screen_activity": AutoMockModule("database.screen_activity"),
+        "database.frame_requests": AutoMockModule("database.frame_requests"),
         "database.vector_db": AutoMockModule("database.vector_db"),
+        "database.legal_holds": AutoMockModule("database.legal_holds"),
+        "database.dev_api_key": AutoMockModule("database.dev_api_key"),
+        "database.mcp_api_key": AutoMockModule("database.mcp_api_key"),
+        "database.mcp_oauth": AutoMockModule("database.mcp_oauth"),
+        "database.messaging": AutoMockModule("database.messaging"),
+        "services.users.agent_vm_account_cleanup": AutoMockModule("services.users.agent_vm_account_cleanup"),
         "utils": _pkg("utils"),
+        "utils.sync": _pkg("utils.sync"),
+        "utils.sync.cap_hold": AutoMockModule("utils.sync.cap_hold"),
         "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),
         "utils.stripe": AutoMockModule("utils.stripe"),
         "utils.executors": AutoMockModule("utils.executors"),
         "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
+        "utils.observability": _pkg("utils.observability"),
+        "utils.observability.fallback": AutoMockModule("utils.observability.fallback"),
+        "utils.integration_telemetry": AutoMockModule("utils.integration_telemetry"),
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
+        "utils.other.lake_wipe": AutoMockModule("utils.other.lake_wipe"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.memory.memory_service": AutoMockModule("utils.memory.memory_service"),
+        "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
+        "utils.retrieval": _pkg("utils.retrieval"),
+        "utils.retrieval.frame_request_storage": AutoMockModule("utils.retrieval.frame_request_storage"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }
     with stub_modules(fakes):
@@ -62,7 +82,7 @@ def _purge_patches(users_service, **overrides):
     """Patch every purge collaborator on the users service. overrides set return_value/side_effect."""
     enumerators = {
         "get_conversation_ids": ["c1", "c2"],
-        "get_memory_ids": ["m1"],
+        "_historical_memory_ids": ["m1"],
         "get_action_item_ids": ["a1", "a2"],
         "get_screen_activity_ids": ["s1"],
     }
@@ -83,8 +103,28 @@ def _purge_patches(users_service, **overrides):
         "delete_user_caller_ids",
     ):
         patchers[name] = patch.object(users_service, name, create=True, **(overrides.get(name) or {}))
+    patchers['purge_user_conversation_index'] = patch.object(
+        users_service,
+        'purge_user_conversation_index',
+        create=True,
+        **(overrides.get('purge_user_conversation_index') or {}),
+    )
     patchers["delete_user_data"] = patch.object(
-        users_service.users_db, "delete_user_data", create=True, **(overrides.get("delete_user_data") or {})
+        users_service.users_db,
+        "delete_user_data",
+        create=True,
+        **(overrides.get("delete_user_data") or {"return_value": {"status": "ok"}}),
+    )
+    patchers['cancel_subscription_for_account_deletion'] = patch.object(
+        users_service,
+        '_cancel_subscription_for_account_deletion',
+        **(overrides.get('cancel_subscription_for_account_deletion') or {}),
+    )
+    patchers['mark_user_deletion_wipe_completed'] = patch.object(
+        users_service.users_db,
+        'mark_user_deletion_wipe_completed',
+        create=True,
+        **(overrides.get('mark_user_deletion_wipe_completed') or {}),
     )
     started = {name: p.start() for name, p in patchers.items()}
     return patchers, started
@@ -110,6 +150,58 @@ def test_purge_runs_all_backends_before_firestore_wipe(users_service):
     # GCS + Firestore
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")
     m["delete_user_data"].assert_called_once_with("uid1")
+    m['purge_user_conversation_index'].assert_called_once_with('uid1')
+    m['cancel_subscription_for_account_deletion'].assert_called_once_with('uid1')
+
+
+def test_grace_admission_receipt_does_not_skip_final_billing_verification(users_service):
+    users_service.deletion_marker_db.read_account_deletion_marker.return_value = {'grace_actions_complete': True}
+    patchers, m = _purge_patches(users_service)
+    try:
+        users_service.background_wipe_user_data('uid1')
+    finally:
+        _stop(patchers)
+
+    users_service.deletion_marker_db.read_account_deletion_marker.assert_not_called()
+    m['cancel_subscription_for_account_deletion'].assert_called_once_with('uid1')
+
+
+def test_typesense_failure_keeps_wipe_incomplete_and_retryable(users_service):
+    patchers, m = _purge_patches(
+        users_service, purge_user_conversation_index={'side_effect': RuntimeError('typesense down')}
+    )
+    try:
+        result = users_service.background_wipe_user_data('uid1')
+    finally:
+        _stop(patchers)
+
+    assert result is False
+    m['delete_user_data'].assert_called_once_with('uid1')
+    users_service.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+    users_service.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+
+
+def test_typesense_wrapper_requires_verified_purge(users_service, monkeypatch):
+    calls = []
+
+    def fail_if_unverified(uid, *, raise_on_failure=False):
+        calls.append((uid, raise_on_failure))
+        if raise_on_failure:
+            raise RuntimeError('typesense down')
+        return 0
+
+    fake_typesense = AutoMockModule('utils.conversations.typesense_index')
+    fake_typesense.purge_user_conversation_index = fail_if_unverified
+    with stub_modules(
+        {
+            'utils.conversations': _pkg('utils.conversations'),
+            'utils.conversations.typesense_index': fake_typesense,
+        }
+    ):
+        with pytest.raises(RuntimeError, match='typesense down'):
+            users_service.purge_user_conversation_index('uid1')
+
+    assert calls == [('uid1', True)]
 
 
 def test_id_enumeration_happens_before_firestore_wipe(users_service):
@@ -124,7 +216,10 @@ def test_id_enumeration_happens_before_firestore_wipe(users_service):
         users_service.background_wipe_user_data("uid1")
     finally:
         _stop(patchers)
-    assert order == ["enumerate", "enumerate", "wipe"], order
+    # Conversation IDs feed the conversation-vector, transcript-vector, and
+    # permanent-photo pixel inventories. All three snapshots must finish
+    # before the recursive Firestore wipe removes their source documents.
+    assert order == ["enumerate", "enumerate", "enumerate", "wipe"], order
 
 
 def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe(users_service):

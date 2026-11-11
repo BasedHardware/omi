@@ -10,6 +10,9 @@ using a fake db_client that supports document().set(merge=True) and .update().
 
 import types
 
+import pytest
+from google.cloud import firestore
+
 from database.memory_app_key_grants import (
     APP_KEY_MEMORY_GRANT_SUBPATH,
     seed_developer_api_key_memory_grant,
@@ -22,7 +25,17 @@ from utils.memory.product_authorization import (
     authorize_app_key_scope_memory_grant,
 )
 
-_DELETE_SENTINEL = object()
+# The real sentinel, so the deletion path is exercised exactly as production does.
+_DELETE_SENTINEL = firestore.DELETE_FIELD
+
+
+def _split_escaped_field_path(path: str) -> list[str]:
+    """Split a Firestore API field path, unwrapping backtick-escaped segments.
+
+    Mirrors the server side of ``FieldPath.to_api_repr()``: segments that are not
+    simple identifiers (UUID key ids with hyphens) come back backtick-quoted.
+    """
+    return [seg[1:-1] if seg.startswith('`') and seg.endswith('`') else seg for seg in path.split('.')]
 
 
 def _deep_merge(base: dict, overlay: dict) -> None:
@@ -58,7 +71,11 @@ class _DocRef:
             self._store.data[self._path] = {}
         target = self._store.data[self._path]
         for dotted_path, value in fields.items():
-            parts = dotted_path.split('.') if isinstance(dotted_path, str) else list(dotted_path)
+            # Firestore only accepts string update keys; a FieldPath instance raises
+            # ``AttributeError: 'FieldPath' object has no attribute 'strip'``.
+            if not isinstance(dotted_path, str):
+                raise AttributeError(f"'{type(dotted_path).__name__}' object has no attribute 'strip'")
+            parts = _split_escaped_field_path(dotted_path)
             for part in parts[:-1]:
                 target = target.setdefault(part, {})
             if value is _DELETE_SENTINEL:
@@ -76,27 +93,6 @@ class FakeDbStore:
 
     def document(self, path):
         return _DocRef(self, path)
-
-
-def _install_fake_firestore():
-    """Patch google.cloud.firestore with DELETE_FIELD and FieldPath stand-ins."""
-    fake = types.ModuleType('google.cloud.firestore')
-    setattr(fake, 'DELETE_FIELD', _DELETE_SENTINEL)
-    setattr(fake, 'FieldPath', lambda *parts: parts)
-    original = sys_modules_set('google.cloud.firestore', fake)
-    return original
-
-
-def _restore_firestore(original):
-    sys_modules_set('google.cloud.firestore', original)
-
-
-def sys_modules_set(key, value):
-    import sys
-
-    prev = sys.modules.get(key)
-    sys.modules[key] = value
-    return prev
 
 
 def test_seed_read_only_grant_writes_default_read_contract():
@@ -168,14 +164,58 @@ def test_remove_grant_deletes_key_entry_only():
     seed_developer_api_key_memory_grant('uid1', 'key1', default_read=True, db_client=store)
     seed_developer_api_key_memory_grant('uid1', 'key2', default_read=True, db_client=store)
 
-    original = _install_fake_firestore()
-    try:
-        remove_developer_api_key_memory_grant('uid1', 'key1', db_client=store)
-    finally:
-        _restore_firestore(original)
+    remove_developer_api_key_memory_grant('uid1', 'key1', db_client=store)
 
     keys = store.data[f'users/uid1/{APP_KEY_MEMORY_GRANT_SUBPATH}']['grants']['developer_api']['apps']['developer_api'][
         'keys'
     ]
     assert 'key1' not in keys
     assert 'key2' in keys
+
+
+def test_remove_grant_uses_escaped_string_field_path_for_uuid_key_id():
+    """Regression: the delete key must be an escaped string, not a FieldPath instance.
+
+    ``google.cloud.firestore`` exposes no ``FieldPath`` attribute, and ``update()``
+    rejects FieldPath keys, so building the update key from one turned every
+    Developer API key deletion into a 500 after the key row was already removed.
+    """
+    key_id = '0f6a4d1c-9b2e-4a77-8c31-2f5c9a8d7e10'
+    store = FakeDbStore()
+    seed_developer_api_key_memory_grant('uid1', key_id, default_read=True, db_client=store)
+    seed_developer_api_key_memory_grant('uid1', 'key2', default_read=True, db_client=store)
+
+    remove_developer_api_key_memory_grant('uid1', key_id, db_client=store)
+
+    _path, fields = store.update_calls[-1]
+    (update_key,) = fields
+    assert isinstance(update_key, str)
+    assert update_key == f'grants.developer_api.apps.developer_api.keys.`{key_id}`'
+
+    keys = store.data[f'users/uid1/{APP_KEY_MEMORY_GRANT_SUBPATH}']['grants']['developer_api']['apps']['developer_api'][
+        'keys'
+    ]
+    assert key_id not in keys
+    assert 'key2' in keys
+
+
+def test_remove_grant_field_path_is_accepted_by_firestore_update_parser():
+    """The produced key must survive Firestore's own update-path parsing."""
+    from google.cloud.firestore_v1 import _helpers
+
+    key_id = '0f6a4d1c-9b2e-4a77-8c31-2f5c9a8d7e10'
+    store = FakeDbStore()
+    seed_developer_api_key_memory_grant('uid1', key_id, default_read=True, db_client=store)
+
+    remove_developer_api_key_memory_grant('uid1', key_id, db_client=store)
+
+    _path, fields = store.update_calls[-1]
+    extractor = _helpers.DocumentExtractorForUpdate(fields)
+    assert [p.to_api_repr() for p in extractor.top_level_paths] == list(fields)
+
+
+def test_fake_doc_ref_rejects_non_string_update_key():
+    """Guard the seam itself: a FieldPath-style key must fail like real Firestore."""
+    store = FakeDbStore()
+    with pytest.raises(AttributeError):
+        store.document('users/uid1/x').update({('grants', 'developer_api'): _DELETE_SENTINEL})

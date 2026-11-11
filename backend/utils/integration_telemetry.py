@@ -1,12 +1,13 @@
 """Low-cardinality telemetry and structured logs for provider integrations."""
 
-import importlib
 import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import httpx
+
+from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,6 @@ AUTH_REFRESH_FAILED = 'Integration Auth Refresh Failed'
 
 GOOGLE_CALENDAR = 'Google Calendar'
 X = 'X'
-
-_posthog_client: Optional[Any] = None
-_posthog_disabled = False
 
 
 @dataclass(frozen=True)
@@ -106,17 +104,12 @@ def _emit(
         extra=extra,
     )
     _log_structured(telemetry_event_name, context.uid, properties)
+    emit_posthog_event(context.uid, telemetry_event_name, properties)
 
-    client = _get_posthog_client()
-    if client is None or not context.uid:
-        return
 
-    try:
-        client.capture(distinct_id=context.uid, event=telemetry_event_name, properties=properties)
-    except Exception as exc:
-        logger.warning(
-            'integration telemetry posthog_emit_failed event=%s error=%s', telemetry_event_name, type(exc).__name__
-        )
+def emit_posthog_event(distinct_id: Optional[str], event: str, properties: Dict[str, Any]) -> None:
+    """Route the integration's closed property dictionary through server capture."""
+    emit_product_event(uid=distinct_id or '', event=event, properties=properties)
 
 
 def _properties(
@@ -166,31 +159,6 @@ def _log_structured(event_name: str, uid: Optional[str], properties: Dict[str, A
         properties.get('app_version', 'unknown'),
         properties['environment'],
     )
-
-
-def _get_posthog_client() -> Optional[Any]:
-    global _posthog_client, _posthog_disabled
-    if _posthog_disabled:
-        return None
-    if _posthog_client is not None:
-        return _posthog_client
-
-    api_key = os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY')
-    if not api_key:
-        _posthog_disabled = True
-        return None
-
-    host = os.getenv('POSTHOG_HOST', 'https://app.posthog.com')
-    try:
-        posthog_module = importlib.import_module('posthog')
-        posthog_client_cls = getattr(posthog_module, 'Posthog')
-    except Exception as exc:
-        logger.warning('integration telemetry posthog_import_failed error=%s', type(exc).__name__)
-        _posthog_disabled = True
-        return None
-
-    _posthog_client = posthog_client_cls(project_api_key=api_key, host=host)
-    return _posthog_client
 
 
 def _provider_status_code(error: Any, explicit_status_code: Any = None) -> Optional[int]:
@@ -256,9 +224,3 @@ def _bucket_count(value: int) -> str:
     if value <= 1000:
         return '101_1000'
     return '1000_plus'
-
-
-def set_posthog_client_for_tests(client: Optional[Any]) -> None:
-    global _posthog_client, _posthog_disabled
-    _posthog_client = client
-    _posthog_disabled = client is None

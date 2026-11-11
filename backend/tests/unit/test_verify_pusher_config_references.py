@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+import re
 import runpy
 import shutil
 import subprocess
@@ -21,6 +22,12 @@ CLASSIFICATION = SCRIPT.parents[2] / "config" / "deployment-setting-classificati
 @pytest.fixture
 def preflight() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(SCRIPT)))
+
+
+@pytest.fixture(scope="module")
+def dev_pusher_contract_baseline() -> tuple[dict, tuple]:
+    module = SimpleNamespace(**runpy.run_path(str(SCRIPT)))
+    return module.rendered_pusher_deployment("dev"), module.dev_pusher_binding_contract()
 
 
 def deployment(refs: list[dict]) -> list[dict]:
@@ -142,6 +149,7 @@ def test_standalone_pusher_reconciles_non_secret_config_before_preflight():
         "RAPID_API_HOST",
         "REDIS_DB_HOST",
         "STT_PRERECORDED_MODEL",
+        "PRERECORDED_SONIOX_FAILOVER_ENABLED",
         "STT_SERVICE_MODELS",
         "TYPESENSE_HOST",
         "TWILIO_ACCOUNT_SID",
@@ -161,11 +169,12 @@ def test_standalone_pusher_reconciles_non_secret_config_before_preflight():
 
     resolve_index = workflow.index("- name: Resolve production pusher runtime targets")
     reconcile_index = workflow.index("- name: Apply non-secret pusher runtime config")
-    preflight_index = workflow.index("- name: Preflight pusher ConfigMap and Secret references")
+    existing_preflight_index = workflow.index("- name: Preflight existing pusher ConfigMap and Secret references")
+    preflight_index = workflow.index("- name: Verify reconciled pusher ConfigMap and Secret references")
     helm_index = workflow.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
     reconcile = workflow[reconcile_index:preflight_index]
 
-    assert resolve_index < reconcile_index < preflight_index < helm_index
+    assert resolve_index < existing_preflight_index < reconcile_index < preflight_index < helm_index
     assert all(f"          {name}:" in reconcile for name in required_config | prod_only_config)
     assert "backend/scripts/deploy-backend-config.sh" in reconcile
     assert "secrets." not in reconcile
@@ -174,38 +183,185 @@ def test_standalone_pusher_reconciles_non_secret_config_before_preflight():
 def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: SimpleNamespace):
     deployment = preflight.rendered_pusher_deployment("dev")
     expected, literals, clear_historical_secret = preflight.dev_pusher_binding_contract()
+    swift = (SCRIPT.parents[2] / "desktop/macos/Desktop/Sources/PostHogManager.swift").read_text(encoding="utf-8")
+    public_token = re.search(r'apiKey = "(phc_[^"]+)"', swift)[1]
 
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        # Dev-only canary (lead2 2afa3e); prod stays "0".
+        "PUSHER_STORAGE_PCM_BUDGET_MB": "512",
+        "CONVERSATION_TERMINAL_FAMILY_MODE": "on",
+        "HOME_TRANSCRIPTION_PRESENTATION_GATE": "true",
+        "HOME_TRANSCRIPTION_DEADLINE_SECONDS": "7200",
+        "HOME_PROCESSING_MAX_AGE_SECONDS": "21600",
+        "RECORD_SEAL_OVERLAP_TRIM_ENABLED": "true",
+        "LISTEN_QUIET_FINALIZATION_ENABLED": "true",
+        "STT_CAP_DISPATCH_ENFORCEMENT": "false",
+        "STT_CAP_DISPATCH_COHORT": "",
+        "STT_CAP_DISPATCH_LANES": "live",
+        "BATCH_LIVE_STT_RETIRE_PERCENT": "0",
+        "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": "false",
+        "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED": "false",
+        "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT": "g1",
+        "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED": "false",
+        "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED": "false",
+        "DEMAND_PROCESSING_ENABLED": "false",
+        "DEMAND_PROCESSING_LAZY_ENABLED": "false",
+        "DEMAND_PROCESSING_TOOL_ENABLED": "false",
+        "DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED": "false",
+        "DEMAND_PROCESSING_UID_ALLOWLIST": "",
+        "DEMAND_PROCESSING_PERCENT": "0",
+        "PLAYBACK_ON_DEMAND_ENABLED": "true",
+        "SYNC_POLL_BACKOFF_ENABLED": "false",
+        "AUDIO_ARCHIVE_LIVE_ENABLED": "true",
+        "AUDIO_ARCHIVE_READ_ENABLED": "true",
+        "AUDIO_ARCHIVE_STOP_PCM_ENABLED": "false",
+        "AUDIO_ARCHIVE_SYNC_ENABLED": "false",
+        "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED": "false",
+        "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
+        "AUDIO_ARCHIVE_PERCENT": "0",
+        "AUDIO_ARCHIVE_STOP_PCM_PERCENT": "0",
+        "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT": "0",
+        "BUCKET_AUDIO_DERIVED": "",
+        "AUDIO_MERGE_WORKER_URL": "",
+        "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
+        "BUCKET_SCREEN_FRAMES": "based-hardware-prod-screen-frames",
+        "BUCKET_OBJECT_LAKE": "omi-dev-object-lake-uc1",
+        "OBJECT_LAKE_KMS_KEY": "projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks",
+        "OBJECT_LAKE_WRITE_ENABLED": "false",
+        "OBJECT_LAKE_WRITE_PERCENT": "0",
+        "OBJECT_LAKE_READ_ENABLED": "true",
+        "OBJECT_LAKE_INLINE_MAX_BYTES": "4096",
+        "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
+        "DREAM_AGENT_ELIGIBILITY": "allowlist",
+        "DREAM_AGENT_UID_ALLOWLIST": "",
+        "DREAM_ON_DEMAND_ENABLED": "true",
+        "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
+        "OMI_SHAPED_AGENT_MODE": "on",
+        "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
+        "CLIENT_SUMMARIES_AT_CAP_ENABLED": "true",
+        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+        "FSR_QUEUE_AGE_PUBLISHER": "0",
+        "FSR_QUEUE_AGE_LEASE_SECONDS": "120",
+        "FSR_LEADER_LEASE_TTL_SECONDS": "0",
+        "DELETION_WIPE_RECONCILE_INTERVAL_SECONDS": "300",
+        "FSR_DELETION_NEGATIVE_TTL_SECONDS": "30",
+        "FSR_USAGE_MONTH_TTL_SECONDS": "60",
+        "FSR_USAGE_MONTH_TOTAL_EPOCH": "v1",
+        "FSR_SUBSCRIPTION_TTL_SECONDS": "55",
+        "FSR_SERVING_CONFIG_TTL_SECONDS": "60",
+        "ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS": "30",
+        "CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS": "30",
+        "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+        "HOSTED_LID_API_URL": "",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
+        "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
+        "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
+        "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION": "false",
+        "LIVE_CAPTURE_WINDOW_MERGE_UNION": "false",
+        "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": "false",
+        "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": "false",
+        "SONIOX_WIRE_LEDGER": "false",
+        "SONIOX_ORDERED_FINALIZE": "false",
+        "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
+        "MEMORY_ENABLED": "on",
+        "OMI_CUSTOMER_DATA_PROJECT": "based-hardware",
+        "OMI_ENV_STAGE": "dev",
+        "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
+        "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",
+        "OMI_LLM_GATEWAY_FEATURE_MODE": "gateway",
+        "OMI_LLM_GATEWAY_URL": "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080",
+        "PROACTIVITY_V2_POSTHOG_TOKEN": public_token,
+        "PROACTIVITY_V2_POSTHOG_HOST": "https://us.posthog.com",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
-        "STT_SERVICE_MODELS": "parakeet,modulate-velma-2",
+        "PRERECORDED_SONIOX_FAILOVER_ENABLED": "true",
+        "STT_SERVICE_MODELS": "modulate-velma-2,soniox",
+        "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": "1",
+        "TRANSCRIPTION_SHADOW_ENABLED": "true",
+        "TRANSCRIPTION_SHADOW_KILL_SWITCH": "false",
+        "TRANSCRIPTION_SHADOW_PERCENT": "0",
+        "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": "omi-release-probe",
     }
     assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
 
 
-def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(preflight: SimpleNamespace):
+@pytest.mark.parametrize(
+    "env_name",
+    ["PROACTIVITY_V2_POSTHOG_TOKEN", "PROACTIVITY_V2_POSTHOG_HOST", "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT"],
+)
+@pytest.mark.parametrize("mutation", ["missing", "changed", "secret"])
+def test_dev_pusher_literal_contracts_reject_rendered_drift(
+    monkeypatch,
+    preflight: SimpleNamespace,
+    dev_pusher_contract_baseline: tuple[dict, tuple],
+    env_name: str,
+    mutation: str,
+):
+    deployment = copy.deepcopy(dev_pusher_contract_baseline[0])
+    monkeypatch.setitem(
+        preflight.validate_dev_pusher_binding_contract.__globals__,
+        "dev_pusher_binding_contract",
+        lambda: dev_pusher_contract_baseline[1],
+    )
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    entry = next(item for item in env if item["name"] == env_name)
+    if mutation == "missing":
+        env.remove(entry)
+    elif mutation == "changed":
+        entry["value"] = "disabled"
+    else:
+        del entry["value"]
+        entry["valueFrom"] = {"secretKeyRef": {"name": "dev-omi-backend-secrets", "key": env_name}}
+
+    failures = preflight.validate_dev_pusher_binding_contract(deployment)
+    if mutation == "changed":
+        assert any(f"literal contract mismatch for {env_name}:" in failure for failure in failures)
+    else:
+        assert f"dev pusher literal contract missing rendered value for {env_name}" in failures
+    if mutation == "secret":
+        assert f"dev pusher binding contract has unclassified rendered binding for {env_name}" in failures
+
+
+def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(preflight: SimpleNamespace):
     deployment = preflight.rendered_pusher_deployment("prod")
     bindings = preflight.direct_pusher_bindings(deployment)
     literals = preflight.literal_pusher_values(deployment)
 
-    assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
-    assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
-    assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"
-    assert literals["STT_SERVICE_MODELS"] == "parakeet,modulate-velma-2"
+    # Deepgram retired 2026-08-27: the cloud credential binding is gone too.
+    assert "DEEPGRAM_API_KEY" not in bindings
+    assert "SPEAKER_MATCH_SCORES_ENABLED" not in literals
+    assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
+    for retired in (
+        "CONVERSATION_RELEVANCE_JEV_ENABLED",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP",
+        "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST",
+        "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT",
+        "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE",
+        "MEMORY_OWNER_JEV_FLIP_ENABLED",
+        "MEMORY_OWNER_JEV_FLIP_PERCENT",
+        "MEMORY_OWNER_JEV_SHADOW_PERCENT",
+        "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP",
+        "DESKTOP_PENDANT_CALL_LINK_MODE",
+        "DESKTOP_PENDANT_CALL_LINK_PERCENT",
+        "DEEPGRAM_SELF_HOSTED_ENABLED",
+        "DEEPGRAM_SELF_HOSTED_URL",
+    ):
+        assert retired not in literals
+    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox"
 
 
 def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: SimpleNamespace):
     deployment = copy.deepcopy(preflight.rendered_pusher_deployment("dev"))
     env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     stt_models = next(item for item in env if item["name"] == "STT_SERVICE_MODELS")
-    stt_models["value"] = "dg-nova-3"
+    stt_models["value"] = "modulate-velma-2"
 
     assert preflight.validate_dev_pusher_binding_contract(deployment) == [
         "dev pusher literal contract mismatch for STT_SERVICE_MODELS: "
-        "expected 'parakeet,modulate-velma-2', got 'dg-nova-3'"
+        "expected 'modulate-velma-2,soniox', got 'modulate-velma-2'"
     ]
 
 
@@ -221,9 +377,17 @@ def test_dev_pusher_contract_requires_typesense_host_secret_clear(preflight: Sim
 
 
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl is required for the local strategic-merge fixture")
-@pytest.mark.parametrize("env_name", ["REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"])
+@pytest.mark.parametrize(
+    ("environment", "env_name"),
+    [
+        ("dev", "REDIS_DB_HOST"),
+        ("dev", "GOOGLE_CLIENT_ID"),
+        ("dev", "TYPESENSE_HOST"),
+        ("prod", "REDIS_DB_HOST"),
+    ],
+)
 def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
-    tmp_path: Path, preflight: SimpleNamespace, env_name: str
+    tmp_path: Path, preflight: SimpleNamespace, environment: str, env_name: str
 ):
     """Exercise Kubernetes' named-env strategic merge behavior without a cluster.
 
@@ -259,7 +423,7 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
                         - name: {env_name}
                           valueFrom:
                             secretKeyRef:
-                              name: dev-omi-backend-secrets
+                              name: {environment}-omi-backend-secrets
                               key: {env_name}
             """))
 
@@ -296,21 +460,23 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
 
     broken = render(f"""\
 configMapKeyRef:
-  name: dev-omi-backend-config
+  name: {environment}-omi-backend-config
   key: {env_name}
 """)
     broken_value_from = broken["spec"]["template"]["spec"]["containers"][0]["env"][0]["valueFrom"]
     assert broken_value_from == {
-        "configMapKeyRef": {"name": "dev-omi-backend-config", "key": env_name},
-        "secretKeyRef": {"name": "dev-omi-backend-secrets", "key": env_name},
+        "configMapKeyRef": {"name": f"{environment}-omi-backend-config", "key": env_name},
+        "secretKeyRef": {"name": f"{environment}-omi-backend-secrets", "key": env_name},
     }
 
-    rendered_deployment = next(document for document in preflight.render("dev") if document.get("kind") == "Deployment")
+    rendered_deployment = next(
+        document for document in preflight.render(environment) if document.get("kind") == "Deployment"
+    )
     rendered_env = rendered_deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     rendered_item = next(item for item in rendered_env if item["name"] == env_name)
     fixed = render(yaml.safe_dump(rendered_item["valueFrom"], sort_keys=False))
     fixed_value_from = fixed["spec"]["template"]["spec"]["containers"][0]["env"][0]["valueFrom"]
-    assert fixed_value_from == {"configMapKeyRef": {"name": "dev-omi-backend-config", "key": env_name}}
+    assert fixed_value_from == {"configMapKeyRef": {"name": f"{environment}-omi-backend-config", "key": env_name}}
 
 
 @pytest.mark.parametrize("kind", ["configmap", "secret"])

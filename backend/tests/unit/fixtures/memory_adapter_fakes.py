@@ -4,17 +4,31 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
+from models import memory_search_gateway
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_search_gateway import SearchVectorHit
-from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
+from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState, is_default_access_eligible
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
+
+MEMORY_ADAPTER_FIXTURE_NOW = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+
+
+def freeze_default_vector_eligibility_clock(monkeypatch, *, now: datetime = MEMORY_ADAPTER_FIXTURE_NOW) -> None:
+    """Keep vector hydration's default eligibility check on the fixture clock."""
+    fixture_now = now
+
+    def _fixture_default_access_eligible(item, policy, *, now: datetime | None = None):
+        evaluation_now = fixture_now if now is None else now
+        return is_default_access_eligible(item, policy, now=evaluation_now)
+
+    monkeypatch.setattr(memory_search_gateway, "is_default_access_eligible", _fixture_default_access_eligible)
 
 
 class Snapshot:
-    def __init__(self, data=None, *, exists=True):
+    def __init__(self, data=None, *, exists=True, document_id=None):
         self._data = data
         self.exists = exists
+        self.id = document_id
 
     def to_dict(self):
         if self._data is None:
@@ -38,13 +52,52 @@ class CollectionRef:
     def __init__(self, db_client, path):
         self._db_client = db_client
         self.path = path
+        self._orders = []
+        self._limit = None
+        self._start_after = None
+
+    def order_by(self, field, direction=None):
+        self._orders.append((field, direction))
+        return self
+
+    def limit(self, value):
+        self._limit = value
+        return self
+
+    def start_after(self, values):
+        self._start_after = values
+        return self
+
+    def document(self, document_id):
+        return DocumentRef(self._db_client, f"{self.path}/{document_id}")
+
+    @staticmethod
+    def _timestamp(value):
+        return datetime.fromisoformat(value) if isinstance(value, str) else value
 
     def stream(self):
         prefix = f"{self.path}/"
-        snapshots = []
+        rows = []
         for path, data in sorted(self._db_client.docs.items()):
             if path.startswith(prefix) and "/" not in path[len(prefix) :]:
-                snapshots.append(Snapshot(data))
+                rows.append((path[len(prefix) :], dict(data)))
+        for field, direction in reversed(self._orders):
+            rows.sort(
+                key=lambda row: row[0] if field == '__name__' else self._timestamp(row[1][field]),
+                reverse=direction == 'DESCENDING',
+            )
+        if self._start_after is not None:
+            cursor = self._start_after
+            cursor_key = (-self._timestamp(cursor['updated_at']).timestamp(), cursor['__name__'].path.rsplit('/', 1)[1])
+            rows = [row for row in rows if (-self._timestamp(row[1]['updated_at']).timestamp(), row[0]) > cursor_key]
+        if self._limit is not None:
+            rows = rows[: self._limit]
+        snapshots = []
+        for document_id, data in rows:
+            if self._orders and 'updated_at' in data:
+                # Firestore timestamps are native datetimes, unlike the JSON fixture seed.
+                data['updated_at'] = self._timestamp(data['updated_at'])
+            snapshots.append(Snapshot(data, document_id=document_id))
         return snapshots
 
 
@@ -93,7 +146,7 @@ def memory_item(
     quote_text: str,
     **overrides,
 ) -> MemoryItem:
-    now = now or datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = now or MEMORY_ADAPTER_FIXTURE_NOW
     captured_at = captured_at or (now - timedelta(days=1))
     data = {
         "memory_id": memory_id,
@@ -124,15 +177,53 @@ def memory_item(
     return MemoryItem(**data)
 
 
+# Firestore stores these as native timestamps. The JSON dump turns them into
+# ISO strings, and fake-firestore then crashes when a keyset ``order_by``
+# compares those strings with datetime values written by the apply path.
+_FIRESTORE_TIMESTAMP_FIELDS = frozenset(
+    {
+        "captured_at",
+        "updated_at",
+        "expires_at",
+        "last_corroborated_at",
+        "valid_from",
+        "valid_to",
+        "created_at",
+    }
+)
+
+
+def _restore_firestore_timestamps(value):
+    if isinstance(value, list):
+        return [_restore_firestore_timestamps(item) for item in value]
+    if isinstance(value, dict):
+        restored = {}
+        for key, item in value.items():
+            if key in _FIRESTORE_TIMESTAMP_FIELDS and isinstance(item, str):
+                restored[key] = datetime.fromisoformat(item.replace("Z", "+00:00"))
+            else:
+                restored[key] = _restore_firestore_timestamps(item)
+        return restored
+    return value
+
+
 def stored_item(item: MemoryItem) -> dict:
-    return item.model_dump(mode="json")
+    """Seed payload shaped like a production ``memory_items`` document.
+
+    Enums stay JSON strings. Timestamp fields stay ``datetime`` so an indexed
+    ``updated_at`` scan can sort them next to rows the apply path wrote.
+    """
+    return _restore_firestore_timestamps(item.model_dump(mode="json"))
 
 
-def vector_hit(item: MemoryItem, *, score, projection_commit_id="projection-1") -> SearchVectorHit:
+def vector_hit(item: MemoryItem, *, score, projection_commit_id=None) -> SearchVectorHit:
+    authoritative_projection_commit_id = projection_commit_id
+    if authoritative_projection_commit_id is None:
+        authoritative_projection_commit_id = item.ledger_commit_id or "projection-1"
     return SearchVectorHit(
         memory_id=item.memory_id,
         score=score,
-        projection_commit_id=projection_commit_id,
+        projection_commit_id=authoritative_projection_commit_id,
         vector_updated_at=item.updated_at + timedelta(minutes=1),
         uid=item.uid,
         account_generation=item.account_generation,
@@ -146,19 +237,8 @@ def enabled_rollout_doc(uid: str = "u1", *, grant_consumer: str) -> dict:
     return {
         "schema_version": 1,
         "uid": uid,
-        "mode": MemoryRolloutMode.read.value,
-        "mode_epoch": 7,
-        "cutover_epoch": 7,
         "account_generation": 3,
         "vector_projection_commit_id": "projection-1",
-        "fallback_projection_ready": True,
-        "persistent_memory_writes_started": True,
-        "writes_blocked": False,
-        "stage_gates": {
-            MemoryRolloutStageGate.shadow.value: PASSED,
-            MemoryRolloutStageGate.write.value: PASSED,
-            MemoryRolloutStageGate.read.value: PASSED,
-        },
         "grants": {
             grant_consumer: {
                 "default_memory": True,

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-health-sample-refresh-gated-on-admission",
+  "violated_contract": "A cache used as a fail-closed admission gate must be refreshed independently of admission attempts. When refresh is scheduled only by rare allocated requests, every request can find the previous sample expired, reject, and leave the healthy service unused indefinitely.",
+  "canonical_prevention": "Start one configured process-lifecycle poller before admission, keep it running across transient refresh faults, and stop it on shutdown. Admission reads only the cached sample and still refuses missing, stale, invalid, incomplete, or pressured samples. Cover intervals longer than the sample TTL with no admission calls, plus disabled configuration and poller restart behavior.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_parakeet_window_live.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/"
+  ],
+  "status": "open"
+}

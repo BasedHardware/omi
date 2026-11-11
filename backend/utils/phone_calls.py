@@ -16,9 +16,8 @@ from fastapi import HTTPException
 
 import database.phone_call_usage as phone_call_usage_db
 import database.users as users_db
-from database.phone_call_config import get_config_for_plan
+from database.phone_call_config import get_config_for_plan, is_paid_phone_call_plan
 from models.users import PlanType
-from utils.subscription import is_paid_plan
 
 # Minimal E.164 prefix → ISO-2 mapping. Intentionally covers the cheap/common
 # destinations; anything not on the list falls through to an empty match and
@@ -147,8 +146,8 @@ def get_quota_snapshot(uid: str) -> QuotaSnapshot:
     """Resolve the user's plan + config + current usage into a snapshot."""
     subscription = users_db.get_user_valid_subscription(uid)
     plan = subscription.plan if subscription else None
-    paid = bool(subscription and is_paid_plan(subscription.plan))
-    config = get_config_for_plan(paid)
+    paid = is_paid_phone_call_plan(plan)
+    config = get_config_for_plan(plan)
     used, reset_at = phone_call_usage_db.get_current_month_count(uid)
     return QuotaSnapshot(
         plan=plan,
@@ -165,8 +164,8 @@ def reserve_phone_call_quota(uid: str) -> QuotaSnapshot:
     """Resolve plan/config and reserve one free-tier call slot atomically."""
     subscription = users_db.get_user_valid_subscription(uid)
     plan = subscription.plan if subscription else None
-    paid = bool(subscription and is_paid_plan(subscription.plan))
-    config = get_config_for_plan(paid)
+    paid = is_paid_phone_call_plan(plan)
+    config = get_config_for_plan(plan)
     monthly_limit = config.get('monthly_call_limit')
 
     if paid or monthly_limit is None:

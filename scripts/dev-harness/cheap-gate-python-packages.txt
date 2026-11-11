@@ -1,0 +1,9 @@
+# Cheap-gate Python packages for a lane worktree.
+#
+# Pins match backend/pylock.macos.toml. This is NOT a full lock: `uv pip sync`
+# of pylock.macos.toml pulls llvmlite/scipy/av/pyarrow and stalled ~20 minutes
+# in a Spine A worktree. Install only these so pre-push cheap gates and
+# `dev_harness.cli` (python-dotenv) can import. Backend unit tests still need
+# `make lane-backend` (wheels) or `make setup-backend` (locked pylock sync).
+python-dotenv==1.2.2
+PyYAML==6.0.1

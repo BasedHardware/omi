@@ -6,7 +6,7 @@ an autouse ``monkeypatch`` fixture instead of mutating ``sys.modules`` at module
 scope. See ``backend/docs/test_isolation.md`` (Tier-2 sanctioned seams).
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -33,6 +33,12 @@ def _patch_fair_use_deps(monkeypatch):
     _mock_redis.eval.side_effect = None
     monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
     monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
+    monkeypatch.setattr(fair_use_mod, 'fair_use_caps_for_user', lambda _uid: fair_use_mod.fair_use_caps_for_plan())
+    # The record_fallback patch is applied per-test (see
+    # TestNormalizeExpiredRestrictionState.setup_method) and restored here so
+    # it cannot leak into other test classes.
+    yield
+    monkeypatch.undo()
 
 
 class TestRecordSpeechMs:
@@ -76,6 +82,25 @@ class TestRecordSpeechMs:
                 idempotency_key='content-1',
                 raise_on_error=True,
             )
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_custom_stt_lane_records_under_its_own_keys(self):
+        """#7690: custom-STT speech is metered in an isolated lane, never
+        coerced into the live-enforced realtime lane."""
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        fair_use_mod.record_speech_ms('user1', 5000, source='custom_stt')
+        bucket_key = pipe.hincrby.call_args.args[0]
+        zset_key = pipe.zadd.call_args.args[0]
+        assert bucket_key == 'fair_use:v2:bucket:custom_stt:user1'
+        assert zset_key == 'fair_use:v2:speech:custom_stt:user1'
+
+    def test_custom_stt_source_is_valid_and_outside_live_enforcement(self):
+        """#7690: the lane must exist (unknown sources coerce to realtime,
+        which would gate exempt users) and must stay out of the live meter."""
+        assert fair_use_mod._normalize_speech_source('custom_stt') == 'custom_stt'
+        assert fair_use_mod._normalize_speech_source('not-a-lane') == 'realtime'
+        assert 'custom_stt' not in fair_use_mod.LIVE_SPEECH_SOURCES
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_ignores_zero_speech(self):
@@ -142,12 +167,12 @@ class TestRecordSpeechMs:
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_cutoff_boundary_zrangebyscore_args(self):
-        """zrangebyscore is called with inclusive range [0, cutoff_ts] for pruning."""
+        """Pruning fetches an inclusive, bounded stale-member batch."""
         import time
 
         pipe = MagicMock()
         _mock_redis.pipeline.return_value = pipe
-        _mock_redis.zrangebyscore.return_value = []
+        _mock_redis.zrangebyscore.return_value = [b'old-minute-1', b'old-minute-2']
         fair_use_mod.record_speech_ms('user1', 5000)
         # Verify zrangebyscore was called with correct cutoff
         zrange_call = _mock_redis.zrangebyscore.call_args
@@ -155,14 +180,15 @@ class TestRecordSpeechMs:
         # Args: (zset_key, min_score=0, max_score=cutoff_ts)
         _key, min_score, max_score = zrange_call[0]
         assert min_score == 0
+        assert zrange_call.kwargs == {'start': 0, 'num': 128}
         # cutoff = now - RETENTION; max_score should be close to that
         expected_cutoff = int(time.time()) - fair_use_mod.FAIR_USE_REDIS_RETENTION_SECONDS
         assert abs(max_score - expected_cutoff) <= 2  # within 2s tolerance
-        # zremrangebyscore in pipe uses same range (inclusive upper bound)
-        zrem_calls = [c for c in pipe.zremrangebyscore.call_args_list]
-        assert len(zrem_calls) == 1
-        assert zrem_calls[0][0][1] == 0  # min
-        assert abs(zrem_calls[0][0][2] - expected_cutoff) <= 2  # max
+        assert pipe.zrem.call_args_list == [
+            ((fair_use_mod._redis_key('user1', 'realtime'), b'old-minute-1'),),
+            ((fair_use_mod._redis_key('user1', 'realtime'), b'old-minute-2'),),
+        ]
+        assert pipe.hdel.call_args.args[1:] == ('old-minute-1', 'old-minute-2')
 
 
 class TestGetRollingSpeechMs:
@@ -369,6 +395,7 @@ class TestEscalateEnforcement:
     def test_warning_stays_warning_with_insufficient_violations(self, _):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
+        _fair_use_db.renew_fair_use_warning.return_value = ({'stage': 'warning'}, {'stage': 'warning'})
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
         classifier = {'misuse_score': 0.9, 'usage_type': 'audiobook'}
@@ -447,7 +474,10 @@ class TestIsHardRestricted:
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
     def test_non_restricted_user_is_not_hard_restricted(self):
-        _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'warning',
+            'warning_until': datetime.now(timezone.utc) + timedelta(days=1),
+        }
         assert fair_use_mod.is_hard_restricted('user1') is False
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
@@ -478,6 +508,7 @@ class TestEnforcementCache:
 
     def setup_method(self):
         _mock_redis.reset_mock()
+        _fair_use_db.update_fair_use_state.reset_mock()
 
     def test_returns_cached_stage(self):
         _mock_redis.get.return_value = b'warning'
@@ -486,10 +517,44 @@ class TestEnforcementCache:
 
     def test_falls_back_to_firestore_on_cache_miss(self):
         _mock_redis.get.return_value = None
-        _fair_use_db.get_fair_use_state.return_value = {'stage': 'throttle'}
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'throttle',
+            'throttle_until': datetime.now(timezone.utc) + timedelta(days=1),
+        }
         stage = fair_use_mod.get_enforcement_stage('user1')
         assert stage == 'throttle'
         _mock_redis.setex.assert_called_once()
+
+    def test_expired_restriction_reads_as_throttle_on_cache_miss(self):
+        """Live listen keys its restrict-stage DG budget cap on this stage, so a restriction
+        past restrict_until must expire here exactly as it does for sync and the status API."""
+        _mock_redis.get.return_value = None
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.now(timezone.utc) - timedelta(days=1),
+        }
+
+        stage = fair_use_mod.get_enforcement_stage('user1')
+
+        assert stage == 'throttle'
+        updates = _fair_use_db.update_fair_use_state.call_args.args[1]
+        assert updates['stage'] == 'throttle'
+        assert updates['restrict_until'] is None
+        assert updates['throttle_until'] > datetime.now(timezone.utc)
+        _mock_redis.setex.assert_called_once_with('fair_use:stage:user1', 60, 'throttle')
+
+    def test_active_restriction_stays_restrict_on_cache_miss(self):
+        _mock_redis.get.return_value = None
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.now(timezone.utc) + timedelta(days=1),
+        }
+
+        stage = fair_use_mod.get_enforcement_stage('user1')
+
+        assert stage == 'restrict'
+        _fair_use_db.update_fair_use_state.assert_not_called()
+        _mock_redis.setex.assert_called_once_with('fair_use:stage:user1', 60, 'restrict')
 
     def test_invalidate_cache_deletes_keys(self):
         fair_use_mod.invalidate_enforcement_cache('user1')
@@ -623,6 +688,22 @@ class TestDgBudget:
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_get_dg_budget_status_resets_at_is_valid_iso8601(self):
+        # resets_at is emitted to API clients (routers/fair_use_admin). tomorrow is tz-aware,
+        # so a naive `isoformat() + 'Z'` produced an invalid "…+00:00Z" that both carries an
+        # offset and a Zulu suffix — datetime.fromisoformat rejects it.
+        _mock_redis.get.return_value = b'600000'
+        result = fair_use_mod.get_dg_budget_status('user1')
+        resets_at = result['resets_at']
+        assert '+00:00Z' not in resets_at, f'malformed offset+Z timestamp: {resets_at!r}'
+        # Must be parseable as ISO-8601 (the reason a client would consume this field).
+        parsed = datetime.fromisoformat(resets_at.replace('Z', '+00:00'))
+        assert parsed.tzinfo is not None
+        # Next-midnight-UTC contract: time component is zeroed.
+        assert (parsed.hour, parsed.minute, parsed.second, parsed.microsecond) == (0, 0, 0, 0)
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
     def test_get_dg_budget_status_exhausted(self):
         _mock_redis.get.return_value = b'2000000'
         result = fair_use_mod.get_dg_budget_status('user1')
@@ -715,3 +796,82 @@ class TestDgBudget:
         assert result['used_ms'] == 0
         assert result['remaining_ms'] == 1800000
         _mock_redis.get.side_effect = None
+
+
+class TestNormalizeExpiredRestrictionState:
+    """restrict_until expiry must always clear, even on malformed stored data."""
+
+    NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=timezone.utc)
+
+    @pytest.fixture(autouse=True)
+    def _legacy_behavior(self, monkeypatch):
+        # Preserve coverage of the exact pre-decay contract behind the kill switch.
+        monkeypatch.setattr(fair_use_mod, 'FAIR_USE_THROTTLE_DECAY_ENABLED', False)
+
+    def setup_method(self):
+        _fair_use_db.update_fair_use_state.reset_mock()
+        _fair_use_db.invalidate_enforcement_cache.reset_mock()
+        self._record_fallback = MagicMock()
+        fair_use_mod.record_fallback = self._record_fallback
+
+    def _state(self, stage='restrict', restrict_until=None):
+        return {'stage': stage, 'restrict_until': restrict_until}
+
+    def test_active_restriction_is_kept(self):
+        future = self.NOW + timedelta(days=1)
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(restrict_until=future), now=self.NOW
+        )
+        assert result['stage'] == 'restrict'
+        _fair_use_db.update_fair_use_state.assert_not_called()
+
+    def test_expired_datetime_restriction_clears(self):
+        past = self.NOW - timedelta(minutes=1)
+        result = fair_use_mod.normalize_expired_restriction_state('uid', self._state(restrict_until=past), now=self.NOW)
+        assert result['stage'] == 'throttle'
+        assert result['restrict_until'] is None
+        _fair_use_db.update_fair_use_state.assert_called_once_with('uid', {'stage': 'throttle', 'restrict_until': None})
+        # A legitimate expiry is normal operation, not a silent heal.
+        self._record_fallback.assert_not_called()
+
+    def test_expired_iso_string_restriction_clears(self):
+        """A string timestamp (older write / admin import) must still expire —
+        previously it was skipped by an isinstance check and the user stayed
+        hard-restricted forever."""
+        past_str = (self.NOW - timedelta(minutes=1)).isoformat()
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(restrict_until=past_str), now=self.NOW
+        )
+        assert result['stage'] == 'throttle'
+        assert result['restrict_until'] is None
+        _fair_use_db.update_fair_use_state.assert_called_once_with('uid', {'stage': 'throttle', 'restrict_until': None})
+
+    def test_unparseable_restriction_clears_fail_safe(self):
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(restrict_until='not-a-timestamp'), now=self.NOW
+        )
+        assert result['stage'] == 'throttle'
+        assert result['restrict_until'] is None
+        # The malformed-timestamp heal must be observable, not silent.
+        self._record_fallback.assert_called_once_with(
+            component='other',
+            from_mode='restrict',
+            to_mode='throttle',
+            reason='malformed_doc',
+            outcome='recovered',
+            log=fair_use_mod.logger,
+        )
+
+    def test_utc_z_suffix_string_restriction_is_kept_while_active(self):
+        future = (self.NOW + timedelta(hours=2)).isoformat().replace('+00:00', 'Z')
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(restrict_until=future), now=self.NOW
+        )
+        assert result['stage'] == 'restrict'
+
+    def test_non_restrict_stage_untouched(self):
+        result = fair_use_mod.normalize_expired_restriction_state(
+            'uid', self._state(stage='throttle', restrict_until=self.NOW + timedelta(days=1)), now=self.NOW
+        )
+        assert result['stage'] == 'throttle'
+        _fair_use_db.update_fair_use_state.assert_not_called()

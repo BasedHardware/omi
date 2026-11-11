@@ -1,0 +1,11 @@
+{
+  "version": "0.12.236",
+  "date": "2026-08-28",
+  "changes": [
+    "Moved Rewind into Brain and unified compact search, navigation, filtering, and contextual actions across Chat, Brain, Tasks, and Apps",
+    "Voice stays instant while you're at your Mac, and stops burning provider quota while you're away: the always-warm voice session now pauses after 10 minutes without keyboard or mouse input and re-warms the moment you're back — this idle re-warm loop is what exhausted the shared Gemini quota and switched everyone's voice to the OpenAI fallback.",
+    "The Tasks page no longer shows a settings gear that pointed at a hidden pane",
+    "Tagging a speaker with a name now works everywhere: conversations opened from Memories or the Dashboard were missing the tap-to-name control, and recent recordings that hadn't finished syncing failed with \"Couldn't assign this speaker\"",
+    "Speaker names tagged on a recording that hasn't finished syncing now reliably survive restarting the app"
+  ]
+}

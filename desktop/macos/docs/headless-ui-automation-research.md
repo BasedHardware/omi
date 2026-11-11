@@ -79,7 +79,7 @@ but you have to wire each action. **This is the pattern we already use** (see §
   `wait-ready`, `open-conversation`). **This already moves the cursor zero times.**
 - **`agent-swift`** (Accessibility API CLI): `snapshot`, `press @ref` (AX, no cursor),
   `click @ref` (CGEvent — **moves cursor**, the fallback to avoid), `fill`, `find`,
-  `wait`. Documented in `desktop/CLAUDE.md`.
+  `wait`. Documented in `desktop/macos/AGENTS.md`.
 - Accessibility identifiers exist but are **sparse** (~5 across 273 files):
   `SidebarView.swift:1466` (`sidebar_*`), `SettingsPage.swift:5213`
   (`syncCalendarButton`), `SpeakerBubbleView.swift` (`transcript_speaker_button_*`).

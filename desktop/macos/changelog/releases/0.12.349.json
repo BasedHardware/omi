@@ -1,0 +1,7 @@
+{
+  "version": "0.12.349",
+  "date": "2026-09-14",
+  "changes": [
+    "Dropping several files onto the chat composer at once now stages all of them up to the attachment limit, and composers without attachment support now decline file drags instead of pasting the dropped file's path into the message"
+  ]
+}

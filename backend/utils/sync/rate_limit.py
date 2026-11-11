@@ -3,7 +3,10 @@
 import json
 import re
 import sys
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+
+from config.plan_catalog import PLAN_TYPE_VALUES
 
 FAIR_USE_RATE_LIMIT_CODE = 'fair_use_restricted'
 FAIR_USE_RATE_LIMIT_REASON = 'fair_use'
@@ -19,7 +22,7 @@ _FAIR_USE_STAGES = frozenset({'none', 'warning', 'throttle', 'restrict'})
 _CLASSIFIER_TYPES = frozenset(
     {'none', 'audiobook', 'podcast', 'prerecorded', 'tv_movie', 'commercial', 'unknown', 'free_exhausted'}
 )
-_SUBSCRIPTION_PLANS = frozenset({'basic', 'unlimited', 'operator', 'architect'})
+_SUBSCRIPTION_PLANS = PLAN_TYPE_VALUES
 _SUBSCRIPTION_STATUSES = frozenset({'active', 'inactive'})
 _APP_VERSION_PATTERN = re.compile(r'^[0-9]{1,4}(?:\.[0-9]{1,6}){1,3}(?:\+[A-Za-z0-9._-]{1,32})?$')
 _REQUEST_ID_PATTERN = re.compile(
@@ -117,3 +120,9 @@ def emit_sync_rate_limit_event(event: Dict[str, Any]) -> None:
     """Write one exact JSON object so Cloud Logging ingests it as jsonPayload."""
     sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
     sys.stdout.flush()
+
+
+def retry_after_until_next_utc_day() -> int:
+    now = datetime.now(timezone.utc)
+    next_day = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(1, int((next_day - now).total_seconds()))

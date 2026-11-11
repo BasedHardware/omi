@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-import-transcript-files.png",
+      "platform": "mobile-android",
+      "description": "Import Data: the Transcript files importer next to Limitless, and transcript-file jobs (running, completed, failed) in Import History",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

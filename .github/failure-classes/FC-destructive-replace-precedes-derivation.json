@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-destructive-replace-precedes-derivation",
+  "violated_contract": "A replace-in-place rebuild may destroy the state it is replacing only once the replacement is fully derived. The delete belongs with the writes that land the new state, never ahead of the work that produces it: if the derivation is slow (per-item provider calls) and its driver is not durable (an in-process background task with no retry), then any redeploy, restart, eviction or driver error inside that window leaves the owner with a partial state and no copy of what it replaced. A derivation loop that reads its own intermediate writes back out of the durable store is what forces the destructive ordering, and using the store as scratch space is the defect, not the sequencing.",
+  "canonical_prevention": "Derive the replacement outside the durable store — staged in the driver's own memory, or into a shadow generation — and delete plus write in one late phase, so an interruption before the swap is a no-op on stored state. Where the loop previously re-read the store for its own intermediate state, move that state into the driver and mirror the store's identity and merge rules there so the swap stays behaviour-preserving. Prove it with a regression test that drives the production function and asserts both that the delete is ordered after the last derivation step and that an interrupted run leaves the prior state untouched.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_knowledge_graph_rebuild_ordering.py"
+  ],
+  "evidence_prs": [
+    11924
+  ],
+  "scope_hints": [
+    "backend/utils/llm/knowledge_graph.py",
+    "backend/database/knowledge_graph.py"
+  ],
+  "status": "open"
+}

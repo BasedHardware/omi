@@ -19,14 +19,11 @@
 //
 // Put it in .env (OMI_REFRESH_TOKEN=...) or pass inline:
 //   OMI_REFRESH_TOKEN=xxx node scripts/diag-listen-probe.mjs
-import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import WebSocket from 'ws'
+import { readDotEnv, decodeJwt, exchangeRefreshToken } from './lib/omi-auth.mjs'
 
-const env = {}
-for (const line of fs.readFileSync(new URL('../.env', import.meta.url), 'utf8').split('\n')) {
-  const m = line.match(/^([A-Z_]+)=(.*)$/)
-  if (m) env[m[1]] = m[2].trim()
-}
+const env = readDotEnv(fileURLToPath(new URL('../.env', import.meta.url)))
 
 // Legacy probe params (uid in query) for the no-auth / dev-key paths.
 const QS = 'language=en&sample_rate=16000&codec=pcm16&channels=1&uid=dummy-uid-test'
@@ -47,36 +44,17 @@ const hosts = [
   ['desktop-backend       ', 'wss://desktop-backend-hhibjajaja-uc.a.run.app']
 ]
 
-function decodeJwt(tok) {
-  try {
-    const payload = tok.split('.')[1]
-    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
-  } catch {
-    return null
-  }
-}
-
 // Resolve a Firebase ID token from OMI_ID_TOKEN, or by exchanging
-// OMI_REFRESH_TOKEN via the Firebase secure-token REST API.
+// OMI_REFRESH_TOKEN via the shared secure-token helper (scripts/lib/omi-auth.mjs).
 async function resolveIdToken() {
   const direct = process.env.OMI_ID_TOKEN || env.OMI_ID_TOKEN
   if (direct) return { token: direct.trim(), source: 'OMI_ID_TOKEN' }
 
-  const refresh = process.env.OMI_REFRESH_TOKEN || env.OMI_REFRESH_TOKEN
+  const refresh = process.env.OMI_REFRESH_TOKEN || env.OMI_REFRESH_TOKEN || env.OMI_E2E_REFRESH_TOKEN
   if (!refresh) return null
 
-  const apiKey = env.VITE_FIREBASE_API_KEY
-  if (!apiKey) throw new Error('VITE_FIREBASE_API_KEY missing from .env')
-  const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refresh.trim() })
-  })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    throw new Error(`securetoken exchange failed: HTTP ${res.status} ${JSON.stringify(data).slice(0, 200)}`)
-  }
-  return { token: data.id_token, source: 'OMI_REFRESH_TOKEN → securetoken exchange' }
+  const token = await exchangeRefreshToken(refresh, env.VITE_FIREBASE_API_KEY)
+  return { token, source: 'refresh token → securetoken exchange' }
 }
 
 // waitForClose: after a 101 OPEN, linger briefly to catch an immediate close

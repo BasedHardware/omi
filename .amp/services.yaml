@@ -1,0 +1,6 @@
+services:
+  # Omi backend cache/locks/rate-limiting store. No durability tuning beyond
+  # disabling persistence — orb data is ephemeral and Redis must restart fast.
+  redis:
+    command: redis-server --port 6379 --save "" --appendonly no --maxmemory 256mb --maxmemory-policy noeviction
+    port: 6379

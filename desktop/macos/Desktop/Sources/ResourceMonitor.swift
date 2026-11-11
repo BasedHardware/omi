@@ -1,13 +1,143 @@
 import AppKit
 import Foundation
-import Sentry
 
-/// Monitors system resources (memory, CPU, disk) and reports to Sentry
+private func boundedDiagnosticTag(_ value: Any?) -> String {
+  switch value {
+  case let value as String:
+    return value
+  case let value as Bool:
+    return value ? "true" : "false"
+  default:
+    return "unknown"
+  }
+}
+
+enum MemoryPressureLevel: String, Equatable, Sendable {
+  case nominal
+  case warning
+  case critical
+  case extreme
+}
+
+struct MemoryPressureDecision: Equatable, Sendable {
+  let previousLevel: MemoryPressureLevel
+  let level: MemoryPressureLevel
+  let shouldReportCritical: Bool
+  let shouldRemediate: Bool
+
+  var reportPhase: String {
+    previousLevel == .critical || previousLevel == .extreme ? "sustained" : "entered"
+  }
+}
+
+/// Owns one memory-pressure episode independently from the sampling timer.
+///
+/// The old monitor used only a five-minute timestamp cooldown. A process that
+/// remained above 800 MB consequently repeated the same alert every five
+/// minutes forever, while a small dip around the threshold could start another
+/// apparent episode. Hysteresis gives recovery one authoritative owner, and a
+/// slower sustained reminder preserves visibility for pressure that never
+/// clears without flooding triage.
+struct MemoryPressureEpisodeTracker: Sendable {
+  private(set) var level: MemoryPressureLevel = .nominal
+  private var lastCriticalReportAt: Date?
+  private var lastRemediationAt: Date?
+
+  let warningThresholdMB: UInt64
+  let criticalThresholdMB: UInt64
+  let extremeThresholdMB: UInt64
+  let warningRecoveryMB: UInt64
+  let criticalRecoveryMB: UInt64
+  let sustainedReportInterval: TimeInterval
+  let remediationInterval: TimeInterval
+
+  init(
+    warningThresholdMB: UInt64 = 500,
+    criticalThresholdMB: UInt64 = 800,
+    extremeThresholdMB: UInt64 = 3000,
+    warningRecoveryMB: UInt64 = 450,
+    criticalRecoveryMB: UInt64 = 720,
+    sustainedReportInterval: TimeInterval = 15 * 60,
+    remediationInterval: TimeInterval = 5 * 60
+  ) {
+    precondition(warningRecoveryMB < warningThresholdMB)
+    precondition(criticalRecoveryMB < criticalThresholdMB)
+    precondition(warningThresholdMB < criticalThresholdMB)
+    precondition(criticalThresholdMB < extremeThresholdMB)
+    self.warningThresholdMB = warningThresholdMB
+    self.criticalThresholdMB = criticalThresholdMB
+    self.extremeThresholdMB = extremeThresholdMB
+    self.warningRecoveryMB = warningRecoveryMB
+    self.criticalRecoveryMB = criticalRecoveryMB
+    self.sustainedReportInterval = sustainedReportInterval
+    self.remediationInterval = remediationInterval
+  }
+
+  mutating func evaluate(memoryFootprintMB: UInt64, at now: Date) -> MemoryPressureDecision {
+    let previous = level
+    let next = nextLevel(for: memoryFootprintMB)
+    level = next
+
+    guard next == .critical else {
+      if next == .nominal || next == .warning {
+        lastCriticalReportAt = nil
+        lastRemediationAt = nil
+      }
+      return MemoryPressureDecision(
+        previousLevel: previous,
+        level: next,
+        shouldReportCritical: false,
+        shouldRemediate: false)
+    }
+
+    let enteredCritical = previous != .critical && previous != .extreme
+    let shouldReport =
+      enteredCritical
+      || lastCriticalReportAt.map { now.timeIntervalSince($0) >= sustainedReportInterval } ?? true
+    let shouldRemediate =
+      enteredCritical
+      || lastRemediationAt.map { now.timeIntervalSince($0) >= remediationInterval } ?? true
+
+    if shouldReport {
+      lastCriticalReportAt = now
+    }
+    if shouldRemediate {
+      lastRemediationAt = now
+    }
+
+    return MemoryPressureDecision(
+      previousLevel: previous,
+      level: next,
+      shouldReportCritical: shouldReport,
+      shouldRemediate: shouldRemediate)
+  }
+
+  private func nextLevel(for memoryFootprintMB: UInt64) -> MemoryPressureLevel {
+    if memoryFootprintMB >= extremeThresholdMB {
+      return .extreme
+    }
+    if memoryFootprintMB >= criticalThresholdMB {
+      return .critical
+    }
+    if level == .critical || level == .extreme, memoryFootprintMB >= criticalRecoveryMB {
+      return .critical
+    }
+    if memoryFootprintMB >= warningThresholdMB {
+      return .warning
+    }
+    if level == .warning, memoryFootprintMB >= warningRecoveryMB {
+      return .warning
+    }
+    return .nominal
+  }
+}
+
+/// Monitors system resources (memory, CPU, disk) and logs threshold breaches
 @MainActor
 class ResourceMonitor {
   static let shared = ResourceMonitor()
 
-  /// Check if this is a non-production build (avoids Sentry calls in test apps)
+  /// Check if this is a non-production build (avoids telemetry in test apps)
   private let isDevBuild: Bool = AppBuild.isNonProduction
 
   // MARK: - Configuration
@@ -16,10 +146,10 @@ class ResourceMonitor {
   private let sampleInterval: TimeInterval = 30
 
   /// Memory threshold (MB) - warn when exceeded
-  private let memoryWarningThreshold: UInt64 = 500
+  private var memoryWarningThreshold: UInt64 { memoryPressureTracker.warningThresholdMB }
 
   /// Memory threshold (MB) - critical alert
-  private let memoryCriticalThreshold: UInt64 = 800
+  private var memoryCriticalThreshold: UInt64 { memoryPressureTracker.criticalThresholdMB }
 
   /// Memory growth rate threshold (MB/min) - detect leaks
   private let memoryGrowthRateThreshold: Double = 50
@@ -28,7 +158,7 @@ class ResourceMonitor {
   /// Keep this well below the point where free RAM is exhausted — at 4GB the system
   /// has ~120MB free and the new instance fails to launch, leaving the user stuck.
   /// At 3GB there is still ~10-13GB free on typical 16GB machines.
-  private let memoryAutoRestartThreshold: UInt64 = 3000  // 3GB
+  private var memoryAutoRestartThreshold: UInt64 { memoryPressureTracker.extremeThresholdMB }
 
   // MARK: - State
 
@@ -37,9 +167,9 @@ class ResourceMonitor {
   private var memorySamples: [(timestamp: Date, memoryMB: UInt64)] = []
   private let maxSamples = 20  // Keep last 20 samples for trend analysis
   private var lastWarningTime: Date?
-  private var lastCriticalTime: Date?
   private var peakMemoryObserved: UInt64 = 0  // Track peak memory manually
   private var autoRestartTriggered = false  // Only auto-restart once per session
+  private var memoryPressureTracker = MemoryPressureEpisodeTracker()
 
   // Minimum time between warnings (prevent spam)
   private let warningCooldown: TimeInterval = 300  // 5 minutes
@@ -76,6 +206,8 @@ class ResourceMonitor {
     monitorTimer?.invalidate()
     monitorTimer = nil
     memorySamples.removeAll()
+    memoryPressureTracker = MemoryPressureEpisodeTracker()
+    lastWarningTime = nil
     log("ResourceMonitor: Stopped resource monitoring")
   }
 
@@ -96,19 +228,9 @@ class ResourceMonitor {
     )
   }
 
-  /// Manually report current resources to Sentry (call before known heavy operations)
+  /// Log current resources (call before known heavy operations and at termination).
   func reportResourcesNow(context: String) {
     let snapshot = getCurrentResources()
-
-    // Add as breadcrumb (skip in dev builds)
-    if !isDevBuild {
-      let breadcrumb = Breadcrumb(level: .info, category: "resources")
-      breadcrumb.message =
-        "[\(context)] Memory: \(snapshot.memoryUsageMB)MB, Footprint: \(snapshot.memoryFootprintMB)MB, CPU: \(String(format: "%.1f", snapshot.cpuUsage))%"
-      breadcrumb.data = snapshot.asDictionary()
-      SentrySDK.addBreadcrumb(breadcrumb)
-    }
-
     log("ResourceMonitor: [\(context)] \(snapshot.summary)")
   }
 
@@ -123,11 +245,8 @@ class ResourceMonitor {
       memorySamples.removeFirst()
     }
 
-    // Update Sentry context with current resources
-    updateSentryContext(snapshot)
-
     // Check for issues
-    checkMemoryThresholds(snapshot)
+    await checkMemoryThresholds(snapshot)
     checkMemoryGrowthRate()
 
     // Log periodically (every 5th sample = ~2.5 min)
@@ -142,7 +261,8 @@ class ResourceMonitor {
   }
 
   /// Collect and log per-component memory diagnostics to help identify leak sources
-  private func logComponentDiagnostics(snapshot: ResourceSnapshot) async {
+  @discardableResult
+  private func logComponentDiagnostics(snapshot: ResourceSnapshot) async -> [String: Any] {
     var components: [String: Any] = [:]
 
     // LiveNotesMonitor buffers (MainActor — direct access)
@@ -160,17 +280,16 @@ class ResourceMonitor {
     components["videoEncoder_restartCount"] = bufferStatus.encoderRestartCount
     components["videoEncoder_emergencyResetCount"] = bufferStatus.emergencyResetCount
     components["videoEncoder_writerNotReadyCount"] = bufferStatus.writerNotReadyCount
+    components["videoEncoder_lifecyclePhase"] = bufferStatus.lifecyclePhase
+    components["videoEncoder_queueBucket"] = bufferStatus.queueBucket
+    components["videoEncoder_isInitialized"] = bufferStatus.isInitialized
+    components["videoEncoder_hasStalenessTimer"] = bufferStatus.hasStalenessTimer
+    components["videoEncoder_finalizationWaiterBucket"] = bufferStatus.finalizationWaiterBucket
     if let age = bufferStatus.oldestFrameAge {
       components["videoEncoder_oldestFrameAgeSec"] = Int(age)
     }
     if let age = bufferStatus.currentChunkAge {
       components["videoEncoder_currentChunkAgeSec"] = Int(age)
-    }
-
-    // FocusAssistant pending tasks (actor — await, optional since it may not be initialized)
-    if let focusAssistant = ProactiveAssistantsPlugin.shared.currentFocusAssistant {
-      components["focus_pendingTasks"] = await focusAssistant.pendingTasksCount
-      components["focus_historyCount"] = await focusAssistant.analysisHistoryCount
     }
 
     // Rewind backpressure stats (MainActor — direct access)
@@ -191,32 +310,14 @@ class ResourceMonitor {
       separator: ", ")
     log("ResourceMonitor: COMPONENTS: \(componentSummary)")
 
-    // Add to Sentry context for crash diagnostics
-    if !isDevBuild {
-      SentrySDK.configureScope { scope in
-        scope.setContext(value: components, key: "memory_components")
-      }
-
-      // Add breadcrumb when memory is elevated
-      if snapshot.memoryFootprintMB >= memoryWarningThreshold {
-        let breadcrumb = Breadcrumb(level: .warning, category: "memory_diagnostics")
-        breadcrumb.message = "Component diagnostics at \(snapshot.memoryFootprintMB)MB"
-        breadcrumb.data = components
-        SentrySDK.addBreadcrumb(breadcrumb)
-      }
-    }
+    return components
   }
 
-  private func updateSentryContext(_ snapshot: ResourceSnapshot) {
-    // Set resource context that will be attached to all future events (skip in dev builds)
-    guard !isDevBuild else { return }
-    SentrySDK.configureScope { scope in
-      scope.setContext(value: snapshot.asDictionary(), key: "resources")
-    }
-  }
-
-  private func checkMemoryThresholds(_ snapshot: ResourceSnapshot) {
+  private func checkMemoryThresholds(_ snapshot: ResourceSnapshot) async {
     let now = Date()
+    let decision = memoryPressureTracker.evaluate(
+      memoryFootprintMB: snapshot.memoryFootprintMB,
+      at: now)
 
     // Extreme threshold - auto-restart to prevent the system from becoming unresponsive.
     // Without this, memory can climb to 7GB+, causing SQLite I/O failures and making
@@ -229,16 +330,10 @@ class ResourceMonitor {
         "ResourceMonitor: EXTREME memory \(snapshot.memoryFootprintMB)MB — auto-restarting to prevent system degradation"
       )
 
-      SentrySDK.capture(message: "App Auto-Restarting Due to Extreme Memory") { scope in
-        scope.setLevel(.fatal)
-        scope.setTag(value: "auto_restart", key: "resource_alert")
-        scope.setContext(value: snapshot.asDictionary(), key: "resources")
-      }
-
-      // Give Sentry 3 seconds to flush, then relaunch and terminate.
-      // Only terminate if the relaunch succeeds — otherwise the user would be
-      // left with no running app and would need a full computer restart.
-      DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+      // Relaunch and terminate. Only terminate if the relaunch succeeds —
+      // otherwise the user would be left with no running app and would need a
+      // full computer restart.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
         let task = Process()
         task.launchPath = "/usr/bin/open"
         task.arguments = ["-n", Bundle.main.bundleURL.path]
@@ -256,36 +351,18 @@ class ResourceMonitor {
     }
 
     // Critical threshold
-    if snapshot.memoryFootprintMB >= memoryCriticalThreshold {
-      if lastCriticalTime == nil || now.timeIntervalSince(lastCriticalTime!) > warningCooldown {
-        lastCriticalTime = now
+    if decision.level == .critical {
+      if decision.shouldReportCritical || decision.shouldRemediate {
+        _ = await logComponentDiagnostics(snapshot: snapshot)
 
-        log(
-          "ResourceMonitor: CRITICAL - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryCriticalThreshold)MB threshold"
-        )
-
-        // Collect component diagnostics immediately at critical threshold
-        Task {
-          await logComponentDiagnostics(snapshot: snapshot)
+        if decision.shouldRemediate {
+          triggerMemoryRemediation()
         }
 
-        // Attempt to free memory by flushing heavy components
-        triggerMemoryRemediation()
-
-        // Send Sentry event (skip in dev builds)
-        if !isDevBuild {
-          let threshold = self.memoryCriticalThreshold
-          SentrySDK.capture(message: "Critical Memory Usage") { scope in
-            scope.setLevel(.error)
-            scope.setTag(value: "memory_critical", key: "resource_alert")
-            scope.setContext(value: snapshot.asDictionary(), key: "resources")
-            scope.setContext(
-              value: [
-                "threshold_mb": threshold,
-                "current_mb": snapshot.memoryFootprintMB,
-                "peak_mb": snapshot.peakMemoryMB,
-              ], key: "memory_details")
-          }
+        if decision.shouldReportCritical {
+          log(
+            "ResourceMonitor: CRITICAL - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryCriticalThreshold)MB threshold"
+          )
         }
       }
     }
@@ -298,13 +375,6 @@ class ResourceMonitor {
           "ResourceMonitor: WARNING - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryWarningThreshold)MB threshold"
         )
 
-        // Add warning breadcrumb (skip in dev builds)
-        if !isDevBuild {
-          let breadcrumb = Breadcrumb(level: .warning, category: "resources")
-          breadcrumb.message = "High memory usage: \(snapshot.memoryFootprintMB)MB"
-          breadcrumb.data = snapshot.asDictionary()
-          SentrySDK.addBreadcrumb(breadcrumb)
-        }
       }
     }
   }
@@ -328,20 +398,6 @@ class ResourceMonitor {
         "ResourceMonitor: WARNING - Memory growing at \(String(format: "%.1f", growthRateMBPerMin))MB/min (potential leak)"
       )
 
-      // Add breadcrumb (skip in dev builds)
-      if !isDevBuild {
-        let breadcrumb = Breadcrumb(level: .warning, category: "resources")
-        breadcrumb.message =
-          "Potential memory leak detected: \(String(format: "%.1f", growthRateMBPerMin))MB/min growth rate"
-        breadcrumb.data = [
-          "growth_rate_mb_per_min": growthRateMBPerMin,
-          "samples_analyzed": recentSamples.count,
-          "time_span_minutes": timeDiffMinutes,
-          "start_memory_mb": first.memoryMB,
-          "end_memory_mb": last.memoryMB,
-        ]
-        SentrySDK.addBreadcrumb(breadcrumb)
-      }
     }
   }
 
@@ -368,17 +424,11 @@ class ResourceMonitor {
 
     Task {
       // Flush VideoChunkEncoder and await completion; ResourceMonitor records
-      // reset counters in component diagnostics so hang/memory Sentry events can
-      // be correlated.
+      // reset counters in component diagnostics afterward.
       do {
-        _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
+        _ = try await RewindStorage.shared.flushCurrentVideoChunk()
       } catch {
         logError("ResourceMonitor: Failed to flush video chunk during memory remediation", error: error)
-      }
-
-      // Clear focus assistant pending tasks specifically
-      if let focusAssistant = ProactiveAssistantsPlugin.shared.currentFocusAssistant {
-        await focusAssistant.clearPendingWork()
       }
 
       // Pause AgentSync to reduce memory pressure and resume after 60s
@@ -393,15 +443,6 @@ class ResourceMonitor {
       log("ResourceMonitor: Memory remediation completed — \(memoryBefore)MB -> \(memoryAfter)MB")
     }
 
-    if !isDevBuild {
-      let breadcrumb = Breadcrumb(level: .warning, category: "memory_remediation")
-      breadcrumb.message = "Memory remediation triggered at critical threshold"
-      breadcrumb.data = [
-        "memory_footprint_mb": memoryBefore,
-        "threshold_mb": memoryCriticalThreshold,
-      ]
-      SentrySDK.addBreadcrumb(breadcrumb)
-    }
   }
 
   // MARK: - Resource Getters (macOS specific)

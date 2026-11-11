@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-oauth-refresh-transience-revokes-grant",
+  "violated_contract": "A transient OAuth refresh storage failure or concurrent duplicate refresh must not cause unhandled server errors or permanent whole-grant authentication loss.",
+  "canonical_prevention": "Bound refresh rotation to three fresh Firestore transactions for classified transient errors, return typed retryable unavailability after exhaustion, tolerate used-token replay only within a fixed grace window without extending it, preserve marker-first revocation beyond grace, and count bounded terminal outcomes at the token handler.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_mcp_oauth.py",
+    "backend/tests/unit/test_mcp_oauth_optional_resource.py",
+    "backend/tests/unit/test_mcp_token_cache.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/mcp_oauth.py",
+    "backend/utils/mcp_server/oauth.py"
+  ],
+  "status": "open"
+}

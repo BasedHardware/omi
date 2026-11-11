@@ -1,31 +1,48 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from '@tschk/moonshine-next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Search as SearchIcon, CheckSquare, X } from 'lucide-react';
+import { CalendarDays, CheckSquare, Search as SearchIcon, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { conversationsForSurface, isFailedConversation } from '@/lib/conversationHome';
 import { useConversations } from '@/hooks/useConversations';
+import { useActivityFailures } from '@/hooks/useActivityFailures';
+import { useAttentionItems } from '@/hooks/useAttentionItems';
+import { AttentionItemsSection } from './AttentionItemsSection';
 import { useConversation } from '@/hooks/useConversation';
+import { useRecaps } from '@/hooks/useRecaps';
 import { useSearchConversations } from '@/hooks/useSearchConversations';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useChat } from '@/components/chat/ChatContext';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { DateGroup, DateGroupSkeleton } from './DateGroup';
-import { VirtualizedConversationList } from './VirtualizedConversationList';
-import { ConversationDetailPanel } from './ConversationDetailPanel';
-import { SearchBar } from './SearchBar';
-import { DateFilter } from './DateFilter';
-import { MergeActionBar } from './MergeActionBar';
-import { MergeConfirmationDialog } from './MergeConfirmationDialog';
-import { DeleteConversationsDialog } from './DeleteConversationsDialog';
-import { FolderTabs, FolderTabsSkeleton, FOLDER_ALL, FOLDER_STARRED } from './FolderTabs';
-import { FolderDialog, DeleteFolderDialog } from './FolderDialog';
-import { MoveFolderDialog } from './MoveFolderDialog';
-import { ResizeHandle } from '@/components/ui/ResizeHandle';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { useToast } from '@/components/ui/Toast';
+import { ConversationDetailPanel } from '@/components/conversations/ConversationDetailPanel';
+import { DateFilter, type DateRange } from '@/components/conversations/DateFilter';
+import { MergeActionBar } from '@/components/conversations/MergeActionBar';
+import { MergeConfirmationDialog } from '@/components/conversations/MergeConfirmationDialog';
+import { DeleteConversationsDialog } from '@/components/conversations/DeleteConversationsDialog';
 import {
+  FolderTabs,
+  FolderTabsSkeleton,
+  FOLDER_ALL,
+  FOLDER_STARRED,
+  FOLDER_ACTIVITY,
+} from '@/components/conversations/FolderTabs';
+import {
+  FolderDialog,
+  DeleteFolderDialog,
+} from '@/components/conversations/FolderDialog';
+import { MoveFolderDialog } from '@/components/conversations/MoveFolderDialog';
+import { RecapDetailPanel } from '@/components/recaps/RecapDetailPanel';
+import { GenerateRecapAction } from '@/components/recaps/GenerateRecapAction';
+import { Button } from '@/components/ui/button';
+import { ConversationGallery, ConversationGallerySkeleton } from './ConversationGallery';
+import { ResizeHandle } from '@/components/ui/ResizeHandle';
+import { PageToolbar } from '@/components/layout/PageToolbar';
+import { useToast } from '@/components/ui/Toast';
+import { TextSwap } from '@/components/ui/TextSwap';
+import {
+  getHomeFailurePlacement,
   mergeConversations,
   getFolders,
   createFolder,
@@ -36,13 +53,22 @@ import {
   deleteConversation,
 } from '@/lib/api';
 import type { Conversation } from '@/types/conversation';
+import type { DailySummary } from '@/types/recap';
 import type { Folder, CreateFolderRequest, UpdateFolderRequest } from '@/types/folder';
-import { formatRelativeDate } from '@/lib/utils';
+import { buildTimelineDayGroups, countTimelineItems } from '@/lib/conversationTimeline';
+import { selectConversationSummary } from '@/lib/conversationSummarySelection';
+import {
+  MIN_CONVERSATION_GALLERY_WIDTH,
+  resizeConversationDetailPanel,
+} from '@/lib/conversationPanelSizing';
 
-// Panel width constraints
-const MIN_PANEL_WIDTH = 320;
-const MAX_PANEL_WIDTH = 600;
-const DEFAULT_PANEL_WIDTH = 420;
+// Detail pane width constraints
+const DEFAULT_PANEL_WIDTH = 480;
+
+type Selection =
+  | { kind: 'conversation'; id: string }
+  | { kind: 'recap'; id: string }
+  | null;
 
 export function ConversationSplitView() {
   const { user } = useAuth();
@@ -50,25 +76,48 @@ export function ConversationSplitView() {
   const { showToast } = useToast();
   const searchParams = useSearchParams();
   const urlConversationId = searchParams.get('id');
-  const [selectedId, setSelectedId] = useState<string | null>(urlConversationId);
+  const urlRecapId = searchParams.get('recap');
+
+  const [selection, setSelectionState] = useState<Selection>(
+    urlRecapId
+      ? { kind: 'recap', id: urlRecapId }
+      : urlConversationId
+      ? { kind: 'conversation', id: urlConversationId }
+      : null,
+  );
+  const selectionRef = useRef(selection);
+  const setSelection = useCallback((nextSelection: Selection) => {
+    selectionRef.current = nextSelection;
+    setSelectionState(nextSelection);
+  }, []);
+  const [selectedRecap, setSelectedRecap] = useState<DailySummary | null>(null);
+
+  const selectedConversationId = selection?.kind === 'conversation' ? selection.id : null;
 
   // Track if we should prevent auto-select (e.g., when user explicitly navigates to list view)
   const preventAutoSelect = useRef(false);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
+  const [submittedSearchQuery, setSubmittedSearchQuery] = useState('');
   const {
     results: searchResults,
     loading: searchLoading,
     search: performSearch,
     clear: clearSearch,
+    replaceConversation: replaceSearchConversation,
   } = useSearchConversations();
 
   // Date filter state
-  const [filterDate, setFilterDate] = useState<Date | null>(null);
+  const [filterDate, setFilterDate] = useState<DateRange | null>(null);
 
-  // Resizable panel width
-  const [panelWidth, setPanelWidth] = useLocalStorage('omi-panel-width', DEFAULT_PANEL_WIDTH);
+  // Resizable detail pane width
+  const [panelWidth, setPanelWidth] = useLocalStorage(
+    'omi-timeline-detail-width',
+    DEFAULT_PANEL_WIDTH,
+  );
+  const splitViewRef = useRef<HTMLDivElement>(null);
+  const [detailResizing, setDetailResizing] = useState(false);
 
   // Selection mode state (for merge feature)
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -97,141 +146,261 @@ export function ConversationSplitView() {
       startDate?: Date;
       endDate?: Date;
       folderId?: string;
+      starred?: boolean;
     } = {};
 
     if (filterDate) {
-      const startDate = new Date(filterDate);
+      const startDate = new Date(filterDate.start);
       startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(filterDate);
+      const endDate = new Date(filterDate.end);
       endDate.setHours(23, 59, 59, 999);
       params.startDate = startDate;
       params.endDate = endDate;
     }
 
     // Add folder filter (only for user folders, not 'all' or 'starred')
-    if (selectedFolderId && selectedFolderId !== FOLDER_ALL && selectedFolderId !== FOLDER_STARRED) {
+    if (
+      selectedFolderId &&
+      selectedFolderId !== FOLDER_ALL &&
+      selectedFolderId !== FOLDER_STARRED &&
+      selectedFolderId !== FOLDER_ACTIVITY
+    ) {
       params.folderId = selectedFolderId;
+    }
+
+    // Starred conversations come from the server: older ones are not on the
+    // pages already loaded for All.
+    if (selectedFolderId === FOLDER_STARRED) {
+      params.starred = true;
     }
 
     return params;
   }, [filterDate, selectedFolderId]);
 
   const {
-    groupedConversations,
     conversations,
     loading: listLoading,
     error: listError,
     hasMore,
     loadMore,
     refresh,
+    replaceConversation,
   } = useConversations(conversationFilterParams);
+
+  const {
+    recaps,
+    loading: recapsLoading,
+    error: recapsError,
+    refresh: refreshRecaps,
+    hasMore: recapsHasMore,
+    loadMore: loadMoreRecaps,
+    getRecapDetail,
+    generateForDate,
+  } = useRecaps({ accountId: user?.uid });
 
   const {
     conversation: selectedConversation,
     loading: detailLoading,
     update: updateSelectedConversation,
-  } = useConversation(selectedId);
+  } = useConversation(selectedConversationId);
 
-  // Update chat context when conversation changes
+  // Update chat context when the selected tile changes. Recaps and
+  // conversations both feed "ask about this", so both write the same context.
   useEffect(() => {
-    if (selectedConversation) {
+    if (selection?.kind === 'conversation' && selectedConversation) {
       setContext({
         type: 'conversation',
         id: selectedConversation.id,
         title: selectedConversation.structured.title,
-        summary: selectedConversation.structured.overview,
+        summary: selectConversationSummary(selectedConversation).content,
+      });
+    } else if (selection?.kind === 'recap' && selectedRecap) {
+      setContext({
+        type: 'recap',
+        id: selectedRecap.id,
+        title: selectedRecap.headline || `Daily Recap - ${selectedRecap.date}`,
+        summary: selectedRecap.overview,
       });
     } else {
       setContext(null);
     }
-  }, [selectedConversation, setContext]);
+  }, [selection, selectedConversation, selectedRecap, setContext]);
+
+  // Clear chat context when the timeline unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
 
   // Track the previous URL conversation ID to detect when it changes
   const prevUrlConversationIdRef = useRef(urlConversationId);
+  const prevUrlRecapIdRef = useRef(urlRecapId);
 
-  // Update selected ID when URL changes (e.g., navigating from recaps or bottom nav)
+  // Update selection when URL changes (e.g., navigating from a notification or bottom nav)
   useEffect(() => {
     const prevUrlId = prevUrlConversationIdRef.current;
     prevUrlConversationIdRef.current = urlConversationId;
 
     // URL has a conversation ID - select it
     if (urlConversationId) {
-      setSelectedId(urlConversationId);
+      setSelection({ kind: 'conversation', id: urlConversationId });
       preventAutoSelect.current = false; // Allow auto-select on future loads
     }
-    // URL changed from having an ID to not having one (user clicked Conversations in nav)
+    // URL changed from having an ID to not having one (user clicked Timeline in nav)
     else if (prevUrlId !== null && urlConversationId === null) {
-      setSelectedId(null);
-      preventAutoSelect.current = true; // Prevent auto-select to stay on list view
+      setSelection(null);
+      preventAutoSelect.current = true; // Prevent auto-select to stay on gallery view
     }
   }, [urlConversationId]);
 
-  // Auto-select first conversation on load (only if no URL param and not explicitly showing list)
+  // A recap deep link resolves to the full recap once the list has loaded.
   useEffect(() => {
-    if (!selectedId && !urlConversationId && !listLoading && !preventAutoSelect.current) {
-      const firstGroup = Object.values(groupedConversations)[0];
-      if (firstGroup && firstGroup.length > 0) {
-        setSelectedId(firstGroup[0].id);
-      }
-    }
-  }, [groupedConversations, listLoading, selectedId, urlConversationId]);
+    const prevUrlRecapId = prevUrlRecapIdRef.current;
+    prevUrlRecapIdRef.current = urlRecapId;
 
-  // Determine if we're showing search results or regular list
-  const isSearching = searchQuery.trim().length > 0;
-
-  // Group search results by date for display
-  const searchGroupedConversations = useMemo(() => {
-    if (!isSearching || searchResults.length === 0) return {};
-
-    return searchResults.reduce((groups, conversation) => {
-      const date = new Date(conversation.started_at || conversation.created_at);
-      const dateKey = formatRelativeDate(date);
-
-      if (!groups[dateKey]) {
-        groups[dateKey] = [];
-      }
-      groups[dateKey].push(conversation);
-      return groups;
-    }, {} as Record<string, Conversation[]>);
-  }, [isSearching, searchResults]);
-
-  // Filter conversations for starred folder
-  const displayedGroupedConversations = useMemo(() => {
-    if (selectedFolderId === FOLDER_STARRED) {
-      // Filter for starred conversations only
-      const starredGroups: Record<string, Conversation[]> = {};
-      for (const [date, convs] of Object.entries(groupedConversations)) {
-        const starredConvs = convs.filter(c => c.starred);
-        if (starredConvs.length > 0) {
-          starredGroups[date] = starredConvs;
+    if (!urlRecapId) {
+      if (prevUrlRecapId !== null) {
+        setSelectedRecap(null);
+        if (!urlConversationId) {
+          setSelection(null);
+          preventAutoSelect.current = true;
         }
       }
-      return starredGroups;
+      return;
     }
-    return groupedConversations;
-  }, [selectedFolderId, groupedConversations]);
 
-  // Get the conversations to display (search results or regular list, with folder filtering)
-  const displayedConversations = isSearching ? searchGroupedConversations : displayedGroupedConversations;
+    setSelection({ kind: 'recap', id: urlRecapId });
+    preventAutoSelect.current = false;
+    const known = recaps.find((r) => r.id === urlRecapId);
+    setSelectedRecap(known ?? null);
+    void getRecapDetail(urlRecapId).then((fullRecap) => {
+      const activeSelection = selectionRef.current;
+      if (
+        fullRecap &&
+        activeSelection?.kind === 'recap' &&
+        activeSelection.id === fullRecap.id
+      ) {
+        setSelectedRecap(fullRecap);
+      }
+    });
+  }, [urlConversationId, urlRecapId, recaps, getRecapDetail]);
 
-  // Get ordered date keys
-  const dateKeys = Object.keys(displayedConversations);
-  const orderedKeys = dateKeys.sort((a, b) => {
-    if (a === 'Today') return -1;
-    if (b === 'Today') return 1;
-    if (a === 'Yesterday') return -1;
-    if (b === 'Yesterday') return 1;
-    // Use actual conversation timestamps instead of parsing the date string
-    // (which lacks year info and causes incorrect sorting)
-    const convA = displayedConversations[a][0];
-    const convB = displayedConversations[b][0];
-    const dateA = new Date(convA?.started_at || convA?.created_at);
-    const dateB = new Date(convB?.started_at || convB?.created_at);
-    return dateB.getTime() - dateA.getTime();
-  });
+  // Determine if we're showing search results or regular list
+  const isSearching = submittedSearchQuery.length > 0;
 
-  const isLoading = isSearching ? searchLoading : (listLoading || folderSwitching);
-  const isEmpty = !isLoading && orderedKeys.length === 0;
+  const [failurePlacement, setFailurePlacement] = useState(false);
+  useEffect(() => {
+    let current = true;
+    let sequence = 0;
+    setFailurePlacement(false);
+    async function reload() {
+      const request = ++sequence;
+      let confirmed = false;
+      try {
+        confirmed = await getHomeFailurePlacement();
+      } catch {
+        /* Restore previous placement. */
+      }
+      if (!current || request !== sequence) return;
+      setFailurePlacement(confirmed);
+      if (!confirmed)
+        setSelectedFolderId((previous) =>
+          previous === FOLDER_ACTIVITY ? FOLDER_ALL : previous,
+        );
+    }
+    void reload();
+    window.addEventListener('focus', reload);
+    return () => {
+      current = false;
+      window.removeEventListener('focus', reload);
+    };
+  }, [user?.uid]);
+
+  const {
+    failures: knownFailures,
+    forget: forgetFailures,
+    resolveRetry,
+  } = useActivityFailures(conversations, searchResults, user?.uid);
+
+  const attention = useAttentionItems(failurePlacement, user?.uid, resolveRetry);
+
+  // The Starred list is fetched starred-only, but search results (and the previous
+  // tab's page while that fetch is in flight) are not, so keep filtering here.
+  const visibleConversations = useMemo(() => {
+    const loaded =
+      selectedFolderId === FOLDER_ACTIVITY
+        ? knownFailures.filter(
+            (row) =>
+              !attention.conversationIds.has(row.id) &&
+              (!isSearching || searchResults.some((match) => match.id === row.id)),
+          )
+        : isSearching
+        ? searchResults
+        : conversations;
+    const source = conversationsForSurface(
+      loaded,
+      selectedFolderId === FOLDER_ACTIVITY,
+      failurePlacement,
+    );
+    if (selectedFolderId === FOLDER_STARRED) {
+      return source.filter((c) => c.starred);
+    }
+    return source;
+  }, [
+    isSearching,
+    searchResults,
+    conversations,
+    selectedFolderId,
+    failurePlacement,
+    knownFailures,
+    attention.conversationIds,
+  ]);
+
+  // Recaps only belong in the unfiltered gallery: a search, a date filter or a
+  // folder is a question about conversations, and a day summary cannot answer it.
+  const visibleRecaps = useMemo(() => {
+    if (isSearching || filterDate || selectedFolderId !== FOLDER_ALL) return [];
+    return recaps;
+  }, [isSearching, filterDate, selectedFolderId, recaps]);
+
+  const dayGroups = useMemo(
+    () =>
+      buildTimelineDayGroups({
+        conversations: visibleConversations,
+        recaps: visibleRecaps,
+      }),
+    [visibleConversations, visibleRecaps],
+  );
+
+  const isLoading = isSearching ? searchLoading : listLoading || folderSwitching;
+  const isEmpty = !isLoading && countTimelineItems(dayGroups) === 0;
+
+  // Auto-select the newest tile on load (only if no URL param and not explicitly showing the gallery)
+  useEffect(() => {
+    if (selection || urlConversationId || urlRecapId) return;
+    const waitingForRecaps =
+      !isSearching && !filterDate && selectedFolderId === FOLDER_ALL && recapsLoading;
+    if (listLoading || waitingForRecaps || preventAutoSelect.current) return;
+
+    const firstItem = dayGroups[0]?.items[0];
+    if (!firstItem) return;
+
+    if (firstItem.kind === 'recap') {
+      setSelection({ kind: 'recap', id: firstItem.id });
+      setSelectedRecap(firstItem.recap);
+    } else {
+      setSelection({ kind: 'conversation', id: firstItem.id });
+    }
+  }, [
+    dayGroups,
+    filterDate,
+    isSearching,
+    listLoading,
+    recapsLoading,
+    selectedFolderId,
+    selection,
+    urlConversationId,
+    urlRecapId,
+  ]);
 
   // Clear folder switching state when loading completes
   useEffect(() => {
@@ -241,65 +410,143 @@ export function ConversationSplitView() {
   }, [listLoading, folderSwitching]);
 
   const handleConversationClick = useCallback((conversation: Conversation) => {
-    setSelectedId(conversation.id);
+    setSelection({ kind: 'conversation', id: conversation.id });
+    setSelectedRecap(null);
     preventAutoSelect.current = false; // Re-enable auto-select for future visits
   }, []);
 
+  const handleRecapClick = useCallback(
+    async (recap: DailySummary) => {
+      setSelection({ kind: 'recap', id: recap.id });
+      setSelectedRecap(recap);
+      preventAutoSelect.current = false;
+
+      // The list endpoint returns a trimmed recap; the detail pane needs the rest.
+      const fullRecap = await getRecapDetail(recap.id);
+      if (fullRecap) {
+        setSelectedRecap((current) =>
+          current?.id === fullRecap.id ? fullRecap : current,
+        );
+      }
+    },
+    [getRecapDetail],
+  );
+
+  // Conversations page first, then recaps, so one scroller drives both sources.
+  const handleLoadMore = useCallback(() => {
+    if (isSearching) return;
+    if (hasMore) void loadMore();
+    if (recapsHasMore) void loadMoreRecaps();
+  }, [isSearching, hasMore, loadMore, recapsHasMore, loadMoreRecaps]);
+
+  // Reprocess returns the authoritative new attempt/result. Update an open
+  // detail only if it still belongs to this conversation, then reload the feed.
+  const handleRetryUpdate = useCallback(
+    (updated: Conversation) => {
+      if (!isFailedConversation(updated)) resolveRetry(updated.id);
+      replaceConversation(updated);
+      replaceSearchConversation(updated);
+      const activeSelection = selectionRef.current;
+      if (activeSelection?.kind === 'conversation' && activeSelection.id === updated.id) {
+        updateSelectedConversation(updated);
+      }
+      void refresh();
+      if (submittedSearchQuery) void performSearch(submittedSearchQuery);
+    },
+    [
+      updateSelectedConversation,
+      refresh,
+      submittedSearchQuery,
+      performSearch,
+      replaceConversation,
+      replaceSearchConversation,
+      resolveRetry,
+    ],
+  );
+
   // Handle star toggle
-  const handleStarToggle = useCallback(async (id: string, starred: boolean) => {
-    try {
-      await toggleStarred(id, starred);
+  const handleStarToggle = useCallback(
+    async (id: string, starred: boolean) => {
+      try {
+        await toggleStarred(id, starred);
+      } catch (error) {
+        console.error('Failed to toggle starred:', error);
+        showToast('Failed to update starred status. Please try again.', 'error');
+        // The tile already shows the change; rethrow so it takes it back
+        throw error;
+      }
       // Refresh the list to update starred status
       await refresh();
-    } catch (error) {
-      console.error('Failed to toggle starred:', error);
-    }
-  }, [refresh]);
+    },
+    [refresh, showToast],
+  );
 
   // Handle folder selection with loading state
-  const handleFolderSelect = useCallback((folderId: string) => {
-    if (folderId !== selectedFolderId) {
-      // Starred filter is client-side only, no loading needed
-      // Also, switching between All and Starred doesn't need API call
-      const isClientSideSwitch =
-        (folderId === FOLDER_STARRED || selectedFolderId === FOLDER_STARRED) &&
-        (folderId === FOLDER_ALL || folderId === FOLDER_STARRED) &&
-        (selectedFolderId === FOLDER_ALL || selectedFolderId === FOLDER_STARRED);
-
-      if (!isClientSideSwitch) {
+  const handleFolderSelect = useCallback(
+    (folderId: string) => {
+      if (folderId !== selectedFolderId) {
+        // Every tab, Starred included, loads its own list from the server
         setFolderSwitching(true);
+        setSelectedFolderId(folderId);
       }
-      setSelectedFolderId(folderId);
-    }
-  }, [selectedFolderId]);
+    },
+    [selectedFolderId],
+  );
 
   // Handle search
-  const handleSearch = useCallback((query: string) => {
-    if (query.trim()) {
-      performSearch(query);
-    } else {
-      clearSearch();
-    }
-  }, [performSearch, clearSearch]);
+  const handleSearchQueryChange = useCallback(
+    (query: string) => {
+      setSearchQuery(query);
+      if (!query.trim() && submittedSearchQuery) {
+        setSubmittedSearchQuery('');
+        clearSearch();
+      }
+    },
+    [submittedSearchQuery, clearSearch],
+  );
+
+  const handleSearch = useCallback(
+    (query: string) => {
+      const submittedQuery = query.trim();
+      setSubmittedSearchQuery(submittedQuery);
+      if (submittedQuery) {
+        performSearch(submittedQuery);
+      } else {
+        clearSearch();
+      }
+    },
+    [performSearch, clearSearch],
+  );
 
   // Handle date filter change
-  const handleDateFilterChange = useCallback((date: Date | null) => {
-    setFilterDate(date);
-    setSelectedId(null); // Reset selection to auto-select first from new results
-    // Clear search when changing date filter
-    if (searchQuery) {
-      setSearchQuery('');
-      clearSearch();
-    }
-  }, [searchQuery, clearSearch]);
+  const handleDateFilterChange = useCallback(
+    (range: DateRange | null) => {
+      setFilterDate(range);
+      setSelection(null); // Reset selection to auto-select first from new results
+      // Clear search when changing date filter
+      if (searchQuery || submittedSearchQuery) {
+        setSearchQuery('');
+        setSubmittedSearchQuery('');
+        clearSearch();
+      }
+    },
+    [searchQuery, submittedSearchQuery, clearSearch],
+  );
 
-  // Handle resize
-  const handleResize = useCallback((delta: number) => {
-    setPanelWidth((prev) => {
-      const newWidth = prev + delta;
-      return Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, newWidth));
-    });
-  }, [setPanelWidth]);
+  // Handle resize. The detail pane sits on the right, so dragging the handle
+  // right shrinks it — the delta is inverted relative to a left-hand list.
+  const handleResize = useCallback(
+    (delta: number) => {
+      setPanelWidth((prev) => {
+        return resizeConversationDetailPanel(
+          prev,
+          delta,
+          splitViewRef.current?.clientWidth ?? window.innerWidth,
+        );
+      });
+    },
+    [setPanelWidth],
+  );
 
   const handleResetWidth = useCallback(() => {
     setPanelWidth(DEFAULT_PANEL_WIDTH);
@@ -309,14 +556,16 @@ export function ConversationSplitView() {
   const enterSelectionMode = useCallback(() => {
     setIsSelectionMode(true);
     setSelectedIds(new Set());
-    setSelectedId(null); // Deselect any viewed conversation
+    setSelection(null); // Deselect any viewed tile
+    preventAutoSelect.current = true; // Stay on the gallery instead of re-selecting the newest tile
   }, []);
 
   // Enter selection mode and select the specified card (for double-click)
   const enterSelectionModeWithId = useCallback((id: string) => {
     setIsSelectionMode(true);
     setSelectedIds(new Set([id]));
-    setSelectedId(null); // Deselect any viewed conversation
+    setSelection(null); // Deselect any viewed tile
+    preventAutoSelect.current = true; // Stay on the gallery instead of re-selecting the newest tile
   }, []);
 
   const exitSelectionMode = useCallback(() => {
@@ -326,7 +575,7 @@ export function ConversationSplitView() {
   }, []);
 
   const toggleSelection = useCallback((id: string) => {
-    setSelectedIds(prev => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -340,7 +589,7 @@ export function ConversationSplitView() {
   // Get selected conversations for merge dialog
   const selectedConversations = useMemo(() => {
     const allConvs = isSearching ? searchResults : conversations;
-    return allConvs.filter(c => selectedIds.has(c.id));
+    return allConvs.filter((c) => selectedIds.has(c.id));
   }, [isSearching, searchResults, conversations, selectedIds]);
 
   const handleMergeClick = useCallback(() => {
@@ -390,7 +639,10 @@ export function ConversationSplitView() {
     setDeleteLoading(true);
     try {
       // Delete each selected conversation
-      const deletePromises = Array.from(selectedIds).map(id => deleteConversation(id));
+      const deletePromises = Array.from(selectedIds).map(async (id) => {
+        await deleteConversation(id);
+        forgetFailures([id]);
+      });
       await Promise.all(deletePromises);
 
       // Exit selection mode and close dialog
@@ -399,8 +651,8 @@ export function ConversationSplitView() {
       setSelectedIds(new Set());
 
       // Clear selected conversation if it was deleted
-      if (selectedId && selectedIds.has(selectedId)) {
-        setSelectedId(null);
+      if (selectedConversationId && selectedIds.has(selectedConversationId)) {
+        setSelection(null);
       }
 
       // Refresh the list
@@ -411,7 +663,7 @@ export function ConversationSplitView() {
     } finally {
       setDeleteLoading(false);
     }
-  }, [selectedIds, selectedId, refresh, showToast]);
+  }, [selectedIds, selectedConversationId, refresh, showToast, forgetFailures]);
 
   // ============================================================================
   // Folder handlers
@@ -453,23 +705,26 @@ export function ConversationSplitView() {
     setShowFolderDialog(true);
   }, []);
 
-  const handleFolderSubmit = useCallback(async (data: CreateFolderRequest | UpdateFolderRequest) => {
-    setFolderActionLoading(true);
-    try {
-      if (editingFolder) {
-        await updateFolder(editingFolder.id, data);
-      } else {
-        await createFolder(data as CreateFolderRequest);
+  const handleFolderSubmit = useCallback(
+    async (data: CreateFolderRequest | UpdateFolderRequest) => {
+      setFolderActionLoading(true);
+      try {
+        if (editingFolder) {
+          await updateFolder(editingFolder.id, data);
+        } else {
+          await createFolder(data as CreateFolderRequest);
+        }
+        setShowFolderDialog(false);
+        setEditingFolder(null);
+        await refreshFolders();
+      } catch (error) {
+        console.error('Failed to save folder:', error);
+      } finally {
+        setFolderActionLoading(false);
       }
-      setShowFolderDialog(false);
-      setEditingFolder(null);
-      await refreshFolders();
-    } catch (error) {
-      console.error('Failed to save folder:', error);
-    } finally {
-      setFolderActionLoading(false);
-    }
-  }, [editingFolder, refreshFolders]);
+    },
+    [editingFolder, refreshFolders],
+  );
 
   const handleDeleteFolderConfirm = useCallback(async () => {
     if (!deletingFolder) return;
@@ -497,42 +752,48 @@ export function ConversationSplitView() {
     }
   }, [selectedIds.size]);
 
-  const handleMoveToFolder = useCallback(async (folderId: string) => {
-    if (selectedIds.size < 1) return;
+  const handleMoveToFolder = useCallback(
+    async (folderId: string) => {
+      if (selectedIds.size < 1) return;
 
-    setMovingToFolderId(folderId);
-    try {
-      await bulkMoveConversationsToFolder(folderId, Array.from(selectedIds));
+      setMovingToFolderId(folderId);
+      try {
+        await bulkMoveConversationsToFolder(folderId, Array.from(selectedIds));
 
-      // Exit selection mode and close dialog
-      setShowMoveDialog(false);
-      setIsSelectionMode(false);
-      setSelectedIds(new Set());
+        // Exit selection mode and close dialog
+        setShowMoveDialog(false);
+        setIsSelectionMode(false);
+        setSelectedIds(new Set());
 
-      // Refresh both folders and conversations
-      await Promise.all([refreshFolders(), refresh()]);
-    } catch (error) {
-      console.error('Failed to move conversations:', error);
-    } finally {
-      setMovingToFolderId(null);
-    }
-  }, [selectedIds, refreshFolders, refresh]);
+        // Refresh both folders and conversations
+        await Promise.all([refreshFolders(), refresh()]);
+      } catch (error) {
+        console.error('Failed to move conversations:', error);
+        showToast('Failed to move conversations. Please try again.', 'error');
+      } finally {
+        setMovingToFolderId(null);
+      }
+    },
+    [selectedIds, refreshFolders, refresh, showToast],
+  );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Page Header */}
-      <PageHeader title="Conversations" icon={MessageSquare} />
-
-      {/* Toolbar: Folder Tabs */}
-      <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
-        <div className="flex items-center gap-4 px-6 py-3">
-          {/* Folder Tabs - takes up available space */}
-          <div className="flex-1 min-w-0">
+    <div className="flex h-full flex-col overflow-hidden">
+      <PageToolbar
+        search={{
+          value: searchQuery,
+          onChange: handleSearchQueryChange,
+          onSubmit: handleSearch,
+          placeholder: 'Search conversations...',
+        }}
+        controls={
+          <div className="min-w-0 flex-1">
             {foldersLoading ? (
               <FolderTabsSkeleton />
             ) : (
               <FolderTabs
                 folders={folders}
+                showActivity={failurePlacement}
                 selectedFolderId={selectedFolderId}
                 onSelectFolder={handleFolderSelect}
                 onCreateFolder={handleCreateFolder}
@@ -542,212 +803,269 @@ export function ConversationSplitView() {
               />
             )}
           </div>
-        </div>
-      </div>
+        }
+        actions={
+          <>
+            <GenerateRecapAction
+              key={user?.uid}
+              generate={generateForDate}
+              onCreated={(recap) => {
+                preventAutoSelect.current = true;
+                setSelectedRecap(recap);
+                setSelection({ kind: 'recap', id: recap.id });
+              }}
+            />
+            <DateFilter
+              selectedRange={filterDate}
+              onRangeChange={handleDateFilterChange}
+            />
 
-      {/* Split Panels Container */}
-      <div className="flex flex-1 overflow-hidden w-full">
-        {/* Left Panel: Conversation List */}
-        <div
-          style={{ width: `${panelWidth}px` }}
-          className={cn(
-            'w-full lg:w-auto flex-shrink-0',
-            'flex flex-col h-full overflow-hidden',
-            'bg-bg-primary border-r border-bg-tertiary',
-            // On mobile, hide list when conversation is selected
-            selectedId ? 'hidden lg:flex' : 'flex'
-          )}
-        >
-          {/* Search, Date Filter, and Select - stays with list */}
-          <div className="flex-shrink-0 px-3 pt-4 pb-3">
-            <div className="flex items-center gap-2">
-              <SearchBar
-                value={searchQuery}
-                onChange={setSearchQuery}
-                onSearch={handleSearch}
-                placeholder="Search"
-                className="flex-1 min-w-0"
-              />
-
-              <DateFilter
-                selectedDate={filterDate}
-                onDateChange={handleDateFilterChange}
-              />
-              {/* Select/Cancel button for merge mode */}
-              <button
-                onClick={isSelectionMode ? exitSelectionMode : enterSelectionMode}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg flex-shrink-0 whitespace-nowrap',
-                  'text-sm font-medium transition-colors',
-                  isSelectionMode
-                    ? 'bg-purple-primary/20 text-purple-primary hover:bg-purple-primary/30'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-                )}
-              >
-                {isSelectionMode ? (
-                  <>
-                    <X className="w-4 h-4" />
-                    <span>Cancel</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckSquare className="w-4 h-4" />
-                    <span>Select</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Active filter indicators */}
-            {(isSearching || filterDate || selectedFolderId === FOLDER_STARRED) && (
-              <div className="flex items-center gap-2 mt-2 text-xs text-text-tertiary">
-                {isSearching && (
-                  <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-bg-tertiary">
-                    <SearchIcon className="w-3 h-3" />
-                    {searchResults.length} results
-                  </span>
-                )}
-                {filterDate && (
-                  <span className="px-2 py-0.5 rounded bg-purple-primary/10 text-purple-primary">
-                    Filtered by date
-                  </span>
-                )}
-                {selectedFolderId === FOLDER_STARRED && (
-                  <span className="px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-600">
-                    Showing starred only
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Inline Merge Action Bar - shows when in selection mode */}
-            {isSelectionMode && (
-              <div className="mt-3">
-                <MergeActionBar
-                  selectedCount={selectedIds.size}
-                  onCancel={exitSelectionMode}
-                  onMerge={handleMergeClick}
-                  onMoveToFolder={handleMoveToFolderClick}
-                  onDelete={handleDeleteClick}
-                  isLoading={mergeLoading || deleteLoading}
-                  inline
-                />
-              </div>
-            )}
-          </div>
-
-          {/* List Content */}
-          <div className="flex-1 overflow-hidden px-3 pb-4">
-            {/* Loading state */}
-            {isLoading && orderedKeys.length === 0 && (
-              <div className="space-y-6">
-                <DateGroupSkeleton count={3} />
-                <DateGroupSkeleton count={2} />
-              </div>
-            )}
-
-            {/* Error state */}
-            {listError && !isSearching && (
-              <div className="p-4 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
-                {listError}
-              </div>
-            )}
-
-            {/* Empty state */}
-            {isEmpty && !listError && (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-12 h-12 rounded-xl bg-bg-tertiary flex items-center justify-center mb-3">
-                  {isSearching ? (
-                    <SearchIcon className="w-6 h-6 text-text-quaternary" />
-                  ) : (
-                    <MessageSquare className="w-6 h-6 text-text-quaternary" />
+            {/* Select/Cancel button for merge mode */}
+            <button
+              onClick={isSelectionMode ? exitSelectionMode : enterSelectionMode}
+              className={cn(
+                'flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3 py-1.5',
+                'text-sm font-medium transition-colors',
+                isSelectionMode
+                  ? 'bg-white text-bg-primary hover:bg-white/90'
+                  : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+              )}
+            >
+              <span className="t-icon-swap" data-state={isSelectionMode ? 'b' : 'a'}>
+                <span className="t-icon" data-icon="a">
+                  <CheckSquare className="h-4 w-4" />
+                </span>
+                <span className="t-icon" data-icon="b">
+                  <X className="h-4 w-4" />
+                </span>
+              </span>
+              <TextSwap text={isSelectionMode ? 'Cancel' : 'Select'} />
+            </button>
+          </>
+        }
+        below={
+          (isSearching ||
+            filterDate ||
+            selectedFolderId === FOLDER_STARRED ||
+            isSelectionMode) && (
+            <>
+              {/* Active filter indicators */}
+              {(isSearching || filterDate || selectedFolderId === FOLDER_STARRED) && (
+                <div className="flex items-center gap-2 text-xs text-text-tertiary">
+                  {isSearching && (
+                    <span className="flex items-center gap-1 rounded-chip bg-bg-tertiary px-2 py-0.5">
+                      <SearchIcon className="h-3 w-3" />
+                      {searchResults.length} results
+                    </span>
+                  )}
+                  {filterDate && (
+                    <span className="rounded-chip bg-bg-tertiary px-2 py-0.5 text-text-secondary">
+                      Filtered by date
+                    </span>
+                  )}
+                  {selectedFolderId === FOLDER_STARRED && (
+                    <span className="rounded-chip bg-bg-tertiary px-2 py-0.5 text-text-secondary">
+                      Showing starred only
+                    </span>
                   )}
                 </div>
-                <p className="text-text-tertiary text-sm">
+              )}
+
+              {/* Inline Merge Action Bar - shows when in selection mode */}
+              {isSelectionMode && (
+                <div className="mt-2">
+                  <MergeActionBar
+                    selectedCount={selectedIds.size}
+                    onCancel={exitSelectionMode}
+                    onMerge={handleMergeClick}
+                    onMoveToFolder={handleMoveToFolderClick}
+                    onDelete={handleDeleteClick}
+                    isLoading={mergeLoading || deleteLoading}
+                    inline
+                  />
+                </div>
+              )}
+            </>
+          )
+        }
+      />
+
+      {/* Gallery + detail pane */}
+      <div ref={splitViewRef} className="flex w-full flex-1 overflow-hidden">
+        {/* Gallery */}
+        <div
+          className={cn(
+            'flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary',
+            // On mobile, hide the gallery when a tile is open
+            selection ? 'hidden lg:flex' : 'flex',
+          )}
+        >
+          {/* Loading state */}
+          {isLoading && dayGroups.length === 0 && (
+            <div className="flex-1 overflow-y-auto pt-4">
+              <ConversationGallerySkeleton />
+            </div>
+          )}
+
+          {/* Error state */}
+          {listError && !isSearching && (
+            <div className="m-5 rounded-section border border-error/20 bg-error/10 p-4 text-sm text-error">
+              {listError}
+            </div>
+          )}
+
+          {failurePlacement && selectedFolderId === FOLDER_ACTIVITY && (
+            <AttentionItemsSection
+              {...attention}
+              onRetry={attention.retry}
+              onOpen={(id) => {
+                setSelection({ kind: 'conversation', id });
+                setSelectedRecap(null);
+                preventAutoSelect.current = false;
+              }}
+            />
+          )}
+
+          {/* Empty state */}
+          {recapsError &&
+            !isSearching &&
+            !filterDate &&
+            selectedFolderId === FOLDER_ALL && (
+              <div
+                role="alert"
+                className="m-5 flex items-center justify-between gap-3 rounded-section border border-stroke p-4 text-sm text-text-secondary"
+              >
+                <span>Daily Recaps couldn’t load. Try again.</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={recapsLoading}
+                  onClick={() => void refreshRecaps()}
+                >
+                  Retry recaps
+                </Button>
+              </div>
+            )}
+          {isEmpty &&
+            !listError &&
+            !recapsError &&
+            !(
+              selectedFolderId === FOLDER_ACTIVITY &&
+              (attention.items.length || attention.loadError)
+            ) && (
+              <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-section bg-bg-tertiary">
+                  {isSearching ? (
+                    <SearchIcon className="h-6 w-6 text-text-quaternary" />
+                  ) : (
+                    <CalendarDays className="h-6 w-6 text-text-quaternary" />
+                  )}
+                </div>
+                <p className="text-sm text-text-tertiary">
                   {isSearching
                     ? 'No conversations found'
                     : filterDate
-                      ? 'No conversations on this date'
-                      : selectedFolderId === FOLDER_STARRED
-                        ? 'No starred conversations'
-                        : selectedFolderId !== FOLDER_ALL
-                          ? 'No conversations in this folder'
-                          : 'No conversations yet'}
+                    ? 'Nothing on this date'
+                    : selectedFolderId === FOLDER_STARRED
+                    ? 'No starred conversations'
+                    : selectedFolderId === FOLDER_ACTIVITY
+                    ? 'No failed conversations'
+                    : selectedFolderId !== FOLDER_ALL
+                    ? 'No conversations in this folder'
+                    : 'Your timeline is empty'}
                 </p>
               </div>
             )}
 
-            {/* Virtualized conversation list */}
-            {orderedKeys.length > 0 && (
-              <VirtualizedConversationList
-                groupedConversations={displayedConversations}
-                orderedKeys={orderedKeys}
+          {dayGroups.length > 0 && (
+            <div className="flex-1 overflow-hidden pt-4">
+              <ConversationGallery
+                showFailedStatus={
+                  failurePlacement && selectedFolderId === FOLDER_ACTIVITY
+                }
+                groups={dayGroups}
+                selectedId={selection?.id ?? null}
                 onConversationClick={handleConversationClick}
+                onRecapClick={handleRecapClick}
                 onStarToggle={handleStarToggle}
-                selectedId={selectedId}
+                onConversationUpdate={handleRetryUpdate}
+                onRetryResolved={failurePlacement ? resolveRetry : undefined}
                 isSelectionMode={isSelectionMode}
                 selectedIds={selectedIds}
                 onSelect={toggleSelection}
                 mergingIds={mergingIds}
-                hasMore={!isSearching && hasMore}
-                onLoadMore={loadMore}
-                loading={listLoading}
                 onEnterSelectionMode={enterSelectionModeWithId}
+                hasMore={!isSearching && (hasMore || recapsHasMore)}
+                onLoadMore={handleLoadMore}
+                loading={listLoading || recapsLoading}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Resize Handle */}
-        <ResizeHandle
-          onResize={handleResize}
-          onDoubleClick={handleResetWidth}
-          className="hidden lg:flex"
-        />
+        {selection && (
+          <ResizeHandle
+            onResize={handleResize}
+            onResizeStart={() => setDetailResizing(true)}
+            onResizeEnd={() => setDetailResizing(false)}
+            onDoubleClick={handleResetWidth}
+            className="hidden lg:flex"
+          />
+        )}
 
-        {/* Right Panel: Conversation Detail */}
-        <div
-          className={cn(
-            'flex-1 flex flex-col min-w-0 h-full overflow-hidden',
-            'bg-bg-primary',
-            // On mobile, show detail when conversation is selected
-            !selectedId ? 'hidden lg:flex' : 'flex'
-          )}
-        >
-          {selectedId ? (
-            <div className="flex-1 overflow-hidden">
-              <ConversationDetailPanel
-                conversationId={selectedId}
-                conversation={selectedConversation}
-                loading={detailLoading}
-                userName={user?.displayName || undefined}
-                onBack={() => {
-                  setSelectedId(null);
-                  preventAutoSelect.current = true; // Stay on list view when using back button
-                }}
-                onConversationUpdate={updateSelectedConversation}
-                onDelete={() => {
-                  setSelectedId(null);
-                  refresh();
-                }}
-              />
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mx-auto mb-4">
-                  <MessageSquare className="w-8 h-8 text-text-quaternary" />
-                </div>
-                <h3 className="text-lg font-medium text-text-primary mb-2">
-                  Select a conversation
-                </h3>
-                <p className="text-text-tertiary text-sm">
-                  Choose a conversation from the list to view details
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Detail pane. The width is a custom property rather than an inline
+            `width` so the responsive layout can override it: below `lg` the
+            gallery is not beside the pane, so the pane is the whole screen. */}
+        {selection && (
+          <div
+            style={
+              {
+                '--conversation-detail-width': `min(${panelWidth}px, calc(100% - ${MIN_CONVERSATION_GALLERY_WIDTH}px))`,
+              } as React.CSSProperties
+            }
+            data-dragging={detailResizing ? 'true' : undefined}
+            className="t-resize flex h-full w-full flex-shrink-0 flex-col overflow-hidden border-l border-stroke bg-bg-pane lg:w-[var(--conversation-detail-width)]"
+          >
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${selection.kind}-${selection.id}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="flex-1 overflow-hidden"
+              >
+                {selection.kind === 'conversation' ? (
+                  <ConversationDetailPanel
+                    conversationId={selection.id}
+                    conversation={selectedConversation}
+                    loading={detailLoading}
+                    userName={user?.displayName || undefined}
+                    onBack={() => {
+                      setSelection(null);
+                      preventAutoSelect.current = true; // Stay on the gallery when using back
+                    }}
+                    onConversationUpdate={updateSelectedConversation}
+                    onDelete={() => {
+                      setSelection(null);
+                      refresh();
+                    }}
+                  />
+                ) : (
+                  <RecapDetailPanel
+                    recapId={selection.id}
+                    recap={selectedRecap}
+                    onBack={() => {
+                      setSelection(null);
+                      preventAutoSelect.current = true;
+                    }}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        )}
       </div>
 
       {/* Merge Confirmation Dialog */}

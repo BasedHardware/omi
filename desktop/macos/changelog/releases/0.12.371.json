@@ -1,0 +1,7 @@
+{
+  "version": "0.12.371",
+  "date": "2026-09-20",
+  "changes": [
+    "Stopped keeping a realtime voice session warm in the background when your plan doesn't include it"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-overstrict-identifier-grammar",
+  "violated_contract": "An input validator for an external taxonomy must accept every identifier the authoritative taxonomy publishes; a grammar stricter than the taxonomy (here: requiring exactly two letters in the optional arXiv subcategory) silently converts valid categories into empty strings, so category-only searches error out and combined searches silently drop the category and widen the search. omi-arxiv-app's _safe_category rejected physics.acc-ph, physics.optics, cond-mat.mes-hall, and cond-mat.soft, all listed in the official arXiv category taxonomy (issue #14380).",
+  "canonical_prevention": "Derive the accepted grammar from the taxonomy's own form (hyphenated archive, any-length hyphenated subject class) and pin representative taxonomy identifiers in the plugin's unit suite, including a category-only query building a cat: clause and a combined query ANDing the category, so an over-narrow grammar fails CI before merge.",
+  "canonical_prevention_artifact": [
+    "plugins/omi-arxiv-app/test_main.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["plugins/**"],
+  "status": "open"
+}

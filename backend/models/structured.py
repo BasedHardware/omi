@@ -1,18 +1,51 @@
+from models.task_due import ReminderIntent, ReminderOrigin, TaskDue
+
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic.json_schema import SkipJsonSchema
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 _SDK_SRC = Path(__file__).resolve().parents[2] / 'plugins' / 'omi-plugin-sdk' / 'src'
 if _SDK_SRC.exists() and str(_SDK_SRC) not in sys.path:
     sys.path.insert(0, str(_SDK_SRC))
 
 try:
-    from omi_plugin_sdk.models import ActionItem, Event, Structured
+    from omi_plugin_sdk.models import (
+        ActionItem,
+        Event,
+        Insight,
+        MeetingType,
+        NoteClaim,
+        NoteEvidenceRef,
+        Participant,
+        Section,
+        Structured,
+    )
 except ModuleNotFoundError:
     from models.conversation_enums import CategoryEnum
+
+    MeetingType = Literal[
+        'interview', 'intro', 'sales', 'customer', 'one_on_one', 'team_sync', 'planning', 'demo', 'social', 'other'
+    ]
+
+    _OMIT_WHEN_UNSET = (
+        'meeting_type',
+        'participants',
+        'insights',
+        'note_claims',
+        'title_provenance',
+        'salience',
+        'gist',
+    )
+
+    def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple) -> dict:
+        for field_name in fields:
+            if field_name not in model.model_fields_set:
+                data.pop(field_name, None)
+        return data
 
     class ActionItem(BaseModel):
         description: str = Field(description='The action item to be completed')
@@ -20,6 +53,9 @@ except ModuleNotFoundError:
         created_at: Optional[datetime] = Field(default=None, description='When the action item was created')
         updated_at: Optional[datetime] = Field(default=None, description='When the action item was last updated')
         due_at: Optional[datetime] = Field(default=None, description='When the action item is due')
+        due: Optional[TaskDue] = None
+        reminder_intent: Optional[ReminderIntent] = None
+        reminder_origin: Optional[ReminderOrigin] = None
         completed_at: Optional[datetime] = Field(default=None, description='When the action item was completed')
         conversation_id: Optional[str] = Field(
             default=None, description='ID of the conversation this action item came from'
@@ -30,12 +66,18 @@ except ModuleNotFoundError:
         capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
         ownership_confidence: Optional[float] = Field(default=None, ge=0, le=1)
         capture_owner: Optional[Literal['user', 'other', 'unknown']] = None
+        owner_name: Optional[str] = Field(default=None, description="The person's name when the owner is known")
+        context: Optional[str] = Field(default=None, description='One line explaining why or how the item matters')
+        due_certainty: Optional[Literal['confirmed', 'tentative']] = Field(
+            default=None, description='Whether the due date was confirmed or only discussed tentatively'
+        )
         concrete_deliverable: Optional[bool] = Field(
             default=None,
             description='True only when the commitment names a concrete deliverable or outcome',
         )
         candidate_action: Optional[Literal['create', 'update', 'complete']] = None
         target_task_id: Optional[str] = None
+        source_segment_ids: List[str] = Field(default_factory=list)
 
         @staticmethod
         def actions_to_string(action_items: List['ActionItem']) -> str:
@@ -85,14 +127,99 @@ except ModuleNotFoundError:
                 ]
             )
 
+    class Section(BaseModel):
+        heading: str = Field(description='A descriptive heading chosen for this conversation')
+        body_markdown: str = Field(description='Free-form markdown containing the section details')
+        source_segment_ids: List[str] = Field(
+            default_factory=list, description='Transcript segment IDs that directly support this section'
+        )
+        kind: Literal['main', 'side_notes'] = Field(
+            default='main', description='Whether the section is primary recap or the closing side-notes section'
+        )
+
+        @model_serializer(mode='wrap')
+        def _omit_unset_kind(self, handler):
+            return _drop_unset_fields(self, handler(self), ('kind',))
+
+    class Participant(BaseModel):
+        name: Optional[str] = Field(default=None, description="Participant's display name")
+        email: Optional[str] = Field(default=None, description="Participant's email address")
+        organization: Optional[str] = Field(default=None, description="Participant's organization when known")
+        role: Optional[str] = Field(default=None, description="Participant's role or relationship when known")
+        is_ai_agent: bool = Field(default=False, description='True for AI notetakers and assistants, never people')
+        alias: Optional[str] = Field(
+            default=None, description='Short alias explicitly asserted for this person; never derive it'
+        )
+        speaker_bindings: List[int] = Field(
+            default_factory=list,
+            description='Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain',
+        )
+        source: Literal['roster', 'transcript'] = Field(
+            description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
+        )
+        evidence: Optional[str] = Field(
+            default=None, description='Short evidence that identifies this participant; agentic notes only'
+        )
+
+        @field_validator('source', mode='before')
+        @classmethod
+        def fold_unreleased_sources(cls, value):
+            if value in ('screen', 'background'):
+                return 'transcript'
+            return value
+
+        @field_validator('speaker_bindings', mode='before')
+        @classmethod
+        def keep_numeric_bindings(cls, value):
+            if not isinstance(value, list):
+                return []
+            return list(dict.fromkeys(v for v in value if type(v) is int and v >= 0))[:8]
+
+    class Insight(BaseModel):
+        text: str = Field(description='One insight connecting background context to this conversation')
+        kind: Literal['prior_meeting', 'goal', 'memory', 'person'] = Field(
+            description='Which background source the insight draws on'
+        )
+
+    class NoteEvidenceRef(BaseModel):
+        id: str
+        source_kind: str
+        time: Optional[str] = None
+        actor: Optional[str] = None
+        diarization_key: Optional[str] = None
+        source_ref: Optional[str] = None
+
+    class NoteClaim(BaseModel):
+        target: str = Field(description='JSON pointer to a visible field, e.g. /sections/0/body_markdown')
+        text: str = Field(description='Exact factual clause within that field')
+        evidence_ids: List[str] = Field(description='Smallest sufficient episode evidence IDs')
+        provenance: Literal['said', 'shown', 'written', 'inferred']
+        evidence_sources: Optional[List[NoteEvidenceRef]] = Field(
+            default=None, description='Server-authored source metadata; model may omit'
+        )
+
     class Structured(BaseModel):
+        title_provenance: SkipJsonSchema[Optional[Literal['server_minimum']]] = None
+        note_claims: Optional[List[NoteClaim]] = Field(
+            default=None, description='Episode claim provenance; absent on legacy notes'
+        )
         title: str = Field(description='A title/name for this conversation', default='')
         overview: str = Field(
             description='A brief overview of the conversation, highlighting the key details from it',
             default='',
         )
-        emoji: str = Field(description='An emoji to represent the conversation', default='🧠')
+        gist: str = Field(
+            description='One line of at most 12 words saying what this conversation was about',
+            default='',
+        )
+        # The neutral "nothing chose" default (models.conversation_emoji.NEUTRAL_EMOJI):
+        # 🧠 is the extraction schemas' unset sentinel; a path that forgets the
+        # emoji must land on the neutral one, not the "unset" brain.
+        emoji: str = Field(description='An emoji to represent the conversation', default='💬')
         category: CategoryEnum = Field(description='A category for this conversation', default=CategoryEnum.other)
+        sections: List[Section] = Field(
+            description='Detailed, free-form note sections in the model-chosen structure', default_factory=list
+        )
         action_items: List[ActionItem] = Field(
             description='A list of action items from the conversation', default_factory=list
         )
@@ -100,6 +227,27 @@ except ModuleNotFoundError:
             description='A list of events extracted from the conversation, that the user must have on his calendar.',
             default_factory=list,
         )
+        meeting_type: Optional[MeetingType] = Field(
+            default=None, description='The kind of meeting, when the capture is a meeting'
+        )
+        participants: List[Participant] = Field(
+            default_factory=list,
+            description='People and AI agents evidenced by the supplied notes context, including screen evidence; never the account owner',
+        )
+        insights: List[Insight] = Field(
+            default_factory=list,
+            description='Insights connecting supplied background context to this conversation; empty without background',
+        )
+        salience: Optional[Literal['highlight', 'background']] = Field(
+            default=None,
+            description=(
+                "'highlight' when the person would want this as its own entry (time with people, a meeting or call, plans, decisions, ideas, tasks); 'background' when it is worth keeping but not a highlight (media or TV playing, ambient chatter, a passing remark, a trivial errand). Absent on legacy notes"
+            ),
+        )
+
+        @model_serializer(mode='wrap')
+        def _omit_unset_rich_fields(self, handler):
+            return _drop_unset_fields(self, handler(self), _OMIT_WHEN_UNSET)
 
         @field_validator('category', mode='before')
         @classmethod
@@ -125,4 +273,14 @@ except ModuleNotFoundError:
             return result.strip()
 
 
-__all__ = ['ActionItem', 'Event', 'Structured']
+__all__ = [
+    'ActionItem',
+    'Event',
+    'Insight',
+    'MeetingType',
+    'NoteClaim',
+    'NoteEvidenceRef',
+    'Participant',
+    'Section',
+    'Structured',
+]

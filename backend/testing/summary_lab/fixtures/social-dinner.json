@@ -1,0 +1,41 @@
+{
+  "id": "social-dinner",
+  "kind": "social",
+  "started_at": "2026-09-07T18:10:00-04:00",
+  "timezone": "America/New_York",
+  "language": "en",
+  "transcript": "[s1 0] Want to do Thai on Thursday with Priya?\n[s2 1] Yes, 7pm in Brooklyn, not the place with the tasting menu.\n[s1 0] I'll book a table for three.\n[s2 1] Don't invite the work thread into this.",
+  "expected_facts": ["Thai on Thursday", "7pm in Brooklyn"],
+  "must_not_contain": ["hey google", "Speaker 0"],
+  "owner_threads": ["dinner plan"],
+  "token_estimate": {"input": 700, "output": 180},
+  "recorded": {
+    "notes_v2": {
+      "title": "Thursday Thai Dinner in Brooklyn",
+      "overview": "They planned Thai on Thursday at 7pm in Brooklyn, not the tasting-menu restaurant.",
+      "sections": [
+        {
+          "heading": "Dinner",
+          "body_markdown": "- Thai on Thursday at 7pm in Brooklyn.\n- Skip the tasting-menu place.\n- Book a table for three."
+        }
+      ],
+      "action_items": [
+        {"description": "Book a table for three"}
+      ]
+    },
+    "legacy": {
+      "title": "Chat",
+      "overview": "Talked about food.",
+      "sections": [],
+      "action_items": []
+    },
+    "defective": {
+      "title": "Speaker 0 Food Talk",
+      "overview": "You know, hey google, they kind of mentioned dinner.",
+      "sections": [
+        {"heading": "Playback", "body_markdown": "- hey google set a timer\n- um maybe food"}
+      ],
+      "action_items": []
+    }
+  }
+}

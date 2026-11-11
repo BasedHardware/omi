@@ -4,51 +4,69 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { dayKeyOf } from '@/lib/localDay';
+
+/** Inclusive local calendar days. A single day has the same start and end. */
+export interface DateRange {
+  start: Date;
+  end: Date;
+}
 
 interface DateFilterProps {
-  selectedDate: Date | null;
-  onDateChange: (date: Date | null) => void;
+  selectedRange: DateRange | null;
+  onRangeChange: (range: DateRange | null) => void;
   className?: string;
 }
 
 type QuickFilter = {
   label: string;
-  getDate: () => Date;
+  getRange: () => DateRange;
 };
 
 const quickFilters: QuickFilter[] = [
-  { label: 'Today', getDate: () => new Date() },
+  { label: 'Today', getRange: () => ({ start: new Date(), end: new Date() }) },
   {
     label: 'Yesterday',
-    getDate: () => {
+    getRange: () => {
       const d = new Date();
       d.setDate(d.getDate() - 1);
-      return d;
+      return { start: d, end: d };
     },
   },
   {
     label: 'Last 7 days',
-    getDate: () => {
+    getRange: () => {
+      // Today and the six days before it.
       const d = new Date();
-      d.setDate(d.getDate() - 7);
-      return d;
+      d.setDate(d.getDate() - 6);
+      return { start: d, end: new Date() };
     },
   },
   {
     label: 'This week',
-    getDate: () => {
+    getRange: () => {
       const d = new Date();
       const day = d.getDay();
       d.setDate(d.getDate() - day);
-      return d;
+      return { start: d, end: new Date() };
     },
   },
 ];
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 function isSameDay(d1: Date, d2: Date): boolean {
@@ -63,9 +81,26 @@ function isToday(date: Date): boolean {
   return isSameDay(date, new Date());
 }
 
-function formatButtonLabel(date: Date | null): string {
-  if (!date) return 'All dates';
+function isSameRange(a: DateRange, b: DateRange): boolean {
+  return isSameDay(a.start, b.start) && isSameDay(a.end, b.end);
+}
 
+function isInRange(date: Date, range: DateRange): boolean {
+  const day = dayKeyOf(date);
+  return day >= dayKeyOf(range.start) && day <= dayKeyOf(range.end);
+}
+
+function formatShortDate(date: Date): string {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatButtonLabel(range: DateRange | null): string {
+  if (!range) return 'All dates';
+  if (!isSameDay(range.start, range.end)) {
+    return `${formatShortDate(range.start)} – ${formatShortDate(range.end)}`;
+  }
+
+  const date = range.start;
   const today = new Date();
   if (isSameDay(date, today)) return 'Today';
 
@@ -73,7 +108,7 @@ function formatButtonLabel(date: Date | null): string {
   yesterday.setDate(yesterday.getDate() - 1);
   if (isSameDay(date, yesterday)) return 'Yesterday';
 
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return formatShortDate(date);
 }
 
 function getDaysInMonth(year: number, month: number): Date[] {
@@ -102,13 +137,9 @@ function getDaysInMonth(year: number, month: number): Date[] {
   return days;
 }
 
-export function DateFilter({
-  selectedDate,
-  onDateChange,
-  className,
-}: DateFilterProps) {
+export function DateFilter({ selectedRange, onRangeChange, className }: DateFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [viewDate, setViewDate] = useState(() => selectedDate || new Date());
+  const [viewDate, setViewDate] = useState(() => selectedRange?.start || new Date());
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Close on click outside
@@ -148,19 +179,19 @@ export function DateFilter({
   };
 
   const handleDateSelect = (date: Date) => {
-    onDateChange(date);
+    onRangeChange({ start: date, end: date });
     setIsOpen(false);
   };
 
   const handleQuickFilter = (filter: QuickFilter) => {
-    const date = filter.getDate();
-    onDateChange(date);
-    setViewDate(date);
+    const range = filter.getRange();
+    onRangeChange(range);
+    setViewDate(range.start);
     setIsOpen(false);
   };
 
   const handleClear = () => {
-    onDateChange(null);
+    onRangeChange(null);
     setIsOpen(false);
   };
 
@@ -177,15 +208,15 @@ export function DateFilter({
           'text-sm font-medium transition-all duration-150',
           'border',
           isOpen
-            ? 'bg-bg-tertiary border-purple-primary/40 text-text-primary'
-            : selectedDate
-              ? 'bg-purple-primary/10 border-purple-primary/30 text-purple-primary'
-              : 'bg-transparent border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+            ? 'bg-bg-tertiary border-white/25 text-text-primary'
+            : selectedRange
+              ? 'bg-white/[0.08] border-white/25 text-text-primary'
+              : 'bg-transparent border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
         )}
       >
         <Calendar className="w-4 h-4" />
-        <span>{formatButtonLabel(selectedDate)}</span>
-        {selectedDate && (
+        <span>{formatButtonLabel(selectedRange)}</span>
+        {selectedRange && (
           <span
             role="button"
             tabIndex={0}
@@ -220,7 +251,7 @@ export function DateFilter({
               'absolute top-full right-0 mt-2 z-50',
               'w-72 p-3 rounded-xl',
               'bg-bg-secondary border border-bg-tertiary',
-              'shadow-lg shadow-black/20'
+              'shadow-lg shadow-black/20',
             )}
           >
             {/* Quick filters */}
@@ -234,9 +265,9 @@ export function DateFilter({
                     className={cn(
                       'px-2.5 py-1 rounded-md text-xs font-medium',
                       'transition-colors',
-                      selectedDate && isSameDay(selectedDate, filter.getDate())
-                        ? 'bg-purple-primary text-white'
-                        : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary'
+                      selectedRange && isSameRange(selectedRange, filter.getRange())
+                        ? 'bg-text-primary text-bg-primary'
+                        : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
                     )}
                   >
                     {filter.label}
@@ -269,10 +300,7 @@ export function DateFilter({
             {/* Day names */}
             <div className="grid grid-cols-7 gap-1 mb-1">
               {DAYS.map((day) => (
-                <div
-                  key={day}
-                  className="text-center text-xs text-text-quaternary py-1"
-                >
+                <div key={day} className="text-center text-xs text-text-quaternary py-1">
                   {day}
                 </div>
               ))}
@@ -282,7 +310,7 @@ export function DateFilter({
             <div className="grid grid-cols-7 gap-1">
               {days.map((date, index) => {
                 const isCurrentMonth = date.getMonth() === currentMonth;
-                const isSelected = selectedDate && isSameDay(date, selectedDate);
+                const isSelected = selectedRange && isInRange(date, selectedRange);
                 const isTodayDate = isToday(date);
                 const isFuture = date > new Date();
 
@@ -295,10 +323,12 @@ export function DateFilter({
                       'w-8 h-8 rounded-md text-xs font-medium',
                       'transition-all duration-100',
                       !isCurrentMonth && 'text-text-quaternary/50',
-                      isCurrentMonth && !isSelected && 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
-                      isSelected && 'bg-purple-primary text-white',
-                      isTodayDate && !isSelected && 'ring-1 ring-purple-primary/50',
-                      isFuture && 'opacity-30 cursor-not-allowed'
+                      isCurrentMonth &&
+                        !isSelected &&
+                        'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+                      isSelected && 'bg-text-primary text-bg-primary',
+                      isTodayDate && !isSelected && 'ring-1 ring-white/25',
+                      isFuture && 'opacity-30 cursor-not-allowed',
                     )}
                   >
                     {date.getDate()}
@@ -308,13 +338,13 @@ export function DateFilter({
             </div>
 
             {/* Clear button */}
-            {selectedDate && (
+            {selectedRange && (
               <button
                 onClick={handleClear}
                 className={cn(
                   'w-full mt-3 py-2 rounded-lg text-sm font-medium',
                   'text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors'
+                  'hover:bg-bg-tertiary transition-colors',
                 )}
               >
                 Clear filter

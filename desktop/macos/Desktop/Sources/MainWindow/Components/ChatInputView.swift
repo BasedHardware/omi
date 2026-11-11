@@ -15,12 +15,61 @@ import UniformTypeIdentifiers
 /// `onAttachmentRemoved` to enable the paperclip button, the staged-files row,
 /// and drag-drop. When omitted (e.g. task-sidebar chat) the input behaves as
 /// before.
+enum ChatComposerLayout {
+  /// The visible margin around every edge of a composer shell.
+  static let shellInset: CGFloat = OmiSpacing.sm
+  /// Shared page margin for the regular chat composer.
+  static let pageMargin: CGFloat = OmiSpacing.lg
+  /// Maximum width shared by the readable chat/composer lane and shell chrome.
+  /// Keep navigation and the Home chat column on the same vertical edges.
+  static let contentLaneMaxWidth: CGFloat = 900
+  /// The transcript uses the same visible edge as the composer shell.
+  static let transcriptEdgeInset: CGFloat = pageMargin
+  /// The height over which transcript content fades into the composer.
+  /// Keep this transition tight: a large translucent raster reads as a
+  /// pixelated glow around the input on non-Retina displays.
+  static let fadeHeight: CGFloat = OmiSpacing.md
+  static let shellRadius: CGFloat = 18
+}
+
+/// Intentionally transparent: transcript content must not be obscured by a
+/// decorative composer glow.
+struct ChatComposerFade: View {
+  var body: some View {
+    Color.clear
+      .frame(height: ChatComposerLayout.fadeHeight)
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
+  }
+}
+
+extension View {
+  /// Lightweight composer chrome shared by regular and Notch chat.
+  /// Keeping the inset equal on every edge avoids the heavy bezel effect.
+  ///
+  /// The stroke is `Ink.separator` — a *dynamic* system colour, which is what lets one modifier
+  /// serve two grounds. The main window's composer sits on the light-pinned glass and the Notch's
+  /// sits on `NotchGlass.fill` in a `.vibrantDark` view, and a separator resolves correctly in each.
+  /// The fixed hairline it replaced only ever suited the dark one.
+  func chatComposerShell(fill: Color = Ink.rowFill) -> some View {
+    padding(ChatComposerLayout.shellInset)
+      .background(
+        RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
+          .fill(fill)
+      )
+      .overlay {
+        RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
+          .stroke(Ink.separator, lineWidth: 1)
+      }
+  }
+}
+
 struct ChatInputView: View {
   let onSend: (String) -> Void
   var onStop: (() -> Void)? = nil
   let isSending: Bool
   var isStopping: Bool = false
-  var placeholder: String = "Type a message..."
+  var placeholder: String = "Type a message…"
   @Binding var mode: ChatMode
   /// Optional text to pre-fill the input (e.g. task context). Consumed on change.
   var pendingText: Binding<String>?
@@ -32,11 +81,21 @@ struct ChatInputView: View {
   var onAttachmentsAdded: (([URL]) -> Void)? = nil
   /// Called when the user removes a staged attachment chip.
   var onAttachmentRemoved: ((String) -> Void)? = nil
+  /// Sources staged by a page action. They are shown above the editor and are
+  /// intentionally independent from file uploads.
+  var references: [ChatComposerReference] = []
+  var onReferenceRemoved: ((String) -> Void)? = nil
+  /// Shows the push-to-talk mic button. Clicking it drives the same
+  /// `PushToTalkManager` turn the keyboard shortcut does.
+  var showsPushToTalk: Bool = true
 
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @Environment(\.fontScale) private var fontScale
   @State private var isDropTargeted = false
   @State private var hasMarkedText = false
+  /// Caret claim for stray typing — a counter, because a flag already `true` cannot re-claim a caret
+  /// AppKit has since given away (`OmiTextEditor.focusRequest`).
+  @State private var caretClaims = 0
 
   private var hasText: Bool {
     !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -48,10 +107,18 @@ struct ChatInputView: View {
   /// Padding used for both the NSTextView (via textContainerInset) and the
   /// placeholder overlay — guaranteeing the cursor and placeholder align.
   private let inputPaddingH: CGFloat = 12
-  private let inputPaddingV: CGFloat = 12
+  private let inputPaddingV: CGFloat = 8
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      if !references.isEmpty {
+        ChatComposerReferenceRow(
+          references: references,
+          onRemove: { id in onReferenceRemoved?(id) }
+        )
+        .accessibilityIdentifier("chat-composer-references")
+      }
+
       if attachmentsEnabled && !currentAttachments.isEmpty {
         AttachmentPreviewRow(
           attachments: currentAttachments,
@@ -59,17 +126,21 @@ struct ChatInputView: View {
         )
       }
 
-      HStack(alignment: .center, spacing: OmiSpacing.sm) {
+      HStack(alignment: .bottom, spacing: OmiSpacing.sm) {
         if attachmentsEnabled {
           Button(action: pickFiles) {
             Image(systemName: "paperclip")
-              .scaledFont(size: OmiType.heading, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(Ink.secondary)
               .frame(width: 32, height: 32)
           }
           .buttonStyle(.plain)
           .help("Attach files")
           .disabled(currentAttachments.count >= kMaxChatAttachments)
+        }
+
+        if showsPushToTalk {
+          PushToTalkMicButton(glyphSize: OmiType.body)
         }
 
         // Input field with floating toggle
@@ -92,7 +163,7 @@ struct ChatInputView: View {
               if inputText.isEmpty && !hasMarkedText {
                 Text(placeholder)
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                   .padding(.horizontal, inputPaddingH)
                   .padding(.vertical, inputPaddingV)
                   .allowsHitTesting(false)
@@ -102,16 +173,22 @@ struct ChatInputView: View {
               OmiTextEditor(
                 text: $inputText,
                 fontSize: round(14 * fontScale),
-                textColor: NSColor(OmiColors.textPrimary),
+                textColor: Ink.nsPrimaryOnGlass,
                 textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
                 onSubmit: handleSubmit,
-                onMarkedTextChange: { hasMarkedText = $0 }
+                onMarkedTextChange: { hasMarkedText = $0 },
+                focusRequest: caretClaims,
+                // Without these the NSTextView swallows the drag before the SwiftUI `.onDrop` below
+                // ever sees it, so only the padding around the field — never the field itself —
+                // could stage a file.
+                onFileDrop: editorFileDropHandler,
+                onFileDragTargeted: editorFileDragTargetedHandler
               )
+              // Typing with nothing focused means this composer, not the page's search bar behind it.
+              .straysTypingHere(priority: .primary) { caretClaims &+= 1 }
             }
             .frame(maxHeight: 200)
             .clipped()
-            .background(OmiColors.backgroundTertiary)
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
 
           // Floating Ask/Act toggle (top-right, inside the input area)
           if askModeEnabled {
@@ -121,36 +198,35 @@ struct ChatInputView: View {
           }
         }
 
-        // Send/Stop button — inline to the right of the input
-        if isSending {
-          if isStopping {
-            ProgressView()
-              .controlSize(.small)
-              .frame(width: 24, height: 24)
-          } else {
-            Button(action: { onStop?() }) {
-              Image(systemName: "stop.circle.fill")
-                .scaledFont(size: 24)
-                .foregroundColor(.red.opacity(0.8))
+        // One stable target keeps the composer still as Send becomes Stop.
+        Button(action: {
+          if isSending { onStop?() } else { handleSubmit() }
+        }) {
+          ZStack {
+            if isStopping {
+              ProgressView()
+                .controlSize(.small)
+                .environment(\.colorScheme, .dark)
+            } else {
+              Image(systemName: isSending ? "stop.fill" : "arrow.up")
+                .scaledFont(size: 14, weight: .semibold)
             }
-            .buttonStyle(.plain)
           }
-        } else {
-          Button(action: handleSubmit) {
-            Image(systemName: "arrow.up.circle.fill")
-              .scaledFont(size: 24)
-              .foregroundColor(canSend ? OmiColors.accent : OmiColors.textQuaternary)
-          }
-          .buttonStyle(.plain)
-          .disabled(!canSend)
+          .frame(width: 32, height: 32)
+          .contentShape(Circle())
         }
+        .buttonStyle(ChatComposerActionStyle(isBusy: isStopping))
+        .disabled(isStopping || (isSending ? onStop == nil : !canSend))
+        .accessibilityLabel(isStopping ? "Stopping response" : isSending ? "Stop response" : "Send message")
+        .help(isSending ? "Stop response" : "Send message (Return)")
+
       }
     }
-    .padding(OmiSpacing.md)
-    .omiPanel(
-      fill: OmiColors.backgroundSecondary, radius: 22, stroke: dropStrokeColor, shadowOpacity: 0.1, shadowRadius: 12,
-      shadowY: 6
-    )
+    .chatComposerShell(fill: isDropTargeted ? Ink.rowFillHover : Ink.rowFill)
+    .overlay {
+      RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
+        .stroke(dropStrokeColor, lineWidth: isDropTargeted ? 1.5 : 0)
+    }
     .fixedSize(horizontal: false, vertical: true)
     .if(attachmentsEnabled) { view in
       view.onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
@@ -178,17 +254,18 @@ struct ChatInputView: View {
     }
   }
 
-  /// Send is enabled when there's text OR (when supported) any attachment ready
-  /// to ship — Flutter allows sending attachments without text.
+  /// Send is enabled when there's text OR (when supported) any attachment or
+  /// staged reference ready to ship — the attachment is the message.
   private var canSend: Bool {
     guard !hasMarkedText else { return false }
     if hasText { return true }
     if attachmentsEnabled && !currentAttachments.isEmpty { return true }
+    if !references.isEmpty { return true }
     return false
   }
 
   private var dropStrokeColor: Color {
-    isDropTargeted ? OmiColors.accent.opacity(0.6) : OmiColors.border.opacity(0.2)
+    isDropTargeted ? Ink.accent.opacity(0.6) : Ink.separator
   }
 
   private func handleSubmit() {
@@ -206,7 +283,7 @@ struct ChatInputView: View {
     panel.allowedContentTypes = [
       .image, .jpeg, .png, .gif, .heic, .heif, .webP, .tiff, .bmp,
       .pdf, .plainText, .json, .commaSeparatedText, .html,
-      .text, .content,
+      .text, .content, .movie,
     ]
     if panel.runModal() == .OK {
       let remaining = max(0, kMaxChatAttachments - currentAttachments.count)
@@ -215,6 +292,28 @@ struct ChatInputView: View {
         onAttachmentsAdded?(urls)
       }
     }
+  }
+
+  /// Same staging path and cap as `handleDrop`, for a single file dropped on the editor interior.
+  private func stageDroppedFile(_ url: URL) {
+    guard currentAttachments.count < kMaxChatAttachments else { return }
+    onAttachmentsAdded?([url])
+  }
+
+  // Split out of `body`, and using `if`/`else` rather than a ternary — a closure-typed ternary here
+  // defeats the type checker (SR-style "failed to produce diagnostic" crash).
+  private var editorFileDropHandler: ((URL) -> Void)? {
+    if attachmentsEnabled {
+      return stageDroppedFile
+    }
+    return nil
+  }
+
+  private var editorFileDragTargetedHandler: ((Bool) -> Void)? {
+    if attachmentsEnabled {
+      return { isDropTargeted = $0 }
+    }
+    return nil
   }
 
   private func handleDrop(providers: [NSItemProvider]) -> Bool {
@@ -303,6 +402,30 @@ struct AttachmentPreviewRow: View {
   }
 }
 
+/// Removable source chips staged by a page action. This intentionally shares
+/// the attachment row's placement above the text editor, but keeps references
+/// separate from file uploads so a source selection never enters the upload
+/// pipeline or submits an empty message.
+struct ChatComposerReferenceRow: View {
+  let references: [ChatComposerReference]
+  let onRemove: (String) -> Void
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: OmiSpacing.sm) {
+        ForEach(references) { reference in
+          ChatConversationReferencePill(
+            reference: reference,
+            onRemove: { onRemove(reference.id) })
+        }
+      }
+      .padding(.horizontal, OmiSpacing.hairline)
+      .padding(.vertical, OmiSpacing.hairline)
+    }
+    .frame(maxHeight: 42)
+  }
+}
+
 private struct AttachmentChip: View {
   let attachment: ChatAttachment
   let onRemove: () -> Void
@@ -316,12 +439,12 @@ private struct AttachmentChip: View {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(attachment.fileName)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .lineLimit(1)
               .truncationMode(.middle)
             Text(attachment.mimeType)
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
           .frame(maxWidth: 160, alignment: .leading)
@@ -329,7 +452,7 @@ private struct AttachmentChip: View {
       }
       .padding(.horizontal, attachment.isImage ? 0 : OmiSpacing.sm)
       .padding(.vertical, attachment.isImage ? 0 : OmiSpacing.xs)
-      .background(OmiColors.backgroundTertiary.opacity(attachment.isImage ? 0 : 0.9))
+      .background(attachment.isImage ? Color.clear : Ink.rowFillHover)
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous))
       .overlay(alignment: .bottom) {
         if case .failed = attachment.state {
@@ -385,10 +508,10 @@ private struct AttachmentChip: View {
     } else {
       ZStack {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(OmiColors.backgroundQuaternary.opacity(0.7))
+          .fill(Ink.rowFillHover)
         Image(systemName: documentIcon)
           .scaledFont(size: OmiType.heading)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
       .frame(width: 44, height: 44)
     }
@@ -434,20 +557,38 @@ struct ChatModeToggle: View {
       modeButton(for: .ask, label: "Ask")
       modeButton(for: .act, label: "Act")
     }
-    .background(OmiColors.backgroundQuaternary.opacity(0.7))
+    // A track with a raised pill on it, the way a real segmented control reads. The dark version
+    // inverted that — a near-black pill under white type — which on glass was a slab.
+    .background(Ink.rowFill)
     .clipShape(RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous))
   }
 
   private func modeButton(for targetMode: ChatMode, label: String) -> some View {
-    Button(action: { mode = targetMode }) {
+    let isSelected = mode == targetMode
+    return Button(action: { mode = targetMode }) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(mode == targetMode ? .white : OmiColors.textTertiary)
+        .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xxs)
-        .background(mode == targetMode ? OmiColors.userBubble : Color.clear)
+        // `surface` and not another wash: the selected segment has to lift off the track, and
+        // stacking a third wash on two others is a difference nobody can see.
+        .background(isSelected ? Ink.surface : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous))
     }
     .buttonStyle(.plain)
+  }
+}
+
+/// Neutral, tactile chrome shared by the composer's mutually exclusive actions.
+struct ChatComposerActionStyle: ButtonStyle {
+  var isBusy = false
+  @Environment(\.isEnabled) private var isEnabled
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .foregroundStyle(Ink.surface)
+      .background(Circle().fill(Ink.primary))
+      .opacity(isEnabled || isBusy ? (configuration.isPressed ? 0.65 : 1) : 0.4)
   }
 }

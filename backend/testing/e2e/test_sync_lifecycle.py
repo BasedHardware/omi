@@ -6,6 +6,9 @@ import time
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from fakes.firestore import read_conversation, seed_conversation
 from models.conversation import Conversation
@@ -43,7 +46,9 @@ def _patch_sync_pipeline(
     *,
     transcript_text: str,
     reprocessed: list[str],
+    user_selections: list[bool] | None = None,
 ):
+    import database.conversations as conversations_db
     import routers.sync as sync_router
     import utils.sync.pipeline as sync_pipeline
 
@@ -95,36 +100,46 @@ def _patch_sync_pipeline(
             )
         ]
 
-    def fake_process_conversation(uid, language, conversation):
+    def fake_ingest_sync_conversation(uid, incoming, *, candidate_id=None, target_id=None):
         import database.conversations as conversations_db
         from models.structured import Structured
 
+        conversation_id = target_id or "sync-created-conversation"
+        existing = read_conversation(uid, conversation_id) or {}
+        segments = list(existing.get("transcript_segments") or []) + list(incoming["transcript_segments"])
+        segments.sort(key=lambda segment: segment.get("start", 0))
+
         conversation_obj = Conversation(
-            id="sync-created-conversation",
+            id=conversation_id,
             uid=uid,
-            created_at=conversation.started_at,
-            started_at=conversation.started_at,
-            finished_at=conversation.finished_at,
-            source=conversation.source,
-            language=language,
+            created_at=incoming["started_at"],
+            started_at=incoming["started_at"],
+            finished_at=incoming["finished_at"],
+            source=incoming["source"],
+            language=incoming["language"],
             structured=Structured(
                 title="Hermetic Sync Conversation",
                 overview="Sync v2 produced a deterministic conversation.",
                 emoji="🧪",
                 category="work",
             ),
-            transcript_segments=conversation.transcript_segments,
+            transcript_segments=segments,
             discarded=False,
             status=ConversationStatus.completed,
-            is_locked=conversation.is_locked,
+            is_locked=incoming["is_locked"],
+            sync_relevance="keep",
+            sync_content_revision=1,
         )
         conversations_db.upsert_conversation_with_lifecycle(uid, conversation_obj.dict())
-        return conversation_obj
+        return conversation_obj.dict(), target_id is None, list(incoming["transcript_segments"])
 
-    def fake_reprocess_after_update(uid, conversation_id, language):
+    def fake_reprocess_after_update(uid, conversation_id, language, *, user_selected=False):
         reprocessed.append(conversation_id)
-
-        conversation = read_conversation(uid, conversation_id)
+        if user_selections is not None:
+            user_selections.append(user_selected)
+        # Read through the normal decoder: the persisted transcript/corrections
+        # are encrypted, and the explicit Process Now path uses the returned model.
+        conversation = conversations_db.get_conversation(uid, conversation_id)
         assert conversation is not None
         conversation["id"] = conversation_id
         structured = dict(conversation.get("structured") or {})
@@ -141,25 +156,29 @@ def _patch_sync_pipeline(
         updated = dict(conversation)
         updated["id"] = conversation_id
         updated["structured"] = structured
-        seed_conversation(uid, updated)
+        conversations_db.update_conversation(uid, conversation_id, {"structured": structured})
+        return Conversation(**updated)
 
     monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
     monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
     monkeypatch.setattr(sync_pipeline, "get_wav_duration", lambda path: 1.25)
-    monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
+    monkeypatch.setattr(
+        sync_router,
+        "resolve_transcription_allowance",
+        lambda uid: SimpleNamespace(managed=True, reason="plan_within_allowance"),
+    )
     monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
     monkeypatch.setattr(sync_pipeline, "get_syncing_file_temporal_signed_url", lambda path: path)
-    monkeypatch.setattr(sync_pipeline, "schedule_syncing_temporal_file_deletion", lambda path: None)
     monkeypatch.setattr(sync_pipeline, "prerecorded", fake_prerecorded)
     monkeypatch.setattr(sync_pipeline, "postprocess_words", fake_postprocess_words)
-    monkeypatch.setattr(sync_pipeline, "process_conversation", fake_process_conversation)
+    monkeypatch.setattr("utils.conversations.lifecycle.ingest_sync_conversation", fake_ingest_sync_conversation)
     monkeypatch.setattr(sync_pipeline, "_reprocess_conversation_after_update", fake_reprocess_after_update)
     monkeypatch.setattr(sync_router, "start_background_task", capture_background_task)
     monkeypatch.setattr(sync_pipeline, "FAIR_USE_ENABLED", False)
     return pending_coroutines
 
 
-def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, monkeypatch):
+def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, monkeypatch, live_user):
     patch_fresh_sync_lane(monkeypatch)
     reprocessed = []
     pending_coroutines = _patch_sync_pipeline(
@@ -188,21 +207,118 @@ def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, mo
     persisted = client.get("/v1/conversations/sync-created-conversation", headers=auth_headers)
     assert persisted.status_code == 200, persisted.text
     body = persisted.json()
-    assert body["structured"]["title"] == "Hermetic Sync Conversation"
+    # Created keep rows are enriched once at batch-end through the update path
+    # (the intake already persisted the row); the visible title is the enrichment
+    # output, not the intake minimum.
+    assert body["structured"]["title"] == "Hermetic Sync Conversation Reprocessed"
     assert body["status"] == "completed"
     assert [segment["text"] for segment in body["transcript_segments"]] == [
         "Hermetic sync transcript from a fake prerecorded STT boundary."
     ]
     assert read_conversation("123", "sync-created-conversation") is not None
-    assert reprocessed == []
+    # Created keep rows get exactly one batch-end enrichment pass.
+    assert reprocessed == ["sync-created-conversation"]
 
 
-def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, auth_headers, monkeypatch):
+@pytest.mark.parametrize('authority', ['live', 'pending', 'completed', 'missing_root', 'rootless_at_start'])
+def test_sync_finalize_usage_preserves_erasure_and_once_receipt(
+    client, auth_headers, monkeypatch, live_user, fake_firestore, authority
+):
+    from utils.metrics import OMI_FALLBACK_TOTAL
+    import utils.sync.pipeline as sync_pipeline
+
+    patch_fresh_sync_lane(monkeypatch)
+    pending = _patch_sync_pipeline(monkeypatch, transcript_text="Finalize usage boundary regression.", reprocessed=[])
+    real_record_usage = sync_pipeline.record_usage
+    attempts = []
+    reason = 'usage_root_missing' if authority in {'missing_root', 'rootless_at_start'} else 'usage_fence_blocked'
+    counter = OMI_FALLBACK_TOTAL.labels(
+        component='usage_publication', from_mode='publish', to_mode='skip', reason=reason, outcome='degraded'
+    )
+    before_count = counter._value.get()
+
+    def record_after_authority_change(*args, **kwargs):
+        # Reach the real usage/finalize boundary after ingestion has succeeded.
+        attempts.append((args, kwargs))
+        if authority == 'missing_root':
+            live_user.delete()
+        elif authority in {'pending', 'completed'}:
+            fake_firestore.collection('account_deletions').document(live_user.id).set({'wipe_status': authority})
+        return real_record_usage(*args, **kwargs)
+
+    monkeypatch.setattr(sync_pipeline, 'record_usage', record_after_authority_change)
+    assert live_user.get().exists
+    assert not fake_firestore.collection('account_deletions').document(live_user.id).get().exists
+    assert not fake_firestore.collection('legal_hold_deletion_gates').document(live_user.id).get().exists
+    # Each scenario is a different recording, including any durable capture
+    # evidence outside the user subtree that the session-scoped fake retains.
+    offset_seconds = 300 + 60 * ['live', 'pending', 'completed', 'missing_root', 'rootless_at_start'].index(authority)
+    if authority == 'rootless_at_start':
+        live_user.delete()
+        assert not live_user.get().exists
+    response = client.post(
+        '/v2/sync-local-files',
+        files=[('files', (_sync_filename(offset_seconds), b'fake-pcm-frame', 'application/octet-stream'))],
+        headers=auth_headers,
+    )
+    assert response.status_code == 202, response.text
+    _drain_background_coroutines(pending)
+    job_id = response.json()['job_id']
+    if authority in {'pending', 'completed'}:
+        from database.sync_jobs import get_sync_job
+
+        # Deletion correctly revokes HTTP polling as well as publication.
+        assert client.get(f'/v2/sync-local-files/{job_id}', headers=auth_headers).status_code == 403
+        job = get_sync_job(job_id)
+        assert job is not None
+    else:
+        job = _poll_sync_job(client, auth_headers, job_id)
+    assert len(attempts) == 1, job
+    args, kwargs = attempts[0]
+    assert kwargs['speech_seconds'] > 0
+    assert kwargs['idempotency_key']
+    receipt = live_user.collection('sync_content_ledger').document(kwargs['idempotency_key'])
+    hourly = list(live_user.collection('hourly_usage').stream())
+    monthly = list(live_user.collection('monthly_usage_totals').stream())
+
+    assert job['status'] == 'completed', job
+    assert job['successful_segments'] == 1
+    assert job['result']['new_memories'] == ['sync-created-conversation']
+    from database.conversations import get_conversation
+
+    conversation = get_conversation('123', 'sync-created-conversation')
+    assert conversation is not None
+    assert conversation['status'] == 'completed'
+    assert [segment['text'] for segment in conversation['transcript_segments']] == [
+        'Finalize usage boundary regression.'
+    ]
+    if authority == 'live':
+        assert counter._value.get() == before_count
+        assert receipt.get().to_dict()['usage_committed_at'] is not None
+        assert len(hourly) == len(monthly) == 1
+        source, total = hourly[0].to_dict(), monthly[0].to_dict()
+        for field in ('speech_seconds', 'transcription_seconds'):
+            assert source[field] == total['totals'][field] == kwargs[field]
+        real_record_usage(*args, **kwargs)
+        assert hourly[0].reference.get().to_dict() == source
+        assert monthly[0].reference.get().to_dict() == total
+    else:
+        assert counter._value.get() == before_count + 1
+        assert not hourly and not monthly
+        assert (receipt.get().to_dict() or {}).get('usage_committed_at') is None
+        assert live_user.get().exists is (authority not in {'missing_root', 'rootless_at_start'})
+
+
+@pytest.mark.parametrize('empty_target', [False, True])
+def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(
+    client, auth_headers, monkeypatch, empty_target, live_user
+):
     patch_fresh_sync_lane(monkeypatch)
     import database.conversations as conversations_db
 
     target_id = "sync-target-conversation"
-    timestamp = int(time.time()) - 120
+    # Independent recordings need distinct ledger identities in the session-scoped fake.
+    timestamp = int(time.time()) - (180 if empty_target else 120)
     target_timestamp = timestamp - 3600
     seed_conversation(
         "123",
@@ -210,7 +326,9 @@ def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, au
             "id": target_id,
             "created_at": datetime.fromtimestamp(target_timestamp, tz=timezone.utc).isoformat(),
             "started_at": datetime.fromtimestamp(target_timestamp, tz=timezone.utc).isoformat(),
-            "finished_at": datetime.fromtimestamp(target_timestamp + 1, tz=timezone.utc).isoformat(),
+            "finished_at": datetime.fromtimestamp(
+                target_timestamp + (0 if empty_target else 1), tz=timezone.utc
+            ).isoformat(),
             "source": "desktop",
             "language": "en",
             "structured": {
@@ -221,16 +339,20 @@ def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, au
                 "action_items": [],
                 "events": [],
             },
-            "transcript_segments": [
-                {
-                    "id": "seg-existing",
-                    "text": "Existing live transcript.",
-                    "speaker": "SPEAKER_00",
-                    "is_user": True,
-                    "start": 0.0,
-                    "end": 1.0,
-                }
-            ],
+            "transcript_segments": (
+                []
+                if empty_target
+                else [
+                    {
+                        "id": "seg-existing",
+                        "text": "Existing live transcript.",
+                        "speaker": "SPEAKER_00",
+                        "is_user": True,
+                        "start": 0.0,
+                        "end": 1.0,
+                    }
+                ]
+            ),
             "discarded": False,
             "status": "completed",
             "is_locked": False,
@@ -264,7 +386,8 @@ def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, au
     assert persisted.status_code == 200, persisted.text
     body = persisted.json()
     assert body["structured"]["title"] == "Hermetic Sync Conversation Reprocessed"
-    assert [segment["text"] for segment in body["transcript_segments"]] == [
-        "Existing live transcript.",
+    assert [segment["text"] for segment in body["transcript_segments"]] == (
+        [] if empty_target else ["Existing live transcript."]
+    ) + [
         "Merged sync transcript appended to the target conversation.",
     ]

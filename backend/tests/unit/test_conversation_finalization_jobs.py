@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+from database import conversation_processing_recovery as processing_recovery
+
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+from google.api_core.exceptions import Aborted
+
+from utils.conversations.relevance_rules import RULES_VERSION
 from database import conversation_finalization_jobs as jobs
+from database import conversation_terminal_title as terminal_title
+from database import firestore_transaction_retry
+from models.conversation import Conversation
+from utils.listen_pusher_session import FINALIZATION_IN_FLIGHT_ERROR
 
 
 class _PhotoCollection:
@@ -13,7 +23,7 @@ class _PhotoCollection:
         self.has_photo = has_photo
 
     def limit(self, count: int):
-        assert count == 1
+        assert count in (1, 64)
         return self
 
     def stream(self, transaction=None):
@@ -26,6 +36,8 @@ class _Ref:
         self.id = doc_id
         self.data = data
         self.has_legacy_photo = has_legacy_photo
+        self.attention_refs = {}
+        self.parent = SimpleNamespace(parent=SimpleNamespace(collection=lambda name: _Collection(self.attention_refs)))
 
     def get(self, transaction=None):
         del transaction
@@ -55,7 +67,7 @@ class _Transaction:
     def update(self, ref, data):
         self.updates.append((ref, data))
 
-    def set(self, ref, data):
+    def set(self, ref, data, **_kwargs):
         self.sets.append((ref, data))
 
 
@@ -98,7 +110,7 @@ def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
 
 def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material():
     transaction = _Transaction()
-    conversation_ref = _conversation()
+    conversation_ref = _conversation({'client_platform': 'android'})
     collection = _Collection({})
 
     intent = jobs._create_or_get_finalization_intent_txn(
@@ -121,7 +133,7 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert job['dispatch_generation'] == 1
     assert job['status'] == 'queued'
     assert job['fanout_key'] == 'fanout-key'
-    assert job['fanout_status'] == 'pending'
+    assert (job['fanout_status'], job['client_platform']) == ('pending', 'android')
     forbidden = {'byok_keys', 'transcript', 'transcript_segments', 'authorization', 'raw_error'}
     assert forbidden.isdisjoint(job)
     assert transaction.updates[0][1]['status'] == 'processing'
@@ -142,10 +154,12 @@ def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically():
         False,
         _admit_finalization,
         _now(),
-        force_process=True,
+        trigger=jobs.ProcessingTrigger.CLIENT_FINALIZE,
         extra_updates={'external_data': {'calendar_meeting_context': {'event_id': 'event-1'}}},
     )
 
+    assert transaction.sets[0][1]['processing_trigger'] == 'client_finalize'
+    # Mirrored so a worker from before processing_trigger runs the same mode.
     assert transaction.sets[0][1]['force_process'] is True
     assert transaction.updates == [
         (
@@ -159,6 +173,75 @@ def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically():
             },
         )
     ]
+
+
+def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(monkeypatch):
+    """Concurrent REST finalizers must recover a read-time Firestore abort."""
+
+    conversation_ref = _conversation()
+    jobs_collection = _Collection({})
+    projection_collection = _Collection({})
+    transactions: list[_Transaction] = []
+
+    class _Client:
+        def transaction(self):
+            transaction = _Transaction()
+            transactions.append(transaction)
+            return transaction
+
+        def collection(self, name: str):
+            if name == jobs.FINALIZATION_JOBS_COLLECTION:
+                return jobs_collection
+            if name == 'users':
+                return SimpleNamespace(document=lambda _uid: SimpleNamespace(collection=lambda _collection_name: None))
+            assert name == jobs.FINALIZATION_PROJECTION_COLLECTION
+            return projection_collection
+
+    transactional_calls = 0
+
+    def transaction_wrapper(function):
+        def invoke(transaction, *args, **kwargs):
+            nonlocal transactional_calls
+            transactional_calls += 1
+            if transactional_calls == 1:
+                raise Aborted('read contention')
+            return function(transaction, *args, **kwargs)
+
+        return invoke
+
+    def fast_contention_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(jobs, '_conversation_ref', lambda *_args: conversation_ref)
+    monkeypatch.setattr(jobs.firestore, 'transactional', transaction_wrapper)
+    monkeypatch.setattr(jobs, 'run_with_transaction_contention_retry', fast_contention_retry)
+
+    intent = jobs.create_or_get_finalization_intent(
+        'uid-1',
+        'conversation-1',
+        requires_byok=False,
+        finalization_admission=_admit_finalization,
+        firestore_client=_Client(),
+    )
+
+    assert transactional_calls == 2
+    assert len(transactions) == 2
+    assert transactions[0] is not transactions[1]
+    assert transactions[0].sets == []
+    assert intent['status'] == 'queued'
+    # The retry's committed transaction creates exactly one job and one shard
+    # delta; the aborted attempt never contributes a second accepted count.
+    assert len(transactions[1].sets) == 2
+    assert transactions[1].sets[1][0].id == jobs._projection_shard_id(
+        jobs.FINALIZATION_PROJECTION_GENERATION,
+        transactions[1].sets[0][1]['projection_shard'],
+    )
 
 
 def test_photo_only_conversation_with_durable_content_marker_is_admitted():
@@ -305,7 +388,31 @@ def test_byok_job_is_explicitly_blocked_without_persisting_a_key():
     assert intent['status'] == 'blocked_byok'
     persisted = transaction.sets[0][1]
     assert persisted['requires_byok'] is True
+    assert persisted['blocked_byok_at'] == _now()
     assert set(persisted).isdisjoint({'byok_keys', 'openai', 'anthropic', 'gemini', 'deepgram'})
+
+
+def test_byok_reclaim_stamps_state_entry_once_without_reset_on_observation():
+    now = _now()
+    ref = _Ref(
+        'synthetic-job',
+        {
+            'status': 'queued',
+            'requires_byok': True,
+            'created_at': now - timedelta(days=13),
+            'updated_at': now - timedelta(hours=1),
+            'dispatch_generation': 1,
+        },
+    )
+    tx = _Transaction()
+    intent = jobs._claim_finalization_replay_txn(tx, ref, timedelta(minutes=5), now)
+    assert intent['status'] == 'blocked_byok'
+    assert tx.updates[0][1]['blocked_byok_at'] == now
+    ref.data.update(tx.updates[0][1])
+    next_tx = _Transaction()
+    jobs._claim_finalization_replay_txn(next_tx, ref, timedelta(minutes=5), now + timedelta(days=1))
+    assert all('blocked_byok_at' not in update for _, update in next_tx.updates)
+    assert ref.data['blocked_byok_at'] == now
 
 
 def test_atomic_admission_rejects_terminal_snapshot_before_any_outbox_write():
@@ -337,21 +444,47 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     ref = _Ref('job-1', {'status': 'queued', 'dispatch_generation': 2, 'attempt_count': 0})
     first = _Transaction()
 
-    claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1, 'created_at': None}
+    claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now, count_worker_claim=True)
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 0, 'created_at': None}
     claim_update = first.updates[0][1]
     assert claim_update['status'] == 'leased'
-    assert claim_update['attempt_count'] == 1
+    assert 'attempt_count' not in claim_update
+    assert claim_update['worker_claim_count'] == 1
 
     ref.data = ref.data | claim_update
     duplicate = _Transaction()
-    assert jobs._claim_finalization_job_txn(duplicate, ref, 2, False, 1500, now + timedelta(seconds=1)) == {
+    assert jobs._claim_finalization_job_txn(
+        duplicate, ref, 2, False, 1500, now + timedelta(seconds=1), count_worker_claim=True
+    ) == {
         'status': 'leased',
         'lease_epoch': None,
         'attempt_count': 0,
         'created_at': None,
     }
     assert duplicate.updates == []
+
+
+def test_live_lease_rejection_matches_the_listen_in_flight_wire_error():
+    """Pin the string the live session keys its in-flight branch on.
+
+    pusher reports a rejected claim as `job_<status>`; listen must recognise the
+    live-lease rejection as healthy in-flight work rather than a failed attempt.
+    """
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'attempt_count': 1,
+            'lease_expires_at': now + timedelta(seconds=300),
+        },
+    )
+
+    claim = jobs._claim_finalization_job_txn(_Transaction(), ref, 2, False, 1500, now)
+
+    assert f"job_{claim['status']}" == FINALIZATION_IN_FLIGHT_ERROR
+    assert claim['status'] not in jobs.TERMINAL_JOB_STATUSES
 
 
 def test_expired_worker_lease_can_be_safely_reclaimed():
@@ -367,10 +500,76 @@ def test_expired_worker_lease_can_be_safely_reclaimed():
     )
     transaction = _Transaction()
 
-    claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 2, 'created_at': None}
-    assert transaction.updates[0][1]['attempt_count'] == 2
+    claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now, count_worker_claim=True)
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1, 'created_at': None}
+    assert 'attempt_count' not in transaction.updates[0][1]
     assert transaction.updates[0][1]['lease_epoch'] == 1
+
+
+def test_session_handoff_reclaim_does_not_burn_the_processing_attempt_budget():
+    """Reconnects reclaim an expired lease; that is not a failed processing try."""
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'attempt_count': 0,
+            'lease_epoch': 3,
+            'lease_expires_at': now - timedelta(seconds=1),
+        },
+    )
+
+    for _ in range(5):
+        transaction = _Transaction()
+        claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
+        assert claim['status'] == 'claimed'
+        assert claim['attempt_count'] == 0
+        assert 'attempt_count' not in transaction.updates[0][1]
+        assert 'worker_claim_count' not in transaction.updates[0][1]
+        ref.data = ref.data | transaction.updates[0][1]
+        ref.data['lease_expires_at'] = now - timedelta(seconds=1)
+
+
+def test_retryable_processing_failure_increments_the_attempt_budget():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'lease_epoch': 4,
+            'attempt_count': 0,
+            'requires_byok': False,
+        },
+    )
+    transaction = _Transaction()
+
+    assert jobs._mark_finalization_retryable_txn(transaction, ref, 2, 4, 'processing_failed', now) is True
+    assert transaction.updates[0][1]['attempt_count'] == 1
+    assert transaction.updates[0][1]['last_failure_code'] == 'processing_failed'
+
+
+@pytest.mark.parametrize('reason', ['record_owner_contention', 'live_episode_notes'])
+def test_repeated_scheduling_wait_does_not_consume_processing_budget(reason):
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {'status': 'queued', 'dispatch_generation': 2, 'lease_epoch': 4, 'attempt_count': 4, 'worker_claim_count': 4},
+    )
+    for _ in range(7):
+        claim_tx = _Transaction()
+        claim = jobs._claim_finalization_job_txn(claim_tx, ref, 2, False, 60, now, count_worker_claim=True)
+        assert claim['attempt_count'] == 4
+        ref.data.update(claim_tx.updates[0][1])
+        transaction = _Transaction()
+        assert jobs._mark_finalization_retryable_txn(
+            transaction, ref, 2, claim['lease_epoch'], reason, now, count_attempt=False
+        )
+        update = transaction.updates[0][1]
+        assert update['status'] == 'queued' and update['attempt_count'] == 4
+        assert update['worker_claim_count'] == 4
+        ref.data.update(update)
 
 
 def test_finalization_completion_requires_durable_fanout_completion():
@@ -400,10 +599,142 @@ def test_finalization_completion_requires_durable_fanout_completion():
 
     completed_fanout = _Transaction()
     assert jobs._mark_finalization_fanout_completed_txn(completed_fanout, ref, 1, 4, now) is True
+    assert 'meeting_treatment_eligible' not in completed_fanout.updates[0][1]
     ref.data = ref.data | completed_fanout.updates[0][1]
 
     completed = _Transaction()
     assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
+    assert completed.updates[0][1]['terminal_outcome'] == 'success'
+
+
+def test_meeting_receipt_is_created_once_on_existing_job_and_projected_to_conversation():
+    now = _now()
+    conversation_ref = _completed_finalization_conversation()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+        },
+    )
+    jobs_collection = _Collection({'job-1': job_ref})
+
+    first = _Transaction()
+    receipt = jobs._record_meeting_receipt_txn(
+        first,
+        conversation_ref,
+        jobs_collection,
+        'uid-1',
+        'conversation-1',
+        'job-1',
+        True,
+        'eligible',
+        1720.0,
+        1719.8,
+        now,
+    )
+
+    assert receipt['job_id'] == 'job-1'
+    assert first.updates[0][0] is job_ref
+    assert first.updates[0][1]['meeting_treatment_reason'] == 'eligible'
+    assert first.updates[1][0] is conversation_ref
+    assert first.updates[1][1]['meeting_treatment_eligible'] is True
+
+    job_ref.data = job_ref.data | first.updates[0][1]
+    replay = _Transaction()
+    replayed = jobs._record_meeting_receipt_txn(
+        replay,
+        conversation_ref,
+        jobs_collection,
+        'uid-1',
+        'conversation-1',
+        'job-1',
+        False,
+        'too_short',
+        1.0,
+        1.0,
+        now + timedelta(minutes=1),
+    )
+
+    assert replayed['meeting_treatment_eligible'] is True
+    assert replayed['meeting_treatment_reason'] == 'eligible'
+    assert replay.updates == [
+        (
+            conversation_ref,
+            {
+                'finalization_job_id': 'job-1',
+                'meeting_treatment_eligible': True,
+                'meeting_treatment_reason': 'eligible',
+                'meeting_duration_s': 1720.0,
+                'meeting_dedup_speech_s': 1719.8,
+            },
+        )
+    ]
+
+
+def test_admitted_terminal_replay_updates_its_shard_once():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+            'fanout_status': 'completed',
+            'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+            'projection_shard': jobs._projection_shard('job-1'),
+        },
+    )
+    projection = _Collection({})
+
+    first = _Transaction()
+    assert jobs._mark_finalization_completed_txn(first, ref, 1, 4, now, projection) is True
+    assert len(first.sets) == 1
+    assert first.sets[0][0].id == jobs._projection_shard_id(
+        jobs.FINALIZATION_PROJECTION_GENERATION, jobs._projection_shard('job-1')
+    )
+
+    # A Firestore retry observes the committed terminal snapshot and performs
+    # no second aggregate write, even though the API remains idempotently true.
+    ref.data = ref.data | first.updates[0][1]
+    replay = _Transaction()
+    assert jobs._mark_finalization_completed_txn(replay, ref, 1, 4, now, projection) is True
+    assert replay.updates == []
+    assert replay.sets == []
+
+
+def test_pre_projection_terminal_keeps_its_outcome_without_moving_the_new_denominator():
+    ref = _Ref(
+        'legacy-job',
+        {'status': 'leased', 'dispatch_generation': 1, 'lease_epoch': 1, 'fanout_status': 'completed'},
+    )
+    transaction = _Transaction()
+
+    assert jobs._mark_finalization_completed_txn(transaction, ref, 1, 1, _now(), _Collection({})) is True
+    assert transaction.updates[0][1]['terminal_outcome'] == 'success'
+    assert transaction.sets == []
+
+
+def test_byok_resume_moves_only_its_admitted_projection_state():
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'blocked_byok',
+            'requires_byok': True,
+            'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+            'projection_shard': 3,
+        },
+    )
+    transaction = _Transaction()
+
+    intent = jobs._resume_blocked_byok_job_txn(transaction, ref, _now(), _Collection({}))
+
+    assert intent['status'] == 'queued'
+    assert transaction.updates[0][1]['status'] == 'queued'
+    assert transaction.sets[0][0].id == jobs._projection_shard_id(jobs.FINALIZATION_PROJECTION_GENERATION, 3)
 
 
 def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transaction():
@@ -441,6 +772,40 @@ def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transacti
 
     assert claim == {'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization:1'}
     assert transaction.updates == [(ref, jobs._fenced_finalization_update(now))]
+
+
+def test_fanout_claim_retries_lease_conflict_when_discarded_processing_races_with_restore():
+    """A finalizer processed the row as discarded (expected_discarded=True), but a concurrent
+    restore flipped discarded=False before the fanout transaction. Fanout must not admit the row
+    without its audio obligation; it must return lease_conflict to retry."""
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+            'fanout_status': 'pending',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 1,
+        },
+    )
+    restored_conversation = _completed_finalization_conversation(data={'discarded': False})
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_fanout_txn(
+        transaction,
+        ref,
+        1,
+        4,
+        now,
+        lambda *_: restored_conversation,
+        expected_discarded=True,
+    )
+
+    assert claim == {'status': 'lease_conflict', 'fanout_key': 'conversation:conversation-1:finalization:1'}
+    assert transaction.updates == []
 
 
 def test_fanout_claim_terminally_fences_a_superseded_finalization_binding():
@@ -490,6 +855,7 @@ def test_fenced_finalization_is_a_terminal_no_fanout_outcome():
     update = transaction.updates[0][1]
     assert update['status'] == 'completed'
     assert update['finalization_outcome'] == 'fenced'
+    assert update['terminal_outcome'] == 'stale'
     assert update['fanout_status'] == 'fenced'
 
 
@@ -565,7 +931,28 @@ def test_reconciler_replaces_stale_generation_after_worker_crash():
 
     assert intent['status'] == 'queued'
     assert intent['dispatch_generation'] == 5
+    assert intent['created'] is True
     assert transaction.updates[0][1]['dispatch_generation'] == 5
+
+
+def test_reconciler_does_not_dispatch_an_already_fresh_generation():
+    now = _now()
+    transaction = _Transaction()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 5,
+            'requires_byok': False,
+            'dispatch_requested_at': now,
+        },
+    )
+
+    intent = jobs._claim_finalization_replay_txn(transaction, ref, timedelta(minutes=5), now)
+
+    assert intent['status'] == 'queued'
+    assert intent['created'] is False
+    assert transaction.updates == []
 
 
 def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
@@ -582,8 +969,8 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
     )
 
     reclaim = _Transaction()
-    new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now)
-    assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 1, 'created_at': None}
+    new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now, count_worker_claim=True)
+    assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 0, 'created_at': None}
     ref.data = ref.data | reclaim.updates[0][1]
 
     stale_completion = _Transaction()
@@ -594,14 +981,16 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
     assert jobs._mark_finalization_completed_txn(current_completion, ref, 3, 5, now) is True
 
 
-def test_final_attempt_sets_visible_dead_letter_instead_of_completed():
+def test_final_attempt_sets_job_dead_letter_instead_of_completed():
     transaction = _Transaction()
     ref = _Ref('job-1', {'status': 'leased', 'dispatch_generation': 3, 'lease_epoch': 1})
 
     assert jobs._mark_finalization_dead_letter_txn(transaction, ref, 3, 1, 5, _now()) is True
     update = transaction.updates[0][1]
     assert update['status'] == 'dead_letter'
+    assert update['terminal_outcome'] == 'failure'
     assert update['task_retry_count'] == 5
+    assert update['attempt_count'] == 5
     assert 'completed_at' not in update
 
 
@@ -624,6 +1013,7 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
             'discarded': False,
             'finalization_job_id': 'job-1',
             'finalization_revision': 3,
+            'structured': {'title': 'Existing summary'},
         }
     )
 
@@ -647,21 +1037,409 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
                 'status': 'dead_letter',
                 'updated_at': _now(),
                 'terminal_at': _now(),
+                'terminal_outcome': 'failure',
                 'lease_expires_at': _now(),
                 'reconcile_after_at': jobs.firestore.DELETE_FIELD,
                 'task_retry_count': 5,
+                'attempt_count': 5,
                 'last_failure_code': 'final_attempt_failed',
             },
         ),
         (
             conversation_ref,
             {
-                'status': 'failed',
-                'discarded': True,
+                'status': 'completed',
+                'discarded': False,
                 'finalization_status': 'dead_letter',
+                'relevance_decision': {
+                    'verdict': 'keep',
+                    'decided_by': 'policy',
+                    'reason': 'dead_letter_default',
+                    'trigger': 'dead_letter',
+                    'rules_version': RULES_VERSION,
+                },
             },
         ),
     ]
+
+
+def test_worker_budget_survives_failed_write_and_crashed_lease_replay():
+    """Accepted claims consume slots across generations; duplicate delivery does not."""
+    now = _now()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 1,
+            'lease_epoch': 0,
+            'attempt_count': 0,
+            'requires_byok': False,
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+        },
+    )
+    conversation_ref = _conversation(
+        {
+            'status': 'processing',
+            'discarded': False,
+            'finalization_job_id': 'job-1',
+            'finalization_revision': 3,
+        }
+    )
+
+    def apply(transaction):
+        for ref, patch in transaction.updates:
+            ref.data = ref.data | patch
+
+    first = _Transaction()
+    first_claim = jobs._claim_finalization_job_txn(first, job_ref, 1, False, 1500, now, count_worker_claim=True)
+    assert first_claim['attempt_count'] == 0
+    apply(first)
+    duplicate = _Transaction()
+    assert (
+        jobs._claim_finalization_job_txn(duplicate, job_ref, 1, False, 1500, now, count_worker_claim=True)['status']
+        == 'leased'
+    )
+    assert duplicate.updates == []
+    assert job_ref.data['worker_claim_count'] == 1
+
+    failure = _Transaction()
+    assert jobs._mark_finalization_retryable_txn(
+        failure, job_ref, 1, first_claim['lease_epoch'], 'processing_failed', now
+    )
+    apply(failure)
+    assert job_ref.data['attempt_count'] == 1
+
+    replay = _Transaction()
+    assert (
+        jobs._claim_finalization_replay_txn(replay, job_ref, timedelta(minutes=5), now + timedelta(minutes=6))[
+            'dispatch_generation'
+        ]
+        == 2
+    )
+    apply(replay)
+    second = _Transaction()
+    second_claim = jobs._claim_finalization_job_txn(
+        second, job_ref, 2, False, 1500, now + timedelta(minutes=6), count_worker_claim=True
+    )
+    assert second_claim['attempt_count'] == 1
+    apply(second)
+
+    # The second worker dies before writing a failure; the expired lease is
+    # replayed into a third generation with no Cloud Tasks retry header.
+    crash_replay = _Transaction()
+    assert (
+        jobs._claim_finalization_replay_txn(crash_replay, job_ref, timedelta(minutes=5), now + timedelta(minutes=32))[
+            'dispatch_generation'
+        ]
+        == 3
+    )
+    apply(crash_replay)
+    third = _Transaction()
+    third_claim = jobs._claim_finalization_job_txn(
+        third, job_ref, 3, False, 1500, now + timedelta(minutes=32), count_worker_claim=True
+    )
+    assert third_claim['attempt_count'] == 2
+    apply(third)
+    assert job_ref.data['attempt_count'] == 1
+    assert job_ref.data['worker_claim_count'] == 3
+    assert not jobs._mark_finalization_retryable_txn(
+        _Transaction(), job_ref, 2, second_claim['lease_epoch'], 'stale_worker', now
+    )
+
+    # Repeated killed workers reach the durable budget despite each new task
+    # arriving with retry_count=0. Terminalization leaves transcript visible.
+    for generation, minute in ((4, 58), (5, 84), (6, 110)):
+        replay = _Transaction()
+        assert (
+            jobs._claim_finalization_replay_txn(replay, job_ref, timedelta(minutes=5), now + timedelta(minutes=minute))[
+                'dispatch_generation'
+            ]
+            == generation
+        )
+        apply(replay)
+        claim_txn = _Transaction()
+        claim = jobs._claim_finalization_job_txn(
+            claim_txn, job_ref, generation, False, 1500, now + timedelta(minutes=minute), count_worker_claim=True
+        )
+        apply(claim_txn)
+    assert claim['attempt_count'] == 5
+    terminal = _Transaction()
+    assert jobs._mark_finalization_dead_letter_txn(
+        terminal,
+        job_ref,
+        6,
+        claim['lease_epoch'],
+        claim['attempt_count'],
+        now,
+        lambda uid, conversation_id: conversation_ref,
+    )
+    apply(terminal)
+    assert job_ref.data['status'] == 'dead_letter'
+    assert job_ref.data['attempt_count'] == 5
+    assert conversation_ref.data['status'] == 'completed'
+    assert conversation_ref.data['discarded'] is False
+    assert conversation_ref.data['transcript_segments'] == [{'text': 'persisted'}]
+    assert conversation_ref.data['finalization_status'] == 'dead_letter'
+    # A kept row never lands untitled: the deterministic first-sentence title.
+    assert conversation_ref.data['structured'] == {'title': 'persisted', 'overview': ''}
+    assert conversation_ref.data['summary_retryable'] is True
+    api_row = Conversation.model_validate(
+        {
+            'id': 'conversation-1',
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+            **conversation_ref.data,
+            'transcript_segments': [{'text': 'persisted', 'is_user': False, 'start': 0, 'end': 1}],
+        }
+    )
+    assert api_row.structured.title == 'persisted'
+    assert api_row.summary_retryable is True
+    assert api_row.discarded is False
+
+
+def test_committed_fanout_completes_after_crashed_claims_exhaust_budget():
+    now = _now()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 1,
+            'lease_epoch': 0,
+            'attempt_count': 0,
+            'worker_claim_count': 0,
+            'fanout_status': 'pending',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+        },
+    )
+    conversation_ref = _completed_finalization_conversation(revision=3)
+
+    def apply(transaction):
+        for ref, patch in transaction.updates:
+            ref.data = ref.data | patch
+
+    first = _Transaction()
+    first_claim = jobs._claim_finalization_job_txn(first, job_ref, 1, False, 1500, now, count_worker_claim=True)
+    apply(first)
+    fanout = _Transaction()
+    assert (
+        jobs._claim_finalization_fanout_txn(
+            fanout, job_ref, 1, first_claim['lease_epoch'], now, lambda uid, conversation_id: conversation_ref
+        )['status']
+        == 'claimed'
+    )
+    apply(fanout)
+    fanout_done = _Transaction()
+    assert jobs._mark_finalization_fanout_completed_txn(fanout_done, job_ref, 1, first_claim['lease_epoch'], now)
+    apply(fanout_done)
+
+    # Each worker dies after claiming; the reconciler mints new tasks whose
+    # Cloud Tasks retry header starts at zero, but the claim count persists.
+    for generation in range(2, 7):
+        replay_at = now + timedelta(minutes=26 * (generation - 1))
+        replay = _Transaction()
+        assert (
+            jobs._claim_finalization_replay_txn(replay, job_ref, timedelta(minutes=5), replay_at)['dispatch_generation']
+            == generation
+        )
+        apply(replay)
+        claim_txn = _Transaction()
+        claim = jobs._claim_finalization_job_txn(
+            claim_txn, job_ref, generation, False, 1500, replay_at, count_worker_claim=True
+        )
+        apply(claim_txn)
+
+    assert claim['attempt_count'] == 5
+    assert job_ref.data['worker_claim_count'] == 6
+    refused_terminal = _Transaction()
+    assert not jobs._mark_finalization_dead_letter_txn(refused_terminal, job_ref, 6, claim['lease_epoch'], 5, now)
+    assert refused_terminal.updates == []
+    completion = _Transaction()
+    assert jobs._mark_finalization_completed_txn(completion, job_ref, 6, claim['lease_epoch'], now)
+    apply(completion)
+    assert job_ref.data['status'] == 'completed'
+    assert job_ref.data['terminal_outcome'] == 'success'
+    assert job_ref.data['fanout_status'] == 'completed'
+    assert conversation_ref.data['status'] == 'completed'
+
+
+class _SummaryJobQuery:
+    """Immutable filters with real COUNT semantics; document streams must stay bounded."""
+
+    def __init__(self, rows, filters=(), calls=None):
+        self.rows = rows
+        self.filters = list(filters)
+        self.calls = [] if calls is None else calls
+        self.clock = None
+        self.cap = None
+
+    def where(self, *, filter):
+        return _SummaryJobQuery(
+            self.rows, self.filters + [(filter.field_path, filter.op_string, filter.value)], self.calls
+        )
+
+    def order_by(self, clock):
+        self.clock = clock
+        return self
+
+    def limit(self, cap):
+        assert cap == 1
+        self.cap = cap
+        return self
+
+    def _matches(self, row):
+        for field, op, value in self.filters:
+            if field not in row:
+                return False
+            actual = row[field]
+            if op == '==' and actual != value:
+                return False
+            if op == '>=' and actual < value:
+                return False
+            if op == '<=' and actual > value:
+                return False
+        return True
+
+    def count(self):
+        assert self.cap is None and self.clock is None
+        self.calls.append(('count', self.filters, None))
+        value = sum(self._matches(row) for row in self.rows)
+        return SimpleNamespace(get=lambda: [[SimpleNamespace(value=value)]])
+
+    def stream(self):
+        assert self.cap == 1 and self.clock in ('created_at', 'terminal_at')
+        self.calls.append(('stream', self.filters, self.clock))
+        rows = sorted(
+            (row for row in self.rows if self._matches(row) and self.clock in row),
+            key=lambda row: row[self.clock],
+        )[: self.cap]
+        return iter(SimpleNamespace(to_dict=lambda row=row: dict(row)) for row in rows)
+
+
+def test_summary_counts_legacy_stock_while_other_totals_read_fixed_projection_shards():
+    class Snapshot:
+        def __init__(self, data):
+            self.exists = data is not None
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    class Projection:
+        def __init__(self):
+            self.read_ids: list[str] = []
+
+        def document(self, doc_id):
+            projection = self
+
+            class Ref:
+                def get(self):
+                    projection.read_ids.append(doc_id)
+                    shard = int(doc_id.rsplit('-', 1)[1])
+                    if shard != 0:
+                        return Snapshot(None)
+                    return Snapshot(
+                        {
+                            'generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+                            'shard': 0,
+                            'accepted': 8,
+                            'queued': 2,
+                            'leased': 1,
+                            'blocked_byok': 2,
+                            'completed': 2,
+                            'dead_letter': 1,
+                            'success': 1,
+                            'stale': 1,
+                            'failure': 1,
+                        }
+                    )
+
+            return Ref()
+
+    projection = Projection()
+    job_query = _SummaryJobQuery([{'status': 'dead_letter'} for _ in range(2001)])
+
+    class Client:
+        def collection(self, name):
+            if name == jobs.FINALIZATION_PROJECTION_COLLECTION:
+                return projection
+            assert name == jobs.FINALIZATION_JOBS_COLLECTION
+            return job_query
+
+    summary = jobs.get_finalization_job_summary(firestore_client=Client())
+
+    assert len(projection.read_ids) == jobs.FINALIZATION_PROJECTION_SHARD_COUNT
+    counts = [filters for kind, filters, _clock in job_query.calls if kind == 'count']
+    assert len(counts) == 2
+    assert counts[0] == [('status', '==', 'dead_letter')]
+    reads = [(filters, clock) for kind, filters, clock in job_query.calls if kind == 'stream']
+    assert len(reads) == 4  # Every document stream is ordered and capped at one row.
+    assert ([('status', '==', 'dead_letter')], 'terminal_at') in reads
+    assert summary == {
+        'accepted': 8,
+        'success': 1,
+        'failure': 1,
+        'stale': 1,
+        'nonterminal': 3,
+        'queued': 2,
+        'leased': 1,
+        'blocked_byok': 2,
+        'completed': 2,
+        'dead_letter': 2001,
+        'byok_abandoned_last_24h': 0,
+        'terminal_unknown': 0,
+        'oldest_nonterminal_age_seconds': 0.0,
+        'oldest_blocked_byok_age_seconds': 0.0,
+        'oldest_dead_letter_age_seconds': 0.0,
+    }
+
+
+def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
+    """Legacy rows without due timestamps still age; blocked rows age separately."""
+
+    created_at = datetime.now(timezone.utc) - timedelta(days=30)
+
+    class Snapshot:
+        def __init__(self, data):
+            self.exists = data is not None
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    class Projection:
+        def document(self, doc_id):
+            class Ref:
+                def get(self):
+                    return Snapshot(None)
+
+            return Ref()
+
+    class Client:
+        def collection(self, name):
+            if name == jobs.FINALIZATION_PROJECTION_COLLECTION:
+                return Projection()
+            return _SummaryJobQuery(
+                [
+                    {'status': 'queued', 'requires_byok': True, 'created_at': created_at},
+                    {'status': 'blocked_byok', 'created_at': created_at - timedelta(days=10)},
+                    {
+                        'status': 'dead_letter',
+                        'created_at': created_at - timedelta(days=20),
+                        'terminal_at': created_at + timedelta(days=25),
+                    },
+                ]
+            )
+
+    summary = jobs.get_finalization_job_summary(firestore_client=Client())
+
+    assert 29 * 24 * 3600 < summary['oldest_nonterminal_age_seconds'] < 31 * 24 * 3600
+    assert 39 * 24 * 3600 < summary['oldest_blocked_byok_age_seconds'] < 41 * 24 * 3600
+    assert 4 * 24 * 3600 < summary['oldest_dead_letter_age_seconds'] < 6 * 24 * 3600
 
 
 class _BoundedReplayCollection:
@@ -685,12 +1463,933 @@ class _BoundedReplayCollection:
         return self.refs[: self.limit_value]
 
 
-def test_replay_candidates_use_a_server_side_bounded_due_query():
+def test_replay_candidates_use_a_server_side_bounded_due_query(monkeypatch):
     collection = _BoundedReplayCollection()
-    client = SimpleNamespace(collection=lambda _name: collection)
+    collection.refs = [_Ref('queued-job', {'status': 'queued'})]
+    orders = []
 
+    def order_by(field):
+        orders.append(field)
+        return collection
+
+    collection.order_by = order_by
+    state_ref = SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: {}))
+    state_collection = SimpleNamespace(document=lambda name: state_ref)
+    client = SimpleNamespace(
+        collection=lambda name: collection if name == jobs.FINALIZATION_JOBS_COLLECTION else state_collection,
+        transaction=lambda: object(),
+    )
+    monkeypatch.setattr(jobs, '_advance_finalization_replay_cursor_txn', lambda *args: True)
+    monkeypatch.setattr(jobs.firestore, 'transactional', lambda fn: fn)
     candidates = jobs.get_finalization_replay_candidates(limit=1000, firestore_client=client)
-
     assert collection.where_calls == [('reconcile_after_at', '<=')]
-    assert collection.limit_value == 100
+    assert collection.limit_value == 1000
+    assert orders == ['reconcile_after_at', '__name__']
     assert candidates == [{'status': 'queued', 'job_id': 'queued-job'}]
+
+
+# ---------------------------------------------------------------------------
+# Stale bare-processing orphan recovery (#10461 revision): authoritative
+# server-owned admission fence, bounded cursor pagination, and legacy migration.
+# ---------------------------------------------------------------------------
+
+
+class _OrphanSnapshot:
+    def __init__(self, uid: str, conversation_id: str, data: dict):
+        self.id = conversation_id
+        self.exists = True
+        self._data = dict(data)
+        self.reference = SimpleNamespace(path=f'users/{uid}/conversations/{conversation_id}')
+
+    def to_dict(self) -> dict:
+        return dict(self._data)
+
+
+class _MissingSnapshot:
+    """A fetched cursor document that no longer exists: the sweep wraps to the top."""
+
+    def __init__(self, path: str):
+        self.exists = False
+        self.reference = SimpleNamespace(path=path)
+
+    def to_dict(self) -> dict:
+        return {}
+
+
+class _OrphanDocRef:
+    def __init__(self, client: '_OrphanClient', path: str):
+        self._client = client
+        self.path = path
+
+    def get(self):
+        for snapshot in self._client._snapshots:
+            if snapshot.reference.path == self.path:
+                return snapshot
+        return _MissingSnapshot(self.path)
+
+
+def _processing_snapshot(
+    uid: str,
+    conversation_id: str,
+    *,
+    admitted_at: datetime | None,
+    deferred: bool = False,
+    finalization_job_id: str | None = None,
+    created_at: datetime | None = None,
+) -> _OrphanSnapshot:
+    data: dict = {'status': 'processing', 'created_at': created_at or admitted_at}
+    if admitted_at is not None:
+        data['processing_admitted_at'] = admitted_at
+    if deferred:
+        data['deferred'] = True
+    if finalization_job_id:
+        data['finalization_job_id'] = finalization_job_id
+    return _OrphanSnapshot(uid, conversation_id, data)
+
+
+class _OrphanQuery:
+    """Fake collection-group query: single equality + cursor pagination."""
+
+    def __init__(self, snapshots: list[_OrphanSnapshot]):
+        self._all = snapshots
+        self.where_count = 0
+        self.where_filters: list[Any] = []
+        self.order_by_count = 0
+        self.limit_calls: list[int] = []
+        self.start_after_calls: list[_OrphanSnapshot] = []
+        self._limit: int | None = None
+        self._after: _OrphanSnapshot | None = None
+
+    def where(self, *args, filter=None, **kwargs):
+        self.where_count += 1
+        self.where_filters.append(filter)
+        return self
+
+    def order_by(self, *args, **kwargs):
+        self.order_by_count += 1
+        return self
+
+    def limit(self, value: int):
+        self.limit_calls.append(value)
+        self._limit = value
+        return self
+
+    def start_after(self, snapshot):
+        self.start_after_calls.append(snapshot)
+        self._after = snapshot
+        return self
+
+    def stream(self):
+        rows = self._all
+        if self._after is not None:
+            idx = rows.index(self._after)
+            rows = rows[idx + 1 :]
+        if self._limit is not None:
+            rows = rows[: self._limit]
+        return list(rows)
+
+
+class _OrphanClient:
+    def __init__(self, snapshots: list[_OrphanSnapshot]):
+        self._snapshots = snapshots
+        self.queries: list[_OrphanQuery] = []
+        self.collection_group_calls: list[str] = []
+        self.collection_calls: list[str] = []
+        self.document_calls: list[str] = []
+
+    def collection_group(self, name: str) -> _OrphanQuery:
+        self.collection_group_calls.append(name)
+        query = _OrphanQuery(self._snapshots)
+        self.queries.append(query)
+        return query
+
+    def collection(self, name: str):
+        self.collection_calls.append(name)
+        assert name == jobs.FINALIZATION_JOBS_COLLECTION
+        return _Collection(getattr(self, 'jobs', {'job-x': _Ref('job-x', {'status': 'queued'})}))
+
+    def document(self, path: str) -> _OrphanDocRef:
+        # The persisted sweep cursor resumes a collection-group scan by fetching
+        # the last-examined conversation document by path.
+        self.document_calls.append(path)
+        return _OrphanDocRef(self, path)
+
+
+def test_stale_orphan_query_is_a_single_field_collection_group_equality():
+    """A single-equality collection-group query rides Firestore's automatic
+    single-field index: no composite index, no collection-scoped entry."""
+    now = _now()
+    client = _OrphanClient([_processing_snapshot('uid', 'eligible', admitted_at=now - timedelta(hours=1))])
+
+    jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900), firestore_client=client)
+
+    assert client.collection_group_calls == ['conversations']
+    assert client.collection_calls == []
+    assert len(client.queries) >= 1
+    assert all(query.where_count == 1 for query in client.queries)
+    assert all(query.order_by_count == 0 for query in client.queries)
+
+
+def test_orphan_stale_after_is_clamped_to_a_safe_floor_and_ceiling(monkeypatch):
+    """The recovery window is bounded so an operator cannot defer recovery
+    unbounded nor tighten it below any plausible live synchronous run."""
+    assert jobs.get_stale_processing_orphan_after() == timedelta(seconds=900)
+    monkeypatch.setenv('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS', '10')
+    assert jobs.get_stale_processing_orphan_after() == timedelta(seconds=300)
+    monkeypatch.setenv('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS', '9999999')
+    assert jobs.get_stale_processing_orphan_after() == timedelta(seconds=86_400)
+    monkeypatch.setenv('LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS', 'not-a-number')
+    assert jobs.get_stale_processing_orphan_after() == timedelta(seconds=900)
+
+
+def test_stale_orphan_age_authority_is_processing_admitted_at_not_created_at(monkeypatch):
+    """Only the server-owned admission stamp bounds age; caller-controlled
+    created_at is never the authority, and legacy rows migrate rather than
+    complete."""
+    now = _now()
+    monkeypatch.setattr(jobs, '_now', lambda: now)
+    stale_after = timedelta(seconds=900)
+    snapshots = [
+        # Fresh admission, ancient caller-controlled created_at: must NOT act.
+        _processing_snapshot(
+            'uid',
+            'fresh-admit-old-create',
+            admitted_at=now - timedelta(seconds=10),
+            created_at=now - timedelta(days=30),
+        ),
+        # Aged admission, fresh created_at: the genuine orphan — must act.
+        _processing_snapshot(
+            'uid',
+            'aged-admit-fresh-create',
+            admitted_at=now - timedelta(seconds=1000),
+            created_at=now - timedelta(seconds=5),
+        ),
+        # Legacy row with no admission stamp: migrate, never complete on sight.
+        _processing_snapshot('uid', 'legacy-no-admit', admitted_at=None, created_at=now - timedelta(days=30)),
+    ]
+    client = _OrphanClient(snapshots)
+
+    candidates = jobs.get_stale_processing_orphan_candidates(stale_after=stale_after, firestore_client=client)[
+        'candidates'
+    ]
+
+    by_id = {candidate['conversation_id']: candidate for candidate in candidates}
+    assert 'fresh-admit-old-create' not in by_id
+    eligible = by_id['aged-admit-fresh-create']
+    assert eligible['legacy'] is False
+    assert eligible['processing_admitted_at'] == now - timedelta(seconds=1000)
+    legacy = by_id['legacy-no-admit']
+    assert legacy['legacy'] is True
+    assert legacy['processing_admitted_at'] is None
+
+
+def test_stale_orphan_candidates_exclude_deferred_and_durable_job_rows():
+    now = _now()
+    aged = now - timedelta(seconds=1000)
+    snapshots = [
+        _processing_snapshot('uid', 'deferred', admitted_at=aged, deferred=True),
+        _processing_snapshot('uid', 'durable', admitted_at=aged, finalization_job_id='job-x'),
+        _processing_snapshot('uid', 'orphan', admitted_at=aged),
+    ]
+    client = _OrphanClient(snapshots)
+
+    candidates = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), firestore_client=client
+    )['candidates']
+
+    assert [candidate['conversation_id'] for candidate in candidates] == ['orphan']
+
+
+def test_stale_orphan_candidates_page_past_excluded_rows_to_reach_a_later_orphan():
+    """A stable first page of excluded rows cannot hide a later eligible orphan."""
+    now = _now()
+    aged = now - timedelta(seconds=1000)
+    snapshots = [_processing_snapshot('uid', f'deferred-{i}', admitted_at=aged, deferred=True) for i in range(120)]
+    snapshots.append(_processing_snapshot('uid', 'later-orphan', admitted_at=aged))
+    client = _OrphanClient(snapshots)
+
+    candidates = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), firestore_client=client
+    )['candidates']
+
+    assert [candidate['conversation_id'] for candidate in candidates] == ['later-orphan']
+    # The first page was entirely excluded, so at least two query pages were issued.
+    assert len(client.queries) >= 2
+    assert client.queries[1].start_after_calls
+
+
+def test_stale_orphan_candidates_bound_total_scan():
+    """The per-sweep scan bound prevents an unbounded walk under backlog."""
+    now = _now()
+    aged = now - timedelta(seconds=1000)
+    snapshots = [_processing_snapshot('uid', f'deferred-{i}', admitted_at=aged, deferred=True) for i in range(50)]
+    snapshots.append(_processing_snapshot('uid', 'later-orphan', admitted_at=aged))
+
+    bounded = _OrphanClient(snapshots)
+    candidates = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), max_scan=10, firestore_client=bounded
+    )['candidates']
+    # The bound stops scanning before the orphan at index 50 is reached.
+    assert candidates == []
+
+    unbounded = _OrphanClient(snapshots)
+    recovered = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900), max_scan=10_000, firestore_client=unbounded
+    )['candidates']
+    # The same population recovers the orphan once the bound is lifted.
+    assert [candidate['conversation_id'] for candidate in recovered] == ['later-orphan']
+
+
+def test_persisted_cursor_reaches_a_later_orphan_beyond_any_per_invocation_bound():
+    """A rotated wraparound cursor guarantees eventual discovery.
+
+    A stable excluded prefix larger than every per-invocation ``max_scan`` would
+    permanently hide a later orphan if each sweep restarted from the top. The
+    sweep instead resumes from a persisted cursor and wraps to the top once the
+    collection is exhausted, so repeated bounded sweeps reach the orphan.
+    """
+    now = _now()
+    aged = now - timedelta(seconds=1000)
+    # An excluded prefix far larger than the per-invocation bound, then one orphan.
+    snapshots = [_processing_snapshot('uid', f'deferred-{i:04d}', admitted_at=aged, deferred=True) for i in range(2500)]
+    snapshots.append(_processing_snapshot('uid', 'later-orphan', admitted_at=aged))
+    client = _OrphanClient(snapshots)
+
+    recovered: list[dict] = []
+    resume_after_path = None
+    for _ in range(10):
+        result = jobs.get_stale_processing_orphan_candidates(
+            stale_after=timedelta(seconds=900),
+            max_scan=1000,
+            resume_after_path=resume_after_path,
+            firestore_client=client,
+        )
+        recovered.extend(result['candidates'])
+        # The persisted cursor advances each sweep and wraps (None) on exhaustion.
+        resume_after_path = None if result['exhausted'] else result['resume_after_path']
+        if any(candidate['conversation_id'] == 'later-orphan' for candidate in recovered):
+            break
+
+    assert [candidate['conversation_id'] for candidate in recovered] == ['later-orphan']
+    # More than one bounded sweep was required: the orphan sits beyond max_scan.
+    assert resume_after_path is None or len(client.document_calls) >= 2
+
+
+def test_persisted_cursor_wraps_to_the_top_when_the_resume_document_is_gone():
+    """A deleted cursor document must not strand the sweep: it resumes from the top."""
+    now = _now()
+    aged = now - timedelta(seconds=1000)
+    snapshots = [_processing_snapshot('uid', 'orphan', admitted_at=aged)]
+    client = _OrphanClient(snapshots)
+
+    result = jobs.get_stale_processing_orphan_candidates(
+        stale_after=timedelta(seconds=900),
+        resume_after_path='users/uid/conversations/does-not-exist',
+        firestore_client=client,
+    )
+
+    assert [candidate['conversation_id'] for candidate in result['candidates']] == ['orphan']
+    assert result['exhausted'] is True
+
+
+def test_stamp_processing_admission_if_absent_only_stamps_a_legacy_processing_row():
+    transaction = _Transaction()
+    now = _now()
+    legacy = _Ref('legacy', {'status': 'processing', 'created_at': now - timedelta(days=1)})
+
+    stamped = processing_recovery._stamp_processing_admission_if_absent_txn(transaction, legacy, now)
+
+    assert stamped is True
+    assert transaction.updates == [(legacy, {'processing_admitted_at': now})]
+
+
+def test_stamp_processing_admission_if_absent_is_idempotent_and_fences_non_processing():
+    transaction = _Transaction()
+    now = _now()
+    already = _Ref('already', {'status': 'processing', 'processing_admitted_at': now - timedelta(hours=2)})
+    terminal = _Ref('terminal', {'status': 'completed'})
+
+    assert processing_recovery._stamp_processing_admission_if_absent_txn(transaction, already, now) is False
+    assert processing_recovery._stamp_processing_admission_if_absent_txn(transaction, terminal, now) is False
+    assert transaction.updates == []
+
+
+# ---------------------------------------------------------------------------
+# Ownership fence (#10461 revision 2): the recovery transaction verifies the
+# exact orphan generation/ownership immediately before terminalization, so a live
+# synchronous processor (lease renewed), a finalizer that attached a durable job
+# after discovery, a deferred desktop row, or an already-terminal row can never
+# be terminalized by the sweep.
+# ---------------------------------------------------------------------------
+
+
+def test_complete_orphan_completes_only_an_unchanged_orphan_generation():
+    transaction = _Transaction()
+    now = _now()
+    admitted = now - timedelta(seconds=1000)
+    orphan = _Ref('orphan', {'status': 'processing', 'processing_admitted_at': admitted})
+
+    completed = processing_recovery._complete_orphan_conversation_txn(transaction, orphan, admitted, now)
+
+    assert completed is True
+    assert transaction.updates[0][0] is orphan
+    assert transaction.updates[0][1]['status'] == 'completed'
+    assert transaction.updates[0][1]['relevance_decision']['reason'] == 'orphan_terminal_default'
+
+
+def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
+    transaction = _Transaction()
+    now = _now()
+    admitted = now - timedelta(seconds=1000)
+    orphan = _Ref(
+        'orphan',
+        {
+            'status': 'processing',
+            'processing_admitted_at': admitted,
+            'structured': {'title': '', 'overview': '', 'category': 'other'},
+            'transcript_segments': [{'text': 'Call the plumber tomorrow. Also groceries.'}],
+        },
+    )
+
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, orphan, admitted, now, 'uid-1') is True
+    assert transaction.updates == [
+        (
+            orphan,
+            {
+                'status': 'completed',
+                'structured': {'title': 'Call the plumber tomorrow.', 'overview': '', 'category': 'other'},
+                'discarded': False,
+                'relevance_decision': {
+                    'verdict': 'keep',
+                    'decided_by': 'policy',
+                    'reason': 'orphan_terminal_default',
+                    'trigger': 'orphan_terminal',
+                    'rules_version': RULES_VERSION,
+                },
+            },
+        )
+    ]
+
+
+def test_complete_orphan_fences_a_row_a_finalizer_claimed_after_discovery():
+    transaction = _Transaction()
+    now = _now()
+    admitted = now - timedelta(seconds=1000)
+    # Between discovery (job-less) and terminalization, a finalizer attached durable ownership.
+    claimed = _Ref(
+        'claimed', {'status': 'processing', 'processing_admitted_at': admitted, 'finalization_job_id': 'job-1'}
+    )
+
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, claimed, admitted, now) is False
+    assert transaction.updates == []
+
+
+def test_complete_orphan_fences_a_live_processor_that_renewed_its_lease():
+    transaction = _Transaction()
+    now = _now()
+    scanned = now - timedelta(seconds=1000)
+    # A live processor renewed its lease after discovery, advancing the generation.
+    renewed = _Ref('renewed', {'status': 'processing', 'processing_admitted_at': now - timedelta(seconds=5)})
+
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, renewed, scanned, now) is False
+    assert transaction.updates == []
+
+
+def test_complete_orphan_fences_deferred_and_terminal_and_discarded_rows():
+    transaction = _Transaction()
+    now = _now()
+    admitted = now - timedelta(seconds=1000)
+    deferred = _Ref('deferred', {'status': 'processing', 'processing_admitted_at': admitted, 'deferred': True})
+    terminal = _Ref('terminal', {'status': 'completed', 'processing_admitted_at': admitted})
+    discarded = _Ref('discarded', {'status': 'processing', 'processing_admitted_at': admitted, 'discarded': True})
+
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, deferred, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, terminal, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, discarded, admitted, now) is False
+    assert transaction.updates == []
+
+
+def test_renew_processing_lease_refreshes_only_a_live_processing_row():
+    transaction = _Transaction()
+    now = _now()
+    processing = _Ref('processing', {'status': 'processing', 'processing_admitted_at': now - timedelta(seconds=120)})
+    completed = _Ref('completed', {'status': 'completed'})
+    discarded = _Ref('discarded', {'status': 'processing', 'discarded': True})
+
+    assert jobs._renew_processing_lease_txn(transaction, processing, now) is True
+    assert transaction.updates == [(processing, {'processing_admitted_at': now})]
+    assert jobs._renew_processing_lease_txn(transaction, completed, now) is False
+    assert jobs._renew_processing_lease_txn(transaction, discarded, now) is False
+    # Only the still-processing, non-discarded row was refreshed.
+    assert transaction.updates == [(processing, {'processing_admitted_at': now})]
+
+
+def test_reacquire_deferred_processing_claims_only_an_explicit_deferred_row():
+    transaction = _Transaction()
+    now = _now()
+    deferred = _Ref('deferred', {'status': 'processing', 'deferred': True})
+    already_claimed = _Ref('already-claimed', {'status': 'processing', 'deferred': False})
+
+    assert jobs._reacquire_deferred_processing_txn(transaction, deferred, now) is True
+    assert jobs._reacquire_deferred_processing_txn(transaction, already_claimed, now) is False
+    assert transaction.updates == [
+        (deferred, {'status': 'processing', 'deferred': False, 'processing_admitted_at': now})
+    ]
+
+
+def test_reacquire_deferred_processing_reopens_a_failed_retry_terminal():
+    transaction = _Transaction()
+    now = _now()
+    retryable = _Ref('retryable', {'status': 'completed', 'deferred': True})
+    discarded = _Ref('discarded', {'status': 'completed', 'deferred': True, 'discarded': True})
+    failed = _Ref('failed', {'status': 'failed', 'deferred': True})
+
+    assert jobs._reacquire_deferred_processing_txn(transaction, retryable, now) is True
+    assert jobs._reacquire_deferred_processing_txn(transaction, discarded, now) is False
+    assert jobs._reacquire_deferred_processing_txn(transaction, failed, now) is False
+    assert transaction.updates == [
+        (retryable, {'status': 'processing', 'deferred': False, 'processing_admitted_at': now})
+    ]
+
+
+def test_recover_deferred_processing_failure_atomically_rearms_retry():
+    transaction = _Transaction()
+    processing = _Ref('processing', {'status': 'processing', 'deferred': False})
+    completed = _Ref('completed', {'status': 'completed', 'deferred': False})
+    already_deferred = _Ref('already-deferred', {'status': 'processing', 'deferred': True})
+    discarded = _Ref('discarded', {'status': 'processing', 'deferred': False, 'discarded': True})
+
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, processing) is True
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, completed) is True
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, already_deferred) is False
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, discarded) is False
+    for (ref, patch), expected in zip(transaction.updates, (processing, completed)):
+        assert ref is expected
+        assert patch['status'] == 'completed'
+        assert patch['deferred'] is True
+        assert patch['relevance_decision']['reason'] == 'deferred_retry_default'
+    assert len(transaction.updates) == 2
+
+
+def test_advance_cursor_succeeds_when_generation_matches():
+    """CAS cursor advance: a writer holding the current generation commits and bumps it."""
+    transaction = _Transaction()
+    ref = _Ref('cursor', {'resume_after_path': 'users/u/c/a', 'generation': 3})
+    now = _now()
+
+    result = jobs._advance_stale_processing_sweep_cursor_txn(transaction, ref, 3, 'users/u/c/b', now)
+
+    assert result is True
+    assert len(transaction.sets) == 1
+    assert transaction.sets[0][1]['resume_after_path'] == 'users/u/c/b'
+    assert transaction.sets[0][1]['generation'] == 4
+    assert transaction.sets[0][1]['updated_at'] == now
+
+
+def test_advance_cursor_fails_when_generation_changed():
+    """CAS cursor advance: a writer with a stale generation is fenced out — no rewind."""
+    transaction = _Transaction()
+    # Another pod already advanced the cursor to generation 5.
+    ref = _Ref('cursor', {'resume_after_path': 'users/u/c/x', 'generation': 5})
+
+    result = jobs._advance_stale_processing_sweep_cursor_txn(transaction, ref, 3, 'users/u/c/b', _now())
+
+    assert result is False
+    assert transaction.sets == []
+
+
+def test_advance_cursor_succeeds_on_first_write_when_doc_absent():
+    """First-ever cursor advance: absent doc is generation 0, expected 0 succeeds."""
+    transaction = _Transaction()
+    ref = _Ref('cursor', None)  # doc does not exist
+
+    result = jobs._advance_stale_processing_sweep_cursor_txn(transaction, ref, 0, 'users/u/c/first', _now())
+
+    assert result is True
+    assert transaction.sets[0][1]['generation'] == 1
+    assert transaction.sets[0][1]['resume_after_path'] == 'users/u/c/first'
+
+
+def test_selfheal_cursor_preserves_verification_deadline(monkeypatch):
+    entry = {'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'j1', 'admitted_at': _now()}
+    ref = _Ref('in_progress_content_sweep', {'pending_verifications': [entry]})
+    client = SimpleNamespace(collection=lambda name: _Collection({'in_progress_content_sweep': ref}))
+
+    cursor = jobs.get_in_progress_content_sweep_cursor(firestore_client=client)
+
+    assert cursor['pending_verifications'] == [entry]
+
+
+def test_stale_processing_terminal_job_is_swept_only_after_admission_age(monkeypatch):
+    now = _now()
+    monkeypatch.setattr(jobs, '_now', lambda: now)
+    client = _OrphanClient(
+        [
+            _processing_snapshot('uid', 'fresh', admitted_at=now - timedelta(seconds=899), finalization_job_id='done'),
+            _processing_snapshot('uid', 'stuck', admitted_at=now - timedelta(seconds=901), finalization_job_id='done'),
+            _processing_snapshot('uid', 'legacy', admitted_at=None, finalization_job_id='done'),
+        ]
+    )
+    client.jobs = {'done': _Ref('done', {'status': 'completed', 'finalization_outcome': 'fenced'})}
+    found = jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900), firestore_client=client)
+    assert [(row['conversation_id'], row['legacy']) for row in found['candidates']] == [
+        ('stuck', False),
+        ('legacy', True),
+    ]
+
+
+def test_summary_abandonment_count_survives_restart_and_uses_terminal_time_window(monkeypatch):
+    now = datetime(2026, 11, 4, tzinfo=timezone.utc)
+    monkeypatch.setattr(jobs, '_now', lambda: now)
+    recent = {
+        'status': 'dead_letter',
+        'last_failure_code': 'byok_session_abandoned',
+        'terminal_at': now - timedelta(hours=1),
+        'created_at': now - timedelta(days=30),
+    }
+    rows = [
+        recent,
+        {**recent, 'terminal_at': now - timedelta(hours=24)},
+        {**recent, 'terminal_at': now - timedelta(hours=24, seconds=1)},
+        {**recent, 'terminal_at': now + timedelta(seconds=1)},
+        {**recent, 'last_failure_code': 'final_attempt_failed'},
+        {**recent, 'status': 'completed'},
+        {'status': 'dead_letter', 'last_failure_code': 'byok_session_abandoned'},
+    ]
+    query = _SummaryJobQuery(rows)
+
+    class Client:
+        def collection(self, name):
+            if name == jobs.FINALIZATION_JOBS_COLLECTION:
+                return query
+            return SimpleNamespace(document=lambda _id: SimpleNamespace(get=lambda: SimpleNamespace(exists=False)))
+
+    # No process counter or projection survived: committed job documents suffice.
+    first = jobs.get_finalization_job_summary(firestore_client=Client())
+    second = jobs.get_finalization_job_summary(firestore_client=Client())
+    assert first['byok_abandoned_last_24h'] == second['byok_abandoned_last_24h'] == 2
+    assert first['dead_letter'] == 6
+    assert first['accepted'] == first['failure'] == 0
+    window = [filters for kind, filters, _ in query.calls if kind == 'count'][1]
+    assert window == [
+        ('status', '==', 'dead_letter'),
+        ('last_failure_code', '==', jobs.BYOK_ABANDONED_FAILURE_CODE),
+        ('terminal_at', '>=', now - timedelta(hours=24)),
+        ('terminal_at', '<=', now),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Budget-free delayed requeue (#20114): one parked second life, then terminal.
+# ---------------------------------------------------------------------------
+
+
+def _exhausted_leased_job(**overrides) -> _Ref:
+    data = {
+        'status': 'leased',
+        'dispatch_generation': 4,
+        'lease_epoch': 2,
+        'attempt_count': 5,
+        'worker_claim_count': 5,
+        'task_retry_count': 2,
+        'requires_byok': False,
+        'fanout_status': 'pending',
+        'uid': 'uid-1',
+        'conversation_id': 'conversation-1',
+        'finalization_revision': 3,
+        'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+        'projection_shard': 3,
+        'dispatch_requested_at': _now() - timedelta(hours=2),
+    }
+    data.update(overrides)
+    return _Ref('job-1', data)
+
+
+def _apply(transaction: _Transaction) -> None:
+    for ref, patch in transaction.updates:
+        ref.data = ref.data | patch
+
+
+def test_budget_requeue_grant_resets_the_budget_and_parks_the_row(monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_BUDGET_REQUEUE_DELAY_SECONDS', '2700')
+    transaction = _Transaction()
+    projection = _Collection({})
+    job_ref = _exhausted_leased_job()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(transaction, job_ref, 4, 2, 'processing_failed', _now(), projection)
+        == 'requeued'
+    )
+
+    update = transaction.updates[0][1]
+    assert update['status'] == 'queued'
+    assert update['attempt_count'] == 0
+    assert update['worker_claim_count'] == 0
+    assert update['task_retry_count'] == 0
+    assert update['budget_requeue_count'] == 1
+    assert update['budget_requeued_at'] == _now()
+    assert update['last_failure_code'] == 'processing_failed'
+    assert update['reconcile_after_at'] == _now() + timedelta(seconds=2700)
+    assert update['lease_expires_at'] == _now()
+    # The parked row keeps its dispatch generation; the replay sweep mints the
+    # next one only once the park elapses.
+    assert 'dispatch_generation' not in update
+    assert 'dispatch_requested_at' not in update
+    # Leased -> queued moves the projection exactly like mark_finalization_retryable.
+    assert len(transaction.sets) == 1
+    shard = transaction.sets[0][1]
+    assert shard['leased'] == jobs.firestore.Increment(-1)
+    assert shard['queued'] == jobs.firestore.Increment(1)
+
+
+def test_second_budget_requeue_grant_is_refused_without_a_write():
+    transaction = _Transaction()
+    job_ref = _exhausted_leased_job(budget_requeue_count=1)
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(transaction, job_ref, 4, 2, 'processing_failed', _now(), None)
+        == 'already_requeued'
+    )
+    assert transaction.updates == []
+
+
+@pytest.mark.parametrize(
+    'overrides',
+    [
+        {'dispatch_generation': 3},
+        {'lease_epoch': 1},
+        {'status': 'queued', 'lease_expires_at': _now()},
+    ],
+)
+def test_budget_requeue_grant_fence_losses_return_conflict_without_a_write(overrides):
+    transaction = _Transaction()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(
+            transaction, _exhausted_leased_job(**overrides), 4, 2, 'processing_failed', _now(), None
+        )
+        == 'conflict'
+    )
+    assert transaction.updates == []
+
+
+def test_budget_requeue_grant_refuses_committed_fanout():
+    transaction = _Transaction()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(
+            transaction, _exhausted_leased_job(fanout_status='completed'), 4, 2, 'processing_failed', _now(), None
+        )
+        == 'conflict'
+    )
+    assert transaction.updates == []
+
+
+def test_budget_requeue_grant_refuses_byok_rows():
+    transaction = _Transaction()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(
+            transaction, _exhausted_leased_job(requires_byok=True), 4, 2, 'processing_failed', _now(), None
+        )
+        == 'conflict'
+    )
+    assert transaction.updates == []
+
+
+@pytest.mark.parametrize('cause', sorted(jobs.NEVER_REQUEUE_CAUSES))
+def test_budget_requeue_grant_refuses_never_requeue_causes_without_a_write(cause):
+    transaction = _Transaction()
+
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(transaction, _exhausted_leased_job(), 4, 2, cause, _now(), None)
+        == 'not_requeueable'
+    )
+    assert transaction.updates == []
+
+
+def test_terminalize_exhausted_requeued_job_closes_the_parked_row_and_its_conversation():
+    transaction = _Transaction()
+    projection = _Collection({})
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 4,
+            'lease_epoch': 2,
+            'attempt_count': 5,
+            'budget_requeue_count': 1,
+            'last_failure_code': 'processing_failed',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+            'projection_generation': jobs.FINALIZATION_PROJECTION_GENERATION,
+            'projection_shard': 3,
+        },
+    )
+    conversation_ref = _conversation(
+        {
+            'status': 'processing',
+            'discarded': False,
+            'finalization_job_id': 'job-1',
+            'finalization_revision': 3,
+            'structured': {'title': 'Existing summary'},
+        }
+    )
+
+    assert (
+        jobs._terminalize_exhausted_requeued_job_txn(
+            transaction,
+            job_ref,
+            'queued',
+            4,
+            2,
+            'processing_failed',
+            _now(),
+            lambda uid, conversation_id: conversation_ref,
+            projection,
+        )
+        is True
+    )
+
+    job_update = transaction.updates[0][1]
+    assert job_update['status'] == 'dead_letter'
+    assert job_update['terminal_outcome'] == 'failure'
+    assert job_update['terminal_at'] == _now()
+    assert job_update['reconcile_after_at'] == jobs.firestore.DELETE_FIELD
+    assert job_update['last_failure_code'] == 'processing_failed'
+    assert transaction.updates[1] == (
+        conversation_ref,
+        {
+            'status': 'completed',
+            'discarded': False,
+            'finalization_status': 'dead_letter',
+            # The discard-detection audit stamps an explicit policy keep on
+            # every dead-letter terminal; a processing_failed row keeps.
+            'relevance_decision': {
+                'verdict': 'keep',
+                'decided_by': 'policy',
+                'reason': 'dead_letter_default',
+                'trigger': 'dead_letter',
+                'rules_version': 4,
+            },
+        },
+    )
+    # A queued source row decrements queued — never the dead-letter txn's leased=-1.
+    shard = transaction.sets[-1][1]
+    assert shard['queued'] == jobs.firestore.Increment(-1)
+    assert shard['dead_letter'] == jobs.firestore.Increment(1)
+    assert shard['failure'] == jobs.firestore.Increment(1)
+
+
+@pytest.mark.parametrize(
+    ('expected_dispatch_generation', 'expected_lease_epoch', 'overrides'),
+    [
+        (5, 2, {}),
+        (4, 3, {}),
+        (4, 2, {'status': 'leased', 'lease_expires_at': _now() - timedelta(minutes=1)}),
+        (4, 2, {'fanout_status': 'completed'}),
+    ],
+)
+def test_terminalize_refuses_fence_losses_and_committed_fanout(
+    expected_dispatch_generation, expected_lease_epoch, overrides
+):
+    transaction = _Transaction()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 4,
+            'lease_epoch': 2,
+            'budget_requeue_count': 1,
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+        }
+        | overrides,
+    )
+
+    assert (
+        jobs._terminalize_exhausted_requeued_job_txn(
+            transaction,
+            job_ref,
+            'queued',
+            expected_dispatch_generation,
+            expected_lease_epoch,
+            'processing_failed',
+            _now(),
+            lambda uid, conversation_id: pytest.fail('the bound conversation must not be read on a fence loss'),
+            None,
+        )
+        is False
+    )
+    assert transaction.updates == []
+    assert transaction.sets == []
+
+
+class _CutoffReplayCollection:
+    """Fake due query: models the frozen-cutoff ``reconcile_after_at <= cutoff`` filter."""
+
+    def __init__(self, refs):
+        self.refs = refs
+        self.where_calls: list[tuple[str, str]] = []
+        self._cutoff: datetime | None = None
+        self._limit: int | None = None
+
+    def where(self, field, operator, value):
+        self.where_calls.append((field, operator))
+        self._cutoff = value
+        return self
+
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, value):
+        self._limit = value
+        return self
+
+    def stream(self):
+        rows = [
+            ref
+            for ref in self.refs
+            if isinstance(ref.data.get('reconcile_after_at'), datetime)
+            and ref.data['reconcile_after_at'] <= self._cutoff
+        ]
+        return rows[: self._limit]
+
+
+def test_parked_budget_requeue_row_is_invisible_to_replay_candidates_until_due(monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_BUDGET_REQUEUE_DELAY_SECONDS', '2700')
+    now = _now()
+    monkeypatch.setattr(jobs, '_now', lambda: now)
+    monkeypatch.setattr(jobs, '_advance_finalization_replay_cursor_txn', lambda *args: True)
+    monkeypatch.setattr(jobs.firestore, 'transactional', lambda fn: fn)
+    job_ref = _exhausted_leased_job()
+    grant = _Transaction()
+    assert (
+        jobs._grant_finalization_budget_requeue_txn(grant, job_ref, 4, 2, 'processing_failed', now, None) == 'requeued'
+    )
+    _apply(grant)
+
+    parked_collection = _CutoffReplayCollection([job_ref])
+    state = {'cutoff': now}
+
+    def client_for(cursor_state):
+        state_ref = SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: cursor_state))
+        state_collection = SimpleNamespace(document=lambda name: state_ref)
+        return SimpleNamespace(
+            collection=lambda name: (
+                parked_collection if name == jobs.FINALIZATION_JOBS_COLLECTION else state_collection
+            ),
+            transaction=lambda: object(),
+        )
+
+    # The sweep-start cutoff is frozen at `now`: the 45-minute park makes the
+    # row invisible to every pass until its reconcile_after_at falls due.
+    assert jobs.get_finalization_replay_candidates(limit=10, firestore_client=client_for({})) == []
+    assert parked_collection.where_calls == [('reconcile_after_at', '<=')]
+
+    due = now + timedelta(seconds=2700) + timedelta(seconds=1)
+    candidates = jobs.get_finalization_replay_candidates(
+        limit=10, firestore_client=client_for({'cursor': {'cutoff': due}})
+    )
+    assert [candidate['job_id'] for candidate in candidates] == ['job-1']

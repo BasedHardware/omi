@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-deadline-bounded-query-without-covering-index",
+  "violated_contract": "A query that serves a deadline-bounded interactive contract must be covered by an index on every predicate it joins and filters on. An uncovered join degrades with accumulated user data, so a contract that passes on a small store becomes a guaranteed timeout on a large one \u2014 and when the query runs synchronously on a single-threaded runtime, it stalls every other request behind it rather than only itself.",
+  "canonical_prevention": "Declare the index in the same change as the query, and assert the plan in a behavioural test that runs the real engine: the query plan must show an equality seek on each join key, never a partial seek that leaves a predicate to a row-by-row scan. Assert the plan rather than a wall-clock threshold, which is unstable on shared hardware and passes on small fixtures for the wrong reason.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/agent/tests/context-snapshot-turn-revision-index.test.ts"
+  ],
+  "evidence_prs": [
+    9597,
+    9660
+  ],
+  "scope_hints": [
+    "desktop/macos/agent/src/runtime/**",
+    "desktop/macos/agent/tests/**"
+  ],
+  "status": "open"
+}

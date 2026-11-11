@@ -13,7 +13,7 @@ struct FileIndexingView: View {
   @State private var scanningFolder: String = ""
   @State private var totalFilesScanned: Int = 0
   @State private var progress: Double = 0.0
-  @State private var statusText: String = "Scanning your files..."
+  @State private var statusText: String = "Scanning your files…"
   @State private var showInfoPopover: Bool = false
   @State private var chatMessages: [String] = []
   @State private var pipelineStarted = false
@@ -58,7 +58,7 @@ struct FileIndexingView: View {
       // Title
       Text(statusText)
         .scaledFont(size: OmiType.subheading, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .multilineTextAlignment(.center)
         .padding(.bottom, OmiSpacing.xs)
 
@@ -69,18 +69,18 @@ struct FileIndexingView: View {
             + (totalFilesScanned > 0 ? " · \(totalFilesScanned.formatted()) files found" : "")
         )
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
         .omiAnimation(.easeInOut(duration: 0.2), value: scanningFolder)
       } else if totalFilesScanned > 0 {
         Text("\(totalFilesScanned.formatted()) files indexed")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
       } else {
-        Text("All data is secure and belongs to you. Open-source verified.")
+        Text("Your files are read on this Mac and aren't uploaded. Omi is open source.")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
       }
 
@@ -88,12 +88,12 @@ struct FileIndexingView: View {
       VStack(spacing: OmiSpacing.xs) {
         GeometryReader { geo in
           ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-              .fill(OmiColors.backgroundTertiary)
+            RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+              .fill(Ink.rowFill)
               .frame(height: 6)
 
-            RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-              .fill(OmiColors.accent)
+            RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+              .fill(Ink.primary)
               .frame(width: max(0, geo.size.width * progress), height: 6)
               .omiAnimation(.easeOut(duration: 0.3), value: progress)
           }
@@ -102,7 +102,7 @@ struct FileIndexingView: View {
 
         Text("\(Int(progress * 100))%")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .monospacedDigit()
       }
       .padding(.horizontal, OmiSpacing.page)
@@ -112,7 +112,7 @@ struct FileIndexingView: View {
       Button(action: skip) {
         Text("Skip")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(.secondary)
+          .foregroundColor(Ink.secondary)
       }
       .buttonStyle(.plain)
       .padding(.top, OmiSpacing.lg)
@@ -128,7 +128,7 @@ struct FileIndexingView: View {
       HStack {
         Text("Behind the scenes")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
       }
 
@@ -136,17 +136,17 @@ struct FileIndexingView: View {
         HStack(spacing: OmiSpacing.xs) {
           Image(systemName: "folder")
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.secondary)
           Text("Scanning ~/\(scanningFolder)")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
       }
 
       if totalFilesScanned > 0 {
         Text("\(totalFilesScanned.formatted()) files indexed")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       // Live chat messages from the AI exploration
@@ -159,7 +159,7 @@ struct FileIndexingView: View {
             ForEach(Array(aiMessages.enumerated()), id: \.offset) { _, msg in
               Text(msg.text)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineSpacing(3)
                 .textSelection(.enabled)
             }
@@ -174,32 +174,43 @@ struct FileIndexingView: View {
 
   // MARK: - Brain Map Phase
 
+  /// This phase has **two different grounds**, and that is what every colour in it turns on:
+  /// with a graph, `MemoryGraphSceneView` renders its own black scene edge to edge; without one,
+  /// there is no scene and the ground is the window's light glass. The white type here was written
+  /// for the scene and survived onto the empty state, where it was white on a near-white panel —
+  /// the headline, the placeholder and its glyph were all invisible in the one state a first-run
+  /// user is most likely to land in.
+  private var hasGraph: Bool { !graphViewModel.isEmpty }
+
   private var brainMapView: some View {
     ZStack {
-      if graphViewModel.isEmpty {
-        // Empty fallback
+      if hasGraph {
+        // 3D graph — SceneKit renders its own black background
+        MemoryGraphSceneView(viewModel: graphViewModel)
+      } else {
+        // Empty fallback, on the light panel: the ladder, not the scene's white.
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "brain")
             .scaledFont(size: OmiType.hero)
-            .foregroundColor(.white.opacity(0.15))
-          Text("Your knowledge graph will grow as omi learns more about you")
+            .foregroundColor(Ink.hairline)
+          Text("More connections appear as Omi learns about you")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(.white.opacity(0.4))
+            .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, OmiSpacing.page)
         }
-      } else {
-        // 3D graph — SceneKit renders its own black background
-        MemoryGraphSceneView(viewModel: graphViewModel)
       }
 
       // Floating title + continue button
       VStack {
         Text("Here's what I know about you")
           .font(.system(size: 22, weight: .bold))
-          .foregroundColor(.white)
-          .shadow(color: .black.opacity(0.7), radius: 12, x: 0, y: 2)
-          .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 4)
+          .foregroundColor(hasGraph ? Ink.glow : Ink.primary)
+          // The shadows are how white type stays readable over a moving scene. Over the light
+          // panel there is nothing to lift the type off, and a dark halo under dark type is just
+          // smudge, so they go with the scene.
+          .shadow(color: .black.opacity(hasGraph ? 0.7 : 0), radius: 12, x: 0, y: 2)
+          .shadow(color: .black.opacity(hasGraph ? 0.4 : 0), radius: 24, x: 0, y: 4)
           .padding(.top, OmiSpacing.page)
 
         Spacer()
@@ -207,25 +218,30 @@ struct FileIndexingView: View {
         Button(action: { onComplete(totalFilesScanned) }) {
           Text("Continue")
             .font(.system(size: 15, weight: .semibold))
-            .foregroundColor(OmiColors.backgroundPrimary)
+            .foregroundColor(Ink.surface)
             .frame(maxWidth: 220)
             .padding(.vertical, OmiSpacing.md)
-            .background(OmiColors.accent)
-            .cornerRadius(OmiChrome.smallControlRadius)
-            .shadow(color: OmiColors.accent.opacity(0.4), radius: 16, x: 0, y: 4)
+            .background(Ink.primary)
+            .cornerRadius(SettingsGlassMetrics.cardRadius)
+            .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 3)
         }
         .buttonStyle(.plain)
+        .keyboardShortcut(.defaultAction)
         .padding(.bottom, OmiSpacing.page)
       }
 
-      // Graph shortcut hints — bottom-left corner
-      VStack {
-        Spacer()
-        HStack {
-          graphShortcutsHint
-            .padding(.leading, OmiSpacing.xl)
-            .padding(.bottom, OmiSpacing.xl)
+      // Graph shortcut hints — bottom-left corner. Only over the scene: every gesture they name
+      // (rotate, pan, zoom, reset) belongs to a graph that is not there in the empty state, and the
+      // plate they sit on is a dark scrim sized for the scene's black, not for the light panel.
+      if hasGraph {
+        VStack {
           Spacer()
+          HStack {
+            graphShortcutsHint
+              .padding(.leading, OmiSpacing.xl)
+              .padding(.bottom, OmiSpacing.xl)
+            Spacer()
+          }
         }
       }
     }
@@ -243,7 +259,7 @@ struct FileIndexingView: View {
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
         .fill(.black.opacity(0.45))
     )
   }
@@ -299,13 +315,13 @@ struct FileIndexingView: View {
       await MainActor.run {
         totalFilesScanned = existingCount
         progress = 0.6
-        statusText = "Analyzing your files..."
+        statusText = "Analyzing your files…"
       }
       return
     }
 
     await MainActor.run {
-      statusText = "Scanning your files..."
+      statusText = "Scanning your files…"
     }
 
     let home = FileManager.default.homeDirectoryForCurrentUser
@@ -350,7 +366,7 @@ struct FileIndexingView: View {
   /// Stage 2: AI exploration chat in background, progress 60% → 90%
   private func runAIExploration() async {
     await MainActor.run {
-      statusText = "Analyzing your files..."
+      statusText = "Analyzing your files…"
     }
 
     // Start progress animation (ease-out curve over ~30s)
@@ -389,7 +405,7 @@ struct FileIndexingView: View {
   /// We poll the local SQLite briefly, then fall back to API if needed.
   private func runKnowledgeGraphBuild() async {
     await MainActor.run {
-      statusText = "Building your knowledge graph..."
+      statusText = "Building your knowledge graph…"
       scanningFolder = ""
       progress = 0.92
     }
@@ -483,15 +499,6 @@ struct FileIndexingView: View {
 
   /// Send the exploration prompt to the chat
   private func startExplorationChat() async {
-    // Multi-chat users get a dedicated session; single-chat users stay in default chat
-    if chatProvider.multiChatEnabled {
-      let session = await chatProvider.createNewSession(skipGreeting: true)
-      guard session != nil else {
-        log("FileIndexingView: Failed to create session for file exploration")
-        return
-      }
-    }
-
     let prompt = """
       I just indexed \(totalFilesScanned) files on your computer. Explore them to learn about me, then build my knowledge graph.
 

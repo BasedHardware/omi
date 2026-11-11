@@ -1,0 +1,8 @@
+{
+  "version": "0.12.132",
+  "date": "2026-07-26",
+  "changes": [
+    "Improved internal diagnostics so failed chat tool calls are recorded alongside successful ones",
+    "Improved reliability of macOS Beta qualification cleanup."
+  ]
+}

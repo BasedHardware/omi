@@ -1,0 +1,7 @@
+{
+  "version": "0.12.195",
+  "date": "2026-08-21",
+  "changes": [
+    "After a call, the meeting notes notification now stays up until you act on it and can email the summary directly to the person you met with (detected from your calendar), with a new Meeting Summary Notifications toggle in Settings"
+  ]
+}

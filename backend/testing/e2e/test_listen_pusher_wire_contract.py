@@ -1,22 +1,25 @@
 """Hermetic native-listen wire contracts for STT and the pusher bridge.
 
-These tests deliberately keep the HTTP route, listen runtime, Parakeet socket,
-and ``ListenPusherSession`` real.  Only auth/storage and the two remote
-WebSocket peers are controlled by the hermetic E2E harness.
+These tests deliberately keep the HTTP route, listen runtime, provider socket,
+and ``ListenPusherSession`` real. Only auth/storage and remote WebSocket peers
+are controlled by the hermetic E2E harness.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from fakes.firestore import get_mock_firestore
 from fakes.listen_pusher_wire import (
     PUSHER_PROCESS_CONVERSATION,
     PUSHER_TRANSCRIPT,
     RejectingParakeetPeer,
+    ScriptedModulatePeer,
     ScriptedParakeetPeer,
     ScriptedPusherPeer,
     clear_finalization_jobs,
@@ -33,7 +36,11 @@ NATIVE_LISTEN_URL = (
 )
 NATIVE_AUTH_HEADERS = {'Authorization': 'Bearer dev-token'}
 PARAKEET_TRANSCRIPT = 'Parakeet wire-contract transcript.'
+MODULATE_TRANSCRIPT = 'Modulate wire-contract transcript.'
 PCM8_AUDIO_FRAME = b'\x80' * 480
+MULTI_LANGUAGE_PARAKEET_LISTEN_URL = (
+    '/v4/listen?language=es&sample_rate=8000&codec=pcm8&source=omi&stt_service=parakeet&vad_gate=disabled'
+)
 
 
 def _configure_live_wire_contract(monkeypatch: Any, pusher: ScriptedPusherPeer, parakeet_api_url: str) -> None:
@@ -41,8 +48,11 @@ def _configure_live_wire_contract(monkeypatch: Any, pusher: ScriptedPusherPeer, 
 
     import routers.listen.runtime as listen_runtime
     import utils.pusher as pusher_client
+    import utils.stt.streaming as streaming
 
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', parakeet_api_url)
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
+    monkeypatch.setattr(streaming, 'stt_service_models', ('parakeet',))
     monkeypatch.setattr(listen_runtime, 'PUSHER_ENABLED', True)
     monkeypatch.setattr(pusher_client, 'PusherAPI', pusher.api_url)
 
@@ -52,6 +62,29 @@ def _configure_live_wire_contract(monkeypatch: Any, pusher: ScriptedPusherPeer, 
     breaker._state = pusher_client.CircuitState.CLOSED  # type: ignore[reportPrivateUsage]
     breaker._failures.clear()  # type: ignore[reportPrivateUsage]
     breaker._probe_in_progress = False  # type: ignore[reportPrivateUsage]
+
+
+def _configure_modulate_loopback(
+    monkeypatch: Any, modulate: ScriptedModulatePeer, *, models: tuple[str, ...] = ('parakeet', 'modulate-velma-2')
+) -> None:
+    """Route only Velma-2's real WebSocket client to the deterministic peer."""
+
+    import utils.stt.streaming as streaming
+
+    original_connect = streaming.websockets.connect
+
+    async def connect_loopback(uri: str, *args: Any, **kwargs: Any) -> Any:
+        parsed = urlsplit(uri)
+        if parsed.hostname == 'modulate-developer-apis.com' and parsed.path == '/api/velma-2-stt-streaming':
+            loopback_uri = f'{modulate.api_url}{parsed.path}'
+            if parsed.query:
+                loopback_uri = f'{loopback_uri}?{parsed.query}'
+            return await original_connect(loopback_uri, *args, **kwargs)
+        return await original_connect(uri, *args, **kwargs)
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'loopback-modulate-key')
+    monkeypatch.setattr(streaming, 'stt_service_models', models)
+    monkeypatch.setattr(streaming.websockets, 'connect', connect_loopback)
 
 
 def _open_native_listen(websocket: Any) -> dict[str, Any]:
@@ -73,11 +106,33 @@ def _receive_parakeet_segment(websocket: Any) -> list[dict[str, Any]]:
     return segments
 
 
-def _make_live_conversation_stale(uid: str, conversation_id: str) -> None:
-    """Advance persisted state; the test releases the real lifecycle loop explicitly."""
+def _receive_modulate_segment(websocket: Any) -> list[dict[str, Any]]:
+    segments = receive_until(
+        websocket,
+        lambda payload: isinstance(payload, list) and bool(payload) and payload[0].get('text') == MODULATE_TRANSCRIPT,
+    )
+    assert segments[0]['speaker'] == 'SPEAKER_00'
+    return segments
 
-    get_mock_firestore().collection('users').document(uid).collection('conversations').document(conversation_id).update(
-        {'finished_at': datetime.now(timezone.utc) - timedelta(minutes=3)}
+
+def _make_live_conversation_stale(uid: str, conversation_id: str) -> None:
+    """Age the complete recorded window before releasing the real lifecycle loop."""
+    from utils.conversations.recorded_time import conversation_span
+
+    ref = get_mock_firestore().collection('users').document(uid).collection('conversations').document(conversation_id)
+    row = ref.get().to_dict()
+    span = conversation_span(row)
+    assert span is not None
+    end = datetime.now(timezone.utc) - timedelta(minutes=3)
+    shift = end - span.recorded_end
+    ref.update(
+        {
+            'started_at': row['started_at'] + shift,
+            'recorded_start': span.recorded_start + shift,
+            'recorded_end': end,
+            'last_speech_at': end,
+            'finished_at': end,
+        }
     )
 
 
@@ -87,6 +142,20 @@ def _assert_durable_finalization_identity(payload: dict[str, Any], conversation_
     assert payload['byok_keys'] == {}
     assert isinstance(payload['finalization_job_id'], str) and payload['finalization_job_id']
     assert payload['dispatch_generation'] == 1
+
+
+def _split_finalization_jobs(store: Any, uid: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Check custody is distinct from admitted processing/fanout ownership."""
+    rows = finalization_jobs_for_uid(store, uid)
+    checks = [row for row in rows if row.get('kind') == 'listen_quiet_check']
+    processing = [row for row in rows if row.get('kind') != 'listen_quiet_check']
+    assert len(checks) == len({row['conversation_id'] for row in checks})
+    for check in checks:
+        assert check['job_id'].startswith('quiet-')
+        assert check['status'] in {'waiting_quiet', 'quiet_done'}
+        assert not check.get('finalization_revision')
+        assert not check.get('fanout_key')
+    return processing, checks
 
 
 def test_listen_pusher_wire_contract_native_happy_path_and_explicit_parakeet_route(
@@ -102,7 +171,7 @@ def test_listen_pusher_wire_contract_native_happy_path_and_explicit_parakeet_rou
     try:
         _configure_live_wire_contract(monkeypatch, pusher, parakeet.api_url)
         clear_finalization_jobs(fake_firestore, test_uid)
-        seed_listen_user(test_uid, uses_custom_stt=False)
+        seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
 
         with client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
             session = _open_native_listen(websocket)
@@ -118,6 +187,7 @@ def test_listen_pusher_wire_contract_native_happy_path_and_explicit_parakeet_rou
         assert pusher.paths[0].startswith('/v1/trigger/listen?')
         assert 'uid=123' in pusher.paths[0]
         assert 'sample_rate=8000' in pusher.paths[0]
+        assert 'audio_timeline=2' in pusher.paths[0]
         assert transcript.connection == 1
         assert transcript.payload['memory_id'] == session['conversation_id']
         assert transcript.payload['segments'][0]['id'] == 'parakeet-wire-1'
@@ -126,6 +196,59 @@ def test_listen_pusher_wire_contract_native_happy_path_and_explicit_parakeet_rou
     finally:
         clear_finalization_jobs(fake_firestore, test_uid)
         pusher.close()
+        parakeet.close()
+
+
+@pytest.mark.parametrize(
+    'listen_url,slot_enabled', [(MULTI_LANGUAGE_PARAKEET_LISTEN_URL, True), (NATIVE_LISTEN_URL, False)]
+)
+def test_listen_pusher_wire_contract_unavailable_explicit_parakeet_routes_to_modulate(
+    client, test_uid, monkeypatch, fake_firestore, listen_url, slot_enabled
+):
+    """Unsupported or retired Parakeet falls through to a serving vendor, including a stale plain-only list."""
+    enabled_live_targets(monkeypatch)
+
+    async def pusher_success(_peer, _frame, _websocket):
+        return None
+
+    parakeet = ScriptedParakeetPeer(segment_text=PARAKEET_TRANSCRIPT).start()
+    modulate = ScriptedModulatePeer(segment_text=MODULATE_TRANSCRIPT).start()
+    pusher = ScriptedPusherPeer(pusher_success).start()
+    try:
+        _configure_live_wire_contract(monkeypatch, pusher, parakeet.api_url)
+        _configure_modulate_loopback(
+            monkeypatch, modulate, models=('parakeet', 'modulate-velma-2') if slot_enabled else ('parakeet',)
+        )
+        monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', str(slot_enabled))
+        clear_finalization_jobs(fake_firestore, test_uid)
+        seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=not slot_enabled)
+
+        with client.websocket_connect(listen_url, headers=NATIVE_AUTH_HEADERS) as websocket:
+            session = _open_native_listen(websocket)
+            pusher.wait_for_connections(1)
+            websocket.send_bytes(PCM8_AUDIO_FRAME)
+            modulate.wait_for_audio(1)
+            _receive_modulate_segment(websocket)
+            transcript = pusher.wait_for_frames(PUSHER_TRANSCRIPT, 1)[0]
+
+        # Auto-detection omits language; the single-language English fallback
+        # keeps its explicit hint. Neither path may dial the Parakeet peer.
+        assert modulate.connection_count == 1
+        modulate_request = urlsplit(modulate.paths[0])
+        assert modulate_request.path == '/api/velma-2-stt-streaming'
+        if slot_enabled:
+            assert 'language=' not in modulate_request.query
+        else:
+            assert 'language=en' in modulate_request.query
+        assert 'sample_rate=8000' in modulate_request.query
+        assert parakeet.connection_count == 0
+        assert parakeet.paths == []
+        assert transcript.payload['memory_id'] == session['conversation_id']
+        assert transcript.payload['segments'][0]['text'] == MODULATE_TRANSCRIPT
+    finally:
+        clear_finalization_jobs(fake_firestore, test_uid)
+        pusher.close()
+        modulate.close()
         parakeet.close()
 
 
@@ -148,7 +271,7 @@ def test_listen_pusher_wire_contract_reconnect_replays_one_durable_finalization(
         timing = install_deterministic_listen_timing(monkeypatch)
         install_fake_firestore_transactions(monkeypatch, fake_firestore)
         clear_finalization_jobs(fake_firestore, test_uid)
-        seed_listen_user(test_uid, uses_custom_stt=False)
+        seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
 
         with client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
             try:
@@ -171,7 +294,12 @@ def test_listen_pusher_wire_contract_reconnect_replays_one_durable_finalization(
                 _assert_durable_finalization_identity(first.payload, session['conversation_id'])
                 assert replay.connection == 2
                 assert replay.payload == first.payload
-                jobs = finalization_jobs_for_uid(fake_firestore, test_uid)
+                jobs, checks = _split_finalization_jobs(fake_firestore, test_uid)
+                assert any(check['conversation_id'] == session['conversation_id'] for check in checks)
+                owner_checks = [check for check in checks if check['conversation_id'] == session['conversation_id']]
+                assert all(
+                    check['status'] == 'quiet_done' and 'reconcile_after_at' not in check for check in owner_checks
+                )
                 assert len(jobs) == 1
                 assert jobs[0]['job_id'] == first.payload['finalization_job_id']
                 assert jobs[0]['dispatch_generation'] == first.payload['dispatch_generation']
@@ -181,7 +309,7 @@ def test_listen_pusher_wire_contract_reconnect_replays_one_durable_finalization(
 
         assert pusher.connection_count == 2
         assert len(pusher.frames_of_type(PUSHER_PROCESS_CONVERSATION)) == 2
-        jobs_after_teardown = finalization_jobs_for_uid(fake_firestore, test_uid)
+        jobs_after_teardown, _checks = _split_finalization_jobs(fake_firestore, test_uid)
         assert len(jobs_after_teardown) == 1
         assert jobs_after_teardown[0]['status'] == 'completed'
     finally:
@@ -220,7 +348,7 @@ def test_listen_pusher_wire_contract_terminal_or_fenced_response_is_not_replayed
         timing = install_deterministic_listen_timing(monkeypatch)
         install_fake_firestore_transactions(monkeypatch, fake_firestore)
         clear_finalization_jobs(fake_firestore, test_uid)
-        seed_listen_user(test_uid, uses_custom_stt=False)
+        seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
 
         with client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
             try:
@@ -233,6 +361,12 @@ def test_listen_pusher_wire_contract_terminal_or_fenced_response_is_not_replayed
 
                 pusher.wait_for_frames(PUSHER_PROCESS_CONVERSATION, 1)
                 pusher.wait_for_finalization_actions(1)
+                _jobs, checks = _split_finalization_jobs(fake_firestore, test_uid)
+                owner_checks = [check for check in checks if check['conversation_id'] == session['conversation_id']]
+                assert owner_checks
+                assert all(
+                    check['status'] == 'quiet_done' and 'reconcile_after_at' not in check for check in owner_checks
+                )
 
                 # The closed peer forces the real pusher receiver through its
                 # production reconnect path.  A terminal 201 must have removed
@@ -268,7 +402,7 @@ def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
         _configure_live_wire_contract(monkeypatch, pusher, parakeet.api_url)
         install_fake_firestore_transactions(monkeypatch, fake_firestore)
         clear_finalization_jobs(fake_firestore, test_uid)
-        seed_listen_user(test_uid, uses_custom_stt=False)
+        seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
 
         with client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
             failed = receive_until(
@@ -295,7 +429,12 @@ def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
 def test_listen_pusher_wire_contract_provider_send_failure_is_terminal_after_pusher_connects(
     client, test_uid, monkeypatch, fake_firestore
 ):
-    """A real provider death latch stops the live route before transcript or finalization work."""
+    """A provider death with the chain exhausted stops the live route before pusher work.
+
+    The send path first offers the session a failover (#12469); this harness
+    runs a parakeet-only chain, so reselection finds nothing and the death must
+    still end the route with the bounded terminal contract.
+    """
 
     async def unexpected_finalization(_peer, _frame, _websocket):
         raise AssertionError('provider send failure must not reach pusher finalization')
@@ -307,12 +446,17 @@ def test_listen_pusher_wire_contract_provider_send_failure_is_terminal_after_pus
     pusher = ScriptedPusherPeer(unexpected_finalization).start()
     try:
         _configure_live_wire_contract(monkeypatch, pusher, parakeet.api_url)
+        # Failover reselection reads the receiver's namespace; a parakeet-only
+        # chain means the death latch has nowhere to go and stays terminal.
+        import routers.listen.receiver as listen_receiver
+
+        monkeypatch.setattr(listen_receiver, 'get_stt_service_for_language', lambda *_a, **_k: (None, None, None))
         install_fake_firestore_transactions(monkeypatch, fake_firestore)
         clear_finalization_jobs(fake_firestore, test_uid)
-        seed_listen_user(test_uid, uses_custom_stt=False)
+        seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
 
         with client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
-            _open_native_listen(websocket)
+            session = _open_native_listen(websocket)
             pusher.wait_for_connections(1)
             websocket.send_bytes(PCM8_AUDIO_FRAME)
             parakeet.wait_for_audio(1)
@@ -334,7 +478,9 @@ def test_listen_pusher_wire_contract_provider_send_failure_is_terminal_after_pus
 
         assert pusher.connection_count == 1
         assert pusher.frames == []
-        assert finalization_jobs_for_uid(fake_firestore, test_uid) == []
+        processing, checks = _split_finalization_jobs(fake_firestore, test_uid)
+        assert processing == []
+        assert any(check['conversation_id'] == session['conversation_id'] for check in checks)
     finally:
         clear_finalization_jobs(fake_firestore, test_uid)
         pusher.close()

@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/l10n/app_localizations_en.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_transfer_keep_alive.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +21,7 @@ class _FakeSyncs {
   int syncWalCalls = 0;
   SyncLocalFilesResponse? nextSyncResult;
   Completer<SyncLocalFilesResponse?>? hangSyncWal;
+  Object? nextError;
 
   _FakeSyncs(this.wals);
 
@@ -33,6 +38,7 @@ class _FakeSyncs {
 
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     syncWalCalls++;
+    if (nextError case final error?) throw error;
     final hang = hangSyncWal;
     if (hang != null) return hang.future;
     final result = nextSyncResult ?? SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
@@ -68,6 +74,46 @@ class _FakeWalService implements IWalService {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('stale phone WAL inventory is reported to upload-health monitoring', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+    final now = DateTime.utc(2026, 9, 26, 12);
+    final events = <String>[];
+    var recoveryWakes = 0;
+    final monitor = CaptureWedgeMonitor(
+      now: () => now,
+      featureGate: () async => false,
+      track: (event, properties) => events.add(event),
+      bleRetry: (_) async {},
+      transferRetry: () async => recoveryWakes++,
+      appBuild: () => 'test',
+      platform: () => 'ios',
+    );
+    final wal = Wal(
+      timerStart: now.subtract(const Duration(hours: 3)).millisecondsSinceEpoch ~/ 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+    );
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(_FakeSyncs([wal])),
+      startBackgroundSync: false,
+      captureWedgeMonitor: monitor,
+    );
+    await provider.initialized;
+    await pumpEventQueue();
+
+    expect(recoveryWakes, 1);
+    expect(events, contains('Capture Wedge Detected'));
+    // Upload silence is telemetry-only; the pending-transcriptions chip is its user-facing surface.
+    expect(monitor.visiblePrompt, isNull);
+    provider.dispose();
+    monitor.dispose();
+  });
+
   test('syncWal 202 wakes the transfer coordinator for reconciliation', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -100,7 +146,9 @@ void main() {
     provider.dispose();
   });
 
-  test('partial localUploadFailures still complete then surface error', () async {
+  test('partial localUploadFailures re-arm recovery without SyncStatus.error', () async {
+    // Regression #4587: leave/background aborts paint as localUploadFailures;
+    // schema says those WALs stay miss and must soft-retry, not red-error.
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
@@ -127,10 +175,127 @@ void main() {
 
     await provider.syncWal(wal);
 
-    expect(provider.syncState.hasError, isTrue);
-    expect(provider.syncError, contains('Upload failed'));
-    // Still wakes — successful HTTP return with partial failures may include uploads.
+    expect(provider.syncState.hasError, isFalse);
+    expect(provider.syncState.isIdle, isTrue);
+    expect(wal.status, WalStatus.miss);
+    expect(
+        wakes,
+        [
+          WakeTrigger.cooldownElapsed,
+        ],
+        reason: 'transient localUploadFailures must emit exactly one re-arm wake from _performSync');
+    provider.dispose();
+  });
+
+  test('a network switch mid-upload re-arms recovery instead of a red sync error', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    // iOS EADDRNOTAVAIL exactly as package:http surfaces it from the upload.
+    final syncs = _FakeSyncs([wal])
+      ..nextError = http.ClientException(
+        "Can't assign requested address",
+        Uri.parse('https://api.omi.me/v2/sync-local-files?audio_start_seconds=1792927415.0'),
+      );
+    final wakes = <WakeTrigger>[];
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: true,
+      waitForWalReady: (_) async {},
+      startRecovery: () async {},
+      wakeTransfer: (trigger) async {
+        wakes.add(trigger);
+      },
+    );
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(provider.syncState.hasError, isFalse);
+    expect(provider.syncError, isNull, reason: 'the raw socket error must not reach the sync card');
+    expect(provider.syncState.isIdle, isTrue);
+    expect(wal.status, WalStatus.miss);
     expect(wakes, [WakeTrigger.cooldownElapsed]);
+    provider.dispose();
+  });
+
+  test('permanent localUploadFailures still surface SyncStatus.error', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])
+      ..nextSyncResult = SyncLocalFilesResponse(
+        newConversationIds: [],
+        updatedConversationIds: [],
+        localUploadFailures: 1,
+        localUploadPermanentFailures: 1,
+        localUploadPermanentError: 'Exception: Audio file could not be processed by server',
+      );
+    final wakes = <WakeTrigger>[];
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: true,
+      waitForWalReady: (_) async {},
+      startRecovery: () async {},
+      wakeTransfer: (trigger) async {
+        wakes.add(trigger);
+      },
+    );
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(provider.syncState.hasError, isTrue);
+    expect(provider.syncError, isNot(contains('connection')));
+    expect(wakes, isEmpty, reason: 'permanent refusals must not soft-retry via cooldown wake');
+    provider.dispose();
+  });
+
+  test('server upload failure keeps its retry classification without blaming connectivity', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..nextError = Exception('Server is temporarily unavailable');
+    final provider = SyncProvider(walService: _FakeWalService(syncs), startBackgroundSync: false);
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(provider.syncError, contains('Server is temporarily unavailable'));
+    expect(provider.syncError, contains('phone audio file'));
+    expect(provider.syncError, isNot(contains('connection')));
+    provider.dispose();
+  });
+
+  test('generic upload failure uses a locale-neutral code with terminal localized failure copy', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..nextError = Exception('Upload failed unexpectedly');
+    final provider = SyncProvider(walService: _FakeWalService(syncs), startBackgroundSync: false);
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(provider.syncError, SyncProvider.pendingUploadErrorCode);
+    expect(SyncProvider.isPendingUploadError(provider.syncError), isTrue);
+    // The pages own this mapping so a provider state never ships English. The
+    // terminal error card has an explicit Retry action; it must not claim that
+    // an automatic retry is already in progress.
+    final localizedFailure = AppLocalizationsEn().syncStatusFailed;
+    expect(localizedFailure, contains('Failed'));
+    expect(localizedFailure, isNot(contains('retrying')));
+    expect(provider.syncError, isNot(contains('connection')));
     provider.dispose();
   });
 
@@ -140,7 +305,9 @@ void main() {
     SyncRateLimiter.instance.clear();
 
     final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
-    final other = Wal(timerStart: 2000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final other = Wal(timerStart: 2000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss)
+      ..retryCount = walMaxAutoRetries
+      ..lastRetryAt = 1900;
     final hang = Completer<SyncLocalFilesResponse?>();
     final syncs = _FakeSyncs([wal, other])..hangSyncWal = hang;
     final wakes = <WakeTrigger>[];
@@ -165,9 +332,118 @@ void main() {
 
     expect(syncs.syncWalCalls, 1, reason: 'contended syncWal must not start a parallel upload');
     expect(wakes, [WakeTrigger.userRetry]);
+    expect(other.status, WalStatus.miss,
+        reason: 'coalescing an exhausted transient retry must actually admit that row');
+    expect(other.retryCount, 0);
+    expect(other.lastRetryAt, 0);
 
     hang.complete(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
     await first;
+    provider.dispose();
+  });
+
+  test('an upload cooldown does not block pulling audio off the device', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+    // syncWal dispatches the whole transfer, including the device-download
+    // phases, which consume no upload quota. Refusing it here strands audio on
+    // a device with finite storage; the upload phases carry their own guard.
+    SyncRateLimiter.instance.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backendBusy);
+    addTearDown(SyncRateLimiter.instance.clear);
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal]);
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: true,
+      waitForWalReady: (_) async {},
+      startRecovery: () async {},
+      wakeTransfer: (_) async {},
+    );
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(SyncRateLimiter.instance.isLimited, isTrue);
+    expect(syncs.syncWalCalls, 1, reason: 'device recovery must stay available during an upload cooldown');
+    provider.dispose();
+  });
+
+  test('syncWal holds transfer keep-alive until the upload finishes (#5221)', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    var starts = 0;
+    var stops = 0;
+    final hang = Completer<SyncLocalFilesResponse?>();
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..hangSyncWal = hang;
+    final keepAlive = SyncTransferKeepAlive(
+      isAndroid: () => true,
+      start: () async {
+        starts++;
+      },
+      stop: () async {
+        stops++;
+      },
+    );
+
+    final provider = SyncProvider(walService: _FakeWalService(syncs), startBackgroundSync: false, keepAlive: keepAlive);
+    await provider.initialized;
+
+    final upload = provider.syncWal(wal);
+    await Future<void>.delayed(Duration.zero);
+    expect(starts, 1);
+    expect(stops, 0);
+    expect(keepAlive.isHeld, isTrue);
+
+    hang.complete(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
+    await upload;
+
+    expect(stops, 1);
+    expect(keepAlive.isHeld, isFalse);
+    provider.dispose();
+  });
+
+  test('cancelSync drops transfer keep-alive immediately (#5221)', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    var stops = 0;
+    final hang = Completer<SyncLocalFilesResponse?>();
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..hangSyncWal = hang;
+    final keepAlive = SyncTransferKeepAlive(
+      isAndroid: () => true,
+      start: () async {},
+      stop: () async {
+        stops++;
+      },
+    );
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: false,
+      keepAlive: keepAlive,
+      wakeTransfer: (_) async {},
+    );
+    await provider.initialized;
+
+    final upload = provider.syncWal(wal);
+    await Future<void>.delayed(Duration.zero);
+    expect(keepAlive.isHeld, isTrue);
+
+    provider.cancelSync();
+    expect(keepAlive.isHeld, isFalse);
+    expect(stops, 1);
+
+    hang.complete(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
+    await upload;
+    expect(stops, 1, reason: 'the in-flight finally must not stop a second time after cancel');
     provider.dispose();
   });
 }

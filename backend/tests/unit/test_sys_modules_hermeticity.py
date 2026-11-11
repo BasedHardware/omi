@@ -46,10 +46,24 @@ def _read_subset() -> list[str]:
     return files
 
 
+def _assert_nested_pytest_succeeded(rc: int | None, output: str) -> None:
+    assert rc == 0, (
+        "single-process-safe subset pytest run failed "
+        f"(nested exit code {rc!r}); the hermeticity result is invalid:\n{output}"
+    )
+
+
+def test_nonzero_nested_pytest_result_invalidates_hermeticity() -> None:
+    with pytest.raises(AssertionError, match="nested exit code 4"):
+        _assert_nested_pytest_succeeded(4, "ERROR: file or directory not found")
+
+
 def test_single_process_safe_subset_does_not_leak_backend_stubs():
     subset = _read_subset()
     if not subset:
         pytest.skip("single-process-safe subset is empty (no files migrated yet)")
+    missing = [path for path in subset if not (BACKEND_DIR / path).is_file()]
+    assert not missing, "single-process-safe subset references missing test files:\n  " + "\n  ".join(missing)
 
     # In-process harness: run pytest via ``pytest.main`` in the SAME interpreter that
     # performs the leak scan, so a stub left behind by a subset test is actually
@@ -121,14 +135,9 @@ def test_single_process_safe_subset_does_not_leak_backend_stubs():
             import json
 
             leaked = json.loads(line.split("=", 1)[1])
-    # Pollution is a hard failure regardless of pytest's own rc.
+    combined_output = "\n".join((result.stdout, result.stderr))
+    _assert_nested_pytest_succeeded(rc, combined_output)
     assert not leaked, (
         "single-process-safe subset leaked backend stub module(s) into sys.modules "
         "(these would corrupt subsequent tests):\n  " + "\n  ".join(f"{name} ({cls})" for name, cls in leaked)
     )
-
-    # Note: we do NOT hard-fail on pytest rc != 0 here. Subset test failures can stem
-    # from runtime global state unrelated to sys.modules hermeticity (e.g. protobuf
-    # descriptor-pool collisions, prometheus registry duplication across files). The
-    # LEAKED assertion above is the hermeticity invariant (P5); runtime-state isolation
-    # of individual files is tracked separately in the migration ledger.

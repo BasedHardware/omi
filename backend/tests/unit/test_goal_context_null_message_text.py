@@ -13,7 +13,7 @@ import utils.llm.goals as goals
 def _isolate(monkeypatch, messages):
     monkeypatch.setattr(goals, 'vector_search', lambda *a, **k: [])
     monkeypatch.setattr(goals.conversations_db, 'get_conversations', lambda *a, **k: [])
-    monkeypatch.setattr(goals.memories_db, 'get_memories', lambda *a, **k: [])
+    monkeypatch.setattr(goals.MemoryService, 'read', lambda *a, **k: [])
     monkeypatch.setattr(goals.chat_db, 'get_messages', lambda *a, **k: messages)
 
 

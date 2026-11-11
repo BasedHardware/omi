@@ -68,6 +68,7 @@ def repo_root(explicit: str | None) -> Path:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
             env=git_env(),
         )
         return Path(result.stdout.strip()).resolve()
@@ -83,6 +84,7 @@ def run_git(root: Path, args: list[str]) -> list[str]:
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
+        encoding="utf-8",
         env=git_env(),
     )
     if result.returncode != 0:
@@ -98,6 +100,7 @@ def git_file_contents(root: Path, ref: str, path: str) -> str | None:
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
+        encoding="utf-8",
         env=git_env(),
     )
     return result.stdout if result.returncode == 0 else None
@@ -113,26 +116,29 @@ def resolve_formatter(root: Path, value: str) -> Formatter | None:
         wrapper = root / FORMATTER_WRAPPER
         if not wrapper.is_file():
             return None
-        bootstrap = subprocess.run(
-            [str(wrapper), "bootstrap"],
-            cwd=root,
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            env=git_env(),
-        )
-        if bootstrap.returncode != 0:
+        try:
+            bootstrap = subprocess.run(
+                [str(wrapper), "bootstrap"],
+                cwd=root,
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                env=git_env(),
+            )
+            if bootstrap.returncode != 0:
+                return None
+            binary_result = subprocess.run(
+                [str(wrapper), "binary-path"],
+                cwd=root,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                env=git_env(),
+            )
+        except OSError:
             return None
-        binary_result = subprocess.run(
-            [str(wrapper), "binary-path"],
-            cwd=root,
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            env=git_env(),
-        )
         binary = Path(binary_result.stdout.strip())
     else:
         binary = Path(value)

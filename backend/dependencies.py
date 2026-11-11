@@ -1,14 +1,23 @@
+from config import directory_routing
 import logging
-from typing import List, Optional
+from typing import Awaitable, Callable, List, Optional
 
-from fastapi import Depends, HTTPException, Request, Security
+from fastapi import Depends, HTTPException, Request, Response, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
-from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
-from utils.executors import critical_executor, run_blocking
+from utils.api_key_families import (
+    DEV_FAMILY,
+    MCP_FAMILY,
+    wrong_key_family_detail,
+    malformed_api_key_detail,
+    unknown_api_key_detail,
+)
+from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
+from utils.ladder_v1 import enforce_daily_cap
+from config import ladder_v1 as ladder_policy
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
 from utils.memory.product_authorization import ProductAuthorizationContext
@@ -17,48 +26,99 @@ from utils.mcp_memories import (
     build_mcp_default_memory_read_context,
     build_mcp_default_memory_write_context,
 )
-from utils.other.endpoints import check_api_key_rate_limit
+from utils.other import endpoints as auth_endpoints
 from utils.scopes import Scopes, has_scope
 
 logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer()
 
+check_api_key_rate_limit = auth_endpoints.check_api_key_rate_limit
+
+
+def enforce_account_deletion_http_access(uid: str) -> None:
+    """Keep transport enforcement behind a call-time module boundary."""
+    auth_endpoints.enforce_account_deletion_http_access(uid)
+
+
+async def _enforce_account_deletion_access(uid: str) -> None:
+    await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
+
+
+def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
+    """Apply cutover fencing when FastAPI injected a Request (MCP/API-key lanes)."""
+    if request is None or not auth_endpoints.cutover_enforcement_enabled():
+        return
+    auth_endpoints.enforce_account_cutover_http_access(
+        uid,
+        method=request.method,
+        path=request.url.path,
+        headers=request.headers,
+    )
+
+
+async def _enforce_cutover_access(uid: str, request: Request | None) -> None:
+    await run_blocking(db_executor, _enforce_cutover_http_if_request, uid, request)
+
 
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
 ) -> str:
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         id_token = credentials.credentials
         decoded_token = await run_blocking(critical_executor, auth.verify_id_token, id_token)
-        return decoded_token["uid"]
+    except ExecutorSaturatedError as error:
+        raise HTTPException(
+            status_code=503,
+            detail='Authentication temporarily unavailable. Try again shortly.',
+            headers={'Retry-After': '1'},
+        ) from error
     except Exception as e:
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    uid = decoded_token["uid"]
+    await _enforce_account_deletion_access(uid)
+    await _enforce_cutover_access(uid, request)
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, uid, request=request)
+    return uid
 
 
 api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> str:
+async def get_uid_from_mcp_api_key(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+    response: Response = None,  # pyright: ignore[reportArgumentType]
+) -> str:
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
             detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
         )
 
-    token = api_key.replace("Bearer ", "")
+    token = api_key[7:]
     mismatch = wrong_key_family_detail(token, MCP_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
-    auth_result = await run_blocking(critical_executor, mcp_api_key_db.get_api_key_auth_result, token)
+    malformed = malformed_api_key_detail(token, MCP_FAMILY)
+    if malformed:
+        raise HTTPException(status_code=401, detail=malformed)
+    auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
     if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail=unknown_api_key_detail(MCP_FAMILY))
     user_id = user_data["user_id"]
+    await _enforce_account_deletion_access(user_id)
+    await _enforce_cutover_access(user_id, request)
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, auth_endpoints._resolve_request_plane_or_503, user_id, request=request)
+    await _enforce_ladder_api(user_id, response)
     await _check_api_key_rate_limit_async(
         prefix="mcp",
         uid=user_id,
@@ -69,7 +129,11 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     return user_id
 
 
-async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiKeyAuth":
+async def get_mcp_api_key_auth(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+    response: Response = None,  # pyright: ignore[reportArgumentType]
+) -> "ApiKeyAuth":
     """Extract uid plus persisted MCP app/key/scope context from an MCP API key.
 
     Existing uid-only MCP auth remains available through get_uid_from_mcp_api_key.
@@ -82,15 +146,26 @@ async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiK
             detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
         )
 
-    token = api_key.replace("Bearer ", "")
+    token = api_key[7:]
     mismatch = wrong_key_family_detail(token, MCP_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
-    auth_result = await run_blocking(critical_executor, mcp_api_key_db.get_api_key_auth_result, token)
+    malformed = malformed_api_key_detail(token, MCP_FAMILY)
+    if malformed:
+        raise HTTPException(status_code=401, detail=malformed)
+    auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
     if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail=unknown_api_key_detail(MCP_FAMILY))
+
+    await _enforce_account_deletion_access(user_data["user_id"])
+    await _enforce_cutover_access(user_data["user_id"], request)
+    if not directory_routing.routing_off():
+        await run_blocking(
+            db_executor, auth_endpoints._resolve_request_plane_or_503, user_data["user_id"], request=request
+        )
+    await _enforce_ladder_api(user_data["user_id"], response)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
@@ -98,6 +173,31 @@ async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiK
         app_id=user_data.get("app_id"),
         key_id=user_data.get("key_id"),
     )
+
+
+def require_mcp_scope(required_scope: str) -> Callable[..., Awaitable[str]]:
+    """Build a UID dependency using the hosted registry's scope requirement.
+
+    Validate the verified credential context without normalizing its scopes here.
+    Raw-key full-access normalization remains the authentication layer's policy.
+    Keep the existing aggregate MCP read budget on reads and writes; route-level
+    write budgets still compose after this dependency succeeds.
+    """
+
+    async def dependency(auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth)) -> str:
+        if not has_scope(auth.scopes, required_scope):
+            raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {required_scope}")
+        await _check_api_key_rate_limit_async(
+            prefix="mcp",
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            policy_name="mcp:read",
+        )
+        return auth.uid
+
+    dependency.__name__ = f"get_uid_with_mcp_{required_scope.replace('.', '_')}"
+    return dependency
 
 
 async def get_mcp_memory_default_memory_read_context(
@@ -169,7 +269,11 @@ class ApiKeyAuth:
         self.key_id = key_id
 
 
-async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAuth:
+async def get_api_key_auth(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+    response: Response = None,  # pyright: ignore[reportArgumentType]
+) -> ApiKeyAuth:
     """Extract user ID and scopes from API key"""
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
@@ -177,16 +281,27 @@ async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAut
             detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
         )
 
-    token = api_key.replace("Bearer ", "")
+    token = api_key[7:]
     mismatch = wrong_key_family_detail(token, DEV_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
-    auth_result = await run_blocking(critical_executor, dev_api_key_db.get_api_key_auth_result, token)
+    malformed = malformed_api_key_detail(token, DEV_FAMILY)
+    if malformed:
+        raise HTTPException(status_code=401, detail=malformed)
+    auth_result = await run_blocking(db_executor, dev_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="dev", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
 
     if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail=unknown_api_key_detail(DEV_FAMILY))
+
+    await _enforce_account_deletion_access(user_data["user_id"])
+    await _enforce_cutover_access(user_data["user_id"], request)
+    if not directory_routing.routing_off():
+        await run_blocking(
+            db_executor, auth_endpoints._resolve_request_plane_or_503, user_data["user_id"], request=request
+        )
+    await _enforce_ladder_api(user_data["user_id"], response)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
@@ -194,12 +309,6 @@ async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAut
         app_id=user_data.get("app_id"),
         key_id=user_data.get("key_id"),
     )
-
-
-async def get_uid_from_dev_api_key(api_key: str = Security(api_key_header)) -> str:
-    """Legacy function for backward compatibility. Use scope-specific dependencies instead."""
-    auth_data = await get_api_key_auth(api_key)
-    return auth_data.uid
 
 
 # Scope-specific dependencies
@@ -269,7 +378,7 @@ async def _check_api_key_rate_limit_async(
     )
 
 
-async def _check_dev_api_key_rate_limit_async(
+async def check_developer_api_key_rate_limit(
     *,
     request: Optional[Request],
     auth: ApiKeyAuth,
@@ -291,12 +400,29 @@ def _require_conversations_read_scope(auth: ApiKeyAuth):
         )
 
 
+async def _check_conversation_read_budgets_async(
+    *,
+    request: Optional[Request],
+    auth: ApiKeyAuth,
+    route_policy_name: str,
+) -> None:
+    """Charge a conversation read against the shared ceiling, then its per-route budget.
+
+    The shared ceiling is checked first so sustained polling is rejected on the
+    aggregate budget regardless of which read route it targets. Without it, adding a
+    per-route policy would hand each key a fresh bucket and raise the total number of
+    conversation reads it can make -- the opposite of what these limits are for.
+    """
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name="dev:conversation_reads_total")
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name=route_policy_name)
+
+
 async def get_auth_with_conversations_read(
     auth: ApiKeyAuth = Depends(get_api_key_auth),
     request: Request = None,
 ) -> ApiKeyAuth:
     _require_conversations_read_scope(auth)
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversations_read")
+    await _check_conversation_read_budgets_async(request=request, auth=auth, route_policy_name="dev:conversations_read")
     return auth
 
 
@@ -305,12 +431,29 @@ async def get_auth_with_conversation_detail_read(
     request: Request = None,
 ) -> ApiKeyAuth:
     _require_conversations_read_scope(auth)
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversation_detail_read")
+    await _check_conversation_read_budgets_async(
+        request=request, auth=auth, route_policy_name="dev:conversation_detail_read"
+    )
     return auth
 
 
 async def get_uid_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
     await get_auth_with_conversations_read(auth)
+    return auth.uid
+
+
+async def get_uid_with_conversations_read_ask(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
+) -> str:
+    """conversations:read plus the tighter dev:ask budget for the billable RAG endpoint.
+
+    POST /v1/dev/user/ask invokes an LLM (qa_rag) per call, so it carries its own low
+    per-key hourly cap rather than riding the cheap dev:conversations_read list limit —
+    a leaked or overused key can't turn it into an unbounded billable endpoint.
+    """
+    _require_conversations_read_scope(auth)
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name="dev:ask")
     return auth.uid
 
 
@@ -339,6 +482,27 @@ async def get_auth_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_k
 
 async def get_uid_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
     await get_auth_with_conversations_write(auth)
+    return auth.uid
+
+
+async def get_uid_with_conversations_from_segments_write(
+    auth: ApiKeyAuth = Depends(get_auth_with_conversations_write),
+    request: Request = None,
+) -> str:
+    """conversations:write plus the dedicated from-segments budget for the dev route.
+
+    POST /v1/dev/user/conversations/from-segments mirrors the first-party
+    route's dedicated conversations:from-segments policy (30/hour) on top of
+    the shared dev:conversations write ceiling — the same shared-plus-per-route
+    composition as _check_conversation_read_budgets_async, so per-route tuning
+    can never raise the aggregate conversation-write limit. Failure logging
+    includes remote IP and user agent: this route is a scripted-abuse target.
+    """
+    await check_developer_api_key_rate_limit(
+        request=request,
+        auth=auth,
+        policy_name="dev:conversations_from_segments",
+    )
     return auth.uid
 
 
@@ -530,6 +694,26 @@ async def get_developer_memory_default_memory_write_context(
     return auth_context
 
 
+async def get_developer_memory_default_memory_create_context(
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+) -> ProductAuthorizationContext:
+    """POST-only memory-create context: shared hourly ceiling plus burst cap.
+
+    The per-minute ``dev:memories_write_burst`` ceiling exists to stop scripted
+    create bursts (the 2026-09-11 69/min shape), so it must ride only the POST
+    create route — PATCH/DELETE share the hourly write context and must not
+    drain a POST-specific bucket.
+    """
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth_context.uid,
+        app_id=auth_context.app_id,
+        key_id=auth_context.key_id,
+        policy_name="dev:memories_write_burst",
+    )
+    return auth_context
+
+
 async def get_developer_memory_default_memory_batch_write_context(
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_auth_context),
 ) -> ProductAuthorizationContext:
@@ -541,3 +725,17 @@ async def get_developer_memory_default_memory_batch_write_context(
         policy_name="dev:memories_batch",
     )
     return auth_context
+
+
+async def _enforce_ladder_api(uid: str, response: Response | None) -> None:
+    # MCP and developer API traffic is bounded by the daily request count and,
+    # once wired, the per-request read limit. It does not draw the monthly
+    # usage budget.
+    daily = None
+    if ladder_policy.mcp_daily_caps_enabled():
+        daily = await run_blocking(db_executor, enforce_daily_cap, uid)
+    if daily is not None and response is not None:
+        response.headers['X-Omi-Usage-State'] = daily['state']
+        response.headers['X-Omi-Usage-Reset-At'] = str(daily['reset_at'])
+        if daily['state'] == 'nudge':
+            response.headers['X-Omi-Storefront-Trigger'] = 'mcp_daily_cap'

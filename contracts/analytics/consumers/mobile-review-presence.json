@@ -1,0 +1,18 @@
+{
+  "id": "mobile-review-presence",
+  "kind": "question",
+  "owner": "Mobile product",
+  "question": "Are native review opportunities and API calls instrumented in this mobile build? These are point counters, not proof of a displayed prompt or submitted review.",
+  "query": "contracts/analytics/consumers/mobile-review-presence.sql",
+  "events": [
+    "appReviewOpportunity",
+    "appReviewRequestAttempted",
+    "appReviewRequestFinished"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "No rows means no recorded opportunities or requests in this namespace/build; do not infer rating behavior or an instrumentation failure without eligible reading traffic."
+}

@@ -1,8 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
+import 'package:provider/provider.dart';
 
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/ui/ui.dart';
 
 typedef CalendarYearBuilder = Widget Function({
   required int year,
@@ -29,12 +35,120 @@ CalendarDatePicker2Config getDefaultCalendarConfig({
     lastDate: lastDate ?? now.add(const Duration(days: 365 * 5)),
     disableMonthPicker: disableMonthPicker,
     yearBuilder: yearBuilder,
-    selectedDayHighlightColor: ResponsiveHelper.purplePrimary,
-    dayTextStyle: const TextStyle(color: ResponsiveHelper.textPrimary),
-    selectedDayTextStyle: const TextStyle(color: ResponsiveHelper.textPrimary, fontWeight: FontWeight.bold),
-    todayTextStyle: const TextStyle(color: ResponsiveHelper.purplePrimary, fontWeight: FontWeight.bold),
-    weekdayLabelTextStyle: const TextStyle(color: ResponsiveHelper.textTertiary, fontWeight: FontWeight.w500),
-    controlsTextStyle: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
-    disabledDayTextStyle: const TextStyle(color: ResponsiveHelper.textQuaternary),
+    // Neutral accent (INV-UI-1): a white selection with black text, today in bold white.
+    selectedDayHighlightColor: OmiColors.accent,
+    selectedRangeHighlightColor: OmiColors.surface3,
+    dayTextStyle: TextStyle(color: OmiColors.textPrimary),
+    selectedDayTextStyle: TextStyle(color: OmiColors.onAccent, fontWeight: FontWeight.bold),
+    todayTextStyle: TextStyle(color: OmiColors.textPrimary, fontWeight: FontWeight.w800),
+    weekdayLabelTextStyle: TextStyle(color: OmiColors.textTertiary, fontWeight: FontWeight.w500),
+    controlsTextStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
+    disabledDayTextStyle: TextStyle(color: OmiColors.textDisabled),
   );
 }
+
+/// The one conversation date filter picker (hub audit #23).
+///
+/// The same filter narrows the list and, while a search is active, the search
+/// ([ConversationProvider.filterConversationsByDateRange]), so the calendar
+/// button never silently switches what it filters. The active filter is also
+/// shown as a removable chip under the search bar (`ConversationDateFilterChip`).
+/// Colours are neutral per INV-UI-1 (product/invariants/brand-ui.md).
+Future<void> showConversationDateRangePicker(
+  BuildContext context, {
+  DateTime? initialStartDate,
+  DateTime? initialEndDate,
+  bool singleDayOnly = false,
+  FutureOr<void> Function(DateTime start, DateTime end)? onSelected,
+  FutureOr<void> Function()? onClear,
+}) async {
+  final provider = onSelected == null ? Provider.of<ConversationProvider>(context, listen: false) : null;
+  final l10n = context.l10n;
+  final hasExistingFilter =
+      onSelected == null ? provider!.selectedStartDate != null : onClear != null && initialStartDate != null;
+  final now = DateTime.now();
+  List<DateTime?> range = singleDayOnly
+      ? [(onSelected == null ? provider!.selectedStartDate : initialStartDate) ?? now]
+      : [
+          (onSelected == null ? provider!.selectedStartDate : initialStartDate) ?? now,
+          (onSelected == null ? provider!.selectedEndDate ?? provider.selectedStartDate : initialEndDate) ?? now,
+        ];
+
+  await showOmiSheet<void>(
+    context: context,
+    title: l10n.filterByDate,
+    builder: (sheetContext) {
+      return SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 340,
+              child: Material(
+                color: Colors.transparent,
+                child: CalendarDatePicker2(
+                  config: getDefaultCalendarConfig(
+                    firstDate: DateTime(2020),
+                    lastDate: now,
+                    currentDate: now,
+                    calendarType: singleDayOnly ? CalendarDatePicker2Type.single : CalendarDatePicker2Type.range,
+                  ),
+                  value: range,
+                  displayedMonthDate: range.first ?? now,
+                  onValueChanged: (dates) => range = dates,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: OmiSpacing.xs, bottom: OmiSpacing.md),
+              child: Row(
+                children: [
+                  if (hasExistingFilter)
+                    Expanded(
+                      child: OmiButton.secondary(
+                        key: const Key('date_range_remove'),
+                        label: l10n.removeFilter,
+                        onPressed: () async {
+                          Navigator.of(sheetContext).pop();
+                          if (onClear != null) {
+                            await onClear();
+                          } else {
+                            await provider!.clearDateFilter();
+                            PlatformManager.instance.analytics.calendarFilterCleared();
+                          }
+                        },
+                      ),
+                    ),
+                  if (hasExistingFilter) const SizedBox(width: OmiSpacing.sm),
+                  Expanded(
+                    child: OmiButton(
+                      key: const Key('date_range_done'),
+                      label: l10n.done,
+                      onPressed: () async {
+                        final start = range.isNotEmpty ? range[0] : null;
+                        Navigator.of(sheetContext).pop();
+                        if (start == null) return;
+                        final end = closedCalendarRangeEnd(start, range.length > 1 ? range[1] : null);
+                        if (onSelected != null) {
+                          await onSelected(start, end);
+                        } else {
+                          await provider!.filterConversationsByDateRange(start, end);
+                          PlatformManager.instance.analytics.calendarFilterApplied(start, end);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+/// Inclusive end of a calendar range. A single selected day has no second
+/// date, so fall back to [start] instead of leaving the upper bound open.
+DateTime closedCalendarRangeEnd(DateTime start, DateTime? end) => end ?? start;

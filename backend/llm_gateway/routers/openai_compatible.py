@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from typing import Any, cast
 
@@ -20,7 +20,10 @@ from llm_gateway.gateway.accounting import (
     image_usage,
     openai_usage_from_sse_payload,
 )
+from llm_gateway.gateway.proactivity_budget import attempt_scope, context_from_request
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
+from llm_gateway.gateway.dream_usage import with_dream_usage
+from llm_gateway.gateway.dream_lanes import DREAM_LANES
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.credentials import (
@@ -35,6 +38,7 @@ from llm_gateway.gateway.errors import (
     GatewayInvalidRouteConfigError,
     GatewayInvalidRequestError,
 )
+from llm_gateway.gateway.schemas import ProviderRejection
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     execute_chat_completion,
@@ -43,6 +47,8 @@ from llm_gateway.gateway.executor import (
     provider_request_for,
     selected_serving_route,
     selected_serving_route_artifact_id,
+    selected_route_is_lkg,
+    selected_route_serving_class,
 )
 from llm_gateway.gateway.metrics import (
     observe_error,
@@ -55,13 +61,23 @@ from llm_gateway.gateway.metrics import (
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
 from llm_gateway.gateway.request_context import request_id_for
-from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
-from llm_gateway.gateway.schemas import RouteArtifact
-from llm_gateway.gateway.sse import SSEEventDecoder
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
+from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
+from llm_gateway.gateway.resolver import ResolvedRoute, resolve_chat_completion_route
+from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
+from llm_gateway.gateway.sse import SSEEvent, SSEEventDecoder
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 
 router = APIRouter()
 _image_generation_client: httpx.AsyncClient | None = None
+
+# The provider throttled the caller's own key. These reach the router as a
+# credential failure, but they are not a bad credential: answering 401 tells
+# callers the key is invalid and makes a transient failure look permanent.
+_THROTTLED_FAILURE_CLASSES = frozenset({FailureClass.BYOK_RATE_LIMIT, FailureClass.BYOK_QUOTA})
+# Keep CRLF atomic: without the atomic group, the regex engine can backtrack
+# from ``\r\n`` to ``\r`` + ``\n`` and split a multi-line SSE event at its
+# first line ending.
 
 
 @router.post('/v1/chat/completions', response_model=None)
@@ -90,7 +106,12 @@ async def create_chat_completion(
             payer='byok' if credentials.mode.value == 'byok' else 'omi',
             fallback_feature=resolved_route.lane.lane_id,
         )
+        proactivity = context_from_request(request, caller, accounting_context)
         is_streaming = resolved_route.validated_request.forwarded_params.get('stream') is True
+        if proactivity is not None and is_streaming:
+            raise GatewayInvalidRequestError(
+                'proactivity requires a nonstreaming exclusive budget', rejection_reason='proactivity_streaming'
+            )
         if is_streaming:
             return await _streaming_response(
                 resolved_route,
@@ -101,12 +122,13 @@ async def create_chat_completion(
                 accounting_context=accounting_context,
                 attempt_trace=attempt_trace,
             )
-        result = await execute_chat_completion(
-            resolved_route,
-            credentials,
-            provider_registry,
-            attempt_trace=attempt_trace,
-        )
+        with attempt_scope(proactivity):
+            result = await execute_chat_completion(
+                resolved_route,
+                credentials,
+                provider_registry,
+                attempt_trace=attempt_trace,
+            )
         schedule_attempt_trace(accounting_context, attempt_trace)
         _safe_observe(
             lambda: observe_success(
@@ -120,7 +142,9 @@ async def create_chat_completion(
             request_id=request_id,
             api_surface='openai_chat_completions',
         )
-        return JSONResponse(content=result.response)
+        return JSONResponse(
+            content=with_dream_usage(result.response, resolved_route.lane.lane_id, attempt_trace),
+        )
     except asyncio.CancelledError:
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, attempt_trace)
@@ -134,8 +158,9 @@ async def create_chat_completion(
                     provider='none',
                     model='none',
                     credential_source=credential_source,
-                    used_lkg=route is resolved_route.last_known_good_route,
-                    fallback_used=route is resolved_route.last_known_good_route,
+                    route_serving_class=selected_route_serving_class(resolved_route),
+                    used_lkg=selected_route_is_lkg(resolved_route),
+                    fallback_used=False,
                     fallback_reason=None,
                     outcome='cancelled',
                     error_class='client_cancelled',
@@ -161,6 +186,8 @@ async def create_chat_completion(
                     credential_source=credential_source,
                     request_id=request_id,
                     streaming=is_streaming,
+                    used_lkg=selected_route_is_lkg(resolved_route),
+                    route_serving_class=selected_route_serving_class(resolved_route),
                 ),
                 request_id=request_id,
                 api_surface='openai_chat_completions',
@@ -171,11 +198,16 @@ async def create_chat_completion(
                     api_surface='openai_chat_completions',
                     error_class=exc.code.value,
                     request_id=request_id,
+                    error=exc,
                 ),
                 request_id=request_id,
                 api_surface='openai_chat_completions',
             )
-        return _error_response(exc)
+        response = _error_response(exc)
+        if resolved_route is not None:
+            content = with_dream_usage(json.loads(bytes(response.body)), resolved_route.lane.lane_id, attempt_trace)
+            return JSONResponse(status_code=response.status_code, content=content)
+        return response
     except Exception:
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, attempt_trace)
@@ -189,8 +221,9 @@ async def create_chat_completion(
                     provider='none',
                     model='none',
                     credential_source=credential_source,
-                    used_lkg=route is resolved_route.last_known_good_route,
-                    fallback_used=route is resolved_route.last_known_good_route,
+                    route_serving_class=selected_route_serving_class(resolved_route),
+                    used_lkg=selected_route_is_lkg(resolved_route),
+                    fallback_used=False,
                     fallback_reason=None,
                     outcome='error',
                     error_class='unexpected_internal',
@@ -227,9 +260,11 @@ async def _request_json(request: Request) -> dict[str, Any]:
     try:
         body = await request.json()
     except ValueError as exc:
-        raise GatewayInvalidRequestError('request body must be valid JSON') from exc
+        raise GatewayInvalidRequestError(
+            'request body must be valid JSON', rejection_reason='request_body_json'
+        ) from exc
     if not isinstance(body, dict):
-        raise GatewayInvalidRequestError('request body must be an object')
+        raise GatewayInvalidRequestError('request body must be an object', rejection_reason='request_body_object')
     return cast(dict[str, Any], body)
 
 
@@ -241,27 +276,38 @@ def _resolve_credentials(request: Request, caller: ServiceAuthDependency) -> Cre
 
 
 def _error_response(exc: GatewayError) -> JSONResponse:
-    content: dict[str, object] = {
-        'error': {
-            'message': exc.message,
-            'type': _error_type_for_code(exc.code),
-            'param': exc.param,
-            'code': exc.code.value,
-        }
+    error: dict[str, object] = {
+        'message': exc.message,
+        'type': _error_type_for_code(exc.code, exc.failure_class),
+        'param': exc.param,
+        'code': exc.code.value,
     }
+    if exc.failure_class is not None:
+        # This is a bounded gateway-owned classifier, never an upstream body.
+        # Backend composition boundaries need it to preserve intentional
+        # credential policy without conflating distinct throttling failures.
+        error['failure_class'] = exc.failure_class.value
+    if exc.provider_rejection is not ProviderRejection.NONE:
+        # Bounded gateway-owned classifier over an allowlisted param set, never
+        # an upstream body. Downstream composition boundaries (file chat) need
+        # it to tell request-shape 400s from unreadable user attachments.
+        error['provider_rejection'] = exc.provider_rejection.value
+    content: dict[str, object] = {'error': error}
     return JSONResponse(
         status_code=_status_code_for_error(exc),
         content=content,
     )
 
 
-def _error_type_for_code(code: GatewayErrorCode) -> str:
+def _error_type_for_code(code: GatewayErrorCode, failure_class: FailureClass | None = None) -> str:
     """Map an internal error code to an OpenAI API error category.
 
     OpenAI distinguishes ``type`` (a broad error category) from ``code`` (the
     specific identifier). Without this distinction clients that categorize
     errors by ``type`` cannot classify them correctly.
     """
+    if failure_class in _THROTTLED_FAILURE_CLASSES:
+        return 'rate_limit_error'
     if code == GatewayErrorCode.CREDENTIAL_FAILURE:
         return 'authentication_error'
     if code in {
@@ -269,18 +315,22 @@ def _error_type_for_code(code: GatewayErrorCode) -> str:
         GatewayErrorCode.INVALID_ROUTE_CONFIG,
         GatewayErrorCode.UNSUPPORTED_MODEL,
         GatewayErrorCode.CAPABILITY_NOT_SUPPORTED,
+        GatewayErrorCode.PROVIDER_REQUEST_REJECTED,
     }:
         return 'invalid_request_error'
     return 'api_error'
 
 
 def _status_code_for_error(exc: GatewayError) -> int:
+    if exc.failure_class in _THROTTLED_FAILURE_CLASSES:
+        return 429
     if exc.code == GatewayErrorCode.MODEL_NOT_FOUND:
         return 404
     if exc.code in {
         GatewayErrorCode.INVALID_REQUEST,
         GatewayErrorCode.UNSUPPORTED_MODEL,
         GatewayErrorCode.CAPABILITY_NOT_SUPPORTED,
+        GatewayErrorCode.PROVIDER_REQUEST_REJECTED,
     }:
         return 400
     if exc.code == GatewayErrorCode.CREDENTIAL_FAILURE:
@@ -400,6 +450,7 @@ async def _streaming_response(
     request_id: str,
     accounting_context: AccountingContext,
     attempt_trace: AttemptTrace,
+    max_provider_attempts: int | None = None,
 ) -> StreamingResponse:
     route = selected_serving_route(resolved_route)
     output_budget = output_budget_for(resolved_route, route)
@@ -410,6 +461,7 @@ async def _streaming_response(
         provider_registry,
         route,
         attempt_trace=attempt_trace,
+        max_provider_attempts=max_provider_attempts,
     )
     async_iterator = _stream_with_terminal_metrics(
         prepared,
@@ -444,10 +496,14 @@ async def _prepared_streaming_iterator(
     route: RouteArtifact,
     *,
     attempt_trace: AttemptTrace,
+    max_provider_attempts: int | None = None,
 ) -> _PreparedStream:
     last_error: GatewayError | None = None
     first_failure: str | None = None
-    for index, provider_ref in enumerate([route.primary, *route.fallbacks]):
+    refs = [route.primary] if route.lane_id in DREAM_LANES else [route.primary, *route.fallbacks]
+    for provider_ref in refs:
+        if max_provider_attempts is not None and len(attempt_trace.attempts) >= max_provider_attempts:
+            raise GatewayInvalidRequestError('provider attempt budget exhausted')
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             raise GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
@@ -464,7 +520,8 @@ async def _prepared_streaming_iterator(
         )
         try:
             while True:
-                first_chunk = await anext(stream)
+                with vertex_attempt_scope(route, provider_ref):
+                    first_chunk = await anext(stream)
                 if first_chunk:
                     break
         except StopAsyncIteration:
@@ -473,13 +530,16 @@ async def _prepared_streaming_iterator(
                 stream=stream,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
-                fallback_used=index > 0 or route is resolved_route.last_known_good_route,
+                fallback_used=first_failure is not None,
                 fallback_reason=first_failure,
                 cache_requested=cache_requested_for_openai_request(provider_request),
             )
         except ProviderFailure as exc:
-            last_error = _map_provider_failure(exc, credentials)
+            last_error = _map_provider_failure(exc, credentials, provider_ref)
             attempt_trace.record(
+                lane_id=route.lane_id,
+                cache_policy=provider_request.get('_gateway_cache_policy'),
+                metadata=exc.accounting,
                 provider=provider_ref.provider,
                 configured_model=provider_ref.model,
                 route_artifact_id=route.route_artifact_id,
@@ -490,7 +550,9 @@ async def _prepared_streaming_iterator(
                 usage_status=UsageStatus.INDETERMINATE,
             )
             first_failure = first_failure or exc.failure_class.value
-            if not is_lkg_eligible(route, exc.failure_class):
+            if not can_try_next_provider(route, provider_ref, exc.failure_class):
+                if provider_ref != route.primary:
+                    record_reserved_rejection_fallback(route, first_failure, outcome='exhausted')
                 raise last_error
             continue
         return _PreparedStream(
@@ -498,11 +560,12 @@ async def _prepared_streaming_iterator(
             stream=stream,
             provider=provider_ref.provider,
             model=provider_ref.model,
-            fallback_used=index > 0 or route is resolved_route.last_known_good_route,
+            fallback_used=first_failure is not None,
             fallback_reason=first_failure,
             cache_requested=cache_requested_for_openai_request(provider_request),
         )
     if last_error is not None:
+        record_reserved_rejection_fallback(route, first_failure, outcome='exhausted')
         raise last_error
     raise GatewayInvalidRequestError('streaming provider adapter is not configured', param='stream')
 
@@ -535,18 +598,30 @@ async def _stream_with_terminal_metrics(
         if terminal_observed:
             return
         terminal_observed = True
+        usage_for_trace = usage_metadata
+        # Per the PR behavioral contract, actual fallback requires a subsequent
+        # successful provider/route.  Only stamp the actual-fallback labels when
+        # the terminal outcome is success; an error or cancellation means the
+        # failover did not complete, so dashboards and ad-hoc queries must not
+        # count it as a completed failover.
+        completed_fallback = prepared.fallback_used and outcome == 'success'
+        if prepared.fallback_used:
+            record_reserved_rejection_fallback(
+                route, prepared.fallback_reason, outcome='recovered' if outcome == 'success' else 'exhausted'
+            )
         trace.record(
+            lane_id=route.lane_id,
             provider=prepared.provider,
             configured_model=prepared.model,
             route_artifact_id=route.route_artifact_id,
-            fallback_reason=prepared.fallback_reason,
+            fallback_reason=prepared.fallback_reason if completed_fallback else None,
             retry_ordinal=1,
             outcome=outcome,
             error_class=error_class,
-            metadata=usage_metadata,
+            metadata=usage_for_trace,
             usage_status=(
                 UsageStatus.CONFIRMED
-                if usage_metadata is not None and usage_metadata.usage is not None
+                if outcome == 'success' and usage_for_trace is not None and usage_for_trace.usage is not None
                 else UsageStatus.NOT_REPORTED if outcome == 'success' else UsageStatus.INDETERMINATE
             ),
         )
@@ -560,9 +635,16 @@ async def _stream_with_terminal_metrics(
                 provider=prepared.provider,
                 model=prepared.model,
                 credential_source=credentials.source.value,
-                used_lkg=route is resolved_route.last_known_good_route,
-                fallback_used=prepared.fallback_used,
-                fallback_reason=prepared.fallback_reason,
+                route_serving_class=(
+                    RouteServingClass.ACTUAL_FALLBACK
+                    if completed_fallback
+                    else selected_route_serving_class(resolved_route)
+                ),
+                used_lkg=selected_route_is_lkg(resolved_route),
+                fallback_used=completed_fallback,
+                fallback_reason=prepared.fallback_reason if completed_fallback else None,
+                fallback_from_route_artifact_id=route.route_artifact_id if completed_fallback else None,
+                fallback_to_route_artifact_id=route.route_artifact_id if completed_fallback else None,
                 outcome=outcome,
                 error_class=error_class,
                 request_id=request_id,
@@ -579,37 +661,58 @@ async def _stream_with_terminal_metrics(
             api_surface='openai_chat_completions',
         )
 
-    async def inspect_chunk(chunk: bytes) -> None:
+    async def handle_events(frame_events: list[SSEEvent]) -> bool:
         nonlocal completion_characters, finish_reason, terminal_marker_seen, usage_metadata
-        for event in decoder.feed(chunk):
-            if event.data.strip() == '[DONE]':
+        done_seen = False
+        for event in frame_events:
+            # SSEEvent is intentionally kept behind the decoder interface; the
+            # runtime only relies on its stable data attribute here.
+            data = event.data
+            if data.strip() == '[DONE]':
                 terminal_marker_seen = True
+                done_seen = True
                 await observe_terminal(outcome='success', error_class='none', phase='terminal_marker')
                 continue
-            payload = _stream_payload(event.data)
+            payload = _stream_payload(data)
             if payload is not None:
                 observed_usage = openai_usage_from_sse_payload(
                     payload,
                     cache_requested=prepared.cache_requested,
                 )
                 if observed_usage is not None:
+                    if usage_metadata is not None and '_gateway_cache_receipt' not in payload:
+                        observed_usage = replace(
+                            observed_usage,
+                            lane_id=usage_metadata.lane_id,
+                            resolved_model=usage_metadata.resolved_model,
+                            cache_mode=usage_metadata.cache_mode,
+                            cacheable_prefix_tokens=usage_metadata.cacheable_prefix_tokens,
+                            cache_write_tokens=usage_metadata.cache_write_tokens,
+                            cache_storage_token_seconds=usage_metadata.cache_storage_token_seconds,
+                            cache_operation_usage_complete=usage_metadata.cache_operation_usage_complete,
+                        )
                     usage_metadata = observed_usage
-            completion_characters += _stream_completion_character_count(event.data)
-            observed_finish_reason = _stream_finish_reason(event.data)
+            completion_characters += _stream_completion_character_count(data)
+            observed_finish_reason = _stream_finish_reason(data)
             if observed_finish_reason is not None:
                 finish_reason = observed_finish_reason
+        return done_seen
+
+    async def inspect_chunk(chunk: bytes) -> list[bytes]:
+        await handle_events(decoder.feed(chunk))
+        return [chunk]
 
     if prepared.first_chunk is None:
         await observe_terminal(outcome='error', error_class='empty_stream_before_output', phase='before_output')
         return
 
     try:
-        await inspect_chunk(prepared.first_chunk)
-        yield prepared.first_chunk
+        for emitted in await inspect_chunk(prepared.first_chunk):
+            yield emitted
         async for chunk in prepared.stream:
             if chunk:
-                await inspect_chunk(chunk)
-                yield chunk
+                for emitted in await inspect_chunk(chunk):
+                    yield emitted
     except asyncio.CancelledError:
         await observe_terminal(
             outcome='cancelled',
@@ -631,6 +734,7 @@ async def _stream_with_terminal_metrics(
         await observe_terminal(outcome='error', error_class='transport_midstream', phase='midstream')
         raise
     else:
+        await handle_events(decoder.feed(b'\n\n'))
         if not terminal_marker_seen:
             await observe_terminal(outcome='error', error_class='eof_before_terminal_marker', phase='midstream')
     finally:
@@ -658,6 +762,9 @@ def _accounting_context(
         feature=feature.strip(),
         api_surface=api_surface,
         payer=payer,
+        app_platform=caller.app_platform,
+        product_lane=caller.product_lane,
+        client_platform=caller.client_platform,
     )
 
 

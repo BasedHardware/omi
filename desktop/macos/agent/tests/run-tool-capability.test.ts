@@ -20,14 +20,18 @@ afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
-function fixture(role: "coordinator" | "leaf" = "coordinator") {
+function fixture(
+  role: "coordinator" | "leaf" = "coordinator",
+  mode: "ask" | "act" = "act",
+  surfaceKind?: string,
+) {
   const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
   roots.push(root);
   const databasePath = join(root, "agent.sqlite");
   const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
   const session = store.insertSession({
     ownerId: "owner-1",
-    surfaceKind: role === "leaf" ? "background_agent" : "main_chat",
+    surfaceKind: surfaceKind ?? (role === "leaf" ? "background_agent" : "main_chat"),
     defaultAdapterId: "acp",
     executionRole: role,
   });
@@ -36,7 +40,7 @@ function fixture(role: "coordinator" | "leaf" = "coordinator") {
     clientId: "trace-client",
     requestId: "trace-request",
     status: "running",
-    mode: "act",
+    mode,
   });
   const attempt = store.insertAttempt({
     runId: run.runId,
@@ -86,6 +90,61 @@ function invocationIdentity(invocation: AuthorizedRunToolInvocation) {
 }
 
 describe("RunToolCapabilityBroker", () => {
+  it("hard-denies ask-mode service writes without trusting an external-ref prefix", () => {
+    const { store, session, run, attempt } = fixture("coordinator", "ask");
+    store.execute(
+      "UPDATE sessions SET surface_kind = 'service', external_ref_kind = 'service', external_ref_id = 'arbitrary-label' WHERE session_id = ?",
+      [session.sessionId],
+    );
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const base = {
+      capabilityRef: capability.capabilityRef,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolInput: {},
+    };
+
+    expect(capability.builtInToolPolicy).toBe("read_only");
+
+    expectCode(
+      () => broker.authorize({ ...base, invocationId: "write", toolName: "create_memory" }),
+      "tool_not_allowed",
+    );
+    expect(
+      broker.authorize({ ...base, invocationId: "read", toolName: "search_memories" }).effectClass,
+    ).toBe("read_only");
+    store.close();
+  });
+
+  it("keeps ordinary ask-mode chat adapter built-ins and manifest writes on default authority", () => {
+    const { store, session, run, attempt } = fixture("coordinator", "ask");
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability.builtInToolPolicy).toBe("default");
+    expect(() => broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "ordinary-write",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "create_memory",
+      toolInput: {},
+    })).not.toThrow();
+    store.close();
+  });
+
   it("requires the canonical profile reader and rejects unknown canonical adapters", () => {
     const { store } = fixture();
     expect(() => new RunToolCapabilityBroker({ store } as never)).toThrow(
@@ -239,6 +298,89 @@ describe("RunToolCapabilityBroker", () => {
     store.close();
   });
 
+  it("classifies create_memory as a coordinator main-chat non-idempotent write", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    expect(capability.allowedToolNames).toContain("create_memory");
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "create-memory-1",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "create_memory",
+      toolInput: { content: "I prefer tea." },
+    });
+    expect(authorized).toMatchObject({
+      canonicalToolName: "create_memory",
+      surfaceKind: "main_chat",
+      executionRole: "coordinator",
+      effectClass: "non_idempotent_write",
+      retryPolicy: "never_auto_retry",
+    });
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      effectClass: "non_idempotent_write",
+      retryPolicy: "never_auto_retry",
+    });
+    store.close();
+  });
+
+  it.each([
+    ["realtime_voice", "coordinator"],
+    ["task_chat", "coordinator"],
+    ["background_agent", "leaf"],
+    ["delegated_agent", "leaf"],
+  ] as const)("does not authorize create_memory from %s/%s", (surfaceKind, executionRole) => {
+    const root = mkdtempSync(join(tmpdir(), "omi-capability-memory-scope-"));
+    roots.push(root);
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner-1",
+      surfaceKind,
+      defaultAdapterId: "acp",
+      executionRole,
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "scope-client",
+      requestId: `scope-request-${surfaceKind}`,
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "acp",
+      adapterInstanceId: "scope-worker",
+    });
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability.allowedToolNames).not.toContain("create_memory");
+    expectCode(() => broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: `create-memory-${surfaceKind}`,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "create_memory",
+      toolInput: { content: "must not be saved" },
+    }), "tool_not_allowed");
+    store.close();
+  });
+
   it("rejects stale and duplicate Swift results by the exact persisted tuple", () => {
     const { store, session, run, attempt } = fixture();
     const broker = createBroker(store);
@@ -343,6 +485,113 @@ describe("RunToolCapabilityBroker", () => {
     expectCode(() => broker.authorize({ ...base, toolName: "not_a_real_tool" }), "tool_not_manifested");
     expectCode(() => broker.authorize({ ...base, toolName: "spawn_agent" }), "tool_not_allowed");
     store.close();
+  });
+
+  it("requires a persisted desktop approval before authorizing sensitive tools", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const base = {
+      capabilityRef: capability.capabilityRef,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "list_message_chats",
+      toolInput: {},
+    };
+
+    expectCode(() => broker.authorize({ ...base, invocationId: "without-approval" }), "approval_required");
+    // The model relays this message; it must not send the user hunting for an approval control.
+    expect(() => broker.authorize({ ...base, invocationId: "without-approval-message" }))
+      .toThrow(/no approval prompt.*do not ask the user to approve/);
+
+    store.insertGrant({
+      sessionId: session.sessionId,
+      runId: run.runId,
+      capability: "desktop.messaging.read",
+      operation: "list_message_chats",
+      resourcePattern: "*",
+      effect: "allow",
+      source: "user",
+    });
+    const authorized = broker.authorize({ ...base, invocationId: "with-approval" });
+    expect(authorized.canonicalToolName).toBe("list_message_chats");
+    store.close();
+  });
+
+  it("authorizes surface-scoped voice tools for swift_realtime runs without leaking them elsewhere", () => {
+    // Regression: realtime-voice runs relay Swift-executed voice tools that no
+    // chat adapter advertises. An adapter-only allowlist rejected every such
+    // tool (think_deeper, web_search, point_click) with tool_not_allowed in production.
+    const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
+    roots.push(root);
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner-1",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "pi-mono",
+      executionRole: "coordinator",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "voice-client",
+      requestId: "voice-request",
+      status: "running",
+      mode: "act",
+      inputJson: JSON.stringify({
+        metadata: { externalSurface: { authority: "swift_realtime", turnId: "turn-1" } },
+      }),
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "pi-mono",
+      adapterInstanceId: "worker",
+    });
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability.surfaceKind).toBe("realtime_voice");
+    expect(capability.allowedToolNames).toContain("think_deeper");
+    expect(capability.allowedToolNames).toContain("web_search");
+    expect(capability.allowedToolNames).toContain("point_click");
+    expect(capability.allowedToolNames).not.toContain("record_interject_feedback");
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "invoke-voice",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "web_search",
+      toolInput: { query: "what's the weather in nyc right now?" },
+    });
+    expect(authorized.canonicalToolName).toBe("web_search");
+    store.close();
+
+    // A plain ACP chat run must not inherit voice-only tools. Typed desktop
+    // chat advertises web_search through the pi-mono adapter, not this ACP fixture.
+    const chat = fixture();
+    const chatCapability = createBroker(chat.store).register({
+      ownerId: chat.session.ownerId,
+      sessionId: chat.session.sessionId,
+      runId: chat.run.runId,
+      attemptId: chat.attempt.attemptId,
+    });
+    expect(chatCapability.allowedToolNames).not.toContain("think_deeper");
+    expect(chatCapability.allowedToolNames).not.toContain("web_search");
+    expect(chatCapability.allowedToolNames).not.toContain("point_click");
+    expect(chatCapability.allowedToolNames).not.toContain("record_interject_feedback");
+    chat.store.close();
   });
 
   it("keeps capability state internal and revokes it at terminal attempt", () => {
@@ -578,5 +827,97 @@ describe("RunToolCapabilityBroker", () => {
       retryPolicy: "safe_retry",
     });
     reopened.close();
+  });
+});
+
+describe("RunToolCapabilityBroker spawn-time tool policy", () => {
+  it("intersects a spawn-time toolPolicy with the computed allowlist", () => {
+    const { store, session, run, attempt } = fixture("leaf");
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({
+        prompt: "restricted child",
+        metadata: { toolPolicy: { allowedToolNames: ["get_memories"] } },
+      }),
+      run.runId,
+    ]);
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    expect(capability.allowedToolNames).toEqual(["get_memories"]);
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "policy-allowed-1",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "get_memories",
+      toolInput: {},
+    });
+    expect(authorized.canonicalToolName).toBe("get_memories");
+    expectCode(
+      () => broker.authorize({
+        capabilityRef: capability.capabilityRef,
+        invocationId: "policy-denied-1",
+        runId: run.runId,
+        attemptId: attempt.attemptId,
+        activeOwnerId: session.ownerId,
+        toolName: "search_memories",
+        toolInput: {},
+      }),
+      "tool_not_allowed",
+    );
+    store.close();
+  });
+
+  it("keeps the full role-computed allowlist when no toolPolicy is present", () => {
+    const { store, session, run, attempt } = fixture("leaf");
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    // Baseline for the intersection test above: both tools are normally
+    // available to a leaf run, so exclusion there is policy-driven.
+    expect(capability.allowedToolNames).toContain("get_memories");
+    expect(capability.allowedToolNames).toContain("search_memories");
+    store.close();
+  });
+
+  it("fails closed when the toolPolicy intersection is empty or the policy is malformed", () => {
+    for (const toolPolicy of [{ allowedToolNames: ["not_a_real_tool"] }, "bogus", { allowedToolNames: "bogus" }]) {
+      const { store, session, run, attempt } = fixture("leaf");
+      store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+        JSON.stringify({ prompt: "restricted child", metadata: { toolPolicy } }),
+        run.runId,
+      ]);
+      const broker = createBroker(store);
+      const capability = broker.register({
+        ownerId: session.ownerId,
+        sessionId: session.sessionId,
+        runId: run.runId,
+        attemptId: attempt.attemptId,
+      });
+      expect(capability.allowedToolNames).toEqual([]);
+      expectCode(
+        () => broker.authorize({
+          capabilityRef: capability.capabilityRef,
+          invocationId: "policy-closed-1",
+          runId: run.runId,
+          attemptId: attempt.attemptId,
+          activeOwnerId: session.ownerId,
+          toolName: "get_memories",
+          toolInput: {},
+        }),
+        "tool_not_allowed",
+      );
+      store.close();
+    }
   });
 });

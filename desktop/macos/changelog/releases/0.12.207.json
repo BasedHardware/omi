@@ -1,0 +1,7 @@
+{
+  "version": "0.12.207",
+  "date": "2026-08-22",
+  "changes": [
+    "Activity's row is now labelled View, carries only the pages it opens, and every page it opens — Conversations, Memories and Brain Map — has a back control to return to it."
+  ]
+}

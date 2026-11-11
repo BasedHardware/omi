@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-wal-acknowledged-without-materialized-output",
+  "violated_contract": "Observability: a reconcile job that completes without materializing output must emit a reconcile_completed_empty diagnostic record.",
+  "canonical_prevention": "Emit a per-WAL reconcile_completed_empty event at the shared async WAL acknowledgement boundary when a completed job reports zero new and zero updated conversations. Include job/WAL identity, result and segment counts, and retry accounting while preserving completed-job acknowledgement. Behavioral reconciliation tests assert persisted acknowledgement and observable diagnostics for empty results, and no empty-completion event for nonempty results.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/local_wal_sync_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/local_wal_sync.dart"
+  ],
+  "status": "open"
+}

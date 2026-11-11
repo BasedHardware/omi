@@ -8,7 +8,10 @@ that the namespaced OmiAPI types cover the desktop's highest-traffic read DTOs.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import os
+import subprocess
+import sys
+from pathlib import Path, PureWindowsPath
 
 from scripts import generate_swift_openapi_types
 
@@ -18,16 +21,16 @@ SWIFT_PATH = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources' / 'Generated
 
 
 def test_swift_dto_file_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_swift_openapi_types.generate(spec, 'docs/api-reference/app-client-openapi.json')
 
-    assert SWIFT_PATH.read_text() == generated
+    assert SWIFT_PATH.read_text(encoding='utf-8') == generated
     assert '// GENERATED CODE - DO NOT EDIT.' in generated
     assert 'public enum OmiAPI {' in generated
 
 
 def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
-    generated = SWIFT_PATH.read_text()
+    generated = SWIFT_PATH.read_text(encoding='utf-8')
 
     # The desktop's highest-traffic read endpoints (conversations, memories,
     # action items, goals) decode these generated DTOs through adapter inits
@@ -40,6 +43,8 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
         'struct ActionItemUpdateRequest:',
         'struct ActionItem:',
         'struct MemoryDB:',
+        'struct MemoryEditResponse:',
+        'struct MemoryRevertRequest:',
         'struct GoalResponse:',
         'struct GoalDetailProjection:',
         'struct CandidateRecord:',
@@ -64,6 +69,8 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
     assert 'public let desiredOutcome: OmiPatchField<String>' in generated
     assert 'public let nextReviewAt: OmiPatchField<String>' in generated
     assert 'taskChange = .create(try c.decode(TaskCreatePayload.self' in generated
+    assert 'body: MemoryRevertRequest' in generated
+    assert 'async throws -> MemoryEditResponse' in generated
 
 
 def test_swift_generator_handles_refs_optionals_and_enums():
@@ -91,6 +98,11 @@ def test_swift_generator_handles_refs_optionals_and_enums():
     assert 'public enum Color: String, Codable, CaseIterable {' in color_block
     assert 'case red' in color_block
     assert 'case _unknown = "__unknown__"' in color_block  # tolerant fallback
+    # Exact match first, then a Python-qualified value ("Color.red") by its last component (#21091).
+    exact = color_block.index('if let exact = Color(rawValue: raw) {')
+    unqualified = color_block.index('let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw')
+    fallback = color_block.index('self = Color(rawValue: unqualified) ?? ._unknown')
+    assert exact < unqualified < fallback
 
     nested_block = generate_swift_openapi_types._render_struct('Nested', nested_schema)
     assert 'public struct Nested: Codable {' in nested_block
@@ -100,6 +112,8 @@ def test_swift_generator_handles_refs_optionals_and_enums():
     # Refs render as the referenced type name; required ref is non-optional.
     assert 'public let nested: Nested' in widget_block
     assert 'public let tags: [String]?' in widget_block
+    # Newly optional fields must not break existing construction call sites.
+    assert 'tags: [String]? = nil' in widget_block
     # AdditionalProperties renders as a typed dictionary.
     assert '[String: Double]?' in widget_block
 
@@ -149,3 +163,29 @@ def test_swift_generator_emits_required_headers_and_client_default_headers():
     assert 'idempotencyKey: String' in generated
     assert 'for (name, value) in client.headers' in generated
     assert 'req.setValue(String(idempotencyKey), forHTTPHeaderField: "Idempotency-Key")' in generated
+
+
+def test_swift_source_label_is_stable_for_windows_paths():
+    root = PureWindowsPath('C:/src/omi')
+    spec_path = root / 'docs' / 'api-reference' / 'app-client-openapi.json'
+
+    assert (
+        generate_swift_openapi_types.source_label_for_path(spec_path, root)
+        == 'docs/api-reference/app-client-openapi.json'
+    )
+
+
+def test_swift_generator_cli_uses_utf8_when_the_process_locale_does_not():
+    env = os.environ.copy()
+    env.update({'LANG': 'C', 'LC_ALL': 'C', 'PYTHONCOERCECLOCALE': '0', 'PYTHONUTF8': '0'})
+
+    completed = subprocess.run(
+        [sys.executable, str(generate_swift_openapi_types.__file__), '--check'],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=ROOT_DIR,
+        env=env,
+    )
+
+    assert completed.returncode == 0, completed.stderr

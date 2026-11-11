@@ -1,12 +1,112 @@
 import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as wire;
-
-enum PlanType { basic, unlimited, architect, operator }
+import 'package:omi/models/transcription_allowance.dart';
 
 enum SubscriptionStatus { active, inactive }
 
-PlanType _planTypeFromWire(String? value) {
-  return PlanType.values.asNameMap()[value] ?? PlanType.basic;
+/// A subscription plan identity received from the backend.
+///
+/// This is intentionally a class rather than an enum. The backend can deploy
+/// a new plan before this app is updated, and decoding that value must not
+/// silently turn a paying subscriber into [PlanType.basic]. Known plan values
+/// retain the enum-shaped API used by the app (`PlanType.values`, `.name`, and
+/// the static plan constants), while unknown values retain their raw wire ID.
+class PlanType {
+  static const PlanType basic = PlanType._('basic', 'basic', 'basic');
+  static const PlanType unlimited = PlanType._('unlimited', 'unlimited', 'unlimited');
+  static const PlanType architect = PlanType._('architect', 'architect', 'architect');
+  static const PlanType operator = PlanType._('operator', 'operator', 'operator');
+  static const PlanType plus = PlanType._('plus', 'plus', 'plus');
+  static const PlanType unlimitedV2 = PlanType._('unlimitedV2', 'unlimited_v2', 'unlimited_v2');
+
+  /// The canonical catalog identities known by this client.
+  ///
+  /// Legacy aliases and future identities are deliberately not included.
+  static const List<PlanType> values = <PlanType>[basic, unlimited, architect, operator, plus, unlimitedV2];
+
+  /// Dart-style identifier used by existing analytics and UI call sites.
+  final String name;
+
+  /// The exact plan ID to use at the backend wire boundary.
+  ///
+  /// For an unknown plan this is the raw value received from the backend.
+  final String wireName;
+
+  /// Canonical catalog identity, or null for an unrecognized future value.
+  final String? _canonicalWireName;
+
+  const PlanType._(this.name, this.wireName, this._canonicalWireName);
+
+  /// Creates a lossless representation for a plan ID unknown to this client.
+  factory PlanType.unknown(String rawWireName) {
+    return PlanType._(rawWireName, rawWireName, null);
+  }
+
+  /// Decodes a backend plan ID without collapsing unknown values to Basic.
+  ///
+  /// `pro` is the catalog's legacy alias for Architect and is canonicalized to
+  /// Architect's identity at the domain boundary.
+  factory PlanType.fromWire(String? value) {
+    switch (value) {
+      case 'basic':
+        return PlanType.basic;
+      case 'unlimited':
+        return PlanType.unlimited;
+      case 'architect':
+        return PlanType.architect;
+      case 'operator':
+        return PlanType.operator;
+      case 'plus':
+        return PlanType.plus;
+      case 'unlimited_v2':
+        return PlanType.unlimitedV2;
+      case 'pro':
+        return PlanType.architect;
+      case null:
+        // GeneratedSubscription supplies the legacy default for an omitted
+        // plan field. Keep this defensive path aligned with that contract.
+        return PlanType.basic;
+      default:
+        return PlanType.unknown(value);
+    }
+  }
+
+  bool get isUnknown => _canonicalWireName == null;
+
+  /// Unknown plans never infer paid access from an unfamiliar ID.
+  bool get isPaid => !isUnknown && _canonicalWireName != PlanType.basic.wireName;
+
+  /// Plans with no monthly transcription cap. Plus is paid but metered
+  /// (1500 min/month), so it is deliberately excluded. Unknown plans are
+  /// conservative and do not infer unlimited access.
+  bool get hasUnlimitedTranscription =>
+      _canonicalWireName == PlanType.unlimited.wireName ||
+      _canonicalWireName == PlanType.operator.wireName ||
+      _canonicalWireName == PlanType.architect.wireName ||
+      _canonicalWireName == PlanType.unlimitedV2.wireName;
+
+  /// Mirrors backend DESKTOP_ENTITLED_PLAN_TYPES.
+  bool get grantsDesktop =>
+      _canonicalWireName == PlanType.operator.wireName ||
+      _canonicalWireName == PlanType.architect.wireName ||
+      _canonicalWireName == PlanType.unlimitedV2.wireName;
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! PlanType) return false;
+    if (isUnknown || other.isUnknown) {
+      return isUnknown && other.isUnknown && wireName == other.wireName;
+    }
+    return _canonicalWireName == other._canonicalWireName;
+  }
+
+  @override
+  int get hashCode => isUnknown ? wireName.hashCode : _canonicalWireName.hashCode;
+
+  @override
+  String toString() => isUnknown ? 'PlanType.unknown($wireName)' : 'PlanType.$name';
 }
+
+PlanType _planTypeFromWire(String? value) => PlanType.fromWire(value);
 
 SubscriptionStatus _subscriptionStatusFromWire(String? value) {
   return SubscriptionStatus.values.asNameMap()[value] ?? SubscriptionStatus.inactive;
@@ -100,7 +200,7 @@ class Subscription {
 
   wire.GeneratedSubscription toGenerated() {
     return wire.GeneratedSubscription(
-      plan: plan.name,
+      plan: plan.wireName,
       status: status.name,
       currentPeriodEnd: currentPeriodEnd,
       stripeSubscriptionId: stripeSubscriptionId,
@@ -231,6 +331,151 @@ class PhoneCallQuota {
   Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
+class HeldAudioRecording {
+  final String id;
+  final int startedAt;
+  final int seconds;
+
+  const HeldAudioRecording({required this.id, required this.startedAt, required this.seconds});
+
+  factory HeldAudioRecording.fromGenerated(wire.GeneratedHeldAudioRecording generated) {
+    return HeldAudioRecording(id: generated.id, startedAt: generated.startedAt, seconds: generated.seconds);
+  }
+}
+
+class HeldAudioSummary {
+  final String state;
+  bool get isRecovering => state == 'recovering';
+  final int seconds;
+  final int resetAt;
+  final bool retainLive;
+  final int count;
+  final List<HeldAudioRecording> recordings;
+
+  const HeldAudioSummary({
+    this.state = 'paused',
+    required this.seconds,
+    required this.resetAt,
+    required this.retainLive,
+    this.count = 0,
+    this.recordings = const [],
+  });
+
+  factory HeldAudioSummary.fromGenerated(wire.GeneratedHeldAudioSummary generated) {
+    return HeldAudioSummary(
+      state: generated.state,
+      seconds: generated.seconds,
+      resetAt: generated.resetAt,
+      retainLive: generated.retainLive,
+      count: generated.count,
+      recordings: generated.recordings.map(HeldAudioRecording.fromGenerated).toList(),
+    );
+  }
+}
+
+/// Server-owned processing estimate and choice. Never infer a reset/upgrade
+/// decision from the legacy held_audio recovery state or a client clock.
+class ProcessingBacklog {
+  final String state;
+  final bool budgetExhausted;
+  final int heldAudioCount;
+  final int heldAudioSeconds;
+  final int deferredConversations;
+  final int deferredSeconds;
+  final double estimatedUnits;
+  final double estimatedHours;
+  final double estimatedPercent;
+  final double? remainingUnits;
+  final bool exceedsRemaining;
+
+  const ProcessingBacklog({
+    required this.state,
+    this.budgetExhausted = true,
+    this.heldAudioCount = 0,
+    this.heldAudioSeconds = 0,
+    this.deferredConversations = 0,
+    this.deferredSeconds = 0,
+    this.estimatedUnits = 0,
+    this.estimatedHours = 0,
+    this.estimatedPercent = 0,
+    this.remainingUnits,
+    this.exceedsRemaining = false,
+  });
+
+  int get waitingSeconds => heldAudioSeconds + deferredSeconds;
+
+  bool get isCapped => state == 'capped';
+  bool get isWaitingChoice => state == 'waiting_choice';
+  bool get isProcessing => state == 'processing';
+  bool get isVisible => isCapped || isWaitingChoice || isProcessing;
+
+  factory ProcessingBacklog.fromJson(Map<String, dynamic> json) =>
+      ProcessingBacklog.fromGenerated(wire.GeneratedProcessingBacklog.fromJson(json));
+
+  factory ProcessingBacklog.fromGenerated(wire.GeneratedProcessingBacklog generated) => ProcessingBacklog(
+        state: generated.state,
+        budgetExhausted: generated.budgetExhausted,
+        heldAudioCount: generated.heldAudioCount,
+        heldAudioSeconds: generated.heldAudioSeconds,
+        deferredConversations: generated.deferredConversations,
+        deferredSeconds: generated.deferredSeconds,
+        estimatedUnits: generated.estimatedUnits,
+        estimatedHours: generated.estimatedHours,
+        estimatedPercent: generated.estimatedPercent,
+        remainingUnits: generated.remainingUnits,
+        exceedsRemaining: generated.exceedsRemaining,
+      );
+
+  wire.GeneratedProcessingBacklog toGenerated() => wire.GeneratedProcessingBacklog(
+        state: state,
+        budgetExhausted: budgetExhausted,
+        heldAudioCount: heldAudioCount,
+        heldAudioSeconds: heldAudioSeconds,
+        deferredConversations: deferredConversations,
+        deferredSeconds: deferredSeconds,
+        estimatedUnits: estimatedUnits,
+        estimatedHours: estimatedHours,
+        estimatedPercent: estimatedPercent,
+        remainingUnits: remainingUnits,
+        exceedsRemaining: exceedsRemaining,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'state': state,
+        'budget_exhausted': budgetExhausted,
+        'held_audio_count': heldAudioCount,
+        'held_audio_seconds': heldAudioSeconds,
+        'deferred_conversations': deferredConversations,
+        'deferred_seconds': deferredSeconds,
+        'estimated_units': estimatedUnits,
+        'estimated_hours': estimatedHours,
+        'estimated_percent': estimatedPercent,
+        'remaining_units': remainingUnits,
+        'exceeds_remaining': exceedsRemaining,
+      };
+}
+
+/// A declined renewal the user can still pay (backend `payment_issue`). Present only while the
+/// plan's Stripe subscription is past_due or unpaid with an open invoice; the entitlement itself
+/// already reads as Free.
+class PaymentIssue {
+  final String status;
+  final PlanType plan;
+
+  const PaymentIssue({required this.status, required this.plan});
+
+  factory PaymentIssue.fromGenerated(wire.GeneratedPaymentIssue generated) =>
+      PaymentIssue(status: generated.status, plan: PlanType.fromWire(generated.plan));
+
+  wire.GeneratedPaymentIssue toGenerated() => wire.GeneratedPaymentIssue(status: status, plan: plan.wireName);
+
+  @override
+  bool operator ==(Object other) => other is PaymentIssue && other.status == status && other.plan == plan;
+
+  @override
+  int get hashCode => Object.hash(status, plan);
+}
+
 class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
@@ -241,6 +486,9 @@ class UserSubscriptionResponse {
   final int insightsGainedLimit;
   final List<SubscriptionPlan> availablePlans;
   final bool showSubscriptionUi;
+
+  /// Backend-confirmed: this reader can still get an introductory free trial on checkout.
+  final bool trialEligible;
   // Chat quota fields — populated from subscription endpoint
   final double chatQuotaUsed;
   final String? chatQuotaUnit;
@@ -248,6 +496,10 @@ class UserSubscriptionResponse {
   final bool chatQuotaAllowed;
   final int? chatQuotaResetAt;
   final PhoneCallQuota? phoneCallQuota;
+  final TranscriptionAllowanceSnapshot? transcriptionAllowance;
+  final HeldAudioSummary? heldAudio;
+  final ProcessingBacklog? processingBacklog;
+  final PaymentIssue? paymentIssue;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -259,21 +511,27 @@ class UserSubscriptionResponse {
     required this.insightsGainedLimit,
     this.availablePlans = const [],
     this.showSubscriptionUi = true,
+    this.trialEligible = false,
     this.chatQuotaUsed = 0.0,
     this.chatQuotaUnit,
     this.chatQuotaPercent = 0.0,
     this.chatQuotaAllowed = true,
     this.chatQuotaResetAt,
     this.phoneCallQuota,
+    this.transcriptionAllowance,
+    this.heldAudio,
+    this.processingBacklog,
+    this.paymentIssue,
   });
 
-  factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) {
-    return UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse.fromJson(json));
-  }
+  factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) =>
+      UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse.fromJson(json));
 
   factory UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse generated) {
     return UserSubscriptionResponse(
       subscription: Subscription.fromGenerated(generated.subscription),
+      processingBacklog:
+          generated.processingBacklog == null ? null : ProcessingBacklog.fromGenerated(generated.processingBacklog!),
       transcriptionSecondsUsed: generated.transcriptionSecondsUsed,
       transcriptionSecondsLimit: generated.transcriptionSecondsLimit,
       wordsTranscribedUsed: generated.wordsTranscribedUsed,
@@ -282,18 +540,25 @@ class UserSubscriptionResponse {
       insightsGainedLimit: generated.insightsGainedLimit,
       availablePlans: generated.availablePlans.map(SubscriptionPlan.fromGenerated).toList(),
       showSubscriptionUi: generated.showSubscriptionUi,
+      trialEligible: generated.trialEligible,
       chatQuotaUsed: generated.chatQuotaUsed,
       chatQuotaUnit: generated.chatQuotaUnit,
       chatQuotaPercent: generated.chatQuotaPercent,
       chatQuotaAllowed: generated.chatQuotaAllowed,
       chatQuotaResetAt: generated.chatQuotaResetAt,
       phoneCallQuota: generated.phoneCallQuota == null ? null : PhoneCallQuota.fromGenerated(generated.phoneCallQuota!),
+      transcriptionAllowance: generated.transcriptionAllowance == null
+          ? null
+          : TranscriptionAllowanceSnapshot.fromGenerated(generated.transcriptionAllowance!),
+      heldAudio: generated.heldAudio == null ? null : HeldAudioSummary.fromGenerated(generated.heldAudio!),
+      paymentIssue: generated.paymentIssue == null ? null : PaymentIssue.fromGenerated(generated.paymentIssue!),
     );
   }
 
   wire.GeneratedUserSubscriptionResponse toGenerated() {
     return wire.GeneratedUserSubscriptionResponse(
       subscription: subscription.toGenerated(),
+      processingBacklog: processingBacklog?.toGenerated(),
       transcriptionSecondsUsed: transcriptionSecondsUsed,
       transcriptionSecondsLimit: transcriptionSecondsLimit,
       wordsTranscribedUsed: wordsTranscribedUsed,
@@ -308,8 +573,28 @@ class UserSubscriptionResponse {
       chatQuotaAllowed: chatQuotaAllowed,
       chatQuotaResetAt: chatQuotaResetAt,
       phoneCallQuota: phoneCallQuota?.toGenerated(),
+      transcriptionAllowance: transcriptionAllowance?.toGenerated(),
+      paymentIssue: paymentIssue?.toGenerated(),
+      heldAudio: heldAudio == null
+          ? null
+          : wire.GeneratedHeldAudioSummary(
+              state: heldAudio!.state,
+              recordings: heldAudio!.recordings
+                  .map(
+                    (row) =>
+                        wire.GeneratedHeldAudioRecording(id: row.id, seconds: row.seconds, startedAt: row.startedAt),
+                  )
+                  .toList(),
+              resetAt: heldAudio!.resetAt,
+              retainLive: heldAudio!.retainLive,
+              seconds: heldAudio!.seconds,
+              count: heldAudio!.count,
+            ),
     );
   }
 
-  Map<String, dynamic> toJson() => toGenerated().toJson();
+  Map<String, dynamic> toJson() => {
+        ...toGenerated().toJson(),
+        if (processingBacklog != null) 'processing_backlog': processingBacklog!.toJson(),
+      };
 }

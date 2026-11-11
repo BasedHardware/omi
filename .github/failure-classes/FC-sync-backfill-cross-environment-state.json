@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-backfill-cross-environment-state",
+  "violated_contract": "A dev sync process sharing production Firestore and Redis must not discover, claim, or mutate production sequencer jobs, leases, retry state, or dispatch guards.",
+  "canonical_prevention": "Bind the legacy UID sequencer registry to the production runtime, reject non-production registry access before any I/O, and scope other shared sync Redis and Firestore state by runtime stage while preserving existing production paths. Test the dev process against seeded production state and require a per-UID cutover wait.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_backfill_uid_sequencer.py",
+    "backend/tests/unit/test_recover_dev_failed_sync_backfill.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/sync_backfill_sequencer.py",
+    "backend/database/sync_jobs.py",
+    "backend/utils/sync/backfill_cutover.py"
+  ],
+  "status": "open"
+}

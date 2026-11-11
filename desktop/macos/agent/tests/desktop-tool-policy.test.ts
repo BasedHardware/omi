@@ -44,6 +44,18 @@ describe("desktop tool policy", () => {
     expect(result.decision).toBe("dispatch_required");
   });
 
+  it("classifies create_memory as an approved coordinator write", () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: "create_memory",
+      selectedBundles: ["desktop.memories.write"],
+      userExplicitMutation: true,
+    });
+
+    expect(result.requiredBundles).toEqual(["desktop.memories.write"]);
+    expect(result.decision).toBe("dispatch_required");
+    expect(result.descriptor.readOnly).toBe(false);
+  });
+
   it("requires dispatch for external sends and denies unselected bundles", () => {
     expect(
       evaluateDesktopToolPolicy({
@@ -118,6 +130,40 @@ describe("desktop tool policy", () => {
 
     expect(prod.decision).toBe("deny");
     expect(dev.decision).toBe("dispatch_required");
+  });
+
+  it("requires an exact resource for automation grants", () => {
+    const base = {
+      requestedBundles: ["desktop.automation.act"] as const,
+      selectedBundles: ["desktop.automation.act"] as const,
+      operation: "run_applescript",
+      resourceRef: "tell application \\\"Finder\\\" to activate",
+      nowMs: 1_000,
+    };
+
+    expect(
+      evaluateDesktopToolPolicy({
+        ...base,
+        grants: [{
+          bundle: "desktop.automation.act" as const,
+          operation: "run_applescript",
+          effect: "allow" as const,
+          expiresAtMs: 2_000,
+        }],
+      }).decision,
+    ).toBe("dispatch_required");
+    expect(
+      evaluateDesktopToolPolicy({
+        ...base,
+        grants: [{
+          bundle: "desktop.automation.act" as const,
+          operation: "run_applescript",
+          resourceRef: base.resourceRef,
+          effect: "allow" as const,
+          expiresAtMs: 2_000,
+        }],
+      }).decision,
+    ).toBe("allow");
   });
 
   it("treats a macOS permission request as a production user-approved capability", () => {

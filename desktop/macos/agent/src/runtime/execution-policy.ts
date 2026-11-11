@@ -8,6 +8,37 @@ import {
 export type AgentExecutionRole = "coordinator" | "leaf";
 export type ProviderBoundary = "managed_cloud" | `local_user:${string}`;
 
+export type SessionModelRoutingContext = {
+  providerBoundary: ProviderBoundary;
+  defaultAdapterId: string;
+  modelProfile: string | null;
+};
+
+/** True when session.modelProfile is a cloud QoS hint that the active adapter uses for routing. */
+export function adapterUsesCloudModelQoSHint(session: SessionModelRoutingContext): boolean {
+  const profile = session.modelProfile?.trim();
+  if (!profile) {
+    return false;
+  }
+  if (session.providerBoundary === "managed_cloud" && session.defaultAdapterId === "pi-mono") {
+    return true;
+  }
+  if (session.defaultAdapterId === "acp") {
+    return true;
+  }
+  return false;
+}
+
+/** Value persisted to runs.requested_model_id at admission time. */
+export function runRequestedModelIdForSession(session: SessionModelRoutingContext): string | null {
+  return adapterUsesCloudModelQoSHint(session) ? session.modelProfile : null;
+}
+
+/** When true, a model_used observation should replace requested_model_id on terminal success. */
+export function shouldRecordServedModelAsRunRequestedId(session: SessionModelRoutingContext): boolean {
+  return !adapterUsesCloudModelQoSHint(session);
+}
+
 export const LEAF_AGENT_CONTROL_TOOLS = new Set([
   "send_agent_message",
   "spawn_background_agent",

@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Rewind now reopens screen capture when the display stream drops, instead of filling the timeline with blank screenshots."
+  ]
+}

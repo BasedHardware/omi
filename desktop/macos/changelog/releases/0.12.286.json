@@ -1,0 +1,10 @@
+{
+  "version": "0.12.286",
+  "date": "2026-09-04",
+  "changes": [
+    "Omi no longer reads Interject's classification aloud during voice replies",
+    "Skipping or denying a permission during onboarding no longer makes Omi re-ask for it on every launch, app switch, or settings sync — microphone, screen recording, and file indexing stay off until you turn them on yourself",
+    "Push-to-talk replies you fully heard are no longer repeated or re-corrected on later, unrelated questions",
+    "Voice transcripts no longer duplicate Omi's own spoken replies picked up by the microphone"
+  ]
+}

@@ -33,6 +33,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=automation-token-path.sh
+source "$SCRIPT_DIR/automation-token-path.sh"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OMI_CTL="$SCRIPT_DIR/omi-ctl"
 
@@ -169,7 +171,7 @@ app_name() { printf '%s' "${BUNDLE_ID#com.omi.}"; }
 app_dir() { printf '/Applications/%s.app' "$(app_name)"; }
 app_binary() { printf '%s/Contents/MacOS/Omi Computer' "$(app_dir)"; }
 app_log() { printf '%s/app.log' "$REPORT_DIR"; }
-token_file() { printf '%s/omi-automation-%s.token' "${TMPDIR:-/tmp}" "$PORT"; }
+token_file() { omi_automation_token_file "$PORT"; }
 
 bridge() { OMI_AUTOMATION_PORT="$PORT" "$OMI_CTL" "$@"; }
 
@@ -256,7 +258,8 @@ launch_app() {
   [ -x "$binary" ] || return 1
   rm -f "$(token_file)"
   OMI_AUTOMATION_PORT="$PORT" OMI_ENABLE_LOCAL_AUTOMATION=1 \
-    nohup "$binary" >>"$(app_log)" 2>&1 &
+    nohup "$binary" --automation-bridge "--automation-port=$PORT" \
+      --automation-ui=quiet >>"$(app_log)" 2>&1 &
   APP_PID=$!
   # Detach from job control so bash doesn't print "Terminated" when probes
   # SIGTERM the app deliberately.

@@ -1,3 +1,4 @@
+import 'package:omi/env/physical_qualification.dart';
 import 'package:flutter/material.dart';
 
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -12,11 +13,13 @@ class CrashlyticsTalkerObserver extends TalkerObserver {
 
   @override
   void onError(err) {
+    if (PhysicalQualification.enabled) return;
     FirebaseCrashlytics.instance.recordError(err.error, err.stackTrace, reason: err.message);
   }
 
   @override
   void onException(err) {
+    if (PhysicalQualification.enabled) return;
     FirebaseCrashlytics.instance.recordError(err.exception, err.stackTrace, reason: err.message);
   }
 }

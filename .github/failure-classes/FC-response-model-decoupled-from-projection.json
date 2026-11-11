@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-response-model-decoupled-from-projection",
+  "violated_contract": "A route's declared response model must validate the exact payload that route returns. When the model names an internal record type the read seam never emits, response validation fails on every populated page while empty pages still succeed, so the route 500s exactly when it has results.",
+  "canonical_prevention": "Declare the response model on the projection the route actually emits, and cover it with a test that serializes a real non-empty projection through a real framework route so the framework's own response validation executes. Route tests that stub the web framework out never run that validation and cannot catch the divergence.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_product_memory_search_response_contract.py"
+  ],
+  "evidence_prs": [
+    11501
+  ],
+  "scope_hints": [
+    "backend/models/*.py",
+    "backend/routers/*.py"
+  ],
+  "status": "open"
+}

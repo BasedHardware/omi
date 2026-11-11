@@ -25,10 +25,10 @@ def _ensure_stub(name):
 # Stub database chain so render.py can import at module level without Firestore
 _ensure_stub("database")
 sys.modules["database"].__path__ = getattr(sys.modules["database"], "__path__", [])
-for _sub in ["_client", "redis_db", "users", "folders"]:
+for _sub in ["_client", "redis_db", "users", "folders", "auth"]:
     _ensure_stub(f"database.{_sub}")
 sys.modules["database._client"].db = MagicMock()
-sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name": "TestUser"})
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="TestUser")
 sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
 sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
 
@@ -89,6 +89,7 @@ class TestRedactForList:
 
     def test_locked_strips_details_keeps_title(self):
         conv = _make_conv_dict(is_locked=True)
+        conv['match_snippets'] = [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
         result = redact_conversation_for_list(conv)
         assert result['structured']['title'] == "Test Title"
         assert result['structured']['overview'] == "Test overview"
@@ -98,6 +99,13 @@ class TestRedactForList:
         assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
+        assert result['match_snippets'] == []
+
+    def test_unlocked_keeps_match_snippets(self):
+        conv = _make_conv_dict(is_locked=False)
+        conv['match_snippets'] = [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
+        result = redact_conversation_for_list(conv)
+        assert result['match_snippets'] == [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
 
     def test_locked_no_structured_key(self):
         conv = {"id": "x", "is_locked": True}
@@ -147,12 +155,14 @@ class TestRedactForList:
 
 class TestRedactForIntegration:
     def test_unlocked_passthrough(self):
-        conv = _make_conv_dict(is_locked=False)
+        conv = _make_conv_dict(is_locked=False, geolocation={'latitude': 1.0, 'longitude': 2.0})
         result = redact_conversation_for_integration(conv)
         assert result['structured']['title'] == "Test Title"
+        assert 'geolocation' not in result
 
     def test_locked_strips_everything(self):
-        conv = _make_conv_dict(is_locked=True)
+        conv = _make_conv_dict(is_locked=True, geolocation={'latitude': 1.0, 'longitude': 2.0})
+        conv['match_snippets'] = [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
         result = redact_conversation_for_integration(conv)
         assert result['structured']['title'] == ''
         assert result['structured']['overview'] == ''
@@ -162,6 +172,8 @@ class TestRedactForIntegration:
         assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
+        assert result['match_snippets'] == []
+        assert 'geolocation' not in result
 
     def test_locked_non_dict_structured_coerced(self):
         """Integration redaction also handles non-dict structured (e.g. Pydantic)."""
@@ -204,6 +216,21 @@ class TestRedactForIntegration:
         results = redact_conversations_for_integration(convs)
         assert results[0]['structured']['title'] == ''
         assert results[1]['structured']['title'] == "Test Title"
+
+    def test_strips_internal_audio_evidence_from_segments(self):
+        conv = _make_conv_dict(is_locked=False)
+        conv['transcript_segments'] = [
+            {
+                'text': 'hi',
+                'audio_capture_start': 1.0,
+                'audio_capture_end': 2.0,
+                'audio_source': {'type': 'sync', 'start': 1.0, 'end': 2.0},
+            }
+        ]
+        result = redact_conversation_for_integration(conv)
+        segment = result['transcript_segments'][0]
+        for field in ('audio_capture_start', 'audio_capture_end', 'audio_source'):
+            assert field not in segment
 
 
 class TestSerializeDatetimes:
@@ -360,7 +387,6 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in [
             'utils/conversations/process_conversation.py',
-            'utils/conversations/postprocess_conversation.py',
             'utils/conversations/merge_conversations.py',
         ]:
             path = os.path.join(backend, rel_path)

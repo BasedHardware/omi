@@ -1,0 +1,13 @@
+{
+  "version": "0.12.168",
+  "date": "2026-08-13",
+  "changes": [
+    "Added context-aware proactive help that carries useful evidence across repeated work without exposing excluded apps",
+    "Memory and tasks now use one consistent system for every account while preserving existing memories and task history",
+    "Improved proactive notifications with adjustable active hours, persistent frequency and permission state, type-specific chat badges, and reliable message actions",
+    "Fixed a crash that could occur while refreshing the live voice context",
+    "Fixed a crash that could occur when opening exported memories in another app",
+    "Fixed desktop chat getting stuck after a local agent error",
+    "Fixed realtime voice audio recovery after an audio-device change"
+  ]
+}

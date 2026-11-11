@@ -1,0 +1,7 @@
+{
+  "version": "0.12.374",
+  "date": "2026-09-21",
+  "changes": [
+    "Added on-device hybrid search over screen history, transcripts, and memories so results stay faster, offline, and private"
+  ]
+}

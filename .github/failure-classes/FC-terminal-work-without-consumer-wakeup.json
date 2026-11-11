@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-terminal-work-without-consumer-wakeup",
+  "violated_contract": "When a consumer drains durable completed work in response to an in-process lifecycle transition, every producer that can complete that work must publish the same transition after the authoritative terminal commit. An externally owned run that writes its final answer and journal but never enters the consumer's observed projection completes silently until an unrelated reconnect or input-window event happens to poll the backlog.",
+  "canonical_prevention": "Return the canonical persisted surface identity with external-run admission, project accepted and terminal kernel receipts onto a run-scoped status surface, and let the completion consumer wake only for terminal background or explicitly run-scoped realtime projections. Keep the durable kernel journal and checkpoint authoritative: the projection schedules a read but never carries or acknowledges completion content itself. Regression coverage must exercise a realtime alias bound to a persisted floating-chat session, the confirmed lifecycle projection, successful next-turn delivery, and rejection of ordinary chat terminal transitions.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/AgentCompletionVoiceDeliveryTests.swift",
+    "desktop/macos/Desktop/Tests/AgentRuntimeStatusStoreTests.swift",
+    "desktop/macos/agent/tests/external-surface-authority.test.ts"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Chat/AgentCompletionVoiceDelivery.swift",
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift",
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift",
+    "desktop/macos/agent/src/runtime/kernel-core.ts"
+  ],
+  "status": "open"
+}

@@ -51,7 +51,7 @@ class _FakeDb:
 
 
 def _install_db(monkeypatch, snapshot):
-    monkeypatch.setattr(task_control_db, 'db', _FakeDb(snapshot))
+    monkeypatch.setattr(task_control_db, 'get_firestore_client', lambda: _FakeDb(snapshot))
 
 
 def test_malformed_control_falls_back_to_legacy_default(monkeypatch):

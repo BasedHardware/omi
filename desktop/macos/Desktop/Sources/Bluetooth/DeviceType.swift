@@ -62,6 +62,20 @@ enum DeviceType: String, CaseIterable, Codable {
   case friendPendant
   case limitless
 
+  /// Stable, bounded vendor dimension for product analytics.
+  var analyticsVendorSlug: String {
+    switch self {
+    case .omi, .openglass: return "omi"
+    case .limitless: return "limitless"
+    case .plaud: return "plaud"
+    case .bee: return "bee"
+    case .appleWatch: return "apple"
+    case .fieldy: return "fieldlabs"
+    case .friendPendant: return "friend"
+    case .frame: return "unknown"
+    }
+  }
+
   /// Human-readable display name
   var displayName: String {
     switch self {

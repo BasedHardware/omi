@@ -316,6 +316,8 @@ private struct FuzzSequenceHarness {
       context.toolCallID = callID
       context.toolIdentity = identity
       context.reservedIdentity = nil
+    case .toolDeadlineClassSelectedScoped:
+      break
     case .playbackStartedScoped(_, let lease):
       context.activeLease = lease
       context.reservedIdentity = nil
@@ -744,6 +746,17 @@ private struct FuzzFailure: Error, CustomStringConvertible {
         identity: identity,
         callID: FuzzIDs.toolCallID(&rng, salt: harness.stringSalt))
     },
+    Entry(label: "tool_deadline_class_selected_scoped", isDriver: false) { rng, harness in
+      let turnID = harness.pickTurnID(&rng, preferCurrent: true)
+      let context = harness.context(for: turnID)
+      let identity = context.toolIdentity ?? harness.reserveIdentity(for: turnID)
+      harness.stringSalt &+= 1
+      return .toolDeadlineClassSelectedScoped(
+        turnID: turnID,
+        identity: identity,
+        callID: context.toolCallID ?? FuzzIDs.toolCallID(&rng, salt: harness.stringSalt),
+        deadlineClass: rng.nextBool() ? .standard : .chatLane)
+    },
     Entry(label: "tool_finished_scoped", isDriver: false) { rng, harness in
       let turnID = harness.pickTurnID(&rng, preferCurrent: true)
       let context = harness.context(for: turnID)
@@ -813,6 +826,9 @@ private struct FuzzFailure: Error, CustomStringConvertible {
         turnID: harness.pickTurnID(&rng, preferCurrent: true),
         text: rng.nextBool() ? "" : "fuzz-hint-\(rng.nextUInt64())")
     },
+    Entry(label: "dictation_recognized", isDriver: false) { rng, harness in
+      .dictationRecognized(turnID: harness.pickTurnID(&rng, preferCurrent: true))
+    },
     Entry(label: "response_waiting_changed", isDriver: false) { rng, harness in
       .responseWaitingChanged(
         turnID: harness.pickTurnID(&rng, preferCurrent: true),
@@ -865,10 +881,11 @@ private struct FuzzFailure: Error, CustomStringConvertible {
     "provider_reconnect_failed", "provider_replacement_started", "provider_replacement_ready",
     "provider_replacement_failed", "context_resolved", "transcription_started",
     "transcription_final", "transcription_failed", "provider_response_started_scoped",
-    "provider_turn_finished_scoped", "tool_started_scoped", "tool_finished_scoped",
+    "provider_turn_finished_scoped", "tool_started_scoped",
+    "tool_deadline_class_selected_scoped", "tool_finished_scoped",
     "playback_started_scoped", "playback_drained_scoped", "playback_failed_scoped",
     "transcription_finalization_started", "transcription_finalization_completed",
-    "journal_accepted", "journal_failed", "transcript_changed", "hint_changed",
+    "journal_accepted", "journal_failed", "transcript_changed", "hint_changed", "dictation_recognized",
     "response_waiting_changed", "response_active_changed", "debug_presentation_changed",
     "clear_presentation", "deadline_fired", "finish", "cancel", "interrupt", "cleanup", "reset",
   ]

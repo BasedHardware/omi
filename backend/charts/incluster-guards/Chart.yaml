@@ -1,0 +1,5 @@
+apiVersion: v2
+name: incluster-guards
+description: Independent Parakeet and batch admission rollback guards
+version: 0.3.2
+type: application

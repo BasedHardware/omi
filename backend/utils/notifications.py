@@ -5,8 +5,10 @@ import math
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from config.action_item_reminder_policy import should_schedule_action_item_reminder
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from database.redis_db import (
     set_credit_limit_notification_sent,
@@ -15,6 +17,8 @@ from database.redis_db import (
     has_silent_user_notification_been_sent,
 )
 from database.auth import get_user_from_uid
+from utils.integration_telemetry import emit_posthog_event
+from utils.notification_text import to_plain_text
 from .llm.notifications import (
     generate_notification_message,
     generate_credit_limit_notification,
@@ -68,8 +72,19 @@ def _build_android_config(tag: str, priority: str = 'normal', is_data_only: bool
     return messaging.AndroidConfig(**config_kwargs)
 
 
-def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSConfig:
-    """Build APNs configuration with deduplication."""
+def _build_apns_config(
+    tag: str,
+    is_background: bool = False,
+    *,
+    alert_title: Optional[str] = None,
+    alert_body: Optional[str] = None,
+) -> messaging.APNSConfig:
+    """Build APNs configuration with deduplication.
+
+    When ``alert_title`` / ``alert_body`` are set (client-displayed chat answers),
+    emit an explicit APNS alert because the FCM top-level ``notification`` is
+    omitted so Android can render BigText locally (#4375).
+    """
     headers = {'apns-collapse-id': tag}
 
     if is_background:
@@ -83,6 +98,24 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
         return messaging.APNSConfig(
             headers=headers,
             payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+        )
+
+    if alert_title is not None or alert_body is not None:
+        headers.update(
+            {
+                'apns-push-type': 'alert',
+                'apns-priority': '10',
+                'apns-topic': IOS_BUNDLE_ID,
+            }
+        )
+        return messaging.APNSConfig(
+            headers=headers,
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(
+                    alert=messaging.ApsAlert(title=alert_title or '', body=alert_body or ''),
+                    sound='default',
+                ),
+            ),
         )
 
     return messaging.APNSConfig(headers=headers)
@@ -119,6 +152,13 @@ def _build_webpush_config(
     return messaging.WebpushConfig(**config_kwargs)
 
 
+def _stringify_fcm_data(data: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """FCM data payloads require string values."""
+    if not data:
+        return {}
+    return {str(k): '' if v is None else str(v) for k, v in data.items()}
+
+
 def _build_message(
     token: str,
     tag: str,
@@ -126,13 +166,35 @@ def _build_message(
     data: Optional[Dict[str, Any]] = None,
     is_background: bool = False,
     priority: str = 'normal',
+    *,
+    client_displayed: bool = False,
+    display_title: Optional[str] = None,
+    display_body: Optional[str] = None,
 ) -> messaging.Message:
-    """Build a complete FCM message with proper platform configs."""
-    # Extract title/body for webpush config (browsers need explicit values)
-    title: Optional[str] = cast(Any, notification).title if notification else None
-    body: Optional[str] = cast(Any, notification).body if notification else None
+    """Build a complete FCM message with proper platform configs.
+
+    ``client_displayed`` omits the top-level FCM notification so Android can
+    render a local BigText shade entry, while APNS still carries an alert for
+    iOS system trays (#4375).
+    """
     # Extract navigate_to for webpush click-through link
     link: Optional[str] = data.get('navigate_to') if data else None
+
+    if client_displayed:
+        title = display_title
+        body = display_body
+        return messaging.Message(
+            token=token,
+            notification=None,
+            data=data,
+            android=_build_android_config(tag, priority, is_data_only=True),
+            apns=_build_apns_config(tag, alert_title=title, alert_body=body),
+            webpush=_build_webpush_config(tag, title, body, link),
+        )
+
+    # Extract title/body for webpush config (browsers need explicit values)
+    title = cast(Any, notification).title if notification else None
+    body = cast(Any, notification).body if notification else None
 
     return messaging.Message(
         token=token,
@@ -168,6 +230,19 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
     return success_count, invalid_tokens
 
 
+def _emit_tokens_invalidated(user_id: str, count: int) -> None:
+    """Analytics-only signal that permanent-failure tokens were just removed.
+
+    Feeds churn/re-engagement analysis: an `invalidated` event without a later
+    `registered` means the uid has no deliverable push token. Bulk sends carry
+    no uid, so this intentionally fires only on per-user send paths.
+    """
+    try:
+        emit_posthog_event(user_id, 'Push Token Status', {'status': 'invalidated', 'invalidated_count': count})
+    except Exception as exc:  # noqa: BLE001 — analytics must never break a send
+        logger.warning(f'push token invalidated emit failed: {type(exc).__name__}')
+
+
 def _send_to_user(
     user_id: str,
     tag: str,
@@ -176,8 +251,19 @@ def _send_to_user(
     is_background: bool = False,
     priority: str = 'normal',
     tokens: Optional[List[str]] = None,
+    *,
+    client_displayed: bool = False,
+    display_title: Optional[str] = None,
+    display_body: Optional[str] = None,
 ) -> int:
     """Send a message to all user's devices using batch send. Returns count of successful sends."""
+    try:
+        if account_deletion_blocks_user_work(user_id):
+            logger.info('notification suppressed reason=account_deletion')
+            return 0
+    except Exception as error:
+        logger.warning('notification suppressed reason=deletion_authority_unavailable type=%s', type(error).__name__)
+        return 0
     if tokens is None:
         tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
@@ -185,7 +271,20 @@ def _send_to_user(
         return 0
 
     # Build messages for all tokens
-    messages = [_build_message(token, tag, notification, data, is_background, priority) for token in tokens]
+    messages = [
+        _build_message(
+            token,
+            tag,
+            notification,
+            data,
+            is_background,
+            priority,
+            client_displayed=client_displayed,
+            display_title=display_title,
+            display_body=display_body,
+        )
+        for token in tokens
+    ]
 
     try:
         response = _send_messages(messages)
@@ -194,6 +293,7 @@ def _send_to_user(
         # Remove invalid tokens in bulk
         if invalid_tokens:
             notification_db.remove_bulk_tokens(invalid_tokens)
+            _emit_tokens_invalidated(user_id, len(invalid_tokens))
 
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
@@ -211,15 +311,39 @@ async def _send_to_user_async(
     is_background: bool = False,
     priority: str = 'normal',
     tokens: Optional[List[str]] = None,
+    *,
+    client_displayed: bool = False,
+    display_title: Optional[str] = None,
+    display_body: Optional[str] = None,
 ) -> int:
     """Async boundary for the synchronous token store and Firebase Admin SDK."""
+    try:
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, user_id):
+            logger.info('notification suppressed reason=account_deletion')
+            return 0
+    except Exception as error:
+        logger.warning('notification suppressed reason=deletion_authority_unavailable type=%s', type(error).__name__)
+        return 0
     if tokens is None:
         tokens = await run_blocking(db_executor, notification_db.get_all_tokens, user_id)
     if not tokens:
         logger.info(f"No tokens found for user {user_id}")
         return 0
 
-    messages = [_build_message(token, tag, notification, data, is_background, priority) for token in tokens]
+    messages = [
+        _build_message(
+            token,
+            tag,
+            notification,
+            data,
+            is_background,
+            priority,
+            client_displayed=client_displayed,
+            display_title=display_title,
+            display_body=display_body,
+        )
+        for token in tokens
+    ]
 
     try:
         response = await run_blocking(postprocess_executor, _send_messages, messages)
@@ -227,6 +351,7 @@ async def _send_to_user_async(
 
         if invalid_tokens:
             await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
+            _emit_tokens_invalidated(user_id, len(invalid_tokens))
 
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
@@ -240,9 +365,26 @@ def send_notification(
 ) -> None:
     """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup."""
     logger.info(f'send_notification to user {user_id}')
+    body = to_plain_text(body)
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
     _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
+
+
+def send_notification_result(
+    user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None, tokens: Optional[List[str]] = None
+) -> int:
+    """send_notification with the successful-send count returned.
+
+    The self-heal wedge nudge must distinguish a delivered push from an
+    undeliverable one (no tokens, or every send rejected), which
+    ``send_notification``'s ``None`` return cannot express.
+    """
+    logger.info(f'send_notification to user {user_id}')
+    body = to_plain_text(body)
+    tag = _generate_notification_tag(user_id, title, body, data)
+    notification = messaging.Notification(title=title, body=body)
+    return _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
 
 
 async def send_notification_async(
@@ -250,9 +392,78 @@ async def send_notification_async(
 ) -> None:
     """Async counterpart used by event-loop callers while preserving the sync public API."""
     logger.info(f'send_notification to user {user_id}')
+    body = to_plain_text(body)
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
     await _send_to_user_async(user_id, tag, notification=notification, data=data, tokens=tokens)
+
+
+def send_client_displayed_notification(
+    user_id: str,
+    title: str,
+    body: str,
+    data: Optional[Dict[str, Any]] = None,
+    tokens: Optional[List[str]] = None,
+) -> None:
+    """Send a chat/plugin answer push that Flutter renders with BigText on Android (#4375).
+
+    Android: data-only (no system tray fallback) so the client can show BigText.
+    iOS: APNS alert with title/body. Both carry ``push_type=chat_answer`` and
+    ``navigate_to`` in the data map for deep-linking.
+    """
+    logger.info(f'send_client_displayed_notification to user {user_id}')
+    body = to_plain_text(body)
+    payload = _stringify_fcm_data(data)
+    payload['push_type'] = 'chat_answer'
+    payload['title'] = title
+    # Do not set payload['body']: NotificationMessage already carries ``text``,
+    # and duplicating the full answer exceeds FCM's 4KB data limit on long
+    # replies. Clients resolve the shade body from ``text`` (#4375).
+    # APNS/webpush still receive display_body below for system-tray alerts.
+    if not payload.get('text'):
+        payload['text'] = body
+    tag = _generate_tag(f"{user_id}:{title}:{body}:{payload.get('id', '')}")
+    _send_to_user(
+        user_id,
+        tag,
+        notification=None,
+        data=payload,
+        priority='high',
+        tokens=tokens,
+        client_displayed=True,
+        display_title=title,
+        display_body=body,
+    )
+
+
+async def send_client_displayed_notification_async(
+    user_id: str,
+    title: str,
+    body: str,
+    data: Optional[Dict[str, Any]] = None,
+    tokens: Optional[List[str]] = None,
+) -> None:
+    """Async client-displayed boundary for streaming chat so FCM does not block SSE (#4375)."""
+    logger.info(f'send_client_displayed_notification to user {user_id}')
+    body = to_plain_text(body)
+    payload = _stringify_fcm_data(data)
+    payload['push_type'] = 'chat_answer'
+    payload['title'] = title
+    # Single copy of the answer in data (``text`` only) — see sync twin above.
+    if not payload.get('text'):
+        payload['text'] = body
+    tag = _generate_tag(f"{user_id}:{title}:{body}:{payload.get('id', '')}")
+    await _send_to_user_async(
+        user_id,
+        tag,
+        notification=None,
+        data=payload,
+        priority='high',
+        tokens=tokens,
+        client_displayed=True,
+        display_title=title,
+        display_body=body,
+    )
 
 
 async def send_subscription_paid_personalized_notification(user_id: str, data: Optional[Dict[str, Any]] = None) -> None:
@@ -367,6 +578,7 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
     try:
         batch_size = 500
         num_batches = math.ceil(len(user_tokens) / batch_size)
+        body = to_plain_text(body)
         tag = _generate_tag(f"bulk:{title}:{body}")
         notification = messaging.Notification(title=title, body=body)
 
@@ -406,7 +618,7 @@ def send_app_review_reply_notification(
 ):
     """Sends a notification to a user when their app review receives a reply."""
     app_owner = get_user_from_uid(app_owner_uid)
-    owner_name = app_owner.get('display_name', 'The developer') if app_owner else 'The developer'
+    owner_name = (app_owner or {}).get('display_name') or 'The developer'
     title = f'{owner_name} ({app_name})'
     body = reply_body
     data = {'app_id': app_id, 'type': 'app_review_reply', 'navigate_to': f'/apps/{app_id}'}
@@ -418,18 +630,30 @@ def send_new_app_review_notification(
 ):
     """Sends a notification to the app owner when a new review is submitted."""
     reviewer = get_user_from_uid(reviewer_uid)
-    reviewer_name = reviewer.get('display_name', 'A user') if reviewer else 'A user'
+    reviewer_name = (reviewer or {}).get('display_name') or 'A user'
     title = f'{reviewer_name} reviewed {app_name}'
     body = review_body
     data = {'app_id': app_id, 'type': 'new_app_review', 'navigate_to': f'/apps/{app_id}'}
     send_notification(app_owner_uid, title, body, data)
 
 
-def send_action_item_data_message(user_id: str, action_item_id: str, description: str, due_at: str):
+def send_action_item_data_message(
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    due_at: str,
+    *,
+    completed: bool = False,
+    status: Optional[str] = None,
+    deleted: bool = False,
+):
     """
     Sends a data-only FCM message for action item reminder scheduling.
     The app receives this in the background and schedules a local notification.
     """
+    if not should_schedule_action_item_reminder(completed=completed, due_at=due_at, status=status, deleted=deleted):
+        send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
+        return
     logger.info(f'send_action_item_data_message to user {user_id}')
     data = {
         'type': 'action_item_reminder',
@@ -608,18 +832,24 @@ def sync_action_item_reminder(
     description: str,
     completed: bool,
     due_at: Optional[Union[datetime, str]],
+    *,
+    status: Optional[str] = None,
+    deleted: bool = False,
 ):
     """Reconcile the client-scheduled reminder after an action item is created or updated (#5085).
 
     The mobile client schedules a local reminder from the action-item update/data message and
     cancels it on the 'action_item_delete' message. The reminder must be cancelled when the task is
-    completed or no longer has a due date, and (re)scheduled only for an open task that still has a
-    due date. Reusing send_action_item_deletion_message is intentional: the client treats it as
+    completed, explicitly non-active, deleted, or undated; only an active (or legacy status-absent)
+    task with a due date is (re)scheduled. Reusing send_action_item_deletion_message is intentional: the client treats it as
     "cancel the scheduled local notification by id", not as a task deletion.
     """
-    if completed or not due_at:
+    if not should_schedule_action_item_reminder(completed=completed, due_at=due_at, status=status, deleted=deleted):
         send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
         return
+    # The shared admission predicate requires a due date; retain that narrowing
+    # for the datetime/string transport below without duplicating its policy.
+    assert due_at is not None
     due_iso: str = due_at.isoformat() if isinstance(due_at, datetime) else due_at
     send_action_item_update_message(
         user_id=user_id, action_item_id=action_item_id, description=description or '', due_at=due_iso

@@ -1,5 +1,6 @@
 """Thread-behind-a-task APIs; workstream creation is intentionally intent-only."""
 
+import logging
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -21,15 +22,27 @@ from models.workstream import (
     WorkstreamEventCreate,
     WorkstreamUpdate,
 )
-from utils.other import endpoints as auth
+from routers.canonical_task_access import require_canonical_task_user
+from utils.log_sanitizer import sanitize
 from utils.task_intelligence.workstream_index import refresh_workstream_association_index
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
 
+def _clean_id(id_val: str | None, field_name: str = 'id') -> str:
+    cleaned = (id_val or '').strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail=f'{field_name} must not be empty or whitespace')
+    return cleaned
+
+
 def _raise_store_error(exc: Exception) -> NoReturn:
+    if isinstance(exc, HTTPException):
+        raise exc
     if isinstance(exc, workstreams_db.WorkstreamNotFoundError):
         raise HTTPException(status_code=404, detail='Workflow resource not found') from exc
     if isinstance(
@@ -37,7 +50,12 @@ def _raise_store_error(exc: Exception) -> NoReturn:
         (workstreams_db.WorkstreamConflictError, workstreams_db.WorkstreamGenerationMismatchError),
     ):
         raise HTTPException(status_code=409, detail='Workflow operation conflicts with current state') from exc
-    raise exc
+    # Everything unmapped is a server-side fault and is masked: that includes
+    # ValueError/TypeError raised while deserializing a malformed stored document,
+    # which must not be reclassified as a client error. Client input is rejected
+    # at the edges (Pydantic 422, _clean_id 400, header guards).
+    logger.error('Unhandled workstreams error: %s', sanitize(str(exc)), exc_info=True)
+    raise HTTPException(status_code=500, detail='An internal server error occurred') from exc
 
 
 @router.post('/v1/work-intents', tags=['tasks'], response_model=WorkIntentReceipt)
@@ -45,10 +63,14 @@ def resolve_work_intent(
     request: WorkIntentRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> WorkIntentReceipt:
     """Idempotent backend operation behind the “Work on this with Omi” affordance."""
 
+    if not idempotency_key.strip():
+        # The store contract requires a non-blank key for intent resolution;
+        # reject at the edge so a whitespace-only header is a deterministic 400.
+        raise HTTPException(status_code=400, detail='idempotency_key must not be empty or whitespace')
     try:
         receipt = workstreams_db.resolve_work_intent(
             uid,
@@ -58,18 +80,23 @@ def resolve_work_intent(
         )
         refresh_workstream_association_index(uid, receipt.workstream_id)
         return receipt
-    except workstreams_db.WorkstreamStoreError as exc:
+    except HTTPException:
+        raise
+    except Exception as exc:
         _raise_store_error(exc)
 
 
 @router.get('/v1/workstreams/{workstream_id}', tags=['tasks'], response_model=WorkstreamDetailProjection)
 def get_workstream_detail(
     workstream_id: str,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> WorkstreamDetailProjection:
+    clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
     try:
-        return workstreams_db.get_workstream_detail(uid, workstream_id)
-    except workstreams_db.WorkstreamStoreError as exc:
+        return workstreams_db.get_workstream_detail(uid, clean_workstream_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
         _raise_store_error(exc)
 
 
@@ -79,19 +106,22 @@ def update_workstream(
     request: WorkstreamUpdate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> Workstream:
+    clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
     try:
         workstream = workstreams_db.update_workstream(
             uid,
-            workstream_id,
+            clean_workstream_id,
             request,
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
         refresh_workstream_association_index(uid, workstream.workstream_id)
         return workstream
-    except workstreams_db.WorkstreamStoreError as exc:
+    except HTTPException:
+        raise
+    except Exception as exc:
         _raise_store_error(exc)
 
 
@@ -101,17 +131,20 @@ def append_workstream_event(
     request: WorkstreamEventCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> WorkstreamEvent:
+    clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
     try:
         return workstreams_db.append_workstream_event(
             uid,
-            workstream_id,
+            clean_workstream_id,
             request,
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
-    except workstreams_db.WorkstreamStoreError as exc:
+    except HTTPException:
+        raise
+    except Exception as exc:
         _raise_store_error(exc)
 
 
@@ -120,14 +153,20 @@ def list_workstream_events(
     workstream_id: str,
     after_sequence: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> list[WorkstreamEvent]:
-    return workstreams_db.list_workstream_events(
-        uid,
-        workstream_id,
-        after_sequence=after_sequence,
-        limit=limit,
-    )
+    clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
+    try:
+        return workstreams_db.list_workstream_events(
+            uid,
+            clean_workstream_id,
+            after_sequence=after_sequence,
+            limit=limit,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_store_error(exc)
 
 
 @router.post('/v1/workstreams/{workstream_id}/artifacts', tags=['tasks'], response_model=ArtifactDescriptor)
@@ -136,17 +175,20 @@ def create_artifact_descriptor(
     request: ArtifactDescriptorCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> ArtifactDescriptor:
+    clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
     try:
         return workstreams_db.create_artifact_descriptor(
             uid,
-            workstream_id,
+            clean_workstream_id,
             request,
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
-    except workstreams_db.WorkstreamStoreError as exc:
+    except HTTPException:
+        raise
+    except Exception as exc:
         _raise_store_error(exc)
 
 
@@ -161,18 +203,22 @@ def transition_artifact_status(
     request: ArtifactStatusTransitionRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> ArtifactDescriptor:
+    clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
+    clean_artifact_id = _clean_id(artifact_id, 'artifact_id')
     try:
         return workstreams_db.transition_artifact_status(
             uid,
-            workstream_id,
-            artifact_id,
+            clean_workstream_id,
+            clean_artifact_id,
             request,
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
-    except workstreams_db.WorkstreamStoreError as exc:
+    except HTTPException:
+        raise
+    except Exception as exc:
         _raise_store_error(exc)
 
 
@@ -180,9 +226,15 @@ def transition_artifact_status(
 def list_artifact_descriptors(
     workstream_id: str,
     limit: int = Query(100, ge=1, le=500),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> list[ArtifactDescriptor]:
-    return workstreams_db.list_artifact_descriptors(uid, workstream_id, limit=limit)
+    clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
+    try:
+        return workstreams_db.list_artifact_descriptors(uid, clean_workstream_id, limit=limit)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_store_error(exc)
 
 
 @router.put(
@@ -196,19 +248,23 @@ def upsert_continuation_checkpoint(
     request: ContinuationCheckpointUpsert,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> ContinuationCheckpoint:
-    if request.runtime_id != runtime_id:
+    clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
+    clean_runtime_id = _clean_id(runtime_id, 'runtime_id')
+    if request.runtime_id != clean_runtime_id:
         raise HTTPException(status_code=422, detail='runtime_id path and body must match')
     try:
         return workstreams_db.upsert_continuation_checkpoint(
             uid,
-            workstream_id,
+            clean_workstream_id,
             request,
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
-    except workstreams_db.WorkstreamStoreError as exc:
+    except HTTPException:
+        raise
+    except Exception as exc:
         _raise_store_error(exc)
 
 
@@ -219,9 +275,15 @@ def upsert_continuation_checkpoint(
 )
 def list_continuation_checkpoints(
     workstream_id: str,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> list[ContinuationCheckpoint]:
-    return workstreams_db.list_continuation_checkpoints(uid, workstream_id)
+    clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
+    try:
+        return workstreams_db.list_continuation_checkpoints(uid, clean_workstream_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_store_error(exc)
 
 
 @router.post('/v1/workflow-migrations/task-goal-links', tags=['tasks'], response_model=TaskGoalLinkImportReport)
@@ -229,7 +291,7 @@ def import_task_goal_links(
     request: TaskGoalLinkImportRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> TaskGoalLinkImportReport:
     try:
         return workstreams_db.import_task_goal_links(
@@ -238,7 +300,9 @@ def import_task_goal_links(
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
-    except workstreams_db.WorkstreamStoreError as exc:
+    except HTTPException:
+        raise
+    except Exception as exc:
         _raise_store_error(exc)
 
 

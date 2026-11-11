@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-check-scope-exceeds-remediation-scope",
+  "violated_contract": "A gate that fails until an operator applies a remediation must only run where that remediation is permitted. When the check is broader than the operation that answers it, the excluded environments are asked to prove a state they are forbidden to reach, so their runs fail permanently on a condition no one can clear.",
+  "canonical_prevention": "Bind the check and its remediation to one resolved scope expression, and assert in a static test that every environment the check runs in is an environment the apply operation accepts.",
+  "canonical_prevention_artifact": [
+    ".github/workflows/gcp_firestore_indexes.yml",
+    "backend/tests/unit/test_firestore_index_config.py"
+  ],
+  "evidence_prs": [11872],
+  "scope_hints": [
+    ".github/workflows/gcp_firestore_indexes.yml",
+    "backend/scripts/reconcile_firestore_field_exemptions.py"
+  ],
+  "status": "open"
+}

@@ -2,26 +2,36 @@
 
 import hashlib
 import json
+from database.action_item_fence import fenced_action_item_commit
 from dataclasses import dataclass
+from database.dream_dirty import after_write
+from database.s5_candidates_cache import invalidate_after_write
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+
 import database.action_items as action_items_db
 from database._client import db
+from database.action_items_cache import bump_action_items_list_version
+from database.firestore_index_registry import CANDIDATES_COMPATIBILITY_QUERY
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
-from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskStatus
+from database.summary_task_links import read_summary_task_row, SummaryTaskConflictError, SummaryTaskNotFoundError
+from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import (
     CandidateAction,
+    CandidateCompatibilityMetadata,
     CandidateCreate,
     CandidateRecord,
     CandidateResolutionReceipt,
     CandidateStatus,
     CandidateSubjectKind,
+    SummaryTaskReference,
 )
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 
 CANDIDATES_COLLECTION = 'candidates'
 ACTION_ITEMS_COLLECTION = 'action_items'
@@ -34,7 +44,34 @@ TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 PENDING_CANDIDATE_SEMANTIC_VERSION = 'task-create.v1'
 WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
-PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
+# A suggestion the user does not act on expires and is gone. This is a real
+# stored deadline, not a display filter: every read treats a lapsed pending
+# Candidate as expired.
+#
+# Storage is not reclaimed yet. A Firestore TTL policy on `expires_at` would do
+# it, but `firebase_index_manifest` can only express `ttl: false` indexing
+# exemptions, so a TTL policy cannot be declared through the generated manifest
+# today — and enabling auto-deletion on a live collection group is not a change
+# to smuggle in through a generated file. Expired Candidates therefore remain
+# stored but unreadable until that is addressed separately.
+SUGGESTION_TTL = timedelta(days=2)
+TASK_PRIORITY_RANK = {
+    TaskPriority.low: 0,
+    TaskPriority.medium: 1,
+    TaskPriority.high: 2,
+}
+
+
+def _max_optional_confidence(*values: Optional[float]) -> Optional[float]:
+    return max((value for value in values if value is not None), default=None)
+
+
+def _strongest_task_priority(*values: Optional[TaskPriority]) -> Optional[TaskPriority]:
+    return max(
+        (value for value in values if value is not None),
+        key=TASK_PRIORITY_RANK.__getitem__,
+        default=None,
+    )
 
 
 class CandidateStoreError(RuntimeError):
@@ -133,14 +170,12 @@ def _task_control_ref(uid: str):
     )
 
 
-def _validate_write_control(snapshot: Any, *, account_generation: int) -> None:
+def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise CandidateGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise CandidateConflictError('Candidate writes are not enabled')
 
 
 def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
@@ -174,7 +209,17 @@ def _canonical_request_value(value: Any) -> Any:
 
 
 def _proposal_request_hash(uid: str, account_generation: int, proposal: CandidateCreate) -> str:
-    canonical = _canonical_request_value(proposal.model_dump(mode='python'))
+    payload = proposal.model_dump(mode='python')
+    if payload.get('reminder_origin') is None:
+        payload.pop('reminder_origin', None)
+    for change in (payload.get('task_change'), (payload.get('workstream_proposal') or {}).get('anchor_task')):
+        if isinstance(change, dict) and change.get('due') is None:
+            change.pop('due', None)
+    origin = payload.get('reminder_origin')
+    if origin:
+        # Processing time is an observation, not retry identity.
+        origin.pop('extracted_at', None)
+    canonical = _canonical_request_value(payload)
     encoded = json.dumps(canonical, sort_keys=True, separators=(',', ':'))
     return _stable_contract_id('request', uid, account_generation, encoded)
 
@@ -224,6 +269,15 @@ def pending_candidate_semantic_identity(proposal: CandidateCreate) -> Optional[s
         workstream_id=proposal.workstream_id,
     )
     encoded = json.dumps(semantic_payload, sort_keys=True, separators=(',', ':'))
+    if proposal.reminder_origin is not None:
+        # Equal wording on unrelated days is not the same reminder. An event/alias
+        # authority can later supply cross-device identity; never guess one here.
+        scope = sorted(ref.id for ref in proposal.evidence_refs if ref.kind.value == 'conversation')
+        due = task_change.due
+        precision = (
+            (due.kind, due.date, due.timezone, due.expression if due.kind == 'unresolved' else None) if due else None
+        )
+        encoded = json.dumps([semantic_payload, scope, precision], sort_keys=True, separators=(',', ':'))
     return _stable_contract_id('semantic', PENDING_CANDIDATE_SEMANTIC_VERSION, encoded)
 
 
@@ -284,12 +338,35 @@ def _merge_candidate_annotations(existing: CandidateRecord, proposal: CandidateC
         evidence.append(evidence_ref)
         if len(evidence) == MAX_CANDIDATE_EVIDENCE_REFS:
             break
+    compatibility = existing.compatibility
+    if proposal.compatibility is not None:
+        current = compatibility or CandidateCompatibilityMetadata()
+        compatibility = current.model_copy(
+            update={
+                field: value
+                for field in ('metadata', 'category', 'relevance_score')
+                if (value := getattr(proposal.compatibility, field)) is not None
+            }
+        )
+    task_change = existing.task_change
+    proposal_task_change = proposal.task_change
+    if isinstance(task_change, TaskCreatePayload) and isinstance(proposal_task_change, TaskCreatePayload):
+        task_change = task_change.model_copy(
+            update={
+                'due_confidence': _max_optional_confidence(
+                    task_change.due_confidence, proposal_task_change.due_confidence
+                ),
+                'priority': _strongest_task_priority(task_change.priority, proposal_task_change.priority),
+            }
+        )
     payload = existing.model_dump(mode='python')
     payload.update(
         {
             'capture_confidence': max(existing.capture_confidence, proposal.capture_confidence),
             'ownership_confidence': max(existing.ownership_confidence, proposal.ownership_confidence),
             'evidence_refs': evidence,
+            'compatibility': compatibility,
+            'task_change': task_change,
         }
     )
     return CandidateRecord.model_validate(payload)
@@ -299,12 +376,14 @@ def _merge_task_provenance(current_task: dict[str, Any], evidence_refs: list[Evi
     provenance: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw_ref in list(current_task.get('provenance') or []) + [
-        ref.model_dump(mode='json', exclude_none=True) for ref in evidence_refs
+        ref.model_dump(mode='json', exclude_none=True, exclude_defaults=True) for ref in evidence_refs
     ]:
         if not isinstance(raw_ref, dict):
             continue
         try:
-            normalized_ref = EvidenceRef.model_validate(raw_ref).model_dump(mode='json', exclude_none=True)
+            normalized_ref = EvidenceRef.model_validate(raw_ref).model_dump(
+                mode='json', exclude_none=True, exclude_defaults=True
+            )
         except ValueError:
             normalized_ref = raw_ref
         identity = json.dumps(normalized_ref, sort_keys=True, default=str)
@@ -364,6 +443,78 @@ def _stored_confidence(value: Any) -> float:
     return 0.0
 
 
+def _stored_optional_confidence(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def _stored_task_priority(value: Any) -> Optional[TaskPriority]:
+    try:
+        return TaskPriority(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_utc(value: Any) -> Optional[datetime]:
+    if not isinstance(value, datetime):
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def _suggestion_window_has_closed(
+    *,
+    status: str,
+    created_at: Optional[datetime],
+    expires_at: Optional[datetime],
+    now: datetime,
+) -> bool:
+    if status != CandidateStatus.pending.value:
+        return False
+    # Candidates written before suggestions had a deadline carry no `expires_at`.
+    # Derive one from creation so the pre-existing backlog ages out too, with no
+    # backfill.
+    deadline = expires_at or (created_at + SUGGESTION_TTL if created_at is not None else None)
+    if deadline is None:
+        return False
+    return deadline <= now
+
+
+def candidate_has_lapsed(candidate: CandidateRecord, *, now: datetime) -> bool:
+    """Whether a pending Candidate's suggestion window has closed.
+
+    Storage reclamation is asynchronous, so a lapsed Candidate can still be
+    readable. Every read path must ask this rather than trusting `status`.
+    """
+
+    return _suggestion_window_has_closed(
+        status=candidate.status.value,
+        created_at=candidate.created_at,
+        expires_at=candidate.expires_at,
+        now=now,
+    )
+
+
+def stored_candidate_has_lapsed(candidate: dict[str, Any], *, now: datetime) -> bool:
+    """`candidate_has_lapsed` for a stored document that was never parsed into a record.
+
+    The recommendation reader loads canonical state as raw documents, so it cannot
+    ask the record-shaped question. It must still ask the same one: a deadline that
+    only one reader enforces is a deadline the other readers repeal.
+    """
+
+    stored_status = candidate.get('status')
+    status = getattr(stored_status, 'value', stored_status)
+    return _suggestion_window_has_closed(
+        status=str(status) if status else CandidateStatus.pending.value,
+        created_at=_as_utc(candidate.get('created_at')),
+        expires_at=_as_utc(candidate.get('expires_at')),
+        now=now,
+    )
+
+
+@after_write('candidates')
+@invalidate_after_write
 def create_candidate(
     uid: str,
     proposal: CandidateCreate,
@@ -389,16 +540,16 @@ def create_candidate(
         account_generation=account_generation,
         idempotency_key=key_hash,
         created_at=now_value,
+        expires_at=now_value + SUGGESTION_TTL,
     )
     ref = _candidate_ref(uid, candidate_id)
     alias_ref = _candidate_idempotency_alias_ref(uid, key_hash)
     semantic_claim_ref = _candidate_pending_claim_ref(uid, semantic_claim_id) if semantic_claim_id is not None else None
-    transaction = db.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
 
         alias_snapshot = alias_ref.get(transaction=write_transaction)
         if alias_snapshot.exists:
@@ -475,8 +626,25 @@ def create_candidate(
             claimed_candidate is not None
             and claimed_candidate.status == CandidateStatus.pending
             and claimed_candidate.created_at.tzinfo is not None
-            and claimed_candidate.created_at >= now_value - PENDING_CANDIDATE_REUSE_WINDOW
+            # Reuse is bounded by the suggestion's own life, not by a separate
+            # window: a lapsed pending Candidate is unreadable, so merging a new
+            # capture into it would store a proposal the user can never see.
+            and not candidate_has_lapsed(claimed_candidate, now=now_value)
         )
+        if (
+            proposal.reminder_origin is not None
+            and claimed_candidate is not None
+            and claimed_candidate.status in {CandidateStatus.accepted, CandidateStatus.rejected}
+        ):
+            # A replay must not reopen completed/deleted/edited/rejected human work.
+            merged = _merge_candidate_annotations(claimed_candidate, proposal)
+            # Keep each supporting source revision intact, including after a human
+            # completes/edits the task. Creation history and task state stay immutable.
+            evidence_patch = [ref.model_dump(mode='python', exclude_none=True) for ref in merged.evidence_refs]
+            write_transaction.update(claimed_ref, {'evidence_refs': evidence_patch})
+            alias_payload['candidate_id'] = claimed_candidate.candidate_id
+            write_transaction.set(alias_ref, alias_payload)
+            return claimed_candidate.model_copy(update={'evidence_refs': merged.evidence_refs})
         if (
             claimed_candidate is not None
             and (reusable_pending or reusable_active_accept)
@@ -494,9 +662,32 @@ def create_candidate(
                         evidence_ref.model_dump(mode='python', exclude_none=True)
                         for evidence_ref in merged.evidence_refs
                     ],
+                    'compatibility': (
+                        merged.compatibility.model_dump(mode='python', exclude_none=True)
+                        if merged.compatibility is not None
+                        else None
+                    ),
+                    'task_change': (
+                        merged.task_change.model_dump(mode='python', exclude_none=True)
+                        if merged.task_change is not None
+                        else None
+                    ),
                 },
             )
             if reusable_active_accept and claimed_task_ref is not None and claimed_task is not None:
+                task_annotation_patch: dict[str, Any] = {}
+                if isinstance(merged.task_change, TaskCreatePayload):
+                    due_confidence = _max_optional_confidence(
+                        _stored_optional_confidence(claimed_task.get('due_confidence')),
+                        merged.task_change.due_confidence,
+                    )
+                    if due_confidence is not None:
+                        task_annotation_patch['due_confidence'] = due_confidence
+                    priority = _strongest_task_priority(
+                        _stored_task_priority(claimed_task.get('priority')), merged.task_change.priority
+                    )
+                    if priority is not None:
+                        task_annotation_patch['priority'] = priority.value
                 write_transaction.update(
                     claimed_task_ref,
                     {
@@ -508,6 +699,7 @@ def create_candidate(
                         ),
                         'provenance': _merge_task_provenance(claimed_task, merged.evidence_refs),
                         'updated_at': now_value,
+                        **task_annotation_patch,
                     },
                 )
             write_transaction.set(alias_ref, alias_payload)
@@ -536,7 +728,7 @@ def create_candidate(
             )
         return record
 
-    return apply(transaction)
+    return run_with_transaction_contention_retry(db.transaction, apply, operation_name='candidate_create')
 
 
 def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
@@ -544,6 +736,51 @@ def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
     if not snapshot.exists:
         return None
     return parse_snapshot_or_none(CandidateRecord, snapshot)
+
+
+@invalidate_after_write
+def update_candidate_compatibility_score(
+    uid: str,
+    candidate_id: str,
+    *,
+    relevance_score: int,
+    account_generation: int,
+) -> CandidateRecord:
+    """Update the released staged-task score on the canonical Candidate envelope."""
+    if not 0 <= relevance_score <= 1000:
+        raise ValueError('relevance_score must be between 0 and 1000')
+    candidate_ref = _candidate_ref(uid, candidate_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction):
+        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
+        snapshot = candidate_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            raise CandidateNotFoundError(candidate_id)
+        candidate = parse_snapshot_strict(CandidateRecord, snapshot)
+        if candidate.account_generation != account_generation:
+            raise CandidateGenerationMismatchError(candidate_id)
+        is_staged_compatibility_candidate = (
+            candidate.subject_kind == CandidateSubjectKind.task
+            and candidate.proposed_action == CandidateAction.create
+            and (
+                candidate.source_surface == 'legacy_staged'
+                or any(
+                    evidence.kind.value == 'external' and evidence.id.startswith('legacy-staged-')
+                    for evidence in candidate.evidence_refs
+                )
+            )
+        )
+        if candidate.status != CandidateStatus.pending or not is_staged_compatibility_candidate:
+            raise CandidateConflictError('Candidate is not an active staged-task compatibility proposal')
+        existing = candidate.compatibility or CandidateCompatibilityMetadata()
+        compatibility = existing.model_copy(update={'relevance_score': relevance_score})
+        write_transaction.update(candidate_ref, {'compatibility': compatibility.model_dump(mode='python')})
+        return candidate.model_copy(update={'compatibility': compatibility})
+
+    return apply(transaction)
 
 
 def list_candidates(
@@ -566,10 +803,54 @@ def list_candidates(
     return parse_snapshots(CandidateRecord, query.stream())
 
 
+def list_candidates_compatibility_page(
+    uid: str,
+    *,
+    account_generation: int,
+    limit: int = 500,
+    cursor: Any | None = None,
+) -> tuple[list[CandidateRecord], int, Any | None]:
+    """Return valid records, raw page size, and a snapshot cursor.
+
+    ``parse_snapshots`` deliberately skips malformed rows. Compatibility
+    callers need the unparsed count as their pagination authority so one bad
+    document cannot make a non-final page look exhausted and hide later data.
+    The cursor is the last raw snapshot for the same reason. Using it with
+    ``start_after`` keeps exhaustive compatibility scans linear in billed
+    document reads; Firestore offsets re-read every skipped prefix.
+    """
+
+    collection = db.collection('users').document(uid).collection(CANDIDATES_COLLECTION)
+    query = CANDIDATES_COMPATIBILITY_QUERY.build(
+        collection,
+        {'account_generation': account_generation},
+        field_filter_factory=FieldFilter,
+    ).order_by(
+        'created_at',
+        direction=firestore.Query.DESCENDING,
+    )
+    if cursor is not None:
+        query = query.start_after(cursor)
+    snapshots = list(query.limit(limit).stream())
+    next_cursor = snapshots[-1] if snapshots else None
+    return parse_snapshots(CandidateRecord, snapshots), len(snapshots), next_cursor
+
+
 def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datetime) -> dict[str, Any]:
     if not isinstance(candidate.task_change, TaskCreatePayload):
         raise CandidateConflictError('task create Candidate has invalid payload')
     task = candidate.task_change.model_dump(mode='python', exclude_none=True)
+    if candidate.task_change.due is not None and candidate.task_change.due.kind != 'instant':
+        # Released no-deadline readers distinguish an explicit null from a missing field.
+        task['due_at'] = None
+    if candidate.reminder_origin is not None:
+        task['reminder_origin'] = candidate.reminder_origin.model_dump(mode='python')
+        task['conversation_id'] = next(
+            (ref.id for ref in candidate.evidence_refs if ref.kind.value == 'conversation'), None
+        )
+        if candidate.reminder_origin.review_reason == 'owner_unresolved':
+            # Acceptance is an explicit user confirmation, never a capture gesture.
+            task['owner'] = TaskOwner.user.value
     task.update(
         {
             'id': task_id,
@@ -598,6 +879,10 @@ def _task_update_storage(candidate: CandidateRecord, *, current_task: dict[str, 
     if not isinstance(candidate.task_change, TaskChangePayload):
         raise CandidateConflictError('task mutation Candidate has invalid payload')
     patch = candidate.task_change.model_dump(mode='python', exclude_unset=True)
+    if candidate.task_change.due is not None:
+        patch['due_at'] = candidate.task_change.due.instant
+    elif 'due_at' in patch and 'due' not in patch:
+        patch['due'] = None
     if candidate.goal_id is not None:
         patch['goal_id'] = candidate.goal_id
     if candidate.workstream_id is not None:
@@ -618,6 +903,7 @@ def _task_update_storage(candidate: CandidateRecord, *, current_task: dict[str, 
     return patch
 
 
+@invalidate_after_write
 def resolve_task_candidate(
     uid: str,
     candidate_id: str,
@@ -625,24 +911,65 @@ def resolve_task_candidate(
     account_generation: int,
     expected_task_links: Optional[tuple[Optional[str], Optional[str]]] = None,
     now: Optional[datetime] = None,
+    summary_item: Optional[SummaryTaskReference] = None,
+    review_edits: Optional[dict] = None,
 ) -> CandidateResolutionReceipt:
     """Atomically accept a task Candidate and create/update exactly one task."""
 
     candidate_ref = _candidate_ref(uid, candidate_id)
-    resolved_at = now or datetime.now(timezone.utc)
-    transaction = db.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
+        tasks = action_items_db.FirestoreActionItems(uid, firestore_client=db, transaction=write_transaction)
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
         candidate = parse_snapshot_strict(CandidateRecord, snapshot)
         if candidate.account_generation != account_generation:
             raise CandidateGenerationMismatchError(candidate_id)
+        summary_row = None
+        if summary_item is not None:
+            if (
+                candidate.subject_kind != CandidateSubjectKind.task
+                or candidate.proposed_action != CandidateAction.create
+            ):
+                raise CandidateConflictError('Summary promotion requires a task-create Candidate')
+            try:
+                summary_row = read_summary_task_row(uid, summary_item, transaction=write_transaction)
+            except SummaryTaskNotFoundError as exc:
+                raise CandidateNotFoundError('Summary action item not found') from exc
+            except SummaryTaskConflictError as exc:
+                raise CandidateConflictError(str(exc)) from exc
+            if pending_candidate_semantic_identity(summary_row.proposal()) != pending_candidate_semantic_identity(
+                candidate.as_proposal()
+            ):
+                raise CandidateConflictError('Summary action item changed; refresh the conversation')
+            expected_task_id = candidate.result_task_id or task_id_for_candidate(uid, account_generation, candidate_id)
+            if summary_row.item.target_task_id not in {None, expected_task_id}:
+                raise CandidateConflictError('Summary action item is linked to another task')
         if candidate.status == CandidateStatus.accepted:
+            if summary_row is not None:
+                task_snapshot = tasks.read_snapshot(cast(str, candidate.result_task_id))
+                if not task_snapshot.exists:
+                    raise CandidateNotFoundError('Linked task not found')
+                existing_task = _snapshot_dict(task_snapshot)
+                if existing_task.get('account_generation', 0) not in {0, account_generation}:
+                    raise CandidateGenerationMismatchError('task account generation mismatch')
+                if not existing_task.get('conversation_id'):
+                    tasks.stage_write(
+                        'update',
+                        cast(str, candidate.result_task_id),
+                        {
+                            'conversation_id': summary_row.conversation_id,
+                            'updated_at': now or datetime.now(timezone.utc),
+                        },
+                    )
+                if summary_row.item.target_task_id is None:
+                    write_transaction.update(
+                        summary_row.reference, summary_row.linked_patch(cast(str, candidate.result_task_id))
+                    )
             return CandidateResolutionReceipt(
                 candidate_id=candidate_id,
                 status=CandidateStatus.accepted,
@@ -654,17 +981,27 @@ def resolve_task_candidate(
             )
         if candidate.status != CandidateStatus.pending:
             raise CandidateConflictError(f'Candidate already {candidate.status.value}')
+        resolved_at = now or datetime.now(timezone.utc)
+        if candidate_has_lapsed(candidate, now=resolved_at):
+            raise CandidateConflictError('Candidate suggestion has expired')
         claim_snapshot = _candidate_resolution_claim_ref(uid, candidate_id).get(transaction=write_transaction)
         if claim_snapshot.exists and _claim_blocks_resolution(_snapshot_dict(claim_snapshot), now=resolved_at):
             raise CandidateConflictError('Candidate resolution is already claimed')
         if candidate.subject_kind == CandidateSubjectKind.workstream:
             raise WorkstreamCandidateResolverUnavailableError('Ticket 04 workstream resolver is not registered')
 
+        if review_edits is not None:
+            from utils.review_candidate_edits import edited_candidate
+
+            candidate = edited_candidate(candidate, review_edits)
+
         if candidate.proposed_action == CandidateAction.create:
             task_id = task_id_for_candidate(uid, account_generation, candidate_id)
             task_ref = _task_ref(uid, task_id)
-            task_snapshot = task_ref.get(transaction=write_transaction)
+            task_snapshot = tasks.read_snapshot(task_ref.id)
             task_data = _task_create_storage(candidate, task_id=task_id, now=resolved_at)
+            if summary_row is not None:
+                task_data['conversation_id'] = summary_row.conversation_id
             try:
                 action_items_db.validate_task_relationship_in_transaction(
                     uid,
@@ -681,11 +1018,11 @@ def resolve_task_candidate(
                 if existing_task.get('candidate_id') != candidate_id:
                     raise CandidateConflictError('deterministic task id collision')
             else:
-                write_transaction.set(task_ref, task_data)
+                tasks.stage_write('set', task_ref.id, task_data)
         else:
             task_id = cast(str, candidate.task_id)
             task_ref = _task_ref(uid, task_id)
-            task_snapshot = task_ref.get(transaction=write_transaction)
+            task_snapshot = tasks.read_snapshot(task_ref.id)
             if not task_snapshot.exists:
                 raise CandidateNotFoundError(f'task:{task_id}')
             current_task = _snapshot_dict(task_snapshot)
@@ -713,14 +1050,37 @@ def resolve_task_candidate(
                 )
             except action_items_db.TaskRelationshipConflictError as exc:
                 raise CandidateConflictError(str(exc)) from exc
-            write_transaction.update(task_ref, task_patch)
+            tasks.stage_write('update', task_ref.id, task_patch)
 
-        candidate_patch = {
+        if summary_row is not None:
+            write_transaction.update(summary_row.reference, summary_row.linked_patch(task_id))
+
+        creation_receipt = None
+        if candidate.proposed_action == CandidateAction.create and candidate.reminder_origin is not None:
+            creation_receipt = {
+                'receipt_id': _stable_contract_id('task-create', task_id, account_generation),
+                'task_id': task_id,
+                'revision': 1,
+                'operation': 'create',
+                'after_status': 'active',
+                'source_channel': 'conversation',
+                'actor_kind': 'authenticated_owner',
+                'actor_id': uid,
+                'event_at': resolved_at,
+                'evidence_refs': [ref.model_dump(mode='python', exclude_none=True) for ref in candidate.evidence_refs],
+                'idempotency_key': candidate.idempotency_key,
+                'history_coverage': 'reminder_creation_only',
+            }
+            tasks.stage_write('update', task_ref.id, {'creation_receipt': creation_receipt})
+        candidate_patch: dict[str, Any] = {
             'status': CandidateStatus.accepted.value,
             'resolution_reason': 'accepted',
             'result_task_id': task_id,
             'resolved_at': resolved_at,
+            'expires_at': None,
         }
+        if creation_receipt is not None:
+            candidate_patch['creation_receipt'] = creation_receipt
         write_transaction.update(candidate_ref, candidate_patch)
         if candidate.proposed_action == CandidateAction.create:
             write_transaction.set(
@@ -731,6 +1091,11 @@ def resolve_task_candidate(
                     'task_id': task_id,
                     'account_generation': account_generation,
                     'status': 'pending',
+                    **(
+                        {'policy_revision': candidate.reminder_origin.policy_revision}
+                        if candidate.reminder_origin
+                        else {}
+                    ),
                     'attempt_count': 0,
                     'created_at': resolved_at,
                     'updated_at': resolved_at,
@@ -745,151 +1110,15 @@ def resolve_task_candidate(
             resolved_at=resolved_at,
         )
 
-    return apply(transaction)
+    with fenced_action_item_commit(uid):
+        receipt = run_with_transaction_contention_retry(db.transaction, apply, operation_name='candidate_accept')
+    # Accepting creates or updates the task directly (not through database.action_items),
+    # so invalidate the cached GET /v1/action-items pages here too.
+    bump_action_items_list_version(uid)
+    return receipt
 
 
-def claim_candidate_integration_dispatch(
-    uid: str,
-    candidate_id: str,
-    *,
-    account_generation: int,
-    now: Optional[datetime] = None,
-    lease_seconds: int = 300,
-) -> Optional[str]:
-    """Claim a durable accepted-task integration side effect for delivery."""
-
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    claim_time = now or datetime.now(timezone.utc)
-    transaction = db.transaction()
-
-    @firestore.transactional
-    def apply(write_transaction):
-        snapshot = outbox_ref.get(transaction=write_transaction)
-        if not snapshot.exists:
-            return None
-        payload = _snapshot_dict(snapshot)
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        control = TaskWorkflowControl()
-        if control_snapshot.exists:
-            control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
-        if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
-            write_transaction.update(
-                outbox_ref,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'account_generation_mismatch',
-                    'updated_at': claim_time,
-                },
-            )
-            return None
-        if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-            write_transaction.update(
-                outbox_ref,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'candidate_writes_disabled',
-                    'updated_at': claim_time,
-                },
-            )
-            return None
-        if payload.get('status') in {'completed', 'suppressed'}:
-            return None
-        if payload.get('status') == 'processing':
-            claimed_at = payload.get('claimed_at')
-            if isinstance(claimed_at, datetime) and claimed_at + timedelta(seconds=lease_seconds) > claim_time:
-                return None
-        lease_token = uuid4().hex
-        write_transaction.update(
-            outbox_ref,
-            {
-                'status': 'processing',
-                'attempt_count': int(payload.get('attempt_count', 0)) + 1,
-                'lease_token': lease_token,
-                'claimed_at': claim_time,
-                'updated_at': claim_time,
-            },
-        )
-        return lease_token
-
-    return apply(transaction)
-
-
-def complete_candidate_integration_dispatch(
-    uid: str,
-    candidate_id: str,
-    *,
-    account_generation: int,
-    lease_token: str,
-    succeeded: bool,
-    now: Optional[datetime] = None,
-) -> bool:
-    completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    transaction = db.transaction()
-
-    @firestore.transactional
-    def apply(write_transaction):
-        snapshot = outbox_ref.get(transaction=write_transaction)
-        if not snapshot.exists:
-            return False
-        payload = _snapshot_dict(snapshot)
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        control = TaskWorkflowControl()
-        if control_snapshot.exists:
-            control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
-        if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
-            write_transaction.update(
-                outbox_ref,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'account_generation_mismatch',
-                    'updated_at': completion_time,
-                },
-            )
-            return False
-        if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-            write_transaction.update(
-                outbox_ref,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'candidate_writes_disabled',
-                    'updated_at': completion_time,
-                },
-            )
-            return False
-        if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
-            return False
-        write_transaction.update(
-            outbox_ref,
-            {
-                'status': 'completed' if succeeded else 'failed',
-                'completed_at': completion_time if succeeded else None,
-                'lease_token': None,
-                'updated_at': completion_time,
-            },
-        )
-        return True
-
-    return apply(transaction)
-
-
-def list_candidate_integration_dispatches(
-    uid: str,
-    *,
-    account_generation: int,
-    limit: int = 100,
-) -> list[dict[str, Any]]:
-    query = (
-        db.collection('users')
-        .document(uid)
-        .collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION)
-        .where(filter=FieldFilter('account_generation', '==', account_generation))
-        .where(filter=FieldFilter('status', 'in', ['pending', 'failed', 'processing']))
-        .limit(limit)
-    )
-    return [_snapshot_dict(snapshot) for snapshot in query.stream()]
-
-
+@invalidate_after_write
 def resolve_candidate_without_mutation(
     uid: str,
     candidate_id: str,
@@ -908,7 +1137,7 @@ def resolve_candidate_without_mutation(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -930,7 +1159,12 @@ def resolve_candidate_without_mutation(
             raise CandidateConflictError('Candidate resolution is already claimed')
         write_transaction.update(
             candidate_ref,
-            {'status': status.value, 'resolution_reason': reason or status.value, 'resolved_at': resolved_at},
+            {
+                'status': status.value,
+                'resolution_reason': reason or status.value,
+                'resolved_at': resolved_at,
+                'expires_at': None,
+            },
         )
         return CandidateResolutionReceipt(
             candidate_id=candidate_id,
@@ -943,6 +1177,7 @@ def resolve_candidate_without_mutation(
     return apply(transaction)
 
 
+@invalidate_after_write
 def reconcile_migrated_candidate(
     uid: str,
     candidate_id: str,
@@ -967,7 +1202,7 @@ def reconcile_migrated_candidate(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -996,6 +1231,7 @@ def reconcile_migrated_candidate(
             'status': status.value,
             'resolution_reason': reason or f'legacy_{status.value}',
             'resolved_at': resolution_time,
+            'expires_at': None,
         }
         if result_task_id:
             patch['result_task_id'] = result_task_id
@@ -1035,7 +1271,7 @@ def claim_candidate_for_legacy_promotion(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -1109,7 +1345,7 @@ def begin_candidate_legacy_promotion(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -1178,15 +1414,15 @@ __all__ = [
     'WorkstreamCandidateResolverUnavailableError',
     'candidate_id_for_idempotency',
     'begin_candidate_legacy_promotion',
-    'claim_candidate_integration_dispatch',
     'claim_candidate_for_legacy_promotion',
-    'complete_candidate_integration_dispatch',
     'create_candidate',
     'get_candidate',
-    'list_candidate_integration_dispatches',
+    'update_candidate_compatibility_score',
     'list_candidates',
     'pending_candidate_semantic_identity',
     'reconcile_migrated_candidate',
+    'candidate_has_lapsed',
+    'stored_candidate_has_lapsed',
     'resolve_candidate_without_mutation',
     'resolve_task_candidate',
     'task_id_for_candidate',

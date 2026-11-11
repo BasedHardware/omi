@@ -1,20 +1,28 @@
 #!/bin/bash
-# omi-auth-dump.sh — capture a signed-in dev bundle's auth session to JSON.
+# omi-auth-dump.sh — capture a signed-in bundle's auth session to JSON.
 #
-# Auth tokens (idToken, refreshToken, expiry, tokenUserId) live in the macOS
-# Keychain on ALL builds under a Team+bundle scoped service name derived from
-# "com.omi.desktop.firebase-rest-session" (see DesktopKeychainStore.scopedService).
-# Format: <base>.v2.team.<TeamID>.bundle.<bundleID>
+# Auth tokens (idToken, refreshToken, expiry, tokenUserId) live in
+# DesktopKeychainStore: the login keychain on shipped production-family bundles
+# (com.omi.computer-macos / com.omi.computer-macos.beta), and a JSON file under
+# Application Support for every other bundle. Format of the scoped service name:
+# <base>.v2.team.<TeamID>.bundle.<bundleID>
 # The remaining auth-state keys (isSignedIn, userEmail, userId, names, onboarding)
 # are in UserDefaults. This script reads BOTH so the captured session can be
 # replayed into other test bundles with omi-auth-seed.sh, letting an agent skip
 # the web OAuth login on every run.
 #
+# Developer-bundle dumps read the secrets file and work from a Background
+# (non-Aqua) session. Production-family dumps still use `security find-generic-password`.
+#
 # It does NOT mint or refresh tokens — it copies whatever the source session has.
 # The captured Firebase idToken expires (~1h); re-run this after signing in again.
 #
 # Usage: omi-auth-dump.sh [source-bundle-id] [out-file]
-#   source-bundle-id  default: com.omi.desktop-dev   (the "Omi Dev" build)
+#   source-bundle-id  default: com.omi.desktop-dev   (the "Omi Dev" build).
+#                     run.sh resolves this from OMI_AUTH_DUMP_SOURCE and falls
+#                     back to the production app com.omi.computer-macos when
+#                     the default source has no usable session; any installed
+#                     Omi bundle works when invoked directly.
 #   out-file          default: desktop/tmp/desktop-auth.json (gitignored)
 set -euo pipefail
 
@@ -30,6 +38,39 @@ KC_SERVICE_BASE="com.omi.desktop.firebase-rest-session"
 KC_ACCOUNT="firebase-rest-tokens"
 
 mkdir -p "$(dirname "$OUT")"
+
+is_production_family_bundle() {
+  case "$1" in
+    com.omi.computer-macos|com.omi.computer-macos.beta) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+application_support_root_for_bundle() {
+  local bid="$1"
+  local base="${HOME}/Library/Application Support"
+  local prefix="com.omi.omi-"
+  if [[ "$bid" == "$prefix"* ]]; then
+    local suffix="${bid#"$prefix"}"
+    if [[ -n "$suffix" && "$suffix" =~ ^[A-Za-z0-9.-]+$ ]]; then
+      printf '%s/Omi Dev Bundles/%s\n' "$base" "$bid"
+      return
+    fi
+  fi
+  if [[ "$bid" == "com.omi.computer-macos.beta" ]]; then
+    printf '%s/Omi Beta\n' "$base"
+    return
+  fi
+  if [[ "${OMI_DESKTOP_LOCAL_PROFILE:-}" == "1" ]]; then
+    printf '%s/%s\n' "$base" "${OMI_LOCAL_PROFILE_STORAGE_NAME:-Omi}"
+    return
+  fi
+  printf '%s/Omi\n' "$base"
+}
+
+developer_secrets_file_for_bundle() {
+  printf '%s/developer-secrets/%s.json\n' "$(application_support_root_for_bundle "$1")" "$1"
+}
 
 # Resolve an installed .app path for the source bundle so we can read its Team ID.
 resolve_app_path() {
@@ -68,12 +109,20 @@ if [ -z "$TEAM_ID" ] || [ "$TEAM_ID" = "not set" ]; then
 fi
 KC_SERVICE="${KC_SERVICE_BASE}.v2.team.${TEAM_ID}.bundle.${SRC}"
 
-python3 - "$SRC" "$OUT" "${UD_KEYS[@]}" "$KC_SERVICE" "$KC_ACCOUNT" <<'PY'
-import json, subprocess, sys
+TOKEN_SOURCE="keychain"
+SECRETS_FILE=""
+if is_production_family_bundle "$SRC"; then
+  TOKEN_SOURCE="keychain"
+else
+  TOKEN_SOURCE="file"
+  SECRETS_FILE="$(developer_secrets_file_for_bundle "$SRC")"
+fi
 
-src, out = sys.argv[1], sys.argv[2]
-ud_keys = sys.argv[3:-2]
-kc_service, kc_account = sys.argv[-2], sys.argv[-1]
+python3 - "$SRC" "$OUT" "$TOKEN_SOURCE" "$SECRETS_FILE" "$KC_SERVICE" "$KC_ACCOUNT" "${UD_KEYS[@]}" <<'PY'
+import json, os, subprocess, sys
+
+src, out, token_source, secrets_file, kc_service, kc_account = sys.argv[1:7]
+ud_keys = sys.argv[7:]
 
 def defaults(*args):
     return subprocess.run(["defaults", *args], capture_output=True, text=True)
@@ -87,6 +136,21 @@ def read_keychain(service):
         return kc.stdout.strip()
     return None
 
+def read_developer_secrets(path, service):
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            obj = json.load(handle)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    payload = obj.get(service + "\0" + kc_account)
+    if isinstance(payload, str) and payload.strip():
+        return payload
+    return None
+
 data = {}
 for k in ud_keys:
     t = defaults("read-type", src, k)
@@ -97,21 +161,28 @@ for k in ud_keys:
         continue
     data[k] = {"type": t.stdout.strip().replace("Type is ", ""), "value": v.stdout.strip()}
 
-# Only the team+bundle scoped v2 item. Never query the unscoped legacy service —
-# `security find-generic-password` on a poisoned ACL can show the same login-
-# keychain password dialog this PR eliminates. Pre-migration sessions fall
-# through to UserDefaults token keys below.
-payload = read_keychain(kc_service)
+# Production-family sources read the team+bundle scoped v2 keychain item and
+# never query the unscoped legacy service. Developer sources read the JSON file
+# and never call `security`.
+if token_source == "file":
+    payload = read_developer_secrets(secrets_file, kc_service)
+    data["_tokenSource"] = {"type": "string", "value": "developer-secrets"}
+    if secrets_file:
+        data["_developerSecretsFile"] = {"type": "string", "value": secrets_file}
+else:
+    payload = read_keychain(kc_service)
+    data["_tokenSource"] = {"type": "string", "value": "keychain"}
+
 if payload:
     try:
         tokens = json.loads(payload)
         # Validate tokenUserId against the UserDefaults auth_userId to avoid
-        # seeding signed-in state for one user with Keychain tokens belonging
-        # to a different user.
+        # seeding signed-in state for one user with tokens belonging to a
+        # different user.
         kc_uid = tokens.get("tokenUserId", "")
         ud_uid = data.get("auth_userId", {}).get("value", "")
         if ud_uid and kc_uid != ud_uid:
-            print(f"WARNING: Keychain tokenUserId ({kc_uid}) does not match "
+            print(f"WARNING: tokenUserId ({kc_uid}) does not match "
                   f"UserDefaults auth_userId ({ud_uid}) — falling back to "
                   f"UserDefaults token keys.", file=sys.stderr)
         else:
@@ -120,7 +191,7 @@ if payload:
             data["auth_tokenExpiry"] = {"type": "float", "value": str(tokens.get("expiryTime", 0))}
             data["auth_tokenUserId"] = {"type": "string", "value": kc_uid}
             data["_keychainService"] = {"type": "string", "value": kc_service}
-    except (json.JSONDecodeError, KeyError):
+    except (json.JSONDecodeError, KeyError, TypeError):
         pass  # fall through to UserDefaults below
 
 # Legacy fallback: pre-migration bundles may still have token keys in UserDefaults.
@@ -141,7 +212,9 @@ with open(out, "w") as f:
 print(f"Dumped {len(data)} keys from {src} -> {out}")
 print(f"  signed_in={data.get('auth_isSignedIn', {}).get('value')} "
       f"email={data.get('auth_userEmail', {}).get('value')}")
-print(f"  keychain_service={kc_service}")
+print(f"  token_source={token_source} service={kc_service}")
+if token_source == "file":
+    print(f"  developer_secrets_file={secrets_file}")
 if "auth_idToken" not in data or not data["auth_idToken"].get("value"):
     sys.exit("WARNING: no auth_idToken found — is the source bundle signed in?")
 PY

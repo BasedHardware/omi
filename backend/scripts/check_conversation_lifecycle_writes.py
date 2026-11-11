@@ -17,7 +17,19 @@ SOURCE_ROOTS = ('backend/database', 'backend/routers', 'backend/services', 'back
 LIFECYCLE_SERVICE = 'backend/utils/conversations/lifecycle.py'
 RAW_STORAGE_ALLOWLIST = {
     'backend/database/conversations.py',
+    'backend/database/conversation_status_transitions.py',
     'backend/database/conversation_finalization_jobs.py',
+    # Atomic merge storage shares the finalization outbox; lifecycle.merge_jobs owns callers.
+    'backend/database/conversation_merge_jobs.py',
+    # Storage primitive for the 1 MiB-ceiling in_progress terminal; its only
+    # caller is lifecycle.close_oversized_in_progress_conversation.
+    'backend/database/oversized_conversation_terminal.py',
+    # Snapshot-fenced close/restore storage; callable only via the lifecycle
+    # methods guarded below, like the oversized terminal primitive above.
+    'backend/database/stuck_backfill.py',
+    # Reversible no-speech terminal: hidden completed shape with a prior-value
+    # marker and an operator undo. No deletion, no content rewrite.
+    'backend/database/no_speech_terminal.py',
 }
 LIFECYCLE_METHODS = {
     'upsert_conversation_with_lifecycle',
@@ -27,6 +39,10 @@ LIFECYCLE_METHODS = {
     'claim_conversation_status',
     'set_conversation_as_discarded',
     'restore_conversation_from_discarded',
+    'close_noise',
+    'restore_noise',
+    'close_no_speech',
+    'restore_no_speech',
 }
 GENERIC_LIFECYCLE_MUTATION_METHODS = {'update_conversation'}
 FINALIZATION_ADMISSION_METHODS = {
@@ -36,10 +52,56 @@ FINALIZATION_ADMISSION_METHODS = {
 LIFECYCLE_FIELDS = {
     'status',
     'discarded',
+    'deferred',
     'finalization_job_id',
     'finalization_revision',
     'finalization_status',
 }
+
+
+def _dict_keys(node: ast.AST) -> set[str]:
+    if not isinstance(node, ast.Dict):
+        return set()
+    keys: set[str] = set()
+    for key in node.keys:
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            keys.add(key.value)
+    return keys
+
+
+def _is_hidden_noise_close(relative_path: str, payload: ast.Dict) -> bool:
+    """The approved operator close cannot publish a visible row.
+
+    Its restore is revision-fenced and returns the saved in-progress state.
+    Require all atomic hide markers; a bare completed write still fails.
+    """
+    if relative_path not in {
+        'backend/database/stuck_backfill.py',
+        'backend/database/no_speech_terminal.py',
+    }:
+        return False
+    fields = {
+        key.value if isinstance(key, ast.Constant) else key.id if isinstance(key, ast.Name) else None: value
+        for key, value in zip(payload.keys, payload.values)
+    }
+    return isinstance(fields.get('MARKER'), ast.Dict) and all(
+        isinstance(fields.get(key), ast.Constant) and fields[key].value is True
+        for key in ('discarded', 'TERMINAL_NO_DERIVED_EFFECTS_FIELD')
+    )
+
+
+def _is_sync_donor_tombstone_discard(relative_path: str, node: ast.Call) -> bool:
+    """Assignment may stamp discarded=True only as part of a redirect tombstone.
+
+    User discard stays owned by the lifecycle service. A donor write that also
+    sets deleted + sync_merged_into is the indexed hide for merge redirects,
+    not a second discard authority.
+    """
+    if relative_path != 'backend/utils/sync/assignment.py':
+        return False
+    payloads = [_dict_keys(argument) for argument in node.args]
+    payloads.extend(_dict_keys(keyword.value) for keyword in node.keywords)
+    return any({'deleted', 'discarded', 'sync_merged_into'} <= keys for keys in payloads)
 
 
 def _literal_lifecycle_fields(node: ast.AST) -> set[str]:
@@ -78,7 +140,11 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
         function = node.func
         if isinstance(function, ast.Attribute) and function.attr in LIFECYCLE_METHODS:
-            if self.relative_path != LIFECYCLE_SERVICE:
+            restore_owner = (
+                self.relative_path == 'backend/utils/conversations/no_speech_restore.py'
+                and function.attr == 'restore_no_speech'
+            )
+            if self.relative_path != LIFECYCLE_SERVICE and not restore_owner:
                 self.errors.append(
                     f'{self.relative_path}:{node.lineno}: direct lifecycle database call {function.attr}; '
                     f'use utils.conversations.lifecycle instead'
@@ -117,6 +183,34 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
             writes_conversation_ref = (
                 receiver_name in self.conversation_refs or first_argument_name in self.conversation_refs
             )
+            # Storage allowlisting must not bypass the completed-row contract.
+            # Only the explicitly named finalization job reference is a job-only
+            # completion; an unknown/renamed ref fails closed for review.
+            job_only = (
+                self.relative_path == 'backend/database/conversation_finalization_jobs.py'
+                and first_argument_name == 'job_ref'
+            )
+            if self.relative_path in RAW_STORAGE_ALLOWLIST and not job_only:
+                for payload in [*node.args, *(kw.value for kw in node.keywords)]:
+                    if not isinstance(payload, ast.Dict):
+                        continue
+                    completed = any(
+                        isinstance(key, ast.Constant)
+                        and key.value == 'status'
+                        and (
+                            (isinstance(value, ast.Constant) and value.value == 'completed')
+                            or (isinstance(value, ast.Attribute) and value.attr == 'completed')
+                        )
+                        for key, value in zip(payload.keys, payload.values)
+                    )
+                    if (
+                        completed
+                        and 'relevance_decision' not in _dict_keys(payload)
+                        and not _is_hidden_noise_close(self.relative_path, payload)
+                    ):
+                        self.errors.append(
+                            f'{self.relative_path}:{node.lineno}: completed conversation write requires relevance_decision'
+                        )
             # A transaction-level lifecycle write outside the storage primitive
             # is a second authority even when the pasted-back ref is named
             # simply ``ref``. Direct document writes are flagged when their
@@ -125,6 +219,7 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
                 fields
                 and self.relative_path not in RAW_STORAGE_ALLOWLIST
                 and (is_transaction_write or writes_conversation_ref)
+                and not _is_sync_donor_tombstone_discard(self.relative_path, node)
             ):
                 self.errors.append(
                     f'{self.relative_path}:{node.lineno}: raw lifecycle fields {sorted(fields)}; '
@@ -133,11 +228,88 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[str]:
+    """Static owner inventory for #15247; behavioral tests prove receipt precedence."""
+    if relative_path != 'backend/database/conversations.py':
+        return []
+    policies = {
+        'upsert_conversation_with_lifecycle': '_reapply_current_manual_assignments',
+        'persist_processing_result_with_lifecycle': '_reapply_current_manual_assignments',
+        'update_conversation_segments': 'apply_manual_assignments',
+        # Revision-fenced final-pass replacement remaps and reapplies current receipts.
+        'promote_final_pass_if_current': 'apply_manual_assignments',
+        'assign_conversation_speaker': 'manual_assignment',
+        # These rewrite current transactional content rather than caller snapshots.
+        'update_conversation_segment_text': 'prepare_conversation_for_read',
+        'migrate_conversations_level_batch': 'decode_manual_speaker_assignments',
+        'create_conversation_if_absent_with_lifecycle': None,
+        # Field-scoped display-only translation merge: reads the transaction
+        # snapshot inside _write and preserves raw text/projections (#15247).
+        'materialize_translation': None,
+    }
+    errors = []
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        calls = [n for n in ast.walk(node) if isinstance(n, ast.Call)]
+        writes = any(
+            isinstance(n.func, ast.Attribute)
+            and n.func.attr in {'set', 'update', 'create'}
+            and isinstance(n.func.value, ast.Name)
+            and n.func.value.id in {'transaction', 'txn', 'batch', 'doc_ref', 'conversation_ref'}
+            for n in calls
+        )
+        transcript = any(isinstance(n, ast.Constant) and n.value == 'transcript_segments' for n in ast.walk(node))
+        snapshot_input = any(a.arg == 'conversation_data' for a in node.args.args)
+        if not writes or not (transcript or snapshot_input):
+            continue
+        required = policies.get(node.name)
+        if node.name not in policies or (
+            required and not any(isinstance(n.func, ast.Name) and n.func.id == required for n in calls)
+        ):
+            errors.append(f'{relative_path}:{node.lineno}: transcript writer {node.name} lacks current receipt policy')
+    return errors
+
+
+def _smart_merge_tombstone_violations(tree: ast.Module, relative_path: str) -> list[str]:
+    """Pin the variable-payload lifecycle write to its reviewed storage owner.
+
+    The generic literal-field scan cannot see ``donor_update``. If this call is
+    renamed or moved, review the new writer before changing this inventory.
+    """
+    if relative_path != 'backend/database/smart_merge.py':
+        return []
+    owners = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'absorb_conversation']
+    if len(owners) != 1:
+        return [f'{relative_path}: smart-merge tombstone writer absorb_conversation is missing']
+    calls = [
+        node
+        for node in ast.walk(owners[0])
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == 'update'
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == 'transaction'
+        and len(node.args) == 2
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id == 'donor_ref'
+        and isinstance(node.args[1], ast.Name)
+        and node.args[1].id == 'donor_update'
+    ]
+    if len(calls) != 1:
+        return [f'{relative_path}: smart-merge tombstone writer must update donor_ref with donor_update exactly once']
+    return []
+
+
 def violations(source: str, relative_path: str) -> list[str]:
     tree = ast.parse(source, filename=relative_path)
     visitor = _LifecycleWriteVisitor(relative_path)
     visitor.visit(tree)
-    return visitor.errors
+    return (
+        visitor.errors
+        + _transcript_writer_violations(tree, relative_path)
+        + _smart_merge_tombstone_violations(tree, relative_path)
+    )
 
 
 def _source_files() -> list[Path]:

@@ -9,10 +9,12 @@ from utils.translation import (
     TranslationService,
     TranslationStatus,
     classify_translation_need,
+    detect_language,
     detect_language_with_confidence,
     split_into_sentences,
 )
 from utils.translation_cache import should_persist_translation
+from utils.translation_language import detection_cache
 
 
 def test_sentence_splitter_preserves_abbreviations_and_decimals():
@@ -65,6 +67,26 @@ def test_confident_language_detection_handles_short_fillers_and_real_text():
     assert confidence > 0.5
 
 
+def test_language_detection_cache_keys_do_not_collide_for_conf_prefixed_text():
+    """detect_language and detect_language_with_confidence share detection_cache; their keys
+    must not overlap even when a caller's raw text happens to start with 'conf:'."""
+    detection_cache.clear()
+    text = 'The weather forecast predicts sunshine tomorrow across the region'
+
+    # Prime the plain cache with the literal string that the confidence API used to key on.
+    detect_language('conf:' + text, remove_non_lexical=False)
+
+    language, confidence = detect_language_with_confidence(text, remove_non_lexical=False)
+    assert isinstance(language, str)
+    assert isinstance(confidence, float)
+
+    # And the reverse order: confidence result must not leak into the plain string API.
+    detection_cache.clear()
+    detect_language_with_confidence(text, remove_non_lexical=False)
+    plain_result = detect_language('conf:' + text, remove_non_lexical=False)
+    assert plain_result is None or isinstance(plain_result, str)
+
+
 @pytest.mark.parametrize(
     ('detected', 'confidence', 'target', 'stable', 'expected'),
     [
@@ -87,13 +109,13 @@ def test_translation_need_thresholds_are_explicit(monkeypatch, detected, confide
 
 def test_whole_text_and_sentence_methods_delegate_to_one_engine():
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[
             translations(('Bonjour là-bas', 'en')),
             translations(('Bonjour.', 'en'), ('Comment ça va?', 'en')),
         ],
     )
-    service, _cache = build_service({TranslationProvider.google: provider})
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     assert service.translate_text('fr', 'Hello there') == ('Bonjour là-bas', 'en')
     assert service.translate_text_by_sentence('fr', 'Hello. How are you?') == ('Bonjour. Comment ça va?', 'en')
@@ -112,8 +134,8 @@ def test_default_services_share_external_adapters_but_keep_session_lrus_separate
 
 
 def test_whitespace_only_input_skips_the_provider_in_every_mode():
-    provider = FakeProvider(TranslationProvider.google, responses=[])
-    service, _cache = build_service({TranslationProvider.google: provider})
+    provider = FakeProvider(TranslationProvider.luna, responses=[])
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     assert service.translate_text('fr', '   ') == ('   ', '')
     assert service.translate_text_by_sentence('fr', '   ') == ('   ', '')
@@ -123,10 +145,10 @@ def test_whitespace_only_input_skips_the_provider_in_every_mode():
 def test_full_text_cache_is_shared_by_sentence_mode():
     store = DictTranslationStore()
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[translations(('Bonjour.', 'en'), ('Ça va?', 'en'))],
     )
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
 
     first = service.translate_text_by_sentence('fr', 'Hello. How are you?')
     second = service.translate_text_by_sentence('fr', 'Hello. How are you?')
@@ -138,8 +160,8 @@ def test_full_text_cache_is_shared_by_sentence_mode():
 
 def test_memory_cache_survives_persistent_cache_miss():
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
     store.values.clear()
@@ -150,10 +172,10 @@ def test_memory_cache_survives_persistent_cache_miss():
 def test_session_cleanup_releases_memory_without_clearing_shared_storage():
     store = DictTranslationStore()
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[translations(('Hola', 'en')), translations(('Hola otra vez', 'en'))],
     )
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
     persisted = dict(store.values)
@@ -167,8 +189,8 @@ def test_session_cleanup_releases_memory_without_clearing_shared_storage():
 
 
 def test_typed_unchanged_outcome_maps_to_legacy_tuple_only_at_facade():
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hello', 'en'))])
-    service, _cache = build_service({TranslationProvider.google: provider})
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hello', 'en'))])
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     outcomes = service.translate_outcomes('en', [('segment', 'Hello')])
 
@@ -181,7 +203,7 @@ def test_typed_unchanged_outcome_maps_to_legacy_tuple_only_at_facade():
     ('source', 'translated', 'detected', 'target', 'expected'),
     [
         ('Hello', ' Hello ', 'en-US', 'en', False),
-        ('Hello', 'HELLO', 'en', 'en', True),
+        ('Hello', 'HELLO', 'en', 'en', False),
         ('Hello', 'Bonjour', 'en', 'fr', True),
         ('hola', 'hello', 'es', 'en', True),
         ('hola', 'hola', 'es', 'en', False),

@@ -99,7 +99,362 @@ private actor GatedRuntimeStartupHarness {
   func launches() -> Int { launchCount }
 }
 
+private actor ContextProjectionRaceHarness {
+  private var generation = 1
+  private var events: [String] = []
+  private var admissionAttempts = 0
+
+  func record(_ event: String) {
+    events.append(event)
+  }
+
+  func advance(_ event: String) {
+    generation += 1
+    events.append(event)
+  }
+
+  func freshness() -> AgentContextFreshness {
+    AgentContextFreshness(
+      version: "snapshot-v\(generation)",
+      generation: generation,
+      rendererFingerprint: "renderer-v\(generation)",
+      capabilityVersion: "capabilities-v\(generation)"
+    )
+  }
+
+  func recordAdmissionAttempt() -> Int {
+    admissionAttempts += 1
+    events.append("admission_attempt_\(admissionAttempts)")
+    return admissionAttempts
+  }
+
+  func snapshot() -> [String] { events }
+}
+
+private actor GateAdmissionOrderProbe {
+  private(set) var order: [String] = []
+
+  func append(_ value: String) {
+    order.append(value)
+  }
+
+  func snapshot() -> [String] {
+    order
+  }
+}
+
+/// Signals are latched, not edge-triggered. The signaller and its waiter run on
+/// separate tasks, so nothing orders `signalEntered()` before `waitUntilEntered()`
+/// (or `release()` before `waitUntilReleased()`); an unlatched signal that lands
+/// first is dropped and its waiter suspends forever, which hangs the whole suite
+/// until the per-suite budget kills it. The other probes in this file latch the
+/// same way.
+private actor GateHoldProbe {
+  private var hasEntered = false
+  private var hasReleased = false
+  private var enteredWaiter: CheckedContinuation<Void, Never>?
+  private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+  func waitUntilEntered() async {
+    if hasEntered { return }
+    await withCheckedContinuation { enteredWaiter = $0 }
+  }
+
+  func signalEntered() {
+    hasEntered = true
+    enteredWaiter?.resume()
+    enteredWaiter = nil
+  }
+
+  func waitUntilReleased() async {
+    if hasReleased { return }
+    await withCheckedContinuation { releaseContinuation = $0 }
+  }
+
+  func release() {
+    hasReleased = true
+    releaseContinuation?.resume()
+    releaseContinuation = nil
+  }
+}
+
+private final class GateGrantCancellationRaceProbe: @unchecked Sendable {
+  private let lock = NSLock()
+  private let resumeGrantedWaiter = DispatchSemaphore(value: 0)
+  private var waiterRegistered = false
+  private var grantPaused = false
+  private var registrationWaiter: CheckedContinuation<Void, Never>?
+  private var grantWaiter: CheckedContinuation<Void, Never>?
+
+  func signalWaiterRegistered() {
+    lock.lock()
+    waiterRegistered = true
+    let waiter = registrationWaiter
+    registrationWaiter = nil
+    lock.unlock()
+    waiter?.resume()
+  }
+
+  func waitUntilWaiterRegistered() async {
+    await withCheckedContinuation { continuation in
+      lock.lock()
+      if waiterRegistered {
+        lock.unlock()
+        continuation.resume()
+        return
+      }
+      registrationWaiter = continuation
+      lock.unlock()
+    }
+  }
+
+  func pauseGrantedHandoff() {
+    lock.lock()
+    grantPaused = true
+    let waiter = grantWaiter
+    grantWaiter = nil
+    lock.unlock()
+    waiter?.resume()
+    resumeGrantedWaiter.wait()
+  }
+
+  func waitUntilGrantPaused() async {
+    await withCheckedContinuation { continuation in
+      lock.lock()
+      if grantPaused {
+        lock.unlock()
+        continuation.resume()
+        return
+      }
+      grantWaiter = continuation
+      lock.unlock()
+    }
+  }
+
+  func resumeGrantedHandoff() {
+    resumeGrantedWaiter.signal()
+  }
+}
+
+private actor ContextProjectionTaskBox {
+  private var task: Task<Void, Never>?
+
+  func store(_ task: Task<Void, Never>) {
+    self.task = task
+  }
+
+  func wait() async {
+    await task?.value
+  }
+}
+
+private enum CredentialRefreshShouldNotRun: Error {
+  case invoked
+}
+
+private actor CredentialFreeControlStartProbe {
+  private var startupCredentialFetches = 0
+  private var runtimeCredentialRefreshes = 0
+  private var ownerSynchronizations = 0
+
+  func attemptStartupCredentialFetch() throws -> String? {
+    startupCredentialFetches += 1
+    throw CredentialRefreshShouldNotRun.invoked
+  }
+
+  func attemptRuntimeCredentialRefresh() throws -> Bool {
+    runtimeCredentialRefreshes += 1
+    throw CredentialRefreshShouldNotRun.invoked
+  }
+
+  func synchronizeOwner() {
+    ownerSynchronizations += 1
+  }
+
+  func snapshot() -> (startupCredentialFetches: Int, runtimeCredentialRefreshes: Int, ownerSynchronizations: Int) {
+    (startupCredentialFetches, runtimeCredentialRefreshes, ownerSynchronizations)
+  }
+}
+
+private actor ContextAdmissionRetryTestState {
+  private(set) var attempts: [AgentContextFreshness?] = []
+  private(set) var refreshCount = 0
+
+  func recordRefresh() {
+    refreshCount += 1
+  }
+
+  func recordAttempt(_ context: AgentContextFreshness?) -> Int {
+    attempts.append(context)
+    return attempts.count
+  }
+
+  func snapshot() -> (attempts: [AgentContextFreshness?], refreshCount: Int) {
+    (attempts, refreshCount)
+  }
+}
+
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testAgentEnvironmentStripsYoloModeOnlyInProduction() {
+    let inherited = ["OMI_YOLO_MODE": "1", "PATH": "/usr/bin", "OMI_UNRELATED": "keep"]
+
+    let production = AgentRuntimeCredentialPolicy.agentEnvironment(
+      inherited, isNonProduction: false)
+    XCTAssertNil(
+      production["OMI_YOLO_MODE"],
+      "production must never let an inherited YOLO override reach the agent subprocess")
+    XCTAssertEqual(production["PATH"], "/usr/bin")
+    XCTAssertEqual(production["OMI_UNRELATED"], "keep")
+
+    let productionOff = AgentRuntimeCredentialPolicy.agentEnvironment(
+      ["OMI_YOLO_MODE": "0"], isNonProduction: false)
+    XCTAssertNil(
+      productionOff["OMI_YOLO_MODE"],
+      "an explicit =0 must also be stripped so a shipped bundle can never carry the key")
+
+    let nonProduction = AgentRuntimeCredentialPolicy.agentEnvironment(
+      inherited, isNonProduction: true)
+    XCTAssertEqual(nonProduction, inherited)
+  }
+
+  func testHermeticFaultModelTokenIsNonProductionOnlyAndAvoidsFirebaseRefresh() {
+    let environment = [
+      AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey: "fault-suite-model-token"
+    ]
+
+    let token = AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+      isNonProduction: true,
+      bundleIdentifier: AgentRuntimeCredentialPolicy.hermeticFaultBundleIdentifier,
+      environment: environment)
+    XCTAssertEqual(token, "fault-suite-model-token")
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: true,
+        hermeticFaultModelToken: token),
+      "the isolated fault backend must exercise its injected response without Firebase")
+    XCTAssertNil(
+      AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+        isNonProduction: false,
+        bundleIdentifier: AgentRuntimeCredentialPolicy.hermeticFaultBundleIdentifier,
+        environment: environment),
+      "production must never accept a harness-supplied model token")
+    XCTAssertNil(
+      AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+        isNonProduction: true,
+        bundleIdentifier: "com.omi.some-other-dev-bundle",
+        environment: environment),
+      "only the named fault bundle may opt into the inert model token")
+    XCTAssertNil(
+      AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+        isNonProduction: true,
+        bundleIdentifier: AgentRuntimeCredentialPolicy.hermeticFaultBundleIdentifier,
+        environment: [
+          AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey: "   "
+        ]))
+  }
+
+  func testNonProductionJournalControlStartDoesNotRefreshCredentials() async throws {
+    let probe = CredentialFreeControlStartProbe()
+
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: false,
+        isNonProduction: true))
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: false,
+        isNonProduction: false),
+      "production must never permit a credential-free runtime start")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: true),
+      "normal model starts must remain credential-required")
+
+    let authHeader = try await AgentRuntimeProcess.startupAuthHeader(
+      requiresCredentials: false,
+      fetchAuthHeader: {
+        try await probe.attemptStartupCredentialFetch()
+      })
+    XCTAssertNil(authHeader)
+
+    await AgentBridge.synchronizeAuthorityForStart(
+      requiresCredentials: false,
+      refreshCredentials: {
+        try await probe.attemptRuntimeCredentialRefresh()
+      },
+      refreshOwner: {
+        await probe.synchronizeOwner()
+      })
+
+    let snapshot = await probe.snapshot()
+    XCTAssertEqual(snapshot.startupCredentialFetches, 0)
+    XCTAssertEqual(snapshot.runtimeCredentialRefreshes, 0)
+    XCTAssertEqual(snapshot.ownerSynchronizations, 1)
+  }
+
+  func testPinnedPiMonoSessionsFetchTokenAfterHarnessSwitch() async throws {
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
+        preferredAdapterIsPiMono: false,
+        requestedCredentials: true,
+        isNonProduction: false),
+      "ACP/Hermes/OpenClaw must still start without a managed token")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: false),
+      "production alternate-harness starts must still fetch the managed token")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
+        preferredAdapterIsPiMono: true,
+        requestedCredentials: true,
+        isNonProduction: false))
+
+    var fetches = 0
+    let header = try await AgentRuntimeProcess.startupAuthHeader(
+      requiresCredentials: AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: false),
+      fetchAuthHeader: {
+        fetches += 1
+        return "Bearer pinned-session-token"
+      })
+    XCTAssertEqual(fetches, 1)
+    XCTAssertEqual(header, "Bearer pinned-session-token")
+
+    var skippedFetches = 0
+    let skipped = try await AgentRuntimeProcess.startupAuthHeader(
+      requiresCredentials: AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: false,
+        isNonProduction: true),
+      fetchAuthHeader: {
+        skippedFetches += 1
+        return "Bearer should-not-fetch"
+      })
+    XCTAssertEqual(skippedFetches, 0)
+    XCTAssertNil(skipped)
+  }
+
+  func testNamedBundleStartupUsesValidSeededCredentialWithoutForcedRefresh() {
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: true,
+        isDesktopLocalProfile: false),
+      "a named bundle has no Firebase SDK session to satisfy a forced refresh")
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: true,
+        isDesktopLocalProfile: true),
+      "the local harness owns its credential lifecycle")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
+        isNonProduction: false,
+        isDesktopLocalProfile: false),
+      "production and Beta starts must continue forcing a fresh credential")
+  }
+
   func testKernelJournalMutationClosesTheRuntimeReplayBoundary() async throws {
     let runtime = AgentRuntimeProcess()
     let turn = try XCTUnwrap(
@@ -135,7 +490,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
     let valid = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability"]}"#
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials"]}"#
       ))
     let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
     XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
@@ -143,13 +498,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     let stale = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":[]}"#
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection"]}"#
       ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(stale))
 
     let wrongProtocol = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
+        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials"]}"#
       ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(wrongProtocol))
   }
@@ -264,6 +619,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["terminalStatus"] as? String, "succeeded")
   }
 
+  func testTurnActivityParsingPreservesRequestCorrelationWithoutContent() throws {
+    let message = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"turn_activity","phase":"running","protocolVersion":2,"requestId":"quiet-1","clientId":"client-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1"}"#
+      ))
+
+    XCTAssertEqual(message.kind, .turnActivity)
+    XCTAssertEqual(
+      message.requestKey,
+      AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "quiet-1")
+    )
+    XCTAssertEqual(message.payload["phase"] as? String, "running")
+    XCTAssertNil(message.payload["text"])
+  }
+
   func testCancelAckRoutesByRequestId() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
       #"{"type":"cancel_ack","protocolVersion":2,"requestId":"cancel-me","clientId":"client-1","accepted":true,"dispatchAttempted":true,"adapterAcknowledged":false}"#
@@ -356,7 +726,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
     let startRange = try XCTUnwrap(
       bridgeSource.range(
-        of: "private func start(\n    authorizationSnapshot:"))
+        of: "func start(\n    authorizationSnapshot:"))
     let restartRange = try XCTUnwrap(
       bridgeSource.range(
         of: "\n  func restart() async throws",
@@ -364,13 +734,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let startBody = String(bridgeSource[startRange.lowerBound..<restartRange.lowerBound])
     let handshakeRange = try XCTUnwrap(
       startBody.range(
-        of: "await synchronizeRuntimeAuthority(authorizationSnapshot: authorizationSnapshot)"))
+        of: "await synchronizeRuntimeAuthority(\n          authorizationSnapshot: authorizationSnapshot,"))
     let migrationRange = try XCTUnwrap(
       startBody.range(
         of: "await migrateLegacyMainChatSessionsIfNeeded("))
     XCTAssertLessThan(handshakeRange.lowerBound, migrationRange.lowerBound)
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else"))
-    XCTAssertTrue(bridgeSource.contains("await runtime.refreshRuntimeOwner("))
+    XCTAssertTrue(bridgeSource.contains("synchronizeAuthorityForStart("))
+    XCTAssertTrue(bridgeSource.contains("runtime.refreshRuntimeOwner("))
   }
 
   func testRuntimeStartupSingleFlightLaunchesExactlyOnceForConcurrentSameKey() async throws {
@@ -472,25 +842,78 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(snapshot.sentOwnerId, "stale refresh must not mutate runtime owner credentials")
   }
 
+  func testConnectClaudeAsksTheRuntimeForASignInURL() {
+    // The agent runtime's `case "start_provider_auth"` answers with `auth_required`
+    // carrying a URL; a turn whose token expired produces none.
+    XCTAssertEqual(
+      AgentRuntimeProcess.providerAuthRequestWireMessage()["type"] as? String, "start_provider_auth")
+    let url = "https://claude.ai/oauth/authorize?state=s"
+    let pressed = Date(timeIntervalSince1970: 1_000)
+    XCTAssertTrue(
+      ChatProvider.opensClaudeSignIn(
+        connectRequestedAt: pressed, now: pressed.addingTimeInterval(2), authUrl: url))
+    XCTAssertFalse(ChatProvider.opensClaudeSignIn(connectRequestedAt: nil, now: pressed, authUrl: url))
+    XCTAssertFalse(ChatProvider.opensClaudeSignIn(connectRequestedAt: pressed, now: pressed, authUrl: nil))
+    // A Connect the runtime never answered must not open a later, unrelated sign-in URL.
+    XCTAssertFalse(
+      ChatProvider.opensClaudeSignIn(
+        connectRequestedAt: pressed,
+        now: pressed.addingTimeInterval(ChatProvider.claudeConnectAnswerWindow + 1),
+        authUrl: url))
+  }
+
+  func testClaudeSignInMessagePointsAtClearChatNotAMissingNewChat() {
+    // The chat-first shell has no "new chat"; Clear Chat is what moves a pinned chat
+    // onto the selected provider, so the message must not send people looking for one.
+    let message = ChatProvider.providerAuthRequiredUserMessage(isUserClaudeMode: false)
+    XCTAssertFalse(message.contains("new chat"))
+    XCTAssertTrue(message.contains("Clear the chat"))
+  }
+
+  @MainActor
+  func testClearedChatProviderMoveMigratesOnlyOnMismatchAndKeepsProviderOnRefusal() async {
+    var calls = 0
+    let same = await ChatProvider.moveSessionToSelectedProvider(pinnedAdapterId: "acp", selectedAdapterId: "acp") {
+      calls += 1
+      return "acp"
+    }
+    guard case .unchanged = same else { return XCTFail("same adapter must not migrate, got \(same)") }
+    XCTAssertEqual(calls, 0)
+
+    let moved = await ChatProvider.moveSessionToSelectedProvider(
+      pinnedAdapterId: "pi-mono", selectedAdapterId: "acp"
+    ) {
+      calls += 1
+      return "acp"
+    }
+    guard case .moved(let from, let to) = moved else { return XCTFail("mismatch must migrate, got \(moved)") }
+    XCTAssertEqual([from, to], ["pi-mono", "acp"])
+    XCTAssertEqual(calls, 1)
+
+    struct RunActive: Error {}
+    let refused = await ChatProvider.moveSessionToSelectedProvider(
+      pinnedAdapterId: "pi-mono", selectedAdapterId: "acp"
+    ) { throw RunActive() }
+    guard case .refused(let error) = refused else { return XCTFail("refusal must be kept, got \(refused)") }
+    XCTAssertTrue(error is RunActive)
+  }
+
   func testRuntimeRefreshTokenWireRequiresCapturedOwnerToRemainCurrent() {
-    let authorized = AgentRuntimeProcess.refreshTokenWireMessage(
-      token: "owner-a-token",
+    let authorized = AgentRuntimeProcess.modelCredentialsReadyWireMessage(
       expectedOwnerId: "owner-a",
       currentOwnerId: "owner-a"
     )
 
-    XCTAssertEqual(authorized?["type"] as? String, "refresh_token")
-    XCTAssertEqual(authorized?["token"] as? String, "owner-a-token")
+    XCTAssertEqual(authorized?["type"] as? String, "refresh_owner")
+    XCTAssertNil(authorized?["token"])
     XCTAssertEqual(authorized?["ownerId"] as? String, "owner-a")
     XCTAssertNil(
-      AgentRuntimeProcess.refreshTokenWireMessage(
-        token: "owner-a-token",
+      AgentRuntimeProcess.modelCredentialsReadyWireMessage(
         expectedOwnerId: "owner-a",
         currentOwnerId: "owner-b"
       ))
     XCTAssertNil(
-      AgentRuntimeProcess.refreshTokenWireMessage(
-        token: "owner-a-token",
+      AgentRuntimeProcess.modelCredentialsReadyWireMessage(
         expectedOwnerId: "owner-a",
         currentOwnerId: nil
       ))
@@ -534,7 +957,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(
       candidates.contains(
-        "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"))
+        "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"))
     XCTAssertTrue(
       candidates.contains(
         "/tmp/debug/Omi Computer_Omi Computer.bundle/node"))
@@ -607,6 +1030,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(message?.requestKey)
   }
 
+  func testQueryResultPreservesResponseObservedProviderTargets() async throws {
+    let message = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"result","protocolVersion":2,"requestId":"req-provider","clientId":"main-chat","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done","modelsUsed":["gpt-6-luna"],"providerTargets":["openai-codex"]}"#
+      )
+    )
+
+    let bridgeResult = await AgentRuntimeProcess.shared.queryResult(from: message)
+    let clientResult = AgentClient.QueryResult(bridgeResult)
+
+    XCTAssertEqual(bridgeResult.modelsUsed, ["gpt-6-luna"])
+    XCTAssertEqual(bridgeResult.providerTargets, ["openai-codex"])
+    XCTAssertEqual(clientResult.providerTargets, ["openai-codex"])
+  }
+
   func testHarnessModeMapsNamedAdapters() {
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "piMono"), "pi-mono")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "pi-mono"), "pi-mono")
@@ -637,11 +1075,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(
       bridgeSource.contains(
         "AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else"))
-    XCTAssertTrue(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(
-      bridgeSource.contains(
-        "ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))
+    XCTAssertTrue(bridgeSource.contains("shouldRequirePiMonoCredentials("))
+    XCTAssertTrue(bridgeSource.contains("shouldFetchManagedToken"))
+    XCTAssertFalse(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
     XCTAssertFalse(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
   }
@@ -815,10 +1251,12 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
   @MainActor
   func testUsableByokEnvironmentSuppressesAllKeysWhenOneProviderIsKnownBad() {
+    let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
     let savedKeys = Dictionary(
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
         (provider, UserDefaults.standard.string(forKey: provider.storageKey))
       })
+    let savedFingerprints = APIKeyService.enrolledFingerprints()
     defer {
       for provider in BYOKProvider.allCases {
         if let saved = savedKeys[provider] ?? nil {
@@ -828,12 +1266,31 @@ final class AgentRuntimeProcessTests: XCTestCase {
         }
       }
       CredentialHealthManager.shared.reset()
+      APIKeyService.persistEnrolledFingerprints([:])
+      if let savedSelectedProvider {
+        UserDefaults.standard.set(savedSelectedProvider, forKey: .byokLLMProvider)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+      }
+      APIKeyService.persistEnrolledFingerprints(savedFingerprints)
     }
 
     for provider in BYOKProvider.allCases {
       UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
     }
+    APIKeyService.persistEnrolledFingerprints(
+      Dictionary(
+        uniqueKeysWithValues: BYOKProvider.allCases.map {
+          ($0.rawValue, APIKeyService.byokFingerprint("sk-agent-\($0.rawValue)"))
+        }))
+    UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
     let openAIKey = APIKeyService.byokKey(.openai)!
+    // usableBYOKEnvironment() gates on isByokActive, which requires the
+    // selected provider's key to be enrolled (#11454's fingerprint contract),
+    // separately from the per-request health suppression this test exercises.
+    APIKeyService.persistEnrolledFingerprints([
+      BYOKProvider.openai.rawValue: APIKeyService.byokFingerprint(openAIKey)
+    ])
     CredentialHealthManager.shared.recordProviderFailure(
       .providerAuthFailed(provider: .openai, mode: .byok),
       provider: .openai,
@@ -848,11 +1305,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   @MainActor
-  func testUsableByokEnvironmentIncludesAllKeysWhenAllProvidersAreUsable() {
+  func testUsableByokEnvironmentIncludesEnrolledSelectedLLMAndDeepgram() {
+    let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
     let savedKeys = Dictionary(
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
         (provider, UserDefaults.standard.string(forKey: provider.storageKey))
       })
+    let savedFingerprints = APIKeyService.enrolledFingerprints()
     defer {
       for provider in BYOKProvider.allCases {
         if let saved = savedKeys[provider] ?? nil {
@@ -862,18 +1321,37 @@ final class AgentRuntimeProcessTests: XCTestCase {
         }
       }
       CredentialHealthManager.shared.reset()
+      APIKeyService.persistEnrolledFingerprints([:])
+      if let savedSelectedProvider {
+        UserDefaults.standard.set(savedSelectedProvider, forKey: .byokLLMProvider)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+      }
+      APIKeyService.persistEnrolledFingerprints(savedFingerprints)
     }
 
     for provider in BYOKProvider.allCases {
       UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
     }
+    APIKeyService.persistEnrolledFingerprints(
+      Dictionary(
+        uniqueKeysWithValues: BYOKProvider.allCases.map {
+          ($0.rawValue, APIKeyService.byokFingerprint("sk-agent-\($0.rawValue)"))
+        }))
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    // Runtime forwarding requires each current key's fingerprint to be enrolled.
+    APIKeyService.persistEnrolledFingerprints([
+      BYOKProvider.openrouter.rawValue: APIKeyService.byokFingerprint("sk-agent-openrouter"),
+      BYOKProvider.deepgram.rawValue: APIKeyService.byokFingerprint("sk-agent-deepgram"),
+    ])
 
     let result = AgentRuntimeProcess.usableBYOKEnvironment()
 
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openai)], "sk-agent-openai")
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .anthropic)], "sk-agent-anthropic")
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .gemini)], "sk-agent-gemini")
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openrouter)], "sk-agent-openrouter")
     XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .deepgram)], "sk-agent-deepgram")
+    XCTAssertNil(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openai)])
+    XCTAssertNil(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .anthropic)])
+    XCTAssertNil(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .gemini)])
     XCTAssertTrue(result.suppressedProviders.isEmpty)
   }
 
@@ -893,26 +1371,6 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(env["OmI_bYoK_LEGACY"])
     XCTAssertEqual(env["OMI_AUTH_TOKEN"], "token")
     XCTAssertEqual(env["PATH"], "/usr/bin")
-  }
-
-  func testPiMonoStartupRefreshesAuthTokenAndFiltersByokEnvironment() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
-
-    XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
-    XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
-    XCTAssertTrue(
-      source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
-    XCTAssertTrue(source.contains("getAuthHeader("))
-    XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
-    XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))
-    XCTAssertFalse(
-      source.contains(
-        "log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
-    XCTAssertTrue(source.contains("forwarding \\(byok.values.count) usable user keys"))
   }
 
   func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {
@@ -1275,27 +1733,176 @@ final class AgentRuntimeProcessTests: XCTestCase {
       rendererFingerprint: "renderer-v2",
       capabilityVersion: "capabilities-v2"
     )
-    var attempts: [AgentContextFreshness?] = []
-    var refreshCount = 0
+    let state = ContextAdmissionRetryTestState()
 
+    let gate = AgentContextAdmissionGate()
     let result: String = try await AgentContextAdmissionRetry.run(
       expectedContext: initial,
+      gate: gate,
       refresh: {
-        refreshCount += 1
+        await state.recordRefresh()
         return refreshed
       },
       attempt: { context in
-        attempts.append(context)
-        if attempts.count == 1 {
-          throw self.contextProjectionMismatchError()
+        let attemptNumber = await state.recordAttempt(context)
+        if attemptNumber == 1 {
+          throw Self.contextProjectionMismatchBridgeError()
         }
         return "admitted"
       }
     )
 
+    let snapshot = await state.snapshot()
     XCTAssertEqual(result, "admitted")
-    XCTAssertEqual(refreshCount, 1)
-    XCTAssertEqual(attempts, [initial, refreshed])
+    XCTAssertEqual(snapshot.refreshCount, 1)
+    XCTAssertEqual(snapshot.attempts, [initial, refreshed])
+  }
+
+  func testContextAdmissionGateConvergesAfterWarmupContextAdvance() async throws {
+    let harness = ContextProjectionRaceHarness()
+    await harness.record("warmup")
+    let warmupContext = await harness.freshness()
+    await harness.advance("context_advanced_between_warmup_and_admission")
+
+    let gate = AgentContextAdmissionGate()
+    let queuedAdvance = ContextProjectionTaskBox()
+    let admission = Task { () throws -> (String, [String]) in
+      await queuedAdvance.store(
+        Task {
+          do {
+            try await gate.withExclusiveAccess {
+              await harness.advance("context_advanced_during_admission")
+            }
+          } catch {
+            // Cancellation while waiting for the gate is expected in some races.
+          }
+        })
+      await Task.yield()
+
+      let result: String = try await AgentContextAdmissionRetry.run(
+        expectedContext: warmupContext,
+        gate: gate,
+        refresh: { await harness.freshness() },
+        attempt: { candidate in
+          _ = await harness.recordAdmissionAttempt()
+          let currentContext = await harness.freshness()
+          guard candidate == currentContext else {
+            throw BridgeError.agentError("context_snapshot_projection_mismatch")
+          }
+          return "admitted"
+        }
+      )
+      return (result, await harness.snapshot())
+    }
+
+    let (result, eventsInsideAdmission) = try await admission.value
+    await queuedAdvance.wait()
+
+    XCTAssertEqual(result, "admitted")
+    XCTAssertEqual(
+      eventsInsideAdmission,
+      [
+        "warmup",
+        "context_advanced_between_warmup_and_admission",
+        "context_advanced_during_admission",
+        "admission_attempt_1",
+        "admission_attempt_2",
+      ],
+      "refresh+admit stay under the gate; queued writers may advance during attempts outside it"
+    )
+    let finalEvents = await harness.snapshot()
+    XCTAssertEqual(finalEvents.last, "admission_attempt_2")
+  }
+
+  /// The interleaving the two gate-hold tests below hit when the signalling task wins
+  /// the race: an edge-triggered probe drops both signals and suspends here forever.
+  func testGateHoldProbeObservesSignalsDeliveredBeforeItsWaitersSuspend() async {
+    let holdProbe = GateHoldProbe()
+
+    await holdProbe.signalEntered()
+    await holdProbe.release()
+
+    await holdProbe.waitUntilEntered()
+    await holdProbe.waitUntilReleased()
+  }
+
+  func testContextAdmissionGateCancelledWaiterDoesNotStealTurn() async throws {
+    let gate = AgentContextAdmissionGate()
+    final class CancelledWaiterProbe: @unchecked Sendable {
+      var acquiredGate = false
+    }
+    let cancelledWaiterProbe = CancelledWaiterProbe()
+    let enteredOrder = GateAdmissionOrderProbe()
+    let holdProbe = GateHoldProbe()
+
+    let first = Task {
+      try await gate.withExclusiveAccess {
+        await enteredOrder.append("first")
+        await holdProbe.signalEntered()
+        await holdProbe.waitUntilReleased()
+        return "first"
+      }
+    }
+
+    await holdProbe.waitUntilEntered()
+
+    let second = Task {
+      _ = try? await gate.withExclusiveAccess {
+        cancelledWaiterProbe.acquiredGate = true
+        await enteredOrder.append("second")
+        return "second"
+      }
+    }
+    second.cancel()
+
+    let third = Task {
+      try await gate.withExclusiveAccess {
+        await enteredOrder.append("third")
+        return "third"
+      }
+    }
+
+    await holdProbe.release()
+    let thirdResult = try await third.value
+    XCTAssertEqual(thirdResult, "third")
+    let firstResult = try await first.value
+    XCTAssertEqual(firstResult, "first")
+    XCTAssertFalse(cancelledWaiterProbe.acquiredGate)
+    let order = await enteredOrder.snapshot()
+    XCTAssertEqual(order, ["first", "third"])
+    _ = await second.result
+  }
+
+  func testContextAdmissionGateCancellationAfterGrantResumesWaiterOnce() async throws {
+    let raceProbe = GateGrantCancellationRaceProbe()
+    let gate = AgentContextAdmissionGate(
+      onWaiterRegistered: { raceProbe.signalWaiterRegistered() },
+      beforeResumingGrantedWaiter: { raceProbe.pauseGrantedHandoff() }
+    )
+    let holdProbe = GateHoldProbe()
+
+    let first = Task {
+      try await gate.withExclusiveAccess {
+        await holdProbe.signalEntered()
+        await holdProbe.waitUntilReleased()
+      }
+    }
+    await holdProbe.waitUntilEntered()
+
+    let second = Task {
+      _ = try? await gate.withExclusiveAccess {}
+    }
+    await raceProbe.waitUntilWaiterRegistered()
+
+    await holdProbe.release()
+    await raceProbe.waitUntilGrantPaused()
+    second.cancel()
+    raceProbe.resumeGrantedHandoff()
+
+    try await first.value
+    _ = await second.result
+    let third: String = try await gate.withExclusiveAccess { "third" }
+    XCTAssertEqual(third, "third")
   }
 
   func testContextAdmissionSecondMismatchFailsWithoutAnotherRefreshOrRetry() async {
@@ -1311,19 +1918,20 @@ final class AgentRuntimeProcessTests: XCTestCase {
       rendererFingerprint: "renderer-v2",
       capabilityVersion: "capabilities-v2"
     )
-    var attempts: [AgentContextFreshness?] = []
-    var refreshCount = 0
+    let state = ContextAdmissionRetryTestState()
 
+    let gate = AgentContextAdmissionGate()
     do {
       let _: String = try await AgentContextAdmissionRetry.run(
         expectedContext: initial,
+        gate: gate,
         refresh: {
-          refreshCount += 1
+          await state.recordRefresh()
           return refreshed
         },
         attempt: { context in
-          attempts.append(context)
-          throw self.contextProjectionMismatchError()
+          _ = await state.recordAttempt(context)
+          throw Self.contextProjectionMismatchBridgeError()
         }
       )
       XCTFail("expected the second projection mismatch to fail closed")
@@ -1333,8 +1941,24 @@ final class AgentRuntimeProcessTests: XCTestCase {
       XCTFail("unexpected error: \(error)")
     }
 
-    XCTAssertEqual(refreshCount, 1)
-    XCTAssertEqual(attempts, [initial, refreshed])
+    let snapshot = await state.snapshot()
+    XCTAssertEqual(snapshot.refreshCount, 1)
+    XCTAssertEqual(snapshot.attempts, [initial, refreshed])
+  }
+
+  func testSessionQueryUsesGatedRetryWithoutHoldingGateForStreaming() throws {
+    let source = try sourceFile("Chat/AgentClient.swift")
+    let sessionQueryStart = try XCTUnwrap(
+      source.range(of: "func query(\n      prompt: String,\n      session: AgentSurfaceSession,"))
+    let sessionQueryEnd = try XCTUnwrap(
+      source.range(of: "  static func makeSession", range: sessionQueryStart.upperBound..<source.endIndex))
+    let sessionQueryBody = String(source[sessionQueryStart.lowerBound..<sessionQueryEnd.lowerBound])
+    XCTAssertTrue(sessionQueryBody.contains("AgentContextAdmissionRetry.run("))
+    XCTAssertFalse(
+      sessionQueryBody.contains(
+        "withContextAdmissionAccess {\n        try Task.checkCancellation()\n        return QueryResult("),
+      "streaming query must not hold the admission gate for the entire bridge.query call"
+    )
   }
 
   func testContextAdmissionMismatchClassifierRequiresExactRuntimeCode() {
@@ -1359,6 +1983,10 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   private func contextProjectionMismatchError() -> BridgeError {
+    Self.contextProjectionMismatchBridgeError()
+  }
+
+  private static func contextProjectionMismatchBridgeError() -> BridgeError {
     .agentRuntimeFailure(
       AgentRuntimeFailure(
         code: "runtime_query_failed",

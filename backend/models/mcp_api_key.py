@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from models.connector_access import ConnectorAccess, connector_access
 
 
 class McpApiKey(BaseModel):
@@ -21,7 +23,9 @@ class McpApiKeyDB(McpApiKey):
 
 class McpApiKeyCreate(BaseModel):
     name: str
+    scopes: Optional[list[str]] = None
 
 
 class McpApiKeyCreated(McpApiKey):
     key: str
+    connector_access: ConnectorAccess = Field(default_factory=lambda: connector_access("mcp_api_key"))

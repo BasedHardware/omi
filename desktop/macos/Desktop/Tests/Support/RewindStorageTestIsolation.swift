@@ -66,6 +66,7 @@ enum RewindStorageTestIsolation {
 
   static func tearDown(userDir: URL?) async {
     guard let userDir else { return }
+    await LocalEmbeddingIndexer.shared.drainForTesting()
     await RewindDatabase.shared.close()
     await invalidateAllStorageCaches()
     RewindDatabase.currentUserId = nil
@@ -98,6 +99,10 @@ enum RewindStorageTestIsolation {
   }
 
   static func invalidateAllStorageCaches() async {
+    // Storage fixtures must never start real platform inference after local defaults turn on.
+    // Suites exercising indexing explicitly install their deterministic engine.
+    await LocalEmbeddingIndexer.shared.setRuntimeForTesting(LocalEmbeddingRuntime(engines: [], record: { _, _ in }))
+    await OCREmbeddingService.shared.reset()
     await MemoryStorage.shared.invalidateCache()
     await ActionItemStorage.shared.invalidateCache()
     await TranscriptionStorage.shared.invalidateCache()

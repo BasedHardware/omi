@@ -102,6 +102,45 @@ final class FileIndexerServiceTests: XCTestCase {
     XCTAssertEqual(records.first { $0.filename == "new.csv" }?.fileType, FileTypeCategory.spreadsheet.rawValue)
   }
 
+  func testScanFoldersStopsBeforeWritingAfterCancellation() async throws {
+    let root = temporaryRoot.appendingPathComponent("Documents", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    _ = try writeFile("do not index", at: root.appendingPathComponent("private.md"))
+
+    let service = FileIndexerService(databasePool: databasePool, batchSize: 1)
+    let gate = ScanContinuationGate(allowedChecks: 3)
+
+    let count = await service.scanFolders([root], shouldContinue: { gate.shouldContinue() })
+
+    XCTAssertEqual(count, 0)
+    XCTAssertTrue(try fetchIndexedRecords().isEmpty)
+  }
+
+  func testPartialIncrementalScanPreservesRowsUnderAnIntentionallyOmittedRoot() async throws {
+    let documents = temporaryRoot.appendingPathComponent("Documents", isDirectory: true)
+    let projects = temporaryRoot.appendingPathComponent("Projects", isDirectory: true)
+    try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
+    let privateFile = try writeFile("keep", at: documents.appendingPathComponent("private.md"))
+    let deletedFile = try writeFile("delete", at: projects.appendingPathComponent("old.md"))
+
+    let service = FileIndexerService(databasePool: databasePool, batchSize: 2)
+    _ = await service.scanFolders([documents, projects])
+    let privateIndexedPath = try XCTUnwrap(
+      fetchIndexedRecords().first { $0.filename == privateFile.lastPathComponent }?.path)
+    let protectedDocumentsPrefix = (privateIndexedPath as NSString).deletingLastPathComponent
+    try FileManager.default.removeItem(at: deletedFile)
+
+    _ = await service.scanFolders(
+      [projects],
+      incremental: true,
+      retentionProtectedPrefixes: [protectedDocumentsPrefix])
+
+    let records = try fetchIndexedRecords()
+    XCTAssertNotNil(records.first { $0.path == privateIndexedPath })
+    XCTAssertNil(records.first { $0.filename == deletedFile.lastPathComponent })
+  }
+
   private func writeFile(_ contents: String, at url: URL) throws -> URL {
     try FileManager.default.createDirectory(
       at: url.deletingLastPathComponent(),
@@ -116,6 +155,23 @@ final class FileIndexerServiceTests: XCTestCase {
       try IndexedFileRecord
         .order(IndexedFileRecord.Columns.path)
         .fetchAll(db)
+    }
+  }
+}
+
+private final class ScanContinuationGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var remainingChecks: Int
+
+  init(allowedChecks: Int) {
+    remainingChecks = allowedChecks
+  }
+
+  func shouldContinue() -> Bool {
+    lock.withLock {
+      guard remainingChecks > 0 else { return false }
+      remainingChecks -= 1
+      return true
     }
   }
 }

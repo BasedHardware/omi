@@ -2,6 +2,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 
 void main() {
+  test('every device type has a stable analytics vendor', () {
+    expect(
+      {for (final type in DeviceType.values) type: type.analyticsVendor},
+      {
+        DeviceType.omi: 'omi',
+        DeviceType.openglass: 'omi',
+        DeviceType.appleWatch: 'apple',
+        DeviceType.plaud: 'plaud',
+        DeviceType.bee: 'bee',
+        DeviceType.fieldy: 'fieldlabs',
+        DeviceType.friendPendant: 'friend',
+        DeviceType.limitless: 'limitless',
+        DeviceType.raybanMeta: 'meta',
+      },
+    );
+  });
+
   group('BtDevice.fromJson', () {
     test('parses a well-formed json round-trip', () {
       final device = BtDevice(id: 'AA:BB:CC', name: 'Omi', type: DeviceType.omi, rssi: -60);

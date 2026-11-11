@@ -1,30 +1,79 @@
 import AppKit
+import Combine
 import OmiTheme
 import SwiftUI
 
-struct ExportsSection: View {
-  let statuses: [MemoryExportDestination: MemoryExportStatus]
-  let onSelectDestination: (MemoryExportDestination) -> Void
+struct MemoryExportCatalogEntry: Identifiable {
+  let destination: MemoryExportDestination
+  let title: String?
+  let subtitle: String?
+  let description: String?
 
-  // Claude/Claude Code and ChatGPT/Codex each share one choice. Their setup
-  // sheets keep the cloud and CLI paths distinct without making this list uneven.
-  private var entries: [(destination: MemoryExportDestination, title: String?, subtitle: String?)] {
-    MemoryExportDestination.allCases.compactMap { d in
-      switch d {
+  var id: String { destination.id }
+  var resolvedTitle: String { title ?? destination.title }
+  var resolvedSubtitle: String { subtitle ?? destination.subtitle }
+  var resolvedDescription: String { description ?? destination.description }
+}
+
+enum MemoryExportCatalog {
+  static let entries: [MemoryExportCatalogEntry] =
+    MemoryExportDestination.allCases.compactMap { destination in
+      switch destination {
       case .claudeCode, .codex:
         return nil
       case .claude:
-        return (
-          .claude, "Claude / Claude Code", "Claude Code (CLI) or Claude cloud — choose in setup."
+        return MemoryExportCatalogEntry(
+          destination: .claude,
+          title: "Claude / Claude Code",
+          subtitle: nil,
+          description: "Claude Code (CLI) or Claude cloud — choose in setup."
         )
       case .chatgpt:
-        return (
-          .chatgpt, "ChatGPT / Codex", "Add Omi in ChatGPT or connect Codex locally — choose in setup."
+        return MemoryExportCatalogEntry(
+          destination: .chatgpt,
+          title: "ChatGPT / Codex",
+          subtitle: "ChatGPT app or Codex CLI",
+          description: "Add Omi in ChatGPT or connect Codex locally — choose in setup."
         )
       default:
-        return (d, nil, nil)
+        return MemoryExportCatalogEntry(
+          destination: destination, title: nil, subtitle: nil, description: nil)
       }
     }
+
+  static func matching(_ searchText: String) -> [MemoryExportCatalogEntry] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return entries }
+
+    return
+      entries
+      .filter { entry in
+        [entry.resolvedTitle, entry.resolvedSubtitle, entry.resolvedDescription]
+          .contains { $0.localizedCaseInsensitiveContains(query) }
+      }
+      .sorted { matchRank($0, query: query) < matchRank($1, query: query) }
+  }
+
+  private static func matchRank(_ entry: MemoryExportCatalogEntry, query: String) -> Int {
+    if entry.resolvedTitle.localizedCaseInsensitiveCompare(query) == .orderedSame { return 0 }
+    if entry.resolvedTitle.range(
+      of: query, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil
+    {
+      return 1
+    }
+    return 2
+  }
+}
+
+struct ExportsSection: View {
+  let statuses: [MemoryExportDestination: MemoryExportStatus]
+  var searchText = ""
+  var title = "Exports"
+  var entriesOverride: [MemoryExportCatalogEntry]? = nil
+  let onSelectDestination: (MemoryExportDestination) -> Void
+
+  private var entries: [MemoryExportCatalogEntry] {
+    entriesOverride ?? MemoryExportCatalog.matching(searchText)
   }
 
   private func status(for destination: MemoryExportDestination) -> MemoryExportStatus {
@@ -33,7 +82,8 @@ struct ExportsSection: View {
       lastExportedAt: nil,
       detailText: nil,
       isConfigured: false,
-      hasConnection: false)
+      hasConnection: false,
+      needsUpdate: false)
 
     switch destination {
     case .claude:
@@ -55,29 +105,34 @@ struct ExportsSection: View {
       lastExportedAt: values.compactMap(\.lastExportedAt).max(),
       detailText: values.compactMap(\.detailText).first,
       isConfigured: values.contains(where: \.hasConnection),
-      hasConnection: values.contains(where: \.hasConnection)
+      hasConnection: values.contains(where: \.hasConnection),
+      needsUpdate: values.contains(where: \.needsUpdate)
     )
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      Text("Exports")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+      Text(title)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
+        .foregroundColor(Ink.primary)
 
-      VStack(spacing: 0) {
-        ForEach(Array(entries.enumerated()), id: \.element.destination.id) { index, entry in
-          if index > 0 {
-            Divider()
-              .background(OmiColors.backgroundTertiary)
-          }
-          MemoryExportRow(
-            destination: entry.destination,
-            titleOverride: entry.title,
-            subtitleOverride: entry.subtitle,
-            status: status(for: entry.destination)
-          ) {
-            onSelectDestination(entry.destination)
+      if entries.isEmpty {
+        Text("No exports match “\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))”.")
+          .scaledFont(size: OmiType.body)
+          .foregroundStyle(Ink.secondary)
+          .padding(.vertical, OmiSpacing.md)
+      } else {
+        VStack(spacing: 0) {
+          ForEach(entries) { entry in
+            MemoryExportRow(
+              destination: entry.destination,
+              titleOverride: entry.title,
+              subtitleOverride: entry.subtitle,
+              descriptionOverride: entry.description,
+              status: status(for: entry.destination)
+            ) {
+              onSelectDestination(entry.destination)
+            }
           }
         }
       }
@@ -85,10 +140,11 @@ struct ExportsSection: View {
   }
 }
 
-private struct MemoryExportRow: View {
+struct MemoryExportRow: View {
   let destination: MemoryExportDestination
   var titleOverride: String? = nil
   var subtitleOverride: String? = nil
+  var descriptionOverride: String? = nil
   let status: MemoryExportStatus
   let action: () -> Void
 
@@ -99,13 +155,14 @@ private struct MemoryExportRow: View {
       return showsConnectedState ? "Connected" : "Connect"
     }
     if destination.supportsMCP {
+      if status.needsUpdate { return "Update" }
       return showsConnectedState ? "Connected" : "Connect"
     }
     switch destination {
     case .obsidian:
       return status.isConfigured ? "Sync" : "Connect"
     case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
-      return "Open"
+      return status.hasConnection ? "Open" : "Connect"
     }
   }
 
@@ -114,6 +171,43 @@ private struct MemoryExportRow: View {
     return status.hasConnection
   }
 
+  private var statusPrimaryText: String {
+    if status.exportedCount > 0 {
+      return "\(status.exportedCount.formatted()) memories exported"
+    }
+    if status.needsUpdate {
+      return "Needs update"
+    }
+    return status.hasConnection ? "Connected" : "Not connected"
+  }
+
+  private var rowSecondaryText: String {
+    if status.needsUpdate, status.exportedCount == 0, !status.hasConnection {
+      return "Using the old endpoint — update to the new URL"
+    }
+    if status.exportedCount > 0 || status.hasConnection {
+      if let lastExportedAt = status.lastExportedAt {
+        let relative = RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date())
+        return "Exported \(relative)"
+      }
+      if let detailText = status.detailText, !detailText.isEmpty {
+        return detailText
+      }
+      return statusPrimaryText
+    }
+    if let descriptionOverride {
+      return descriptionOverride
+    }
+    if let subtitleOverride {
+      return subtitleOverride
+    }
+    let subtitle = destination.subtitle
+    return subtitle.isEmpty ? destination.description : subtitle
+  }
+
+  // Mirrors ImportConnectorRow: one horizontal row with the integration name,
+  // a single status line, and the action pill — no stacked description block that
+  // wraps "Claude / Claude Code" away from its Connect control.
   var body: some View {
     Button(action: action) {
       HStack(spacing: OmiSpacing.md) {
@@ -122,24 +216,24 @@ private struct MemoryExportRow: View {
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(titleOverride ?? destination.title)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
+            .truncationMode(.tail)
 
-          Text(subtitleOverride ?? destination.description)
+          Text(rowSecondaryText)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
             .truncationMode(.tail)
         }
 
         Spacer(minLength: 12)
 
-        ImportConnectorActionButton(
-          title: actionTitle, isConnected: showsConnectedState)
+        ImportConnectorActionButton(title: actionTitle, isConnected: showsConnectedState)
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.md)
-      .background(isHovering ? OmiColors.backgroundSecondary : Color.clear)
+      .background(isHovering ? Ink.wash : Color.clear)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -148,7 +242,26 @@ private struct MemoryExportRow: View {
 }
 
 @MainActor
+struct MemoryExportWorkspace {
+  var installedApplicationURL: (ConnectorBrand) -> URL?
+  var defaultApplicationURL: (URL) -> URL?
+  var openWithApplication: ([URL], URL, NSWorkspace.OpenConfiguration, @escaping @Sendable (Error?) -> Void) -> Void
+  var open: (URL) -> Void
+
+  static let live = Self(
+    installedApplicationURL: { $0.installedApplicationURL },
+    defaultApplicationURL: { NSWorkspace.shared.urlForApplication(toOpen: $0) },
+    openWithApplication: { urls, applicationURL, configuration, completion in
+      NSWorkspace.shared.open(urls, withApplicationAt: applicationURL, configuration: configuration) { _, error in
+        completion(error)
+      }
+    },
+    open: { NSWorkspace.shared.open($0) })
+}
+
+@MainActor
 final class MemoryExportDestinationSheetModel: ObservableObject {
+  private let workspace: MemoryExportWorkspace
   @Published var isRunning = false
   @Published var statusMessage: String?
   @Published var errorMessage: String?
@@ -158,6 +271,10 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
   @Published var mcpKey: String?
   @Published var isLoadingMCPKey = false
   @Published var isTestingAgentConnection = false
+
+  init(workspace: MemoryExportWorkspace = .live) {
+    self.workspace = workspace
+  }
 
   func loadConfiguration() async {
     obsidianVaultPath = await MemoryExportService.shared.obsidianVaultPath()
@@ -198,7 +315,9 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     defer { isTestingAgentConnection = false }
 
     do {
-      let key = try await MemoryExportService.shared.ensureMCPKey()
+      guard let key = await MemoryExportService.shared.storedMCPKey() else {
+        throw MemoryExportError.requestFailed("Copy the setup prompt before testing the connection.")
+      }
       let localToken = try LocalAgentAPISettings.enable()
       mcpKey = key
       let result = try await MemoryExportService.shared.testAgentConnections(
@@ -281,13 +400,15 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     do {
       switch destination {
       case .notion:
-        let result = try await MemoryExportService.shared.prepareManualExport(for: destination)
+        if !NotionMCPConnector.shared.isConnected {
+          statusMessage = "Approve Omi in your browser…"
+          try await NotionMCPConnector.shared.connect()
+        }
+        let result = try await MemoryExportService.shared.exportToNotion()
         await MainActor.run {
-          applyClipboard(from: result)
-          revealExportFile(from: result)
           openDestination(for: destination, url: result.destinationURL)
         }
-        statusMessage = "Copied \(result.memoryCount.formatted()) memories for Notion."
+        statusMessage = "Wrote \(result.memoryCount.formatted()) memories into Notion."
 
       case .obsidian:
         let vaultURL: URL
@@ -356,20 +477,19 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     NSWorkspace.shared.activateFileViewerSelecting([fileURL])
   }
 
-  private func openDestination(for destination: MemoryExportDestination, url: URL?) {
+  func openDestination(for destination: MemoryExportDestination, url: URL?) {
     guard let url else { return }
 
-    if let appURL = destination.brand.installedApplicationURL {
+    if let appURL = workspace.installedApplicationURL(destination.brand) {
       let configuration = NSWorkspace.OpenConfiguration()
       configuration.activates = true
 
-      NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) {
-        _, error in
+      workspace.openWithApplication([url], appURL, configuration) { [self] error in
         if let error {
           log(
             "MemoryExportDestinationSheetModel: Failed opening \(destination.title) with installed app: \(error.localizedDescription)"
           )
-          Task { @MainActor in
+          Self.performOnMainActor { [self] in
             self.openInDefaultHandler(url)
           }
         }
@@ -380,24 +500,31 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     openInDefaultHandler(url)
   }
 
-  private func openInDefaultHandler(_ url: URL) {
+  func openInDefaultHandler(_ url: URL) {
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.activates = true
 
-    if let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
-      NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) {
-        _, error in
+    if let appURL = workspace.defaultApplicationURL(url) {
+      workspace.openWithApplication([url], appURL, configuration) { [workspace] error in
         if let error {
           log(
             "MemoryExportDestinationSheetModel: Failed opening \(url.absoluteString): \(error.localizedDescription)"
           )
-          NSWorkspace.shared.open(url)
+          Self.performOnMainActor {
+            workspace.open(url)
+          }
         }
       }
       return
     }
 
-    NSWorkspace.shared.open(url)
+    workspace.open(url)
+  }
+
+  nonisolated static func performOnMainActor(_ operation: @escaping @MainActor @Sendable () -> Void) {
+    Task { @MainActor in
+      operation()
+    }
   }
 }
 
@@ -409,6 +536,7 @@ struct MemoryExportDestinationSheet: View {
   @StateObject private var model = MemoryExportDestinationSheetModel()
   @State private var showManualSetup = false
   @State private var permissionRefreshID = 0
+  @State private var isDisconnecting = false
 
   private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common)
     .autoconnect()
@@ -421,15 +549,15 @@ struct MemoryExportDestinationSheet: View {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(destination.title)
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Text(destination.subtitle)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           Text(destination.description)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .padding(.top, OmiSpacing.xxs)
         }
 
@@ -442,41 +570,42 @@ struct MemoryExportDestinationSheet: View {
       // memory pack) never clips inside the fixed-height sheet.
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          if let entry = IntegrationNudgeCatalog.exportEntry(destinationID: destination.rawValue) {
+            IntegrationValueSection(entry: entry)
+          }
+
           content
+
+          DeveloperHomeLink()
 
           if let statusMessage = model.statusMessage {
             Text(statusMessage)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.success)
+              .foregroundColor(Ink.listeningGreen)
           }
 
           if let errorMessage = model.errorMessage {
             Text(errorMessage)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.warning)
+              .foregroundColor(PageGlass.warning)
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
     .padding(OmiSpacing.xxl)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
+    .glassContent()
     .task {
       await model.loadConfiguration()
-      statuses[destination] =
-        destination == .chatgpt
-        ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
-        : await MemoryExportService.shared.status(for: destination)
-      if destination.supportsMCP && destination.requiresHostedMCPKeyForSetup && model.mcpKey == nil {
-        await model.generateMCPKey()
-      }
+      statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
-      refreshChatGPTDirectoryConnectionIfNeeded()
+      refreshCloudGrantConnectionIfNeeded()
     }
   }
 
@@ -485,10 +614,10 @@ struct MemoryExportDestinationSheet: View {
     permissionRefreshID += 1
   }
 
-  private func refreshChatGPTDirectoryConnectionIfNeeded() {
-    guard destination == .chatgpt else { return }
+  private func refreshCloudGrantConnectionIfNeeded() {
+    guard destination.cloudOAuthClientID != nil else { return }
     Task {
-      statuses[.chatgpt] = await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
+      statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
     }
   }
 
@@ -508,7 +637,7 @@ struct MemoryExportDestinationSheet: View {
           icon: "doc.on.clipboard.fill",
           title: "Memory pack",
           tag: "MANUAL",
-          tagColor: OmiColors.textTertiary,
+          tagColor: Ink.secondary,
           subtitle: "Copy a one-time snapshot and paste it in yourself. Won't update on its own."
         )
         packSection
@@ -529,7 +658,7 @@ struct MemoryExportDestinationSheet: View {
           icon: "bolt.fill",
           title: destination == .chatgpt ? "Custom ChatGPT app" : "Live connection",
           tag: destination == .chatgpt ? "ADVANCED" : "AUTOMATIC",
-          tagColor: destination == .chatgpt ? OmiColors.textTertiary : OmiColors.success,
+          tagColor: destination == .chatgpt ? Ink.secondary : Ink.listeningGreen,
           subtitle: destination == .chatgpt
             ? "Use only when your workspace requires a developer-mode custom app."
             : "Set it once — \(destination.title) reads your memories live and stays in sync."
@@ -538,13 +667,13 @@ struct MemoryExportDestinationSheet: View {
 
         if destination.supportsMemoryPack {
           Divider()
-            .background(OmiColors.backgroundTertiary)
+            .background(Ink.rowFillHover)
             .padding(.vertical, OmiSpacing.hairline)
           methodHeader(
             icon: "doc.on.clipboard.fill",
             title: "Memory pack",
             tag: "MANUAL",
-            tagColor: OmiColors.textTertiary,
+            tagColor: Ink.secondary,
             subtitle: "Copy a one-time snapshot and paste it in yourself. Won't update on its own."
           )
           packSection
@@ -611,19 +740,19 @@ struct MemoryExportDestinationSheet: View {
       HStack(spacing: OmiSpacing.sm) {
         Text("Let your agent do it")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Text("MCP + CLI")
           .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundColor(OmiColors.success)
+          .foregroundColor(Ink.listeningGreen)
           .padding(.horizontal, OmiSpacing.xs)
           .padding(.vertical, OmiSpacing.hairline)
-          .background(Capsule().fill(OmiColors.success.opacity(0.15)))
+          .background(Capsule().fill(Ink.listeningGreen.opacity(0.15)))
       }
       Text(
         "Copy one setup prompt for your agent. It connects Omi memories through MCP, turns on local Desktop access through the Omi CLI, and includes a short Omi guide the agent can keep."
       )
       .scaledFont(size: OmiType.caption)
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
       .fixedSize(horizontal: false, vertical: true)
     }
   }
@@ -632,11 +761,11 @@ struct MemoryExportDestinationSheet: View {
     HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: "checkmark.circle.fill")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.success)
+        .foregroundColor(Ink.listeningGreen)
         .padding(.top, 1)
       Text(text)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
     }
   }
@@ -692,29 +821,27 @@ struct MemoryExportDestinationSheet: View {
         HStack(spacing: OmiSpacing.sm) {
           Image(systemName: "sparkles")
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
           Text(destination.mcpExecuteKind == .directoryApp ? "Connect in ChatGPT" : "Let Omi do it")
             .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
           Text(destination.mcpExecuteKind == .directoryApp ? "ONE CLICK" : "FASTEST")
             .scaledFont(size: OmiType.micro, weight: .bold)
-            .foregroundColor(OmiColors.success)
+            .foregroundColor(Ink.listeningGreen)
             .padding(.horizontal, OmiSpacing.xs)
             .padding(.vertical, OmiSpacing.hairline)
-            .background(Capsule().fill(OmiColors.success.opacity(0.15)))
+            .background(Capsule().fill(Ink.listeningGreen.opacity(0.15)))
         }
         Text(executeBlockSubtitle)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
 
         Button {
           Task {
             await model.executeWithOmi(destination: destination)
-            statuses[destination] =
-              destination == .chatgpt
-              ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
-              : await MemoryExportService.shared.status(for: destination)
+            statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(
+              for: destination)
             // Assisted flow: the user pastes values by hand, so surface the
             // field-by-field steps instead of leaving them collapsed.
             if destination.mcpExecuteKind == .assisted, destination.assistedOverlayHint != nil {
@@ -734,30 +861,62 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
-    HStack(alignment: .top, spacing: OmiSpacing.sm) {
-      Image(systemName: "checkmark.seal.fill")
-        .scaledFont(size: OmiType.subheading, weight: .semibold)
-        .foregroundColor(OmiColors.success)
-        .padding(.top, 1)
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text(completion.title)
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(alignment: .top, spacing: OmiSpacing.sm) {
+        Image(systemName: "checkmark.seal.fill")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-        Text(completion.subtitle)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
+          .foregroundColor(Ink.listeningGreen)
+          .padding(.top, 1)
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text(completion.title)
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(Ink.primary)
+          if destination == .claudeCode {
+            ClaudeCodeRestartSubtitle()
+          } else {
+            Text(completion.subtitle)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+      if destination.cloudOAuthClientID != nil {
+        Button(isDisconnecting ? "Disconnecting…" : "Disconnect") {
+          disconnectCloudConnection()
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(Ink.secondary)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .disabled(isDisconnecting)
       }
     }
     .padding(OmiSpacing.md)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
+        .fill(Ink.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-            .stroke(OmiColors.success.opacity(0.22), lineWidth: 1))
+            .stroke(Ink.listeningGreen.opacity(0.22), lineWidth: 1))
     )
+  }
+
+  private func disconnectCloudConnection() {
+    guard !isDisconnecting else { return }
+    isDisconnecting = true
+    model.errorMessage = nil
+    model.statusMessage = nil
+    Task { @MainActor in
+      do {
+        statuses[destination] = try await MemoryExportService.shared
+          .disconnectCloudOAuthConnection(for: destination)
+        model.statusMessage = "Disconnected from \(destination.title)."
+      } catch {
+        model.errorMessage = "Couldn't disconnect \(destination.title). Try again."
+      }
+      isDisconnecting = false
+    }
   }
 
   private var isConnected: Bool {
@@ -776,7 +935,7 @@ struct MemoryExportDestinationSheet: View {
           .foregroundColor(tagColor)
         Text(title)
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Text(tag)
           .scaledFont(size: OmiType.micro, weight: .bold)
           .foregroundColor(tagColor)
@@ -788,7 +947,7 @@ struct MemoryExportDestinationSheet: View {
       }
       Text(subtitle)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
     }
   }
@@ -822,10 +981,10 @@ struct MemoryExportDestinationSheet: View {
             HStack(alignment: .top, spacing: OmiSpacing.sm) {
               Text("\(index + 1).")
                 .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
               Text(step)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
           }
@@ -836,7 +995,7 @@ struct MemoryExportDestinationSheet: View {
           Button(openTitle) { model.open(openURL) }
             .buttonStyle(.plain)
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
       }
     }
@@ -847,7 +1006,7 @@ struct MemoryExportDestinationSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Copy these fields into Claude's Add custom connector form.")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
 
       mcpCodeRow(label: "Name", value: "Omi Memory", copyLabel: "Name")
@@ -860,7 +1019,7 @@ struct MemoryExportDestinationSheet: View {
 
       Text("Advanced settings")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .padding(.top, OmiSpacing.hairline)
 
       mcpCodeRow(
@@ -870,7 +1029,7 @@ struct MemoryExportDestinationSheet: View {
 
       Text("Leave OAuth Client Secret blank.")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
     }
   }
@@ -880,7 +1039,7 @@ struct MemoryExportDestinationSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Copy these fields only when creating a ChatGPT developer-mode custom app.")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
 
       mcpCodeRow(label: "Name", value: "Omi Memory", copyLabel: "Name")
@@ -892,7 +1051,7 @@ struct MemoryExportDestinationSheet: View {
 
       Text("Advanced OAuth settings")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .padding(.top, OmiSpacing.hairline)
 
       mcpCodeRow(
@@ -901,7 +1060,7 @@ struct MemoryExportDestinationSheet: View {
         copyLabel: "OAuth Client ID")
       Text("Leave OAuth Client Secret blank.")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
       mcpCodeRow(
         label: "Token auth method",
         value: destination.cloudTokenAuthMethod ?? "none",
@@ -936,27 +1095,27 @@ struct MemoryExportDestinationSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
       HStack(spacing: OmiSpacing.sm) {
         Text(secure ? String(repeating: "•", count: min(value.count, 28)) : value)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .lineLimit(1)
           .truncationMode(.middle)
           .frame(maxWidth: .infinity, alignment: .leading)
         Button("Copy") { model.copyToPasteboard(value, label: copyLabel) }
           .buttonStyle(.plain)
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-              .stroke(Color.white.opacity(0.08), lineWidth: 1))
+              .stroke(Ink.rowFill, lineWidth: 1))
       )
     }
   }
@@ -965,16 +1124,16 @@ struct MemoryExportDestinationSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text(text)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(OmiSpacing.md)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-            .fill(OmiColors.backgroundSecondary)
+            .fill(Ink.rowFill)
             .overlay(
               RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1))
+                .stroke(Ink.rowFill, lineWidth: 1))
         )
       Button(title) { model.copyToPasteboard(text, label: title) }
         .buttonStyle(OmiButtonStyle(.primary))
@@ -988,15 +1147,53 @@ struct MemoryExportDestinationSheet: View {
   private var packSection: some View {
     switch destination {
     case .notion:
+      let notionConnected = NotionMCPConnector.shared.isConnected
+      let notionSteps = [
+        "Click Connect and approve Omi in your browser",
+        "Omi creates an Omi Memories page in your workspace. Hit Sync anytime to refresh",
+        "Find the page in your Notion sidebar or search",
+      ]
       VStack(alignment: .leading, spacing: OmiSpacing.md) {
-        Text(
-          "Omi copies a ready-to-paste Markdown page, saves a local backup, and opens Notion so you can drop it where you want."
+        selectedLocationCard(
+          title: notionConnected ? "Connected to Notion" : "Not connected yet",
+          value: notionConnected
+            ? (NotionMCPConnector.shared.memoriesPageURL?.absoluteString
+              ?? "First Sync creates your Omi Memories page.")
+            : "One browser approval connects your workspace."
         )
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+
+        if notionConnected {
+          Button("Disconnect") {
+            NotionMCPConnector.shared.disconnect()
+            statuses[.notion] = nil
+          }
+          .buttonStyle(.plain)
+          .foregroundColor(Ink.secondary)
+          .scaledFont(size: OmiType.caption, weight: .medium)
+        }
+
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          ForEach(Array(notionSteps.enumerated()), id: \.offset) { index, step in
+            HStack(alignment: .top, spacing: OmiSpacing.sm) {
+              Text("\(index + 1).")
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(Ink.secondary)
+              Text(step)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
+        }
+        .padding(.top, OmiSpacing.hairline)
       }
 
     case .obsidian:
+      let obsidianSteps = [
+        "Choose your vault folder",
+        "Omi writes your memories to Omi/Memories.md and opens Obsidian. Hit Sync anytime to refresh",
+        "If Obsidian asks “Do you trust the author of this vault?”, pick either option. Omi only adds a Markdown note",
+      ]
       VStack(alignment: .leading, spacing: OmiSpacing.md) {
         selectedLocationCard(
           title: model.obsidianVaultPath.isEmpty ? "No vault selected yet" : "Selected vault",
@@ -1009,12 +1206,23 @@ struct MemoryExportDestinationSheet: View {
           model.pickObsidianVault()
         }
         .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .scaledFont(size: OmiType.caption, weight: .medium)
 
-        Text("Omi writes a refreshed `Omi/Memories.md` file inside the selected vault.")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          ForEach(Array(obsidianSteps.enumerated()), id: \.offset) { index, step in
+            HStack(alignment: .top, spacing: OmiSpacing.sm) {
+              Text("\(index + 1).")
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(Ink.secondary)
+              Text(step)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
+        }
+        .padding(.top, OmiSpacing.hairline)
       }
 
     case .chatgpt, .claude, .gemini:
@@ -1023,19 +1231,19 @@ struct MemoryExportDestinationSheet: View {
           "Omi will generate a Markdown memory pack, copy the prompt and export together, reveal the file in Finder, and open \(destination.title)."
         )
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
         Text(destination.manualPrompt)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .padding(OmiSpacing.md)
           .frame(maxWidth: .infinity, alignment: .leading)
           .background(
             RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-              .fill(OmiColors.backgroundSecondary)
+              .fill(Ink.rowFill)
               .overlay(
                 RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-                  .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                  .stroke(Ink.rowFill, lineWidth: 1)
               )
           )
       }
@@ -1060,7 +1268,8 @@ struct MemoryExportDestinationSheet: View {
   private var actionTitle: (idle: String, running: String) {
     switch destination {
     case .notion:
-      return ("Copy & open", "Preparing…")
+      return NotionMCPConnector.shared.isConnected
+        ? ("Sync", "Syncing…") : ("Connect", "Connecting…")
     case .obsidian:
       return (model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export", "Exporting…")
     case .chatgpt, .claude, .gemini:
@@ -1076,7 +1285,7 @@ struct MemoryExportDestinationSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(title)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Group {
         if isSecure {
@@ -1086,15 +1295,15 @@ struct MemoryExportDestinationSheet: View {
         }
       }
       .textFieldStyle(.plain)
-      .foregroundColor(OmiColors.textPrimary)
+      .foregroundColor(Ink.primary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-              .stroke(Color.white.opacity(0.08), lineWidth: 1)
+              .stroke(Ink.rowFill, lineWidth: 1)
           )
       )
     }
@@ -1104,20 +1313,20 @@ struct MemoryExportDestinationSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(title)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Text(value)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.md)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-            .fill(OmiColors.backgroundSecondary)
+            .fill(Ink.rowFill)
             .overlay(
               RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .stroke(Ink.rowFill, lineWidth: 1)
             )
         )
     }

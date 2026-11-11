@@ -87,7 +87,8 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(
       driverSource.contains("\"all\": {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
     XCTAssertTrue(
-      driverSource.contains("SUITE_NAMES = {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
+      driverSource.contains(
+        "SUITE_NAMES = {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\", \"evidence\"}"))
     XCTAssertTrue(driverSource.contains("def run_resilience_suite(self) -> None"))
     XCTAssertTrue(driverSource.contains("if \"resilience\" in self.suites"))
     XCTAssertTrue(driverSource.contains("self.run_resilience_suite()"))
@@ -166,11 +167,11 @@ final class AgentContinuityGauntletTests: XCTestCase {
     let registry = DesktopAutomationActionRegistry.shared
     registry.register(
       name: "__metadata_contract_test__",
+      effects: [],
       summary: "Read test-only metadata",
       params: ["limit"],
       category: "read",
       surfaces: ["test_surface"],
-      safety: "read_only",
       sideEffects: [],
       examples: ["./scripts/omi-ctl action __metadata_contract_test__ limit=1"]
     ) { _ in
@@ -190,9 +191,10 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(descriptor.preferSemantic)
   }
 
-  func testAutomationActionDescriptorInfersUsefulMetadataForBuiltins() throws {
+  func testAutomationActionDescriptorUsesDeclaredEffectsAndInfersSurfaceHints() throws {
     let snapshot = DesktopAutomationActionDescriptor(
       name: "main_chat_snapshot",
+      effects: [],
       summary: "Export main-chat state",
       params: ["limit"]
     )
@@ -203,6 +205,7 @@ final class AgentContinuityGauntletTests: XCTestCase {
 
     let capture = DesktopAutomationActionDescriptor(
       name: "capture_floating_bar_png",
+      effects: [.localArtifact],
       summary: "Capture the floating bar",
       params: ["path"]
     )

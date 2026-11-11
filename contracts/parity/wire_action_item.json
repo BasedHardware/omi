@@ -1,0 +1,121 @@
+{
+  "$comment": "Action item wire-decode vectors: the exact JSON a backend ActionItemResponse serializes, and what every first-party client must recover from it. Cases with a flat `expected` are the shared agreement set: an ISO-8601 due_at with an explicit offset decodes to the same instant everywhere, and null or missing due_at decodes to no-due-date. Cases with `expected_by_model` pin a REAL client divergence on present-but-unparseable due_at strings: strict_decode (the Dart generated wire) rejects the whole item with a FormatException because a non-null field that reads to null is invalid, while tolerant_decode (the Windows sync mapper) maps it to no-due-date; the backend refuses to accept these forms at all (strict side, asserted in test_parity_contracts.py). due_utc in expectations is the canonical instant; adapters compare instants, not string forms. Every payload carries the full required field set of the strictest client (Dart generated wire: id, description, completed). Known asymmetry documented in README.md: the Windows sync mapper fills a missing created_at with sync time because its local store requires one; the Dart wire keeps it null.",
+  "cases": [
+    {
+      "name": "due_utc_zulu",
+      "payload": {
+        "id": "ai_parity_1",
+        "description": "Ship the parity contracts",
+        "completed": false,
+        "created_at": "2026-08-01T10:00:00Z",
+        "due_at": "2026-08-20T16:00:00Z"
+      },
+      "expected": { "parses": true, "description": "Ship the parity contracts", "completed": false, "due_utc": "2026-08-20T16:00:00Z" }
+    },
+    {
+      "name": "due_with_positive_offset_same_instant",
+      "payload": {
+        "id": "ai_parity_2",
+        "description": "Offset form decodes to the same instant",
+        "completed": false,
+        "created_at": "2026-08-01T10:00:00Z",
+        "due_at": "2026-08-20T18:00:00+02:00"
+      },
+      "expected": { "parses": true, "description": "Offset form decodes to the same instant", "completed": false, "due_utc": "2026-08-20T16:00:00Z" }
+    },
+    {
+      "name": "due_with_negative_offset_same_instant",
+      "payload": {
+        "id": "ai_parity_2n",
+        "description": "Negative offset form decodes to the same instant",
+        "completed": false,
+        "created_at": "2026-08-01T10:00:00Z",
+        "due_at": "2026-08-20T09:00:00-07:00"
+      },
+      "expected": { "parses": true, "description": "Negative offset form decodes to the same instant", "completed": false, "due_utc": "2026-08-20T16:00:00Z" }
+    },
+    {
+      "name": "due_with_half_hour_offset_same_instant",
+      "payload": {
+        "id": "ai_parity_2h",
+        "description": "Half hour offset form decodes to the same instant",
+        "completed": false,
+        "created_at": "2026-08-01T10:00:00Z",
+        "due_at": "2026-08-20T21:30:00+05:30"
+      },
+      "expected": { "parses": true, "description": "Half hour offset form decodes to the same instant", "completed": false, "due_utc": "2026-08-20T16:00:00Z" }
+    },
+    {
+      "name": "due_null",
+      "payload": {
+        "id": "ai_parity_3",
+        "description": "Null due date",
+        "completed": false,
+        "created_at": "2026-08-01T10:00:00Z",
+        "due_at": null
+      },
+      "expected": { "parses": true, "description": "Null due date", "completed": false, "due_utc": null }
+    },
+    {
+      "name": "due_missing",
+      "payload": {
+        "id": "ai_parity_4",
+        "description": "Missing due date key",
+        "completed": false,
+        "created_at": "2026-08-01T10:00:00Z"
+      },
+      "expected": { "parses": true, "description": "Missing due date key", "completed": false, "due_utc": null }
+    },
+    {
+      "name": "due_empty_string",
+      "payload": {
+        "id": "ai_parity_5",
+        "description": "Empty string due date",
+        "completed": false,
+        "created_at": "2026-08-01T10:00:00Z",
+        "due_at": ""
+      },
+      "expected_by_model": {
+        "strict_decode": { "parses": false },
+        "tolerant_decode": { "parses": true, "description": "Empty string due date", "completed": false, "due_utc": null }
+      }
+    },
+    {
+      "name": "due_unparseable_string",
+      "payload": {
+        "id": "ai_parity_6",
+        "description": "Garbage due date",
+        "completed": false,
+        "created_at": "2026-08-01T10:00:00Z",
+        "due_at": "not-a-date"
+      },
+      "expected_by_model": {
+        "strict_decode": { "parses": false },
+        "tolerant_decode": { "parses": true, "description": "Garbage due date", "completed": false, "due_utc": null }
+      }
+    },
+    {
+      "name": "completed_with_due",
+      "payload": {
+        "id": "ai_parity_7",
+        "description": "Completed task keeps its due date",
+        "completed": true,
+        "created_at": "2026-08-01T10:00:00Z",
+        "due_at": "2026-08-10T09:00:00Z"
+      },
+      "expected": { "parses": true, "description": "Completed task keeps its due date", "completed": true, "due_utc": "2026-08-10T09:00:00Z" }
+    },
+    {
+      "name": "unknown_field_ignored",
+      "payload": {
+        "id": "ai_parity_8",
+        "description": "Unknown fields never break decode",
+        "completed": false,
+        "created_at": "2026-08-01T10:00:00Z",
+        "due_at": "2026-08-20T16:00:00Z",
+        "parity_probe_unknown_field": { "nested": true }
+      },
+      "expected": { "parses": true, "description": "Unknown fields never break decode", "completed": false, "due_utc": "2026-08-20T16:00:00Z" }
+    }
+  ]
+}

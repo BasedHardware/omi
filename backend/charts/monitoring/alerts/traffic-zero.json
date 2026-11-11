@@ -93,22 +93,38 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "__panelId__": "5",
-      "summary": "Parakeet receiving zero traffic for 10+ minutes \u2014 possible ILB connectivity or config issue (previous incident: https\u2192http misconfiguration caused 8h outage)",
-      "threshold": "< 0.001 rps (effectively zero)"
+      "summary": "Parakeet receiving zero traffic for 10+ minutes — possible ILB connectivity or config issue (previous incident: https→http misconfiguration caused 8h outage)",
+      "threshold": "< 0.001 rps (effectively zero)",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "alert_identity": "tz_parakeet_rps_zero",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -206,22 +222,38 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "17",
-      "summary": "Backend-listen receiving zero LB traffic for 10+ minutes \u2014 transcription pipeline may be down",
-      "threshold": "< 0.001 rps (effectively zero)"
+      "summary": "Backend-listen receiving zero LB traffic for 10+ minutes — transcription pipeline may be down",
+      "threshold": "< 0.001 rps (effectively zero)",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "tz_backend_listen_lb_zero",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -319,22 +351,38 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "21",
-      "summary": "Backend-listen has zero ready pods \u2014 all replicas are down or failing health checks",
-      "threshold": "< 1 ready pod"
+      "summary": "Backend-listen has zero ready pods — all replicas are down or failing health checks",
+      "threshold": "< 1 ready pod",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "tz_backend_listen_pods_zero",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -432,22 +480,38 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "86",
-      "summary": "Pusher has zero active WebSocket connections for 10+ minutes \u2014 live transcription pipeline broken",
-      "threshold": "< 1 active connection"
+      "summary": "Pusher has zero active WebSocket connections for 10+ minutes — live transcription pipeline broken",
+      "threshold": "< 1 active connection",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "tz_pusher_connections_zero",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -545,22 +609,41 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "82",
       "summary": "Backend-listen active WS connections dropped below 10 for 5+ minutes — clients disconnecting, likely backend-listen failure (3-day baseline: min=52, avg=218, max=365)",
-      "threshold": "< 10 active connections"
+      "threshold": "< 10 active connections",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "tz_backend_listen_ws_drop",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -678,22 +761,190 @@
       }
     ],
     "noDataState": "Alerting",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "3",
-      "summary": "Backend Cloud Run service receiving zero LB traffic for 15+ minutes \u2014 API may be unreachable",
-      "threshold": "< 0.001 rps (effectively zero)"
+      "summary": "Backend Cloud Run service receiving zero LB traffic for 15+ minutes — API may be unreachable",
+      "threshold": "< 0.001 rps (effectively zero)",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
       "severity": "critical",
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "alert_identity": "tz_backend_cloudrun_zero",
+      "component": "api",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "tz_chat_agent_requests_zero",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Traffic Zero Detection",
+    "title": "AI chat - agent lane traffic dropped to zero",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(llm_gateway_requests_total{lane_id=\"omi:auto:chat-agent\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  5
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-21T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "13",
+      "summary": "The AI chat agent lane served under 5 requests in an hour; the lowest hour in the preceding week was 18",
+      "threshold": "< 5 requests in 1h, sustained 30m",
+      "user_impact": "Users may be unable to start or continue an Omi chat at all.",
+      "scope": "The Omi AI chat agent production lane.",
+      "verification": "Confirm in the linked panel that request volume, not scrape availability, is what dropped.",
+      "safe_next_action": "Inspect the chat entry points and gateway routing on the linked dashboard before changing configuration.",
+      "runbook": "backend/docs/runbooks/silent-failure-detection.md"
+    },
+    "labels": {
+      "alert_identity": "tz_chat_agent_requests_zero",
+      "severity": "critical",
+      "instatus_component": "ai-chat",
+      "component": "ai-chat",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   }

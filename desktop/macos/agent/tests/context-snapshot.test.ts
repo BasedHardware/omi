@@ -10,6 +10,7 @@ import {
   inheritContextSnapshotForSession,
   kernelSystemPolicy,
   renderContextSnapshot,
+  renderContextSnapshotForBinding,
   updateContextSource,
 } from "../src/runtime/context-snapshot.js";
 import {
@@ -86,12 +87,214 @@ describe("kernel ContextSnapshot", () => {
     expect(at65?.contextPlan.stableCacheIdentity).toBe(at64?.contextPlan.stableCacheIdentity);
     expect(at65?.contextPlan.dynamicContextIdentity).not.toBe(at64?.contextPlan.dynamicContextIdentity);
     expect(at65?.contextPlan.semanticGuidance).toContain("recentTurns are the canonical history");
+    expect(at65?.contextPlan.semanticGuidance).toContain(
+      "task write, or memory write succeeded unless the corresponding tool result says it succeeded",
+    );
     const cacheBoundedPolicy = kernelSystemPolicy("main_chat", "coordinator", at65!.contextPlan);
     expect(cacheBoundedPolicy).toContain(`stable=${at65?.contextPlan.stableCacheIdentity}`);
     expect(cacheBoundedPolicy).toContain("dynamic=per_turn");
     expect(cacheBoundedPolicy).not.toContain(at65!.contextPlan.dynamicContextIdentity);
     expect(renderContextSnapshot(at65!, "main_chat", "coordinator"))
       .toContain(at65!.contextPlan.dynamicContextIdentity);
+    store.close();
+  });
+
+  it("surfaces a turn's journaled screen_context in recentTurns, bounded, and omits it otherwise", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-screen",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "screen" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    recordJournalTurn(store, {
+      ownerId: "owner-screen", conversationId: surface.conversationId, turnId: "screen-user",
+      role: "user", surfaceKind: "main_chat", origin: "realtime_voice", status: "completed",
+      content: "what's the answer?", contentBlocks: [], createdAtMs: 1,
+      metadataJson: JSON.stringify({ continuityKey: "voice:1", screen_context: "Riddle on screen: " + "x".repeat(900) }),
+    });
+    recordJournalTurn(store, {
+      ownerId: "owner-screen", conversationId: surface.conversationId, turnId: "screen-assistant",
+      role: "assistant", surfaceKind: "main_chat", origin: "realtime_voice", status: "completed",
+      content: "A keyboard.", contentBlocks: [], createdAtMs: 2,
+    });
+    const snapshot = buildContextSnapshot(store, surface.agentSessionId, "owner-screen", 2);
+    const [user, assistant] = snapshot.recentTurns;
+    expect(user?.screenContext?.startsWith("Riddle on screen: ")).toBe(true);
+    expect(user?.screenContext?.length).toBe(800);
+    expect(assistant?.screenContext).toBeUndefined();
+    expect(renderContextSnapshot(snapshot, "realtime_voice", "coordinator")).toContain("Riddle on screen: ");
+    expect(snapshot.contextPlan.semanticGuidance).toContain("screenContext");
+    store.close();
+  });
+
+  it("separates a delivery-cut completed answer from a mid-stream fragment on failed voice turns", () => {
+    // 2026-09-09 incident: a PTT barge-in after the provider finished journaled
+    // the reply `.failed` exactly like a mid-stream fragment, and the one-size
+    // cut-off guidance told the model to re-answer the old thread on a generic
+    // follow-up. The flag must surface per turn and the guidance must split.
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-cut",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "cut" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    recordJournalTurn(store, {
+      ownerId: "owner-cut", conversationId: surface.conversationId, turnId: "cut-user",
+      role: "user", surfaceKind: "main_chat", origin: "realtime_voice", status: "completed",
+      content: "how many obsidian do I need?", contentBlocks: [], createdAtMs: 1,
+      metadataJson: JSON.stringify({ continuityKey: "voice:1" }),
+    });
+    recordJournalTurn(store, {
+      ownerId: "owner-cut", conversationId: surface.conversationId, turnId: "cut-assistant-complete",
+      role: "assistant", surfaceKind: "main_chat", origin: "realtime_voice", status: "failed",
+      content: "You need four obsidian in total.", contentBlocks: [], createdAtMs: 2,
+      metadataJson: JSON.stringify({
+        terminalReason: "interrupted_by_barge_in",
+        answerTextCompleted: true,
+      }),
+    });
+    recordJournalTurn(store, {
+      ownerId: "owner-cut", conversationId: surface.conversationId, turnId: "cut-assistant-fragment",
+      role: "assistant", surfaceKind: "main_chat", origin: "realtime_voice", status: "failed",
+      content: "You need fo", contentBlocks: [], createdAtMs: 3,
+      metadataJson: JSON.stringify({
+        terminalReason: "provider_failed",
+        answerTextCompleted: false,
+      }),
+    });
+    const snapshot = buildContextSnapshot(store, surface.agentSessionId, "owner-cut", 3);
+    const completed = snapshot.recentTurns.find((turn) => turn.turnId === "cut-assistant-complete");
+    const fragment = snapshot.recentTurns.find((turn) => turn.turnId === "cut-assistant-fragment");
+    expect(completed?.status).toBe("failed");
+    expect(completed?.answerTextCompleted).toBe(true);
+    expect(fragment?.answerTextCompleted).toBeUndefined();
+    const rendered = renderContextSnapshot(snapshot, "realtime_voice", "coordinator");
+    expect(rendered).toContain("answerTextCompleted");
+    // The guidance keeps the strict rule for fragments and adds the
+    // do-not-re-answer rule for delivery-cut completed answers.
+    const guidance = kernelSystemPolicy("realtime_voice", "coordinator");
+    expect(guidance).toContain("if the user follows up on it, answer the request fully");
+    expect(guidance).toContain("Do not re-deliver or re-answer that thread from scratch");
+    store.close();
+  });
+
+  it("delivers full history once per binding, then only new or changed canonical turns", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-delta",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "delta" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 64; sequence += 1) {
+      recordJournalTurn(store, {
+        ownerId: "owner-delta",
+        conversationId: surface.conversationId,
+        turnId: `delta-turn-${sequence}`,
+        role: sequence % 2 ? "user" : "assistant",
+        surfaceKind: "main_chat",
+        origin: "typed_chat",
+        status: "completed",
+        content: `delta canonical turn ${sequence}`,
+        contentBlocks: [],
+        createdAtMs: sequence,
+      });
+    }
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-delta", 64);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator");
+    expect(full.deliveryMode).toBe("full");
+    expect(full.rendered).toContain("delta canonical turn 1");
+    expect(full.rendered).toContain("delta canonical turn 64");
+
+    recordJournalTurn(store, {
+      ownerId: "owner-delta",
+      conversationId: surface.conversationId,
+      turnId: "delta-turn-65",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "delta canonical turn 65",
+      contentBlocks: [],
+      createdAtMs: 65,
+    });
+    const second = buildContextSnapshot(store, surface.agentSessionId, "owner-delta", 65);
+    const delta = renderContextSnapshotForBinding(second, "main_chat", "coordinator", full.next);
+    expect(delta.deliveryMode).toBe("delta");
+    expect(delta.rendered).toContain('"includedTurnCount":1');
+    expect(delta.rendered).toContain("delta canonical turn 65");
+    expect(delta.rendered).not.toContain("delta canonical turn 2");
+
+    updateJournalTurn(store, {
+      ownerId: "owner-delta",
+      conversationId: surface.conversationId,
+      turnId: "delta-turn-65",
+      content: "delta canonical turn 65 corrected",
+      status: "completed",
+    });
+    const corrected = buildContextSnapshot(store, surface.agentSessionId, "owner-delta", 66);
+    const correction = renderContextSnapshotForBinding(corrected, "main_chat", "coordinator", delta.next);
+    expect(correction.rendered).toContain('"includedTurnCount":1');
+    expect(correction.rendered).toContain("delta canonical turn 65 corrected");
+    store.close();
+  });
+
+  it("falls back to full delivery when previously retained turns disappear", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-shrink",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "shrink" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 5; sequence += 1) {
+      recordJournalTurn(store, {
+        ownerId: "owner-shrink",
+        conversationId: surface.conversationId,
+        turnId: `shrink-turn-${sequence}`,
+        role: sequence % 2 ? "user" : "assistant",
+        surfaceKind: "main_chat",
+        origin: "typed_chat",
+        status: "completed",
+        content: `shrink canonical turn ${sequence}`,
+        contentBlocks: [],
+        createdAtMs: sequence,
+      });
+    }
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-shrink", 5);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator");
+    expect(full.deliveryMode).toBe("full");
+
+    // Simulate journal_clear_turns: delete some turns so the retained set shrinks.
+    store.execute(
+      "DELETE FROM conversation_turns WHERE conversation_id = ? AND turn_id IN (?, ?)",
+      [surface.conversationId, "shrink-turn-1", "shrink-turn-2"],
+    );
+
+    // New turn arrives after the clear.
+    recordJournalTurn(store, {
+      ownerId: "owner-shrink",
+      conversationId: surface.conversationId,
+      turnId: "shrink-turn-6",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "shrink canonical turn 6",
+      contentBlocks: [],
+      createdAtMs: 6,
+    });
+
+    const afterShrink = buildContextSnapshot(store, surface.agentSessionId, "owner-shrink", 7);
+    const result = renderContextSnapshotForBinding(afterShrink, "main_chat", "coordinator", full.next);
+    // Must be a full re-render, not a delta, so the model knows turns 1 and 2
+    // are gone. A delta with no tombstone would let the model believe they still
+    // exist in the binding's conversation history.
+    expect(result.deliveryMode).toBe("full");
+    expect(result.rendered).not.toContain("delivery=delta");
+    expect(result.rendered).toContain("shrink canonical turn 3");
+    expect(result.rendered).toContain("shrink canonical turn 6");
+    expect(result.rendered).not.toContain("shrink canonical turn 1");
     store.close();
   });
 
@@ -377,7 +580,7 @@ describe("kernel ContextSnapshot", () => {
     store.close();
   });
 
-  it("shares one base content version across surfaces while separating renderer policy", () => {
+  it("shares one base content version across surfaces while separating renderer and capability policy", () => {
     const { store } = fixture();
     const main = store.insertSession({
       ownerId: "shared-owner",
@@ -410,8 +613,11 @@ describe("kernel ContextSnapshot", () => {
     expect(voiceSnapshot).toMatchObject({
       version: mainSnapshot.version,
       snapshotGeneration: mainSnapshot.snapshotGeneration,
-      capabilityVersion: mainSnapshot.capabilityVersion,
     });
+    // Typed-chat-only writes are intentionally absent from voice capability
+    // projections, so the capability fingerprint must diverge even though
+    // both surfaces share the same admitted context content.
+    expect(voiceSnapshot.capabilityVersion).not.toBe(mainSnapshot.capabilityVersion);
     expect(voiceSnapshot.rendererFingerprint).not.toBe(mainSnapshot.rendererFingerprint);
     expect(voiceSnapshot.rendererPolicyVersion).toBe(mainSnapshot.rendererPolicyVersion);
     store.close();

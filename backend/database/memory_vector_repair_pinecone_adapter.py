@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, Optional, cast
 
-from database.memory_vector_metadata import build_memory_vector_metadata, deterministic_memory_vector_id
+from database.memory_vector_metadata import (
+    build_canonical_memory_vector_delete_filter,
+    build_memory_vector_metadata,
+    canonical_memory_provider_id,
+)
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItemStatus, MemoryItem
 
@@ -25,18 +29,21 @@ def make_pinecone_vector_deleter(
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
     """Return a worker-compatible deleter for memory vector repair/purge records.
 
-    `delete_vectors` is the only Pinecone-shaped dependency. It must accept
-    keyword args `ids=[...]` and `namespace=...`; tests inject fakes and
-    production can pass a thin wrapper around Pinecone index.delete.
+    Cleanup is fenced by canonical UID + memory metadata, so a legacy bare-ID
+    row cannot make one user's repair delete another user's scoped projection.
     """
 
     _validate_namespace(namespace)
 
     def delete_record(record: Dict[str, Any]) -> Dict[str, Any]:
         vector_id = _required_str(record, "vector_id")
-        pinecone_result = delete_vectors(ids=[vector_id], namespace=namespace)
+        uid = _required_str(record, "uid")
+        memory_id = _required_str(record, "memory_id")
+        delete_filter = build_canonical_memory_vector_delete_filter(uid, memory_id)
+        pinecone_result = delete_vectors(filter=delete_filter, namespace=namespace)
         return {
             "action": "delete",
+            "filter": delete_filter,
             "namespace": namespace,
             "vector_ids": [vector_id],
             "pinecone_result": pinecone_result,
@@ -48,6 +55,7 @@ def make_pinecone_vector_deleter(
 def make_pinecone_vector_repairer(
     *,
     embed_text: Callable[[str], Iterable[float]],
+    delete_vectors: Callable[..., Any],
     upsert_vectors: Callable[..., Any],
     namespace: str = VECTOR_REPAIR_PINECONE_NAMESPACE,
     now: Optional[datetime] = None,
@@ -74,7 +82,7 @@ def make_pinecone_vector_repairer(
         if item.source_state != SourceState.active or item.status != MemoryItemStatus.active:
             raise VectorRepairNotReady("authoritative item is not live/active")
 
-        vector_id = deterministic_memory_vector_id(item.uid, item.memory_id, item.tier, item.item_revision)
+        vector_id = canonical_memory_provider_id(item.uid, item.memory_id)
         metadata = build_memory_vector_metadata(
             item,
             projection_commit_id=projection_commit_id,
@@ -84,9 +92,15 @@ def make_pinecone_vector_repairer(
         if not values:
             raise VectorRepairNotReady("embedding result is empty")
         payload = {"id": vector_id, "values": values, "metadata": metadata}
+        # Remove every prior provider identity for this canonical memory before
+        # replacing it. Failure aborts the repair so the outbox retries.
+        delete_filter = build_canonical_memory_vector_delete_filter(item.uid, item.memory_id)
+        delete_result = delete_vectors(filter=delete_filter, namespace=namespace)
         pinecone_result = upsert_vectors(vectors=[payload], namespace=namespace)
         return {
             "action": "repair",
+            "delete_filter": delete_filter,
+            "delete_result": delete_result,
             "namespace": namespace,
             "vector_id": vector_id,
             "pinecone_result": pinecone_result,

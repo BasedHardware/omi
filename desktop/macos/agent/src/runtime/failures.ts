@@ -1,3 +1,4 @@
+import { AcpError, isAcpProviderAuthFailure } from "../adapters/acp.js";
 import type { ProductionAdapterId } from "../adapters/interface.js";
 
 export type RuntimeFailureSource = "adapter_process" | "adapter_execution" | "runtime";
@@ -37,6 +38,9 @@ export interface RuntimeFailure {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
+  recoveryAction?: "worker_recycled";
+  recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
+  retryDisposition?: "next_send" | "same_turn";
 }
 
 export class AdapterRuntimeError extends Error {
@@ -64,18 +68,120 @@ export function unexpectedQueryErrorDiagnostic(error: unknown): string | null {
   return `Unhandled query error: ${String(error)}`;
 }
 
+export const WORKER_RECYCLED_NEXT_SEND_MESSAGE =
+  "The local agent reset its session after an error. Send your message again.";
+
+const PROVIDER_BILLING_HTTP_402 = /\bhttp[\s/]*402\b/i;
+const PROVIDER_BILLING_402_STATUS = /\b(?:402\s+status|status(?:\s+code)?\s*[:=]?\s*402)\b/i;
+
+/** A 402 is a provider billing rejection, not a poisoned worker. Recycle can
+ * still clean the process; retrying the same turn cannot clear Payment Required.
+ */
+export function isProviderBillingFailure(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("payment required")
+    || PROVIDER_BILLING_HTTP_402.test(lower)
+    || PROVIDER_BILLING_402_STATUS.test(lower)
+    || lower.includes("credit balance is too low")
+  );
+}
+
+export function applyProviderBillingClassification(failure: RuntimeFailure): RuntimeFailure {
+  const haystack = `${failure.technicalMessage ?? ""}\n${failure.userMessage}`;
+  if (!isProviderBillingFailure(haystack)) return failure;
+  return {
+    ...failure,
+    failureCode: "quota_exceeded",
+    retryable: false,
+  };
+}
+
+/** Recycle succeeded only when the worker stopped and the binding was invalidated. */
+export function workerRecycleRecovered(outcome: {
+  stopSucceeded: boolean;
+  bindingInvalidationSucceeded: boolean;
+}): boolean {
+  return outcome.stopSucceeded && outcome.bindingInvalidationSucceeded;
+}
+
+/** 402 / quota / authentication are not healed by a fresh worker in the same turn. */
+export function blocksSameTurnRetryAfterWorkerRecycle(error: unknown): boolean {
+  const failure = failureFromError(error, {
+    code: "adapter_execution_failed",
+    retryable: true,
+  });
+  if (failure.retryable === false) return true;
+  if (failure.code === "provider_auth_required") return true;
+  return failure.failureCode === "quota_exceeded" || failure.failureCode === "authentication";
+}
+
+export function workerRecycleDisposition(input: {
+  stopSucceeded: boolean;
+  bindingInvalidationSucceeded: boolean;
+  canRetry: boolean;
+  originalError: unknown;
+}): NonNullable<RuntimeFailure["retryDisposition"]> {
+  if (
+    input.canRetry
+    && workerRecycleRecovered(input)
+    && !blocksSameTurnRetryAfterWorkerRecycle(input.originalError)
+  ) {
+    return "same_turn";
+  }
+  return "next_send";
+}
+
+/** Recycle metadata stays on every pi-mono execution throw so the next send
+ * can mint a fresh worker. Non-retryable causes keep their own copy — wrapping
+ * them as "send again" hid HTTP 402 behind the unclassified transcript marker.
+ */
+export function attachWorkerRecycle(
+  failure: RuntimeFailure,
+  outcome: { stopSucceeded: boolean; bindingInvalidationSucceeded: boolean },
+): RuntimeFailure {
+  const recoveryOutcome: NonNullable<RuntimeFailure["recoveryOutcome"]> = !outcome.stopSucceeded
+    ? "stop_failed"
+    : outcome.bindingInvalidationSucceeded
+      ? "recovered"
+      : "binding_stale_failed";
+  const recycled: RuntimeFailure = {
+    ...failure,
+    recoveryAction: "worker_recycled",
+    recoveryOutcome,
+  };
+  if (failure.retryable === false) return recycled;
+  return {
+    ...recycled,
+    userMessage: WORKER_RECYCLED_NEXT_SEND_MESSAGE,
+    retryable: true,
+    retryDisposition: "next_send",
+  };
+}
+
 export function failureFromError(
   error: unknown,
   fallback: Omit<RuntimeFailure, "userMessage"> & { userMessage?: string }
 ): RuntimeFailure {
   if (error instanceof AdapterRuntimeError) {
-    return error.failure;
+    return applyProviderBillingClassification(error.failure);
   }
-  return normalizeRuntimeFailure({
+  if (error instanceof AcpError && isAcpProviderAuthFailure(error)) {
+    return normalizeRuntimeFailure({
+      code: "provider_auth_required",
+      failureCode: "authentication",
+      userMessage: "Claude sign-in is required to continue this chat.",
+      technicalMessage: messageFrom(error),
+      source: fallback.source ?? "adapter_execution",
+      adapterId: fallback.adapterId ?? "acp",
+      retryable: false,
+    });
+  }
+  return applyProviderBillingClassification(normalizeRuntimeFailure({
     ...fallback,
     userMessage: fallback.userMessage ?? messageFrom(error),
     technicalMessage: fallback.technicalMessage ?? messageFrom(error),
-  });
+  }));
 }
 
 export function normalizeRuntimeFailure(failure: RuntimeFailure): RuntimeFailure {

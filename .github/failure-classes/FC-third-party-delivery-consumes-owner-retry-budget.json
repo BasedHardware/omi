@@ -1,0 +1,18 @@
+{
+ "schema_version": 1,
+ "id": "FC-third-party-delivery-consumes-owner-retry-budget",
+ "violated_contract": "A durable job's retry budget belongs to the user work it owns, not to a side effect delivered to a third party. A delivery the job cannot influence may keep that job retryable only while attempts remain: on the terminal attempt the job dead-letters regardless, so failing it one last time buys the delivery nothing and costs the owner its terminal state. An app webhook answering HTTP 530 for days dead-lettered every conversation of every user who installed it, because webhook health only auto-disables an endpoint after 72h.",
+ "canonical_prevention": "Tell the fanout whether the caller still has an attempt left (finalize_persisted_conversation(final_attempt=...) to trigger_external_integrations(last_delivery_attempt=...)) and drop the delivery on the terminal attempt with record_fallback(component='webhook', to_mode='dropped', outcome='exhausted') instead of raising ExternalIntegrationFanoutError. The owner's work reaches its terminal state; the abandoned delivery is visible in fallback telemetry rather than silent.",
+ "evidence_prs": [
+  11883
+ ],
+ "scope_hints": [
+  "backend/utils/app_integrations.py",
+  "backend/utils/conversations/finalizer.py",
+  "backend/routers/conversation_finalization.py"
+ ],
+ "canonical_prevention_artifact": [
+  "backend/tests/unit/test_listen_finalization_cloud_tasks.py"
+ ],
+ "status": "open"
+}

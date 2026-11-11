@@ -8,6 +8,7 @@ call LLMs, vector stores, or user integrations.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -49,6 +50,13 @@ def _offline_extract_memories(_uid: str, _conversation: Any) -> None:
 
 
 async def _offline_trigger_integrations(_uid: str, conversation: Any, *, idempotency_key: str, **_kwargs: Any) -> None:
+    release_file = os.getenv('OMI_STACK_INLINE_FINALIZATION_RELEASE_FILE')
+    if release_file:
+        release_path = Path(release_file)
+        _record({'event': 'inline_finalization_hold_entered', 'conversation_id': str(conversation.id)})
+        while not release_path.exists():
+            await asyncio.sleep(0.01)
+        _record({'event': 'inline_finalization_hold_released', 'conversation_id': str(conversation.id)})
     _record(
         {
             'event': 'integration_fanout_skipped',
@@ -64,20 +72,28 @@ finalizer.process_conversation = _offline_process_conversation
 finalizer.extract_memories = _offline_extract_memories
 finalizer.trigger_external_integrations = _offline_trigger_integrations
 
+from utils import pusher_audio_projection
 from routers import pusher as pusher_router  # noqa: E402  (patch finalizer first)
 
 _receive_bytes = pusher_router.WebSocket.receive_bytes
 _send_bytes = pusher_router.WebSocket.send_bytes
+_drain_tasks = pusher_router.drain_tasks
 
 
-def _offline_store_audio_chunks(chunks: list[dict[str, Any]], _uid: str, conversation_id: str, _level: str) -> None:
-    """Keep the real pusher queue/flush path local when 101 frames are enabled."""
+def _offline_store_audio_chunks(
+    chunks: list[dict[str, Any]], _uid: str, conversation_id: str, _level: str, *, sample_rate: int, **_kwargs: Any
+) -> None:
+    """Keep the real pusher queue/flush path local when 101 frames are enabled.
+
+    The pusher upload path passes flush-policy keywords (reconcile_prefix);
+    this stub records the admission without binding the call signature."""
     _record(
         {
             'event': 'audio_storage_skipped',
             'conversation_id': conversation_id,
             'chunks': len(chunks),
             'bytes': sum(len(chunk.get('data') or b'') for chunk in chunks),
+            'sample_rate': sample_rate,
         }
     )
 
@@ -87,7 +103,7 @@ def _offline_create_audio_files(*_args: Any, **_kwargs: Any) -> list[Any]:
 
 
 pusher_router.upload_audio_chunks_batch = _offline_store_audio_chunks
-pusher_router.conversations_db.create_audio_files_from_chunks = _offline_create_audio_files
+pusher_audio_projection.conversations_db.create_audio_files_from_chunks = _offline_create_audio_files
 
 
 def _frame_metadata(data: bytes, direction: str) -> dict[str, Any]:
@@ -135,5 +151,15 @@ async def _observed_send_bytes(websocket: Any, data: bytes) -> None:
 
 pusher_router.WebSocket.receive_bytes = _observed_receive_bytes
 pusher_router.WebSocket.send_bytes = _observed_send_bytes
+
+
+async def _observed_drain_tasks(*args: Any, **kwargs: Any) -> int:
+    result = await _drain_tasks(*args, **kwargs)
+    if kwargs.get('label') == 'pusher_cleanup':
+        _record({'event': 'pusher_cleanup_completed'})
+    return result
+
+
+pusher_router.drain_tasks = _observed_drain_tasks
 
 from pusher.main import app  # noqa: E402

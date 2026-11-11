@@ -1,10 +1,16 @@
 import Foundation
 @preconcurrency import GRDB
 import OmiSupport
+import os
 
 /// Actor-based database manager for Rewind screenshots
 actor RewindDatabase {
   static let shared = RewindDatabase()
+  private static let terminationStateLock = OSAllocatedUnfairLock<Bool>(initialState: false)
+
+  nonisolated static var isTerminationInProgress: Bool {
+    terminationStateLock.withLock { $0 }
+  }
 
   private var dbQueue: DatabasePool?
 
@@ -16,6 +22,14 @@ actor RewindDatabase {
 
   /// Path to the running flag file (used to detect unclean shutdown)
   private var runningFlagPath: String?
+
+  /// Whether the *previous* session ended uncleanly, latched at the first
+  /// observation in this process. `.omi_running` is created at the end of
+  /// `performInitialization()`, so the answer stops being observable once the
+  /// database opens — and any of the lazily-initializing storage actors can get
+  /// there first. That race is why `App Startup Timing` reported
+  /// `had_unclean_shutdown = true` on ~every sample.
+  private var uncleanShutdownVerdict: Bool?
 
   /// The user ID this database is configured for (nil = not yet configured → "anonymous")
   private var configuredUserId: String?
@@ -35,8 +49,13 @@ actor RewindDatabase {
   /// on open does not break the in-flight-close detection in `initialize()`.
   private var poolEpoch: Int = 0
 
-  /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
-  nonisolated(unsafe) static var currentUserId: String?
+  /// Lock-gated (`OSAllocatedUnfairLock`) so concurrent access from the actor,
+  /// `MainActor` (`AgentVMService`), and nonisolated shutdown is race-free (SCA-8).
+  private static let currentUserIdLock = OSAllocatedUnfairLock<String?>(initialState: nil)
+  static var currentUserId: String? {
+    get { currentUserIdLock.withLock { $0 } }
+    set { currentUserIdLock.withLock { $0 = newValue } }
+  }
 
   /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
   /// When this hits the threshold, we close the database so the next initialize() attempt
@@ -97,11 +116,27 @@ actor RewindDatabase {
 
   /// A sanitized SQLite corruption/I/O classifier. Avoid logging DB paths or row data.
   private func isRecoverableDatabaseError(_ error: Error) -> Bool {
-    guard let dbError = error as? DatabaseError else { return false }
-    if isBusyDatabaseError(error) { return false }
-    let code = dbError.resultCode
-    let extendedCode = dbError.extendedResultCode.rawValue
-    return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    if let dbError = error as? DatabaseError {
+      if isBusyDatabaseError(error) { return false }
+      let code = dbError.resultCode
+      let extendedCode = dbError.extendedResultCode.rawValue
+      return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    }
+
+    // GRDB can bridge a SQLite failure through NSError before a storage actor
+    // reports it. NSError.code is meaningful only with its domain, so restrict
+    // this to known SQLite/GRDB domains to avoid rotating local storage when an
+    // unrelated POSIX or application error happens to share a numeric code.
+    let nsError = error as NSError
+    if isKnownSQLiteDomain(nsError.domain),
+      nsError.code == 10 || nsError.code == 11 || nsError.code == 6922
+    {
+      return true
+    }
+    let description = error.localizedDescription.lowercased()
+    return description.contains("sqlite error 10")
+      || description.contains("sqlite error 11")
+      || description.contains("sqlite error 6922")
   }
 
   private func isBusyDatabaseError(_ error: Error) -> Bool {
@@ -109,8 +144,19 @@ actor RewindDatabase {
     return dbError.resultCode == .SQLITE_BUSY
   }
 
+  /// NSError domains that carry canonical SQLite result codes. GRDB bridges
+  /// SQLite errors through these before the storage actor reports a typed
+  /// `DatabaseError`; other domains may reuse the same numeric codes for
+  /// unrelated POSIX or application failures.
+  private func isKnownSQLiteDomain(_ domain: String) -> Bool {
+    domain == "GRDB"
+      || domain == "GRDB.DatabaseError"
+      || domain == "SQLite3"
+      || domain == "NSSQLiteErrorDomain"
+  }
+
   /// Handle corruption/I/O failures from cleanup and other maintenance operations.
-  /// Those paths can otherwise run repeatedly and emit the same Sentry error forever.
+  /// Those paths can otherwise run repeatedly and emit the same error forever.
   private func recoverFromMaintenanceError(_ error: Error, operation: String) async {
     guard dbQueue != nil else { return }
     guard isRecoverableDatabaseError(error) else { return }
@@ -124,7 +170,7 @@ actor RewindDatabase {
 
     guard FileManager.default.fileExists(atPath: dbPath) else { return }
     do {
-      try await handleCorruptedDatabase(at: dbPath, in: omiDir)
+      try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: error)
       try await initialize()
       log("RewindDatabase: recovered and reopened database after \(operation)")
     } catch {
@@ -137,118 +183,6 @@ actor RewindDatabase {
   func reportQuerySuccess() {
     if consecutiveQueryIOErrors > 0 {
       consecutiveQueryIOErrors = 0
-    }
-  }
-
-  /// Return true for SQLite failures that specifically implicate action_items_fts.
-  /// Keep this narrow so unrelated write/constraint failures are never hidden by an FTS repair retry.
-  func isActionItemsFTSError(_ error: Error) -> Bool {
-    guard let dbError = error as? DatabaseError else { return false }
-    let message = "\(dbError)".lowercased()
-    guard message.contains("action_items_fts") || message.contains("vtable constructor failed") else {
-      return false
-    }
-
-    return dbError.resultCode == .SQLITE_IOERR
-      || dbError.resultCode == .SQLITE_CORRUPT
-      || message.contains("no such table")
-      || message.contains("malformed")
-      || message.contains("database disk image is malformed")
-      || dbError.extendedResultCode.rawValue == 6922
-  }
-
-  /// Rebuild only the action_items full-text-search table and triggers from durable action_items rows.
-  /// This intentionally never drops or rewrites action_items itself.
-  func repairActionItemsFTS(reason: String) async throws {
-    guard let queue = dbQueue else {
-      throw DatabaseError(resultCode: .SQLITE_MISUSE, message: "database is not initialized")
-    }
-    try await repairActionItemsFTS(in: queue, reason: reason)
-  }
-
-  /// Rebuild action_items_fts on a specific database queue. Callers that caught an FTS-trigger
-  /// write failure should pass the same queue they will retry on, avoiding stale queue races.
-  func repairActionItemsFTS(in queue: DatabasePool, reason: String) async throws {
-    try await queue.write { db in
-      try Self.recreateActionItemsFTS(in: db)
-    }
-    log("RewindDatabase: Rebuilt action_items_fts after \(reason)")
-  }
-
-  private static let actionItemsFTSShadowTables = [
-    "action_items_fts_data",
-    "action_items_fts_idx",
-    "action_items_fts_content",
-    "action_items_fts_docsize",
-    "action_items_fts_config",
-  ]
-
-  private static func recreateActionItemsFTS(in db: Database) throws {
-    try dropActionItemsFTSIfPresent(in: db)
-    try installActionItemsFTS(in: db, populateExistingRows: true)
-  }
-
-  private static func installActionItemsFTS(in db: Database, populateExistingRows: Bool) throws {
-    try db.execute(
-      sql: """
-        CREATE VIRTUAL TABLE action_items_fts USING fts5(
-            description,
-            content='action_items',
-            content_rowid='id',
-            tokenize='unicode61'
-        )
-        """)
-
-    try db.execute(
-      sql: """
-        CREATE TRIGGER action_items_fts_ai AFTER INSERT ON action_items BEGIN
-            INSERT INTO action_items_fts(rowid, description)
-            VALUES (new.id, new.description);
-        END
-        """)
-
-    try db.execute(
-      sql: """
-        CREATE TRIGGER action_items_fts_ad AFTER DELETE ON action_items BEGIN
-            INSERT INTO action_items_fts(action_items_fts, rowid, description)
-            VALUES ('delete', old.id, old.description);
-        END
-        """)
-
-    try db.execute(
-      sql: """
-        CREATE TRIGGER action_items_fts_au AFTER UPDATE ON action_items BEGIN
-            INSERT INTO action_items_fts(action_items_fts, rowid, description)
-            VALUES ('delete', old.id, old.description);
-            INSERT INTO action_items_fts(rowid, description)
-            VALUES (new.id, new.description);
-        END
-        """)
-
-    guard populateExistingRows else { return }
-    try db.execute(
-      sql: """
-        INSERT INTO action_items_fts(rowid, description)
-        SELECT id, description FROM action_items
-        """)
-  }
-
-  private static func dropActionItemsFTSIfPresent(in db: Database) throws {
-    try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_ai")
-    try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_ad")
-    try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_au")
-
-    do {
-      try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
-    } catch {
-      try dropActionItemsFTSShadowsIfPresent(in: db)
-      try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
-    }
-  }
-
-  private static func dropActionItemsFTSShadowsIfPresent(in db: Database) throws {
-    for table in actionItemsFTSShadowTables {
-      try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
     }
   }
 
@@ -294,6 +228,10 @@ actor RewindDatabase {
     initializationTask = nil
     runningFlagPath = nil
     openedForUserId = nil
+    // The database identity is being torn down, so the latched verdict no longer
+    // describes anything. The next performInitialization() makes a fresh
+    // authoritative observation for whichever user it opens.
+    uncleanShutdownVerdict = nil
     initGeneration += 1
     poolEpoch += 1
     log("RewindDatabase: Closed database (generation \(initGeneration), pool epoch \(poolEpoch))")
@@ -337,6 +275,7 @@ actor RewindDatabase {
   /// Call from applicationWillTerminate to avoid unnecessary integrity checks on next launch.
   /// This is nonisolated so it can be called synchronously from the main thread during termination.
   nonisolated static func markCleanShutdown() {
+    terminationStateLock.withLock { $0 = true }
     let userDir = staticUserBaseDirectory()
     let flagPath = userDir.appendingPathComponent(".omi_running").path
     try? FileManager.default.removeItem(atPath: flagPath)
@@ -344,9 +283,17 @@ actor RewindDatabase {
   }
 
   /// Check if the previous session ended with an unclean shutdown (crash, force quit, etc.)
+  ///
+  /// Order-independent: whoever observes first latches the verdict for the whole
+  /// process, and `performInitialization()` latches it before it writes this
+  /// session's own running flag. A later caller therefore reads the previous
+  /// session's state, not this one's.
   func hadUncleanShutdown() -> Bool {
+    if let uncleanShutdownVerdict { return uncleanShutdownVerdict }
     let flagPath = userBaseDirectory().appendingPathComponent(".omi_running").path
-    return FileManager.default.fileExists(atPath: flagPath)
+    let verdict = FileManager.default.fileExists(atPath: flagPath)
+    uncleanShutdownVerdict = verdict
+    return verdict
   }
 
   /// Initialize the database with migrations.
@@ -409,6 +356,7 @@ actor RewindDatabase {
     expectedUserId: String,
     expectedGeneration: Int
   ) async throws {
+    try Task.checkCancellation()
     guard dbQueue == nil else { return }
 
     // Resolve the directory once. `retargetEffectiveOwner` may run while
@@ -419,8 +367,10 @@ actor RewindDatabase {
     // Create directory if needed (withIntermediateDirectories creates parents too)
     try FileManager.default.createDirectory(at: omiDir, withIntermediateDirectories: true)
 
-    // Migrate data from legacy path if this is first launch with per-user paths
-    migrateFromLegacyPathIfNeeded(to: omiDir)
+    // Migrate data from legacy path if this is first launch with per-user paths.
+    // Remember an anonymous-directory source so context-bucket migration can
+    // fall back to the signed-out legacy defaults key after an early init.
+    let migratedLegacyOwnerID = migrateFromLegacyPathIfNeeded(to: omiDir)
 
     let dbPath = omiDir.appendingPathComponent("omi.db").path
     let flagPath = omiDir.appendingPathComponent(".omi_running").path
@@ -430,6 +380,13 @@ actor RewindDatabase {
     // Detect unclean shutdown: if the running flag file exists, the previous launch
     // didn't exit cleanly (crash, force quit, power loss)
     let previousCrashed = FileManager.default.fileExists(atPath: flagPath)
+    // This is the authoritative, user-scoped observation and it happens before
+    // this session's flag is written below. Latch it here so a startup-timing
+    // reader that arrives after the database opened still reports the previous
+    // session, whatever order the storage actors initialized in.
+    if uncleanShutdownVerdict == nil {
+      uncleanShutdownVerdict = previousCrashed
+    }
     if previousCrashed {
       log("RewindDatabase: Unclean shutdown detected (running flag exists)")
     }
@@ -487,10 +444,22 @@ actor RewindDatabase {
         }
 
         if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
+          try Task.checkCancellation()
           log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
-          try await handleCorruptedDatabase(at: dbPath, in: omiDir)
-          // Retry with recovered or fresh database
-          queue = try DatabasePool(path: dbPath, configuration: config)
+          let installedRecovered = try await handleCorruptedDatabase(
+            at: dbPath, in: omiDir, triggerError: retryError)
+          // Retry with recovered or fresh database. The corrupted original is already in
+          // backups/, so a recovered database that will not open is replaced by a fresh one.
+          do {
+            queue = try DatabasePool(path: dbPath, configuration: config)
+          } catch {
+            guard installedRecovered else { throw error }
+            log("RewindDatabase: Recovered database failed to open (\(error)), creating fresh database")
+            recoveredDatabaseAwaitingMigration = nil
+            recoveredRecordCount = 0
+            Self.removeDatabaseFiles(at: dbPath)
+            queue = try DatabasePool(path: dbPath, configuration: config)
+          }
         } else {
           throw retryError
         }
@@ -528,6 +497,43 @@ actor RewindDatabase {
       throw CancellationError()
     }
 
+    // Migrate BEFORE publishing the pool. `initialize()` treats
+    // `dbQueue != nil && openedForUserId == targetUser` as "already
+    // initialized", so publishing first and then throwing out of the schema
+    // ladder would latch a half-migrated schema in permanently: every later
+    // initialize() returns early and every caller is handed a pool whose
+    // tables do not match the code. Leaving both unset means the next
+    // initialize() retries the migration from the top.
+    do {
+      try migrate(
+        activeQueue,
+        ownerID: expectedUserId,
+        legacyOwnerFallback: migratedLegacyOwnerID)
+    } catch {
+      try? activeQueue.close()
+      guard recoveredDatabaseAwaitingMigration == dbPath else { throw error }
+      // The recovered ledger passed validation but its schema still disagrees with the
+      // ladder. The corrupted original is already in backups/; start fresh rather than
+      // fail here on every launch.
+      recoveredDatabaseAwaitingMigration = nil
+      log("RewindDatabase: Recovered database failed migration (\(error)), creating fresh database")
+      Self.removeDatabaseFiles(at: dbPath)
+      recoveredRecordCount = 0
+      activeQueue = try DatabasePool(path: dbPath, configuration: config)
+      do {
+        try migrate(
+          activeQueue,
+          ownerID: expectedUserId,
+          legacyOwnerFallback: migratedLegacyOwnerID)
+      } catch {
+        try? activeQueue.close()
+        throw error
+      }
+    }
+    if recoveredDatabaseAwaitingMigration == dbPath {
+      recoveredDatabaseAwaitingMigration = nil
+    }
+
     dbQueue = activeQueue
     // Bump the pool epoch on every (re)open so storage actors that cached the
     // previous pool revalidate and drop it — recovery may have replaced the
@@ -538,8 +544,6 @@ actor RewindDatabase {
     poolEpoch += 1
     openedForUserId = expectedUserId
     consecutiveQueryIOErrors = 0
-
-    try migrate(activeQueue)
 
     // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
     // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
@@ -596,12 +600,14 @@ actor RewindDatabase {
     }
   }
 
-  private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
+  private func migrateFromLegacyPathIfNeeded(to userDir: URL) -> String? {
     // The legacy `Omi` root is shared historical state. A named bundle that
     // now has an identity-derived profile must never claim it: the first
     // bundle to launch would otherwise move data belonging to Omi/Omi Dev
     // or another old named bundle into its isolated root.
-    guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else { return }
+    guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else {
+      return nil
+    }
     let fileManager = FileManager.default
     let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     let omiDir = appSupport.appendingPathComponent("Omi", isDirectory: true)
@@ -627,14 +633,15 @@ actor RewindDatabase {
       let hasContent = ["omi.db", "Screenshots", "Videos", "backups"].contains {
         fileManager.fileExists(atPath: anonymousDir.appendingPathComponent($0).path)
       }
-      guard hasContent else { return }
+      guard hasContent else { return nil }
       sourceDir = anonymousDir
     } else {
-      return  // Nothing to migrate
+      return nil  // Nothing to migrate
     }
 
     // Don't migrate to ourselves
-    guard sourceDir.path != userDir.path else { return }
+    guard sourceDir.path != userDir.path else { return nil }
+    let migratedLegacyOwnerID = sourceDir.path == anonymousDir.path ? "signed-out" : nil
 
     log("RewindDatabase: Migrating data from \(sourceDir.path) to \(userDir.path)")
 
@@ -662,8 +669,12 @@ actor RewindDatabase {
     // NOT proceed to delete it — abort the whole migration and leave source +
     // dest intact. initialize() retries migration on the next launch, once the
     // transient cause (locked DB, momentary IO error) has likely cleared.
-    guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else { return }
-    guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else { return }
+    guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else {
+      return nil
+    }
+    guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else {
+      return nil
+    }
 
     // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
     // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
@@ -728,6 +739,7 @@ actor RewindDatabase {
     }
 
     log("RewindDatabase: Legacy migration complete")
+    return migratedLegacyOwnerID
   }
 
   static func shouldMigrateLegacyStorage(isolatedStorage: Bool) -> Bool {
@@ -789,249 +801,135 @@ actor RewindDatabase {
   /// Number of records recovered from corrupted database (0 if none)
   private(set) var recoveredRecordCount: Int = 0
 
-  /// Handle corrupted database: attempt recovery, backup, and recreate
-  private func handleCorruptedDatabase(at dbPath: String, in omiDir: URL) async throws {
-    let fileManager = FileManager.default
+  /// `omi.db` path that corruption recovery just replaced with a recovered database, until
+  /// that database has been migrated. If the ladder still fails on it, initialization
+  /// starts fresh instead of failing on every launch.
+  private var recoveredDatabaseAwaitingMigration: String?
 
-    // Create backup directory
+  /// Handle corrupted database: move it aside, attempt recovery, and leave either the
+  /// recovered database or nothing at `dbPath` (the caller then creates a fresh one).
+  ///
+  /// - Returns: true when a recovered database was installed at `dbPath`.
+  @discardableResult
+  private func handleCorruptedDatabase(
+    at dbPath: String,
+    in omiDir: URL,
+    triggerError: Error? = nil
+  ) async throws -> Bool {
+    let fileManager = FileManager.default
     let backupDir = omiDir.appendingPathComponent("backups", isDirectory: true)
-    try fileManager.createDirectory(at: backupDir, withIntermediateDirectories: true)
 
     // Generate backup filename with timestamp
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyyMMdd_HHmmss"
     let timestamp = formatter.string(from: Date())
-    let backupPath = backupDir.appendingPathComponent("omi_corrupted_\(timestamp).db")
+    var backupPath = backupDir.appendingPathComponent("omi_corrupted_\(timestamp).db").path
+    if fileManager.fileExists(atPath: backupPath) {
+      backupPath = backupDir.appendingPathComponent("omi_corrupted_\(timestamp)_\(UUID().uuidString.prefix(8)).db").path
+    }
 
-    // Backup the corrupted database (for potential manual recovery)
-    log("RewindDatabase: Backing up corrupted database to \(backupPath.path)")
-    try fileManager.copyItem(atPath: dbPath, toPath: backupPath.path)
+    // Move the corrupted database out of `omi.db` (kept in backups/ for potential manual
+    // recovery) BEFORE attempting recovery, so no failure, timeout, or quit below can make
+    // the next launch start over on the same file.
+    log("RewindDatabase: Moving corrupted database aside to \(backupPath)")
+    let salvageSource = try Self.moveCorruptedDatabaseAside(dbPath: dbPath, backupPath: backupPath)
 
     // Attempt to recover data from corrupted database
     let recoveredPath = omiDir.appendingPathComponent("omi_recovered.db").path
-    let recoveredCount = await attemptDataRecovery(from: dbPath, to: recoveredPath)
-    recoveredRecordCount = recoveredCount
+    let recovery = await attemptDataRecovery(from: salvageSource, to: recoveredPath)
+    recoveredRecordCount = recovery.screenshotCount ?? 0
 
-    if recoveredCount > 0 {
-      log("RewindDatabase: Recovered \(recoveredCount) screenshot records from corrupted database")
-      // Use recovered database instead of creating fresh one
-      try fileManager.removeItem(atPath: dbPath)
-      try fileManager.moveItem(atPath: recoveredPath, toPath: dbPath)
-
-      // Remove WAL/SHM files from corrupted database
-      for ext in ["-wal", "-shm", "-journal"] {
-        let file = dbPath + ext
-        if fileManager.fileExists(atPath: file) {
-          try? fileManager.removeItem(atPath: file)
-        }
-      }
-
-      log("RewindDatabase: Using recovered database with \(recoveredCount) records")
-    } else {
-      // No data recovered, remove corrupted database and start fresh
-      log("RewindDatabase: No data could be recovered, creating fresh database")
-
-      // Clean up recovery attempt if it exists
-      if fileManager.fileExists(atPath: recoveredPath) {
-        try? fileManager.removeItem(atPath: recoveredPath)
-      }
-
-      // Remove corrupted database and associated WAL/SHM files
-      let filesToRemove = [
-        dbPath,
-        dbPath + "-wal",
-        dbPath + "-shm",
-        dbPath + "-journal",
-      ]
-
-      for file in filesToRemove {
-        if fileManager.fileExists(atPath: file) {
-          try fileManager.removeItem(atPath: file)
-          log("RewindDatabase: Removed \(file)")
-        }
+    var installedRecovered = false
+    if let recoveredCount = recovery.screenshotCount {
+      do {
+        try fileManager.moveItem(atPath: recoveredPath, toPath: dbPath)
+        installedRecovered = true
+        recoveredDatabaseAwaitingMigration = dbPath
+        log("RewindDatabase: Using recovered database with \(recoveredCount) screenshot records")
+      } catch {
+        log("RewindDatabase: Could not install recovered database (\(error.localizedDescription))")
       }
     }
+    if !installedRecovered {
+      log("RewindDatabase: No data could be recovered, creating fresh database")
+      Self.removeDatabaseFiles(at: recoveredPath)
+    }
 
-    logError("RewindDatabase: Corrupted database backed up and removed. A fresh database will be created.")
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "rewind_database",
+      from: "corrupted_db",
+      to: installedRecovered ? recovery.method : "fresh_db",
+      reason: recovery.failureReason,
+      outcome: installedRecovered && recovery.method == "recovered_db" ? .recovered : .degraded)
 
-    // Clean up old backups (keep only last 5)
-    try await cleanupOldBackups(in: backupDir, keepCount: 5)
+    logError(
+      "RewindDatabase: Corrupted database moved aside to backups. "
+        + (installedRecovered ? "A recovered database will be used." : "A fresh database will be created."),
+      context: StorageFailureDiagnostics.context(
+        pathClass: "rewind-db",
+        containingURL: omiDir,
+        databaseURL: URL(fileURLWithPath: dbPath),
+        error: triggerError,
+        appIsTerminating: Self.isTerminationInProgress))
+
+    // Clean up old backups (keep only last 5). Never let this fail the recovery: the
+    // database at `dbPath` is already settled.
+    do {
+      try await cleanupOldBackups(in: backupDir, keepCount: 5)
+    } catch {
+      log("RewindDatabase: Failed to clean up old backups: \(error.localizedDescription)")
+    }
+    return installedRecovered
   }
 
-  /// Attempt to recover data from a corrupted database using sqlite3 .recover
-  /// Returns the number of screenshot records recovered
-  private func attemptDataRecovery(from corruptedPath: String, to recoveredPath: String) async -> Int {
-    let fileManager = FileManager.default
+  private struct DataRecoveryResult {
+    /// Screenshots in the database left at `recoveredPath`; nil when there is none to use.
+    var screenshotCount: Int?
+    /// `recovered_db` (sqlite3 `.recover`) or `salvaged_screenshots` (direct-table fallback).
+    var method: String
+    /// Why `.recover` could not be used (`none` when it was).
+    var failureReason: String
+  }
 
-    // Remove any existing recovered database
-    if fileManager.fileExists(atPath: recoveredPath) {
-      try? fileManager.removeItem(atPath: recoveredPath)
+  /// Rebuild a usable database at `recoveredPath` from the corrupted file moved aside to
+  /// `corruptedPath`: first with a bounded `sqlite3 .recover`, then, if that fails, by
+  /// copying the screenshots table directly.
+  private func attemptDataRecovery(from corruptedPath: String?, to recoveredPath: String) async -> DataRecoveryResult {
+    Self.removeDatabaseFiles(at: recoveredPath)
+    guard let corruptedPath else {
+      return DataRecoveryResult(screenshotCount: nil, method: "fresh_db", failureReason: "other")
     }
+    let ownerID = targetUserId()
 
-    // Run sqlite3 recovery in a detached task to avoid blocking the actor
-    // Process.waitUntilExit() is synchronous and would deadlock the actor
-    let (success, recoveredSQL) = await withCheckedContinuation {
-      (continuation: CheckedContinuation<(Bool, Data), Never>) in
-      Task.detached {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process.arguments = [corruptedPath, ".recover"]
-
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-          try process.run()
-          process.waitUntilExit()
-
-          if process.terminationStatus == 0 {
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            continuation.resume(returning: (true, data))
-          } else {
-            continuation.resume(returning: (false, Data()))
-          }
-        } catch {
-          continuation.resume(returning: (false, Data()))
-        }
+    let outcome = await RewindSQLiteRecoveryPipeline.run(corruptedPath: corruptedPath, recoveredPath: recoveredPath)
+    let failureReason: String
+    switch outcome {
+    case .completed:
+      if let count = Self.validatedRecoveredScreenshotCount(at: recoveredPath, ownerID: ownerID) {
+        return DataRecoveryResult(screenshotCount: count, method: "recovered_db", failureReason: "none")
       }
-    }
-
-    if success && !recoveredSQL.isEmpty {
-      // Import recovered SQL into new database (also in detached task)
-      let importSuccess = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-        Task.detached {
-          let importProcess = Process()
-          importProcess.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-          importProcess.arguments = [recoveredPath]
-
-          let inputPipe = Pipe()
-          importProcess.standardInput = inputPipe
-          importProcess.standardOutput = FileHandle.nullDevice
-          importProcess.standardError = FileHandle.nullDevice
-
-          do {
-            try importProcess.run()
-            inputPipe.fileHandleForWriting.write(recoveredSQL)
-            inputPipe.fileHandleForWriting.closeFile()
-            importProcess.waitUntilExit()
-            continuation.resume(returning: importProcess.terminationStatus == 0)
-          } catch {
-            continuation.resume(returning: false)
-          }
-        }
-      }
-
-      if importSuccess && fileManager.fileExists(atPath: recoveredPath) {
-        return countRecoveredScreenshots(at: recoveredPath)
-      }
+      log("RewindDatabase: sqlite3 .recover output is not a usable database")
+      failureReason = "other"
+    case .timedOut:
+      log("RewindDatabase: sqlite3 .recover timed out and was terminated")
+      failureReason = "timeout"
+    case .launchFailed:
+      log("RewindDatabase: sqlite3 .recover could not be launched")
+      failureReason = "process_exited"
+    case .exited(let recoverStatus, let importStatus):
+      log("RewindDatabase: sqlite3 .recover failed (recover=\(recoverStatus), import=\(importStatus))")
+      failureReason = "process_exited"
     }
 
     // Fallback: Try to read screenshots table directly
-    return await attemptDirectTableRecovery(from: corruptedPath, to: recoveredPath)
-  }
-
-  /// Fallback recovery: try to read the screenshots table directly
-  private func attemptDirectTableRecovery(from corruptedPath: String, to recoveredPath: String) async -> Int {
-    var config = Configuration()
-    config.readonly = true
-
-    do {
-      let corruptedQueue = try DatabaseQueue(path: corruptedPath, configuration: config)
-
-      // Try to read screenshot records
-      let screenshots:
-        [(timestamp: Date, appName: String, windowTitle: String?, videoChunkPath: String?, frameOffset: Int?)] =
-          try await corruptedQueue.read { db in
-            var results: [(Date, String, String?, String?, Int?)] = []
-
-            // Try to fetch what we can from screenshots table
-            let rows = try? Row.fetchAll(
-              db,
-              sql: """
-                    SELECT timestamp, appName, windowTitle, videoChunkPath, frameOffset
-                    FROM screenshots
-                    ORDER BY timestamp DESC
-                    LIMIT 100000
-                """)
-
-            for row in rows ?? [] {
-              if let timestamp: Date = row["timestamp"],
-                let appName: String = row["appName"]
-              {
-                results.append(
-                  (
-                    timestamp,
-                    appName,
-                    row["windowTitle"] as String?,
-                    row["videoChunkPath"] as String?,
-                    row["frameOffset"] as Int?
-                  ))
-              }
-            }
-            return results
-          }
-
-      if screenshots.isEmpty {
-        return 0
-      }
-
-      // Create new database with recovered data
-      let recoveredQueue = try DatabaseQueue(path: recoveredPath)
-
-      try await recoveredQueue.write { db in
-        // Create minimal screenshots table
-        try db.execute(
-          sql: """
-                CREATE TABLE IF NOT EXISTS screenshots (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME NOT NULL,
-                    appName TEXT NOT NULL,
-                    windowTitle TEXT,
-                    imagePath TEXT NOT NULL DEFAULT '',
-                    videoChunkPath TEXT,
-                    frameOffset INTEGER,
-                    ocrText TEXT,
-                    ocrDataJson TEXT,
-                    isIndexed INTEGER NOT NULL DEFAULT 0,
-                    focusStatus TEXT,
-                    extractedTasksJson TEXT,
-                    adviceJson TEXT
-                )
-            """)
-
-        // Insert recovered records
-        for screenshot in screenshots {
-          try db.execute(
-            sql: """
-                  INSERT INTO screenshots (timestamp, appName, windowTitle, imagePath, videoChunkPath, frameOffset, isIndexed)
-                  VALUES (?, ?, ?, '', ?, ?, 0)
-              """,
-            arguments: [
-              screenshot.timestamp, screenshot.appName, screenshot.windowTitle, screenshot.videoChunkPath,
-              screenshot.frameOffset,
-            ])
-        }
-      }
-
-      return screenshots.count
-
-    } catch {
-      log("RewindDatabase: Direct table recovery failed: \(error)")
-      return 0
+    Self.removeDatabaseFiles(at: recoveredPath)
+    let salvaged = await Self.rebuildScreenshotsFromCorruptedDatabase(
+      at: corruptedPath, into: recoveredPath, ownerID: ownerID)
+    guard salvaged > 0 else {
+      return DataRecoveryResult(screenshotCount: nil, method: "fresh_db", failureReason: failureReason)
     }
-  }
-
-  /// Count screenshots in recovered database
-  private func countRecoveredScreenshots(at path: String) -> Int {
-    do {
-      let queue = try DatabaseQueue(path: path)
-      return try queue.read { db in
-        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM screenshots") ?? 0
-      }
-    } catch {
-      return 0
-    }
+    log("RewindDatabase: Salvaged \(salvaged) screenshot records from corrupted database")
+    return DataRecoveryResult(screenshotCount: salvaged, method: "salvaged_screenshots", failureReason: failureReason)
   }
 
   /// Clean up old database backups, keeping only the most recent ones
@@ -1051,9 +949,12 @@ actor RewindDatabase {
       return date1 > date2
     }
 
-    // Remove files beyond keepCount
+    // Remove files beyond keepCount, with the WAL/journal moved aside alongside them
     for file in sortedFiles.dropFirst(keepCount) {
       try fileManager.removeItem(at: file)
+      for suffix in ["-wal", "-journal"] where fileManager.fileExists(atPath: file.path + suffix) {
+        try? fileManager.removeItem(atPath: file.path + suffix)
+      }
       log("RewindDatabase: Removed old backup \(file.lastPathComponent)")
     }
   }
@@ -1085,7 +986,28 @@ actor RewindDatabase {
 
   // MARK: - Migrations
 
-  private func migrate(_ queue: DatabasePool) throws {
+  /// `ownerID` is passed explicitly because migration now runs *before* `openedForUserId` is
+  /// published, so the owner-scoped migrations cannot read it back off the actor.
+  private func migrate(
+    _ queue: DatabasePool,
+    ownerID: String? = nil,
+    legacyOwnerFallback: String? = nil
+  ) throws {
+    let contextBucketOwnerID = ownerID ?? openedForUserId ?? targetUserId()
+    let migrator = Self.makeMigrator(
+      contextBucketOwnerID: contextBucketOwnerID,
+      legacyOwnerFallback: legacyOwnerFallback)
+    try migrator.migrate(queue)
+    try ContextBucketSchema.removeMigratedLegacyDefaults(
+      afterMigrating: queue,
+      defaults: .standard,
+      ownerID: contextBucketOwnerID)
+  }
+
+  /// The full schema ladder, in registration order. Corruption recovery uses the same
+  /// ladder to validate a `.recover`ed database's migration ledger and to build the
+  /// fallback database, so neither can drift from what `migrate` will later apply.
+  static func makeMigrator(contextBucketOwnerID: String, legacyOwnerFallback: String?) -> DatabaseMigrator {
     var migrator = DatabaseMigrator()
 
     // Migration 1: Create screenshots table
@@ -1417,7 +1339,8 @@ actor RewindDatabase {
         t.column("language", .text).notNull().defaults(to: "en")
         t.column("timezone", .text).notNull().defaults(to: "UTC")
         t.column("inputDeviceName", .text)
-        t.column("status", .text).notNull().defaults(to: "recording")  // recording|pending_upload|uploading|completed|failed
+        // recording|pending_upload|uploading|completed|failed
+        t.column("status", .text).notNull().defaults(to: "recording")
         t.column("retryCount", .integer).notNull().defaults(to: 0)
         t.column("lastError", .text)
         t.column("backendId", .text)  // Server conversation ID
@@ -1463,6 +1386,18 @@ actor RewindDatabase {
         on: "transcription_sessions",
         columns: ["clientConversationId"]
       )
+    }
+
+    migrator.registerMigration("addTranscriptionConversationRole") { db in
+      try db.alter(table: "transcription_sessions") { t in
+        t.add(column: "conversationRole", .text).notNull().defaults(to: "ambient")
+      }
+    }
+
+    migrator.registerMigration("addTranscriptionCaptureAttemptId") { db in
+      try db.alter(table: "transcription_sessions") { t in
+        t.add(column: "captureAttemptId", .text)
+      }
     }
 
     // Migration 11: Create live_notes table for AI-generated notes during recording
@@ -1714,7 +1649,7 @@ actor RewindDatabase {
 
     // Migration 19: Create FTS5 virtual table on action_items.description for keyword search
     migrator.registerMigration("createActionItemsFTS") { db in
-      try Self.installActionItemsFTS(in: db, populateExistingRows: true)
+      try RewindFTSDefinition.actionItems.install(in: db, populateExistingRows: true)
     }
 
     // Migration 20: Create ai_user_profiles table for daily AI-generated user profile history
@@ -2219,66 +2154,11 @@ actor RewindDatabase {
           """)
     }
 
-    // One-time migration: move non-top-5 AI tasks from action_items to staged_tasks
-    migrator.registerMigration("migrateAITasksToStaged") { db in
-      // Get all AI-extracted (screenshot) tasks that are active
-      let aiTasks = try Row.fetchAll(
-        db,
-        sql: """
-          SELECT * FROM action_items
-          WHERE source LIKE '%screenshot%'
-          AND (completed IS NULL OR completed = 0)
-          AND (deleted IS NULL OR deleted = 0)
-          ORDER BY relevanceScore ASC NULLS LAST, createdAt DESC
-          """)
-
-      guard !aiTasks.isEmpty else { return }
-
-      // Top 5 stay in action_items with [screen] suffix
-      let top5 = Array(aiTasks.prefix(5))
-      let rest = Array(aiTasks.dropFirst(5))
-
-      // Add [screen] suffix to top 5 descriptions if not already tagged
-      for task in top5 {
-        let desc = task["description"] as? String ?? ""
-        if !desc.hasSuffix(" [screen]") && !desc.hasPrefix("[screen]") {
-          try db.execute(
-            sql: "UPDATE action_items SET description = ? WHERE id = ?",
-            arguments: [desc + " [screen]", task["id"]]
-          )
-        }
-      }
-
-      // Move the rest to staged_tasks
-      for task in rest {
-        try db.execute(
-          sql: """
-            INSERT OR IGNORE INTO staged_tasks (
-                backendId, backendSynced, description, completed, deleted,
-                source, conversationId, priority, category, tagsJson,
-                deletedBy, dueAt, screenshotId, confidence, sourceApp,
-                windowTitle, contextSummary, currentActivity, metadataJson,
-                embedding, relevanceScore, scoredAt, createdAt, updatedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-          arguments: [
-            task["backendId"], task["backendSynced"],
-            task["description"], task["completed"], task["deleted"],
-            task["source"], task["conversationId"], task["priority"],
-            task["category"], task["tagsJson"], task["deletedBy"],
-            task["dueAt"], task["screenshotId"], task["confidence"],
-            task["sourceApp"], task["windowTitle"], task["contextSummary"],
-            task["currentActivity"], task["metadataJson"], task["embedding"],
-            task["relevanceScore"], task["scoredAt"],
-            task["createdAt"], task["updatedAt"],
-          ])
-
-        // Delete from action_items
-        try db.execute(
-          sql: "DELETE FROM action_items WHERE id = ?",
-          arguments: [task["id"]]
-        )
-      }
+    // Keep the migration identifier so existing databases retain a stable
+    // history, but no longer move UI-visible action_items into a local staging
+    // table. The Tasks screen does not render staged rows, so that migration
+    // could make a freshly upgraded local list appear to lose tasks.
+    migrator.registerMigration("migrateAITasksToStaged") { _ in
     }
 
     migrator.registerMigration("addActionItemSortOrder") { db in
@@ -2547,7 +2427,170 @@ actor RewindDatabase {
       }
     }
 
-    try migrator.migrate(queue)
+    // Legacy and rebuilt screenshots cannot safely assert an originating machine.
+    // New captures retain a display name and the canonical memory device identity.
+    migrator.registerMigration("addScreenshotDeviceProvenance") { db in
+      try db.alter(table: "screenshots") { t in
+        t.add(column: "deviceName", .text)
+        t.add(column: "clientDeviceId", .text)
+      }
+    }
+
+    ContextBucketSchema.registerMigration(
+      on: &migrator,
+      defaults: .standard,
+      ownerID: contextBucketOwnerID,
+      fallbackOwnerID: legacyOwnerFallback)
+
+    RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
+
+    // Keep new migrations after every previously registered component migration. Existing rows
+    // deliberately start pending so a dark-launched lossless sweep can recover history later.
+    migrator.registerMigration("addScreenActivitySyncState") { db in
+      try Self.installScreenActivitySyncStateSchema(db)
+    }
+
+    // Ledger fields are an additive mirror only. Legacy rows remain intact and
+    // fail closed in the prompt projection until a canonical payload refreshes
+    // their metadata.
+    migrator.registerMigration("addMemoryLedgerMetadata") { db in
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerMetadataJson", type: .text)
+    }
+
+    Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
+    Self.registerFabricatedActionItemTombstoneRepair(on: &migrator)
+    Self.registerClientProcessingProjectionMigration(on: &migrator)
+    Self.registerConversationSummarySectionsMigration(on: &migrator)
+    Self.registerConversationLocalSummaryMigration(on: &migrator)
+    Self.registerConversationCaptureGroupMigration(on: &migrator)
+    SiriMemoryExpirySchema.registerMigration(on: &migrator)
+    LocalEmbeddingStore.registerMigration(on: &migrator)
+    ProactivityRetirementMigration.registerMigration(on: &migrator)
+    return addingSpeakerLabelSourceMigration(migrator)
+  }
+
+  /// Kept as one callable migration boundary so a populated legacy table can be exercised in a
+  /// focused test without reproducing the entire historical migration ledger.
+  static func installScreenActivitySyncStateSchema(_ db: Database) throws {
+    try db.alter(table: "screenshots") { t in
+      t.add(column: "screenActivitySyncState", .integer).notNull().defaults(to: 0)
+    }
+    try db.execute(
+      sql: """
+        CREATE INDEX idx_screenshots_screen_activity_sync
+        ON screenshots(screenActivitySyncState, id)
+        WHERE screenActivitySyncState IN (0, 1)
+        """)
+  }
+
+  /// Registers the evidence columns separately so an upgrade from a populated
+  /// pre-evidence table exercises the same path as the production migrator.
+  static func registerMemoryLedgerEvidenceMigrations(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addMemoryLedgerEvidence") { db in
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerEvidenceJson", type: .text)
+    }
+    migrator.registerMigration("addMemoryLedgerEvidenceRevision") { db in
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerEvidenceRevision", type: .datetime)
+    }
+  }
+
+  /// Clear the local tombstones the Removed lane manufactured over live tasks.
+  ///
+  /// `TasksStore.fetchDeletedPage` asked the backend for retired rows with a
+  /// `deleted=true` query item that `GET /v1/action-items` never had. FastAPI
+  /// drops an unknown query item, and that handler skips soft-deleted
+  /// documents outright, so the page it answered with was the user's live
+  /// tasks — which the lane then stamped retired and synced into this table.
+  /// Every visit to Removed tombstoned another page. Completing one of those
+  /// tasks from a chat card read the tombstone back and rendered "Task is no
+  /// longer available" over a task the reader had just ticked.
+  ///
+  /// A genuine retirement always leaves a witness the fabricated ones cannot:
+  /// a local deletion records `deletedBy`, and a server-side retirement
+  /// arrives as canonical status `cancelled` or `superseded`. A row carrying
+  /// neither was retired by nothing but the stamp, so only those are cleared —
+  /// a real deletion, local or remote, is left exactly as it is.
+  /// Durable `client_processing` blob for S10. Retry serialization (S11) sends
+  /// this stored JSON; it is never regenerated from the transcript.
+  static func registerClientProcessingProjectionMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addClientProcessingProjection") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "clientProcessingJson", type: .text)
+    }
+  }
+
+  /// Persist the structured summary sections alongside the legacy overview. Without this field,
+  /// a cache refresh silently dropped section bodies and their transcript evidence even though the
+  /// network decode had succeeded.
+  static func registerConversationSummarySectionsMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationSummarySections") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "sectionsJson", type: .text)
+    }
+  }
+
+  /// Display attribution is separate from clientProcessingJson, whose exact bytes own retries.
+  static func registerConversationLocalSummaryMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationLocalSummary") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "localSummaryJson", type: .text)
+    }
+  }
+
+  /// Cross-surface event membership, so a cached list collapses the same way before the server answers.
+  static func registerConversationCaptureGroupMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationCaptureGroup") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "captureGroupJson", type: .text)
+    }
+  }
+
+  static func addTranscriptionSessionColumnIfMissing(
+    _ db: Database,
+    name: String,
+    type: Database.ColumnType
+  ) throws {
+    guard try db.columns(in: "transcription_sessions").contains(where: { $0.name == name }) == false else {
+      return
+    }
+    try db.alter(table: "transcription_sessions") { t in
+      t.add(column: name, type)
+    }
+  }
+
+  static func registerFabricatedActionItemTombstoneRepair(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("clearFabricatedActionItemTombstones") { db in
+      let repaired =
+        try Int.fetchOne(
+          db,
+          sql: """
+            SELECT COUNT(*) FROM action_items
+            WHERE deleted = 1
+              AND (deletedBy IS NULL OR deletedBy = '')
+              AND (taskStatus IS NULL OR taskStatus NOT IN ('cancelled', 'superseded'))
+            """) ?? 0
+      guard repaired > 0 else { return }
+      try db.execute(
+        sql: """
+          UPDATE action_items
+          SET deleted = 0
+          WHERE deleted = 1
+            AND (deletedBy IS NULL OR deletedBy = '')
+            AND (taskStatus IS NULL OR taskStatus NOT IN ('cancelled', 'superseded'))
+          """)
+      log("RewindDatabase: Cleared \(repaired) fabricated action-item tombstone(s)")
+    }
+  }
+
+  /// Probe the table before adding a column so older installations that already
+  /// carry it can safely continue through the migration ladder.
+  static func addMemoryColumnIfMissing(
+    _ db: Database,
+    name: String,
+    type: Database.ColumnType
+  ) throws {
+    guard try db.columns(in: "memories").contains(where: { $0.name == name }) == false else {
+      return
+    }
+    try db.alter(table: "memories") { t in
+      t.add(column: name, type)
+    }
   }
 
   // MARK: - OCR Precision Reduction Migration
@@ -2698,24 +2741,6 @@ actor RewindDatabase {
 
   // MARK: - CRUD Operations
 
-  /// Insert a new screenshot record
-  @discardableResult
-  func insertScreenshot(_ screenshot: Screenshot) throws -> Screenshot {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    return try dbQueue.write { db -> Screenshot in
-      var record = screenshot
-      // The `imagePath` column is NOT NULL in the schema, but the model field is
-      // optional (nil for video-based screenshots). Coalesce nil → "" so a video
-      // screenshot never trips a NOT NULL constraint violation on insert.
-      if record.imagePath == nil { record.imagePath = "" }
-      try record.insert(db)
-      return record
-    }
-  }
-
   /// Atomically replace every database row reconstructed from one video chunk.
   ///
   /// Rebuilds can be retried, so inserting reconstructed rows one at a time would
@@ -2748,6 +2773,8 @@ actor RewindDatabase {
     }
 
     return try dbQueue.write { db in
+      try RewindAbandonedVideoChunkQuarantine.requireAvailable(db, videoChunkPath: path)
+
       try db.execute(
         sql: "DELETE FROM screenshots WHERE videoChunkPath = ?",
         arguments: [path]
@@ -2760,7 +2787,7 @@ actor RewindDatabase {
         // unrelated screenshot.
         record.id = nil
         if record.imagePath == nil { record.imagePath = "" }
-        try record.insert(db)
+        _ = try record.inserted(db)
       }
 
       return screenshots.count
@@ -2885,125 +2912,6 @@ actor RewindDatabase {
     }
   }
 
-  // MARK: - Screenshot Embedding Methods
-
-  /// Store embedding BLOB for a screenshot
-  func updateScreenshotEmbedding(id: Int64, embedding: Data) throws {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    try dbQueue.write { db in
-      try db.execute(
-        sql: "UPDATE screenshots SET embedding = ? WHERE id = ?",
-        arguments: [embedding, id]
-      )
-    }
-  }
-
-  /// Get screenshots missing embeddings (for backfill)
-  func getScreenshotsMissingEmbeddings(limit: Int = 100) throws -> [(
-    id: Int64, ocrText: String, appName: String, windowTitle: String?
-  )] {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    return try dbQueue.read { db in
-      try Row.fetchAll(
-        db,
-        sql: """
-              SELECT id, ocrText, appName, windowTitle FROM screenshots
-              WHERE embedding IS NULL AND ocrText IS NOT NULL AND LENGTH(ocrText) >= 20
-              ORDER BY id LIMIT ?
-          """, arguments: [limit]
-      ).compactMap { row in
-        guard let id: Int64 = row["id"],
-          let ocrText: String = row["ocrText"],
-          let appName: String = row["appName"]
-        else { return nil }
-        let windowTitle: String? = row["windowTitle"]
-        return (id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
-      }
-    }
-  }
-
-  /// Read screenshot embedding BLOBs in batches for disk-based vector search
-  func readEmbeddingBatch(startDate: Date, endDate: Date, appFilter: String? = nil, limit: Int = 5000, offset: Int = 0)
-    throws -> [(screenshotId: Int64, embedding: Data)]
-  {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    return try dbQueue.read { db in
-      var sql = """
-            SELECT id, embedding FROM screenshots
-            WHERE embedding IS NOT NULL
-              AND timestamp >= ? AND timestamp <= ?
-        """
-      var arguments: [DatabaseValueConvertible] = [startDate, endDate]
-
-      if let app = appFilter {
-        sql += " AND appName = ?"
-        arguments.append(app)
-      }
-
-      sql += " ORDER BY id LIMIT ? OFFSET ?"
-      arguments.append(limit)
-      arguments.append(offset)
-
-      return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(arguments)).compactMap { row in
-        guard let id: Int64 = row["id"],
-          let embedding: Data = row["embedding"]
-        else { return nil }
-        return (screenshotId: id, embedding: embedding)
-      }
-    }
-  }
-
-  /// Check screenshot embedding backfill status
-  func getScreenshotEmbeddingBackfillStatus() throws -> (completed: Bool, processedCount: Int) {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    return try dbQueue.read { db in
-      let completed =
-        try Int64.fetchOne(
-          db,
-          sql: """
-                SELECT completed FROM migration_status WHERE name = 'screenshot_embedding_backfill'
-            """) ?? 1
-      let processedCount =
-        try Int64.fetchOne(
-          db,
-          sql: """
-                SELECT COALESCE(processedCount, 0) FROM migration_status WHERE name = 'screenshot_embedding_backfill'
-            """) ?? 0
-      return (
-        completed: completed == 1,
-        processedCount: Int(processedCount)
-      )
-    }
-  }
-
-  /// Update screenshot embedding backfill progress
-  func updateScreenshotEmbeddingBackfillStatus(completed: Bool, processedCount: Int) throws {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    try dbQueue.write { db in
-      try db.execute(
-        sql: """
-              UPDATE migration_status
-              SET completed = ?, processedCount = ?, completedAt = CASE WHEN ? = 1 THEN datetime('now') ELSE completedAt END
-              WHERE name = 'screenshot_embedding_backfill'
-          """, arguments: [completed ? 1 : 0, processedCount, completed ? 1 : 0])
-    }
-  }
-
   /// Get screenshots for a date range
   func getScreenshots(from startDate: Date, to endDate: Date, limit: Int = 100) throws -> [Screenshot] {
     guard let dbQueue = dbQueue else {
@@ -3019,48 +2927,91 @@ actor RewindDatabase {
     }
   }
 
+  /// How far back the captured-day walk below will go before it stops asking.
+  ///
+  /// Two years is already past any retention window this app offers and past any capture history
+  /// that exists, and it bounds the walk on a database whose oldest row is a decade old.
+  static let capturedDayCeiling = 800
+
+  /// Every local day that actually holds capture, newest first.
+  ///
+  /// **This is how Rewind knows how far back it goes.** The page shows one day at a time, so
+  /// without this the only way to reach an older day is to guess dates in a calendar that gives no
+  /// hint which of them hold anything — and the days that hold capture are not the days that hold
+  /// conversations, because a day spent entirely at the keyboard says nothing.
+  ///
+  /// It is a walk rather than a `GROUP BY date(timestamp)`: grouping reads the timestamp of every
+  /// frame in the database (hundreds of thousands of rows on a long capture history), whereas each
+  /// step here is a single index seek for the newest capture at or before the cursor. One seek per
+  /// day that exists, none for the days that do not — so the cost is the number of days you have
+  /// used the computer, not the number of frames.
+  ///
+  /// Returns local start-of-day instants. Bucketing in SQL would be wrong: GRDB stores `Date` as a
+  /// UTC string, so `date(timestamp)` puts the user's evening on the following day for most of the
+  /// world, and only `Calendar` gets a day with a DST transition in it right.
+  func capturedDayStarts(calendar: Calendar = .current, ceiling: Int = capturedDayCeiling) throws -> [Date] {
+    guard let dbQueue = dbQueue else {
+      throw RewindError.databaseNotInitialized
+    }
+
+    var days: [Date] = []
+    var cursor = Date()
+    while days.count < ceiling {
+      let upperBound = cursor
+      let newest = try dbQueue.read { db in
+        try Date.fetchOne(
+          db,
+          sql: "SELECT MAX(timestamp) FROM screenshots WHERE timestamp <= ?",
+          arguments: [upperBound]
+        )
+      }
+      guard let newest else { return days }
+      let day = calendar.startOfDay(for: newest)
+      days.append(day)
+      // Step to the instant before this day began, so the next seek can only land on an older day.
+      guard let previous = calendar.date(byAdding: .second, value: -1, to: day) else { return days }
+      cursor = previous
+    }
+    return days
+  }
+
   /// Get screenshots sampled evenly across a date range, ordered ASC (oldest first).
-  /// If the total count for the range is <= targetCount, returns all rows ASC.
-  /// Otherwise picks every Nth screenshot to fit ~targetCount frames.
-  func getScreenshotsSampled(from startDate: Date, to endDate: Date, targetCount: Int) throws -> [Screenshot] {
+  /// Returns all rows within `targetCount`; otherwise samples evenly while retaining both endpoints.
+  func getScreenshotsSampled(
+    from startDate: Date, to endDate: Date, targetCount: Int, appFilter: String? = nil
+  ) throws -> [Screenshot] {
     guard let dbQueue = dbQueue else {
       throw RewindError.databaseNotInitialized
     }
 
     return try dbQueue.read { db in
-      // Get total count for the range
-      let totalCount =
-        try Screenshot
-        .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
-        .fetchCount(db)
+      var request = Screenshot.filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
+      if let appFilter {
+        request = request.filter(Column("appName") == appFilter)
+      }
+
+      // Count only rows eligible for the timeline, so sparse app filters get a full sample.
+      let totalCount = try request.fetchCount(db)
 
       if totalCount <= targetCount {
         // Return all, ordered ASC (oldest first)
-        return
-          try Screenshot
-          .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
-          .order(Column("timestamp").asc)
-          .fetchAll(db)
+        return try request.order(Column("timestamp").asc).fetchAll(db)
       }
 
       // Fetch all IDs + timestamps ordered ASC, then pick every Nth
-      let rows = try Row.fetchAll(
-        db,
-        sql: """
-              SELECT id FROM screenshots
-              WHERE timestamp >= ? AND timestamp <= ?
-              ORDER BY timestamp ASC
-          """, arguments: [startDate, endDate])
+      let idRequest = request.select(Column("id")).order(Column("timestamp").asc)
+      let rows = try Row.fetchAll(db, idRequest)
 
-      let step = Double(totalCount) / Double(targetCount)
-      var sampledIds: [Int64] = []
-      var i: Double = 0
-      while Int(i) < totalCount && sampledIds.count < targetCount {
-        let index = Int(i)
-        if index < rows.count {
-          sampledIds.append(rows[index]["id"])
-        }
-        i += step
+      let sampleCount = max(1, targetCount)
+      let sampledIds: [Int64] = (0..<sampleCount).compactMap { slot in
+        let index =
+          sampleCount == 1
+          ? totalCount - 1
+          : Int(
+            (Double(slot) * Double(totalCount - 1) / Double(sampleCount - 1))
+              .rounded())
+        guard rows.indices.contains(index) else { return nil }
+        return rows[index]["id"]
       }
 
       // Batch-fetch the sampled rows and return in ASC order
@@ -3184,14 +3135,21 @@ actor RewindDatabase {
 
   /// Expand a search query by splitting compound words (camelCase, numbers)
   /// e.g., "ActivityPerformance" -> "(ActivityPerformance* OR Activity* OR Performance*)"
-  private func expandSearchQuery(_ query: String) -> String {
+  ///
+  /// Pure — depends on no actor state, so it is `nonisolated` and directly testable.
+  nonisolated func expandSearchQuery(_ query: String) -> String {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "" }
 
-    // Split query into words
-    let words = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+    // Split on anything that is not alphanumeric, not just whitespace. FTS5 gives punctuation
+    // its own meaning, so a bare `2.1.220*` built from a Cursor version title is
+    // `fts5: syntax error near "."` and fails the whole search. Callers that sanitize first
+    // (the suggestion grounding path) never saw this; the Rewind search UI passes raw titles
+    // and did. Splitting here makes the expansion safe for both rather than relying on every
+    // caller to clean up first.
+    let words = trimmed.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
 
-    let expandedWords = words.map { word -> String in
+    let expandedWords = words.compactMap { word -> String? in
       var parts: [String] = [word]
 
       // Split camelCase: "ActivityPerformance" -> ["Activity", "Performance"]
@@ -3208,6 +3166,11 @@ actor RewindDatabase {
 
       // Remove duplicates and create OR query with prefix matching
       let uniqueParts = Array(Set(parts)).filter { $0.count >= 2 }
+      // A single-character word (e.g. the "2" and "1" in a "2.1.220" window title) leaves
+      // nothing to match on. Contribute no term rather than an empty group: emitting "()"
+      // makes the whole MATCH invalid with `fts5: syntax error near ")"`, which fails the
+      // entire search instead of just this word.
+      guard !uniqueParts.isEmpty else { return nil }
       if uniqueParts.count == 1 {
         return "\(uniqueParts[0])*"
       } else {
@@ -3216,11 +3179,17 @@ actor RewindDatabase {
       }
     }
 
-    return expandedWords.joined(separator: " ")
+    // Joined with an explicit AND, not a space. FTS5 only accepts implicit AND between bare
+    // terms: the moment one word expands into a parenthesised `(a* OR b*)` group, a
+    // space-joined query fails whole with `fts5: syntax error near "("` — so a two-word title
+    // where either word splits on camelCase or a number boundary returned nothing at all.
+    // Observed 45 times across 13 sessions, silently emptying screen-history grounding and
+    // the Rewind search UI alike. AND is what the space already meant.
+    return expandedWords.joined(separator: " AND ")
   }
 
   /// Split camelCase string into parts
-  private func splitCamelCase(_ string: String) -> [String] {
+  nonisolated private func splitCamelCase(_ string: String) -> [String] {
     var parts: [String] = []
     var currentPart = ""
 
@@ -3241,7 +3210,7 @@ actor RewindDatabase {
   }
 
   /// Split string on number boundaries
-  private func splitOnNumbers(_ string: String) -> [String] {
+  nonisolated private func splitOnNumbers(_ string: String) -> [String] {
     var parts: [String] = []
     var currentPart = ""
     var wasDigit = false

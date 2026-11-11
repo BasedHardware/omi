@@ -71,7 +71,7 @@ final class TaskAgentStatusRegistry {
     pruneIfNeeded()
   }
 
-  func markRunning(taskId: String, title: String? = nil, statusText: String = "Responding...") {
+  func markRunning(taskId: String, title: String? = nil, statusText: String = "Responding…") {
     update(taskId: taskId, title: title, statusText: statusText, lastError: nil)
     AgentRuntimeStatusStore.shared.updateActivity(surface: .taskChat(taskId: taskId), statusText: statusText)
   }

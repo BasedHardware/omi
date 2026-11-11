@@ -1,0 +1,7 @@
+{
+  "path": "scripts/dev-harness/tests/spine/c10_backend_contract.py",
+  "owner": "C10",
+  "before": "9973a1c09701a490c88604b9af217195d2c23a50a7b8c0991dd2e3f0764bacd2",
+  "after": "f5366d510539804fec4e8a630e5092d34e1d952a6d0418a742ae444016f8f87b",
+  "reason": "Spine A pre-delivery scope audit: bootstrap acceptance requires two distinct distributed builds; ongoing real-router replay follows supported captured cases, verifies exact current response bytes and rejects empty bodies for every active case. Validated retirement is explicitly out of scope. This avoids permanently constraining endpoints no supported client uses. Pending markers are unchanged."
+}

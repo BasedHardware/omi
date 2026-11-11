@@ -1,6 +1,16 @@
 import OmiSupport
 import SwiftUI
 
+/// The lifecycle of the currently selected marketplace filter query. `filteredApps == nil`
+/// is not enough to distinguish a query that has not produced a result from a completed
+/// query with no matches.
+enum AppFilterResultsQueryState: Equatable {
+  case unknown
+  case loading
+  case completed
+  case failed
+}
+
 /// State management for apps/plugins functionality
 @MainActor
 class AppProvider: ObservableObject {
@@ -11,6 +21,15 @@ class AppProvider: ObservableObject {
   @Published var summaryApps: [OmiApp] = []  // Apps with memories capability
   @Published var notificationApps: [OmiApp] = []  // Apps with proactive_notification capability
   @Published var enabledApps: [OmiApp] = []
+  @Published var localSkills: [LocalSkillsStore.Skill] = []  // User-authored skills on disk
+  @Published var localMcpServers: [LocalMcpStore.Entry] = []  // ~/.omi/mcp.json entries
+  @Published var mcpCatalog: [ExtensionCatalog.Entry] = []  // Marketplace MCP servers
+  @Published var skillCatalog: [ExtensionCatalog.Entry] = []  // Marketplace skills
+  @Published var isLoadingMcpCatalog = false
+  @Published var isLoadingSkillCatalog = false
+  @Published var mcpStatuses: [String: McpServerProbe.Status] = [:]
+  private var mcpCatalogCache: [String: [ExtensionCatalog.Entry]] = [:]
+  private var skillCatalogCache: [String: [ExtensionCatalog.Entry]] = [:]
   @Published var categories: [OmiAppCategory] = []
   @Published var capabilities: [OmiAppCapability] = []
 
@@ -18,13 +37,34 @@ class AppProvider: ObservableObject {
   @Published var isSearching = false
   @Published var appLoadingStates: [String: Bool] = [:]
 
-  @Published var searchQuery = ""
-  @Published var selectedCategory: String?
-  @Published var selectedCapability: String?
-  @Published var showInstalledOnly = false
+  @Published var searchQuery = "" {
+    didSet {
+      guard searchQuery != oldValue else { return }
+      invalidateFilteredAppsQuery()
+    }
+  }
+  @Published var selectedCategory: String? {
+    didSet {
+      guard selectedCategory != oldValue else { return }
+      invalidateFilteredAppsQuery()
+    }
+  }
+  @Published var selectedCapability: String? {
+    didSet {
+      guard selectedCapability != oldValue else { return }
+      invalidateFilteredAppsQuery()
+    }
+  }
+  @Published var showInstalledOnly = false {
+    didSet {
+      guard showInstalledOnly != oldValue else { return }
+      invalidateFilteredAppsQuery()
+    }
+  }
 
   @Published var errorMessage: String?
   @Published var filteredApps: [OmiApp]?
+  @Published private(set) var filteredAppsQueryState: AppFilterResultsQueryState = .unknown
   @Published var hasMoreFilteredApps = false
   @Published var isLoadingMore = false
 
@@ -96,6 +136,7 @@ class AppProvider: ObservableObject {
 
     errorMessage = nil
     filteredApps = nil
+    filteredAppsQueryState = .unknown
     hasMoreFilteredApps = false
     isLoadingMore = false
     filteredAppsOffset = 0
@@ -120,6 +161,11 @@ class AppProvider: ObservableObject {
   func fetchApps() async {
     isLoading = true
     errorMessage = nil
+    // Owner fence: capture the account this fetch belongs to. An account switch
+    // (resetStartupState → resetSessionState) can land mid-fetch; without this
+    // the in-flight response would repopulate the previous account's apps and
+    // per-user enabled flags over the reset state.
+    let ownerID = RuntimeOwnerIdentity.currentOwnerId()
     defer {
       isLoading = false
       NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
@@ -176,6 +222,9 @@ class AppProvider: ObservableObject {
         return (dedupedApps, popular, integration, chat, summary, notification)
       }.value
 
+      // Owner fence: drop the response if the account switched while fetching.
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+
       // Batch-assign all @Published properties on main actor
       apps = processed.0
       marketplaceApps = processed.0
@@ -200,6 +249,9 @@ class AppProvider: ObservableObject {
       Task {
         do {
           let ratedApps = try await self.apiClient.getAppsWithRatings()
+          // Owner fence: the ratings/enabled enrichment must not write the
+          // previous account's per-user enabled flags after an account switch.
+          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
           // Build a map of id → full app (for ratings AND enabled state).
           // The API can return duplicate app ids; use last-write-wins.
           let v1Map = Dictionary(lastWriteWins: ratedApps.map { ($0.id, $0) })
@@ -241,6 +293,7 @@ class AppProvider: ObservableObject {
       if !marketplaceApps.isEmpty {
         apps = marketplaceApps
         filteredApps = nil
+        filteredAppsQueryState = .unknown
         updateDerivedLists()
         return
       }
@@ -254,10 +307,12 @@ class AppProvider: ObservableObject {
       filteredApps = cached.apps
       filteredAppsOffset = cached.offset
       hasMoreFilteredApps = cached.hasMore
+      filteredAppsQueryState = .completed
       return
     }
 
     isSearching = true
+    filteredAppsQueryState = .loading
     errorMessage = nil
     defer { isSearching = false }
 
@@ -274,6 +329,7 @@ class AppProvider: ObservableObject {
       guard currentFilterKey == cacheKey else { return }
       filteredApps = results
       hasMoreFilteredApps = results.count >= filteredAppsPageSize
+      filteredAppsQueryState = .completed
       cacheFilteredApps(
         FilterCacheEntry(
           apps: results,
@@ -283,9 +339,11 @@ class AppProvider: ObservableObject {
         for: cacheKey
       )
     } catch {
+      guard currentFilterKey == cacheKey else { return }
       logError("Failed to search apps", error: error)
       errorMessage = "Search failed: \(error.localizedDescription)"
       hasMoreFilteredApps = false
+      filteredAppsQueryState = .failed
     }
   }
 
@@ -344,6 +402,7 @@ class AppProvider: ObservableObject {
     filteredApps = nil
     filteredAppsOffset = 0
     hasMoreFilteredApps = false
+    filteredAppsQueryState = .unknown
   }
 
   /// Fetch user's enabled apps
@@ -354,6 +413,67 @@ class AppProvider: ObservableObject {
     } catch {
       logError("Failed to fetch enabled apps", error: error)
     }
+  }
+
+  /// Re-scan the user's local skills and MCP servers under ~/.omi.
+  func fetchUserExtensions() async {
+    localSkills = LocalSkillsStore.listSkills()
+    localMcpServers = LocalMcpStore.listServers()
+  }
+
+  /// Ask every configured server whether it actually answers. Probes run concurrently and publish
+  /// as they land, so one slow server does not hold the others' status.
+  func refreshMcpStatuses() async {
+    let servers = LocalMcpStore.readAllServers()
+    let names = servers.keys.sorted()
+    for name in names where mcpStatuses[name] == nil { mcpStatuses[name] = .checking }
+    // A server removed since the last pass must not keep a stale badge.
+    mcpStatuses = mcpStatuses.filter { servers[$0.key] != nil }
+
+    let targets = names.compactMap { name -> (String, McpServerProbe.Target)? in
+      guard let entry = servers[name] as? [String: Any] else { return nil }
+      return (name, McpServerProbe.Target(entry: entry))
+    }
+    await withTaskGroup(of: (String, McpServerProbe.Status).self) { group in
+      for (name, target) in targets {
+        group.addTask { (name, await McpServerProbe.probe(target)) }
+      }
+      for await (name, status) in group { mcpStatuses[name] = status }
+    }
+  }
+
+  /// Marketplace catalogs. The service is fail-open, so a failure lands here as an empty list and
+  /// the installed sections above it are unaffected.
+  ///
+  /// Results are held for the session and keyed by query: browsing away from the tab and back
+  /// otherwise re-ran dozens of requests — the catalogs each resolve one detail fetch per entry —
+  /// for a list the user just looked at.
+  func fetchMcpCatalog(search: String) async {
+    let key = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if let cached = mcpCatalogCache[key] {
+      mcpCatalog = cached
+      return
+    }
+    isLoadingMcpCatalog = true
+    let entries = await ExtensionCatalogService.mcpEntries(search: search)
+    isLoadingMcpCatalog = false
+    // An empty result is a failed or unreachable catalog as often as it is a genuine miss, and
+    // caching that would keep the section empty for the rest of the session.
+    if !entries.isEmpty { mcpCatalogCache[key] = entries }
+    mcpCatalog = entries
+  }
+
+  func fetchSkillCatalog(search: String) async {
+    let key = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if let cached = skillCatalogCache[key] {
+      skillCatalog = cached
+      return
+    }
+    isLoadingSkillCatalog = true
+    let entries = await ExtensionCatalogService.skillEntries(search: search)
+    isLoadingSkillCatalog = false
+    if !entries.isEmpty { skillCatalogCache[key] = entries }
+    skillCatalog = entries
   }
 
   // MARK: - App Management
@@ -442,6 +562,13 @@ class AppProvider: ObservableObject {
     list = updatedList
   }
 
+  private func invalidateFilteredAppsQuery() {
+    filteredApps = nil
+    filteredAppsOffset = 0
+    hasMoreFilteredApps = false
+    filteredAppsQueryState = .unknown
+  }
+
   private func cachedFilteredApps(for key: FilterKey) -> FilterCacheEntry? {
     guard let cached = filteredAppsCache[key] else { return nil }
     filteredAppsCacheOrder.removeAll { $0 == key }
@@ -512,5 +639,6 @@ class AppProvider: ObservableObject {
     filteredApps = nil
     filteredAppsOffset = 0
     hasMoreFilteredApps = false
+    filteredAppsQueryState = .unknown
   }
 }

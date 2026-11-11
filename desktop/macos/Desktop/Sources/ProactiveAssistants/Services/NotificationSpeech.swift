@@ -1,0 +1,102 @@
+import Foundation
+
+/// Decides whether a delivered proactive notification is also spoken out loud, and what
+/// exactly is said.
+///
+/// Off by default: a voice in a quiet room is a far bigger intrusion than a banner, so
+/// speech only ever comes from an explicit opt-in (Advanced settings → Preferences).
+/// Pure policy so the default-off contract and the spoken text are testable without a
+/// speech synthesizer or a delivered banner.
+enum NotificationSpeech {
+  nonisolated static let enabledDefaultsKey = DefaultsKey.speakNotificationsAloud.rawValue
+
+  static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+    defaults.bool(forKey: enabledDefaultsKey)
+  }
+
+  /// What to say for a delivered notification, or nil to stay silent.
+  ///
+  /// Only proactive notifications speak (`isProactive` = the caller's `respectFrequency`
+  /// marker): functional notices — the onboarding test banner, screen-recording repair
+  /// prompts, support replies — are system chrome, not omi talking to you, and reading
+  /// them aloud would be exactly the wrong voice for the feature.
+  ///
+  /// Only the message is spoken: the title is banner chrome ("Suggestion", "Insight")
+  /// that would read as a spoken label prefix, not something a person would say.
+  ///
+  /// `othersCanHear` silences it outright. Speech has no private surface: a banner during
+  /// a call is seen by the user alone, the same text read aloud is heard by everyone in
+  /// the room and on the call. The visual delivery still goes through — see
+  /// `NotificationService.shouldWithholdSpeechForPresence`.
+  static func utterance(
+    message: String,
+    isEnabled: Bool,
+    isProactive: Bool,
+    othersCanHear: Bool = false
+  ) -> String? {
+    guard isEnabled, isProactive, !othersCanHear else { return nil }
+    let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    return trimmed
+  }
+}
+
+/// Speaks a delivered notification at most once, at the moment a surface actually
+/// presents it.
+///
+/// Presentation — not sending — is the right trigger: the default proactive path is
+/// floating-bar only and never reaches the system banner, the bar can queue a
+/// notification for later, and a muted-preview fallback can deliver both surfaces for
+/// one message. All of those report through the same presentation callback, so speaking
+/// there covers every surface, and the once-guard keeps a dual delivery from reading
+/// the same message twice.
+@MainActor
+final class NotificationSpeechOnDelivery {
+  private let text: String?
+  private let speak: (_ text: String, _ audienceAllows: @escaping () -> Bool) -> Void
+  private let othersCanHearNow: () -> Bool
+  private var hasSpoken = false
+
+  init(
+    text: String?,
+    speak: @escaping (_ text: String, _ audienceAllows: @escaping () -> Bool) -> Void = {
+      FloatingBarVoicePlaybackService.shared.speakOneShot($0, audienceAllows: $1)
+    },
+    othersCanHearNow: @escaping () -> Bool = {
+      NotificationService.shouldWithholdSpeechForPresence(presence: NotificationService.currentPresence())
+    }
+  ) {
+    self.text = text
+    self.speak = speak
+    self.othersCanHearNow = othersCanHearNow
+  }
+
+  convenience init(message: String, isProactive: Bool, othersCanHear: Bool = false) {
+    self.init(
+      text: NotificationSpeech.utterance(
+        message: message,
+        isEnabled: NotificationSpeech.isEnabled(),
+        isProactive: isProactive,
+        othersCanHear: othersCanHear))
+  }
+
+  /// Whether this delivery will actually say something. The card's presentation surface
+  /// depends on it: a spoken card stays in the notch, a silent one takes the panel.
+  var willSpeak: Bool { text != nil }
+
+  func notificationWasPresented() {
+    guard let text, !hasSpoken else { return }
+    // Admission and presentation can be separated by an arbitrarily long queue.
+    // Re-read the call state here so a card accepted in private never starts
+    // speaking after the user joins a call.
+    if othersCanHearNow() {
+      log("NotificationSpeech: withholding delivered notification because others can hear")
+      return
+    }
+    hasSpoken = true
+    log("NotificationSpeech: speaking delivered notification (\(text.count) chars)")
+    // Speech is generated before it plays; a call can start in between. The player
+    // re-checks this wherever audio would actually start, including fallbacks.
+    speak(text) { [othersCanHearNow] in !othersCanHearNow() }
+  }
+}

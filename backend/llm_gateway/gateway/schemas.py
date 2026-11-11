@@ -19,6 +19,10 @@ LaneId = Annotated[str, Field(pattern=r'^omi:auto:[a-z0-9][a-z0-9-]*$')]
 class Surface(str, Enum):
     OPENAI_CHAT_COMPLETIONS = 'openai.chat_completions'
     ANTHROPIC_MESSAGES = 'anthropic.messages'
+    OPENAI_EMBEDDINGS = 'openai.embeddings'
+    # OpenRouter's decision-model endpoint (POST /api/v1/systemone): typed
+    # answers with probabilities, no generated text (TypeSafe Jev, #14835).
+    OPENROUTER_SYSTEMONE = 'openrouter.systemone'
 
 
 class StructuredOutputMode(str, Enum):
@@ -39,17 +43,60 @@ class RolloutStage(str, Enum):
     ACTIVE = 'active'
 
 
+class RouteServingClass(str, Enum):
+    """Bounded classification of why the terminal provider served the request."""
+
+    ACTIVE = 'active'
+    CANARY = 'canary'
+    LKG = 'lkg'
+    ACTUAL_FALLBACK = 'actual_fallback'
+
+
 class FailureClass(str, Enum):
     TIMEOUT_BEFORE_OUTPUT = 'timeout_before_output'
     PROVIDER_429_OMI_PAID = 'provider_429_omi_paid'
+    RESERVED_CAPACITY_UNAVAILABLE = 'reserved_capacity_unavailable'
     PROVIDER_5XX_OMI_PAID = 'provider_5xx_omi_paid'
-    BYOK_AUTH = 'byok_auth'
+    PROVIDER_INVALID_REQUEST = 'provider_invalid_request'
+    BYOK_AUTH = 'byok_auth'  # pragma: allowlist secret
     BYOK_QUOTA = 'byok_quota'
     BYOK_RATE_LIMIT = 'byok_rate_limit'
     BYOK_UNSUPPORTED_PROVIDER = 'byok_unsupported_provider'
-    MISSING_BYOK_KEY = 'missing_byok_key'
+    MISSING_BYOK_KEY = 'missing_byok_key'  # pragma: allowlist secret
     CAPABILITY_MISMATCH = 'capability_mismatch'
     INVALID_CONFIG = 'invalid_config'
+
+
+class ProviderRejection(str, Enum):
+    """Privacy-safe classification of an upstream provider's rejected request."""
+
+    NONE = 'none'
+    CONTEXT_LENGTH_EXCEEDED = 'context_length_exceeded'
+    MODEL_NOT_FOUND = 'model_not_found'
+    INVALID_REQUEST = 'invalid_request'
+    INVALID_MODEL = 'invalid_model'
+    INVALID_MESSAGES = 'invalid_messages'
+    INVALID_RESPONSE_FORMAT = 'invalid_response_format'
+    INVALID_REASONING_EFFORT = 'invalid_reasoning_effort'
+    INVALID_TEMPERATURE = 'invalid_temperature'
+    INVALID_OUTPUT_LIMIT = 'invalid_output_limit'
+    INVALID_PROMPT_CACHE = 'invalid_prompt_cache'
+    INVALID_TOOLS = 'invalid_tools'
+    INVALID_STREAM = 'invalid_stream'
+    INVALID_OTHER = 'invalid_other'
+    INVALID_ATTACHMENT = 'invalid_attachment'
+    UNSUPPORTED_ATTACHMENT = 'unsupported_attachment'
+    UNSUPPORTED_MODEL = 'unsupported_model'
+    UNSUPPORTED_MESSAGES = 'unsupported_messages'
+    UNSUPPORTED_RESPONSE_FORMAT = 'unsupported_response_format'
+    UNSUPPORTED_REASONING_EFFORT = 'unsupported_reasoning_effort'
+    UNSUPPORTED_TEMPERATURE = 'unsupported_temperature'
+    UNSUPPORTED_OUTPUT_LIMIT = 'unsupported_output_limit'
+    UNSUPPORTED_PROMPT_CACHE = 'unsupported_prompt_cache'
+    UNSUPPORTED_TOOLS = 'unsupported_tools'
+    UNSUPPORTED_STREAM = 'unsupported_stream'
+    UNSUPPORTED_OTHER = 'unsupported_other'
+    OTHER_4XX = 'other_4xx'
 
 
 class BenchmarkSource(str, Enum):
@@ -64,6 +111,13 @@ class Capabilities(StrictBaseModel):
     streaming: bool
     structured_output: StructuredOutputMode
     tools: bool
+    translation: bool = False
+
+    @model_validator(mode='after')
+    def validate_translation(self):
+        if self.translation and self.structured_output != StructuredOutputMode.JSON_SCHEMA:
+            raise ValueError('translation lanes require json_schema structured output')
+        return self
 
 
 class Objective(StrictBaseModel):
@@ -98,6 +152,7 @@ class GeneratedRouteOverride(StrictBaseModel):
     feature: str = Field(min_length=1)
     primary: ProviderRef
     provider_options: dict[str, Any] = Field(default_factory=dict)
+    request_timeout_ms: int | None = Field(default=None, gt=0, le=900_000)
 
 
 class TimeoutPolicy(StrictBaseModel):
@@ -165,7 +220,6 @@ class FallbackPolicy(StrictBaseModel):
 class OutputBudgetPolicy(StrictBaseModel):
     """An opt-in per-route output cap, never a global provider default."""
 
-    experiment: str = Field(min_length=1, max_length=64, pattern=r'^[a-z][a-z0-9_-]*$')
     max_completion_tokens: int = Field(ge=1, le=8192)
 
 

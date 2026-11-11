@@ -1,0 +1,320 @@
+import XCTest
+
+@testable import Omi_Computer
+
+/// Unit tests for `ServerConversation.displayState` / `displayTitle` /
+/// `canReprocess`. The intent of these accessors is to disambiguate the four
+/// reasons a conversation might lack a title — locked, processing, recoverable
+/// silent-failure, and genuinely-empty — so the row UI can render an honest
+/// label instead of a flat "Untitled".
+final class ConversationDisplayStateTests: XCTestCase {
+
+  // MARK: - Builders
+
+  /// Builds a minimally-populated `ServerConversation` with overridable knobs.
+  /// Keeps the tests focused on the fields that drive displayState.
+  private func makeConversation(
+    title: String = "",
+    status: ConversationStatus = .completed,
+    homeStep: String? = nil,
+    isLocked: Bool = false,
+    segments: [TranscriptSegment] = [],
+    deferred: Bool = false,
+    startedAt: Date? = nil
+  ) -> ServerConversation {
+    ServerConversation(
+      id: "id",
+      createdAt: Date(),
+      updatedAt: nil,
+      startedAt: startedAt,
+      finishedAt: nil,
+      structured: Structured(
+        title: title,
+        overview: "",
+        emoji: "",
+        category: "",
+        actionItems: [],
+        events: []
+      ),
+      transcriptSegments: segments,
+      transcriptSegmentsIncluded: !segments.isEmpty,
+      geolocation: nil,
+      photos: [],
+      appsResults: [],
+      source: nil,
+      language: nil,
+      status: status,
+      homeStep: homeStep,
+      discarded: false,
+      deleted: false,
+      isLocked: isLocked,
+      starred: false,
+      folderId: nil,
+      inputDeviceName: nil,
+      deferred: deferred
+    )
+  }
+
+  private func segment(_ text: String) -> TranscriptSegment {
+    TranscriptSegment(
+      id: UUID().uuidString,
+      text: text,
+      speaker: "SPEAKER_00",
+      isUser: false,
+      personId: nil,
+      start: 0,
+      end: 1
+    )
+  }
+
+  // MARK: - Titled
+
+  func test_completedWithTitle_returnsTitledState() {
+    let conv = makeConversation(title: "Morning standup")
+    if case .titled(let t) = conv.displayState {
+      XCTAssertEqual(t, "Morning standup")
+    } else {
+      XCTFail("Expected .titled, got \(conv.displayState)")
+    }
+    XCTAssertEqual(conv.displayTitle, "Morning standup")
+    XCTAssertFalse(conv.canReprocess)
+  }
+
+  // MARK: - Locked
+
+  func test_lockedTakesPrecedence_overEverythingElse() {
+    // Locked + has title + completed — locked still wins so the user
+    // gets an honest signal that their content is gated.
+    let conv = makeConversation(
+      title: "Was titled before lock",
+      status: .completed,
+      isLocked: true,
+      segments: [segment("plenty of words to look recoverable normally")]
+    )
+    XCTAssertEqual(conv.displayState, .locked)
+    XCTAssertEqual(conv.displayTitle, "Waiting")
+    XCTAssertFalse(conv.canReprocess, "Reprocess shouldn't be offered while locked")
+  }
+
+  // MARK: - Processing
+
+  func test_serverTranscriptionHold_preservesTitleWithoutSummaryStallReprocess() {
+    let conv = makeConversation(title: "Transcribing…", status: .processing)
+    XCTAssertEqual(conv.status, .processing)
+    XCTAssertEqual(conv.displayState, .titled("Transcribing…"))
+    XCTAssertEqual(conv.displayTitle, "Transcribing…")
+    XCTAssertFalse(conv.canReprocess)
+    XCTAssertTrue(conv.isAwaitingTranscription)
+    XCTAssertFalse(conv.showsSummaryProcessing)
+    XCTAssertFalse(ConversationProcessingBanner.offersReprocess(conversation: conv, phase: .stalled))
+    XCTAssertTrue(
+      ConversationProcessingBanner.offersReprocess(conversation: makeConversation(status: .processing), phase: .stalled)
+    )
+    XCTAssertEqual(makeConversation(title: "Other title", status: .processing).displayState, .processing)
+    XCTAssertEqual(makeConversation(title: "Transcribing…", status: .processing, isLocked: true).displayState, .locked)
+  }
+
+  func test_inProgressStatus_returnsProcessing() {
+    let conv = makeConversation(status: .inProgress)
+    XCTAssertEqual(conv.displayState, .processing)
+    XCTAssertFalse(conv.canReprocess)
+  }
+
+  func test_processingTitle_isNeverTheStatusWord() {
+    // Status belongs in the badge. The title slot carries identity: the
+    // recording time when no transcript is loaded yet.
+    guard let started = Calendar.current.date(bySettingHour: 23, minute: 12, second: 0, of: Date()) else {
+      return XCTFail("Calendar could not build the fixture date")
+    }
+    let conv = makeConversation(status: .processing, startedAt: started)
+    XCTAssertEqual(conv.displayTitle, "Recording at 11:12 PM")
+    XCTAssertFalse(conv.hasTranscriptProvisionalTitle)
+    XCTAssertFalse(conv.displayTitle.localizedCaseInsensitiveContains("processing"))
+  }
+
+  func test_processingTitle_quotesFirstSubstantiveTranscriptLine() {
+    let conv = makeConversation(
+      status: .processing,
+      segments: [segment("yeah"), segment("let's go over the launch timeline for next week")]
+    )
+    XCTAssertEqual(conv.displayTitle, "Let's go over the launch timeline for next week")
+    XCTAssertTrue(conv.hasTranscriptProvisionalTitle)
+    XCTAssertEqual(conv.displayState, .processing)
+  }
+
+  // MARK: - Deferred (awaiting first open)
+
+  func test_deferredProcessingRow_isAwaitingFirstOpen_notProcessing() {
+    // Free-tier desktop capture: stored with the raw transcript, `processing`
+    // on the wire, enriched on first open. Nothing is running for it.
+    let conv = makeConversation(
+      status: .processing,
+      segments: [segment("we talked about the budget for the offsite")],
+      deferred: true
+    )
+    XCTAssertEqual(conv.displayState, .awaitingFirstOpen)
+    XCTAssertEqual(conv.displayTitle, "We talked about the budget for the offsite")
+    XCTAssertFalse(conv.canReprocess)
+  }
+
+  func test_legacyTitleDebrisIsRepairedForDisplayOnly() {
+    let s01234 = TranscriptSegment(
+      id: "s01234", text: "Hi", speaker: "SPEAKER_00", isUser: false, personId: nil, start: 0, end: 1)
+    let conv = makeConversation(title: "Kickoff [s01234]", status: .completed, segments: [s01234])
+    XCTAssertEqual(conv.displayState, .titled("Kickoff"))
+    XCTAssertEqual(conv.displayTitle, "Kickoff")
+    // Rename starts from the stored title.
+    XCTAssertEqual(conv.title, "Kickoff [s01234]")
+  }
+
+  func test_ordinaryBracketedTitleWordsAreKept() {
+    XCTAssertEqual(makeConversation(title: "Project [Q3]").displayState, .titled("Project [Q3]"))
+    XCTAssertEqual(makeConversation(title: "Notes [v2] [s01234]").displayState, .titled("Notes [v2]"))
+  }
+
+  func test_titleOfOnlyDebrisReadsAsUntitled() {
+    let conv = makeConversation(title: "Speaker_00 [s01234]", status: .completed)
+    XCTAssertEqual(conv.displayState, .untitledEmpty)
+  }
+
+  func test_deferredFlagIgnored_onceCompleted() {
+    let conv = makeConversation(title: "Real title", status: .completed, deferred: true)
+    XCTAssertEqual(conv.displayState, .titled("Real title"))
+  }
+
+  func test_homeProjectionChangeIsNotEqualToProcessingRow() {
+    let processing = makeConversation(status: .processing)
+    var failed = processing
+    failed.homeStep = "failed"
+    XCTAssertNotEqual(processing, failed)
+  }
+
+  func test_transcriptTimingCopyKeepsFailedHomeProjection() {
+    let failed = makeConversation(status: .processing, homeStep: "failed")
+    let retimed = failed.onAudioClock(segments: [], startedAt: Date(timeIntervalSince1970: 100))
+    XCTAssertEqual(retimed.homeStep, "failed")
+    XCTAssertEqual(retimed.displayState, .failed)
+  }
+
+  func test_failedHomeProjectionStopsAllLiveProcessingPresentation() {
+    for status in [ConversationStatus.processing, .merging, .inProgress] {
+      let conversation = makeConversation(status: status, homeStep: "failed")
+      XCTAssertEqual(conversation.displayState, .failed)
+      XCTAssertEqual(conversation.displayTitle, "Failed to process")
+      XCTAssertFalse(conversation.showsSummaryProcessing)
+      XCTAssertFalse(conversation.needsProcessingDetailRefresh)
+      XCTAssertTrue(conversation.canReprocess)
+    }
+  }
+
+  func test_failedHomeProjectionOverridesTranscriptionAndDeferredWaits() {
+    let transcription = makeConversation(title: "Transcribing…", status: .processing, homeStep: "failed")
+    XCTAssertFalse(transcription.isAwaitingTranscription)
+    XCTAssertEqual(transcription.displayState, .failed)
+    let deferred = makeConversation(status: .processing, homeStep: "failed", deferred: true)
+    XCTAssertEqual(deferred.displayState, .failed)
+    XCTAssertFalse(deferred.showsSummaryProcessing)
+    XCTAssertFalse(deferred.needsProcessingDetailRefresh)
+    XCTAssertTrue(makeConversation(status: .processing).needsProcessingDetailRefresh)
+    XCTAssertTrue(makeConversation(title: "Transcribing…", status: .processing).needsProcessingDetailRefresh)
+    XCTAssertTrue(makeConversation(deferred: true).needsProcessingDetailRefresh)
+  }
+
+  func test_processingStatus_returnsProcessing() {
+    let conv = makeConversation(status: .processing)
+    XCTAssertEqual(conv.displayState, .processing)
+  }
+
+  func test_mergingStatus_returnsProcessing() {
+    let conv = makeConversation(status: .merging)
+    XCTAssertEqual(conv.displayState, .processing)
+  }
+
+  // MARK: - Failed
+
+  func test_failedStatus_returnsFailed_andCanReprocess() {
+    let conv = makeConversation(status: .failed)
+    XCTAssertEqual(conv.displayState, .failed)
+    XCTAssertEqual(conv.displayTitle, "Failed to process")
+    XCTAssertTrue(conv.canReprocess, "User should be able to retry a failed conversation")
+  }
+
+  // MARK: - Recoverable vs empty
+
+  func test_completedNoTitle_withSubstantialTranscript_returnsRecoverable() {
+    // 5+ words in a single segment satisfies the "real content" heuristic.
+    let conv = makeConversation(
+      status: .completed,
+      segments: [segment("hello this is a longer transcript please title me")]
+    )
+    XCTAssertEqual(conv.displayState, .untitledRecoverable)
+    XCTAssertEqual(conv.displayTitle, "Untitled")
+    XCTAssertTrue(conv.canReprocess, "Recoverable rows should expose the reprocess CTA")
+  }
+
+  func test_completedNoTitle_withShortTranscript_returnsEmpty() {
+    // ≤ 4 words across the only segment — treat as ambient/accidental
+    // capture. No reprocess CTA (would burn LLM tokens on noise).
+    let conv = makeConversation(
+      status: .completed,
+      segments: [segment("hello there")]
+    )
+    XCTAssertEqual(conv.displayState, .untitledEmpty)
+    XCTAssertEqual(conv.displayTitle, "Untitled")
+    XCTAssertFalse(conv.canReprocess, "Empty rows shouldn't offer reprocess")
+  }
+
+  func test_completedNoTitle_withNoTranscript_returnsEmpty() {
+    let conv = makeConversation(status: .completed, segments: [])
+    XCTAssertEqual(conv.displayState, .untitledEmpty)
+    XCTAssertFalse(conv.canReprocess)
+  }
+
+  func test_completedNoTitle_anyOneSegmentLongEnough_recoverable() {
+    // Even if the first segment is tiny, a later substantial segment
+    // promotes the conversation to recoverable.
+    let conv = makeConversation(
+      status: .completed,
+      segments: [
+        segment("um"),
+        segment("ok"),
+        segment("this is the substantive part of the conversation"),
+      ]
+    )
+    XCTAssertEqual(conv.displayState, .untitledRecoverable)
+    XCTAssertTrue(conv.canReprocess)
+  }
+
+  func test_untitledRecoverable_neverShowsSettlingDerivedLine() {
+    let conv = makeConversation(
+      status: .completed,
+      segments: [segment("hello this is a longer transcript please title me")]
+    )
+    XCTAssertEqual(conv.displayState, .untitledRecoverable)
+    XCTAssertFalse(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: conv.displayState, isSettling: true),
+      "A first-run untitled row must not claim memories and tasks are landing"
+    )
+  }
+
+  func test_titled_showsSettlingDerivedLineDuringGrace() {
+    let conv = makeConversation(title: "Morning standup")
+    XCTAssertTrue(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: conv.displayState, isSettling: true)
+    )
+  }
+
+  func test_untitledRecoverableBadgeCopy_isTrueOnFirstRun() {
+    XCTAssertEqual(ConversationProcessingProgress.untitledRecoverableBadgeText, "Title didn't generate")
+    XCTAssertEqual(
+      ConversationProcessingProgress.untitledRecoverableBadgeHelp,
+      "The transcript was saved, but Omi couldn't write a title. Try Reprocess."
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.untitledRecoverableBadgeText.localizedCaseInsensitiveContains("needs reprocess")
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.untitledRecoverableBadgeHelp.localizedCaseInsensitiveContains("needs reprocess")
+    )
+  }
+}

@@ -3,18 +3,18 @@ AI App Generator utility
 Generates app configuration from a natural language prompt using LLM
 """
 
+from utils.generated_compute import require_current_generated_compute, generated_compute_configured
+
 import json
 import re
 import base64
 import httpx
 from typing import Any, Dict, Optional, cast
 from pydantic import BaseModel
-from openai import OpenAI
-
 from langchain_core.messages import SystemMessage, HumanMessage
-from utils.executors import llm_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.llm.clients import get_llm
-from utils.llm.gateway_client import generate_image_via_gateway, should_route_features_through_gateway
+from utils.llm.gateway_client import generate_image_via_gateway
 
 
 def _content_str(response: Any) -> str:
@@ -154,7 +154,7 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
 
 async def generate_app_icon(app_name: str, app_description: str, category: str) -> bytes:
     """
-    Generate an app icon using OpenAI's DALL-E.
+    Generate an app icon through the internal LLM gateway.
 
     Args:
         app_name: Name of the app
@@ -164,6 +164,8 @@ async def generate_app_icon(app_name: str, app_description: str, category: str) 
     Returns:
         PNG image bytes of the generated icon
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_current_generated_compute, 'app_generator', allow_byok=False)
     # Create a prompt for icon generation
     icon_prompt = f"""Create a modern, minimal app icon for an AI app called "{app_name}".
 
@@ -180,35 +182,22 @@ Design requirements:
     - Vibrant but not overwhelming colors
     - Style: Similar to modern iOS/Android app icons"""
 
-    if not should_route_features_through_gateway():
-        return await run_blocking(
-            llm_executor,
-            _generate_app_icon_via_openai,
-            icon_prompt,
-        )
-
+    # gpt-image-1 with an explicit size/quality pair the gateway rate card prices
+    # (openai.gpt-image-1.medium.1024x1024). The retired dall-e-3 `standard` quality and the
+    # `response_format` parameter are both rejected by the images API now, and it always
+    # returns base64 image data.
     response = await run_blocking(
         llm_executor,
         generate_image_via_gateway,
-        model="dall-e-3",
+        model="gpt-image-1",
         prompt=icon_prompt,
         size="1024x1024",
-        quality="standard",
+        quality="medium",
         n=1,
-        response_format="b64_json",
     )
 
     # Get the base64 image data and decode it
     image_data = cast("list[dict[str, Any]]", response["data"])[0]["b64_json"]
-    return base64.b64decode(cast(str, image_data))
-
-
-def _generate_app_icon_via_openai(icon_prompt: str) -> bytes:
-    client = OpenAI()
-    response = client.images.generate(
-        model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
-    )
-    image_data = cast("list[Any]", response.data)[0].b64_json
     return base64.b64decode(cast(str, image_data))
 
 

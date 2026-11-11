@@ -21,6 +21,7 @@ os.environ.setdefault(
 
 from database import user_usage  # noqa: E402
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode  # noqa: E402
+from routers import users as users_router  # noqa: E402
 
 
 @pytest.fixture
@@ -31,8 +32,9 @@ def mock_db(monkeypatch):
 
 
 class _Snap:
-    def __init__(self, data):
+    def __init__(self, data, doc_id=None):
         self._d = data
+        self.id = doc_id
         self.exists = True
 
     def to_dict(self):
@@ -45,14 +47,44 @@ class _DocRef:
         self._data = data
 
     def get(self):
-        return _Snap(self._data)
+        return _Snap(self._data, self.id)
+
+
+class _LlmUsageCollection:
+    """Firestore collection fake that actually applies the `__name__` range
+    filters the month query issues, so the first/last day of the month and the
+    adjacent months are exercised rather than assumed. `list_documents` raises:
+    the quota reader must never fall back to scanning the account's whole
+    llm_usage history."""
+
+    def __init__(self, docs, filters=()):
+        self._docs = docs
+        self._filters = filters
+
+    def document(self, doc_id):
+        return _DocRef(doc_id, self._docs.get(doc_id, {}))
+
+    def list_documents(self):
+        raise AssertionError("chat-quota reads must stay bounded to the current month")
+
+    def where(self, filter):
+        return _LlmUsageCollection(self._docs, (*self._filters, filter))
+
+    def stream(self):
+        def _match(doc_id):
+            for f in self._filters:
+                assert f.field_path == "__name__"  # Firestore's document-id sentinel
+                if f.op_string == ">=" and doc_id < f.value.id:
+                    return False
+                if f.op_string == "<" and doc_id >= f.value.id:
+                    return False
+            return True
+
+        return iter([_Snap(data, doc_id) for doc_id, data in self._docs.items() if _match(doc_id)])
 
 
 def _setup_docs(mock_db, docs):
-    refs = [_DocRef(k, v) for k, v in docs.items()]
-    llm_usage_ref = MagicMock()
-    llm_usage_ref.list_documents.return_value = refs
-    mock_db.collection.return_value.document.return_value.collection.return_value = llm_usage_ref
+    mock_db.collection.return_value.document.return_value.collection.return_value = _LlmUsageCollection(docs)
 
 
 NOW = datetime(2026, 6, 23, tzinfo=timezone.utc)
@@ -88,6 +120,34 @@ def test_counts_nested_desktop_chat_plus_flat_backend_chat(mock_db):
     assert r["cost_usd"] == 1.5, r
 
 
+def test_monthly_usage_exposes_plan_cost_status_without_zero_filling(mock_db):
+    _setup_docs(
+        mock_db,
+        {
+            "2026-06-23": {
+                "plan_usage": {
+                    "operator": {
+                        "desktop_chat": {"quota_questions": 2, "input_tokens": 10},
+                        "_metadata": {
+                            "cost_status_counts": {"missing": 1},
+                            "cost_exclusions": {"provider_token_cost_not_recorded": 1},
+                        },
+                    }
+                },
+                "desktop_chat": {"quota_questions": 2},
+            }
+        },
+    )
+
+    usage = user_usage.get_monthly_chat_usage("uid", now=NOW)
+
+    assert usage["usage_by_plan"]["operator"]["questions"] == 2
+    assert usage["usage_by_plan"]["operator"]["cost_usd"] is None
+    assert usage["cost_by_plan"]["operator"] is None
+    assert usage["cost_status_by_plan"]["operator"] == "missing"
+    assert usage["usage_by_plan"]["operator"]["cost_exclusions"] == {"provider_token_cost_not_recorded": 1}
+
+
 def test_realtime_ptt_included_via_grand_total(mock_db):
     # A pure-PTT month: only realtime turns. record_llm_usage always bumps the grand-total
     # desktop_chat too, so it must be counted even with zero typed chat.
@@ -106,6 +166,41 @@ def test_realtime_ptt_included_via_grand_total(mock_db):
 def test_only_proactive_counts_zero(mock_db):
     _setup_docs(mock_db, {"2026-06-23": {"conv_apps.gpt-5.call_count": 100, "memories.gpt-4.call_count": 50}})
     assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 0
+
+
+def test_month_read_is_bounded_to_the_current_month(mock_db, monkeypatch):
+    # `enforce_chat_quota` calls this on every chat request. Reading the whole
+    # llm_usage collection made the cost of asking a question grow with how long
+    # the account had existed.
+    _setup_docs(
+        mock_db,
+        {
+            "2025-06-23": {"desktop_chat": {"quota_questions": 500}},  # last year
+            "2026-05-31": {"desktop_chat": {"quota_questions": 400}},  # day before the month
+            "2026-06-01": {"desktop_chat": {"quota_questions": 1}},  # first day, inclusive
+            "2026-06-30": {"desktop_chat": {"quota_questions": 2}},  # last day, inclusive
+            "2026-07-01": {"desktop_chat": {"quota_questions": 300}},  # day after the month
+        },
+    )
+    observed = []
+    monkeypatch.setattr(user_usage, "record_firestore_read", lambda *args: observed.append(args))
+
+    assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 3
+    assert observed == [(FirestoreReadFamily.CHAT_QUOTA_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, 2)]
+
+
+def test_december_month_read_stops_at_the_january_boundary(mock_db):
+    _setup_docs(
+        mock_db,
+        {
+            "2026-12-01": {"desktop_chat": {"quota_questions": 4}},
+            "2026-12-31": {"desktop_chat": {"quota_questions": 6}},
+            "2027-01-01": {"desktop_chat": {"quota_questions": 900}},
+        },
+    )
+    usage = user_usage.get_monthly_chat_usage("uid", now=datetime(2026, 12, 15, tzinfo=timezone.utc))
+    assert usage["questions"] == 10
+    assert usage["reset_at"] == int(datetime(2027, 1, 1, tzinfo=timezone.utc).timestamp())
 
 
 def test_monthly_usage_since_observes_every_scanned_hourly_document(mock_db, monkeypatch):
@@ -129,3 +224,483 @@ def test_monthly_usage_since_observes_every_scanned_hourly_document(mock_db, mon
 
     assert usage['transcription_seconds'] == 40
     assert observed == [(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.UNBOUNDED, 2)]
+
+
+def test_hourly_transcription_writer_keeps_plan_and_missing_cost_explicit(mock_db, monkeypatch):
+    from tests.unit.fixtures.shadow_usage_firestore import Store
+
+    monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *_args, **_kwargs: 'plus')
+    store = Store({'users/uid': {'synthetic': True}})
+
+    user_usage.update_hourly_usage(
+        'uid',
+        datetime(2026, 6, 23, 10, tzinfo=timezone.utc),
+        {'transcription_seconds': 12},
+        firestore_client=store,
+    )
+
+    update = store.docs['users/uid/hourly_usage/2026-06-23-10']
+    assert store.writes == 2 and store.reads == 3
+    assert update['plan_usage']['plus']['transcription_seconds'] == 12
+    assert update['plan_usage']['plus']['_metadata']['cost_status_counts']['missing'] == 1
+    assert 'cost_usd' not in update['plan_usage']['plus']
+
+
+def test_usage_by_plan_joins_chat_and_hourly_rows_without_cost_zero(monkeypatch):
+    monthly = {
+        'usage_by_plan': {
+            'plus': {
+                'questions': 2,
+                'input_tokens': 10,
+                'output_tokens': 5,
+                'total_tokens': 0,
+                'cost_usd': None,
+                'cost_status': 'missing',
+                'cost_exclusions': {'provider_token_cost_not_recorded': 1},
+            }
+        }
+    }
+    monkeypatch.setattr(user_usage, 'get_monthly_chat_usage', lambda *_args, **_kwargs: monthly)
+    query = MagicMock()
+    query.where.return_value = query
+    query.stream.return_value = iter(
+        [
+            _Snap(
+                {
+                    'plan_usage': {
+                        'plus': {
+                            'transcription_seconds': 120,
+                            '_metadata': {
+                                'cost_status_counts': {'missing': 1},
+                                'cost_exclusions': {'provider_cost_not_recorded': 1},
+                            },
+                        }
+                    }
+                }
+            )
+        ]
+    )
+    user_ref = MagicMock()
+    user_ref.collection.return_value = query
+    client = MagicMock()
+    client.collection.return_value.document.return_value = user_ref
+
+    report = user_usage.get_usage_by_plan('uid', now=NOW, firestore_client=client)
+
+    assert report['plus']['questions'] == 2
+    assert report['plus']['transcription_seconds'] == 120
+    assert report['plus']['cost_usd'] is None
+    assert report['plus']['cost_status'] == 'missing'
+    assert report['plus']['cost_exclusions']['provider_cost_not_recorded'] == 1
+
+
+# ---------------------------------------------------------------------------
+# get_current_user_usage(period='today') — local-day vs UTC-day boundary
+#
+# hourly_usage docs are written keyed by UTC date (utils/analytics.py always
+# stamps `datetime.now(timezone.utc)`). A user behind UTC (e.g. LA, UTC-7 in
+# summer) has the first ~17 hours of their local calendar day stored under the
+# PREVIOUS UTC date. Querying only "the UTC date matching now" silently drops
+# that morning/afternoon usage from what the app displays as "Today".
+# ---------------------------------------------------------------------------
+
+
+class _HourlyQuery:
+    """Firestore query fake that actually applies '==' filters (unlike a bare
+    MagicMock), because get_today_usage_stats now issues a fresh where-chain
+    per UTC calendar day inside a loop and the two chains must select disjoint
+    subsets of `docs` for this test to mean anything."""
+
+    def __init__(self, docs, filters=()):
+        self._docs = docs
+        self._filters = filters
+
+    def where(self, filter):
+        return _HourlyQuery(self._docs, (*self._filters, filter))
+
+    def stream(self):
+        def _match(doc):
+            return all(doc.get(f.field_path) == f.value for f in self._filters)
+
+        return iter([_Snap(d) for d in self._docs if _match(d)])
+
+
+def _setup_hourly_docs(mock_db, docs):
+    mock_db.collection.return_value.document.return_value.collection.return_value = _HourlyQuery(docs)
+
+
+# 8pm local time on LA-calendar-day June 23rd, which is already 3am UTC on June 24th.
+_LA_EVENING_NOW = datetime(2026, 6, 24, 3, 0, tzinfo=timezone.utc)
+
+_LA_HOURLY_DOCS = [
+    # LA-local 2026-06-23 07:00 (7am) -- written under UTC 2026-06-23, the day
+    # BEFORE `now`'s UTC date. A UTC-day-only query misses this entirely.
+    {'year': 2026, 'month': 6, 'day': 23, 'hour': 14, 'transcription_seconds': 600},
+    # LA-local 2026-06-23 18:00 (6pm) -- written under UTC 2026-06-24, which
+    # happens to match `now`'s UTC date.
+    {'year': 2026, 'month': 6, 'day': 24, 'hour': 1, 'transcription_seconds': 300},
+    # LA-local 2026-06-22 20:00 (8pm the day BEFORE) -- must stay excluded from
+    # "today" no matter which boundary logic is used.
+    {'year': 2026, 'month': 6, 'day': 23, 'hour': 3, 'transcription_seconds': 12345},
+]
+
+
+def test_today_usage_local_day_spans_two_utc_dates_for_user_west_of_utc(mock_db):
+    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+
+    result = user_usage.get_current_user_usage('uid', 'today', tz_name='America/Los_Angeles', now=_LA_EVENING_NOW)
+
+    # Correct local-day total: 600 (7am bucket) + 300 (6pm bucket) = 900.
+    # The pre-fix UTC-day-equality query only ever found the 300 bucket.
+    assert result['today']['transcription_seconds'] == 900, result['today']
+
+
+def test_today_usage_without_timezone_still_falls_back_to_utc_day(mock_db):
+    """No stored timezone -> unchanged UTC-day behavior (no regression for
+    users who never granted notification permissions / have no time_zone)."""
+    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+
+    result = user_usage.get_current_user_usage('uid', 'today', tz_name=None, now=_LA_EVENING_NOW)
+
+    assert result['today']['transcription_seconds'] == 300, result['today']
+
+
+def test_today_history_covers_the_same_local_day_as_the_total(mock_db):
+    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+
+    result = user_usage.get_current_user_usage('uid', 'today', tz_name='America/Los_Angeles', now=_LA_EVENING_NOW)
+
+    assert [(point['date'], point['transcription_seconds']) for point in result['history']] == [
+        ('2026-06-23T14:00:00Z', 600),
+        ('2026-06-24T01:00:00Z', 300),
+    ]
+
+
+def test_today_history_leaves_out_last_night_for_user_west_of_utc(mock_db):
+    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS[0:1] + _LA_HOURLY_DOCS[2:])
+    la_morning = datetime(2026, 6, 23, 17, 0, tzinfo=timezone.utc)
+
+    result = user_usage.get_current_user_usage('uid', 'today', tz_name='America/Los_Angeles', now=la_morning)
+
+    assert [point['date'] for point in result['history']] == ['2026-06-23T14:00:00Z']
+    assert result['today']['transcription_seconds'] == 600
+
+
+@pytest.mark.parametrize(
+    'period,now,docs,expected',
+    [
+        (
+            'monthly',
+            datetime(2026, 7, 1, 3, tzinfo=timezone.utc),
+            [
+                {'year': 2026, 'month': 6, 'day': 1, 'hour': 6, 'words_transcribed': 10},
+                {'year': 2026, 'month': 7, 'day': 1, 'hour': 2, 'words_transcribed': 20},
+                {'year': 2026, 'month': 7, 'day': 1, 'hour': 7, 'words_transcribed': 99},
+            ],
+            [('2026-05-31', 10), ('2026-06-30', 20)],
+        ),
+        (
+            'yearly',
+            datetime(2027, 1, 1, 3, tzinfo=timezone.utc),
+            [
+                {'year': 2026, 'month': 1, 'day': 1, 'hour': 6, 'words_transcribed': 10},
+                {'year': 2027, 'month': 1, 'day': 1, 'hour': 2, 'words_transcribed': 20},
+                {'year': 2027, 'month': 1, 'day': 1, 'hour': 8, 'words_transcribed': 99},
+            ],
+            [('2025-12-01', 10), ('2026-12-01', 20)],
+        ),
+    ],
+)
+def test_local_period_buckets_and_totals_match(mock_db, period, now, docs, expected):
+    _setup_hourly_docs(mock_db, docs)
+    result = user_usage.get_current_user_usage('uid', period, tz_name='America/Los_Angeles', now=now)
+    # The first document is outside the local period. Only the second is in it.
+    assert result[period]['words_transcribed'] == 20
+    assert [(row['date'], row['words_transcribed']) for row in result['history']] == [expected[1]]
+
+
+@pytest.mark.parametrize(
+    'zone,period,now,hours,expected',
+    [
+        (
+            'Asia/Tokyo',
+            'monthly',
+            datetime(2026, 1, 20, tzinfo=timezone.utc),
+            [
+                ('2025-12-31T14:00:00', 99),
+                ('2025-12-31T15:00:00', 10),
+                ('2026-01-19T15:00:00', 20),
+                ('2026-01-31T15:00:00', 99),
+            ],
+            [('2026-01-01', 10), ('2026-01-20', 20)],
+        ),
+        (
+            'Asia/Kolkata',
+            'monthly',
+            datetime(2026, 1, 20, tzinfo=timezone.utc),
+            [
+                ('2025-12-31T18:00:00', 99),
+                ('2025-12-31T19:00:00', 10),
+                ('2026-01-19T19:00:00', 20),
+                ('2026-01-31T19:00:00', 99),
+            ],
+            [('2026-01-01', 10), ('2026-01-20', 20)],
+        ),
+        (
+            'Asia/Tokyo',
+            'yearly',
+            datetime(2026, 6, 1, tzinfo=timezone.utc),
+            [
+                ('2025-12-31T14:00:00', 99),
+                ('2025-12-31T15:00:00', 10),
+                ('2026-12-31T14:00:00', 20),
+                ('2026-12-31T15:00:00', 99),
+            ],
+            [('2026-01-01', 10), ('2026-12-01', 20)],
+        ),
+        (
+            'Asia/Kolkata',
+            'yearly',
+            datetime(2026, 6, 1, tzinfo=timezone.utc),
+            [
+                ('2025-12-31T18:00:00', 99),
+                ('2025-12-31T19:00:00', 10),
+                ('2026-12-31T18:00:00', 20),
+                ('2026-12-31T19:00:00', 99),
+            ],
+            [('2026-01-01', 10), ('2026-12-01', 20)],
+        ),
+        (
+            'America/Los_Angeles',
+            'monthly',
+            datetime(2026, 3, 20, tzinfo=timezone.utc),
+            [
+                ('2026-03-01T07:00:00', 99),
+                ('2026-03-01T08:00:00', 10),
+                ('2026-03-08T09:00:00', 20),
+                ('2026-03-08T10:00:00', 30),
+                ('2026-04-01T06:00:00', 40),
+                ('2026-04-01T07:00:00', 99),
+            ],
+            [('2026-03-01', 10), ('2026-03-08', 50), ('2026-03-31', 40)],
+        ),
+        (
+            'America/Los_Angeles',
+            'monthly',
+            datetime(2026, 11, 20, tzinfo=timezone.utc),
+            [
+                ('2026-11-01T06:00:00', 99),
+                ('2026-11-01T07:00:00', 10),
+                ('2026-11-01T08:00:00', 20),
+                ('2026-11-01T09:00:00', 30),
+                ('2026-12-01T07:00:00', 40),
+                ('2026-12-01T08:00:00', 99),
+            ],
+            [('2026-11-01', 60), ('2026-11-30', 40)],
+        ),
+    ],
+)
+def test_local_period_edges_and_dst_are_counted_once(mock_db, zone, period, now, hours, expected):
+    docs = []
+    for timestamp, words in hours:
+        hour = datetime.fromisoformat(timestamp)
+        docs.append(
+            {'year': hour.year, 'month': hour.month, 'day': hour.day, 'hour': hour.hour, 'words_transcribed': words}
+        )
+    _setup_hourly_docs(mock_db, docs)
+
+    result = user_usage.get_current_user_usage('uid', period, tz_name=zone, now=now)
+
+    actual = [(row['date'], row['words_transcribed']) for row in result['history']]
+    assert actual == expected
+    assert result[period]['words_transcribed'] == sum(value for _, value in expected)
+    assert result[period]['words_transcribed'] == sum(value for _, value in actual)
+
+
+@pytest.mark.parametrize(
+    'zone,local_boundary,expected_utc,now,hours,expected_date',
+    [
+        (
+            'America/Havana',
+            datetime(2026, 11, 1),
+            datetime(2026, 11, 1, 4, tzinfo=timezone.utc),
+            datetime(2026, 11, 1, 12, tzinfo=timezone.utc),
+            [('2026-11-01T03:00:00', 99), ('2026-11-01T04:00:00', 10), ('2026-11-01T05:00:00', 20)],
+            '2026-11-01',
+        ),
+        (
+            'Africa/Cairo',
+            datetime(2014, 8, 1),
+            datetime(2014, 7, 31, 22, tzinfo=timezone.utc),
+            datetime(2014, 7, 31, 23, tzinfo=timezone.utc),
+            [('2014-07-31T21:00:00', 99), ('2014-07-31T22:00:00', 10), ('2014-07-31T23:00:00', 20)],
+            '2014-08-01',
+        ),
+    ],
+)
+def test_midnight_transition_month_and_today_boundaries(
+    mock_db, zone, local_boundary, expected_utc, now, hours, expected_date
+):
+    assert user_usage._local_boundary_utc(user_usage.pytz.timezone(zone), local_boundary) == expected_utc
+    docs = []
+    for timestamp, words in hours:
+        hour = datetime.fromisoformat(timestamp)
+        docs.append(
+            {'year': hour.year, 'month': hour.month, 'day': hour.day, 'hour': hour.hour, 'words_transcribed': words}
+        )
+    _setup_hourly_docs(mock_db, docs)
+
+    monthly = user_usage.get_current_user_usage('uid', 'monthly', tz_name=zone, now=now)
+    today = user_usage.get_current_user_usage('uid', 'today', tz_name=zone, now=now)
+
+    assert monthly['monthly']['words_transcribed'] == 30
+    assert [(row['date'], row['words_transcribed']) for row in monthly['history']] == [(expected_date, 30)]
+    assert today['today']['words_transcribed'] == 30
+    assert [row['words_transcribed'] for row in today['history']] == [10, 20]
+
+
+@pytest.mark.parametrize('period', ['monthly', 'yearly'])
+def test_invalid_timezone_keeps_utc_period_buckets(mock_db, period):
+    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+    now = datetime(2026, 6, 24, 3, tzinfo=timezone.utc)
+    result = user_usage.get_current_user_usage('uid', period, tz_name='Not/AZone', now=now)
+    assert result[period]['transcription_seconds'] == 13245
+
+
+def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monkeypatch):
+    """Behavioural proof through the route the app actually calls.
+
+    The two tests above exercise the helper directly and so can only be written against the
+    tz-aware signature. This one goes through GET /v1/users/me/usage, which is the surface the
+    Flutter usage page hits, and therefore fails on unfixed source with a wrong total rather
+    than a signature error: the handler there never consults the stored timezone at all.
+
+    `routers.users` is imported at module scope like the other router-level unit tests. The
+    router graph is a heavy import, and paying it inside the test body charges ~26s of CPU to
+    this one test and trips the fast-unit duration guard.
+    """
+
+    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+    monkeypatch.setattr(users_router.notification_db, 'get_user_time_zone', lambda uid: 'America/Los_Angeles')
+
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _LA_EVENING_NOW if tz is not None else _LA_EVENING_NOW.replace(tzinfo=None)
+
+    monkeypatch.setattr(user_usage, 'datetime', _FrozenDatetime)
+
+    result = users_router.get_user_usage_stats_endpoint(uid='uid')
+
+    # 600 (7am local, filed under the previous UTC date) + 300 (6pm local, filed under today's
+    # UTC date). Serving the UTC day alone finds only the 300.
+    assert result['today']['transcription_seconds'] == 900, result['today']
+
+
+@pytest.mark.parametrize(
+    'device,stored,expected',
+    [
+        ('Asia/Tokyo', 'America/Los_Angeles', 'Asia/Tokyo'),
+        ('Asia/Kolkata', None, 'Asia/Kolkata'),
+        ('Not/AZone', 'America/Los_Angeles', 'America/Los_Angeles'),
+        (None, 'Not/AZone', 'UTC'),
+        ('Not/AZone', None, 'UTC'),
+    ],
+)
+def test_usage_endpoint_prefers_valid_device_timezone(monkeypatch, device, stored, expected):
+    monkeypatch.setattr(users_router.notification_db, 'get_user_time_zone', lambda uid: stored)
+    get_usage = MagicMock(return_value={'today': {}, 'history': []})
+    monkeypatch.setattr(users_router.user_usage_db, 'get_current_user_usage', get_usage)
+
+    users_router.get_user_usage_stats_endpoint(uid='uid', time_zone=device)
+
+    get_usage.assert_called_once_with('uid', 'today', tz_name=expected)
+
+
+def test_all_time_usage_builds_totals_and_history_from_one_stream(mock_db, monkeypatch):
+    query = MagicMock()
+    query.stream.return_value = iter(
+        [
+            _Snap({'year': 2025, 'transcription_seconds': 10, 'speech_seconds': 8}),
+            _Snap({'year': 2026, 'transcription_seconds': 20, 'words_transcribed': 4, 'speech_seconds': 16}),
+        ]
+    )
+    mock_db.collection.return_value.document.return_value.collection.return_value = query
+    record_read = MagicMock()
+    monkeypatch.setattr(user_usage, 'record_firestore_read', record_read)
+
+    result = user_usage.get_current_user_usage('uid', 'all_time')
+
+    assert result['all_time']['transcription_seconds'] == 30
+    assert result['all_time']['words_transcribed'] == 4
+    assert result['all_time']['speech_seconds'] == 24
+    assert result['history'] == [
+        {
+            'date': '2025-01-01',
+            'transcription_seconds': 10,
+            'words_transcribed': 0,
+            'insights_gained': 0,
+            'memories_created': 0,
+        },
+        {
+            'date': '2026-01-01',
+            'transcription_seconds': 20,
+            'words_transcribed': 4,
+            'insights_gained': 0,
+            'memories_created': 0,
+        },
+    ]
+    query.stream.assert_called_once_with()
+    record_read.assert_called_once_with(FirestoreReadFamily.ALL_TIME_USAGE, FirestoreReadMode.UNBOUNDED, 2)
+
+
+def test_fully_attributed_document_creates_no_phantom_unattributed_row(mock_db):
+    """A document whose plan_usage accounts for all its questions must not also
+    report those questions as unattributed.
+
+    Writers store questions at plan_usage.{plan}.{bucket}.quota_questions -- there is
+    no top-level plan_usage.{plan}.questions field. Reading the attributed total from
+    that non-existent field made it always 0, so the residual was the document's FULL
+    root count and every post-deploy document counted twice: once against its real
+    plan and once against _unattributed.
+    """
+    _setup_docs(
+        mock_db,
+        {
+            "2026-06-23": {
+                "desktop_chat": {"quota_questions": 2},
+                "plan_usage": {"operator": {"desktop_chat": {"quota_questions": 2}}},
+            }
+        },
+    )
+
+    usage = user_usage.get_monthly_chat_usage("uid", now=NOW)
+    by_plan = usage["usage_by_plan"]
+
+    assert by_plan["operator"]["questions"] == 2
+    assert usage["questions"] == 2
+    assert "_unattributed" not in by_plan, f"phantom unattributed row: {by_plan}"
+    assert sum(r["questions"] for r in by_plan.values()) == usage["questions"]
+
+
+def test_mixed_document_attributes_only_the_unaccounted_residual(mock_db):
+    """The genuine MIXED case: pre-deploy root counters plus post-deploy plan_usage.
+
+    Only the portion plan_usage does not account for belongs to _unattributed.
+    """
+    _setup_docs(
+        mock_db,
+        {
+            "2026-06-23": {
+                "desktop_chat": {"quota_questions": 5},
+                "plan_usage": {"operator": {"desktop_chat": {"quota_questions": 2}}},
+            }
+        },
+    )
+
+    usage = user_usage.get_monthly_chat_usage("uid", now=NOW)
+    by_plan = usage["usage_by_plan"]
+
+    assert by_plan["operator"]["questions"] == 2
+    assert by_plan["_unattributed"]["questions"] == 3, "only the 3 unaccounted questions"
+    assert sum(r["questions"] for r in by_plan.values()) == usage["questions"] == 5

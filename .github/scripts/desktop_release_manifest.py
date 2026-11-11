@@ -6,6 +6,11 @@ workflows can use the exact same contract on clean runners. The detached
 manifest digest is SHA-256 over UTF-8 JSON with sorted keys, no insignificant
 whitespace, and non-ASCII characters preserved. A detached digest avoids the
 self-referential ambiguity of embedding a manifest hash inside the manifest.
+
+``qualification_tier`` and ``qualification_passed`` are legacy evidence-class
+fields on the frozen v1 wire schema; ``signed-smoke`` is the only tier new
+manifests carry. The names must not be renamed: every stored manifest is
+validated on every read.
 """
 
 from __future__ import annotations
@@ -19,7 +24,6 @@ from pathlib import Path
 import re
 from typing import Any, NoReturn
 from urllib.parse import unquote, urlparse
-
 
 SCHEMA_VERSION = 1
 PLATFORM = "macos"
@@ -50,6 +54,9 @@ TOP_LEVEL_FIELDS = frozenset(
         "compatibility_contract",
         "environment_contract_version",
         "created_at",
+        "published_at",
+        "changelog",
+        "mandatory",
     }
 )
 REQUIRED_FIELDS = frozenset(
@@ -58,6 +65,9 @@ REQUIRED_FIELDS = frozenset(
         "desktop_backend_source_sha",
         "desktop_backend_oci_index_digest",
         "desktop_backend_platform_digest",
+        "published_at",
+        "changelog",
+        "mandatory",
     }
 )
 BACKEND_FIELDS = frozenset(
@@ -169,6 +179,13 @@ def _require_timestamp(data: dict[str, Any], key: str) -> str:
     return value
 
 
+def _require_changelog(data: dict[str, Any]) -> list[str]:
+    value = data.get("changelog")
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
+        _fail("changelog must be a list of non-empty strings")
+    return value
+
+
 def _validate_compatibility(manifest: dict[str, Any]) -> None:
     raw = manifest.get("compatibility_contract")
     if not isinstance(raw, dict):
@@ -225,11 +242,26 @@ def validate_manifest(value: object) -> dict[str, Any]:
     _require_string(manifest, "ed_signature")
 
     evidence_asset = _require_string(manifest, "qualification_evidence_asset")
-    if not EVIDENCE_ASSET_RE.fullmatch(evidence_asset):
-        _fail("qualification_evidence_asset must be a qualification-evidence-*.json asset name")
+    if not EVIDENCE_ASSET_RE.fullmatch(evidence_asset) and evidence_asset not in {
+        "desktop-smoke-result.json",
+        "desktop-smoke-result-beta.json",
+    }:
+        _fail("qualification_evidence_asset must be a qualification evidence or signed-smoke asset name")
     _require_sha256(manifest, "qualification_evidence_sha256")
-    if manifest.get("qualification_tier") != "T2" or manifest.get("qualification_passed") is not True:
-        _fail("qualification must be passed at tier T2")
+    qualification_tier = manifest.get("qualification_tier")
+    qualification_passed = manifest.get("qualification_passed")
+    if not isinstance(qualification_passed, bool) or (qualification_tier, qualification_passed) not in {
+        ("T2", True),
+        ("signed-smoke", False),
+        ("emergency", False),
+    }:
+        _fail("release evidence must be T2, signed-smoke, or emergency truth")
+    if qualification_tier == "T2" and not EVIDENCE_ASSET_RE.fullmatch(evidence_asset):
+        _fail("T2 qualification requires a qualification-evidence-*.json asset")
+    if qualification_tier == "emergency" and evidence_asset != "desktop-smoke-result.json":
+        _fail("emergency qualification requires exact signed-smoke evidence")
+    if qualification_tier == "signed-smoke" and evidence_asset != "desktop-smoke-result-beta.json":
+        _fail("normal Beta promotion requires exact Codemagic Beta signed-smoke evidence")
 
     mode = manifest.get("backend_mode")
     if mode not in BACKEND_MODES:
@@ -253,6 +285,12 @@ def validate_manifest(value: object) -> dict[str, Any]:
     if not ENVIRONMENT_CONTRACT_RE.fullmatch(environment_contract):
         _fail("environment_contract_version must use desktop-backend-env-vN form")
     _require_timestamp(manifest, "created_at")
+    if "published_at" in manifest:
+        _require_timestamp(manifest, "published_at")
+    if "changelog" in manifest:
+        _require_changelog(manifest)
+    if "mandatory" in manifest and not isinstance(manifest.get("mandatory"), bool):
+        _fail("mandatory must be a boolean")
     _validate_compatibility(manifest)
     return manifest
 

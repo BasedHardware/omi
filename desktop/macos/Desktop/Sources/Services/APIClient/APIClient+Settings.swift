@@ -11,15 +11,26 @@ extension APIClient {
   }
 
   /// Updates daily summary settings
-  func updateDailySummarySettings(enabled: Bool? = nil, hour: Int? = nil) async throws
-    -> DailySummarySettings
-  {
+  func updateDailySummarySettings(
+    enabled: Bool? = nil, hour: Int? = nil, depth: DailySummaryDepth? = nil
+  ) async throws {
     struct UpdateRequest: Encodable {
       let enabled: Bool?
       let hour: Int?
+      let depth: DailySummaryDepth?
     }
-    let body = UpdateRequest(enabled: enabled, hour: hour)
-    return try await patch("v1/users/daily-summary-settings", body: body)
+    struct StatusResponse: Decodable {
+      let status: String
+      let depth: DailySummaryDepth?
+    }
+    let body = UpdateRequest(enabled: enabled, hour: hour, depth: depth)
+    let response: StatusResponse = try await patch("v1/users/daily-summary-settings", body: body)
+    guard response.status == "ok" else {
+      throw DailySummaryDepthSaveError.notConfirmed
+    }
+    if let depth, response.depth != depth {
+      throw DailySummaryDepthSaveError.notConfirmed
+    }
   }
 
   /// Fetches transcription preferences
@@ -43,7 +54,15 @@ extension APIClient {
     let body = UpdateRequest(singleLanguageMode: singleLanguageMode, vocabulary: vocabulary)
     struct StatusResponse: Decodable { let status: String }
     let _: StatusResponse = try await patch("v1/users/transcription-preferences", body: body)
-    return try await getTranscriptionPreferences()
+    // The PATCH above already succeeded, so the account has stored this change. A failed
+    // follow-up read (offline, a transient server error) must not make the caller treat the
+    // save itself as failed and roll it back — fall back to what was just confirmed saved.
+    do {
+      return try await getTranscriptionPreferences()
+    } catch {
+      return TranscriptionPreferences(
+        singleLanguageMode: singleLanguageMode ?? false, vocabulary: vocabulary ?? [])
+    }
   }
 
   /// Fetches user language preference
@@ -71,6 +90,29 @@ extension APIClient {
       body: body,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// Persists the "how did you hear about Omi" answer to the user's backend
+  /// onboarding state (`acquisition_source`). Previously the desktop only wrote
+  /// this to local `@AppStorage` + analytics, so the answer never reached the
+  /// user record and was lost on reinstall / other devices.
+  @discardableResult
+  func updateOnboardingAcquisitionSource(
+    _ source: String,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> String {
+    struct UpdateRequest: Encodable {
+      let acquisitionSource: String
+      enum CodingKeys: String, CodingKey { case acquisitionSource = "acquisition_source" }
+    }
+    struct StatusResponse: Decodable { let status: String }
+    let response: StatusResponse = try await patch(
+      "v1/users/onboarding",
+      body: UpdateRequest(acquisitionSource: source),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    return response.status
   }
 
   /// Fetches recording permission status
@@ -182,150 +224,115 @@ extension APIClient {
 
   // MARK: - Knowledge Graph API
 
-  /// Get the full knowledge graph (nodes and edges)
-  func getKnowledgeGraph() async throws -> KnowledgeGraphResponse {
-    return try await get("v1/knowledge-graph")
+  func getKnowledgeGraph(
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> KnowledgeGraphResponse {
+    try await getKnowledgeGraphImpl(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// Rebuild the knowledge graph from memories
-  func rebuildKnowledgeGraph(limit: Int = 500) async throws -> RebuildGraphResponse {
-    return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody())
+  func getKnowledgeGraphPage(
+    limit: Int = KnowledgeGraphResponse.defaultPageSize,
+    cursor: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> KnowledgeGraphResponse {
+    try await getKnowledgeGraphPageImpl(
+      limit: limit,
+      cursor: cursor,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// Delete the knowledge graph
+  func rebuildKnowledgeGraph(
+    limit: Int = 500,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> RebuildGraphResponse {
+    try await rebuildKnowledgeGraphImpl(
+      limit: limit,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
   func deleteKnowledgeGraph() async throws {
-    return try await delete("v1/knowledge-graph")
-  }
-}
-
-// MARK: - Knowledge Graph Models
-
-/// Node type in the knowledge graph
-enum KnowledgeGraphNodeType: String, Codable {
-  case person
-  case place
-  case organization
-  case thing
-  case concept
-}
-
-/// A node in the knowledge graph representing an entity
-struct KnowledgeGraphNode: Codable, Identifiable {
-  let id: String
-  let label: String
-  let nodeType: KnowledgeGraphNodeType
-  let aliases: [String]
-  let memoryIds: [String]
-  let createdAt: Date
-  let updatedAt: Date
-
-  enum CodingKeys: String, CodingKey {
-    case id, label, aliases
-    case nodeType = "node_type"
-    case memoryIds = "memory_ids"
-    case createdAt = "created_at"
-    case updatedAt = "updated_at"
+    try await deleteKnowledgeGraphImpl()
   }
 
-  init(
-    id: String, label: String, nodeType: KnowledgeGraphNodeType, aliases: [String] = [],
-    memoryIds: [String] = [], createdAt: Date = Date(), updatedAt: Date = Date()
-  ) {
-    self.id = id
-    self.label = label
-    self.nodeType = nodeType
-    self.aliases = aliases
-    self.memoryIds = memoryIds
-    self.createdAt = createdAt
-    self.updatedAt = updatedAt
+  func extractKnowledgeGraph(
+    text: String,
+    includeExisting: Bool = false,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> KnowledgeGraphExtractResponse {
+    try await extractKnowledgeGraphImpl(
+      text: text,
+      includeExisting: includeExisting,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    label = try container.decode(String.self, forKey: .label)
-    if let rawType = try container.decodeIfPresent(String.self, forKey: .nodeType) {
-      nodeType = KnowledgeGraphNodeType(rawValue: rawType) ?? .concept
-    } else {
-      nodeType = .concept
-    }
-    aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
-    memoryIds = try container.decodeIfPresent([String].self, forKey: .memoryIds) ?? []
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
-  }
-}
-
-/// An edge in the knowledge graph representing a relationship
-struct KnowledgeGraphEdge: Codable, Identifiable {
-  let id: String
-  let sourceId: String
-  let targetId: String
-  let label: String
-  let memoryIds: [String]
-  let createdAt: Date
-
-  enum CodingKeys: String, CodingKey {
-    case id, label
-    case sourceId = "source_id"
-    case targetId = "target_id"
-    case memoryIds = "memory_ids"
-    case createdAt = "created_at"
+  func extractMemoryLog(
+    text: String,
+    textSource: String,
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> MemoryLogExtractResponse {
+    try await extractMemoryLogImpl(
+      text: text,
+      textSource: textSource,
+      existingMemories: existingMemories,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
-  init(
-    id: String, sourceId: String, targetId: String, label: String, memoryIds: [String] = [],
-    createdAt: Date = Date()
-  ) {
-    self.id = id
-    self.sourceId = sourceId
-    self.targetId = targetId
-    self.label = label
-    self.memoryIds = memoryIds
-    self.createdAt = createdAt
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    sourceId = try container.decode(String.self, forKey: .sourceId)
-    targetId = try container.decode(String.self, forKey: .targetId)
-    label = try container.decode(String.self, forKey: .label)
-    memoryIds = try container.decodeIfPresent([String].self, forKey: .memoryIds) ?? []
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-  }
-}
-
-/// Response containing the full knowledge graph
-struct KnowledgeGraphResponse: Codable {
-  let nodes: [KnowledgeGraphNode]
-  let edges: [KnowledgeGraphEdge]
-
-  init(nodes: [KnowledgeGraphNode], edges: [KnowledgeGraphEdge]) {
-    self.nodes = nodes
-    self.edges = edges
-  }
-}
-
-/// Response for rebuild operation
-struct RebuildGraphResponse: Codable {
-  let status: String
-  let nodesCount: Int?
-  let edgesCount: Int?
-
-  enum CodingKeys: String, CodingKey {
-    case status
-    case nodesCount = "nodes_count"
-    case edgesCount = "edges_count"
+  func synthesizeConnectorItems(
+    source: String,
+    items: [String],
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ConnectorSynthesisResponse {
+    try await synthesizeConnectorItemsImpl(
+      source: source,
+      items: items,
+      existingMemories: existingMemories,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
   }
 }
 
 // MARK: - User Settings Models
 
-/// Daily summary notification settings
-struct DailySummarySettings: Codable {
+enum DailySummaryDepth: String, Codable, CaseIterable {
+  case brief
+  case normal
+  case deep
+}
+
+enum DailySummaryDepthSaveError: Error {
+  case notConfirmed
+}
+
+/// Daily summary notification settings. Older backends omit depth; brief remains the default.
+struct DailySummarySettings: Decodable {
   let enabled: Bool
   let hour: Int
+  let depth: DailySummaryDepth
+
+  private enum CodingKeys: String, CodingKey {
+    case enabled, hour, depth
+  }
+
+  init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    enabled = try values.decode(Bool.self, forKey: .enabled)
+    hour = try values.decode(Int.self, forKey: .hour)
+    depth = (try? values.decode(DailySummaryDepth.self, forKey: .depth)) ?? .brief
+  }
 }
 
 /// Transcription preferences
@@ -336,6 +343,11 @@ struct TranscriptionPreferences: Codable {
   enum CodingKeys: String, CodingKey {
     case singleLanguageMode = "single_language_mode"
     case vocabulary
+  }
+
+  init(singleLanguageMode: Bool, vocabulary: [String]) {
+    self.singleLanguageMode = singleLanguageMode
+    self.vocabulary = vocabulary
   }
 
   init(from decoder: Decoder) throws {
@@ -396,12 +408,94 @@ struct NotificationSettingsResponse: Codable {
   }
 }
 
-enum SubscriptionPlanType: String, Codable {
+enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
   case basic  // display "Free"
-  case unlimited  // legacy — display "Unlimited (legacy)"
-  case architect  // display "Architect" ($400/mo, cost_usd quota)
+  case plus
+  case unlimited  // legacy — display "Neo"
+  case unlimitedV2  // display "Omi Pro" — the only plan sold
+  case architect  // retired — display "Architect" ($400/mo, cost_usd quota)
   case pro  // backward compat: old Firestore docs may still say "pro"
-  case `operator`  // new — display "Operator"
+  case `operator`  // retired — display "Operator"
+  case unknown(String)
+
+  init(rawValue: String) {
+    switch rawValue {
+    case "basic": self = .basic
+    case "plus": self = .plus
+    case "unlimited": self = .unlimited
+    case "unlimited_v2": self = .unlimitedV2
+    case "architect": self = .architect
+    case "pro": self = .pro
+    case "operator": self = .operator
+    default: self = .unknown(rawValue)
+    }
+  }
+
+  var rawValue: String {
+    switch self {
+    case .basic: return "basic"
+    case .plus: return "plus"
+    case .unlimited: return "unlimited"
+    case .unlimitedV2: return "unlimited_v2"
+    case .architect: return "architect"
+    case .pro: return "pro"
+    case .operator: return "operator"
+    case .unknown(let rawValue): return rawValue
+    }
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    self.init(rawValue: try container.decode(String.self))
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    try container.encode(rawValue)
+  }
+
+  /// Copy that is safe to show when the backend sends a plan introduced after this build.
+  var displayName: String {
+    switch self {
+    case .basic: return "Free"
+    case .plus: return "Plus"
+    case .unlimited: return "Neo"
+    case .unlimitedV2: return "Omi Pro"
+    case .architect, .pro: return "Architect"
+    case .operator: return "Operator"
+    case .unknown: return "Plan unavailable"
+    }
+  }
+
+  /// Unknown identities must not be treated as paid until their capabilities are known.
+  var hasPaidCapability: Bool {
+    switch self {
+    case .basic, .unknown: return false
+    case .plus, .unlimited, .unlimitedV2, .architect, .pro, .operator: return true
+    }
+  }
+}
+
+/// Title compatibility for catalogs that predate explicit plan IDs.
+/// Omi Pro is `unlimited_v2`; bare Pro is the retired Operator plan.
+enum SubscriptionPlanNames {
+  static func planId(from title: String) -> String? {
+    let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if normalized.contains("omi pro") { return "unlimited_v2" }
+    if normalized.contains("architect") { return "architect" }
+    if normalized.contains("operator") || normalized == "pro" || normalized.hasPrefix("pro ") {
+      return "operator"
+    }
+    if normalized.contains("plus") { return "plus" }
+    if normalized.contains("neo") || normalized.contains("legacy")
+      || normalized == "unlimited plan" || normalized.hasPrefix("unlimited plan ")
+      || normalized.hasPrefix("omi unlimited")
+    {
+      return "unlimited"
+    }
+    if normalized.contains("unlimited") { return "unlimited_v2" }
+    return nil
+  }
 }
 
 enum SubscriptionStatusType: String, Codable {
@@ -466,6 +560,8 @@ struct SubscriptionPlanOption: Codable, Identifiable {
   let features: [String]
   let prices: [SubscriptionPriceOption]
 
+  var displayTitle: String { SubscriptionPlanType(rawValue: id).displayName }
+
   init(
     id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil,
     features: [String] = [], prices: [SubscriptionPriceOption] = []
@@ -477,6 +573,17 @@ struct SubscriptionPlanOption: Codable, Identifiable {
     self.eyebrow = eyebrow
     self.features = features
     self.prices = prices
+  }
+}
+
+struct TranscriptionAllowanceSnapshot: Codable {
+  let mode: String
+  let remainingSeconds: Int?
+  let reason: String
+
+  enum CodingKeys: String, CodingKey {
+    case mode, reason
+    case remainingSeconds = "remaining_seconds"
   }
 }
 
@@ -492,6 +599,9 @@ struct UserSubscriptionResponse: Codable {
   let memoriesCreatedLimit: Int
   let availablePlans: [SubscriptionPlanOption]
   let showSubscriptionUI: Bool
+  /// Server-resolved allowance for this request, including its validated BYOK headers.
+  /// Nil on older backends; the UI must not infer unlimited STT from a BYOK plan.
+  let transcriptionAllowance: TranscriptionAllowanceSnapshot?
   // Set for Neo subscribers whose current billing period started before the
   // policy change in #7496 — they retain desktop access until this unix-seconds
   // timestamp (their `current_period_end`). Null for everyone else.
@@ -509,13 +619,13 @@ struct UserSubscriptionResponse: Codable {
     case memoriesCreatedLimit = "memories_created_limit"
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
+    case transcriptionAllowance = "transcription_allowance"
     case desktopGrandfatherUntil = "desktop_grandfather_until"
   }
 
   // Defensive decode: only `subscription` is required. The usage counters and
-  // plan catalog default when absent so a backend that's behind on schema
-  // (notably the dev backend the beta channel routes to, which can lag prod or
-  // omit newer fields like `memories_created_used`) doesn't blank the entire
+  // plan catalog default when absent so a backend that's behind on schema and
+  // omits newer fields like `memories_created_used` doesn't blank the entire
   // Plan & Usage page with "Failed to load plan information."
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -530,6 +640,8 @@ struct UserSubscriptionResponse: Codable {
     memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
     availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
     showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
+    transcriptionAllowance = try? c.decodeIfPresent(
+      TranscriptionAllowanceSnapshot.self, forKey: .transcriptionAllowance)
     desktopGrandfatherUntil = try c.decodeIfPresent(Int.self, forKey: .desktopGrandfatherUntil)
   }
 }
@@ -561,6 +673,8 @@ struct UpgradeSubscriptionResponse: Codable {
 
 struct AvailablePlanPriceOption: Codable, Identifiable {
   let id: String
+  /// Backend plan id; older backends omit it and the title is parsed instead.
+  var planId: String? = nil
   let title: String
   let priceString: String
   let description: String?
@@ -573,6 +687,7 @@ struct AvailablePlanPriceOption: Codable, Identifiable {
     case priceString = "price_string"
     case unitAmount = "unit_amount"
     case isActive = "is_active"
+    case planId = "plan_id"
   }
 }
 
@@ -798,22 +913,6 @@ struct SharedAssistantSettingsResponse: Codable {
   }
 }
 
-struct FocusSettingsResponse: Codable {
-  var enabled: Bool?
-  var analysisPrompt: String?
-  var cooldownInterval: Int?
-  var notificationsEnabled: Bool?
-  var excludedApps: [String]?
-
-  enum CodingKeys: String, CodingKey {
-    case enabled
-    case analysisPrompt = "analysis_prompt"
-    case cooldownInterval = "cooldown_interval"
-    case notificationsEnabled = "notifications_enabled"
-    case excludedApps = "excluded_apps"
-  }
-}
-
 struct TaskSettingsResponse: Codable {
   var enabled: Bool?
   var analysisPrompt: String?
@@ -831,24 +930,6 @@ struct TaskSettingsResponse: Codable {
     case notificationsEnabled = "notifications_enabled"
     case allowedApps = "allowed_apps"
     case browserKeywords = "browser_keywords"
-  }
-}
-
-struct InsightSettingsResponse: Codable {
-  var enabled: Bool?
-  var analysisPrompt: String?
-  var extractionInterval: Double?
-  var minConfidence: Double?
-  var notificationsEnabled: Bool?
-  var excludedApps: [String]?
-
-  enum CodingKeys: String, CodingKey {
-    case enabled
-    case analysisPrompt = "analysis_prompt"
-    case extractionInterval = "extraction_interval"
-    case minConfidence = "min_confidence"
-    case notificationsEnabled = "notifications_enabled"
-    case excludedApps = "excluded_apps"
   }
 }
 
@@ -934,17 +1015,14 @@ enum AssistantSettingsJSONValue: Codable, Equatable {
 
 struct AssistantSettingsResponse: Codable {
   var shared: SharedAssistantSettingsResponse?
-  var focus: FocusSettingsResponse?
   var task: TaskSettingsResponse?
-  var insight: InsightSettingsResponse?
   var memory: MemorySettingsResponse?
   var floatingBar: FloatingBarSettingsResponse?
   var updateChannel: String?
   var unknownSections: [String: AssistantSettingsJSONValue]
 
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case shared, focus, task
-    case insight = "advice"
+    case shared, task
     case memory
     case floatingBar = "floating_bar"
     case updateChannel = "update_channel"
@@ -952,18 +1030,14 @@ struct AssistantSettingsResponse: Codable {
 
   init(
     shared: SharedAssistantSettingsResponse? = nil,
-    focus: FocusSettingsResponse? = nil,
     task: TaskSettingsResponse? = nil,
-    insight: InsightSettingsResponse? = nil,
     memory: MemorySettingsResponse? = nil,
     floatingBar: FloatingBarSettingsResponse? = nil,
     updateChannel: String? = nil,
     unknownSections: [String: AssistantSettingsJSONValue] = [:]
   ) {
     self.shared = shared
-    self.focus = focus
     self.task = task
-    self.insight = insight
     self.memory = memory
     self.floatingBar = floatingBar
     self.updateChannel = updateChannel
@@ -973,9 +1047,7 @@ struct AssistantSettingsResponse: Codable {
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     shared = Self.decodeLossy(SharedAssistantSettingsResponse.self, from: container, forKey: .shared)
-    focus = Self.decodeLossy(FocusSettingsResponse.self, from: container, forKey: .focus)
     task = Self.decodeLossy(TaskSettingsResponse.self, from: container, forKey: .task)
-    insight = Self.decodeLossy(InsightSettingsResponse.self, from: container, forKey: .insight)
     memory = Self.decodeLossy(MemorySettingsResponse.self, from: container, forKey: .memory)
     floatingBar = Self.decodeLossy(
       FloatingBarSettingsResponse.self, from: container, forKey: .floatingBar)
@@ -994,9 +1066,7 @@ struct AssistantSettingsResponse: Codable {
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encodeIfPresent(shared, forKey: .shared)
-    try container.encodeIfPresent(focus, forKey: .focus)
     try container.encodeIfPresent(task, forKey: .task)
-    try container.encodeIfPresent(insight, forKey: .insight)
     try container.encodeIfPresent(memory, forKey: .memory)
     try container.encodeIfPresent(floatingBar, forKey: .floatingBar)
     try container.encodeIfPresent(updateChannel, forKey: .updateChannel)
@@ -1034,12 +1104,6 @@ struct AssistantSettingsDynamicCodingKey: CodingKey {
     stringValue = String(intValue)
     self.intValue = intValue
   }
-}
-
-// MARK: - Focus Sessions API
-
-extension APIClient {
-
 }
 
 // MARK: - Insight API

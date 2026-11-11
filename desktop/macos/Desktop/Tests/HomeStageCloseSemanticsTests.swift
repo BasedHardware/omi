@@ -1,0 +1,255 @@
+import XCTest
+
+@testable import Omi_Computer
+
+/// Close-semantics alignment for the redesigned Home stage (home-stage S6
+/// regression): the automation bridge's `home_close_panel` must follow the same
+/// path as Esc / click-outside / the connect × button (collapse to the resting
+/// surface), and the deferred ask-field focus must be fenced so a stale focus
+/// cannot reopen chat.
+///
+/// Behavioral coverage: the bridge assertions run the real
+/// `DesktopAutomationActionRegistry` (the production seam), and the deferred
+/// focus policy itself is unit-tested in `HomeAskFocusPolicyTests`. The
+/// `DashboardPage` assertions below are static-contract tripwires over wiring
+/// that lives in `@State`/`@FocusState` and so cannot be driven without a
+/// booted SwiftUI view — they supplement, not replace, the behavioral coverage.
+@MainActor
+final class HomeStageCloseSemanticsTests: XCTestCase {
+  // MARK: Bridge (production seam — behavioral)
+
+  func testHomeClosePanelIsRegistered() {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let names = Set(registry.descriptors().map(\.name))
+    XCTAssertTrue(names.contains("home_close_panel"))
+  }
+
+  func testHomeClosePanelSummaryAlignsWithUserCollapse() throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let descriptor = try XCTUnwrap(
+      registry.descriptors().first { $0.name == "home_close_panel" })
+
+    XCTAssertTrue(descriptor.summary.contains("resting surface"), descriptor.summary)
+    XCTAssertFalse(
+      descriptor.summary.contains("back to the hub"),
+      "The bridge must not claim a hub jump it no longer performs: \(descriptor.summary)")
+  }
+
+  func testHomeClosePanelPostsStageCloseNotification() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let expectation = self.expectation(
+      forNotification: .homeStageClose, object: nil)
+
+    _ = try await registry.perform("home_close_panel", params: [:])
+
+    await fulfillment(of: [expectation], timeout: 2.0)
+  }
+
+  // MARK: Connect toggle refuses a shell with no stage (production seam — behavioral)
+
+  /// **A bridge action that answers "ok" and does nothing makes every verification that uses it a
+  /// lie.** `home_connect_toggle` did exactly that on the query-shell Home from the moment that
+  /// surface landed: it posted a notification only `DashboardPage` observes, and `DashboardPage` is
+  /// not mounted there. The four sibling `home_*` actions were re-hosted in `QueryShellHome` because
+  /// that surface still owns what they act on; this one has no Connect tray to toggle, so it refuses
+  /// and names the page that does own connectors.
+  ///
+  /// The guard reads `homeMode`, which only the view that renders the stage writes — so the action's
+  /// refusal and the state a flow asserts on can never disagree.
+  func testConnectToggleRefusesAndPostsNothingWhenNoStageIsMounted() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let restore = DesktopAutomationStateStore.shared.current()
+    defer { DesktopAutomationStateStore.shared.update(restore) }
+    _ = DesktopAutomationStateStore.shared.updateLiveFields { $0.homeMode = nil }
+
+    let notPosted = expectation(forNotification: .homeStageToggleConnect, object: nil)
+    notPosted.isInverted = true
+
+    let detail = try await registry.perform("home_connect_toggle", params: [:])
+
+    let error = try XCTUnwrap(detail?["error"], "a shell with no stage must not report success")
+    XCTAssertTrue(
+      error.contains("Apps page"),
+      "the refusal must name the surface that does own connectors: \(error)")
+    await fulfillment(of: [notPosted], timeout: 0.5)
+  }
+
+  /// …and it still drives the real stage where one exists, through the same notification the ask
+  /// bar's Connect button posts. The guard gates the action; it does not retire it.
+  func testConnectToggleStillDrivesTheStageWhenOneIsMounted() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let restore = DesktopAutomationStateStore.shared.current()
+    defer { DesktopAutomationStateStore.shared.update(restore) }
+    _ = DesktopAutomationStateStore.shared.updateLiveFields { $0.homeMode = "hub" }
+
+    let posted = expectation(forNotification: .homeStageToggleConnect, object: nil)
+
+    let detail = try await registry.perform("home_connect_toggle", params: [:])
+
+    XCTAssertNil(detail?["error"], "a mounted stage must not be refused")
+    await fulfillment(of: [posted], timeout: 2.0)
+  }
+
+  // MARK: open_ask_omi reports the chat-first composer (#13201)
+
+  /// `open_ask_omi` used to poll the retired notch composer (`showingAIConversation`), so
+  /// wait=true always timed out and wait=false's triggered=true was a lie. The action now names
+  /// the main-window composer and returns `target=main_chat`.
+  func testOpenAskOmiDescriptorNamesTheMainChatComposer() throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let descriptor = try XCTUnwrap(
+      registry.descriptors().first { $0.name == "open_ask_omi" })
+    XCTAssertTrue(descriptor.summary.contains("main-window composer"), descriptor.summary)
+    XCTAssertTrue(descriptor.summary.contains("quiet"), descriptor.summary)
+    XCTAssertEqual(descriptor.surfaces, ["main_chat"])
+  }
+
+  func testOpenAskOmiWaitFalseReturnsMainChatTarget() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let posted = expectation(forNotification: .homeStageOpenChat, object: nil)
+
+    let detail = try await registry.perform("open_ask_omi", params: ["wait": "false"])
+
+    XCTAssertEqual(detail?["target"], "main_chat")
+    XCTAssertEqual(detail?["triggered"], "true")
+    XCTAssertNotNil(detail?["presentation"])
+    XCTAssertNil(detail?["error"])
+    await fulfillment(of: [posted], timeout: 2.0)
+  }
+
+  /// Quiet must not be reported as a focus timeout. A timeout made every harness wait
+  /// indistinguishable from an expand regression (#13201).
+  func testOpenAskOmiUnderQuietDoesNotTimeOutOrExitQuiet() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let previous = DesktopAutomationWindowPresentation.currentMode
+    defer { DesktopAutomationWindowPresentation.setMode(previous) }
+    _ = DesktopAutomationWindowPresentation.setMode(.quiet)
+    // The composer counts as presented only once the Chat destination has
+    // mounted and acknowledged (`markRouteVisible` from its `onAppear`).
+    let navigation = ChatFirstShellNavigation.shared
+    navigation.selectMore(.rewind)
+    navigation.selectPrimary(.chat, origin: .chatDeeplink)
+    navigation.markRouteVisible(.chat)
+    XCTAssertTrue(OpenAskOmiAutomation.isComposerPresented(navigation))
+
+    let detail = try await registry.perform("open_ask_omi", params: ["wait": "true"])
+
+    XCTAssertEqual(DesktopAutomationWindowPresentation.currentMode, .quiet)
+    XCTAssertEqual(detail?["target"], "main_chat")
+    XCTAssertEqual(detail?["presentation"], "quiet")
+    XCTAssertNotEqual(detail?["openMs"], "timeout")
+    XCTAssertNil(
+      detail?["focusMs"],
+      "quiet omits the focus field entirely; it must not be reported as a focus timeout")
+    XCTAssertEqual(detail?["focused"], "false")
+  }
+
+  /// A navigation command is not a mount: `selectPrimary` sets `route` before SwiftUI mounts
+  /// Chat, so until `markRouteVisible` fires the composer is not presented and `wait=true`
+  /// must report an honest timeout instead of an instant `openMs` for a composer that is not
+  /// on screen yet.
+  func testOpenAskOmiWaitTrueTimesOutUntilChatMountAcknowledges() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let navigation = ChatFirstShellNavigation.shared
+    navigation.selectMore(.rewind)
+    navigation.markRouteVisible(.more(.rewind))
+    XCTAssertFalse(OpenAskOmiAutomation.isComposerPresented(navigation))
+
+    let detail = try await registry.perform("open_ask_omi", params: ["wait": "true"])
+
+    XCTAssertEqual(navigation.route, .chat, "the navigation command must still be issued")
+    XCTAssertNil(navigation.visibleRoute, "the destination has not mounted in the test host")
+    XCTAssertEqual(detail?["openMs"], "timeout")
+    XCTAssertEqual(detail?["error"], "main_chat_composer_not_presented")
+
+    // Once the destination acknowledges the mount — as its `onAppear` does in
+    // the real shell — the composer is presented.
+    navigation.markRouteVisible(.chat)
+    XCTAssertTrue(OpenAskOmiAutomation.isComposerPresented(navigation))
+  }
+
+  func testOpenAskOmiRequestSelectsChatWithoutReveal() throws {
+    let suiteName = "HomeStageCloseSemanticsTests.open-ask-omi.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    navigation.selectMore(.settings)
+    navigation.markRouteVisible(.more(.settings))
+    XCTAssertNotEqual(navigation.route, .chat)
+
+    OpenAskOmiAutomation.requestComposer(navigation: navigation, ensureWindow: false)
+
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertNil(navigation.visibleRoute, "a navigation command is not a mount")
+    XCTAssertFalse(OpenAskOmiAutomation.isComposerPresented(navigation))
+    // Presented only after the mounted destination acknowledges, as the real
+    // Chat destination's `onAppear` does via `markRouteVisible`.
+    navigation.markRouteVisible(.chat)
+    XCTAssertTrue(OpenAskOmiAutomation.isComposerPresented(navigation))
+  }
+
+  /// CI's XCTest host has no NSApplication. Focus and ensure-window must not
+  /// touch `NSApp.windows` (IUO crash) or create `NSApplication.shared`.
+  func testOpenAskOmiStaysNilSafeWithoutNSApplication() throws {
+    let suiteName = "HomeStageCloseSemanticsTests.open-ask-omi-nil-app.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    navigation.selectPrimary(.chat, origin: .chatDeeplink)
+    navigation.markRouteVisible(.chat)
+    XCTAssertTrue(OpenAskOmiAutomation.isComposerPresented(navigation))
+    XCTAssertFalse(OpenAskOmiAutomation.isComposerFocused(navigation))
+    OpenAskOmiAutomation.requestComposer(navigation: navigation, ensureWindow: true)
+    XCTAssertEqual(navigation.route, .chat)
+  }
+
+  func testOpenAskOmiContractOmitsFocusTimeoutWhenQuietBlocksFocus() {
+    let detail = OpenAskOmiAutomation.detail(
+      wait: true,
+      presentation: .quiet,
+      presented: true,
+      focused: false,
+      openMs: "1.2"
+    )
+    XCTAssertEqual(detail["target"], "main_chat")
+    XCTAssertEqual(detail["presentation"], "quiet")
+    XCTAssertEqual(detail["focused"], "false")
+    XCTAssertEqual(detail["openMs"], "1.2")
+    XCTAssertNil(detail["focusMs"])
+    XCTAssertNil(detail["error"])
+  }
+
+  /// `close_ask_omi` still closes the floating panel, but when the chat-first composer is
+  /// presented it must not let a paired flow read a floating-bar-only result as "Ask Omi
+  /// closed": the main-chat composer is the resting Chat surface and has no close.
+  func testCloseAskOmiDisclosesMainChatRestingSurfaceWhenPresented() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let navigation = ChatFirstShellNavigation.shared
+    navigation.selectMore(.rewind)
+    navigation.markRouteVisible(.more(.rewind))
+
+    let floatingOnly = try await registry.perform("close_ask_omi", params: ["wait": "false"])
+    XCTAssertNil(floatingOnly?["mainChatPresented"])
+    XCTAssertNil(floatingOnly?["mainChatClosed"])
+
+    navigation.selectPrimary(.chat, origin: .chatDeeplink)
+    navigation.markRouteVisible(.chat)
+
+    let detail = try await registry.perform("close_ask_omi", params: ["wait": "false"])
+    XCTAssertEqual(detail?["mainChatPresented"], "true")
+    XCTAssertEqual(detail?["mainChatClosed"], "false")
+  }
+
+  // MARK: Flow (static contract over DashboardPage wiring)
+
+}

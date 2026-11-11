@@ -6,7 +6,8 @@ import PackageDescription
 let package = Package(
     name: "omi-lib",
     platforms: [
-        .iOS(.v17)  // Set minimum version to iOS 17
+        .iOS(.v17),  // Set minimum version to iOS 17
+        .macOS(.v14)  // SwiftData parity with iOS 17; AudioKit needs macOS 11+
     ],
     products: [
         .library(
@@ -29,9 +30,15 @@ let package = Package(
                 .product(name: "AudioKit", package: "AudioKit"),
             ],
             path: "sdks/swift",  // Correct the path to your source files
+            exclude: ["Tests", "README.md"],
             resources: [
                 .process("Sources/omi-lib/Resources")  // Make sure this resource is in the correct directory
             ]
+        ),
+        .testTarget(
+            name: "omi-libTests",
+            dependencies: ["omi-lib"],
+            path: "sdks/swift/Tests"
         ),
     ]
 )

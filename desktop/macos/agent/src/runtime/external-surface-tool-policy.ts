@@ -19,6 +19,8 @@ export type ExternalSurfaceToolPolicyDecision =
       | "permission_route_rejected"
       | "permission_request_not_authorized"
       | "pill_management_intent_required"
+      | "memory_save_not_authorized"
+      | "memory_content_not_in_user_request"
       | "sql_write_rejected";
     message: string;
   };
@@ -40,6 +42,14 @@ const PERMISSION_TYPES: ReadonlyArray<{ type: string; phrases: readonly string[]
   { type: "accessibility", phrases: ["accessibility permission", "accessibility access"] },
   { type: "automation", phrases: ["automation permission", "automation access"] },
   { type: "full_disk_access", phrases: ["full disk access"] },
+  // The device tool surface advertises these four in request_permission and
+  // names them in its failure hints. Without an entry here the request is
+  // rejected as permission_route_rejected before it reaches Swift, so the
+  // recovery path the tools point the model at could never be taken.
+  { type: "contacts", phrases: ["contacts permission", "contacts access", "address book"] },
+  { type: "calendars", phrases: ["calendar permission", "calendars permission", "calendar access"] },
+  { type: "reminders", phrases: ["reminders permission", "reminders access"] },
+  { type: "photos", phrases: ["photos permission", "photo library", "photos access"] },
 ];
 
 const PERMISSION_CAPABILITY_SUBJECTS = new Set([
@@ -70,7 +80,28 @@ const PERMISSION_CAPABILITY_SUBJECTS = new Set([
   "automation access",
   "full disk access",
   "full disk access permission",
+  "contacts",
+  "contacts permission",
+  "contacts access",
+  "address book",
+  "calendars",
+  "calendar permission",
+  "calendars permission",
+  "calendar access",
+  "reminders",
+  "reminders permission",
+  "reminders access",
+  "photos",
+  "photo library",
+  "photos permission",
+  "photos access",
 ]);
+
+const PERMISSION_PHRASE_PATTERN = PERMISSION_TYPES
+  .flatMap(({ phrases }) => phrases)
+  .sort((left, right) => right.length - left.length)
+  .map((phrase) => phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  .join("|");
 
 const DIRECTED_PROVIDER_TARGETS = [
   { provider: "openclaw" as const, pattern: "(?:open\\s*claw|open\\s*cloud)" },
@@ -144,6 +175,22 @@ export function routeExternalSurfaceTool(
       code: "pill_management_intent_required",
       message: "Dismissing or restoring a desktop agent pill requires explicit current-turn pill-management intent",
     };
+  }
+  if (input.toolName === "create_memory") {
+    if (!hasExplicitMemorySaveIntent(input.originatingPrompt)) {
+      return {
+        action: "reject",
+        code: "memory_save_not_authorized",
+        message: "Saving a memory requires an explicit affirmative current-turn request such as 'remember this' or 'save this'",
+      };
+    }
+    if (!hasMemoryContentGroundedInUserRequest(input.toolInput, input.originatingPrompt)) {
+      return {
+        action: "reject",
+        code: "memory_content_not_in_user_request",
+        message: "Memory content must be grounded in the current user request; inferred or unrelated content is not authorized",
+      };
+    }
   }
   if (input.toolName !== "spawn_agent") {
     return { action: "execute", toolName: input.toolName, toolInput: input.toolInput, recoveredFromDelegation: false };
@@ -324,6 +371,127 @@ export function hasExplicitPillManagementIntent(prompt: string): boolean {
   return target && action;
 }
 
+/**
+ * Memory writes are model-proposed effects, so the current user turn must
+ * contain its own affirmative remember/save command. A fact merely stated in
+ * context, a question about whether to save, or a negative instruction is not
+ * authorization; an assistant suggestion cannot authorize the write either.
+ */
+const MEMORY_GROUNDING_STOP_WORDS = new Set([
+  "a", "an", "and", "as", "at", "be", "been", "being", "but", "for", "from", "had", "has",
+  "have", "hey", "i", "im", "in", "is", "it", "me", "my", "of", "on", "or", "please", "that",
+  "the", "this", "to", "was", "were", "with", "you", "your",
+  "keep", "remember", "save", "store",
+]);
+
+/**
+ * The desktop chat runtime prefixes every run input with a machine-generated
+ * clock preamble (ChatPrompts.currentTimePrompt: "# Current Time\n<iso>
+ * (<tz>)\n\n"). Authorization must judge the raw current user turn that
+ * follows it, so strip exactly that prefix and nothing else; any other
+ * leading text is treated as user text.
+ */
+const RUNTIME_CLOCK_PREAMBLE_PATTERN = /^# Current Time\n[^\n]*\n\n/;
+
+export function hasExplicitMemorySaveIntent(prompt: string): boolean {
+  const text = prompt.replace(RUNTIME_CLOCK_PREAMBLE_PATTERN, "").toLowerCase().trim();
+  if (!text) return false;
+
+  // Keep these patterns identical to ChatToolExecutor.isExplicitMemorySaveIntent.
+  // Shared cases live in tests/fixtures/memory-save-intent-corpus.json.
+  const negativePattern =
+    /(?:\b(?:don't|do not|never|no longer|without|not to)\b[^.!?]{0,96}\b(?:remember|save|store|keep)\b|\b(?:remember|save|store|keep)\b[^.!?]{0,96}\b(?:not|never)\b)/;
+  if (negativePattern.test(text)) return false;
+
+  if (text.includes("?")) {
+    const politeCommand = /\bplease\b[^.!?]*\b(?:remember|save|store|keep)\b/.test(text)
+      || /^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b/.test(text);
+    if (!politeCommand && /\b(?:remember|save|store|keep)\b/.test(text)) return false;
+  }
+
+  const passiveMentionPattern =
+    /\b(?:should|could|would)\s+(?:remember|save|store|keep)\b|\b(?:ability|able)\s+to\s+(?:remember|save|store|keep)\b/;
+  if (passiveMentionPattern.test(text)) return false;
+
+  const thirdPartyCommandPattern =
+    /\b(?:ask|tell|have|get|let|want|need)\s+(?!you\b)\w+(?:\s+\w+){0,2}\s+to\s+(?:remember|save|store|keep)\b/;
+  if (thirdPartyCommandPattern.test(text)) return false;
+
+  const directCommandPattern = /^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b/;
+  const sentenceCommandPattern = /(?:^|[.!?,;]\s+)(?:please\s+)?(?:remember|save|store|keep)\b/;
+  const delegatedCommandPattern = /\b(?:want|need|ask)\s+(?:you\s+)?to\s+(?:please\s+)?(?:remember|save|store|keep)\b/;
+  const rememberThatCommandPattern = /(?:^|[.!?,;]\s+)(?:please\s+)?remember\s+that\b/;
+  const anaphoricCommandPattern =
+    /\b(?:remember|save|store|keep)\s+(?:this|it|my|our|the following)\b/;
+  const memoryPhrasePattern =
+    /\b(?:add this to memory|create a memory|make this a memory|save to memory|save as a memory|store(?:\s+this)? in memory|keep in mind(?:\s+that)?)\b/;
+  const hasCommand = directCommandPattern.test(text)
+    || sentenceCommandPattern.test(text)
+    || delegatedCommandPattern.test(text)
+    || rememberThatCommandPattern.test(text)
+    || anaphoricCommandPattern.test(text)
+    || memoryPhrasePattern.test(text);
+  if (!hasCommand) return false;
+  return !/\b(?:i|we|you|they)\s+(?:remember|save|store|keep)\b/.test(text);
+}
+
+/**
+ * Memory writes may paraphrase the user's fact, but the content must still be
+ * grounded in this turn. Verbatim spans pass; anaphoric-only commands ("remember
+ * this") carry no extractable fact here; otherwise a meaningful token overlap is
+ * required so invented facts cannot ride explicit save intent.
+ */
+export function hasMemoryContentGroundedInUserRequest(
+  toolInput: Record<string, unknown>,
+  originatingPrompt: string,
+): boolean {
+  const content = normalizeMemoryText(textField(toolInput, "content"));
+  const prompt = normalizeMemoryText(originatingPrompt);
+  if (!content || !prompt) return false;
+  if (` ${prompt} `.includes(` ${content} `)) return true;
+  if (isAnaphoricOnlyMemoryCommand(originatingPrompt)) return true;
+
+  const contentTokens = memoryGroundingTokens(textField(toolInput, "content"));
+  if (contentTokens.length === 0) return false;
+  const promptTokenSet = new Set(memoryGroundingTokens(originatingPrompt));
+  const overlap = contentTokens.filter((token) => promptTokenSet.has(token));
+  const required = contentTokens.length <= 2
+    ? 1
+    : Math.max(2, Math.ceil(contentTokens.length * 0.5));
+  return overlap.length >= required;
+}
+
+function isAnaphoricOnlyMemoryCommand(prompt: string): boolean {
+  const text = prompt.toLowerCase().trim();
+  const hasDeicticCommand = /\b(?:remember|save|store|keep)\s+(?:this|that|it)\b/.test(text)
+    || /\b(?:add this to memory|make this a memory)\b/.test(text);
+  if (!hasDeicticCommand) return false;
+  return memoryGroundingTokens(stripMemoryCommandPhrases(text)).length < 2;
+}
+
+function stripMemoryCommandPhrases(text: string): string {
+  return text
+    .replace(/^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b[:\s]*/i, "")
+    .replace(/\b(?:want|need|ask)\s+you\s+to\s+(?:please\s+)?(?:remember|save|store|keep)\b[:\s]*/gi, "")
+    .replace(/\b(?:remember|save|store|keep)\s+(?:that|this|it|my|our|the following)\b[:\s,]*/gi, "")
+    .replace(
+      /\b(?:add this to memory|create a memory|make this a memory|save to memory|save as a memory|store(?:\s+this)? in memory|keep in mind(?:\s+that)?)\b[:\s]*/gi,
+      "",
+    )
+    .trim();
+}
+
+function memoryGroundingTokens(value: string): string[] {
+  return normalizeMemoryText(value)
+    .split(" ")
+    .filter((token) => token.length > 1 && !MEMORY_GROUNDING_STOP_WORDS.has(token));
+}
+
+function normalizeMemoryText(value: string): string {
+  const words = value.normalize("NFKC").toLowerCase().replace(/[\p{P}\s]+/gu, " ").trim();
+  return words;
+}
+
 function permissionRequest(text: string): { toolName: "check_permission_status" | "request_permission"; type: string } | null {
   const normalized = text.toLowerCase();
   const permission = PERMISSION_TYPES.find(({ phrases }) => phrases.some((phrase) => normalized.includes(phrase)));
@@ -355,10 +523,10 @@ function hasExplicitExternalPermissionTarget(
   for (const narrative of [originatingPrompt, objective]) {
     const normalized = narrative.toLowerCase();
     const candidates = [
-      ...captures(normalized, /\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)['’]s\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
-      ...captures(normalized, /\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)\s+needs\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
-      ...captures(normalized, /\b(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)(?:\s+permissions?|\s+access)?\s+for\s+([a-z0-9._ -]+?)(?:[?.!,]|$)/g),
-      ...captures(normalized, /\b(?:grant|allow|enable|give|check)\s+([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
+      ...captures(normalized, new RegExp(`\\b([a-z0-9._-]+(?:\\s+[a-z0-9._-]+)?)['’]s\\s+(?:${PERMISSION_PHRASE_PATTERN})\\b`, "g")),
+      ...captures(normalized, new RegExp(`\\b([a-z0-9._-]+(?:\\s+[a-z0-9._-]+)?)\\s+needs\\s+(?:${PERMISSION_PHRASE_PATTERN})\\b`, "g")),
+      ...captures(normalized, new RegExp(`\\b(?:${PERMISSION_PHRASE_PATTERN})(?:\\s+permissions?|\\s+access)?\\s+for\\s+([a-z0-9._ -]+?)(?:[?.!,]|$)`, "g")),
+      ...captures(normalized, new RegExp(`\\b(?:grant|allow|enable|give|check)\\s+([a-z0-9._-]+(?:\\s+[a-z0-9._-]+)?)\\s+(?:${PERMISSION_PHRASE_PATTERN})\\b`, "g")),
     ];
     for (const candidate of candidates) {
       const cleaned = normalizeTarget(candidate);

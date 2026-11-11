@@ -1,0 +1,50 @@
+// Electron wiring for the backend-mediated provider sign-in flow. The actual
+// flow (loopback listener, authorize URL, token exchange) lives in
+// src/main/auth/signInFlow.ts and is Electron-free; this file supplies
+// the browser opener, file logging, and window surfacing.
+import { app, ipcMain, shell } from 'electron'
+import { appendFileSync } from 'fs'
+import { join } from 'path'
+import { startSignIn } from '../auth/signInFlow'
+import type { SignInProvider, SignInResult } from '../../shared/types'
+
+// Main-process console.log only reaches the dev-server terminal, which is easy
+// to miss. Also append to userData/sign-in.log so a failed field sign-in
+// can be traced after the fact (same pattern as integrations/oauth.ts).
+function authLog(msg: string, extra?: unknown): void {
+  const line = `[${new Date().toISOString()}] ${msg}${extra !== undefined ? ' ' + JSON.stringify(extra) : ''}`
+  console.log('[sign-in]', line)
+  try {
+    appendFileSync(join(app.getPath('userData'), 'sign-in.log'), line + '\n')
+  } catch {
+    /* best-effort logging only */
+  }
+}
+
+function apiBase(): string {
+  return import.meta.env.VITE_OMI_API_BASE || 'https://api.omi.me'
+}
+
+/**
+ * Register the auth IPC. `onSignedIn` surfaces the main window after the
+ * loopback callback lands (the browser holds foreground focus at that point —
+ * see index.ts for the focus-steal implementation).
+ */
+export function registerAuthHandlers(onSignedIn: () => void): void {
+  ipcMain.handle('auth:signIn', async (_event, provider: unknown): Promise<SignInResult> => {
+    if (provider !== 'google' && provider !== 'apple') {
+      return { ok: false, error: 'Unsupported sign-in provider' }
+    }
+    authLog(`${provider} sign-in requested`)
+    const result = await startSignIn(provider as SignInProvider, {
+      apiBase: apiBase(),
+      openExternal: (url) => shell.openExternal(url),
+      log: authLog
+    })
+    if (result.ok) {
+      authLog(`${provider} sign-in complete — surfacing window`)
+      onSignedIn()
+    }
+    return result
+  })
+}

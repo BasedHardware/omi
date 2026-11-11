@@ -2,10 +2,36 @@ import Foundation
 
 protocol ImportEvidenceBatchCreating {
   func createMemoryImportBatch(_ batch: ImportEvidenceBatch) async throws -> ImportEvidenceBatchResponse
+  func createMemoryImportBatch(
+    _ batch: ImportEvidenceBatch,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> ImportEvidenceBatchResponse
 }
 
 protocol MemoryBatchCreating {
   func createMemoriesBatch(_ memories: [MemoryBatchItem]) async throws -> BatchMemoriesResponse
+  func createMemoriesBatch(
+    _ memories: [MemoryBatchItem],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> BatchMemoriesResponse
+}
+
+extension ImportEvidenceBatchCreating {
+  func createMemoryImportBatch(
+    _ batch: ImportEvidenceBatch,
+    authorizationSnapshot _: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> ImportEvidenceBatchResponse {
+    try await createMemoryImportBatch(batch)
+  }
+}
+
+extension MemoryBatchCreating {
+  func createMemoriesBatch(
+    _ memories: [MemoryBatchItem],
+    authorizationSnapshot _: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> BatchMemoriesResponse {
+    try await createMemoriesBatch(memories)
+  }
 }
 
 extension APIClient: ImportEvidenceBatchCreating {}
@@ -21,11 +47,12 @@ enum OnboardingImportEvidenceService {
     importRunId: String? = nil,
     sourceAccountHash: String? = nil,
     legacyMemories: [MemoryBatchItem]? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     apiClient: ImportEvidenceBatchCreating = APIClient.shared,
     legacyApiClient: MemoryBatchCreating = APIClient.shared,
     sleep: @escaping (UInt64) async -> Void = sleepSeconds
   ) async -> (saved: Int, failed: Int) {
-    guard !artifacts.isEmpty else { return (0, 0) }
+    guard !artifacts.isEmpty, isAuthorized(authorizationSnapshot) else { return (0, 0) }
 
     let importRunId = importRunId ?? Self.newImportRunId(sourceType: sourceType)
     let artifacts = withClientDeviceProvenance(artifacts)
@@ -34,6 +61,7 @@ enum OnboardingImportEvidenceService {
     var failed = 0
 
     for chunk in chunks {
+      guard isAuthorized(authorizationSnapshot) else { return (saved, failed) }
       do {
         let response = try await createChunkWithRetry(
           chunk,
@@ -42,8 +70,10 @@ enum OnboardingImportEvidenceService {
           sourceAccountHash: sourceAccountHash,
           logPrefix: logPrefix,
           apiClient: apiClient,
+          authorizationSnapshot: authorizationSnapshot,
           sleep: sleep
         )
+        guard isAuthorized(authorizationSnapshot) else { return (saved, failed) }
         saved += response.artifactsCreated + response.artifactsDeduped
         failed += max(0, chunk.count - response.artifactsReceived)
       } catch {
@@ -52,6 +82,7 @@ enum OnboardingImportEvidenceService {
           return await OnboardingMemoryBatchImportService.save(
             legacyMemories,
             logPrefix: logPrefix,
+            authorizationSnapshot: authorizationSnapshot,
             apiClient: legacyApiClient,
             sleep: sleep
           )
@@ -88,19 +119,22 @@ enum OnboardingImportEvidenceService {
     sourceAccountHash: String?,
     logPrefix: String,
     apiClient: ImportEvidenceBatchCreating,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     sleep: @escaping (UInt64) async -> Void
   ) async throws -> ImportEvidenceBatchResponse {
     var lastError: Error?
 
     for attempt in 0...retryBackoffSeconds.count {
       do {
+        guard isAuthorized(authorizationSnapshot) else { throw AuthError.userChangedDuringRequest }
         return try await apiClient.createMemoryImportBatch(
           ImportEvidenceBatch(
             sourceType: sourceType,
             importRunId: importRunId,
             sourceAccountHash: sourceAccountHash,
             items: chunk
-          )
+          ),
+          authorizationSnapshot: authorizationSnapshot
         )
       } catch {
         lastError = error
@@ -142,6 +176,11 @@ enum OnboardingImportEvidenceService {
     try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
   }
 
+  private static func isAuthorized(_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?) -> Bool {
+    !Task.isCancelled
+      && (authorizationSnapshot.map(RuntimeOwnerIdentity.isAuthorizationCurrent) ?? true)
+  }
+
   private static func isLegacyMemorySystemError(_ error: Error) -> Bool {
     guard case APIError.httpError(let statusCode, let detail) = error else { return false }
     if statusCode == 403 && detail == "memory_import_requires_canonical" { return true }
@@ -166,23 +205,27 @@ enum OnboardingMemoryBatchImportService {
   static func save(
     _ memories: [MemoryBatchItem],
     logPrefix: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     apiClient: MemoryBatchCreating = APIClient.shared,
     sleep: @escaping (UInt64) async -> Void = sleepSeconds
   ) async -> (saved: Int, failed: Int) {
-    guard !memories.isEmpty else { return (0, 0) }
+    guard !memories.isEmpty, isAuthorized(authorizationSnapshot) else { return (0, 0) }
 
     let chunks = memories.chunked(maxSize: APIClient.memoriesBatchMaxSize)
     var saved = 0
     var failed = 0
 
     for chunk in chunks {
+      guard isAuthorized(authorizationSnapshot) else { return (saved, failed) }
       do {
         let response = try await createChunkWithRetry(
           chunk,
           logPrefix: logPrefix,
           apiClient: apiClient,
+          authorizationSnapshot: authorizationSnapshot,
           sleep: sleep
         )
+        guard isAuthorized(authorizationSnapshot) else { return (saved, failed) }
         saved += response.createdCount
         failed += max(0, chunk.count - response.createdCount)
       } catch {
@@ -198,13 +241,17 @@ enum OnboardingMemoryBatchImportService {
     _ chunk: [MemoryBatchItem],
     logPrefix: String,
     apiClient: MemoryBatchCreating,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     sleep: @escaping (UInt64) async -> Void
   ) async throws -> BatchMemoriesResponse {
     var lastError: Error?
 
     for attempt in 0...retryBackoffSeconds.count {
       do {
-        return try await apiClient.createMemoriesBatch(chunk)
+        guard isAuthorized(authorizationSnapshot) else { throw AuthError.userChangedDuringRequest }
+        return try await apiClient.createMemoriesBatch(
+          chunk,
+          authorizationSnapshot: authorizationSnapshot)
       } catch {
         lastError = error
         guard shouldRetry(error), attempt < retryBackoffSeconds.count else {
@@ -243,6 +290,11 @@ enum OnboardingMemoryBatchImportService {
 
   private static func sleepSeconds(_ seconds: UInt64) async {
     try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+  }
+
+  private static func isAuthorized(_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?) -> Bool {
+    !Task.isCancelled
+      && (authorizationSnapshot.map(RuntimeOwnerIdentity.isAuthorizationCurrent) ?? true)
   }
 }
 

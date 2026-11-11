@@ -1,29 +1,17 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import {
-  House,
-  GanttChartSquare,
-  ListChecks,
-  LayoutGrid,
-  History,
-  Monitor,
-  Mic,
-  PanelLeftClose,
-  PanelLeftOpen
-} from 'lucide-react'
+import { Monitor, Mic, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
 import { cn } from '../../lib/utils'
+import { Orb } from '../orb/Orb'
+import { navRoutes, isNavActive } from '../../routes/manifest'
 import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
 
-const navItems = [
-  { label: 'Home', to: '/home', Icon: House },
-  { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
-  { label: 'Tasks', to: '/tasks', Icon: ListChecks },
-  { label: 'Rewind', to: '/rewind', Icon: History },
-  { label: 'Apps', to: '/apps', Icon: LayoutGrid }
-]
+// The nav rail is driven off the shared route manifest (routes/manifest.ts) — the
+// same source MainViews renders from — so adding a page is one manifest entry, not
+// an edit here. isNavActive covers the /goals -> Tasks legacy alias.
 
 const COLLAPSE_KEY = 'omi.sidebar.collapsed'
 
@@ -51,6 +39,9 @@ export function Sidebar(): React.JSX.Element {
 
   useEffect(() => {
     void window.omi.rewindGetSettings().then(setRewind)
+    // The Hub's capture pill toggles the same setting and is on screen at the same
+    // time as this one — subscribe so they can't drift apart.
+    return window.omi.onRewindSettings(setRewind)
   }, [])
 
   const email = user?.email
@@ -72,7 +63,7 @@ export function Sidebar(): React.JSX.Element {
   }
 
   // Microphone = always-on listening. The toggle reflects the `continuousRecording`
-  // preference; flipping it starts/stops the background ContinuousRecordingHost
+  // preference; flipping it starts/stops the capture window's ContinuousSessionHost
   // (which streams the mic to /v4/listen). Viewing the live transcript is a SEPARATE
   // affordance (the "New" button in Conversations / opening a conversation row) —
   // this switch only turns listening on and off.
@@ -132,8 +123,8 @@ export function Sidebar(): React.JSX.Element {
         >
           <span
             className={cn(
-              'absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all duration-200',
-              on ? 'left-3.5' : 'left-0.5'
+              'absolute top-0.5 h-3 w-3 rounded-full transition-all duration-200',
+              on ? 'left-3.5 bg-[color:var(--accent-contrast)]' : 'left-0.5 bg-white'
             )}
           />
         </span>
@@ -144,21 +135,48 @@ export function Sidebar(): React.JSX.Element {
   return (
     <nav
       className={cn(
-        'slide-in-left relative z-50 flex h-full shrink-0 flex-col border-r border-white/10 bg-[#0a0a0a] px-2 py-3',
+        'slide-in-left relative z-50 flex h-full shrink-0 flex-col border-r border-line px-2 py-3',
         'transition-[width] duration-200 ease-out',
         collapsed ? 'w-16' : 'w-60'
       )}
     >
-      {/* Top row: logo (left, fades out) + collapse toggle pinned right. */}
-      <div className="flex items-center justify-between px-1.5 py-1">
-        <img
-          src="https://personas.omi.me/omilogo.png"
-          alt="omi"
-          className={cn(
-            'h-4 shrink-0 overflow-hidden transition-opacity duration-200',
-            collapsed ? 'pointer-events-none w-0 opacity-0' : 'w-auto opacity-100'
-          )}
-        />
+      {/* Top row: orb + logo (left, logo fades out when collapsed) + collapse
+          toggle pinned right. The orb is the same component the bar mounts, but
+          here it's the resting brand logo ONLY — pinned to the calm idle pose
+          with its slow step-rest spin (user, 2026-07-12: the in-app logo should
+          NOT mirror the bar's activity, just the regular slow-spin logo).
+
+          Collapsed rail (w-16): the 22px orb and the ~28px collapse button can't
+          sit side-by-side in the ~36px of header content width — the fixed-width
+          orb canvas would overflow under the button. So when collapsed we stack
+          them vertically (flex-col) with each on its own row, both centered by the
+          base `items-center` (cross-axis in a column). Expanded stays a justified
+          row, pixel-identical to before. */}
+      <div
+        className={cn(
+          // Tuck the brand toward the true top-left. `-mt-1` lifts the header
+          // ~4px closer under the drag strip; when expanded, `-ml-1.5` pulls the
+          // row ~6px left into the nav's px-2 so the orb sits ~8px from the edge
+          // (was ~14/16px). Only the left group moves — the collapse button
+          // keeps its right inset, and the nav items below keep their left
+          // rhythm (nav wrapper padding is untouched). Collapsed rail stays
+          // center-aligned (no `-ml` there).
+          'flex items-center px-1.5 py-1 -mt-1',
+          collapsed ? 'flex-col gap-2' : 'justify-between -ml-1.5'
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Orb size={22} preset="compact" state="idle" />
+          {/* Wordmark as text (crisp at every DPI, no network fetch). */}
+          <span
+            className={cn(
+              'shrink-0 select-none overflow-hidden text-[15px] font-semibold lowercase tracking-tight text-white transition-opacity duration-200',
+              collapsed ? 'pointer-events-none w-0 opacity-0' : 'w-auto opacity-100'
+            )}
+          >
+            omi
+          </span>
+        </div>
         <button
           onClick={() => setCollapsed((c) => !c)}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -176,38 +194,43 @@ export function Sidebar(): React.JSX.Element {
         </button>
       </div>
 
-      <div className="my-2 h-px w-full bg-white/10" />
+      <div className="my-2 h-px w-full bg-white/[0.07]" />
 
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
-        {navItems.map(({ label: text, to, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            title={collapsed ? text : undefined}
-            className={({ isActive }) =>
-              linkClass(isActive || (to === '/tasks' && pathname === '/goals'))
-            }
-          >
-            {({ isActive }) => {
-              const active = isActive || (to === '/tasks' && pathname === '/goals')
-              return (
-                <>
-                  <Icon
-                    className={cn(
-                      'h-4 w-4 shrink-0 transition-colors duration-150',
-                      active ? 'text-[color:var(--accent)]' : 'text-white/50'
-                    )}
-                    strokeWidth={1.75}
-                  />
-                  {label(text)}
-                </>
-              )
-            }}
-          </NavLink>
-        ))}
+        {navRoutes().map((entry) => {
+          const nav = entry.nav
+          if (!nav || !entry.path) return null
+          const to = entry.path
+          const text = nav.label
+          const Icon = nav.Icon
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              title={collapsed ? text : undefined}
+              className={({ isActive }) => linkClass(isActive || isNavActive(entry, pathname))}
+            >
+              {({ isActive }) => {
+                const active = isActive || isNavActive(entry, pathname)
+                return (
+                  <>
+                    <Icon
+                      className={cn(
+                        'h-4 w-4 shrink-0 transition-colors duration-150',
+                        active ? 'text-[color:var(--accent)]' : 'text-white/50'
+                      )}
+                      strokeWidth={1.75}
+                    />
+                    {label(text)}
+                  </>
+                )
+              }}
+            </NavLink>
+          )
+        })}
       </div>
 
-      <div className="my-2 h-px w-full bg-white/10" />
+      <div className="my-2 h-px w-full bg-white/[0.07]" />
 
       {/* Quick capture toggles, sitting just above the account row. */}
       <div className="flex flex-col gap-1">
@@ -215,7 +238,7 @@ export function Sidebar(): React.JSX.Element {
         {toggleRow('Microphone', Mic, micOn, toggleMic)}
       </div>
 
-      <div className="my-2 h-px w-full bg-white/10" />
+      <div className="my-2 h-px w-full bg-white/[0.07]" />
 
       {/* Account row → opens Settings (Sign out now lives in Settings). */}
       <NavLink
@@ -229,7 +252,7 @@ export function Sidebar(): React.JSX.Element {
           )
         }
       >
-        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10">
+        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full border border-line">
           <img
             src={photoURL ?? ''}
             alt=""

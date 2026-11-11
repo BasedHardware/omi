@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
 from __future__ import annotations
 
 import argparse
@@ -10,7 +12,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from utils.memory.v3.archive_visibility_readiness import evaluate_archive_short_term_visibility_readiness
+from scripts.archive_visibility_readiness import evaluate_archive_short_term_visibility_readiness
 
 
 def main() -> int:
