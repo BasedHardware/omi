@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+vi.mock('../../lib/analytics', () => ({ trackPurchaseEvent: vi.fn() }))
 import type { ChatUsageQuota } from '../../lib/omiApi.generated'
 import { createChatQuotaGate } from '../../lib/chatQuotaGate'
 import { createBarSender } from './barSend'

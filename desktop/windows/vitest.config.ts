@@ -1,9 +1,10 @@
 import { defineConfig, type Plugin } from 'vitest/config'
-import { loadEnv } from 'vite'
 import { dirname, resolve } from 'path'
 
-// Real values when the developer has a .env; empty strings in CI, which has none.
-const localEnv = loadEnv('test', __dirname, 'VITE_')
+// Unit tests never inherit service endpoints or Firebase identity from a developer .env.
+const testApiBase = 'http://127.0.0.1:9'
+process.env.VITE_OMI_API_BASE = testApiBase
+process.env.VITE_OMI_DESKTOP_API_BASE = testApiBase
 
 // electron-vite's `?asset` imports (a file path resolved at build time) don't
 // exist in plain vitest. Resolve them to the real on-disk source path so
@@ -35,22 +36,13 @@ export default defineConfig({
     }
   },
   test: {
-    // Firebase config for tests. `lib/firebase.ts` builds `auth` AT MODULE IMPORT
-    // (deliberately — persistence must be set synchronously so a reloaded window
-    // rehydrates its session deterministically), and the Firebase SDK validates
-    // the API key right there. So ANY suite that transitively imports that module
-    // needs a key to merely be importable, even though no test ever talks to
-    // Firebase.
-    //
-    // Developers have a real .env, so this was invisible locally — but CI has no
-    // .env, the key was undefined, and two capture suites died on import with
-    // `auth/invalid-api-key` before a single test ran. Placeholders keep the
-    // import graph loadable without credentials; a real .env still wins, so the
-    // live E2E suites keep talking to the real project.
+    setupFiles: [resolve(__dirname, 'test/hermeticSetup.ts')],
     env: {
-      VITE_FIREBASE_API_KEY: localEnv.VITE_FIREBASE_API_KEY || 'test-firebase-api-key',
-      VITE_FIREBASE_AUTH_DOMAIN: localEnv.VITE_FIREBASE_AUTH_DOMAIN || 'test.firebaseapp.com',
-      VITE_FIREBASE_PROJECT_ID: localEnv.VITE_FIREBASE_PROJECT_ID || 'test-project'
+      VITE_OMI_API_BASE: testApiBase,
+      VITE_OMI_DESKTOP_API_BASE: testApiBase,
+      VITE_FIREBASE_API_KEY: 'test-firebase-api-key',
+      VITE_FIREBASE_AUTH_DOMAIN: 'test.firebaseapp.com',
+      VITE_FIREBASE_PROJECT_ID: 'test-project'
     },
     environment: 'node',
     // .tsx suites opt into jsdom per-file via `// @vitest-environment jsdom`.
