@@ -168,6 +168,8 @@ paths_timeout = {
     "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
+    # Same queue and dispatch deadline; a heavy owner's batch scan runs for minutes.
+    "/v1/conversations/deletion-batch-purges/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
     # STT proxy: 30s slot wait + 300s parakeet client budget (get_stt_proxy_client)
     # + headroom for auth and the multipart spool read; the default POST timeout

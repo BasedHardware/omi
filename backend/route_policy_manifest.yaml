@@ -1693,6 +1693,24 @@ routes:
         state: active
   - route_type: http
     method: POST
+    path: /v1/conversations/deletion-batch-purges/run
+    policy:
+      review_status: reviewed
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: account_deletion_wipe
+      surface: internal_task
+      visibility: internal
+      data_domain: conversations
+      deprecation:
+        state: active
+  - route_type: http
+    method: POST
     path: /v1/conversation-finalization-jobs/run
     policy:
       review_status: reviewed

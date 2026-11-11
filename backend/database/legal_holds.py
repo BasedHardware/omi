@@ -10,6 +10,7 @@ outcome is known. User-facing routes never write either authority document.
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -46,6 +47,10 @@ GATE_STALE_AFTER_SECONDS = 6 * 60 * 60
 # a lingering "running" row of this kind is always an abandoned artifact.
 _OBSOLETE_WRITER_GATE_KIND = "external_data_write"
 _ACTIVE_GATE: ContextVar[tuple[str, str, str] | None] = ContextVar("active_legal_hold_deletion_gate", default=None)
+# Backoff between acquisition attempts while a same-kind peer holds the gate.
+_GATE_WAIT_BACKOFF_SECONDS = (0.1, 0.2, 0.4, 0.5)
+_gate_wait_sleep = time.sleep
+_gate_wait_clock = time.monotonic
 _EXTERNAL_TRANSACTION: ContextVar[tuple[str, Any, Any] | None] = ContextVar("external_write_transaction", default=None)
 
 
@@ -436,14 +441,62 @@ def dream_gate_contention_retry_allowed(
     return gate["kind"] in _DREAM_RETRYABLE_GATE_KINDS
 
 
+def _blocking_gate_kind(client: Any, uid: str) -> str | None:
+    """Kind of the fresh running gate for ``uid``; None when free; "" when unreadable."""
+
+    try:
+        gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get())
+    except Exception:  # noqa: BLE001 - an unreadable gate never earns a wait
+        return ""
+    if gate is None or not _gate_blocks(gate, datetime.now(timezone.utc)):
+        return None
+    return gate["kind"] if gate["uid"] == uid else ""
+
+
+def _acquire_with_same_kind_wait(uid: str, *, kind: str, token: str, client: Any, wait_seconds: float) -> None:
+    """Acquire, waiting out a running gate of the same kind for at most ``wait_seconds``.
+
+    Same-account deletes arrive in bursts (multi-select, client retries) and each
+    holds the gate for seconds, so a peer of the same kind is waited for instead
+    of answered with an immediate 409. Any other kind (account wipe, retention,
+    audio deletion), a legal hold, or an unreadable gate still fails at once.
+    """
+
+    deadline = _gate_wait_clock() + max(0.0, wait_seconds)
+    waits = 0
+    while True:
+        try:
+            acquire_destructive_operation(uid, kind=kind, token=token, firestore_client=client)
+        except DestructiveOperationInProgress:
+            remaining = deadline - _gate_wait_clock()
+            blocking_kind = _blocking_gate_kind(client, uid) if remaining > 0 else ""
+            if blocking_kind not in {None, kind}:
+                if waits:
+                    logger.warning("destructive operation gate wait exhausted kind=%s waits=%d", kind, waits)
+                raise
+            # A gate that reads free was released after our attempt: retry almost at once.
+            backoff = _GATE_WAIT_BACKOFF_SECONDS[min(waits, len(_GATE_WAIT_BACKOFF_SECONDS) - 1)]
+            _gate_wait_sleep(min(backoff if blocking_kind is not None else 0.05, remaining))
+            waits += 1
+            continue
+        if waits:
+            logger.info("destructive operation gate acquired after waiting kind=%s waits=%d", kind, waits)
+        return
+
+
 @contextmanager
 def destructive_operation_gate(
     uid: str,
     *,
     kind: str = "explicit_memory_deletion",
     firestore_client: Any | None = None,
+    wait_seconds: float = 0.0,
 ) -> Iterator[str]:
-    """Acquire one account-wide gate, reusing it for nested deletion layers."""
+    """Acquire one account-wide gate, reusing it for nested deletion layers.
+
+    ``wait_seconds`` bounds how long acquisition waits behind a running gate of
+    the same kind; zero keeps the fail-fast contract for every other caller.
+    """
 
     active = _ACTIVE_GATE.get()
     if active is not None:
@@ -454,7 +507,7 @@ def destructive_operation_gate(
         return
     token = uuid4().hex
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    acquire_destructive_operation(uid, kind=kind, token=token, firestore_client=client)
+    _acquire_with_same_kind_wait(uid, kind=kind, token=token, client=client, wait_seconds=wait_seconds)
     reset = _ACTIVE_GATE.set((uid, kind, token))
     try:
         yield token

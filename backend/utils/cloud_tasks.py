@@ -243,6 +243,54 @@ def assert_account_deletion_queue_exists(client: Any = None) -> None:
         logger.warning('account-deletion queue existence probe inconclusive: %s', sanitize(str(exc)))
 
 
+CONVERSATION_BATCH_PURGE_PATH = '/v1/conversations/deletion-batch-purges/run'
+
+
+def _conversation_batch_purge_handler_url() -> str:
+    """Same backend-sync host as the account-deletion handler, different path."""
+    deletion_url = os.getenv('ACCOUNT_DELETION_HANDLER_URL', '').strip()
+    if not deletion_url:
+        return ''
+    parts = urlsplit(deletion_url)
+    if not parts.scheme or not parts.netloc:
+        return ''
+    return f'{parts.scheme}://{parts.netloc}{CONVERSATION_BATCH_PURGE_PATH}'
+
+
+def is_conversation_batch_purge_dispatch_configured() -> bool:
+    """Conversation batch purges ride the account-deletion queue and invoker identity."""
+    return bool(
+        is_account_deletion_dispatch_enabled()
+        and os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip()
+        and _conversation_batch_purge_handler_url()
+        and _invoker_sa()
+    )
+
+
+def conversation_batch_purge_task_id(uid: str, conversation_id: str) -> str:
+    digest = hashlib.sha256(f'{uid}\x00{conversation_id}'.encode()).hexdigest()[:40]
+    return f'conversation-batch-purge-{digest}'
+
+
+def enqueue_conversation_batch_purge(uid: str, conversation_id: str, *, redrive: int = 0) -> None:
+    """Durably hand one tombstoned conversation's batch purge to backend-sync.
+
+    Named per (uid, conversation): a repeated delete deduplicates. ``redrive``
+    gives an operator re-drive a fresh name once the original task is spent.
+    """
+    task_id = conversation_batch_purge_task_id(uid, conversation_id)
+    if redrive:
+        task_id = f'{task_id}-r{int(redrive)}'
+    enqueue_named_task(
+        os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip(),
+        _conversation_batch_purge_handler_url(),
+        task_id,
+        {'uid': uid, 'conversation_id': conversation_id},
+        audience=_conversation_batch_purge_handler_url(),
+        invoker_sa=_invoker_sa(),
+    )
+
+
 def is_listen_finalization_dispatch_enabled() -> bool:
     """Whether platform-key listen finalization uses its durable worker."""
     return os.getenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
@@ -648,6 +696,13 @@ def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletio
         log_failure=False,
     )
     return AccountDeletionTaskAuthentication(retry_count=retry_count)
+
+
+def verify_conversation_batch_purge_cloud_tasks_oidc(request: Request) -> int:
+    """Audience is this handler's own URL, minted from the same env as the task URL."""
+    return verify_configured_cloud_tasks_oidc(
+        request, audience=_conversation_batch_purge_handler_url(), invoker_sa=_invoker_sa()
+    )
 
 
 def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:

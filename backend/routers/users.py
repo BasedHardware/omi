@@ -142,8 +142,11 @@ from utils.cloud_tasks import (
     AccountDeletionTaskAuthentication,
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
+    verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from utils.executors import db_executor, llm_executor, run_blocking
+from database import conversation_tombstones
+from database.legal_holds import LegalHoldActive
+from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -394,6 +397,41 @@ async def run_account_deletion_wipe(
     finally:
         if release_lock:
             await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
+
+
+# Rides the account-deletion queue and invoker identity; enqueued by conversation deletes.
+# Path must equal utils.cloud_tasks.CONVERSATION_BATCH_PURGE_PATH (pinned by its test).
+@router.post('/v1/conversations/deletion-batch-purges/run', include_in_schema=False)
+async def run_conversation_batch_purge(
+    request: Request,
+    retry_count: int = Depends(verify_conversation_batch_purge_cloud_tasks_oidc),
+):
+    try:
+        payload = await request.json()
+        uid = payload.get('uid') if isinstance(payload, dict) else None
+        conversation_id = payload.get('conversation_id') if isinstance(payload, dict) else None
+        if not isinstance(uid, str) or not uid or not isinstance(conversation_id, str) or not conversation_id:
+            raise ValueError('uid and conversation_id must be non-empty strings')
+    except Exception as e:
+        logger.error(f'conversation_batch_purge handler: invalid payload, dropping task: {sanitize(str(e))}')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    try:
+        outcome = await run_blocking(cleanup_executor, conversation_tombstones.run_batch_purge, uid, conversation_id)
+    except LegalHoldActive:
+        # The pending marker stays on the tombstone; a re-drive resumes after release.
+        logger.warning('conversation_batch_purge handler: legal hold active uid=%s, holding purge', uid)
+        return JSONResponse(status_code=200, content={'status': 'held', 'reason': 'legal_hold'})
+    except Exception as e:
+        logger.warning(
+            'conversation_batch_purge handler: attempt %d failed uid=%s, will retry: %s',
+            retry_count + 1,
+            uid,
+            type(e).__name__,
+        )
+        return JSONResponse(status_code=500, content={'status': 'retry'})
+    logger.info('conversation_batch_purge handler: uid=%s outcome=%s', uid, outcome)
+    return JSONResponse(status_code=200, content={'status': 'done', 'outcome': outcome})
 
 
 @router.patch('/v1/users/geolocation', tags=['v1'], response_model=UserStatusResponse)
