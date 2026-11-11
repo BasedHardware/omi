@@ -65,7 +65,10 @@ def test_advances_inbound_head_with_naive_and_iso_timestamps():
     assert advances_inbound_head(msg, {"received_at": "2026-10-28T11:00:00", "provider_message_id": "110"}) is False
 
     # 3. Prior has naive datetime earlier
-    assert advances_inbound_head(msg, {"received_at": earlier_utc.replace(tzinfo=None), "provider_message_id": "90"}) is True
+    assert (
+        advances_inbound_head(msg, {"received_at": earlier_utc.replace(tzinfo=None), "provider_message_id": "90"})
+        is True
+    )
 
     # 4. Prior has None received_at
     assert advances_inbound_head(msg, {"received_at": None, "provider_message_id": "90"}) is True
