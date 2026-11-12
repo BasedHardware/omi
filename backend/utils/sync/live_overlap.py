@@ -22,7 +22,7 @@ def _tolerance(tolerance_seconds: float) -> timedelta:
     """A malformed tolerance resolves strict (0) instead of raising or loosening."""
     try:
         value = float(tolerance_seconds)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return timedelta(0)
     if not math.isfinite(value) or value < 0 or value > MAX_TOLERANCE_SECONDS:
         return timedelta(0)

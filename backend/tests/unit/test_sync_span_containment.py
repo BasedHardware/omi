@@ -8,6 +8,7 @@ it, and the donor span is never shrunk.
 """
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 
@@ -92,6 +93,19 @@ def test_tolerance_wider_than_the_target_interval_refuses():
 def test_malformed_tolerance_resolves_strict_without_raising(tolerance):
     # A malformed config value must refuse, not crash the caller. Resolving to
     # zero keeps the equal-boundary donor accepted and the outside donor refused.
+    assert span_contained(row(placed(0.0, 20.0)), target(), tolerance_seconds=tolerance)
+    assert not span_contained(row(placed(-0.4, 10.0)), target(), tolerance_seconds=tolerance)
+
+
+@pytest.mark.parametrize(
+    'tolerance',
+    [10**1000, -(10**1000), Decimal('1e1000')],
+    ids=['huge-int', 'huge-negative-int', 'huge-decimal'],
+)
+def test_float_overflow_tolerance_resolves_strict_without_raising(tolerance):
+    # float() raises OverflowError for a finite value too large to represent.
+    # That is malformed config, not an authorization to widen: it must resolve
+    # strict (0) and let the containment comparison refuse, never escape.
     assert span_contained(row(placed(0.0, 20.0)), target(), tolerance_seconds=tolerance)
     assert not span_contained(row(placed(-0.4, 10.0)), target(), tolerance_seconds=tolerance)
 
