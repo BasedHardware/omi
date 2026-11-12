@@ -4,12 +4,12 @@ from copy import deepcopy
 from datetime import timedelta
 import json
 from pathlib import Path
+import re
 import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -300,6 +300,57 @@ def test_off_refuses_contained_processed_donor_before_any_target_read(monkeypatc
     assert not source.get('deleted') and not source.get('sync_merged_into')
 
 
+def test_shadow_does_not_emit_capture_coverage_comparisons(monkeypatch, caplog, pending):
+    from utils.capture.shadow import SHADOW
+
+    monkeypatch.setenv(ENV, 'shadow')
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    store, _, _, _ = pending
+    _mark_processed(store)
+    _finish_target(store, end_seconds=20.0)
+
+    def live_bind_samples() -> float:
+        return sum(
+            sample.value
+            for metric in SHADOW.collect()
+            for sample in metric.samples
+            if sample.labels.get('path') == 'live_bind'
+        )
+
+    before = live_bind_samples()
+    with caplog.at_level('INFO'):
+        assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    # The shadow pass must not inject live_bind disagreement samples into the
+    # capture-coverage rollout's own evidence.
+    assert live_bind_samples() == before
+    assert not [record for record in caplog.records if 'check=live_bind' in record.getMessage()]
+
+
+def test_shadow_target_read_failure_still_refuses(monkeypatch, caplog, pending):
+    from utils.metrics import OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL
+
+    monkeypatch.setenv(ENV, 'shadow')
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    _finish_target(store, end_seconds=20.0)
+    original_get = db.get_conversation
+
+    def fail_target_read(uid, conversation_id, **kwargs):
+        if conversation_id == 'live':
+            raise RuntimeError('transcript segments failed to decode')
+        return original_get(uid, conversation_id, **kwargs)
+
+    monkeypatch.setattr(db, 'get_conversation', fail_target_read)
+    before = OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL.labels(outcome='error')._value.get()
+    with caplog.at_level('INFO', logger='utils.sync.bridge'):
+        # A raising target read must refuse like ``off``, never propagate.
+        assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    after = OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL.labels(outcome='error')._value.get()
+    assert after == before + 1
+    assert 'outcome=error' in caplog.text
+    assert not source.get('deleted') and not source.get('sync_merged_into')
+
+
 def test_off_is_byte_identical_to_the_pre_change_refusal(monkeypatch, pending):
     monkeypatch.setenv(ENV, 'off')
     store, _, _, _ = pending
@@ -437,27 +488,31 @@ def test_mode_parser_selects_shadow(monkeypatch):
     assert contained_donor_merge_enabled() is False
 
 
-def _walk_env_entries(node):
-    if isinstance(node, dict):
-        if ENV in node:
-            yield node[ENV]
-        for value in node.values():
-            yield from _walk_env_entries(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from _walk_env_entries(value)
+_MODE_DECL = re.compile(rf'^{ENV}:\s*$')
+_MODE_OFF_VALUE = re.compile(r"^\s*value:\s*['\"]?off['\"]?\s*$")
+
+
+def _declared_off_values(path: Path) -> int:
+    """Count ``ENV:`` block declarations that carry ``value: 'off'`` on the next line.
+
+    Line-scanning instead of ``yaml.safe_load``: both deploy manifests are ~5k
+    lines, and parsing them whole costs more call-phase CPU than the fast-unit
+    duration guard allows for a single test.
+    """
+    lines = path.read_text(encoding='utf-8').splitlines()
+    count = 0
+    for index, line in enumerate(lines):
+        if not _MODE_DECL.match(line.strip()):
+            continue
+        following = lines[index + 1] if index + 1 < len(lines) else ''
+        assert _MODE_OFF_VALUE.match(following), f'{path}: {ENV} at line {index + 1} does not declare value off'
+        count += 1
+    return count
 
 
 def test_mode_surfaces_agree_on_off_and_the_three_values():
-    base = yaml.safe_load((REPO_ROOT / 'backend/deploy/runtime_env/_base.yaml').read_text(encoding='utf-8'))
-    base_entries = list(_walk_env_entries(base))
-    assert len(base_entries) == 5
-    assert all(entry['value'] == 'off' for entry in base_entries)
-
-    composed = yaml.safe_load((REPO_ROOT / 'backend/deploy/runtime_env.yaml').read_text(encoding='utf-8'))
-    composed_entries = list(_walk_env_entries(composed))
-    assert len(composed_entries) == 10
-    assert all(entry['value'] == 'off' for entry in composed_entries)
+    assert _declared_off_values(REPO_ROOT / 'backend/deploy/runtime_env/_base.yaml') == 5
+    assert _declared_off_values(REPO_ROOT / 'backend/deploy/runtime_env.yaml') == 10
 
     for chart in ('dev', 'prod'):
         text = (REPO_ROOT / f'backend/charts/backend-listen/{chart}_omi_backend_listen_values.yaml').read_text(
@@ -465,8 +520,9 @@ def test_mode_surfaces_agree_on_off_and_the_three_values():
         )
         assert f'- name: {ENV}\n    value: "off"' in text
 
-    registry = yaml.safe_load((REPO_ROOT / 'config/feature-flags.yaml').read_text(encoding='utf-8'))
-    entry = next(flag for flag in registry['flags'] if flag['key'] == ENV)
+    registry_lines = (REPO_ROOT / 'config/feature-flags.yaml').read_text(encoding='utf-8').splitlines()
+    entry_line = next(line for line in registry_lines if f'"key":"{ENV}"' in line)
+    entry = json.loads(entry_line.strip().removeprefix('- ').strip())
     assert entry['fail'] == 'closed'
     assert entry['lifecycle'] == 'config_switch'
     for word in ('off', 'shadow', 'on'):

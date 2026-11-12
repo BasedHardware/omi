@@ -21,6 +21,7 @@ from config.sync_bridge_containment import (
     CONTAINMENT_TOLERANCE_SECONDS,
     MODE_OFF,
     MODE_SHADOW,
+    contained_donor_merge_enabled,
     contained_donor_merge_mode,
 )
 from config.sync_finalize import sync_finalize_target_recovery_enabled
@@ -39,6 +40,7 @@ from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
 from utils.metrics import OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL, OMI_SYNC_BRIDGE_RETRACTION_TOTAL
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import ContainedDonorShadowOutcome, ReasonFamily, reason_label
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
     SyncAssignmentConflictReason,
@@ -142,25 +144,42 @@ def _bridge_source_defect(
     return 'chain_broken'
 
 
+def _record_contained_donor_shadow(outcome: ContainedDonorShadowOutcome) -> None:
+    """Count one closed shadow outcome through the reason ratchet; never raises."""
+    try:
+        OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL.labels(
+            outcome=reason_label(ReasonFamily.SYNC_BRIDGE_CONTAINMENT, outcome, ContainedDonorShadowOutcome)
+        ).inc()
+    except Exception:
+        pass
+
+
 def _shadow_contained_donor(uid: str, source: dict, target_id: str) -> None:
     """Count what the merge would do, then refuse; never assign or emit identity.
 
     The counter and the log line carry only a closed outcome token. No uid,
     conversation id, transcript text or note content is read into either.
+
+    A target read can raise (transcript decode, list read budget, decryption), so
+    the whole body is guarded: a shadow read failure counts ``outcome=error`` and
+    refuses, exactly where ``off`` would have returned the donor id.
     """
-    target = conversations_db.get_conversation(uid, target_id)
-    if not target or target.get('status') == 'in_progress':
-        outcome = 'open_target'
-    elif choose_live_overlap([target], source, uid=uid) != target_id:
-        outcome = 'no_overlap'
-    elif span_contained(source, target, tolerance_seconds=CONTAINMENT_TOLERANCE_SECONDS):
-        outcome = 'would_absorb'
-    elif segment_span(source) is None or segment_span(target) is None:
-        outcome = 'no_segment_span'
-    else:
-        outcome = 'partial_overlap'
-    OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL.labels(outcome=outcome).inc()
-    logger.info('event=sync_bridge_contained_donor_shadow outcome=%s', outcome)
+    try:
+        target = conversations_db.get_conversation(uid, target_id)
+        if not target or target.get('status') == 'in_progress':
+            outcome = ContainedDonorShadowOutcome.OPEN_TARGET
+        elif choose_live_overlap([target], source, uid=uid, record_comparison=False) != target_id:
+            outcome = ContainedDonorShadowOutcome.NO_OVERLAP
+        elif span_contained(source, target, tolerance_seconds=CONTAINMENT_TOLERANCE_SECONDS):
+            outcome = ContainedDonorShadowOutcome.WOULD_ABSORB
+        elif segment_span(source) is None or segment_span(target) is None:
+            outcome = ContainedDonorShadowOutcome.NO_SEGMENT_SPAN
+        else:
+            outcome = ContainedDonorShadowOutcome.PARTIAL_OVERLAP
+    except Exception:
+        outcome = ContainedDonorShadowOutcome.ERROR
+    _record_contained_donor_shadow(outcome)
+    logger.info('event=sync_bridge_contained_donor_shadow outcome=%s', outcome.value)
 
 
 def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
@@ -195,8 +214,10 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
         return conversation_id
     try:
         # Only the processed-donor exception passes the absorb flag; every other
-        # call is the pre-change call, so off never names the absorb path.
-        if processed:
+        # call is the pre-change call, so off never names the absorb path. The
+        # irreversible effect is guarded locally by the same parser that selects
+        # the mode, so the guard and the parser cannot drift.
+        if processed and contained_donor_merge_enabled():
             assigned, _, _ = conversations_db.assign_sync_conversation(
                 uid, source, target_id=target_id, absorb_contained_processed_donor=True
             )

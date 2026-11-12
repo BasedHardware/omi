@@ -15,7 +15,10 @@ only blocker is that fence.
 - `shadow` runs the containment predicate and the span comparison, emits a
   bounded counter and one log line, and returns the same refusal. It never
   assigns, tombstones, retracts notes or memories, and never emits an identifier
-  or content. This is the plan's dry-run count.
+  or content. It also emits no capture-coverage `live_bind` comparison, so it
+  cannot inject samples into that rollout's evidence, and a target read that
+  raises counts the bounded `outcome=error` and still refuses instead of
+  propagating. This is the plan's dry-run count.
 - `on` lets the bridge absorb such a donor. Containment is proven by placed
   transcript-segment spans on both sides (`segment_span`) with a 0.5 s jitter
   tolerance; a row whose only span is the `finished_at` wall-clock envelope never
@@ -25,12 +28,16 @@ Every other fence is unchanged: user curation, an open target,
 `choose_live_overlap` (live provenance plus recorded overlap), privacy and size.
 Partial overlap keeps the standalone row.
 
-The assignment transaction re-proves containment on the rows it will merge. If
-the donor grew past the target between the bridge read and the transaction, the
-whole assignment is refused with `contained_donor_not_contained`; the bridge
-treats that as "not yet" and leaves the donor visible. The existing donor
-retraction path then discards the donor's standalone notes, copies its audio,
-and regenerates notes from the merged transcript.
+The bridge passes `absorb_contained_processed_donor` only when
+`contained_donor_merge_enabled()` is true, so the irreversible effect is guarded
+locally by the same parser that selects the mode. The assignment transaction
+then re-proves containment on the rows it will merge, independent of
+`merge_before_processing`. If the donor grew past the target between the bridge
+read and the transaction, the whole assignment is refused with
+`contained_donor_not_contained`; the bridge treats that as "not yet" and leaves
+the donor visible. The existing donor retraction path then discards the donor's
+standalone notes, copies its audio, and regenerates notes from the merged
+transcript.
 
 Only the documented lowercase words select a mode (`on`, `true`, `yes`,
 `enabled`, `shadow`). An absent, blank, unknown, misspelled or numeric value
@@ -47,9 +54,11 @@ backend image train and the sync/enrichment hosts after review and merge.
 Regression coverage: `tests/unit/test_sync_pending_live_bridge.py` covers a
 contained donor merging in `on`, a legacy donor whose only span is the
 `finished_at` envelope refused, partial overlap refused, an open target refused,
-the `off` refusal, the `shadow` dry-run that never assigns or retracts, the
-mode parser's fail-closed values, and the surface agreement between the parser,
-the registry, the runtime-env manifest and the deployment-setting classification.
+the `off` refusal, the `shadow` dry-run that never assigns or retracts and emits
+no capture-coverage comparison, a shadow target read failure that still refuses
+with `outcome=error`, the mode parser's fail-closed values, and the surface
+agreement between the parser, the registry, the runtime-env manifest and the
+deployment-setting classification.
 `tests/unit/test_sync_live_overlap.py` and
 `tests/unit/test_sync_cross_job_assignment.py` retain the ordinary assignment
 and overlap contracts.

@@ -630,8 +630,23 @@ def assign_in_transaction(
             or (receipt_owner if receipt_owner in matched else None)
             or (min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id'])
         )
+        processed_ids = {cid for cid, raw in matched.items() if merge_before_processing.already_processed(raw)}
+        if absorb_contained_processed_donor and plan_target_id and own_id in processed_ids and own_id != canonical:
+            # The bridge proved containment on its own read. Re-prove it on the
+            # rows this transaction will actually merge; a donor that grew past
+            # the target is refused whole, never partially merged. This runs
+            # regardless of the merge-before-processing flag: the absorb flag
+            # alone authorizes the irreversible merge, so it cannot depend on a
+            # second gate to re-check containment.
+            donor_row = decode(own_anchor) if own_anchor is not None else incoming
+            target_row = decode(plan_target) if plan_target is not None else None
+            if target_row is None or not span_contained(
+                donor_row, target_row, tolerance_seconds=CONTAINMENT_TOLERANCE_SECONDS
+            ):
+                raise SyncAssignmentConflict(
+                    'contained donor span changed', subtype=Reason.CONTAINED_DONOR_NOT_CONTAINED
+                )
         if merge_before_processing.enabled():
-            processed_ids = {cid for cid, raw in matched.items() if merge_before_processing.already_processed(raw)}
             if not plan_target_id and not receipt_owner and processed_ids:
                 # Keep an enriched identity as the parent, preferring the retry
                 # anchor. Late bridges must never turn completed notes into a
@@ -643,17 +658,6 @@ def assign_in_transaction(
                 )
             protected_donors = processed_ids - {canonical}
             if absorb_contained_processed_donor and plan_target_id and own_id in protected_donors:
-                # The bridge proved containment on its own read. Re-prove it on
-                # the rows this transaction will actually merge; a donor that
-                # grew past the target is refused whole, never partially merged.
-                donor_row = decode(own_anchor) if own_anchor is not None else incoming
-                target_row = decode(plan_target) if plan_target is not None else None
-                if target_row is None or not span_contained(
-                    donor_row, target_row, tolerance_seconds=CONTAINMENT_TOLERANCE_SECONDS
-                ):
-                    raise SyncAssignmentConflict(
-                        'contained donor span changed', subtype=Reason.CONTAINED_DONOR_NOT_CONTAINED
-                    )
                 protected_donors = protected_donors - {own_id}
             if protected_donors:
                 # Replan from the incoming interval, so excluded processed rows

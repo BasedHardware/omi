@@ -121,7 +121,9 @@ def _live_binding_score(row: dict, incoming: dict) -> float:
     return live_overlap_seconds(row, incoming)
 
 
-def choose_live_overlap(rows: list[dict], incoming: dict, *, uid: str | None = None) -> str | None:
+def choose_live_overlap(
+    rows: list[dict], incoming: dict, *, uid: str | None = None, record_comparison: bool = True
+) -> str | None:
     # refactor: superseded by this module's keyed path when CAPTURE_COVERAGE_MODE=serve
     legacy = _legacy_choose_live_overlap(rows, incoming)
     if not refactor_modes.shadow_or_serve('CAPTURE_COVERAGE_MODE'):
@@ -130,5 +132,9 @@ def choose_live_overlap(rows: list[dict], incoming: dict, *, uid: str | None = N
     proposed = (
         min(eligible, key=lambda pair: (-pair[0], pair[1]['started_at'], pair[1]['id']))[1]['id'] if eligible else None
     )
-    compare('live_bind', 'agree' if proposed == legacy else 'disagree')
+    if record_comparison:
+        # A caller that must stay side-effect-inert (the contained-donor shadow
+        # pass) opts out: it may not inject live_bind disagreement samples into
+        # the capture-coverage rollout's own evidence.
+        compare('live_bind', 'agree' if proposed == legacy else 'disagree')
     return proposed if refactor_modes.serving_for('CAPTURE_COVERAGE_MODE', uid) else legacy
