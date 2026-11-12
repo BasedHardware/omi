@@ -91,6 +91,11 @@ _MESSAGE_INTENT_TARGET_RE = re.compile(
     re.IGNORECASE,
 )
 
+_PROMPT_TAG_LIKE_RE = re.compile(
+    r'<\s*/?\s*[A-Za-z_!?][^>]*>|<\s*/?\s*user_voice_profile\b[^>]*',
+    re.IGNORECASE,
+)
+
 _SPANISH_STOPWORDS = frozenset({'hola', 'gracias', 'para', 'pero', 'como', 'estoy', 'vamos', 'bien', 'porque', 'que'})
 _FRENCH_STOPWORDS = frozenset({'bonjour', 'salut', 'merci', 'avec', 'pour', 'dans', 'est', 'pas', 'oui', 'mais'})
 _GERMAN_STOPWORDS = frozenset({'hallo', 'danke', 'nicht', 'und', 'ich', 'wir', 'sind', 'bitte', 'auch', 'mit'})
@@ -787,6 +792,15 @@ def _extract_greetings(lines: Sequence[str], max_greetings: int = 4) -> List[str
     return [surface for _count, surface in ranked[:max_greetings]]
 
 
+def _strip_prompt_tag_sequences(text: str) -> str:
+    cleaned = _PROMPT_TAG_LIKE_RE.sub(' ', text)
+    return re.sub(r'\s+', ' ', cleaned).strip()
+
+
+def _sanitize_prompt_excerpt(text: str) -> str:
+    return escape(_strip_prompt_tag_sequences(text), quote=False)
+
+
 def _select_representative_examples(
     lines: Sequence[str],
     typical_words: int,
@@ -797,7 +811,7 @@ def _select_representative_examples(
     seen = set()
     unique: List[str] = []
     for line in lines:
-        compact = re.sub(r'\s+', ' ', line).strip()
+        compact = _strip_prompt_tag_sequences(line)
         if not compact or len(compact) > USER_VOICE_MAX_EXAMPLE_CHARS:
             continue
         key = compact.lower()
@@ -808,7 +822,7 @@ def _select_representative_examples(
 
     if not unique:
         for line in lines:
-            compact = re.sub(r'\s+', ' ', line).strip()[:USER_VOICE_MAX_EXAMPLE_CHARS]
+            compact = _strip_prompt_tag_sequences(line)[:USER_VOICE_MAX_EXAMPLE_CHARS].strip()
             if compact and compact.lower() not in seen:
                 seen.add(compact.lower())
                 unique.append(compact)
@@ -1008,8 +1022,10 @@ def format_user_voice_prompt(profile: Optional[UserVoiceProfile]) -> str:
     }.get(profile.dominant_ending, profile.dominant_ending)
 
     script_parts = [f'{k}:{int(round(v * 100))}%' for k, v in profile.script_mix.items()]
-    greetings_str = ', '.join(f'"{g}"' for g in profile.greetings) if profile.greetings else 'none'
-    examples_lines = '\n'.join(f'  - "{ex}"' for ex in profile.examples)
+    safe_greetings = [g for g in (_sanitize_prompt_excerpt(raw_g) for raw_g in profile.greetings) if g]
+    greetings_str = ', '.join(f'"{g}"' for g in safe_greetings) if safe_greetings else 'none'
+    safe_examples = [ex for ex in (_sanitize_prompt_excerpt(raw_ex) for raw_ex in profile.examples) if ex]
+    examples_lines = '\n'.join(f'  - "{ex}"' for ex in safe_examples)
 
     lines = [
         f'<user_voice_profile recipient="{target_label}">',
