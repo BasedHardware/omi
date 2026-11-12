@@ -288,6 +288,8 @@ env:
     value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
     value: "true"
+  - name: SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED
+    value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
   # Keep these aligned with the development GitHub environment variables used

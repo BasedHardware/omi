@@ -13,7 +13,7 @@ from decimal import Decimal
 import pytest
 
 from utils.conversations.recorded_time import conversation_span, segment_span
-from utils.sync.live_overlap import span_contained
+from utils.sync.live_overlap import span_contained_strict as span_contained
 
 ORIGIN = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 

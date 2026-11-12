@@ -131,6 +131,9 @@ environments:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+            value: 'true'
+            category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
@@ -1012,6 +1015,9 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
@@ -1331,6 +1337,9 @@ environments:
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
               value: 'true'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -1662,6 +1671,9 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
@@ -1966,6 +1978,9 @@ environments:
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
               value: 'true'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -2504,6 +2519,9 @@ environments:
             value: 'true'
             category: ops_kill
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
@@ -3513,6 +3531,9 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
@@ -3959,6 +3980,9 @@ environments:
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
               value: 'true'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -4421,6 +4445,9 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
@@ -4841,6 +4868,9 @@ environments:
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
               value: 'true'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}

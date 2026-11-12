@@ -1,6 +1,7 @@
 """A live overlap hint holds standalone visibility until proof, keep or expiry."""
 
 from copy import deepcopy
+from datetime import timedelta
 import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -14,11 +15,15 @@ from tests.unit.test_sync_live_overlap import assign, live_row, seeded
 from tests.unit.test_sync_cross_job_assignment import chunk
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing, _rows_from_store
 from utils.sync import bridge, bridge_pending
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.sync.intake_completion import complete_sync_intake
 
 
 @pytest.fixture
 def pending(monkeypatch):
+    # The switch is default on; keep the tests independent of a developer or
+    # deploy shell that exports the kill switch off.
+    monkeypatch.delenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', raising=False)
     # The live owner exists but has not yet persisted speech proof. Its wall
     # envelope may hold intake, but cannot authorize transcript transfer.
     live = live_row('in_progress')
@@ -175,6 +180,148 @@ def test_pending_bridge_preserves_an_independently_enriched_donor(pending):
     assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
     assert not source.get('deleted')
     assert not store.rows[('users', 'u', 'conversations', 'live')].get('sync_content_revision')
+
+
+def _mark_processed(store, conversation_id='wal'):
+    source = store.rows[('users', 'u', 'conversations', conversation_id)]
+    source['summary_completed_at'] = source['started_at'] + timedelta(seconds=1)
+    source['structured'] = {'title': 'Generated notes', 'overview': 'Existing protected notes.'}
+    return source
+
+
+def _finish_target(store, *, end_seconds):
+    target = store.rows[('users', 'u', 'conversations', 'live')]
+    target.update(live_row('completed'))
+    target['transcript_segments'] = [
+        {'start': 0.0, 'end': end_seconds, 'text': 'Live capture.', 'speaker_id': 0, 'is_user': False}
+    ]
+    return target
+
+
+def test_contained_processed_donor_merges(pending):
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    # Donor span is 1002..1011.5; the target covers 1000..1020.
+    _finish_target(store, end_seconds=20.0)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'live'
+    donor = store.rows[('users', 'u', 'conversations', 'wal')]
+    assert donor['deleted'] and donor['sync_merged_into'] == 'live'
+    assert 'wal' in store.rows[('users', 'u', 'conversations', 'live')]['sync_merged_from']
+
+
+def test_partial_overlap_processed_donor_is_refused(pending):
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    # Donor span is 1002..1011.5; the target covers only 1000..1009.5.
+    _finish_target(store, end_seconds=9.5)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    assert not source.get('deleted')
+    assert not source.get('sync_merged_into')
+
+
+def test_open_target_processed_donor_is_refused(pending):
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    # The target's recorded span covers the whole donor, but its capture is still
+    # open, so no merge is due yet. Without the open-target fence this would merge.
+    target = _finish_target(store, end_seconds=20.0)
+    target['status'] = 'in_progress'
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    assert not source.get('deleted')
+    assert not source.get('sync_merged_into')
+
+
+def test_contained_donor_growing_past_target_refuses_whole_assignment(monkeypatch, pending):
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    _finish_target(store, end_seconds=20.0)
+    refused = []
+    assign_after_bridge_read = db.assign_sync_conversation
+
+    def grow_then_assign(uid, row, **kw):
+        # The bridge already proved containment on its own read. Grow the donor
+        # past the target before the assignment transaction reads it again.
+        grown = store.rows[('users', 'u', 'conversations', 'wal')]
+        grown['transcript_segments'] = [
+            {'start': 0.0, 'end': 30.0, 'text': 'Donor speech.', 'speaker_id': 0, 'is_user': False}
+        ]
+        grown['recorded_end'] = grown['started_at'] + timedelta(seconds=30)
+        try:
+            return assign_after_bridge_read(uid, row, **kw)
+        except SyncAssignmentConflict as error:
+            refused.append(error.subtype)
+            raise
+
+    monkeypatch.setattr(db, 'assign_sync_conversation', grow_then_assign)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    # The transaction re-proof refuses the assignment whole, not just the donor.
+    assert refused == [SyncAssignmentConflictReason.CONTAINED_DONOR_NOT_CONTAINED]
+    donor = store.rows[('users', 'u', 'conversations', 'wal')]
+    assert not donor.get('deleted') and not donor.get('sync_merged_into')
+    assert 'wal' not in store.rows[('users', 'u', 'conversations', 'live')].get('sync_merged_from', [])
+    # Nothing dead-letters the row: it is still pending and visible after expiry.
+    assert bridge_pending.hidden(donor, now=donor[bridge_pending.FIELD]['expires_at'] + 1) is False
+
+
+def test_contained_donor_switch_off_restores_refusal(monkeypatch, pending):
+    monkeypatch.setenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', 'false')
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    _finish_target(store, end_seconds=20.0)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    assert not source.get('deleted')
+    assert not source.get('sync_merged_into')
+
+
+@pytest.mark.parametrize('recorded_segments', [True, False])
+def test_contained_donor_requires_a_segment_span_on_both_sides(pending, recorded_segments):
+    from utils.conversations.recorded_time import conversation_span, segment_span
+    from utils.sync.live_overlap import span_contained
+
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    target = _finish_target(store, end_seconds=20.0)
+    if recorded_segments:
+        assert span_contained(source, target, tolerance_seconds=0.5)
+        assert bridge.finish_sync_bridges('u', 'wal') == 'live'
+        donor = store.rows[('users', 'u', 'conversations', 'wal')]
+        assert donor['deleted'] and donor['sync_merged_into'] == 'live'
+        return
+    # Legacy donor: its only span is the finished_at envelope 1002..1011.5,
+    # fully inside the target's 1000..1020, but no placed segment proves it.
+    source['transcript_segments'] = []
+    for field in ('recorded_start', 'recorded_end', 'sync_live_target', 'audio_timeline'):
+        source.pop(field, None)
+    if (source.get('capture_evidence') or {}).get('origin') == 'live':
+        source.pop('capture_evidence')
+    envelope = conversation_span(source)
+    assert envelope is not None and envelope.recorded_end == source['finished_at']
+    assert segment_span(source) is None
+    assert not span_contained(source, target, tolerance_seconds=0.5)
+    assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    donor = store.rows[('users', 'u', 'conversations', 'wal')]
+    assert not donor.get('deleted') and not donor.get('sync_merged_into')
+    assert not store.rows[('users', 'u', 'conversations', 'live')].get('sync_merged_from')
+
+
+@pytest.mark.parametrize('mode', ['default', 'serve'])
+def test_contained_donor_kill_switch_fails_closed_in_every_mode(monkeypatch, mode):
+    from config.sync_bridge_containment import contained_donor_merge_enabled
+
+    monkeypatch.delenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', raising=False)
+    if mode == 'serve':
+        monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    else:
+        monkeypatch.delenv('CAPTURE_COVERAGE_MODE', raising=False)
+    # Only an absent variable keeps the default on.
+    assert contained_donor_merge_enabled() is True
+    for raw in ('ture', '1', ''):
+        monkeypatch.setenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', raw)
+        assert contained_donor_merge_enabled() is False
+    monkeypatch.setenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', 'false')
+    assert contained_donor_merge_enabled() is False
+    monkeypatch.setenv('SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED', 'true')
+    assert contained_donor_merge_enabled() is True
 
 
 def test_sync_enrichment_yields_to_a_bound_processing_finalizer(monkeypatch, pending):

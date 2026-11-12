@@ -168,6 +168,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
             "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
+            "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
@@ -289,6 +290,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
             "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
+            "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",
