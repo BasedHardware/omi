@@ -10936,6 +10936,19 @@
     "@unableToDetermineFirmwareVersion": {
         "description": "Shown when the device firmware revision cannot be read over BLE, so an OTA update offer would be unreliable."
     },
+    "applyCodeToCurrentPlan": "Apply to Current Plan",
+    "@applyCodeToCurrentPlan": {
+        "description": "Apply a code only to the existing subscription, regardless of highlighted checkout plan; never changes plans."
+    },
+    "subscriptionCodeResult": "{result, select, applied{Code applied to your current plan.} refused{This code cannot be applied. Check the code and its required plan.} conflict{Code already used, or your plan already has a discount.} rateLimited{Too many tries. Please wait and try again later.} other{Could not apply this code. Please try again.}}",
+    "@subscriptionCodeResult": {
+        "description": "Existing-subscription code application result; never promises payment or entitlement. result: applied, refused, conflict, rateLimited, other.",
+        "placeholders": {
+            "result": {
+                "type": "String"
+            }
+        }
+    },
     "promoCode": "Promo code",
     "enterPromoCode": "Enter promo code",
     "invalidPromotionCode": "Invalid promotion code.",
@@ -16494,6 +16507,10 @@
                 "type": "int"
             }
         }
+    },
+    "attentionRerunNotes": "Re-run notes",
+    "@attentionRerunNotes": {
+        "description": "Activity Needs attention button: retry notes only, preserving saved tasks and events"
     },
     "attentionSummaryFailed": "Couldn't summarize this conversation",
     "@attentionSummaryFailed": {

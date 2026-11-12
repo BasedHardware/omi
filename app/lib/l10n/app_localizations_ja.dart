@@ -9044,6 +9044,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => '現在のファームウェアバージョンを特定できません';
 
   @override
+  String get applyCodeToCurrentPlan => '現在のプランに適用';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': '現在のプランにコードを適用しました。',
+        'refused': 'このコードは適用できません。コードと対象プランを確認してください。',
+        'conflict': 'コードが使用済みか、プランに割引が適用されています。',
+        'rateLimited': '試行回数が多すぎます。しばらく待ってからお試しください。',
+        'other': 'コードを適用できませんでした。もう一度お試しください。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'プロモコード';
 
   @override
@@ -13465,6 +13483,9 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'ノートを再生成';
 
   @override
   String get attentionSummaryFailed => 'この会話を要約できませんでした';

@@ -179,7 +179,7 @@ from utils.stt.pre_recorded import (
     postprocess_words,
     prerecorded,
 )
-from utils.sync import empty_recovery, empty_success_guard, minimal_redrive
+from utils.sync import empty_success_guard, minimal_redrive
 from utils.sync.empty_recovery_intent import dispatch_once as dispatch_empty_recovery_once
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -1402,92 +1402,6 @@ class _OrderedTurnstile:
             self._cond.notify_all()
 
 
-def _recover_empty_segment(
-    path: str,
-    uid: str,
-    provider: str,
-    lane: str,
-    job_id: str | None,
-    attempt_ref: str | None,
-    cap_dispatch_lane: str = 'sync',
-) -> tuple[list[TranscriptSegment], str, float] | None:
-    def observe_inspection(duration: float | None, spans: list[dict] | None):
-        logger.info(
-            'event=sync_empty_strict_vad outcome=%s lane=%s provider=%s segment_ref=%s '
-            'duration_seconds=%.3f vad_spans=%d speech_seconds=%.3f',
-            'inspection_error' if spans is None else ('speech' if spans else 'silence'),
-            _bounded_sync_lane(lane),
-            bounded_provider(provider),
-            compute_sync_segment_id(uid, path),
-            duration or 0,
-            len(spans or []),
-            sum(span['end'] - span['start'] for span in spans or []),
-        )
-
-    def authorize_recovery():
-        if provider != 'parakeet':
-            # Positive VAD after multilingual double-empty is unresolved;
-            # buying the same call again is not independent recovery.
-            raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
-        if cap_enabled(uid, cap_dispatch_lane) and not sync_allowed(
-            uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.MULTILINGUAL
-        ):
-            raise CapAllowanceDenied()
-
-    def multilingual_once(audio: bytes, **kwargs: Any):
-        def dispatch():
-            response = modulate_prerecorded_from_bytes(audio, **kwargs)
-            if cap_enabled(uid, cap_dispatch_lane):
-                allowance = funded_allowance(uid, lane=cap_dispatch_lane)
-                record_cap_audio(
-                    'sync',
-                    'accepted',
-                    'modulate',
-                    (len(audio) - 44) / 32000,
-                    allowance.reason == 'plan_allowance_exhausted',
-                )
-            return response
-
-        try:
-            return dispatch_empty_recovery_once(uid, compute_sync_segment_id(uid, path), dispatch)
-        except (ValueError, TypeError):
-            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate') from None
-        except Exception as error:
-            raise failure_from_exception(error, provider='modulate') from None
-
-    words, recovered_language, duration, spans = empty_recovery.recover(
-        path, transcribe=multilingual_once, authorize=authorize_recovery, observe=observe_inspection
-    )
-    logger.info(
-        'event=sync_empty_recovery outcome=%s lane=%s duration_seconds=%.3f '
-        'vad_spans=%d speech_seconds=%.3f job_ref=%s attempt_ref=%s',
-        'speech' if spans else 'silence',
-        _bounded_sync_lane(lane),
-        duration,
-        len(spans),
-        sum(span['end'] - span['start'] for span in spans),
-        _bounded_correlation_ref(job_id),
-        _bounded_correlation_ref(attempt_ref),
-    )
-    if not spans:
-        return None
-    transcript_segments = postprocess_words(words, 0)
-    if not transcript_segments:
-        raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider='modulate')
-    if sync_safety_wal_enabled():
-        for segment in transcript_segments:
-            segment.stt_provider = 'velma-2'
-    record_fallback(
-        component='sync_dispatch',
-        from_mode=provider,
-        to_mode='modulate',
-        reason='empty_streak',
-        outcome='recovered',
-        log=logger,
-    )
-    return transcript_segments, recovered_language, first_word_offset(words)
-
-
 def _assign_segment_speakers(
     uid: str,
     audio_bytes: bytes | None,
@@ -1710,6 +1624,10 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 _bounded_correlation_ref(attempt_ref),
             )
 
+        def _note_served_provider(served_provider: str, served_model: str) -> None:
+            nonlocal provider, model
+            provider, model = served_provider, served_model
+
         empty_retried = False
         recovered_via_retry = False
         transcript_segments: List[TranscriptSegment] = []
@@ -1742,6 +1660,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 return_language=True,
                 language=req_language,
                 keywords=vocabulary if vocabulary else None,
+                on_provider_served=_note_served_provider,
                 **recovery_dispatch,
             )
             if cap_enforced():
@@ -1769,17 +1688,6 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 return False
             if empty_retried:
                 _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
-                if minimal_redrive.paid_recovery_enabled(redrive_mode):
-                    phase = 'provider_call'
-                    recovered = _recover_empty_segment(
-                        path, uid, provider, sync_lane, job_id, attempt_ref, cap_dispatch_lane
-                    )
-                    if recovered is not None:
-                        transcript_segments, recovered_language, speech_offset = recovered
-                        provider, model = 'modulate', 'velma-2'
-                        language = user_language if (single_language_mode and user_language) else recovered_language
-                        recovered_via_retry = True
-                        break
                 held, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
                 if held:
                     # Speech-positive audio that a degraded provider chain returned

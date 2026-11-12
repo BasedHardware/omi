@@ -9224,6 +9224,24 @@ class AppLocalizationsRo extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nu se poate determina versiunea curentă a firmware-ului';
 
   @override
+  String get applyCodeToCurrentPlan => 'Aplică planului actual';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Cod aplicat planului actual.',
+        'refused': 'Acest cod nu poate fi aplicat. Verifică codul și planul necesar.',
+        'conflict': 'Codul a fost deja folosit sau planul tău are deja o reducere.',
+        'rateLimited': 'Prea multe încercări. Așteaptă și încearcă mai târziu.',
+        'other': 'Codul nu a putut fi aplicat. Încearcă din nou.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Cod promoțional';
 
   @override
@@ -13713,6 +13731,9 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Generează din nou notițele';
 
   @override
   String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';

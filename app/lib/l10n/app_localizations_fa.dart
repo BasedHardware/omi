@@ -9177,6 +9177,24 @@ class AppLocalizationsFa extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'تعیین نسخه فعلی سفت‌افزار امکان‌پذیر نیست';
 
   @override
+  String get applyCodeToCurrentPlan => 'اعمال روی طرح فعلی';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'کد روی طرح فعلی شما اعمال شد.',
+        'refused': 'این کد قابل اعمال نیست. کد و طرح مورد نیاز را بررسی کنید.',
+        'conflict': 'کد قبلاً استفاده شده یا طرح شما از قبل تخفیف دارد.',
+        'rateLimited': 'تلاش‌های بیش از حد. صبر کنید و بعداً دوباره امتحان کنید.',
+        'other': 'کد اعمال نشد. دوباره امتحان کنید.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'کد تخفیف';
 
   @override
@@ -13652,6 +13670,9 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'ایجاد دوباره یادداشت‌ها';
 
   @override
   String get attentionSummaryFailed => 'خلاصه‌سازی این گفتگو ممکن نشد';

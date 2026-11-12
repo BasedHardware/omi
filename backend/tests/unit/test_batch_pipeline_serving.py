@@ -245,18 +245,14 @@ async def test_dev_reprocess_is_foreign_runtime_for_any_namespace(monkeypatch, n
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status,code', [('busy', 200), ('completed', 200)])
-@pytest.mark.parametrize('deadline', ['false', 'true'])
-async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(
-    monkeypatch, caplog, status, code, deadline
-):
+async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(monkeypatch, caplog, status, code):
     from unittest.mock import Mock
     from utils.sync import reprocess
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
 
     async def run(executor, func, *args):
-        assert executor is (module.postprocess_executor if deadline == 'true' else module.sync_executor)
+        assert executor is module.postprocess_executor
         return func(*args)
 
     monkeypatch.setattr(module, 'run_blocking', run)
@@ -274,7 +270,6 @@ async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_
 async def test_summary_runs_while_transcription_executor_is_full(monkeypatch):
     from utils.sync import reprocess
 
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(module, 'run_enrichment', lambda *_: 'processed')
     release = threading.Event()

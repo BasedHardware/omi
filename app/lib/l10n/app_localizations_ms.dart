@@ -9196,6 +9196,24 @@ class AppLocalizationsMs extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Tidak dapat menentukan versi perisian tegar semasa';
 
   @override
+  String get applyCodeToCurrentPlan => 'Gunakan pada Pelan Semasa';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kod digunakan pada pelan semasa anda.',
+        'refused': 'Kod ini tidak boleh digunakan. Semak kod dan pelan yang diperlukan.',
+        'conflict': 'Kod sudah digunakan atau pelan anda sudah mempunyai diskaun.',
+        'rateLimited': 'Terlalu banyak percubaan. Tunggu dan cuba lagi kemudian.',
+        'other': 'Kod tidak dapat digunakan. Sila cuba lagi.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Kod promo';
 
   @override
@@ -13687,6 +13705,9 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Jana semula nota';
 
   @override
   String get attentionSummaryFailed => 'Perbualan ini tidak dapat diringkaskan';

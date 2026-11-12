@@ -127,31 +127,6 @@ jobs:
         id: meta
         run: python3 omi/firmware/scripts/ci/cv1_release.py prepare
 
-      # Release gate: the CV1 simulator suite plus a fuzz batch must pass for
-      # this exact SHA before QA assets can be staged; stage refuses to package
-      # without the passing sim-report.json, which travels in the QA artifact
-      # and is revalidated at promote and publish.
-      - name: Run CV1 simulator gate
-        if: ${{ inputs.publish != 'publish' }}
-        env:
-          VER: ${{ steps.meta.outputs.ver }}
-        run: |
-          python3 omi/firmware/omi/sim/scenario_runner.py \
-            --cache "$RUNNER_TEMP/cv1-sim" --jobs 4 --fuzz-seeds 40 \
-            --firmware-version "$VER" --report "$RUNNER_TEMP/sim-report.json"
-
-      - name: Upload simulator evidence
-        if: ${{ always() && inputs.publish != 'publish' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: cv1-sim-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/cv1-sim/sim-report.json
-            ${{ runner.temp }}/cv1-sim/runs/**
-            ${{ runner.temp }}/cv1-sim/fuzz-failures/**
-            !${{ runner.temp }}/cv1-sim/runs/**/sd.img
-          if-no-files-found: ignore
-
       - name: Cache nRF Connect SDK workspace (v2.9.0)
         if: ${{ inputs.publish != 'publish' }}
         uses: actions/cache@v6
@@ -165,12 +140,69 @@ jobs:
           docker run --rm \
             -v "$GITHUB_WORKSPACE/omi/firmware:/omi/firmware" \
             -e CMAKE_PREFIX_PATH=/opt/toolchains \
+            -e GITHUB_SHA -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT \
             "$CI_IMAGE" \
             bash /omi/firmware/scripts/ci/build-cv1.sh
+
+      - name: Upload failed MCUboot build diagnostics
+        if: ${{ failure() && inputs.publish != 'publish' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cv1-bootloader-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            omi/firmware/v2.9.0/build/mcuboot/zephyr/zephyr.elf
+            omi/firmware/v2.9.0/build/mcuboot/zephyr/zephyr.hex
+            omi/firmware/v2.9.0/build/mcuboot/zephyr/zephyr.map
+            omi/firmware/v2.9.0/build/mcuboot/zephyr/.config
+            omi/firmware/v2.9.0/build/partitions.yml
+          include-hidden-files: true
+          if-no-files-found: ignore
 
       - name: Fix workspace ownership
         if: ${{ inputs.publish != 'publish' }}
         run: sudo chown -R "$(id -u):$(id -g)" omi/firmware
+
+      - name: Upload custom MCUboot qualification evidence (never release assets)
+        if: ${{ inputs.publish != 'publish' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cv1-bootloader-${{ github.run_id }}-${{ github.run_attempt }}
+          path: omi/firmware/v2.9.0/build/cv1-bootloader/*
+          if-no-files-found: error
+
+      # Release gate: the CV1 simulator suite plus a fuzz batch must pass for
+      # this exact SHA before QA assets can be staged; stage refuses to package
+      # without the passing sim-report.json, which travels in the QA artifact
+      # and is revalidated at promote and publish.
+      - name: Run CV1 simulator gate
+        if: ${{ inputs.publish != 'publish' }}
+        env:
+          VER: ${{ steps.meta.outputs.ver }}
+        run: |
+          python3 omi/firmware/omi/sim/scenario_runner.py \
+            --cache "$RUNNER_TEMP/cv1-sim" --jobs 4 --fuzz-seeds 40 \
+            --firmware-version "$VER" --report "$RUNNER_TEMP/sim-report.json"
+
+      # The simulator runs in Docker as root; its per-scenario flash images are
+      # root-owned and unreadable to upload-artifact (EACCES) without this.
+      - name: Fix simulator evidence ownership
+        if: ${{ always() && inputs.publish != 'publish' }}
+        run: |
+          if [ -d "$RUNNER_TEMP/cv1-sim" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/cv1-sim"
+          fi
+
+      - name: Upload simulator evidence
+        if: ${{ always() && inputs.publish != 'publish' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cv1-sim-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sim-report.json
+            ${{ runner.temp }}/cv1-sim/runs/**
+            ${{ runner.temp }}/cv1-sim/fuzz-failures/**
+            !${{ runner.temp }}/cv1-sim/runs/**/sd.img
+          if-no-files-found: ignore
 
       - name: Package QA release assets
         if: ${{ inputs.publish != 'publish' }}
@@ -212,6 +244,12 @@ jobs:
             2. Go to **Settings** > **Device Settings**.
             3. Select **Product Update**.
         run: |
+          # The app's update check needs min_version: without it, it reports
+          # "up to date" even when the backend offers the release (3.0.24).
+          if [ -z "$MIN_FW" ]; then
+            echo "::error::minimum_firmware_required is required to publish (every CV1 release so far: 3.0.6, with minimum_app_version 1.0.74 and minimum_app_version_code 438)"
+            exit 1
+          fi
           OUT="$RUNNER_TEMP/cv1-body.md"
           OUT="$OUT" bash omi/firmware/scripts/ci/make-release-body.sh
           echo "file=$OUT" >> "$GITHUB_OUTPUT"

@@ -9180,6 +9180,24 @@ class AppLocalizationsVi extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Không thể xác định phiên bản firmware hiện tại';
 
   @override
+  String get applyCodeToCurrentPlan => 'Áp dụng cho gói hiện tại';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Đã áp dụng mã cho gói hiện tại của bạn.',
+        'refused': 'Không thể áp dụng mã này. Kiểm tra mã và gói được yêu cầu.',
+        'conflict': 'Mã đã được dùng hoặc gói của bạn đã có ưu đãi giảm giá.',
+        'rateLimited': 'Thử quá nhiều lần. Vui lòng chờ rồi thử lại sau.',
+        'other': 'Không thể áp dụng mã. Vui lòng thử lại.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Mã khuyến mãi';
 
   @override
@@ -13655,6 +13673,9 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Tạo lại ghi chú';
 
   @override
   String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';

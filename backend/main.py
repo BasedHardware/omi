@@ -75,6 +75,7 @@ from services.conversation_finalization import reconcile_stale_in_progress_conve
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
+from utils.conversations.deletion_batch_purge import reconcile_conversation_batch_purges
 from utils.other.local_storage import local_storage_root_from_env
 
 # Log LangSmith tracing status at startup
@@ -159,6 +160,7 @@ methods_timeout = {
 paths_timeout = {
     "/v2/cap-hold-recovery/sweep": 1710,  # Await bounded redrive under Scheduler's 1740s deadline.
     "/v2/batch-pipeline/recover-quarantine": 1500,  # Await paid STT and durable settlement within the task request.
+    "/v2/pipeline-ledger/census": 60,  # Bounded owner window read; fail closed rather than hold the request.
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Enabled Dream routes use the 1710s cap in TimeoutMiddleware.
     "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
@@ -167,6 +169,8 @@ paths_timeout = {
     "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
+    # Same queue and dispatch deadline; a heavy owner's batch scan runs for minutes.
+    "/v1/conversations/deletion-batch-purges/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
     # STT proxy: 30s slot wait + 300s parakeet client budget (get_stt_proxy_client)
     # + headroom for auth and the multipart spool read; the default POST timeout
@@ -272,6 +276,14 @@ async def startup_event():
         name='startup_byok_abandonment_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
+    # Sole dispatcher of conversation batch-purge obligations (deletes only arm them).
+    start_background_task(
+        run_blocking(db_executor, _drain_conversation_batch_purges),
+        name='startup_conversation_batch_purge_reconcile',
+    )
+    start_background_task(
+        _periodic_conversation_batch_purge_reconcile(), name='periodic_conversation_batch_purge_reconcile'
+    )
     start_background_task(_periodic_durable_queue_age_publish(), name='periodic_durable_queue_age_publish')
     start_background_task(
         proactive_message_dispatcher(),
@@ -325,6 +337,50 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int | None = None)
                 logger.info(f"Periodic deletion-wipe reconciliation: {result}")
         except Exception as e:
             logger.error(f"Periodic deletion-wipe reconciliation failed: {e}")
+
+
+def _drain_conversation_batch_purges():
+    """Best-effort dispatch of due batch-purge obligations right after a restart/deploy."""
+    try:
+        result = _run_fsr_loop(
+            'reconcile_conversation_batch_purges',
+            reconcile_conversation_batch_purges,
+            _conversation_batch_purge_reconcile_interval_seconds(),
+        )
+        if result.get('dispatched') or result.get('held_for_consumer'):
+            logger.info(f"Startup conversation batch-purge reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup conversation batch-purge reconciliation failed: {e}")
+
+
+def _conversation_batch_purge_reconcile_interval_seconds() -> int:
+    try:
+        seconds = int(os.getenv('CONVERSATION_BATCH_PURGE_RECONCILE_INTERVAL_SECONDS', '60'))
+    except ValueError:
+        seconds = 60
+    return max(1, seconds)
+
+
+async def _periodic_conversation_batch_purge_reconcile(interval_seconds: int | None = None):
+    """Dispatch due conversation batch-purge obligations (new, lost, exhausted, released holds)."""
+    if interval_seconds is None:
+        interval_seconds = _conversation_batch_purge_reconcile_interval_seconds()
+    from utils.other.fsr_leader_lease import poll_delay
+
+    while True:
+        await asyncio.sleep(poll_delay(interval_seconds))
+        try:
+            result = await run_blocking(
+                db_executor,
+                _run_fsr_loop,
+                'reconcile_conversation_batch_purges',
+                reconcile_conversation_batch_purges,
+                interval_seconds,
+            )
+            if result.get('dispatched') or result.get('held_for_consumer') or result.get('enqueue_failed'):
+                logger.info(f"Periodic conversation batch-purge reconciliation: {result}")
+        except Exception as e:
+            logger.error(f"Periodic conversation batch-purge reconciliation failed: {e}")
 
 
 def _drain_listen_finalization_jobs():

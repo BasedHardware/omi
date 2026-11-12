@@ -42,7 +42,6 @@ def valid_note(title='Written approval', overview='The message shows approval.')
 @pytest.fixture(autouse=True)
 def claim_generation_mode(monkeypatch):
     # These regression fixtures exercise the existing annotated path explicitly.
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'default')
 
 

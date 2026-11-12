@@ -292,9 +292,12 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   distinguish label drift from new speech. That successful compose seeds the
   narrow stamp, so subsequent label-only finalizes skip. No historical backfill
   or production-data migration is required.
-- `omi_episode_compose_total{outcome="settling"}` counts deferred runs;
+- `omi_episode_compose_total{outcome,trigger}` counts runs by outcome and bounded
+  trigger (`close|read|member_final|settle`); `omi_episode_compose_seconds` carries
+  the same labels. `omi_episode_compose_calls_total{trigger,outcome}` counts each
+  paid model call, including `trigger="repair"`.
   `omi_episode_compose_trigger_skipped_total{reason="evidence_unchanged"}` counts
-  avoided triggers. Both have bounded labels and no user identifiers.
+  avoided triggers. All have bounded labels and no user identifiers.
 - Triggers: close, member finalize (including `sync_update`, gated on the changed
   member already loaded by finalization), and a
   read-side safety net in `home_read.project_episodes` for a closed episode that
@@ -308,15 +311,19 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   per request; changing it takes a new backend revision). Telemetry:
   `omi_episode_home_members_total{outcome}`.
 - Kill switch `EPISODE_COMPOSER` (on unless set off): off restores the live
-  notes as the final notes. Telemetry: `omi_episode_compose_total{outcome}` and
-  `omi_episode_compose_seconds`; usage adds `composer_*` counters.
+  notes as the final notes. Telemetry: `omi_episode_compose_total{outcome,trigger}`,
+  `omi_episode_compose_seconds` and `omi_episode_compose_calls_total{trigger,outcome}`;
+  usage adds `composer_*` counters.
+- `EPISODE_COMPOSER_THRIFT` (on unless set off) keeps paid composes: one repair
+  retry over the bad output alone, a title-and-lede compose for short episodes,
+  superseded results stored and marked pending, and a two-paid-failure cap. Off
+  restores discard-and-retry and the four-failure cap.
 
 ## Kill switch, cohort and client capability
 
 `config/episodes.py`:
 - `EPISODES_ENABLED` defaults on and is the kill switch.
-- `EPISODES_PERCENT` (default 100) and `EPISODES_UID_ALLOWLIST`
-  select the admitted cohort. The allowlist bypasses the percentage.
+- Every nonempty owner is admitted while the kill switch is on.
 
 Off makes `/v1/episodes/*` report `enabled: false`. Apps keep today's
 per-conversation UI, and episode lifecycle reads, writes and model calls stop.
@@ -364,6 +371,10 @@ builds, the desktop app and web never call any `/v1/episodes` route.
 - `omi_episode_provisional_items_total{outcome}`
 - `omi_episode_wrapup_latency_seconds`
 - `omi_episode_boundary_total`
+- `omi_episode_f_gate_total{reason}`: first candidate privacy refusal at Variant F settlement;
+  `held|client_processing|deferred|local_pending|local_only|row_consent|user_consent|locked_discarded|owner|status|hidden|other`
+- `omi_episode_f_fallback_total{site}`: fallback attribution by distinct bounded call site;
+  existing shared fallback reason values stay unchanged
 - `omi_episode_moments_skipped_no_client_total{trigger}`: admitted moments (and
   finalization tails, `trigger=finalize`) skipped because no capable client was seen
 - `omi_episode_live_sessions_total{client_seen}`: admitted live conversations at

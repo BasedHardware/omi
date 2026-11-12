@@ -9179,6 +9179,24 @@ class AppLocalizationsFi extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nykyistä laiteohjelmistoversiota ei voida määrittää';
 
   @override
+  String get applyCodeToCurrentPlan => 'Käytä nykyiseen tilaukseen';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koodi käytettiin nykyiseen tilaukseesi.',
+        'refused': 'Koodia ei voi käyttää. Tarkista koodi ja vaadittu tilaus.',
+        'conflict': 'Koodi on jo käytetty tai tilauksessasi on jo alennus.',
+        'rateLimited': 'Liian monta yritystä. Odota ja yritä myöhemmin uudelleen.',
+        'other': 'Koodia ei voitu käyttää. Yritä uudelleen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Tarjouskoodi';
 
   @override
@@ -13660,6 +13678,9 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Luo muistiinpanot uudelleen';
 
   @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';

@@ -9034,6 +9034,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => '无法确定当前固件版本';
 
   @override
+  String get applyCodeToCurrentPlan => '应用于当前套餐';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': '代码已应用于您当前的套餐。',
+        'refused': '无法应用此代码。请检查代码及其适用套餐。',
+        'conflict': '代码已使用，或您的套餐已有折扣。',
+        'rateLimited': '尝试次数过多。请稍后重试。',
+        'other': '无法应用此代码。请重试。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => '促销代码';
 
   @override
@@ -13447,6 +13465,9 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => '重新生成笔记';
 
   @override
   String get attentionSummaryFailed => '无法总结这段对话';

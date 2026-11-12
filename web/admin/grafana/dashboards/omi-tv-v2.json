@@ -4118,7 +4118,7 @@
             },
             "insertNulls": 129600000
           },
-          "noValue": "Loading\u2026",
+          "noValue": "No day in the last 35 has both plan cost and revenue",
           "decimals": 0
         },
         "overrides": [
@@ -5995,7 +5995,7 @@
         "legend": {
           "showLegend": true,
           "displayMode": "list",
-          "placement": "right"
+          "placement": "bottom"
         },
         "tooltip": {
           "mode": "multi",

@@ -9204,6 +9204,24 @@ class AppLocalizationsBe extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Не ўдалося вызначыць бягучую версію прашыўкі';
 
   @override
+  String get applyCodeToCurrentPlan => 'Ужыць да бягучага плана';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Код ужыты да вашага бягучага плана.',
+        'refused': 'Немагчыма ўжыць код. Праверце код і патрэбны план.',
+        'conflict': 'Код ужо выкарыстаны або план ужо мае зніжку.',
+        'rateLimited': 'Зашмат спроб. Пачакайце і паспрабуйце пазней.',
+        'other': 'Не ўдалося ўжыць код. Паспрабуйце яшчэ раз.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Промакод';
 
   @override
@@ -13690,6 +13708,9 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Стварыць нататкі зноў';
 
   @override
   String get attentionSummaryFailed => 'Не ўдалося падсумаваць гэту размову';

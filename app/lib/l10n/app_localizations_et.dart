@@ -9172,6 +9172,24 @@ class AppLocalizationsEt extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Praeguse püsivara versiooni ei õnnestunud tuvastada';
 
   @override
+  String get applyCodeToCurrentPlan => 'Rakenda praegusele paketile';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kood rakendati sinu praegusele paketile.',
+        'refused': 'Seda koodi ei saa rakendada. Kontrolli koodi ja nõutavat paketti.',
+        'conflict': 'Koodi on juba kasutatud või paketil on juba soodustus.',
+        'rateLimited': 'Liiga palju katseid. Oota ja proovi hiljem uuesti.',
+        'other': 'Koodi ei saanud rakendada. Proovi uuesti.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Sooduskood';
 
   @override
@@ -13650,6 +13668,9 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Loo märkmed uuesti';
 
   @override
   String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';

@@ -50,7 +50,8 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  service_name: backend-listen
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -100,6 +101,22 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
+  - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
+    value: "true"
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -143,14 +160,12 @@ env:
     value: "100"
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
+  - name: BATCH_INPUT_EXPIRING_ENABLED
+    value: "true"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
-  - name: FIRST_SUMMARY_DEADLINE_ENABLED
-    value: "true"
-  - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "100"
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
@@ -161,8 +176,6 @@ env:
   - name: SERVER_BATCH_ONLY_WEB_PERCENT
     value: "0"
   # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
-  - name: SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT
-    value: "0"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_SERVING_ENABLED
@@ -185,8 +198,6 @@ env:
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
-  - name: REPEAT_WORK_LLM_VERSION
-    value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
@@ -231,8 +242,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
@@ -241,8 +250,6 @@ env:
     value: "0"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: ""
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -387,10 +394,6 @@ env:
     value: "10"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: SPEAKER_GROUPING_MODE
-    value: "incumbent"
-  - name: SPEAKER_MATCH_SCORES_ENABLED
-    value: "true"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
   - name: DREAM_AGENT_ENABLED
@@ -611,10 +614,10 @@ env:
     value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
-  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
-    value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
+    value: "true"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
@@ -629,8 +632,6 @@ env:
     value: "true"
   - name: MOBILE_STANDARD_BATCH_PERCENT
     value: "0"
-  - name: MOBILE_STANDARD_BATCH_UIDS
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
   - name: STT_ROUTING_MODE
@@ -646,8 +647,6 @@ env:
   - name: STT_NO_TEXT_SECONDS
     value: "30"
   - name: STT_NO_TEXT_RESCUE_ENABLED
-    value: "true"
-  - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
@@ -667,8 +666,6 @@ env:
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
-    value: "false"
-  - name: PARAKEET_WINDOW_DEADLINE_CUT_ENABLED
     value: "false"
   - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
     value: "1.2"
@@ -781,10 +778,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: LIVE_CAPTURE_WINDOW_RETENTION
-    value: 'false'
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
@@ -847,6 +840,9 @@ env:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_CLIENTS_JSON
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
+  # Quiet-check empty exit; evaluated on backend-sync (Cloud Tasks handler), pinned here for consistency (lead2 9b4ffd).
+  - name: QUIET_EMPTY_EXIT_ENABLED
     value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"

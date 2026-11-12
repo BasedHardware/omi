@@ -44,7 +44,14 @@ class ServerBatchSuppressionReason(StrEnum):
     NOT_ENABLED = 'not_enabled'
 
 
+class MemoryL1Reason(StrEnum):
+    NOISE = 'noise'
+    SHORT_OWNER_SPEECH = 'short_owner_speech'
+    UNKNOWN = 'unknown'
+
+
 class ReasonFamily(StrEnum):
+    MEMORY_L1 = 'memory_l1'
     PUSHER_PCM = 'pusher_pcm'
     LIVE_STT = 'live_stt'
     WORKER_VALIDATION = 'worker_validation'
@@ -75,6 +82,8 @@ class ReasonFamily(StrEnum):
     BATCH_FINAL_PASS = 'batch_final_pass'
     RECURRING_VOICE = 'recurring_voice'
     RECORD_GAP_FILL = 'record_gap_fill'
+    RECORD_RETAINED_ACK = 'record_retained_ack'
+    PIPELINE_LEDGER = 'pipeline_ledger'
 
 
 class PusherPcmStage(StrEnum):
@@ -121,6 +130,23 @@ class RecordGapFillOutcome(StrEnum):
     SKIPPED_NO_AUDIO = 'skipped_no_audio'
     SKIPPED_NOT_CONTIGUOUS = 'skipped_not_contiguous'
     SKIPPED_COLLISION = 'skipped_collision'
+    SKIPPED_BUSY = 'skipped_busy'
+    RACED = 'raced'
+    FAILED = 'failed'
+
+
+class RecordRetainedAckOutcome(StrEnum):
+    """One option A byte-exact retained-copy proof (``utils.batch_pipeline.record_retained_ack``)."""
+
+    UNKNOWN = 'unknown'
+    ACKED = 'acked'
+    SKIPPED_FILL = 'skipped_fill'
+    SKIPPED_UNCOVERED = 'skipped_uncovered'
+    SKIPPED_LOSSY_SOURCE = 'skipped_lossy_source'
+    SKIPPED_BYTES_DIFFER = 'skipped_bytes_differ'
+    SKIPPED_OUTSIDE_RECORD = 'skipped_outside_record'
+    SKIPPED_BOUNDS = 'skipped_bounds'
+    SKIPPED_PRIVACY = 'skipped_privacy'
     FAILED = 'failed'
 
 
@@ -796,3 +822,23 @@ class IdentitySpeechOutcome(StrEnum):
     PERSON = 'person'
     RECURRING = 'recurring'
     UNNAMED = 'unnamed'
+
+
+class PipelineLedgerOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OK = 'ok'
+    ERROR = 'error'
+    DISABLED = 'disabled'
+    DUPLICATE = 'duplicate'
+    STALE = 'stale'
+    ILLEGAL = 'illegal'
+    TERMINAL = 'terminal'
+
+
+class PipelineLedgerFailureReason(StrEnum):
+    UNKNOWN = 'unknown'
+    TIMEOUT = 'timeout'
+    UNAVAILABLE = 'unavailable'
+    PERMISSION = 'permission'
+    INVALID = 'invalid'
+    OTHER = 'other'

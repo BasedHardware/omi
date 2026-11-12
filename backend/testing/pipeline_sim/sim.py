@@ -103,8 +103,6 @@ logger = logging.getLogger(__name__)
 # state disagrees across dates, so these are explicit simulation inputs.
 DEFAULT_FLAGS = {
     'OMI_ENV_STAGE': 'dev',
-    'FIRST_SUMMARY_DEADLINE_ENABLED': 'true',
-    'FIRST_SUMMARY_DEADLINE_PERCENT': '100',
     'BATCH_PIPELINE_ENABLED': 'true',
     'BATCH_PIPELINE_PERCENT': '100',
     'BATCH_PIPELINE_UID_ALLOWLIST': '',
@@ -608,6 +606,8 @@ class Simulation:
 
     def _cancel_fenced_recovery(self, store, segment_id):
         """Model of cancel_fenced_recovery(): revocation-only write after the fence rejects."""
+        if hasattr(store, 'cancel_fenced_recovery'):
+            return store.cancel_fenced_recovery(segment_id)
         job = store.rows.get(('jobs', segment_id), {})
         if not job or not job.get('recovery'):
             return False

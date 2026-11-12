@@ -1,6 +1,6 @@
 """Independent default-off cuts; existing Train 1 switches retain their meaning.
 
-REPEAT_WORK_REVISION_ENABLED state resolved 2026-11-01: off everywhere, deliberately.
+Revision reuse retired 2026-11-09 after remaining off everywhere.
 It adds no LLM skips (those are CONVERSATION_LLM_INPUT_DEDUPE_ENABLED, default-on).
 It buys stricter reuse fingerprints (route + version + content revision), an
 extra-read-free dedupe probe, a 1h outbox ceiling and the omi_repeat_work_* metrics;
@@ -17,12 +17,6 @@ import os
 def playback_on_demand() -> bool:
     return rollout_default_off(
         'PLAYBACK_ON_DEMAND_ENABLED', os.getenv('PLAYBACK_ON_DEMAND_ENABLED', 'false').strip().lower() == 'true'
-    )
-
-
-def revision_reuse() -> bool:
-    return rollout_default_off(
-        'REPEAT_WORK_REVISION_ENABLED', os.getenv('REPEAT_WORK_REVISION_ENABLED', 'false').strip().lower() == 'true'
     )
 
 

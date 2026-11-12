@@ -9179,6 +9179,24 @@ class AppLocalizationsCs extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nelze určit aktuální verzi firmwaru';
 
   @override
+  String get applyCodeToCurrentPlan => 'Použít na aktuální tarif';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kód byl použit na váš aktuální tarif.',
+        'refused': 'Tento kód nelze použít. Zkontrolujte kód a požadovaný tarif.',
+        'conflict': 'Kód již byl použit nebo váš tarif již má slevu.',
+        'rateLimited': 'Příliš mnoho pokusů. Počkejte a zkuste to později.',
+        'other': 'Kód se nepodařilo použít. Zkuste to znovu.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promo kód';
 
   @override
@@ -13657,6 +13675,9 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Znovu vytvořit poznámky';
 
   @override
   String get attentionSummaryFailed => 'Tuto konverzaci se nepodařilo shrnout';

@@ -9253,6 +9253,24 @@ class AppLocalizationsDe extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Aktuelle Firmware-Version konnte nicht ermittelt werden';
 
   @override
+  String get applyCodeToCurrentPlan => 'Auf aktuellen Tarif anwenden';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Code auf deinen aktuellen Tarif angewendet.',
+        'refused': 'Dieser Code kann nicht angewendet werden. Prüfe den Code und den erforderlichen Tarif.',
+        'conflict': 'Code bereits verwendet oder dein Tarif hat bereits einen Rabatt.',
+        'rateLimited': 'Zu viele Versuche. Bitte warte und versuche es später erneut.',
+        'other': 'Code konnte nicht angewendet werden. Bitte versuche es erneut.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Aktionscode';
 
   @override
@@ -13757,6 +13775,9 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Notizen erneut erstellen';
 
   @override
   String get attentionSummaryFailed => 'Diese Unterhaltung konnte nicht zusammengefasst werden';

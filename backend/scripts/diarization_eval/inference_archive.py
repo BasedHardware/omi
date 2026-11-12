@@ -13,7 +13,7 @@ import subprocess
 import wave
 
 from scripts.diarization_eval.local_artifacts import file_digest
-from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
+from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled
 from config.batch_pipeline import (
     empty_asr_disposition_enabled,
     empty_asr_recovery_enabled,
@@ -33,7 +33,6 @@ def effective_worker_switches():
     """Capture effective values through the same accessors the worker uses."""
     return {
         'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': diarize_speech_only_enabled(),
-        'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': short_speech_single_enabled(),
         'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED': empty_asr_recovery_enabled(),
         'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED': empty_asr_disposition_enabled(),
         'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED': worker_silence_disposition_enabled(),

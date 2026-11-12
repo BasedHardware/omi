@@ -404,7 +404,9 @@ def columns():
                                               ("revenuePerDay", "Revenue", "number"),
                                               ("oneTimeExcluded", "One-time excluded", "number"),
                                               ("total", "All-in total", "number")])],
-                   unit="currencyUSD", draw="bars", stack=True, time_from="35d", extra=legend_right,
+                   # Legend under the plot, not beside it: Health is a 4-column
+                   # panel, and a right-hand legend left the 35 days ~100px wide.
+                   unit="currencyUSD", draw="bars", stack=True, time_from="35d",
                    overrides=[*[short_label(color(n, h), STACK_LABELS[n]) for n, h in COST.items()],
                               *[short_label(color(n, h), STACK_LABELS[n]) for n, h in MEASURED.items()],
                               *[short_label(estimate(n, h), STACK_LABELS[n]) for n, h in ESTIMATE.items()],
@@ -428,6 +430,9 @@ def columns():
     return dict(zip(COLUMNS, [growth, activation, retention, revenue, health]))
 
 
+MARGIN_EMPTY = "No day in the last 35 has both plan cost and revenue"
+
+
 def margin_by_plan():
     """Allocated-estimate margin by plan (David 2026-10-17): paid plans as margin %
     lines (left axis); Free, which has no revenue, as negative $/day bars (right
@@ -448,6 +453,9 @@ def margin_by_plan():
 
     def centre(panel):
         panel["fieldConfig"]["defaults"]["custom"]["axisCenteredZero"] = True
+        # An empty frame is a real answer here (no day in the window has both a
+        # settled plan cost and a revenue book), not a load still in flight.
+        panel["fieldConfig"]["defaults"]["noValue"] = MARGIN_EMPTY
         disconnect_after(1.5)(panel)  # any missing day is a gap (e.g. no 09-29 book)
 
     return chart("Margin by plan",

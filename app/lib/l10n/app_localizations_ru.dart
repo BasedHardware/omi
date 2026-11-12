@@ -9212,6 +9212,24 @@ class AppLocalizationsRu extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Не удаётся определить текущую версию прошивки';
 
   @override
+  String get applyCodeToCurrentPlan => 'Применить к текущему плану';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Код применён к вашему текущему плану.',
+        'refused': 'Невозможно применить этот код. Проверьте код и требуемый план.',
+        'conflict': 'Код уже использован или к плану уже применена скидка.',
+        'rateLimited': 'Слишком много попыток. Подождите и повторите позже.',
+        'other': 'Не удалось применить код. Попробуйте ещё раз.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Промокод';
 
   @override
@@ -13702,6 +13720,9 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Создать заметки заново';
 
   @override
   String get attentionSummaryFailed => 'Не удалось подвести итоги этого разговора';

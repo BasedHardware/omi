@@ -243,6 +243,74 @@ def assert_account_deletion_queue_exists(client: Any = None) -> None:
         logger.warning('account-deletion queue existence probe inconclusive: %s', sanitize(str(exc)))
 
 
+CONVERSATION_BATCH_PURGE_PATH = '/v1/conversations/deletion-batch-purges/run'
+
+
+def _conversation_batch_purge_handler_url() -> str:
+    """Same backend-sync host as the account-deletion handler, different path."""
+    deletion_url = os.getenv('ACCOUNT_DELETION_HANDLER_URL', '').strip()
+    if not deletion_url:
+        return ''
+    parts = urlsplit(deletion_url)
+    if not parts.scheme or not parts.netloc:
+        return ''
+    return f'{parts.scheme}://{parts.netloc}{CONVERSATION_BATCH_PURGE_PATH}'
+
+
+def is_conversation_batch_purge_dispatch_configured() -> bool:
+    """Conversation batch purges ride the account-deletion queue and invoker identity."""
+    return bool(
+        is_account_deletion_dispatch_enabled()
+        and os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip()
+        and _conversation_batch_purge_handler_url()
+        and _invoker_sa()
+    )
+
+
+def conversation_batch_purge_task_id(job_id: str, generation: int) -> str:
+    # One name per dispatch generation: a completed, deleted or still-reserved
+    # name (Cloud Tasks keeps them for up to 24 h) never swallows a redrive.
+    return f'conversation-batch-purge-{job_id}-g{int(generation)}'
+
+
+def enqueue_conversation_batch_purge(job_id: str, generation: int) -> None:
+    """Dispatch one generation of a durable purge obligation to backend-sync (opaque payload)."""
+    enqueue_named_task(
+        os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip(),
+        _conversation_batch_purge_handler_url(),
+        conversation_batch_purge_task_id(job_id, generation),
+        {'job_id': job_id, 'generation': int(generation)},
+        audience=_conversation_batch_purge_handler_url(),
+        invoker_sa=_invoker_sa(),
+    )
+
+
+def conversation_batch_purge_consumer_ready() -> Optional[bool]:
+    """Probe the live handler URL without credentials: does the serving consumer have the route?
+
+    The new handler rejects the unauthenticated probe with its own 403
+    ("Missing bearer token"); a revision without the route answers 404/405.
+    None means the probe itself failed (network), which proves nothing.
+    """
+    url = _conversation_batch_purge_handler_url()
+    if not url:
+        return False
+    try:
+        response = _get_auth_request()(
+            url, method='POST', body=b'{}', headers={'Content-Type': 'application/json'}, timeout=5
+        )
+    except Exception as exc:  # noqa: BLE001 - an unreachable probe is an unanswered question
+        logger.warning('conversation batch purge consumer probe failed: %s', type(exc).__name__)
+        return None
+    if response.status in (404, 405):
+        return False
+    try:
+        detail = json.loads(response.data or b'{}').get('detail')
+    except Exception:  # noqa: BLE001
+        detail = None
+    return response.status == 403 and detail == 'Missing bearer token'
+
+
 def is_listen_finalization_dispatch_enabled() -> bool:
     """Whether platform-key listen finalization uses its durable worker."""
     return os.getenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
@@ -648,6 +716,13 @@ def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletio
         log_failure=False,
     )
     return AccountDeletionTaskAuthentication(retry_count=retry_count)
+
+
+def verify_conversation_batch_purge_cloud_tasks_oidc(request: Request) -> int:
+    """Audience is this handler's own URL, minted from the same env as the task URL."""
+    return verify_configured_cloud_tasks_oidc(
+        request, audience=_conversation_batch_purge_handler_url(), invoker_sa=_invoker_sa()
+    )
 
 
 def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:

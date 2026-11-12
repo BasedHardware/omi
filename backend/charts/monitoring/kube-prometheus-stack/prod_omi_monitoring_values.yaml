@@ -364,6 +364,8 @@ prometheus:
             namespaces:
               names: [prod-omi-backend]
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
             regex: batch-pipeline-worker
             action: keep
@@ -387,6 +389,8 @@ prometheus:
             namespaces:
               names: [prod-omi-backend]
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
             regex: record-seal-worker
             action: keep
@@ -444,6 +448,8 @@ prometheus:
         kubernetes_sd_configs:
         - role: pod
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: "true"
@@ -476,6 +482,8 @@ prometheus:
         kubernetes_sd_configs:
         - role: pod
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: "true"

@@ -48,6 +48,8 @@ from utils import encryption
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
 from config.recording_speakers import stamp_scope_index, with_creation_scope_index
+from config.record_audio import record_identity
+from utils.sync.stage import current_stage
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_settling_fragment
 from utils.conversations.transcript_hash import (
@@ -394,7 +396,7 @@ def _prepare_conversation_for_write(
         _reveal_match_scores_for_read(data, uid)
         if isinstance(segments, list):
             updates = match_scores.from_segments(segments)
-            if updates and match_scores.enabled():
+            if updates:
                 data[match_scores.FIELD] = match_scores.merge(data.get(match_scores.FIELD), updates)
     except Exception:
         # Optional metadata must never block content when decoding/merging fails.
@@ -2394,6 +2396,12 @@ def update_conversation_chat(uid: str, conversation_id: str, expected: dict, upd
     prepared = _prepare_conversation_for_write(
         update_data, uid, raw.get('data_protection_level', 'standard'), conversation_id=conversation_id
     )
+    # The general codec also prepares summary enrollment metadata. A manual
+    # chat edit owns only its requested fields and correction encoding; carrying
+    # those derived fields would fail the chat allowlist (or re-enroll debt).
+    prepared = {
+        key: value for key, value in prepared.items() if key in update_data or key == 'user_corrections_compressed'
+    }
     after = chat_edits.apply_update(uid, 'conversation', conversation_id, expected, prepared)
     refresh_conversation_after_chat_edit(uid, conversation_id)
     return after
@@ -2466,7 +2474,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     if not doc_snapshot.exists:
         return
 
-    conversation_ref.update({'structured.title': title, 'user_title': title})
+    conversation_ref.update({'structured.title': title, 'user_title': title, 'summary_due_at': None})
     _sync_conversation_search_index(uid, conversation_id)
 
 
@@ -3255,6 +3263,9 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str, *, retur
         restored = {**current, **updates}
         stamp_terminal_decision(restored, path='user_restore')
         updates['relevance_decision'] = restored['relevance_decision']
+        due = summary_delivery.rearm_after_refusal_clear(current, restored)
+        if due is not None:
+            updates['summary_due_at'] = restored['summary_due_at'] = due
         transaction.update(conversation_ref, updates)
         return restored
 
@@ -4010,7 +4021,7 @@ def update_conversation_segments(
             # this fence must not depend on the lineage rollout allowlist.
             update_payload['sync_content_revision'] = (current.get('sync_content_revision') or 0) + 1
         summary_delivery.rearm_on_revision_change(current, update_payload)
-        if score_updates and match_scores.enabled():
+        if score_updates:
             try:
                 score_current = dict(current)
                 _reveal_match_scores_for_read(score_current, uid)
@@ -4665,6 +4676,13 @@ def assign_sync_conversation(
                     uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
                 )
 
+        def record_obligations():
+            # Registration and visibility are separate commits. Reread the
+            # canonical obligation in the transaction that replaces the text.
+            _, segment = record_identity(uid, target_id)
+            job = client.collection(f'batch_pipeline_{current_stage()}_jobs').document(segment)
+            return (job.get(transaction=transaction).to_dict() or {},)
+
         with clock.timed('plan'):
             planned = assign_in_transaction(
                 transaction,
@@ -4678,6 +4696,7 @@ def assign_sync_conversation(
                 full_ids=full_ids,
                 live_candidate_ids=discovery.candidate_ids,
                 absorbed=absorbed,
+                **({'record_obligations': record_obligations} if incoming.get('_batch_replace_live') else {}),
                 **discovery.plan_kwargs(),
             )
         # Remember the candidate before the transaction commits.

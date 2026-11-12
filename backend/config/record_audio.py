@@ -13,6 +13,11 @@ def record_identity(uid: str, conversation_id: str) -> tuple[str, str]:
     return content, hashlib.sha256(f'{content}:0'.encode()).hexdigest()
 
 
+def restore_pending(row: dict, *obligations: dict) -> bool:
+    """Registration precedes restore metadata; only that origin fences revival."""
+    return bool(row.get('discarded') and any(job.get('registration_origin') == 'restore' for job in obligations))
+
+
 def require_record_audio_barrier(row, *, expected=None):
     snapshot = {
         key: row.get(key)

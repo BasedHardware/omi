@@ -209,7 +209,6 @@ def test_discovery_links_recorded_overlap_despite_skew_and_delayed_ingest(harnes
     decoy = dict(primary, id='far', recorded_start=T0 - timedelta(hours=3), recorded_end=T0 - timedelta(hours=2))
     harness.rows.update({path('pendant'): primary, path('desktop'): secondary, path('far'): decoy})
     monkeypatch.setattr(policy, 'reconcile_cross_device', lambda *a: False)
-    monkeypatch.setattr(policy, 'shared_speech_mode', lambda uid: 'off')
     monkeypatch.setattr(policy, '_group_confirmed_captures', lambda *a: None)
 
     policy.link_duplicate_captures(UID, SimpleNamespace(**secondary))

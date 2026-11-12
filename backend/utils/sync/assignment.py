@@ -235,6 +235,7 @@ def assign_in_transaction(
     live_lookup_complete: bool = False,
     live_lookup_incomplete_reason: str | None = None,
     discover_on_reroute: bool = False,
+    record_obligations: Callable[[], tuple[dict, ...]] | None = None,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
 
@@ -357,7 +358,8 @@ def assign_in_transaction(
         if not target or not target_id:
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         current = decode(target)
-        result, survivors = replace_record(current, incoming, record_span)
+        obligations = record_obligations() if current.get('discarded') and record_obligations is not None else ()
+        result, survivors = replace_record(current, incoming, record_span, obligations=obligations)
         if result.get('transcript_segments') != current.get('transcript_segments'):
             rearm_on_revision_change(current, result)
         invalidate(result)
@@ -1422,6 +1424,7 @@ def _donor_redirect_patch(row: dict, canonical: str) -> dict:
     return {
         'deleted': True,
         'discarded': True,
+        'summary_due_at': None,
         'sync_merged_into': canonical,
         **(
             {

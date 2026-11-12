@@ -14,7 +14,9 @@ import yaml
 
 from scripts.verify_pusher_cohost_env_diff import parse_env_entries
 from scripts.runtime_env_validation import manifest as manifest_validation
-from scripts.runtime_env_validation.manifest import _validate_directory_routing_bindings
+from scripts.runtime_env_validation.manifest import (
+    _validate_directory_routing_bindings,  # pyright: ignore[reportPrivateUsage]
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
@@ -147,7 +149,7 @@ def test_directory_binding_guard_is_in_deploy_validator(directory_manifest, monk
 
 
 @pytest.fixture(autouse=True)
-def _fast_safe_yaml_for_contract_fixtures(monkeypatch):
+def fast_safe_yaml_for_contract_fixtures(monkeypatch):
     # Keep the same safe YAML schema and every validator assertion, without
     # spending the call-phase budget on Python tokenization of large manifests.
     monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
@@ -155,6 +157,7 @@ def _fast_safe_yaml_for_contract_fixtures(monkeypatch):
 
 def load_validator():
     spec = importlib.util.spec_from_file_location('validate_backend_runtime_env', SCRIPT)
+    assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     sys.modules[spec.name] = module
@@ -199,6 +202,10 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_LIVE_STT_RETIRE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
         {"name": "RECORD_SEAL_OVERLAP_TRIM_ENABLED", "value": "true"},
+        {"name": "RECORD_TOKEN_LEASE_MODE", "value": "off"},
+        {"name": "RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT", "value": "0"},
+        {"name": "RECORD_TOKEN_LEASE_SECONDS", "value": "3600"},
+        {"name": "RECORD_TOKEN_LEASE_DEPLOYED_AT", "value": "0"},
         {"name": "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED", "value": "false"},
@@ -228,6 +235,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
+        {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT", "value": "100"},
         {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "true"},
@@ -268,6 +276,7 @@ def with_memory_env(payload: str) -> str:
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "PRERECORDED_SONIOX_FAILOVER_ENABLED", "value": "true"},\n'
         '        {"name": "GCP_LOCATION", "value": "us-central1"},\n'
         '        {"name": "USE_VERTEX_AI", "value": "true"},\n'
         # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts to the
@@ -601,6 +610,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},'
+        r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
@@ -641,10 +651,12 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         flags=re.DOTALL,
     )
     # These gateway/secret fixtures still need the dedicated public v2 binding.
-    public_token = re.search(
+    token_match = re.search(
         r'apiKey = "(phc_[^"]+)"',
         (ROOT.parent / 'desktop/macos/Desktop/Sources/PostHogManager.swift').read_text(),
-    )[1]
+    )
+    assert token_match is not None
+    public_token = token_match[1]
     public_bindings = {
         'PROACTIVITY_V2_POSTHOG_TOKEN': public_token,
         'PROACTIVITY_V2_POSTHOG_HOST': 'https://us.posthog.com',
@@ -673,6 +685,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
                 'HOSTED_LID_API_URL',
+                'BATCH_INPUT_EXPIRING_ENABLED',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
@@ -2012,6 +2025,20 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
     assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
     assert errors[0].scope == 'cloud_run/backend'
 
+    state_path.write_text(
+        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
+            '{"name": "BATCH_INPUT_EXPIRING_ENABLED", "value": "true"},\n        ', ''
+        ),
+        encoding='utf-8',
+    )
+    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
+    assert {(error.scope, error.message) for error in errors} == {
+        ('cloud_run/backend', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
+        ('cloud_run/backend-sync', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
+        ('cloud_run/backend-integration', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
+        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
+    }
+
     # A complete synthetic revision carries the new kill switch. Removing it
     # must still fail validation; completing the fixture must not weaken the guard.
     state_path.write_text(
@@ -3246,7 +3273,9 @@ def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
 
 
 def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
-    from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
+    from scripts.runtime_env_validation.manifest import (
+        _validate_stt_serving_model_policy,  # pyright: ignore[reportPrivateUsage]
+    )
 
     env_map = {
         'STT_SERVICE_MODELS': {'value': 'parakeet-window,soniox'},
@@ -3258,7 +3287,9 @@ def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
 
 
 def test_non_listener_stt_models_accept_a_policy_ordered_subset():
-    from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
+    from scripts.runtime_env_validation.manifest import (
+        _validate_stt_serving_model_policy,  # pyright: ignore[reportPrivateUsage]
+    )
 
     env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox'}}
     config = {'gke': {'pusher': {'env': env_map}}}
@@ -3380,6 +3411,7 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     prod = validator._get_env_config(manifest, 'prod')
     overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
+    selected = {}
     for source in (prod, overlay):
         pusher = source['gke']['pusher']['env']
         selected = {key: pusher[key]['value'] for key in controls}
@@ -3493,32 +3525,17 @@ def test_shaped_notes_enabled_on_every_process_conversation_cohost():
             assert overlay_blocks[scope]['OMI_SHAPED_AGENT_MODE'] == expected, f'{env_name} overlay {scope}'
 
 
-def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts():
-    # main.py serves capture, sync, developer processing and reprocess on all
-    # four Cloud Run copies. pusher runs the same finalizer; desktop_backend
-    # and the cron jobs never compute/persist these snapshots.
-    expected = {
-        'gke/backend-listen',
-        'gke/pusher',
-        'cloud_run/backend',
-        'cloud_run/backend-sync',
-        'cloud_run/backend-sync-backfill',
-        'cloud_run/backend-integration',
-    }
+def test_graduated_speaker_match_scores_have_no_runtime_knob():
     validator = load_validator()
     prod = validator._get_env_config(validator._load_yaml(validator.DEFAULT_MANIFEST), 'prod')
     overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
     for source in (prod, overlay):
-        declared = {scope for scope, env in _manifest_env_blocks(source) if 'SPEAKER_MATCH_SCORES_ENABLED' in env}
-        assert declared == expected
-        for scope, env in _manifest_env_blocks(source):
-            if scope in expected:
-                assert env['SPEAKER_MATCH_SCORES_ENABLED'] == {'value': 'true', 'category': 'rollout'}
+        assert all('SPEAKER_MATCH_SCORES_ENABLED' not in env for _, env in _manifest_env_blocks(source))
     for chart in (
         ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml',
         ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
     ):
-        assert parse_env_entries(chart.read_text())['SPEAKER_MATCH_SCORES_ENABLED'].value == 'true'
+        assert 'SPEAKER_MATCH_SCORES_ENABLED' not in parse_env_entries(chart.read_text())
 
 
 def _posthog_billing_key_bindings(node, path='manifest'):
@@ -3636,10 +3653,11 @@ def test_proactivity_v2_posthog_token_is_required_only_off_the_omi_flag_store():
     gateway_env = env_config['llm_gateway']['env']
     assert gateway_env['OMI_FLAGS_SOURCE']['value'] == 'omi'
     assert 'PROACTIVITY_V2_POSTHOG_TOKEN' not in gateway_env
-    assert manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config) == []
+    check_hosts = manifest_validation._validate_proactivity_v2_flag_hosts  # pyright: ignore[reportPrivateUsage]
+    assert check_hosts('prod', env_config) == []
 
     gateway_env['OMI_FLAGS_SOURCE']['value'] = 'dual'
-    errors = manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config)
+    errors = check_hosts('prod', env_config)
     assert [error.scope for error in errors] == ['prod/llm_gateway']
 
 

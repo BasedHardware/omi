@@ -9182,6 +9182,24 @@ class AppLocalizationsSv extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Det gick inte att fastställa aktuell firmwareversion';
 
   @override
+  String get applyCodeToCurrentPlan => 'Tillämpa på nuvarande abonnemang';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koden har tillämpats på ditt nuvarande abonnemang.',
+        'refused': 'Koden kan inte tillämpas. Kontrollera koden och det abonnemang som krävs.',
+        'conflict': 'Koden har redan använts, eller ditt abonnemang har redan rabatt.',
+        'rateLimited': 'För många försök. Vänta och försök igen senare.',
+        'other': 'Koden kunde inte tillämpas. Försök igen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Kampanjkod';
 
   @override
@@ -13662,6 +13680,9 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Skapa anteckningar igen';
 
   @override
   String get attentionSummaryFailed => 'Det gick inte att sammanfatta samtalet';

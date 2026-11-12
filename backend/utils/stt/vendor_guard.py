@@ -55,6 +55,10 @@ class ModulateQuotaError(RuntimeError):
     prefix in raisers so existing callers and retryable-failure semantics are unchanged.
     """
 
+    def __init__(self, message: str, *, breaker_open: bool = False):
+        super().__init__(message)
+        self.breaker_open = breaker_open
+
 
 def is_quota_error(exc: BaseException) -> bool:
     if not isinstance(exc, httpx.HTTPStatusError):
@@ -204,9 +208,16 @@ def record_breaker_other_failure(endpoint: str) -> None:
             state.opened_at = _clock()
 
 
-def record_vendor_burn(endpoint: str, outcome: str, seconds: float) -> None:
+def record_vendor_burn(endpoint: str, outcome: str, seconds: float, *, provider: str = MODULATE_PROVIDER) -> None:
+    """Count one bounded vendor attempt; existing callers retain the Modulate default."""
+    if (
+        provider not in {MODULATE_PROVIDER, 'soniox'}
+        or endpoint not in {ENDPOINT_STT, ENDPOINT_LID}
+        or outcome not in {'ok', 'error'}
+    ):
+        return
     try:
-        VENDOR_AUDIO_SECONDS.labels(MODULATE_PROVIDER, endpoint, outcome).inc(max(0.0, float(seconds or 0.0)))
+        VENDOR_AUDIO_SECONDS.labels(provider, endpoint, outcome).inc(max(0.0, float(seconds or 0.0)))
     except Exception:
         pass
 

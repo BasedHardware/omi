@@ -9120,6 +9120,24 @@ class AppLocalizationsAr extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'تعذر تحديد إصدار البرنامج الثابت الحالي';
 
   @override
+  String get applyCodeToCurrentPlan => 'تطبيق على الخطة الحالية';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'تم تطبيق الرمز على خطتك الحالية.',
+        'refused': 'لا يمكن تطبيق هذا الرمز. تحقق من الرمز والخطة المطلوبة.',
+        'conflict': 'تم استخدام الرمز أو توجد خصومات على خطتك بالفعل.',
+        'rateLimited': 'محاولات كثيرة. انتظر وحاول لاحقًا.',
+        'other': 'تعذر تطبيق الرمز. حاول مرة أخرى.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'رمز ترويجي';
 
   @override
@@ -13580,6 +13598,9 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'إعادة إنشاء الملاحظات';
 
   @override
   String get attentionSummaryFailed => 'تعذّر تلخيص هذه المحادثة';

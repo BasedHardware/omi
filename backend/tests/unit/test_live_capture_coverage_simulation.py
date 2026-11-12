@@ -10,8 +10,6 @@ from pathlib import Path
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.manual_speaker_assignments import merge_live_segments
 
-FLAG = 'LIVE_CAPTURE_WINDOW_RETENTION'
-
 
 def mapped(translator, start, end):
     result = translator.translate([dict(text='synthetic', start=start, end=end)])[0]
@@ -101,22 +99,19 @@ def sticky_merge():
     return dict(known=known_versions, versions=versions, distinct_stored_ids=len(persisted))
 
 
-def test_simulated_coverage_recovers_only_retention_pressure(monkeypatch):
-    report = {}
-    for enabled in (False, True):
-        monkeypatch.setenv(FLAG, 'true' if enabled else 'false')
-        report['on' if enabled else 'off'] = dict(
+def test_simulated_coverage_under_fixed_retention_limits(monkeypatch):
+    # LIVE_CAPTURE_WINDOW_RETENTION was retired off (2026-11-09 docket): the existing
+    # 64-anchor / 4096-send-span limits are fixed, so pressure-evicted finals stay unknown.
+    report = {
+        'retention_fixed': dict(
             realistic_4h_reconnect_failover=realistic_reconnect_failover(),
             anchor_pressure_delayed_finals=retention_pressure('anchor'),
             send_map_pressure_delayed_finals=retention_pressure('send'),
             positive_gap_sticky_merge=sticky_merge(),
         )
-    assert report['off']['realistic_4h_reconnect_failover'] == report['on']['realistic_4h_reconnect_failover']
-    assert report['on']['anchor_pressure_delayed_finals']['known'] == 20
-    assert report['on']['send_map_pressure_delayed_finals']['known'] == 20
-    assert report['off']['anchor_pressure_delayed_finals']['known'] == 0
-    assert report['off']['send_map_pressure_delayed_finals']['known'] == 0
-    assert report['on']['positive_gap_sticky_merge'] == report['off']['positive_gap_sticky_merge']
+    }
+    assert report['retention_fixed']['anchor_pressure_delayed_finals']['known'] == 0
+    assert report['retention_fixed']['send_map_pressure_delayed_finals']['known'] == 0
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'true')
     report['merge_preservation_on'] = sticky_merge()
     assert report['merge_preservation_on'] == dict(known=119, versions=119, distinct_stored_ids=60)

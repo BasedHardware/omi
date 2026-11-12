@@ -9189,6 +9189,24 @@ class AppLocalizationsLt extends AppLocalizations {
       'Nepavyko nustatyti dabartinės programinės aparatinės įrangos versijos';
 
   @override
+  String get applyCodeToCurrentPlan => 'Taikyti dabartiniam planui';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kodas pritaikytas dabartiniam planui.',
+        'refused': 'Šio kodo pritaikyti negalima. Patikrinkite kodą ir reikiamą planą.',
+        'conflict': 'Kodas jau panaudotas arba jūsų planui jau taikoma nuolaida.',
+        'rateLimited': 'Per daug bandymų. Palaukite ir bandykite vėliau.',
+        'other': 'Kodo pritaikyti nepavyko. Bandykite dar kartą.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Reklamos kodas';
 
   @override
@@ -13679,6 +13697,9 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Kurti pastabas iš naujo';
 
   @override
   String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
