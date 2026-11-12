@@ -860,11 +860,11 @@
           "from": 900,
           "to": 0
         },
-        "datasourceUid": "prometheus",
+        "datasourceUid": "gmp-cloud-run",
         "model": {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "gmp-cloud-run"
           },
           "expr": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) or vector(0)",
           "instant": true,
@@ -880,11 +880,11 @@
           "from": 900,
           "to": 0
         },
-        "datasourceUid": "prometheus",
+        "datasourceUid": "gmp-cloud-run",
         "model": {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "gmp-cloud-run"
           },
           "expr": "sum(rate(omi_firestore_caller_label_overflow_total[5m])) or vector(0)",
           "instant": true,
@@ -1004,8 +1004,8 @@
       "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "summary": "The Firestore read caller label set has overflowed into other: a new call site is no longer named, so by-caller attribution is silently folding.",
       "user_impact": "No direct user impact; this is an attribution and cost-visibility signal. Reads keep being served, but a new or changed read path stops being named in the by-caller counter, so a read regression on it can no longer be attributed to a call site.",
-      "scope": "omi_firestore_billed_reads_by_caller_total{caller=\"other\"} and omi_firestore_caller_label_overflow_total from the Python Firestore read probe (backend/database/firestore_document_probe.py), across every instrumented process. The cap is MAX_CALLERS (1536) distinct module:function labels per process.",
-      "verification": "Run sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) and sum(rate(omi_firestore_caller_label_overflow_total[5m])). A non-zero overflow rate means a well-formed new caller arrived after the cap filled; a non-zero other read rate without overflow means a malformed or frame-less caller label. Both are folding. Confirm the probe image is current before changing the cap.",
+      "scope": "omi_firestore_billed_reads_by_caller_total{caller=\"other\"} and omi_firestore_caller_label_overflow_total from the Python Firestore read probe (backend/database/firestore_document_probe.py), queried on the managed gmp-cloud-run datasource so Cloud Run and GKE are both covered. The cap is MAX_CALLERS (1536) distinct module:function labels per process.",
+      "verification": "Run sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) and sum(rate(omi_firestore_caller_label_overflow_total[5m])) on gmp-cloud-run. A non-zero overflow rate means a well-formed new caller arrived after the cap filled; a non-zero other read rate without overflow means a malformed or frame-less caller label. Both are folding. Confirm the probe image is current before changing the cap.",
       "safe_next_action": "Identify the folded call site from the deploy that started serving just before the first overflow, then either raise MAX_CALLERS in a reviewed PR with the measured function count, or fix the malformed label. Never add a uid, document id or query text as a label. Kill switch: set node D (vector(1)) to vector(0) and re-provision; restore vector(1) to re-enable. The rule also ships isPaused=false; pausing it is the operational switch.",
       "threshold": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) > 0 OR sum(rate(omi_firestore_caller_label_overflow_total[5m])) > 0, sustained 5m, gated by the enable selector node D vector(1).",
       "evaluated_bad": "Fixture, not a live backtest: the counter is new in this program and no production overflow window exists yet. With MAX_CALLERS=1 a second well-formed caller folds to other and omi_firestore_caller_label_overflow_total increments by 1; the rule evaluates to 1. See backend/tests/unit/test_firestore_caller_overflow_alert.py.",

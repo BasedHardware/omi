@@ -84,7 +84,8 @@ def test_rule_is_identical_in_both_exports_and_enabled_by_default():
 
 
 def test_expression_is_the_done_check_query_plus_the_overflow_counter():
-    nodes = _nodes(_rule())
+    rule = _rule()
+    nodes = _nodes(rule)
     assert nodes['A']['expr'] == (
         'sum(rate(omi_firestore_billed_reads_by_caller_total{caller="other"}[5m])) or vector(0)'
     )
@@ -95,6 +96,31 @@ def test_expression_is_the_done_check_query_plus_the_overflow_counter():
     assert nodes['F']['type'] == 'threshold'
     assert nodes['F']['expression'] == 'E'
     assert nodes['F']['conditions'][0]['evaluator'] == {'params': [0], 'type': 'gt'}
+
+
+def test_both_read_arms_use_the_managed_datasource():
+    # The in-cluster Cloud Run bridge keeps only documents_per_operation and
+    # read_operations_total, so a local-prometheus rule is blind to Cloud Run.
+    rule = _rule()
+    for node in rule['data']:
+        if node['refId'] in ('A', 'B'):
+            assert node['datasourceUid'] == 'gmp-cloud-run'
+            assert node['model']['datasource'] == {'type': 'prometheus', 'uid': 'gmp-cloud-run'}
+
+
+def test_custom_registry_processes_export_the_overflow_counter():
+    # The batch pipeline worker and record-seal worker serve COLLECTORS on a
+    # private registry, not the default REGISTRY.
+    from prometheus_client import CollectorRegistry
+    from prometheus_client.parser import text_string_to_metric_families
+    from prometheus_client import generate_latest
+    from utils.observability.firestore_probe_export import register_probe_collectors
+
+    registry = CollectorRegistry()
+    register_probe_collectors(registry)
+    names = {family.name for family in text_string_to_metric_families(generate_latest(registry).decode())}
+    assert 'omi_firestore_caller_label_overflow' in names
+    assert 'omi_firestore_billed_reads_by_caller' in names
 
 
 def test_overflow_fires_and_clean_labels_resolve(monkeypatch):
