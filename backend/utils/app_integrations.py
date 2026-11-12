@@ -29,7 +29,7 @@ from database import mem_db
 from database import redis_db
 from database.apps import get_app_by_id_db, record_app_usage
 from database.redis_db import delete_app_cache_by_id
-from database.webhook_signing import get_app_webhook_signing_db, note_unsigned_delivery
+from database.webhook_signing import get_app_webhook_signing_db, note_signing_unavailable
 from database.webhook_health import (
     ACTION_DISABLE,
     ACTION_REDIRECT_NOT_FOLLOWED,
@@ -72,7 +72,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.episodes.live import on_realtime_segments
-from utils.webhook_signing import signed_body_kwargs
+from utils.webhook_signing import WebhookSigningUnavailable, signed_body_kwargs
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
@@ -97,17 +97,19 @@ def _delivery_failure_is_retryable(status_code: int) -> bool:
 
 
 async def _load_app_signing_secrets(app_id: str) -> list[str]:
-    """Secrets that sign this app's deliveries right now; empty means deliver unsigned.
+    """Secrets that sign this app's deliveries right now; empty means the app has none.
 
-    The lookup is cached in Redis (see database/webhook_signing.py). A store error must not
-    stop a delivery the developer configured; it is reported once per app per window (error log
-    + fallback metric) so unsigned deliveries never pass silently.
+    The lookup is cached in Redis (see database/webhook_signing.py). A store that cannot be read
+    raises WebhookSigningUnavailable, reported once per app per window, and the caller holds the
+    delivery as it would behind an open circuit breaker rather than sending it unsigned.
     """
     try:
         record = await run_blocking(db_executor, get_app_webhook_signing_db, app_id)
-    except Exception:
-        await run_blocking(db_executor, note_unsigned_delivery, 'other', app_id)
-        return []
+    except WebhookSigningUnavailable:
+        raise
+    except Exception as exc:
+        await run_blocking(db_executor, note_signing_unavailable, 'other', app_id)
+        raise WebhookSigningUnavailable('other', app_id) from exc
     return record.active() if record else []
 
 
@@ -315,7 +317,18 @@ async def trigger_external_integrations(
                     failed_deliveries.append(app.id)
             return
 
-        signing_secrets = await _load_app_signing_secrets(app.id)
+        try:
+            signing_secrets = await _load_app_signing_secrets(app.id)
+        except WebhookSigningUnavailable as e:
+            # Our store, not the developer's endpoint: hold it exactly like an open circuit breaker.
+            journey_attempt.fail('dependency_unavailable')
+            logger.error(f'trigger_external_integrations: delivery held for {app.id}: {e}')
+            if require_delivery:
+                if last_delivery_attempt:
+                    _drop_exhausted_delivery(app.id, 'signing_unavailable')
+                else:
+                    failed_deliveries.append(app.id)
+            return
         try:
             payload = serialize_datetimes(conversation_dict)
             headers = dict(pin_kwargs['headers'])
@@ -707,7 +720,11 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
         if not cb.allow_request():
             return
 
-        signing_secrets = await _load_app_signing_secrets(app.id)
+        try:
+            signing_secrets = await _load_app_signing_secrets(app.id)
+        except WebhookSigningUnavailable as e:
+            logger.error(f'trigger_realtime_audio_bytes: delivery held for {app.id}: {e}')
+            return
         try:
             headers = dict(pin_kwargs['headers'])
             headers['Content-Type'] = 'application/octet-stream'
@@ -805,7 +822,12 @@ async def _async_trigger_realtime_integrations(
             logger.info(f'trigger_realtime_integrations: circuit breaker open for {app.id}')
             return
 
-        signing_secrets = await _load_app_signing_secrets(app.id)
+        try:
+            signing_secrets = await _load_app_signing_secrets(app.id)
+        except WebhookSigningUnavailable as e:
+            journey_attempt.fail('dependency_unavailable')
+            logger.error(f'trigger_realtime_integrations: delivery held for {app.id}: {e}')
+            return
         try:
             headers = dict(pin_kwargs['headers'])
             body_kwargs = signed_body_kwargs(

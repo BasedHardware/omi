@@ -30,6 +30,7 @@ def delivery(monkeypatch):
     monkeypatch.setattr(webhooks, 'enqueue_dev_webhook_dlq', MagicMock())
     monkeypatch.setattr(webhooks, 'user_webhook_status_db', MagicMock(return_value=True))
     monkeypatch.setattr(webhooks, 'get_user_webhook_db', MagicMock(return_value=URL))
+    monkeypatch.setattr(webhooks, 'get_user_webhook_signing_db', MagicMock(return_value=None))
     monkeypatch.setattr(webhooks, 'record_dev_webhook_failure', MagicMock(return_value=True))
     monkeypatch.setattr(webhooks, 'record_dev_webhook_success', MagicMock())
     monkeypatch.setattr(webhooks, 'disable_user_webhook_db', MagicMock())

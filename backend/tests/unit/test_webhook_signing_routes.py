@@ -13,7 +13,7 @@ os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 from database.webhook_signing import WebhookSigningSecrets  # noqa: E402
 from routers import webhook_signing as routes  # noqa: E402
 from utils.other import endpoints  # noqa: E402
-from utils.webhook_signing import SECRET_PREFIX  # noqa: E402
+from utils.webhook_signing import SECRET_PREFIX, WebhookSigningUnavailable  # noqa: E402
 
 
 class _Store:
@@ -65,6 +65,20 @@ def test_user_secret_is_shown_once_then_only_its_status_is_readable(user_store):
     status = routes.get_user_webhook_signing_secret_status(uid='uid-1')
     assert status == {'configured': True, 'created_at': issued['created_at'], 'previous_valid_until': None}
     assert 'secret' not in status
+
+
+def test_status_reports_an_unreadable_record_and_issuing_replaces_it(user_store, monkeypatch):
+    def unreadable(uid):
+        raise WebhookSigningUnavailable('malformed_doc', uid)
+
+    monkeypatch.setattr(routes, 'get_user_webhook_signing_db', unreadable)
+    with pytest.raises(HTTPException) as refused:
+        routes.get_user_webhook_signing_secret_status(uid='uid-1')
+    assert refused.value.status_code == 503
+    assert 'POST' in refused.value.detail
+    # Issuing does not need to read the broken record.
+    issued = routes.issue_user_webhook_signing_secret(Response(), uid='uid-1')
+    assert issued['secret'].startswith(SECRET_PREFIX)
 
 
 def test_issuing_again_rotates_and_keeps_the_old_secret_for_the_grace_window(user_store):

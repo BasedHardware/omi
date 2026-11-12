@@ -11,7 +11,7 @@ limit (``webhook_signing:secret``); reading the status does not count against it
 """
 
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
@@ -31,7 +31,7 @@ from models.webhook_signing import (
 )
 from utils.apps import get_available_app_by_id
 from utils.other import endpoints as auth
-from utils.webhook_signing import generate_secret
+from utils.webhook_signing import WebhookSigningUnavailable, generate_secret
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,12 @@ def _issued(record: WebhookSigningSecrets, response: Response) -> dict[str, Any]
     }
 
 
-def _status(record: WebhookSigningSecrets | None) -> dict[str, Any]:
+def _status(load: Callable[[], WebhookSigningSecrets | None]) -> dict[str, Any]:
+    try:
+        record = load()
+    except WebhookSigningUnavailable:
+        # Deliveries are being held, not sent unsigned; a new secret (POST) replaces the record.
+        raise HTTPException(status_code=503, detail='Signing secret cannot be read; issue a new one with POST')
     if record is None:
         return {'configured': False}
     return {'configured': True, 'created_at': record.created_at, 'previous_valid_until': record.previous_valid_until}
@@ -71,7 +76,7 @@ def issue_user_webhook_signing_secret(response: Response, uid: str = Depends(_mu
     '/v1/users/developer/webhook-signing-secret', tags=['v1'], response_model=WebhookSigningSecretStatusResponse
 )
 def get_user_webhook_signing_secret_status(uid: str = Depends(auth.get_current_user_uid)):
-    return _status(get_user_webhook_signing_db(uid))
+    return _status(lambda: get_user_webhook_signing_db(uid))
 
 
 @router.delete(
@@ -105,7 +110,7 @@ def issue_app_webhook_signing_secret(app_id: str, response: Response, uid: str =
 @router.get('/v1/apps/{app_id}/webhook-signing-secret', tags=['v1'], response_model=WebhookSigningSecretStatusResponse)
 def get_app_webhook_signing_secret_status(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _owned_app_or_raise(app_id, uid)
-    return _status(get_app_webhook_signing_db(app_id))
+    return _status(lambda: get_app_webhook_signing_db(app_id))
 
 
 @router.delete(

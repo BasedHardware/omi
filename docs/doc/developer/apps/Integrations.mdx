@@ -496,6 +496,8 @@ Verify against the exact body bytes you received: parsing the JSON and serializi
 
 A destination without a secret receives exactly what it receives today, with none of these headers.
 
+Once you have configured a secret, Omi never sends that destination an unsigned request. If Omi cannot read the secret on its side (a store outage, or a record it can no longer decrypt), the delivery is held: developer webhooks are kept for replay, app deliveries are retried by their job or dropped, and none of it counts against your endpoint's health. So a request that arrives without `X-Omi-Signature` after you set a secret did not come from Omi.
+
 <Warning>
 Two paths are **not** signed yet: chat-tool invocations (the `{uid, app_id, tool_name, ...}` POSTs described in [Chat Tools](/doc/developer/apps/ChatTools)) and the `audio_bytes_websocket` stream. Keep treating `uid` in those as unverified until signing lands for them.
 </Warning>

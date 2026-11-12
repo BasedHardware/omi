@@ -186,7 +186,7 @@ sys.modules["database.webhook_health"].ACTION_DISABLE = 3
 sys.modules["database.webhook_health"].ACTION_REDIRECT_NOT_FOLLOWED = 4
 # utils.app_integrations loads each app's signing secret per delivery; no secret means unsigned.
 sys.modules["database.webhook_signing"].get_app_webhook_signing_db = MagicMock(return_value=None)
-sys.modules["database.webhook_signing"].note_unsigned_delivery = MagicMock()
+sys.modules["database.webhook_signing"].note_signing_unavailable = MagicMock()
 
 _utils_pkg = sys.modules.get("utils")
 if _utils_pkg is None:
