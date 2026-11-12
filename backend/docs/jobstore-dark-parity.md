@@ -51,13 +51,24 @@ methods and the actual PostgresTransaction reads, rather than parallel SQL.
 It compares complete codec-normalized ordered results, documents, nulls and
 cursors. An explicit method allowlist refuses mutation methods; point reads are
 restricted to mirrored batch tables. Transaction comparisons never flush writes.
-PG connection acquisition and statements are bounded. Two immediate observations
+Firestore RPC retries and timeouts share one observation deadline with PG
+connection acquisition and statements. Observers reuse only warm PG connections
+and never initiate IAM refresh or connection establishment; a cold pool is an
+error, not a pass. Expired observations cannot record a match. A broken transport
+may still delay synchronous driver cleanup; the separate worker/queue contains
+that delay and reports dropped observations as unknown. Two immediate observations
 of each side distinguish changing pairs (`unknown`) from stable `match` or
 `mismatch`; errors are `error`. All four outcomes have bounded query labels in
 `omi_jobstore_serving_parity_total`. An unknown, dropped observation or error is
-not a pass. Opt-in automatic observations use a bounded queue and preserve the
+not a pass. Opt-in automatic observations use a separate bounded queue (a slow query cannot
+delay document copying), honor the write kill switch, and preserve the
 primary result. Transactional comparisons are explicit rehearsal calls; normal
 transactional point-read mirroring retains its existing convergence tracker.
+
+Record-pending observation uses the serving query's shared implementation with
+recovery promotion disabled, so an observation cannot replay promotion writes.
+Resumable conversation purge runs its cold-copy phase regardless of mirror mode;
+PG failures leave its obligation incomplete for retry.
 
 The real emulator/PG matrix covers every enumerated read, empty/populated
 fixtures, ties, duplicate successors, null versus missing previous links and

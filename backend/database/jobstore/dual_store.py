@@ -281,6 +281,8 @@ class DualStore:
         self.budget_s = budget_s
         self.inline = inline  # single-threaded harnesses mirror in the caller, deterministically
         self._queue: queue.Queue = queue.Queue(maxsize=queue_limit)
+        self._query_queue: queue.Queue = queue.Queue(maxsize=queue_limit)
+        self._query_worker: threading.Thread | None = None
         self._worker: threading.Thread | None = None
         self._lock = threading.Lock()
         # Convergence tracker (lead ruling a2d720): its own thread and heap, so re-checks never delay the mirror.
@@ -310,11 +312,36 @@ class DualStore:
     def _observe_query(self, name, args, kwargs):
         from database.jobstore.serving_parity import SERVING_PARITY_TOTAL
 
+        if not shadow_writes_enabled():
+            return
         try:
-            self._queue.put_nowait(('query', name, (deepcopy(args), deepcopy(kwargs))))
-            self._ensure_worker()
+            self._query_queue.put_nowait((name, deepcopy(args), deepcopy(kwargs)))
+            with self._lock:
+                if self._query_worker is None or not self._query_worker.is_alive():
+                    self._query_worker = threading.Thread(
+                        target=contextvars.Context().run,
+                        args=(self._drain_queries,),
+                        name='jobstore-query-parity',
+                        daemon=True,
+                    )
+                    self._query_worker.start()
         except Exception:
             SERVING_PARITY_TOTAL.labels(query=name, outcome='unknown').inc()
+
+    def _drain_queries(self):
+        from database.jobstore.serving_parity import SERVING_PARITY_TOTAL, compare_serving_query
+
+        while True:
+            name, args, kwargs = self._query_queue.get()
+            try:
+                if shadow_writes_enabled() and os.getenv('JOBSTORE_SHADOW_QUERY_PARITY', '').strip().lower() == 'on':
+                    compare_serving_query(self.primary, self.shadow, name, *args, budget_s=self.budget_s, **kwargs)
+                else:
+                    SERVING_PARITY_TOTAL.labels(query=name, outcome='unknown').inc()
+            except Exception:
+                SERVING_PARITY_TOTAL.labels(query=name, outcome='error').inc()
+            finally:
+                self._query_queue.task_done()
 
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
         # Only Firestore claims. Its CAS bypasses run(), so refresh the cold copy after success.
@@ -373,12 +400,7 @@ class DualStore:
         while True:
             kind, first, second = self._queue.get()
             try:
-                if kind == 'query':
-                    from database.jobstore.serving_parity import compare_serving_query
-
-                    args, kwargs = second
-                    compare_serving_query(self.primary, self.shadow, first, *args, budget_s=self.budget_s, **kwargs)
-                elif kind == 'refresh':
+                if kind == 'refresh':
                     self.refresh_now(first)
                 else:
                     self.mirror(first, second)
@@ -729,6 +751,7 @@ class DualStore:
 
         def wait() -> None:
             self._queue.join()
+            self._query_queue.join()
             done.set()
 
         threading.Thread(target=wait, daemon=True).start()

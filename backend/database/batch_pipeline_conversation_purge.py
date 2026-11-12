@@ -13,7 +13,7 @@ those dependents. This pass keeps every dependent reachable:
 3. ``parked``    owner-id fallback artifacts, matched the same way;
 4. ``segments``  each persisted segment's job/result, the conversation binding,
    is erased last and its record removed only after;
-5. ``shadow``    the jobstore shadow purge, only in shadow mode.
+5. ``shadow``    the retained jobstore copy purge, independently of writer mode.
 
 Every destructive step runs in a short unit (``UNIT_MAX_ROWS`` rows or
 ``UNIT_BUDGET_SECONDS``) inside ``progress.unit()``, which owns the account
@@ -40,7 +40,6 @@ from database.batch_pipeline_purge import erase_result as _erase_result
 from database.batch_pipeline_purge import row_belongs as _belongs
 from database.batch_pipeline_purge import row_references as _references
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
-from database.batch_pipeline_shadow_hook import shadow_mode_enabled as _shadow_mode
 from database.legal_holds import settles_unknown_erasure
 
 PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow')
@@ -337,7 +336,7 @@ def purge_conversation(
                         if len(done) < len(bindings):
                             break  # Budget hit; re-read pending (the rest stays recorded).
                     mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': None})
-            elif phase == 'shadow' and _shadow_mode():
+            elif phase == 'shadow':
                 _ensure_budget(progress)
                 settle()
                 with progress.unit():

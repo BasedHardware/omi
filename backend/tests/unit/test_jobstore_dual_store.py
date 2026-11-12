@@ -854,3 +854,33 @@ def test_erasure_of_both_namespaces_is_independent_of_serving_stage(monkeypatch,
     assert dual_store.purge_owner(namespace, 'synthetic') == 0
     assert seen[0].namespace == namespace
     assert not hasattr(seen[0], 'run')  # an erasure handle cannot authorize serving writes
+
+
+def test_slow_serving_comparison_cannot_block_document_mirroring(stores, monkeypatch):
+    from database.jobstore import serving_parity
+
+    _, shadow, store = stores
+    comparing, release, mirrored = threading.Event(), threading.Event(), threading.Event()
+
+    def slow(*args, **kwargs):
+        comparing.set()
+        assert release.wait(10)
+        return 'match'
+
+    write = shadow.write_doc
+
+    def signal_write(*args):
+        write(*args)
+        mirrored.set()
+
+    monkeypatch.setattr(serving_parity, 'compare_serving_query', slow)
+    monkeypatch.setattr(shadow, 'write_doc', signal_write)
+    monkeypatch.setenv('JOBSTORE_SHADOW_QUERY_PARITY', 'on')
+    try:
+        assert store.due('retry', 10, 1) == []
+        assert comparing.wait(5)
+        store.run(lambda tx: tx.put('owners', 'o', {'revision': 1}))
+        assert mirrored.wait(5), 'query latency must not hold the mirror queue'
+    finally:
+        release.set()
+    assert store.drain(5)

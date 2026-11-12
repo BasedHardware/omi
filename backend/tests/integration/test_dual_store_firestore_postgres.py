@@ -42,6 +42,8 @@ def dual(monkeypatch):
     namespace, _ = _new_ids()
     pool = Pool('', connect=connect)
     shadow = PostgresStore(namespace, pool=pool, customer_client=None)
+    with pool.connection():  # observation never initiates a connection or credential refresh
+        pass
     store = DualStore(FirestoreStore(namespace, firestore_client=client), shadow, budget_s=5.0)
     yield store, shadow, pool
     store.drain(30)
@@ -89,6 +91,7 @@ def test_firestore_commits_mirror_and_read_back_at_parity(dual):
 # Package C exercises the serving implementation, not a second hand-written SQL query.
 READ_CASES = [
     ('due', ('retry', 10, 2), {}),
+    ('due', ('record_pending', 10, 2), {}),
     ('oldest', (1,), {}),
     ('oldest', (1,), {'ready_only': True}),
     ('oldest_retry', (1,), {}),
@@ -250,3 +253,14 @@ def test_opt_in_observation_runs_actual_queries_and_preserves_primary_result(dua
     assert store.due('retry', 10, 100) == ['b']
     assert store.drain(30)
     assert metric._value.get() == before + 1
+
+
+def test_observing_record_pending_never_promotes_recovery_state(dual, monkeypatch):
+    from database import batch_pipeline_store as primary_module
+    from database.jobstore.serving_parity import compare_serving_query
+
+    store, shadow, _ = dual
+    monkeypatch.setattr(
+        primary_module, 'promote_record_recoveries', lambda *a: pytest.fail('observer attempted a write')
+    )
+    assert compare_serving_query(store.primary, shadow, 'due', 'record_pending', 10, 2, budget_s=5) == 'match'

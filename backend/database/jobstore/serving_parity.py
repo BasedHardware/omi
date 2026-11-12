@@ -8,12 +8,14 @@ Transaction queries run without flush(), so this cannot become a second writer.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import time
 from typing import Any
 
 from prometheus_client import Counter
 
-from database.jobstore import codec
+import database.jobstore.codec as codec
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
+from database import rpc_deadline
 
 STORE_QUERIES = frozenset(
     {
@@ -51,9 +53,17 @@ class _ParityPostgresStore(PostgresStore):
 
     @contextmanager
     def _read_conn(self):
-        with self.pool.connection(timeout=self.budget_s) as conn:
+        remaining = rpc_deadline.remaining()
+        budget = min(self.budget_s, remaining) if remaining is not None else self.budget_s
+        if budget <= 0:
+            raise TimeoutError('serving observation deadline exceeded')
+        with self.pool.connection(timeout=budget, existing_only=True) as conn:
             with conn.transaction():
-                conn.execute(f'SET LOCAL statement_timeout = {max(1, int(self.budget_s * 1000))}')
+                remaining = rpc_deadline.remaining()
+                budget = min(budget, remaining) if remaining is not None else budget
+                if budget <= 0:
+                    raise TimeoutError('serving observation deadline exceeded')
+                conn.execute(f'SET LOCAL statement_timeout = {max(1, int(budget * 1000))}')
                 yield conn
 
 
@@ -73,6 +83,14 @@ def query_value(store, query: str, args: tuple, kwargs: dict, *, transaction: bo
                 # Locks match the real transaction read; never flush buffered writes.
                 return getattr(PostgresTransaction(bounded, conn), query)(*args, **kwargs)
         return getattr(bounded, query)(*args, **kwargs)
+    from database.batch_pipeline_store import FirestoreStore, due
+
+    if isinstance(store, FirestoreStore):
+        rpc_deadline.bind_firestore_client(store.client)
+        if query == 'due':
+            # The serving wrapper promotes record recoveries. Observe its shared
+            # query implementation without replaying that mutation.
+            return due(store.client, store.namespace, *args, promote_recoveries=False, **kwargs)
     if transaction:
         return store.run(lambda tx: getattr(tx, query)(*args, **kwargs))
     return getattr(store, query)(*args, **kwargs)
@@ -95,8 +113,12 @@ def compare_serving_query(
         def read(store):
             return codec.canonical(query_value(store, query, args, kwargs, transaction=transaction, budget_s=budget_s))
 
-        before = read(primary), read(shadow)
-        after = read(primary), read(shadow)
+        deadline = time.monotonic() + budget_s
+        with rpc_deadline.rpc_deadline(deadline):
+            before = read(primary), read(shadow)
+            after = read(primary), read(shadow)
+        if time.monotonic() > deadline:
+            raise TimeoutError('serving observation exceeded its deadline')
         if before != after:
             outcome = 'unknown'
         elif before[0] == before[1]:
