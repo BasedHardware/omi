@@ -3222,6 +3222,17 @@ _add(
     )
 )
 _add(
+    DriverEntry(
+        'database.monthly_usage_totals.establish_verified_month',
+        base={'uid': UID, 'date': T0},
+        setup=_monthly_total_user,
+        patchers=(
+            _stub('database.monthly_usage_totals._epoch', 'v1'),
+            _monthly_total_transaction_boundary,
+        ),
+    )
+)
+_add(
     CoveredByEntry(
         'database.monthly_usage_totals._month_rows',
         covered_by=('database.monthly_usage_totals.read_monthly_totals',),
