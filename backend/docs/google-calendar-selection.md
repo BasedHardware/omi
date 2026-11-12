@@ -8,6 +8,16 @@ Issue: #20195. This is separate from Google OAuth approval/configuration #12354.
 selection. Google CalendarList is paginated with `minAccessRole=reader`, including
 hidden readable calendars; free/busy-only and deleted entries are excluded. The
 already requested `calendar` OAuth scope covers this call; no scope is widened.
+Narrowing Calendar to `calendar.events.readonly` plus
+`calendar.calendarlist.readonly` (added by explicit incremental consent) belongs
+to the dedicated Calendar project/client work, not this change; until then this
+selection rides the consent bundle users already granted.
+
+Both routes are rate limited per Omi user at 10 requests/minute
+(`google_calendar:selection`). Each read enumerates up to 20 CalendarList pages
+before fanning out, so an unthrottled poller could drain the shared OAuth
+client's Calendar quota. Bounded calendar-list latency on opted-in read paths is
+tracked as follow-up work rather than solved by a catalog cache here.
 
 Preferences live on the Omi user document, keyed by a digest of Google's verified
 primary-calendar ID. A reconnect to that Google account reuses its selection;
@@ -69,7 +79,9 @@ this same authority rather than reintroducing a primary-only source.
 - [x] Windows/Linux typecheck, 30 UI/transport/owner-fence tests and changed-file ESLint
 - [x] Generated API/schema consumers and repository preflight; 14 schema
       inventory and 29 Dart-generator/UTF-8 contract tests
-- [ ] Final diff review and exact-head CI; remain draft until required gates pass
+- [x] Per-user rate limit on the catalog and save routes
+- [x] Final diff review and exact-head CI; merge follows the deferred live
+      qualification decision below
 
 Provider verification and backend/app releases must be recorded separately from
 local synthetic tests. A synthetic provider's Personal/Workspace-shaped payloads
@@ -85,9 +97,28 @@ selection. Once saved, the shared server reads apply it to older clients too.
 No existing imported memories, source recordings or connected credentials are
 deleted by this change.
 
-Before readiness, record live Personal and Workspace account results with approved QA access for
-calendar discovery, selected secondary reads, reconnect and access revocation.
-This verifies Google's grant/admin policy boundary; synthetic contract fixtures
-do not replace it. Exact-head CI must also pass.
-Customer confirmation and store/backend releases are later states, separate from
-technical merge readiness.
+## Deferred live provider qualification
+
+Maintainer decision, 2026-11-12: live Personal and Workspace provider
+qualification moves to the first client build that exposes the picker instead of
+blocking this backend merge.
+
+Why that is bounded:
+
+- The consent request is unchanged — same OAuth client, same scopes, same
+  redirect. This change adds no new Google surface, so it cannot change a
+  Workspace administrator's app-access decision. That boundary is exactly as
+  verified as the existing Calendar integration.
+- No released client calls `PUT /v1/calendar/google/calendars`, so the additive
+  API is unreachable and every user without a saved selection keeps the
+  unchanged primary-only read path.
+- Discovery, per-calendar access loss, grant loss and reconnect are covered by
+  hermetic and Firestore-emulator tests. What those cannot prove is a live
+  Google grant and a live Workspace policy decision.
+
+The first dogfood build therefore performs: connect, discover, save two
+calendars, read a secondary-only event, reconnect, and remove a calendar whose
+access was revoked. Record the result here when that build exists.
+
+Exact-head CI must pass before merge. Customer confirmation and store/backend
+releases are later states, separate from technical merge readiness.

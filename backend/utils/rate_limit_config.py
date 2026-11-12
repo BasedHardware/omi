@@ -235,6 +235,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "memories:extract": (30, 3600),
     # Return-only SSOT calendar/gmail/notes synthesis for desktop connector imports
     "connectors:synthesize": (30, 3600),
+    # Calendar read selection. Each catalog read enumerates Google CalendarList
+    # (up to 20 pages) and each save re-derives it, so a polling client can drain
+    # the shared OAuth client's Calendar quota. A picker opens on user intent.
+    "google_calendar:selection": (10, 60),
     # Return-only SSOT provisional conversation topic (emoji + short title)
     "conversations:topic": (60, 3600),
     # Return-only SSOT AI user profile synthesis (once-daily desktop cadence)

@@ -87,13 +87,16 @@ async def _selection_catalog_with_refresh(uid: str) -> dict[str, Any]:
 
 
 @router.get('/v1/calendar/google/calendars', response_model=CalendarSelection, tags=['google_calendar'])
-async def list_readable_google_calendars(uid: str = Depends(auth.get_current_user_uid)):
+async def list_readable_google_calendars(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'google_calendar:selection')),
+):
     return await _selection_catalog(uid)
 
 
 @router.put('/v1/calendar/google/calendars', response_model=CalendarSelection, tags=['google_calendar'])
 async def save_google_calendar_selection(
-    request: CalendarSelectionUpdate, uid: str = Depends(auth.get_current_user_uid)
+    request: CalendarSelectionUpdate,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'google_calendar:selection')),
 ):
     current = await _selection_catalog(uid)
     if request.account_id != current['account_id']:
