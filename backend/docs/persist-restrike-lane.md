@@ -41,11 +41,41 @@ reclassifying the fault.
   privacy fences (`BatchPrivacyBlocked`, `PermissionError`), the
   bounded-payload and owner-binding `ValueError`s — and every other
   non-Google exception aborts the lane on the spot and the legacy fail path
-  runs byte-for-byte as before. Firestore contention never reaches this
-  boundary raw: the artifact register's transaction wrapper replays
-  contention internally and raises `FirestoreContentionExhausted` (a
-  `RuntimeError`), which lands here as non-strikeable and keeps its own
-  recovery lane.
+  runs byte-for-byte as before.
+- The atomic contention family joined the lane
+  (Failure-Class: FC-persist-contention-exhaustion-discards-completed-gpu-results)
+  as its second admission arm, `persist_loss_is_contention`: the artifact
+  register's exhausted fresh-transaction budget
+  (`FirestoreContentionExhausted`) and any exception whose cause chain
+  classifies as transaction contention (a raw read-time `Aborted`, an
+  expired-transaction rejection). An aborted or expired chain is atomic and
+  wrote nothing, so a re-strike cannot double-write — the arm is strictly
+  safer to replay than the uncertain-outcome transport arm above, whose
+  registered-but-unwritten tolerance already covers the full persist
+  replay. The lane's strike budget and kill switch are unchanged; a lost
+  lease, a privacy fence, a policy refusal and every custody class stay
+  outside it. The legacy lane kept this class out on the documented premise
+  that contention "never reaches this boundary as `Aborted`" — production
+  disproved the premise before the register wrapper shipped
+  (`error_class=Aborted stage=persist` at ~131/12h on the worker channel,
+  2026-11-12), and after the wrapper lands the same storm arrives as the
+  exhausted class. Either shape discards a fully produced GPU result into
+  the lease-recovery re-run cycle for a wave the next strike rides out; the
+  pump's publication lane re-strikes the identical class with the same
+  budget (`publication_loss_is_contention`), and this boundary joins it.
+- A contention strike also honors the storm damper's measured window. The
+  store stamps the window its damper actually armed for the exhausted label
+  onto the raised chain's `retry_after`; `persist_restrike_storm_after`
+  reads that stamp and the lane waits
+  `max(ladder step, min(stamped retry-after, storm cap))` — the cap is
+  `PERSIST_RESTRIKE_STORM_MAX_SECONDS = 4.0`, the store damper's own window
+  ceiling (`FirestoreStore.STORM_DAMPER_CAP_SECONDS`), pinned as a literal
+  in `diarizer/batch_pipeline.py` — so the replay lands after the armed
+  window instead of colliding inside it, exactly the alignment the pump
+  publication lane applies. A wait never shortens below the documented
+  ladder step, the attempt budget never grows, and an exhaustion with no
+  stamped window (the damper disabled, a foreign store, a raw `Aborted`)
+  keeps the ladder byte-for-byte.
 - The bare builtin `TimeoutError` family joined the strikeable verdict
   (Failure-Class: FC-persist-socket-transport-loss-discards-completed-gpu-results).
   The boundary's own deadline guards raise it unwrapped — the upload

@@ -127,7 +127,12 @@ def _is_transaction_contention(error: BaseException) -> bool:
         if isinstance(current, FirestoreAborted) or _is_expired_transaction(current):
             return True
         seen.add(id(current))
-        current = current.__cause__
+        # A hostile or non-exception carrier reaches this classifier from the
+        # fail-open branches: plain objects carry no ``__cause__`` attribute,
+        # and the family contract is that classification never raises on
+        # hostile input. getattr keeps the walk total without changing the
+        # verdict for any real exception.
+        current = getattr(current, '__cause__', None)
     return False
 
 

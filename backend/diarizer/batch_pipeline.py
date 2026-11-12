@@ -15,6 +15,8 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
+from database.firestore_transaction_retry import FirestoreContentionExhausted, is_transaction_contention
+
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.prerecorded_language import language_class
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
@@ -194,6 +196,79 @@ def persist_restrike_delay(attempt: int) -> float:
     return min(PERSIST_RESTRIKE_MAX_SECONDS, PERSIST_RESTRIKE_BASE_SECONDS * (2 ** (attempt - 1)))
 
 
+# The storm term's own ceiling: the store's damper caps an armed window at
+# 4.0s (``FirestoreStore.STORM_DAMPER_CAP_SECONDS``), so a window deeper than
+# the lane's ladder cap must still be clearable. ``utils`` stays independent
+# of ``database`` internals by pinning the literal here, exactly like the
+# pump publication lane it mirrors.
+PERSIST_RESTRIKE_STORM_MAX_SECONDS = 4.0
+
+
+def persist_restrike_storm_after(error: BaseException | None) -> float:
+    """The measured storm window a persist re-strike must land after.
+
+    The ladder above answers "when does this lane try again on its own
+    schedule"; this answers "when did the damper measure the register's hot
+    documents go quiet". ``FirestoreStore.run`` stamps the window its storm
+    damper actually armed for the exhausted label onto the raised chain's
+    ``retry_after``; a re-strike that ignores it fires into the window's
+    interior, where the entry consult parks the persist's db-executor thread
+    on a blocking sleep for the residual and a chain that still loses re-arms
+    the storm the lane just re-entered. The clamp is the lane's own storm
+    ceiling — the store damper's window cap — so the deepest measured window
+    stays clearable while the lane's horizon stays bounded and documented.
+    Only a positive finite number counts; a foreign exception, an exhaustion
+    raised with no damper in scope, hostile or malformed input all return
+    ``0.0`` (the caller keeps its documented ladder step). Never raises. The
+    shape is byte-for-byte the pump publication lane's
+    ``_contention_storm_after``; the two lanes share the damper's stamp, so a
+    retune of one is a reviewed diff against the other.
+
+    Failure-Class: FC-persist-contention-exhaustion-discards-completed-gpu-results
+    """
+    value = getattr(error, 'retry_after', None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    value = float(value)
+    if not math.isfinite(value) or value <= 0.0:
+        return 0.0
+    return min(value, PERSIST_RESTRIKE_STORM_MAX_SECONDS)
+
+
+def persist_loss_is_contention(error: BaseException) -> bool:
+    """True for the atomic contention family a fresh persist call can survive.
+
+    ``FirestoreContentionExhausted`` — the register's bounded
+    fresh-transaction budget exhausted — and any exception whose cause chain
+    classifies as transaction contention (a raw read-time ``Aborted``, an
+    expired-transaction rejection). An aborted or expired chain is atomic and
+    wrote nothing, exactly like an aborted one, so a re-strike cannot
+    double-write: this arm is strictly safer to replay than the
+    uncertain-outcome transport arm above, whose registered-but-unwritten
+    tolerance already covers the full persist replay. The lane's bounded
+    strike budget and kill switch are unchanged; a lost lease, a privacy
+    fence, a policy refusal and every custody class stay outside it, and a
+    replayed refusal would only reproduce itself.
+
+    The legacy lane kept this class out on the documented premise that
+    contention "never reaches this boundary as ``Aborted``" — the register's
+    wrapper replays it internally. Production disproved the premise before
+    the wrapper shipped: ``error_class=Aborted stage=persist`` burned at
+    ~131/12h on the worker channel, and after the wrapper lands the same
+    storm arrives instead as the exhausted class. Either shape today
+    discards a fully produced GPU result — decode, VAD, diarization and ASR
+    all done — into the lease-recovery re-run cycle for a contention wave
+    the next strike rides out. The pump's publication lane re-strikes the
+    identical class with the same budget (``publication_loss_is_contention``)
+    ; this boundary joins it.
+
+    Failure-Class: FC-persist-contention-exhaustion-discards-completed-gpu-results
+    """
+    if isinstance(error, FirestoreContentionExhausted):
+        return True
+    return is_transaction_contention(error)
+
+
 def persist_loss_is_restrikeable(error: BaseException) -> bool:
     """True for a transport fault a fresh persist call can survive.
 
@@ -205,10 +280,18 @@ def persist_loss_is_restrikeable(error: BaseException) -> bool:
     privacy fences, policy refusals, the bounded-payload and owner-binding
     ValueErrors, the upload deadline — raises a non-Google class and stays
     non-strikeable: replaying it would only reproduce the same refusal.
-    Firestore contention never reaches this boundary as ``Aborted`` — the
-    register's transaction wrapper replays it internally and raises
-    ``FirestoreContentionExhausted`` (a ``RuntimeError``), which lands here
-    as non-strikeable and keeps its own recovery lane.
+    uncertain-outcome transport arm above. Firestore contention reaches this
+    boundary in two shapes: the register's transaction wrapper replays a
+    read-time ``Aborted`` internally and raises ``FirestoreContentionExhausted``
+    (a ``RuntimeError``) once its bounded fresh-transaction budget exhausts,
+    and a direct-transaction site can still surface a raw ``Aborted`` — prod
+    booked ``error_class=Aborted stage=persist`` at ~131/12h before the
+    wrapper shipped. Both shapes belong to the contention arm
+    (``persist_loss_is_contention``), not this one: an aborted or expired
+    chain wrote nothing, so the contention lane re-strikes with the storm
+    damper's measured window instead of feeding the lease-recovery re-run
+    cycle. This arm keeps its uncertain-outcome semantics (an upload that may
+    have landed) exactly as documented.
 
     The builtin ``TimeoutError`` joins the Google API transport family's
     verdict as its second arm. The boundary's own deadline guards raise it
@@ -527,17 +610,24 @@ class PipelineWorker:
         The first call is the legacy persist byte-for-byte. A transport loss
         (``persist_loss_is_restrikeable``: the Google API transport family and
         the bare builtin ``TimeoutError`` family — the stream deadline, the
-        registration grace and raw socket timeouts) under the
+        registration grace and raw socket timeouts) or an atomic contention loss
+        (``persist_loss_is_contention``: the register's exhausted
+        fresh-transaction budget, and any raw ``Aborted``/expired-transaction
+        shape whose cause chain classifies as contention) under the
         ``persist_restrike_enabled`` gate is re-struck up to
         ``PERSIST_RESTRIKE_MAX_ATTEMPTS`` times on the documented doubling
         schedule, each strike its own ``persist`` timing span, so a
         burst-shaped storage fault rides out in-process and the completed
         GPU result survives instead of feeding the recovery re-lease cycle.
-        Every non-strikeable fault, an exhausted strike budget, or the gate
+        A contention strike also honors the storm damper's measured window: it
+        waits ``max(ladder step, min(stamped retry-after, storm cap))``, so the
+        replay lands after the armed window instead of colliding inside it — the
+        same alignment the pump publication lane applies. Every
+        non-strikeable fault, an exhausted strike budget, or the gate
         off raises the first fault untouched — the legacy ``fail`` path and
         its evidence run exactly as before.
 
-        Failure-Class: FC-persist-transport-loss-discards-completed-gpu-results
+        Failure-Class: FC-persist-contention-exhaustion-discards-completed-gpu-results
         """
         for attempt in range(1, PERSIST_RESTRIKE_MAX_ATTEMPTS + 1):
             try:
@@ -545,11 +635,14 @@ class PipelineWorker:
             except Exception as error:
                 if (
                     not persist_restrike_enabled()
-                    or not persist_loss_is_restrikeable(error)
+                    or not (persist_loss_is_restrikeable(error) or persist_loss_is_contention(error))
                     or attempt >= PERSIST_RESTRIKE_MAX_ATTEMPTS
                 ):
                     raise
                 delay = persist_restrike_delay(attempt)
+                storm = persist_restrike_storm_after(error)
+                if storm > delay:
+                    delay = storm
                 logger.info(
                     'event=batch_persist outcome=restrike_wait attempt=%d delay_ms=%d exception_type=%s',
                     attempt,

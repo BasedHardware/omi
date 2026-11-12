@@ -316,8 +316,15 @@ def persist_restrike_enabled() -> bool:
     still holds the sealed payload: the durable deletion outbox registers each
     attempt before its upload, so a strike that never lands leaves the same
     registered-but-unwritten reference the uncertain-upload path already
-    tolerates, and a strike that lands returns its own immutable URI. Only the
-    Google API transport family and the builtin ``TimeoutError`` transport
+    tolerates, and a strike that lands returns its own immutable URI. The
+    atomic contention family (``persist_loss_is_contention``: the register's
+    exhausted fresh-transaction budget and any raw ``Aborted``/
+    expired-transaction cause chain) joins the same lane — an aborted chain
+    wrote nothing, so its replay cannot double-write — and a contention
+    strike additionally waits out the storm damper's measured window
+    (``persist_restrike_storm_after``, capped at the damper's own 4.0s)
+    instead of colliding inside it. Only the Google API transport family, the
+    builtin ``TimeoutError`` transport family and the atomic contention
     family classify as re-strikeable losses; typed custody faults
     (StagedAudioInvalid and siblings), privacy fences, policy refusals and
     every other non-Google exception abort the lane and the legacy fail path

@@ -1270,7 +1270,12 @@ def test_config_and_worker_fc_ids_are_identical():
     config_source = inspect.getsource(persist_restrike_enabled)
     worker_fc = worker_source.split('Failure-Class: ')[1].splitlines()[0].strip()
     config_fc = config_source.split('Failure-Class: ')[1].splitlines()[0].strip()
-    assert worker_fc == config_fc == FC
+    # The lane method's trailer names the contention delta's class; the gate's
+    # docstring keeps the transport family's class. Both stay pinned, each on
+    # the surface that owns it (the classifier docstrings carry the transport
+    # and timeout family trailers).
+    assert worker_fc == 'FC-persist-contention-exhaustion-discards-completed-gpu-results'
+    assert config_fc == FC
 
 
 def test_lane_reads_the_gate_once_per_decision():

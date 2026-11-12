@@ -24,8 +24,10 @@ try:
         PERSIST_RESTRIKE_BASE_SECONDS,
         PERSIST_RESTRIKE_MAX_ATTEMPTS,
         PERSIST_RESTRIKE_MAX_SECONDS,
+        persist_loss_is_contention,
         persist_loss_is_restrikeable,
         persist_restrike_delay,
+        persist_restrike_storm_after,
     )
 except ImportError:  # the lane is the subject; the parent fails at runtime (the RED half)
     pass
@@ -156,6 +158,30 @@ def exhaust_script(fault=None):
     """Literal exhaustion script: the cap worth of faults, replayed past the cap."""
     source = fault if fault is not None else InvalidArgument
     return ScriptedPersist([source('burst')] * 3, default=source('burst'))
+
+
+def contention(stamp=0.0, message='register storm'):
+    """A `FirestoreContentionExhausted` carrying the given damper stamp."""
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+
+    return FirestoreContentionExhausted(message, reason='attempts_exhausted', retry_after=stamp)
+
+
+def stamped(stamp, message='stamped'):
+    """A plain fault object carrying a raw `retry_after` attribute."""
+    import types
+
+    fault = types.SimpleNamespace(args=(message,))
+    fault.retry_after = stamp
+    return fault
+
+
+class StampCarrier(RuntimeError):
+    """A foreign RuntimeError subclass carrying an arbitrary `retry_after`."""
+
+    def __init__(self, message='carrier', stamp=0.0):
+        super().__init__(message)
+        self.retry_after = stamp
 
 
 class PerSegmentPersist:

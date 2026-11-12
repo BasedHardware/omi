@@ -64,6 +64,16 @@ after the shared five-attempt budget) instead of raw
 `batch_worker_failed error_class=Aborted stage=persist` events. An
 `outcome=exhausted` line means five fresh transactions all aborted on the
 same documents: look for a writer storm against that segment's job doc or
-the owner's privacy document, not for a persist defect.
+the owner's privacy document, not for a persist defect. Past the budget the
+exhaustion reaches the worker's persist boundary as
+`FirestoreContentionExhausted`, where the persist re-strike lane's
+contention arm (`persist_loss_is_contention`) re-plays the whole persist
+call in-process up to three more times, each strike waiting
+`max(ladder step, min(stamped retry-after, 4.0s))` so the replay lands
+after the damper's armed window instead of inside it; the
+`event=batch_persist outcome=restrike_committed` INFO line marks a strike
+that landed, and the legacy `batch_worker_failed` ERROR line fires only
+past that lane — fewer lines mean fewer actual discarded GPU results, not
+quieter failures.
 
 Failure-Class: FC-persist-registration-read-abort-fails-gpu-unit-and-requeues-it

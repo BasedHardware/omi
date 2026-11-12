@@ -244,7 +244,56 @@ def test_code_gate_is_exported():
 def test_worker_method_docstring_carries_the_failure_class():
     import inspect
 
-    assert 'Failure-Class: ' + FC in inspect.getsource(bp.PipelineWorker._persist_with_restrike)
+    source = inspect.getsource(bp.PipelineWorker._persist_with_restrike)
+    # The method's own trailer names this delta's class; the transport arm's
+    # class stays pinned at file level (NORMALIZED) and on the classifier.
+    assert 'Failure-Class: FC-persist-contention-exhaustion-discards-completed-gpu-results' in source
+    assert 'Failure-Class: FC-persist-transport-loss-discards-completed-gpu-results' in NORMALIZED
+
+
+def test_doc_doc_names_the_contention_arm():
+    assert 'persist_loss_is_contention' in NORMALIZED
+
+
+def test_doc_doc_names_the_storm_window():
+    assert 'persist_restrike_storm_after' in NORMALIZED
+    assert 'PERSIST_RESTRIKE_STORM_MAX_SECONDS' in NORMALIZED
+
+
+def test_doc_doc_names_the_prod_evidence():
+    assert 'error_class=Aborted stage=persist' in NORMALIZED
+
+
+def test_code_contention_arm_matches_the_doc_family():
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.batch_pipeline.audio import StagedAudioInvalid as _StagedAudioInvalid
+
+    assert bp.persist_loss_is_contention(FirestoreContentionExhausted('budget')) is True
+    assert bp.persist_loss_is_contention(Aborted('read-time abort')) is True
+    expired = InvalidArgument('The referenced transaction has expired or is no longer valid.')
+    assert bp.persist_loss_is_contention(expired) is True
+    assert bp.persist_loss_is_contention(_StagedAudioInvalid('pinned bytes')) is False
+    assert bp.persist_loss_is_contention(PermissionError('policy')) is False
+    assert bp.persist_loss_is_contention(None) is False
+
+
+def test_code_storm_alignment_matches_the_doc():
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+
+    stamped = FirestoreContentionExhausted('chain', retry_after=2.5)
+    assert bp.persist_restrike_storm_after(stamped) == 2.5
+    assert bp.persist_restrike_storm_after(FirestoreContentionExhausted('deep', retry_after=50.0)) == (
+        bp.PERSIST_RESTRIKE_STORM_MAX_SECONDS
+    )
+    assert bp.persist_restrike_storm_after(InvalidArgument('transport')) == 0.0
+    assert bp.persist_restrike_storm_after(None) == 0.0
+
+
+def test_code_storm_cap_is_the_store_damper_ceiling():
+    # The doc pins the lane cap to the damper's own window ceiling.
+    from database.batch_pipeline_store import FirestoreStore
+
+    assert bp.PERSIST_RESTRIKE_STORM_MAX_SECONDS == FirestoreStore.STORM_DAMPER_CAP_SECONDS
 
 
 def test_classifier_docstring_explains_the_family():
