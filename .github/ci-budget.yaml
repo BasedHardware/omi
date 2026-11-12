@@ -1801,7 +1801,7 @@
       "display_name": "provision-prod-ops-dashboards",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 3,
-      "if": "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+      "if": "github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'BasedHardware/omi'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "validate",

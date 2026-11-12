@@ -163,7 +163,7 @@ jobs:
   # and two merged board fixes never reached monitor.omi.me. Alert rules and the
   # admin deploy keep their gates.
   provision-prod-ops-dashboards:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'BasedHardware/omi'
     needs: validate
     runs-on: ubuntu-latest
     environment: grafana-dashboards-prod
