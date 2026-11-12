@@ -49,6 +49,15 @@ class SettingsSyncManager {
       shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: enabled))
   }
 
+  /// Records a user toggle on this Mac and pushes that one field.
+  /// A local off stays off across later account syncs until the user turns capture back on.
+  func setUserScreenAnalysisEnabled(_ enabled: Bool, push: Bool = true) {
+    AssistantSettings.shared.screenAnalysisEnabled = enabled
+    UserDefaults.standard.set(!enabled, forKey: .screenAnalysisHeldOffByUser)
+    guard push, !shouldKeepLocalScreenAnalysisDefault else { return }
+    pushPartialUpdate(Self.screenAnalysisEnabledUpdate(enabled))
+  }
+
   // MARK: - Apply Remote → Local
 
   /// Applies a server-authoritative snapshot, then notifies runtime owners to
@@ -63,7 +72,12 @@ class SettingsSyncManager {
       // importing another bundle's remote value. Capture defaults to enabled;
       // the runtime checks TCC without prompting when permission is absent.
       if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
-        AssistantSettings.shared.screenAnalysisEnabled = v
+        let keepLocalOff =
+          v && !AssistantSettings.shared.screenAnalysisEnabled
+          && UserDefaults.standard.bool(forKey: .screenAnalysisHeldOffByUser)
+        if !keepLocalOff {
+          AssistantSettings.shared.screenAnalysisEnabled = v
+        }
       }
     }
 
