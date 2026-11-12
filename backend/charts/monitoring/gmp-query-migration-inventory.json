@@ -489,6 +489,32 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) or vector(0)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_firestore_billed_reads_by_caller_total"
+      ],
+      "owner_title": "Firestore - caller label set overflowed into other",
+      "owner_uid": "omi-firestore-caller-overflow",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_firestore_caller_label_overflow_total[5m])) or vector(0)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_firestore_caller_label_overflow_total"
+      ],
+      "owner_title": "Firestore - caller label set overflowed into other",
+      "owner_uid": "omi-firestore-caller-overflow",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "(((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[1h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h]))) > bool 0.5) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[5m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m]))) > bool 0.5) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) >= bool 5)) > 0) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[6h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h]))) > bool 0.474) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[30m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m]))) > bool 0.474) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) >= bool 5)) > 0) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)",
       "file": "alerts/journey-slos.json",
       "issues": [],
@@ -4111,7 +4137,7 @@
   ],
   "counts": {
     "explicit_bridge": 34,
-    "query_consumers": 276
+    "query_consumers": 278
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
