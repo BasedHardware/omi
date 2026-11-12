@@ -363,7 +363,21 @@ class ProjectionSession:
         # encode is still in assignment's read-only planning phase.
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
 
-    def persist(self, transaction, planned=None, *, superseded=False, quarantined=False, privacy_deleted=False):
+    def persist(
+        self, transaction, planned=None, *, superseded=False, quarantined=False, privacy_deleted=False, silence=False
+    ):
+        if silence and (
+            planned is not None
+            or superseded
+            or quarantined
+            or privacy_deleted
+            or self.binding.record_origin
+            or self.binding.native_record
+            or self.part_index is not None
+            or self.speech_seconds != 0
+            or self.entry.get('result', {}).get('outcome') != 'silence'
+        ):
+            raise ProjectionBlocked('silence receipt requires an unassigned silent result')
         if self._privacy_refusal_transaction is transaction or self.entry.get('projection_privacy_refusal'):
             raise ProjectionBlocked('privacy hold cannot assign or acknowledge content')
         privacy_replay = self._privacy_replay_transaction is transaction
@@ -394,7 +408,7 @@ class ProjectionSession:
                     conversation.document(row['id']), {'sync_silent_redrive_revision': row['sync_content_revision']}
                 )
         receipt: dict[str, Any] = {
-            'state': 'ready' if superseded else 'persisted',
+            'state': 'ready' if superseded or silence else 'persisted',
             'conversation_id': assigned.get('id'),
             'created': created,
             'language': assigned.get('language') or self.binding.language or 'en',
@@ -567,12 +581,16 @@ class ProjectionSession:
         )
         return receipt
 
-    def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False):
+    def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False, silence=False):
         @firestore.transactional
         def commit(transaction):
             self.prepare(transaction, privacy_deleted=privacy_deleted)
             receipt = self.persist(
-                transaction, superseded=superseded, quarantined=quarantined, privacy_deleted=privacy_deleted
+                transaction,
+                superseded=superseded,
+                quarantined=quarantined,
+                privacy_deleted=privacy_deleted,
+                silence=silence,
             )
             return receipt
 

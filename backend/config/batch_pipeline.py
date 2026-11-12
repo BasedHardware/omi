@@ -389,6 +389,14 @@ def worker_silence_disposition_enabled() -> bool:
     )
 
 
+def silence_read_skip_enabled() -> bool:
+    """R9: false restores the full silent-unit projection/accounting path."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
+        os.getenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'true').strip().lower() not in {'false', 'off', '0'},
+    )
+
+
 LONG_SPEECH_HANDOFF_SECONDS = 5.0
 
 

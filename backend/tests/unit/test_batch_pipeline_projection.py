@@ -582,6 +582,7 @@ def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch)
 
 
 def test_dark_control_preserves_empty_race_failure_boundary(monkeypatch, binding):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'false')
     from dataclasses import asdict
     from utils.batch_pipeline.contracts import WorkItem, Priority
     from utils.batch_pipeline.projection import Projector

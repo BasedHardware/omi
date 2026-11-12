@@ -560,23 +560,59 @@ class ProjectionStore:
         }
 
     def complete(
-        self, segment_id: str, binding: ProjectionBinding, now: float, accounting: dict, *, policy=None
+        self, segment_id: str, binding: ProjectionBinding, now: float, accounting: dict | None, *, policy=None
     ) -> dict | None:
         """Complete only after every bound sibling persisted and marked enrichment."""
         policy = policy or self.policy(segment_id)
 
         @firestore.transactional
         def commit(transaction):
+            zero_speech = accounting is None
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
+            if zero_speech and (
+                binding.record_origin
+                or binding.native_record
+                or session.ledger.get('status') == BATCH_PARTIAL_STATUS
+                or session.ledger.get('usage_committed_seconds', 0) != 0
+            ):
+                return None, False, 0
             receipts = []
             live_siblings = []
             erased_count = 0
             captured_seconds = 0.0
             terminal_empty_count = 0
             for sibling in binding.segment_ids:
-                job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
-                entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if zero_speech and sibling == segment_id:
+                    job, entry = session.job, session.entry
+                else:
+                    job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
+                    entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if zero_speech and (
+                    job.get('shadow')
+                    or job.get('owner_id') != binding.owner_id
+                    or job.get('privacy_generation') != binding.privacy_generation
+                    or job.get('result') != entry.get('result')
+                    or entry.get('owner_key') != owner_key(binding.owner_id)
+                    or entry.get('segment_id') != sibling
+                    or entry.get('result', {}).get('outcome') != 'silence'
+                    or entry.get('projection_parts')
+                    or entry.get('projection_state') not in {'ready', 'completed'}
+                    or (entry.get('projection') or {}).get('state') != 'ready'
+                    or (entry.get('projection') or {}).get('speech_seconds') != 0
+                    or any(
+                        (entry.get('projection') or {}).get(field)
+                        for field in (
+                            'conversation_id',
+                            'disposition',
+                            'privacy_reason',
+                            'audio_required',
+                            'enrichment_required',
+                            'size_rollover_outputs',
+                        )
+                    )
+                ):
+                    return None, False, 0
                 from utils.batch_pipeline.input_retention import input_expiring
 
                 if artifact_missing(job) or input_expiring(job):
@@ -601,11 +637,12 @@ class ProjectionStore:
             # This is a job-wide decision after collecting every sibling/part.
             # A no-text receipt must suppress IDs from parts assigned earlier.
             source_deleted = any(receipt.get('disposition') == 'source_deleted' for receipt in receipts)
-            new, updated = self._visible(transaction, binding, receipts)
+            new, updated = ([], []) if zero_speech else self._visible(transaction, binding, receipts)
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             deleted_output_count = sum(receipt.get('disposition') == 'output_deleted' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
-            session.guard(transaction, (*new, *updated))
+            if not zero_speech:
+                session.guard(transaction, (*new, *updated))
             result = {
                 'new_memories': new,
                 'updated_memories': updated,
@@ -665,16 +702,25 @@ class ProjectionStore:
                 return old, False, 0
             # Part-level attribution need not sum to the worker's speech union
             # for older receipts. The immutable result summary owns metering.
-            seconds = sum(
-                (self.ref('results', sid).get(transaction=transaction).to_dict() or {})
-                .get('projection', {})
-                .get('speech_seconds', 0.0)
-                for sid in live_siblings
+            seconds = (
+                0.0
+                if zero_speech
+                else sum(
+                    (self.ref('results', sid).get(transaction=transaction).to_dict() or {})
+                    .get('projection', {})
+                    .get('speech_seconds', 0.0)
+                    for sid in live_siblings
+                )
             )
-            if seconds != accounting['seconds']:
+            completion_accounting = (
+                {'seconds': 0.0, 'updates': {}, 'charged': 0.0} if accounting is None else accounting
+            )
+            if seconds != completion_accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
             if not source_deleted:
-                self._commit_usage(transaction, session.ledger_ref, session.ledger, binding, accounting, seconds, now)
+                self._commit_usage(
+                    transaction, session.ledger_ref, session.ledger, binding, completion_accounting, seconds, now
+                )
             from database.sync_ledger import complete_batch_projection_in_transaction
 
             complete_batch_projection_in_transaction(
@@ -698,7 +744,11 @@ class ProjectionStore:
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
             return result, True, captured_seconds
 
-        with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
+        with (
+            nullcontext()
+            if accounting is None or accounting.get('source_deleted')
+            else writing('usage_month_cache', binding.owner_id)
+        ):
             result, changed, seconds = self.run(commit, policy=policy)
         self._mirror(binding)
         if changed:

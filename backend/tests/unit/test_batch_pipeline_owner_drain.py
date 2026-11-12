@@ -269,6 +269,7 @@ def test_drain_step_holds_the_owner_claim_and_skips_only_the_pre_checks(claims):
 
 
 def test_drain_off_walk_keeps_every_pre_check(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
     log = CountingLog()
     ids = chain(log, BURST, 'a', 4)
@@ -298,7 +299,8 @@ def test_predecessor_fence_still_stops_a_drain_without_pre_checks():
 
 
 @pytest.mark.parametrize('fresh_read_saw_receipt', [True, False])
-def test_a_row_persisted_elsewhere_is_a_replay_with_or_without_the_pre_check(fresh_read_saw_receipt):
+def test_a_row_persisted_elsewhere_is_a_replay_with_or_without_the_pre_check(fresh_read_saw_receipt, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'false')
     log = CountingLog()
     ids = chain(log, BURST, 'a', 2)
     projector = projector_for(log)
