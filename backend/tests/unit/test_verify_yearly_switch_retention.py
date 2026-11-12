@@ -95,6 +95,7 @@ def test_complete_synthetic_receipt_only_exercises_acceptance_parser():
         lambda r: r['arms']['control']['revenue_per_uid'].update(mean_usd=float('nan')),
         lambda r: r['measurement'].update(billing_linkage_evidence_ref=''),
         lambda r: r['measurement'].update(revenue_basis='overall_stripe_total'),
+        lambda r: r['arms']['control']['effective_ends_60'].update(count=21),
     ],
 )
 def test_missing_immature_ambiguous_or_recoverable_cells_fail_closed(mutation):

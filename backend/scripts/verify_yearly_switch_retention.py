@@ -130,6 +130,10 @@ def verify(receipt, *, source_revision, now=None, render_digest=None, copy_diges
             require(
                 values['effective_ends_30']['count'] <= values['effective_ends_60']['count'], 'cumulative paid ends'
             )
+            require(
+                values['effective_ends_60']['count'] - values['effective_ends_30']['count'] >= 10,
+                'protected day-31-to-60 recoverable complement',
+            )
             revenue = values['revenue_per_uid']
             mean = revenue['mean_usd']
             require(

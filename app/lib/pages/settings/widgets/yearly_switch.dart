@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/payment.dart' as payment_api;
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/yearly_switch_retention.dart' as retention_api;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/models/subscription.dart';
@@ -156,7 +157,9 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
   Future<bool> _enabled() async {
     if (widget.surface == YearlySwitchSurface.plans) return true;
     try {
-      return await (widget.readEnabled ?? retention_api.yearlyRetentionEnabled)().timeout(const Duration(seconds: 3));
+      if (widget.readEnabled != null) return await widget.readEnabled!().timeout(const Duration(seconds: 3));
+      final status = await retention_api.yearlyRetentionStatus().timeout(const Duration(seconds: 3));
+      return status is ApiSuccess<bool> && status.data;
     } catch (_) {
       return false;
     }

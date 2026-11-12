@@ -542,6 +542,18 @@ def _run_wrapped(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> Non
     trial(capture, wrapped_2025.generate_wrapped_2025, 'u1')
 
 
+def _run_yearly_retention(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    import routers.yearly_switch as yearly_router
+    from tests.unit.fixtures.generic_firestore_fake import FakeFirestore
+
+    _stub(monkeypatch, yearly_router.yearly_switch_retention, 'enabled', lambda: True)
+    _stub(monkeypatch, users_db, 'get_user_deletion_wipe_status', lambda uid: None)
+    _stub(monkeypatch, users_db, 'get_user_subscription', lambda uid: SimpleNamespace(stripe_subscription_id='fixture'))
+    _stub(monkeypatch, yearly_router.yearly_switch, 'get_offer', lambda _: SimpleNamespace(eligible=True))
+    monkeypatch.setattr('database._client.get_firestore_client', lambda: FakeFirestore())
+    trial(capture, yearly_router.admit_retention, placement='engaged', uid='u1')
+
+
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
@@ -560,6 +572,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('main-list-single-status', 'main-list-default-or-multi-status'),
             1,
             _run_main_list,
+        ),
+        CallerWitness(
+            'routers/yearly_switch.py:admit_retention:database.conversations.get_conversations_count',
+            'database.conversations.get_conversations_count',
+            'database.conversations.get_conversations_count',
+            ('yearly-retention-engaged-count',),
+            1,
+            _run_yearly_retention,
         ),
         CallerWitness(
             'routers/conversations.py:get_conversations_count:database.conversations.get_conversations_count',

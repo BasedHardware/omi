@@ -52,6 +52,9 @@ _MULTI_STATUS = [['processing', 'completed']]
 _ROUTE_SOURCES = [[], ['omi'], ['friend', 'omi']]
 
 COUNT_PROFILES = (
+    _profile(
+        'yearly-retention-engaged-count', statuses=[['completed']], start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]
+    ),
     _profile('main-count-all-statuses', statuses=[[]], sources=_ROUTE_SOURCES, **_DATES, **_SELECTORS),
     _profile('main-count-single-status', statuses=[['completed']], sources=_ROUTE_SOURCES, **_DATES, **_SELECTORS),
     _profile('main-count-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS),

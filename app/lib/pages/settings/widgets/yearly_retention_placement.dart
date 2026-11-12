@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/yearly_switch_retention.dart' as api;
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/yearly_switch.dart';
@@ -73,7 +74,12 @@ class _YearlyRetentionPlacementState extends State<YearlyRetentionPlacement> wit
   Future<bool> _checkEnabled() async {
     bool enabled;
     try {
-      enabled = await (widget.readEnabled ?? api.yearlyRetentionEnabled)().timeout(const Duration(seconds: 3));
+      if (widget.readEnabled != null) {
+        enabled = await widget.readEnabled!().timeout(const Duration(seconds: 3));
+      } else {
+        final status = await api.yearlyRetentionStatus().timeout(const Duration(seconds: 3));
+        enabled = status is ApiSuccess<bool> && status.data;
+      }
     } catch (_) {
       enabled = false;
     }
@@ -89,7 +95,12 @@ class _YearlyRetentionPlacementState extends State<YearlyRetentionPlacement> wit
   Future<void> _claim(String candidate) async {
     wire.GeneratedYearlySwitchResponse? offer;
     try {
-      offer = await (widget.claim ?? api.claimYearlyRetention)(widget.surface.name).timeout(const Duration(seconds: 4));
+      if (widget.claim != null) {
+        offer = await widget.claim!(widget.surface.name).timeout(const Duration(seconds: 4));
+      } else {
+        final result = await api.claimYearlyRetention(widget.surface.name).timeout(const Duration(seconds: 4));
+        if (result is ApiSuccess<wire.GeneratedYearlySwitchResponse>) offer = result.data;
+      }
     } catch (_) {
       return;
     }

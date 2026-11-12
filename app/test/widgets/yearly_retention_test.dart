@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -139,6 +140,9 @@ Future<void> fonts() async {
   }
 }
 
+void iosTestWidgets(String description, WidgetTesterCallback callback) =>
+    testWidgets(description, callback, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
 void main() {
   late RecordingAnalytics analytics;
   setUp(() async {
@@ -150,10 +154,12 @@ void main() {
     AnalyticsManager.configure(analytics.adapter);
     await AnalyticsManager.init();
   });
-  tearDown(AnalyticsManager.resetForTesting);
+  tearDown(() {
+    AnalyticsManager.resetForTesting();
+  });
 
   for (final treatment in [false, true]) {
-    testWidgets('cancel ${treatment ? 'treatment' : 'control'} renders and Cancel stays reachable', (tester) async {
+    iosTestWidgets('cancel ${treatment ? 'treatment' : 'control'} renders and Cancel stays reachable', (tester) async {
       if (output.isNotEmpty) await tester.runAsync(fonts);
       final usage = await pump(
           tester,
@@ -176,16 +182,16 @@ void main() {
       final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold).first));
       expect(find.text(l10n.cancelSubscription).hitTestable(), findsOneWidget);
       analytics.expectSingle('Retention Offer Shown', {'reason': 'too_expensive', 'percent_off': 50});
-      await screenshot(tester, treatment ? '002-cancel-after' : '001-cancel-control');
+      await screenshot(tester, treatment ? '003-mobile-ios-cancel-after' : '002-mobile-ios-cancel-control');
       if (treatment) {
         await tester.tap(key);
         await tester.pumpAndSettle();
         expect(find.text('US\$244.92'), findsOneWidget);
-        await screenshot(tester, '005-exact-price-preview');
+        await screenshot(tester, '006-mobile-ios-price-preview');
         await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
         await tester.pumpAndSettle();
         expect(find.text(l10n.yearlySwitchDeclined), findsOneWidget);
-        await screenshot(tester, '006-payment-declined');
+        await screenshot(tester, '007-mobile-ios-payment-declined');
         await tester.tap(find.byKey(const Key('yearly_switch_cancel')));
         await tester.pumpAndSettle();
         expect(find.text(l10n.cancelSubscription).hitTestable(), findsOneWidget);
@@ -197,7 +203,7 @@ void main() {
     });
   }
 
-  testWidgets('pending admission never blocks cancellation', (tester) async {
+  iosTestWidgets('pending admission never blocks cancellation', (tester) async {
     final pending = Completer<wire.GeneratedYearlySwitchResponse?>();
     final usage = await pump(
         tester,
@@ -212,7 +218,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('engaged placement renders once through rebuilds; flag off hides it', (tester) async {
+  iosTestWidgets('engaged placement renders once through rebuilds; flag off hides it', (tester) async {
     if (output.isNotEmpty) await tester.runAsync(fonts);
     var enabled = true;
     var claims = 0;
@@ -230,7 +236,7 @@ void main() {
                   readEnabled: () async => enabled)
             ])));
     expect(claims, 1);
-    await screenshot(tester, '004-engaged-after');
+    await screenshot(tester, '005-mobile-ios-engaged-after');
     usage.notifyListeners();
     await tester.pumpAndSettle();
     expect(claims, 1);
@@ -240,14 +246,14 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('yearly_retention_engaged')), findsNothing);
-    await screenshot(tester, '003-engaged-off');
+    await screenshot(tester, '004-mobile-ios-engaged-before');
     enabled = true;
     usage.notifyListeners();
     await tester.pumpAndSettle();
     expect(claims, 1);
   });
 
-  testWidgets('flag disabled between preview and confirm prevents payment', (tester) async {
+  iosTestWidgets('flag disabled between preview and confirm prevents payment', (tester) async {
     var enabled = true;
     var charges = 0;
     await pump(
