@@ -20,7 +20,7 @@ The processing observer reads this same chargeable balance. The actual summary/m
 
 `omi_free_allowance_watch_decisions` and `omi_free_allowance_watch_seconds` describe requests, retries, renewals, and processing observations. `omi_free_allowance_lease_decisions` labels reservation reasons. Do not sum these durations or paths: they can describe the same work multiple times. `omi_free_allowance_settled_seconds` counts confirmed joins, but a lost reply can leave a metric gap. Durable operation receipts, joined to aggregate settled billing/unit-cost data, are the reconciliation authority. Receipts retain bounded source and decision labels; only one primary month receipt carries the operation's billed seconds. Logs/metric labels contain no UID, transcript, or audio.
 
-The Firestore TTL manifest declares 90-day receipt and settled/unreserved-operation expiry. Active operations protecting holds have no TTL. The manifest is not deployed by this change. Normal recursive account deletion must include these user subcollections.
+`backend/deploy/free-allowance-retention.json` declares 90-day receipt and settled/unreserved-operation expiry. Active operations protecting holds have no TTL. The release owner can review the existing TTL-only operator with `python backend/scripts/batch_pipeline_ttl.py --project <project> --policy backend/deploy/free-allowance-retention.json`; its default mode only prints a plan. This declaration is not applied by this change and must be explicitly applied before production activation. Normal recursive account deletion must include these user subcollections.
 
 ## Validation and rollout gates
 

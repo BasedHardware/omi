@@ -136,7 +136,7 @@ def reserve(
     elapsed_seconds = _number(elapsed_seconds)
     if partial and elapsed_seconds > seconds:
         raise ValueError('reservation must cover its unbilled exposure')
-    if not uid or not isinstance(operation, str) or not operation or len(operation) > 512 or seconds <= 0:
+    if not uid or not operation or len(operation) > 512 or seconds <= 0:
         raise ValueError('identified positive reservation required')
     now = now or datetime.now(timezone.utc)
     month, end = _period(now)
@@ -171,7 +171,7 @@ def reserve(
 
             def record(reason: str) -> None:
                 # Refused shadow work still spends under today's serving policy.
-                data = {
+                data: dict[str, Any] = {
                     'months': months,
                     'status': 'active',
                     'last_reason': reason,
