@@ -1797,7 +1797,7 @@
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/provision-prod-ops-dashboards": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "provision-prod-ops-dashboards",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 3,
@@ -1806,7 +1806,7 @@
       "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Prod Ops dashboard apply on every push to main that matches the workflow trigger paths (approved by David 2026-11-09); the same job applies the Business TV boards once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and warns and skips until then (David 2026-11-12). The apply is idempotent and has no change-detection skip, so a superseded push run cannot drop a dashboard change. Uses the production MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment, which has no required reviewers (the repo-level token is dev-only). expected_runs_per_day 3 is a conservative daily ceiling for merges plus alert and script pushes. The 5-minute p50 is a reviewed estimate for one Grafana API apply; re-measure with --reseed after the first runs.",
+      "rationale": "Prod Ops dashboard apply on every push to main that matches the workflow trigger paths (approved by David 2026-11-09); the same job applies the Business TV boards once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and warns and skips until then (David 2026-11-12). The apply is idempotent and has no change-detection skip, so a superseded push run cannot drop a dashboard change. Uses the production MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment, which has no required reviewers (the repo-level token is dev-only). expected_runs_per_day 3 is a conservative daily ceiling for merges plus alert and script pushes. The 6-minute p50 is a reviewed estimate for two Grafana API applies (Ops, then Business); re-measure with --reseed after the first runs. The job runs only in BasedHardware/omi.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
