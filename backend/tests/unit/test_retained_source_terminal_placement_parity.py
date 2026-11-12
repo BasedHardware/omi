@@ -289,10 +289,10 @@ def test_the_blob_is_read_with_retry_disabled():
 # --- The five stage members are exactly the GPU chain -------------------------------------
 
 
-def test_stage_vocabulary_has_exactly_five_members():
+def test_stage_vocabulary_has_exactly_six_members():
     from utils.observability.reasons import WorkerValidationStage
 
-    assert len({stage.value for stage in WorkerValidationStage}) == 6  # five + unknown
+    assert len({stage.value for stage in WorkerValidationStage}) == 7  # six + unknown
 
 
 def test_fetch_decode_is_a_stage_member():

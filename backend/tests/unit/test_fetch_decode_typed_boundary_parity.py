@@ -559,7 +559,7 @@ def test_evidence_records_keep_the_exception_class_names():
         'stage': 'fetch_decode',
         'reason': 'unknown',
     }
-    assert transient_failure_evidence('persist', 'unclassified') is None
+    assert transient_failure_evidence('persist', 'unclassified') == {'stage': 'persist', 'reason': 'unknown'}
 
 
 # --- evidence for the retryable typed faults at later stages -------------------------
@@ -580,11 +580,13 @@ def test_typed_fault_at_words_stays_evidence_free():
     assert results[0].worker_failure is None
 
 
-def test_typed_fault_at_persist_stays_evidence_free():
-    # persist is not a closed worker stage: it carries no evidence pair.
+def test_typed_fault_at_persist_carries_the_closed_pair():
+    # persist joined the closed vocabulary: the FailedWork names its stage.
+    # The typed decode verdicts stay fetch_decode-bound, so a decode class
+    # escaping into the persist tail collapses to the unknown reason.
     results = results_for(persist=Mock(side_effect=StagedAudioInvalid('invalid staged WAV container')))
     assert all(isinstance(result, FailedWork) for result in results)
-    assert results[0].worker_failure is None
+    assert results[0].worker_failure == {'stage': 'persist', 'reason': 'unknown'}
 
 
 # --- the real decoder at the boundary -------------------------------------------------

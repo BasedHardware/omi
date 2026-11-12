@@ -92,7 +92,7 @@ def test_evidence_gate_matrix_asr_recovery_x_every_reason():
 
 
 def test_matrix_size_is_the_full_stage_grid():
-    assert len(STAGES) == 5
+    assert len(STAGES) == 6
 
 
 def test_matrix_reasons_cover_the_named_token():

@@ -34,8 +34,8 @@ from utils.observability.reasons import (
 
 FC = 'FC-worker-flight-escape-voids-settled-and-held-units-into-anonymous-quarantine'
 
-CLOSED_STAGES = ('fetch_decode', 'vad_windows', 'word_clocks', 'assemble_words', 'asr_recovery')
-ALL_STAGES = CLOSED_STAGES + ('unknown', 'asr', 'persist', 'diarize')
+CLOSED_STAGES = ('fetch_decode', 'vad_windows', 'word_clocks', 'assemble_words', 'asr_recovery', 'persist')
+ALL_STAGES = CLOSED_STAGES + ('unknown', 'asr', 'diarize')
 TYPED_REASONS = tuple(member.value for member in WorkerValidationReason if member.value != 'unknown')
 ALL_REASONS = TYPED_REASONS + ('unknown', 'gibberish_payload')
 
@@ -611,63 +611,78 @@ def test_evidence_grid_asr_gibberish_payload():
 
 
 def test_evidence_grid_persist_staged_audio_invalid():
-    assert transient_failure_evidence('persist', 'staged_audio_invalid') == None
+    assert transient_failure_evidence('persist', 'staged_audio_invalid') == {
+        'stage': 'persist',
+        'reason': 'staged_audio_invalid',
+    }
 
 
 def test_evidence_grid_persist_retained_audio_invalid():
-    assert transient_failure_evidence('persist', 'retained_audio_invalid') == None
+    assert transient_failure_evidence('persist', 'retained_audio_invalid') == {
+        'stage': 'persist',
+        'reason': 'retained_audio_invalid',
+    }
 
 
 def test_evidence_grid_persist_decoded_duration_mismatch():
-    assert transient_failure_evidence('persist', 'decoded_duration_mismatch') == None
+    assert transient_failure_evidence('persist', 'decoded_duration_mismatch') == {
+        'stage': 'persist',
+        'reason': 'decoded_duration_mismatch',
+    }
 
 
 def test_evidence_grid_persist_word_shape():
-    assert transient_failure_evidence('persist', 'word_shape') == None
+    assert transient_failure_evidence('persist', 'word_shape') == {'stage': 'persist', 'reason': 'word_shape'}
 
 
 def test_evidence_grid_persist_word_clock():
-    assert transient_failure_evidence('persist', 'word_clock') == None
+    assert transient_failure_evidence('persist', 'word_clock') == {'stage': 'persist', 'reason': 'word_clock'}
 
 
 def test_evidence_grid_persist_word_sequence():
-    assert transient_failure_evidence('persist', 'word_sequence') == None
+    assert transient_failure_evidence('persist', 'word_sequence') == {'stage': 'persist', 'reason': 'word_sequence'}
 
 
 def test_evidence_grid_persist_vad_nonfinite():
-    assert transient_failure_evidence('persist', 'vad_nonfinite') == None
+    assert transient_failure_evidence('persist', 'vad_nonfinite') == {'stage': 'persist', 'reason': 'vad_nonfinite'}
 
 
 def test_evidence_grid_persist_vad_order():
-    assert transient_failure_evidence('persist', 'vad_order') == None
+    assert transient_failure_evidence('persist', 'vad_order') == {'stage': 'persist', 'reason': 'vad_order'}
 
 
 def test_evidence_grid_persist_vad_bounds():
-    assert transient_failure_evidence('persist', 'vad_bounds') == None
+    assert transient_failure_evidence('persist', 'vad_bounds') == {'stage': 'persist', 'reason': 'vad_bounds'}
 
 
 def test_evidence_grid_persist_empty_asr():
-    assert transient_failure_evidence('persist', 'empty_asr') == None
+    assert transient_failure_evidence('persist', 'empty_asr') == {'stage': 'persist', 'reason': 'empty_asr'}
 
 
 def test_evidence_grid_persist_no_owned_words():
-    assert transient_failure_evidence('persist', 'no_owned_words') == None
+    assert transient_failure_evidence('persist', 'no_owned_words') == {'stage': 'persist', 'reason': 'no_owned_words'}
 
 
 def test_evidence_grid_persist_unsupported_language():
-    assert transient_failure_evidence('persist', 'unsupported_language') == None
+    assert transient_failure_evidence('persist', 'unsupported_language') == {
+        'stage': 'persist',
+        'reason': 'unsupported_language',
+    }
 
 
 def test_evidence_grid_persist_outside_admitted_source():
-    assert transient_failure_evidence('persist', 'outside_admitted_source') == None
+    assert transient_failure_evidence('persist', 'outside_admitted_source') == {
+        'stage': 'persist',
+        'reason': 'outside_admitted_source',
+    }
 
 
 def test_evidence_grid_persist_unknown():
-    assert transient_failure_evidence('persist', 'unknown') == None
+    assert transient_failure_evidence('persist', 'unknown') == {'stage': 'persist', 'reason': 'unknown'}
 
 
 def test_evidence_grid_persist_gibberish_payload():
-    assert transient_failure_evidence('persist', 'gibberish_payload') == None
+    assert transient_failure_evidence('persist', 'gibberish_payload') == {'stage': 'persist', 'reason': 'unknown'}
 
 
 def test_evidence_grid_diarize_staged_audio_invalid():

@@ -549,6 +549,29 @@ class WorkerValidationStage(StrEnum):
     WORD_CLOCKS = 'word_clocks'
     ASSEMBLE_WORDS = 'assemble_words'
     ASR_RECOVERY = 'asr_recovery'
+    # The persist tail — payload assembly, encrypt/upload and the durable
+    # artifact register that settles a completed GPU unit — attributes its
+    # faults with this stage today (``settle_persist`` and the serial persist
+    # tail both fail with ``fail(item, exc, 'persist')``), but the token was
+    # missing from the closed vocabulary every evidence gate routes on:
+    # ``transient_failure_evidence`` refused the stage and returned ``None``,
+    # so the ``FailedWork`` handoff crossed the pump evidence-less on every
+    # attempt, ``scheduler.fail`` stored no diagnosis on the job, and a unit
+    # whose ladder exhausted on persist faults terminal-quarantined with the
+    # historical anonymous ``stage=unknown worker_reason=unclassified`` shape
+    # — the sensor's unattributed worker-fault bucket — even though the
+    # worker's own ``batch_worker_failed`` ERROR line already named
+    # ``stage=persist``. A persist-stage typed verdict also raised
+    # ``ValueError('closed worker validation failure required')`` out of
+    # ``validate_worker_failure`` and crashed the publication transition it
+    # rode. Joining the shared vocabulary closes the chain with no other
+    # code change: the evidence, ladder, terminal and demotion gates all key
+    # off this enum. Persist faults are real faults — a storage/register
+    # outage is not a designed handoff — so they keep the ERROR quarantine
+    # channel, attributed instead of anonymous.
+    #
+    # Failure-Class: FC-persist-stage-failure-quarantines-anonymous-without-stage-evidence
+    PERSIST = 'persist'
 
 
 class WorkerValidationReason(StrEnum):

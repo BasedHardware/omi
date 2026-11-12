@@ -6,7 +6,7 @@ it, so the scheduler's ladder burned blind and quarantined
 ``stage=unknown worker_reason=unclassified``. This suite pins the extraction
 matrix: closed stages produce closed evidence (generic exceptions collapse to
 the enum's unknown token, BatchValidationError reasons pass through), the
-untyped provider/persist stages stay unevidenced, the terminal validation
+untyped provider stages (``asr``, ``diarize``) stay unevidenced, the terminal validation
 families keep their existing typed handoff, and no exception text ever
 reaches the evidence or the logs.
 
@@ -24,8 +24,8 @@ from utils.batch_pipeline.contracts import FailedWork, ValidationFailureWork
 from utils.observability.reasons import WorkerValidationStage
 from tests.unit.test_batch_pipeline_worker import item, setup_worker
 
-EVIDENCE_STAGES = ['fetch_decode', 'vad_windows', 'word_clocks', 'assemble_words', 'asr_recovery']
-UNTYPED_STAGES = ['asr', 'persist', 'diarize']
+EVIDENCE_STAGES = ['fetch_decode', 'vad_windows', 'word_clocks', 'assemble_words', 'asr_recovery', 'persist']
+UNTYPED_STAGES = ['asr', 'diarize']
 
 
 @pytest.fixture(autouse=True)
@@ -143,10 +143,10 @@ def test_asr_stage_cardinality_mismatch_stays_unevidenced():
     assert worker.counts['failed'] == 1
 
 
-def test_persist_stage_generic_exception_stays_unevidenced():
+def test_persist_stage_generic_exception_carries_stage_evidence():
     worker, *_ = setup_worker(persist=Mock(side_effect=OSError('upload failed')))
     result = _first_failed_work(worker.process_batch([item()]))
-    assert result.worker_failure is None
+    assert result.worker_failure == {'stage': 'persist', 'reason': 'unknown'}
 
 
 def test_diarize_stage_generic_exception_stays_unevidenced():

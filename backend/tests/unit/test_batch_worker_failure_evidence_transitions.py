@@ -395,13 +395,17 @@ def test_malformed_evidence_raises_and_leaves_the_job_leased():
 
 
 def test_open_stage_evidence_raises_and_leaves_the_job_leased():
+    # the raised refusal uses a still-foreign stage; the closed persist
+    # stage stores its evidence and takes the ladder path instead.
     store = MemoryStore()
     queue = _queue(store)
     queue.enqueue(item('a'), 0)
     lease = queue.pull(0)[0]
     with pytest.raises(ValueError, match='closed worker failure evidence required'):
-        queue.fail('a', lease.token, 1, worker_failure_evidence={'stage': 'persist', 'reason': 'unknown'})
+        queue.fail('a', lease.token, 1, worker_failure_evidence={'stage': 'diarize', 'reason': 'unknown'})
     assert store.rows['jobs', 'a']['state'] == 'leased'
+    assert queue.fail('a', lease.token, 1, worker_failure_evidence={'stage': 'persist', 'reason': 'unknown'})
+    assert store.rows['jobs', 'a']['worker_failure_evidence'] == {'stage': 'persist', 'reason': 'unknown'}
 
 
 def test_open_reason_evidence_raises_and_leaves_the_job_leased():

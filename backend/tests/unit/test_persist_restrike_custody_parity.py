@@ -102,15 +102,16 @@ def test_exhaustion_safety_on_returns_no_work_result(monkeypatch):
     assert not [r for r in run['results'] if isinstance(r, WorkResult)]
 
 
-def test_exhaustion_safety_on_books_no_evidence_token(monkeypatch):
+def test_exhaustion_safety_on_books_the_persist_stage_evidence_token(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), safety_net='true')
-    assert not [r for r in run['results'] if getattr(r, 'worker_failure', None)]
+    carried = [getattr(r, 'worker_failure', None) for r in run['results']]
+    assert carried and all(c == {'stage': 'persist', 'reason': 'unknown'} for c in carried if c)
 
 
-def test_exhaustion_safety_on_books_a_failed_work_without_evidence(monkeypatch):
+def test_exhaustion_safety_on_books_a_failed_work_with_stage_evidence(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), safety_net='true')
     assert len(run['results']) == 1 and isinstance(run['results'][0], FailedWork)
-    assert run['results'][0].worker_failure is None
+    assert run['results'][0].worker_failure == {'stage': 'persist', 'reason': 'unknown'}
 
 
 def test_exhaustion_safety_off_returns_no_entry(monkeypatch):

@@ -544,8 +544,11 @@ def test_scheduler_fail_validates_evidence_before_any_transaction():
 
 
 def test_scheduler_fail_validates_evidence_stage_before_any_transaction():
+    # a still-foreign stage is refused before any transaction; the closed
+    # persist stage clears the same gate now.
     with pytest.raises(ValueError, match='closed worker failure evidence required'):
-        _queue().fail('missing', 'token', 0.0, worker_failure_evidence={'stage': 'persist', 'reason': 'unknown'})
+        _queue().fail('missing', 'token', 0.0, worker_failure_evidence={'stage': 'diarize', 'reason': 'unknown'})
+    _queue().fail('missing', 'token', 0.0, worker_failure_evidence={'stage': 'persist', 'reason': 'unknown'})
 
 
 def test_scheduler_fail_validates_evidence_reason_before_any_transaction():

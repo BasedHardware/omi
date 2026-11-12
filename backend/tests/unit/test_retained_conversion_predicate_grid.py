@@ -2101,7 +2101,7 @@ def test_hostile_9_language_guard_redrive():
 
 def test_stage_vocabulary_is_closed():
     assert WORKER_VALIDATION_STAGES == frozenset(
-        {'fetch_decode', 'vad_windows', 'word_clocks', 'assemble_words', 'asr_recovery'}
+        {'fetch_decode', 'vad_windows', 'word_clocks', 'assemble_words', 'asr_recovery', 'persist'}
     )
 
 

@@ -89,10 +89,10 @@ def test_lane_exhaustion_costs_three_calls_vs_legacy_one(monkeypatch):
     assert lane['sleeps'].delays == [0.25, 0.5]
 
 
-def test_evidence_contract_persist_stays_unevidenced_after_exhaustion(monkeypatch):
+def test_evidence_contract_persist_names_its_stage_after_exhaustion(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), safety_net='true')
     assert isinstance(run['results'][0], FailedWork)
-    assert run['results'][0].worker_failure is None
+    assert run['results'][0].worker_failure == {'stage': 'persist', 'reason': 'unknown'}
 
 
 def test_evidence_contract_recovered_units_carry_no_failed_work(monkeypatch):
@@ -120,7 +120,7 @@ def test_the_scheduler_fail_signature_is_untouched_by_the_lane():
     assert FC not in source
 
 
-def test_the_store_validators_still_reject_persist_stages():
+def test_the_store_validators_accept_typed_persist_diagnoses():
     from utils.batch_pipeline.errors import validate_worker_failure
 
     try:
@@ -128,8 +128,8 @@ def test_the_store_validators_still_reject_persist_stages():
     except ValueError:
         pass
     else:
-        raise AssertionError('persist must stay outside the closed evidence vocabulary')
+        raise AssertionError('a typed persist diagnosis must clear the closed evidence gates')
 
 
-def test_transient_failure_evidence_returns_none_for_persist():
-    assert bp.transient_failure_evidence('persist', 'unclassified') is None
+def test_transient_failure_evidence_closes_the_persist_stage_pair():
+    assert bp.transient_failure_evidence('persist', 'unclassified') == {'stage': 'persist', 'reason': 'unknown'}

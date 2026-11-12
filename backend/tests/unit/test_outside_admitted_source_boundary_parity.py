@@ -76,8 +76,14 @@ def test_evidence_still_collapses_the_truly_unknown_reason():
     }
 
 
-def test_evidence_stays_none_for_the_untyped_provider_stage():
-    assert transient_failure_evidence('persist', 'outside_admitted_source') is None
+def test_evidence_for_outside_admitted_source_follows_the_stage_vocabulary():
+    # the untyped provider stages still carry no evidence; the closed
+    # persist stage names the reason it observed.
+    assert transient_failure_evidence('diarize', 'outside_admitted_source') is None
+    assert transient_failure_evidence('persist', 'outside_admitted_source') == {
+        'stage': 'persist',
+        'reason': 'outside_admitted_source',
+    }
 
 
 def test_evidence_stays_none_for_an_invented_stage():
