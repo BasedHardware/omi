@@ -141,6 +141,10 @@ AUDITED_PUBLIC_PREFIXES = (
 UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
         'POST',
+        '/v1/conversations/deletion-batch-purges/run',
+    ): 'Cloud Tasks worker on backend-sync, service OIDC only; not a browser, app or Developer API surface.',
+    (
+        'POST',
         '/v1/conversations/shared/chat',
     ): 'Trusted frontend service OIDC route; it is not a browser or Developer API surface.',
     (

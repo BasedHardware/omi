@@ -29,6 +29,21 @@ class Store:
     def collection(self, name):
         return Ref(self, name)
 
+    def batch(self):
+        return Batch()
+
+
+class Batch:
+    def __init__(self):
+        self.refs = []
+
+    def delete(self, ref):
+        self.refs.append(ref)
+
+    def commit(self):
+        for ref in self.refs:
+            ref.delete()
+
 
 class Ref:
     def __init__(self, store, path):
@@ -62,6 +77,8 @@ def function(path, name, namespace):
     if path == 'routers/conversations.py' and name == 'delete_conversation':
         namespace['nullcontext'] = nullcontext
         namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+        namespace.setdefault('CONVERSATION_DELETE_GATE_WAIT_SECONDS', 0.0)
+        namespace.setdefault('deferred_batch_purges', lambda uid: nullcontext())
         function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n

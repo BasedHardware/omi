@@ -77,7 +77,9 @@ def test_tombstone_precedes_batch_cleanup_and_failure_is_retryable(monkeypatch, 
     rows = {'users/u/conversations/c': {'created_at': 'synthetic'}}
     if retry:
         rows['users/u/deleted_conversations/c'] = {'conversation_id': 'c', 'created_at': 'original'}
-    client = SimpleNamespace(collection=lambda key: Ref(rows, key))
+    staged = []
+    batch = SimpleNamespace(delete=staged.append, commit=lambda: [ref.delete() for ref in staged])
+    client = SimpleNamespace(collection=lambda key: Ref(rows, key), batch=lambda: batch)
     monkeypatch.setattr(conversation_tombstones, 'db', client)
 
     def reject(uid, **kwargs):

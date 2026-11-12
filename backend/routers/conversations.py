@@ -117,6 +117,7 @@ from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
+from utils.conversations.deletion_batch_purge import deferred_batch_purges
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
@@ -1447,14 +1448,20 @@ def delete_conversation(
     memory_service = MemoryService(db_client=db_client) if cascade else None
     # Acquire before recording delete intent. A busy account returns a retryable
     # 409 without leaving a tombstone on a still-live conversation. Nested
-    # memory retraction reuses this exact gate and token.
+    # memory retraction reuses this exact gate and token. A same-account delete
+    # already holding the gate is waited for (bounded), not answered with 409.
     gate = (
-        destructive_operation_gate(uid, kind='explicit_memory_deletion', firestore_client=db_client)
+        destructive_operation_gate(
+            uid,
+            kind='explicit_memory_deletion',
+            firestore_client=db_client,
+            wait_seconds=CONVERSATION_DELETE_GATE_WAIT_SECONDS,
+        )
         if cascade
         else nullcontext()
     )
     try:
-        with gate:
+        with gate, deferred_batch_purges(uid):
             return _delete_conversation_under_gate(
                 conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
             )
@@ -1466,6 +1473,10 @@ def delete_conversation(
         }:
             raise
         raise account_gate_busy_http_exception() from error
+
+
+# Same-account deletes queue behind each other; stays under the released app's 30 s read timeout.
+CONVERSATION_DELETE_GATE_WAIT_SECONDS = 20.0
 
 
 def _delete_conversation_under_gate(
