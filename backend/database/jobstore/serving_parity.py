@@ -66,6 +66,8 @@ class _ParityPostgresStore(PostgresStore):
                 conn.execute(f'SET LOCAL statement_timeout = {max(1, int(budget * 1000))}')
                 yield conn
 
+    read_connection = _read_conn
+
 
 def query_value(store, query: str, args: tuple, kwargs: dict, *, transaction: bool, budget_s: float):
     allowed = TRANSACTION_QUERIES if transaction else STORE_QUERIES
@@ -79,7 +81,7 @@ def query_value(store, query: str, args: tuple, kwargs: dict, *, transaction: bo
     if isinstance(store, PostgresStore):
         bounded = _ParityPostgresStore(store, budget_s)
         if transaction:
-            with bounded._read_conn() as conn:
+            with bounded.read_connection() as conn:
                 # Locks match the real transaction read; never flush buffered writes.
                 return getattr(PostgresTransaction(bounded, conn), query)(*args, **kwargs)
         return getattr(bounded, query)(*args, **kwargs)
