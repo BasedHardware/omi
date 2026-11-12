@@ -216,3 +216,31 @@ async def test_live_watch_covers_fallback_with_legacy_dispatch_disabled(policy, 
     ]
     first.assert_awaited_once()
     fallback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_gpu_observations_cannot_starve_another_authorization(monkeypatch):
+    from copy import deepcopy
+    from tests.unit.test_batch_pipeline_admission import setup, tokens
+    from utils.batch_pipeline import admission
+
+    store, _, lease, _ = setup(monkeypatch)
+    store.rows['jobs', 'second'] = deepcopy(store.rows['jobs', 'segment'])
+    requests = tokens(lease) + [{'segment_id': 'second', 'token': lease.token}]
+    monkeypatch.setattr(admission, 'cap_dispatch_enabled', lambda *args: False)
+    clock = [0.0]
+    monkeypatch.setattr(admission, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=lambda: 1.0))
+    observations = []
+
+    async def observe(*args, **kwargs):
+        assert all(
+            store.rows['jobs', name].get('compute_admission_token') == lease.token for name in ('segment', 'second')
+        )
+        observations.append((args, kwargs))
+        clock[0] += 5  # Even spending the entire remaining budget cannot undo either decision.
+
+    monkeypatch.setattr(watch, 'observe_async', observe)
+    receipt = await admission.authorize(store, requests, now=1)
+    assert receipt == {'allowed': ['segment', 'second'], 'retry_after': {}, 'held_reason': {}}
+    assert len(observations) == 1
+    assert observations[0][1]['timeout'] == 0.1

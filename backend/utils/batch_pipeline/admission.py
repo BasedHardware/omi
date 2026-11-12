@@ -202,7 +202,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
             if await stage('seal', store.run, seal):
                 allowed.append(segment)
                 retries.pop(segment, None)
-                observations.append((job['owner_id'], float(job.get('duration_seconds', 0))))
+                observations.append((job['owner_id'], job.get('duration_seconds', 0)))
             else:
                 retries[segment] = 30
         except BatchPrivacyBlocked:
