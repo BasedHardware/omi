@@ -162,7 +162,7 @@ def bump_action_items_list_version(uid: str) -> None:
         pipe.incr(vkey)
         pipe.expire(vkey, _VERSION_TTL_SECONDS)
         pipe.execute()
-    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: version bump failed uid=%s: %s', uid, e)
 
 
@@ -180,7 +180,7 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
         if r is None:
             return None
         raw = r.get(vkey)
-    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: version read failed uid=%s: %s', uid, e)
         return None
     if raw is None:
@@ -197,18 +197,16 @@ def list_cache_key(uid: str, version: int, params: Dict[str, Any]) -> str:
     cleaned_uid = _clean_uid(uid)
     if not cleaned_uid:
         return ''
-    safe_version = max(0, version) if isinstance(version, int) else 0
-    safe_params = params if isinstance(params, dict) else {}
+    safe_version = max(0, version)
     fingerprint = hashlib.sha256(
-        json.dumps(safe_params, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
+        json.dumps(params, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
     ).hexdigest()[:16]
     return f'{_ENTRY_KEY_PREFIX}:{cleaned_uid}:{safe_version}:{fingerprint}'
 
 
 def compute_etag(body: Dict[str, Any]) -> str:
     """Weak ETag over the exact bytes the route would return."""
-    safe_body = body if isinstance(body, dict) else {}
-    digest = hashlib.sha256(json.dumps(safe_body, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8'))
+    digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8'))
     return f'W/"{digest.hexdigest()[:32]}"'
 
 
@@ -222,7 +220,7 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
         if r is None:
             return None
         raw = r.get(clean_k)
-    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: read failed: %s', e)
         return None
     if not raw:
@@ -242,20 +240,18 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
 
 def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) -> None:
     """Store one list page. Never raises; a failed write just means a later miss."""
-    if not isinstance(ttl, int) or ttl <= 0:
+    if ttl <= 0:
         return
     effective_ttl = min(ttl, _TTL_MAX_SECONDS)
     clean_k = _clean_key(key)
     if not clean_k:
-        return
-    if not isinstance(body, dict) or not isinstance(etag, str):
         return
     try:
         r = _redis()
         if r is None:
             return
         r.set(clean_k, json.dumps({'etag': etag, 'body': body}, default=str), ex=effective_ttl)
-    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: write failed: %s', e)
     except (TypeError, ValueError) as e:
         logger.warning('action-items list cache: body not serializable: %s', e)
