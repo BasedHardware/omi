@@ -393,6 +393,45 @@ final class APIClientAssistantSettingsTests: XCTestCase {
   }
 
   @MainActor
+  func testExistingOffSurvivesUpgradeSyncAndStartupRepair() {
+    let originalEnabled = AssistantSettings.shared.screenAnalysisEnabled
+    let originalHold = UserDefaults.standard.object(forKey: .screenAnalysisHeldOffByUser)
+    defer { restoreScreenAnalysisDefaults(enabled: originalEnabled, hold: originalHold) }
+    // Released builds wrote only this Bool; no new hold key exists yet.
+    AssistantSettings.shared.screenAnalysisEnabled = false
+    // omi-test-quality: shared-defaults -- integration: seed the pre-upgrade persisted preference
+    UserDefaults.standard.removeObject(forKey: .screenAnalysisHeldOffByUser)
+    SettingsSyncManager.shared.applyRemoteSettings(
+      AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true)))
+    XCTAssertFalse(AssistantSettings.shared.screenAnalysisEnabled)
+    XCTAssertTrue(SettingsSyncManager.shared.isScreenAnalysisHeldOffByUser)
+    XCTAssertFalse(SettingsSyncManager.shared.restoreScreenAnalysisDefaultForMigration())
+    XCTAssertFalse(AssistantSettings.shared.screenAnalysisEnabled)
+    // A subsequent hydration/launch reads the persisted hold, not an in-memory latch.
+    SettingsSyncManager.shared.applyRemoteSettings(
+      AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true)))
+    XCTAssertFalse(AssistantSettings.shared.screenAnalysisEnabled)
+    SettingsSyncManager.shared.setUserScreenAnalysisEnabled(true, push: false)
+    XCTAssertTrue(SettingsSyncManager.shared.restoreScreenAnalysisDefaultForMigration())
+  }
+
+  @MainActor
+  func testRemoteOffDoesNotBecomeALocalHoldAfterMigration() {
+    let originalEnabled = AssistantSettings.shared.screenAnalysisEnabled
+    let originalHold = UserDefaults.standard.object(forKey: .screenAnalysisHeldOffByUser)
+    defer { restoreScreenAnalysisDefaults(enabled: originalEnabled, hold: originalHold) }
+    AssistantSettings.shared.screenAnalysisEnabled = true
+    // omi-test-quality: shared-defaults -- integration: an existing enabled installation has no hold key
+    UserDefaults.standard.removeObject(forKey: .screenAnalysisHeldOffByUser)
+    for enabled in [false, true] {
+      SettingsSyncManager.shared.applyRemoteSettings(
+        AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: enabled)))
+      XCTAssertEqual(AssistantSettings.shared.screenAnalysisEnabled, enabled)
+      XCTAssertFalse(SettingsSyncManager.shared.isScreenAnalysisHeldOffByUser)
+    }
+  }
+
+  @MainActor
   private func restoreScreenAnalysisDefaults(enabled: Bool, hold: Any?) {
     AssistantSettings.shared.screenAnalysisEnabled = enabled
     if let hold {
