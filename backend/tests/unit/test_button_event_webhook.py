@@ -51,6 +51,7 @@ async def test_button_events_keep_stable_id_and_serialize_per_device(monkeypatch
 
     monkeypatch.setattr(webhooks, 'user_webhook_status_db', MagicMock(return_value=True))
     monkeypatch.setattr(webhooks, 'get_user_webhook_db', MagicMock(return_value='https://example.com/hook'))
+    monkeypatch.setattr(webhooks, 'get_user_webhook_signing_db', MagicMock(return_value=None))
     monkeypatch.setattr(webhooks, 'record_dev_webhook_success', MagicMock())
     circuit_breaker = MagicMock()
     circuit_breaker.allow_request.return_value = True

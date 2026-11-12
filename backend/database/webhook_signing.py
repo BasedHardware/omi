@@ -17,10 +17,11 @@ a hash. Records are encrypted at rest with the shared AES-GCM helper under their
 signing-secret ciphertext decrypts as the other; the Redis cache holds only the encrypted record. Rotation is a compare-and-set (Redis
 WATCH, Firestore transaction) so two concurrent rotations cannot both believe they are current.
 
-Delivery is fail-open: a record this code cannot read, or a store that cannot be reached, means
-the delivery goes out unsigned. An enforcing receiver rejects the missing header, while failing
-closed here would feed the auto-disable failure counter for a problem that is ours, not the
-developer's. The fallback is reported once per record per cache window, never per delivery.
+Delivery fails closed: a record this code cannot read, or a store that cannot be reached, raises
+``WebhookSigningUnavailable`` and the delivery is held rather than sent unsigned, because a
+receiver cannot tell our outage from a forgery. Callers treat it like an open circuit breaker:
+retry or dead-letter on our side, and no failure counted against the developer's endpoint. The
+condition is reported once per record per cache window, never per delivery.
 """
 
 import json
@@ -38,7 +39,7 @@ from database._client import get_firestore_client, run_transactional
 from database.apps import apps_collection
 from database.redis_db import delete_generic_cache, get_generic_cache, r, set_generic_cache
 from utils import encryption
-from utils.observability.fallback import record_fallback
+from utils.webhook_signing import WebhookSigningUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ _APP_CACHE_TTL_SECONDS = 600
 _ROTATE_ATTEMPTS = 5
 
 # One report per (reason, owner) per cache window; the app lookup cache would otherwise re-log an
-# unreadable record on every delivery for ten minutes.
+# unreadable record on every held delivery for ten minutes.
 _UNSIGNED_REPORTED: TTLCache[tuple[str, str], bool] = TTLCache(maxsize=10_000, ttl=_APP_CACHE_TTL_SECONDS)
 _UNSIGNED_REPORTED_LOCK = threading.Lock()
 
@@ -92,18 +93,17 @@ class WebhookSigningSecrets:
         return [self.current]
 
 
-def note_unsigned_delivery(reason: str, key_id: str) -> None:
-    """Report that deliveries for ``key_id`` are going out unsigned, once per window.
+def note_signing_unavailable(reason: str, key_id: str) -> None:
+    """Report that deliveries for ``key_id`` are being held, once per window.
 
-    ``reason`` is a fallback-telemetry reason: ``malformed_doc`` for a record that exists but
-    cannot be read, ``other`` for a store that could not be reached.
+    A hard failure, not a fallback: the delivery does not continue in another mode, so this is an
+    error log (and the dead-letter entry the caller writes), not ``record_fallback``.
     """
     with _UNSIGNED_REPORTED_LOCK:
         if (reason, key_id) in _UNSIGNED_REPORTED:
             return
         _UNSIGNED_REPORTED[(reason, key_id)] = True
-    logger.error(f'webhook signing unavailable key_id={key_id} reason={reason}; delivering unsigned')
-    record_fallback(component='webhook', from_mode='signed', to_mode='unsigned', reason=reason, outcome='degraded')
+    logger.error(f'webhook signing unavailable key_id={key_id} reason={reason}; holding deliveries')
 
 
 def _encode(secrets: WebhookSigningSecrets, key_id: str) -> dict[str, Any]:
@@ -140,9 +140,17 @@ def _decode(raw: Optional[dict[str, Any]], key_id: str) -> Optional[WebhookSigni
             previous=_decrypt_secret(raw['previous'], key_id) if raw.get('previous') else None,
             previous_valid_until=datetime.fromisoformat(previous_valid_until) if previous_valid_until else None,
         )
-    except (KeyError, TypeError, ValueError):
-        # A record this code cannot read must not sign with garbage; deliver unsigned and say so.
-        note_unsigned_delivery('malformed_doc', key_id)
+    except (KeyError, TypeError, ValueError) as exc:
+        # A record this code cannot read must not sign with garbage, nor be skipped as "no secret".
+        note_signing_unavailable('malformed_doc', key_id)
+        raise WebhookSigningUnavailable('malformed_doc', key_id) from exc
+
+
+def _decode_for_rotation(raw: Optional[dict[str, Any]], key_id: str) -> Optional[WebhookSigningSecrets]:
+    """The record a rotation composes against: an unreadable one is replaced, not kept."""
+    try:
+        return _decode(raw, key_id)
+    except WebhookSigningUnavailable:
         return None
 
 
@@ -176,7 +184,8 @@ def rotate_user_webhook_signing_db(uid: str, secret: str) -> WebhookSigningSecre
             try:
                 pipe.watch(key)
                 raw = pipe.get(key)
-                record = WebhookSigningSecrets.issue(secret, previous=_decode(json.loads(raw), uid) if raw else None)
+                previous = _decode_for_rotation(json.loads(raw), uid) if raw else None
+                record = WebhookSigningSecrets.issue(secret, previous=previous)
                 pipe.multi()
                 pipe.set(key, json.dumps(_encode(record, uid)))
                 pipe.execute()
@@ -234,7 +243,7 @@ def rotate_app_webhook_signing_db(
 
     @firestore.transactional
     def rotate(transaction: Any) -> WebhookSigningSecrets:
-        previous = _decode(_snapshot_record(ref.get(transaction=transaction)), app_id)
+        previous = _decode_for_rotation(_snapshot_record(ref.get(transaction=transaction)), app_id)
         record = WebhookSigningSecrets.issue(secret, previous=previous)
         transaction.set(ref, _encode(record, app_id))
         return record

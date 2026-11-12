@@ -1,10 +1,9 @@
-"""Signing-secret storage (#20939): rotation grace, atomic rotate, encryption at rest, caching, fail-open reporting."""
+"""Signing-secret storage (#20939): rotation grace, atomic rotate, encryption at rest, caching, unreadable records."""
 
 import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
 
 import pytest
 import redis
@@ -140,11 +139,8 @@ def firestore():
 
 
 @pytest.fixture
-def fallback(monkeypatch):
-    recorded = MagicMock()
-    monkeypatch.setattr(store, 'record_fallback', recorded)
+def fresh_reports():
     store._UNSIGNED_REPORTED.clear()
-    return recorded
 
 
 def test_first_issue_has_no_previous_secret():
@@ -185,7 +181,8 @@ def test_user_record_round_trips_and_is_encrypted_at_rest(fake_redis):
     assert store.get_user_webhook_signing_db('uid-1') == record
     # Another user's key cannot read this record even with the same ciphertext.
     fake_redis.data['users:uid-2:developer:webhook_signing'] = fake_redis.data['users:uid-1:developer:webhook_signing']
-    assert store.get_user_webhook_signing_db('uid-2') is None
+    with pytest.raises(store.WebhookSigningUnavailable):
+        store.get_user_webhook_signing_db('uid-2')
 
     store.delete_user_webhook_signing_db('uid-1')
     assert store.get_user_webhook_signing_db('uid-1') is None
@@ -219,38 +216,45 @@ def test_user_rotate_gives_up_after_bounded_collisions(fake_redis, monkeypatch):
     assert fake_redis.watch_calls == store._ROTATE_ATTEMPTS
 
 
-def test_unreadable_user_record_means_unsigned_reported_once_per_window(fake_redis, fallback, caplog):
+def test_unreadable_user_record_raises_and_is_reported_once_per_window(fake_redis, fresh_reports, caplog):
     fake_redis.data['users:uid-1:developer:webhook_signing'] = b'{"current": "not-ciphertext", "created_at": "bad"}'
     with caplog.at_level(logging.ERROR, logger=store.__name__):
         for _ in range(5):
-            assert store.get_user_webhook_signing_db('uid-1') is None
-    errors = [rec for rec in caplog.records if rec.levelno == logging.ERROR and 'delivering unsigned' in rec.message]
-    assert len(errors) == 1
-    assert 'uid-1' in errors[0].message and 'malformed_doc' in errors[0].message
-    fallback.assert_called_once_with(
-        component='webhook', from_mode='signed', to_mode='unsigned', reason='malformed_doc', outcome='degraded'
-    )
-    # A different owner is a different incident and reports on its own.
-    fake_redis.data['users:uid-2:developer:webhook_signing'] = fake_redis.data['users:uid-1:developer:webhook_signing']
-    assert store.get_user_webhook_signing_db('uid-2') is None
-    assert fallback.call_count == 2
+            with pytest.raises(store.WebhookSigningUnavailable) as raised:
+                store.get_user_webhook_signing_db('uid-1')
+            assert (raised.value.reason, raised.value.key_id) == ('malformed_doc', 'uid-1')
+        held = [rec for rec in caplog.records if rec.levelno == logging.ERROR and 'holding deliveries' in rec.message]
+        assert len(held) == 1
+        assert 'uid-1' in held[0].message and 'malformed_doc' in held[0].message
+        # A different owner is a different incident and reports on its own.
+        fake_redis.data['users:uid-2:developer:webhook_signing'] = fake_redis.data[
+            'users:uid-1:developer:webhook_signing'
+        ]
+        with pytest.raises(store.WebhookSigningUnavailable):
+            store.get_user_webhook_signing_db('uid-2')
+        assert len([rec for rec in caplog.records if 'holding deliveries' in rec.message]) == 2
 
 
-def test_signing_secrets_use_their_own_key_domain(fake_redis, fallback):
+def test_rotation_replaces_an_unreadable_user_record(fake_redis, fresh_reports):
+    fake_redis.data['users:uid-1:developer:webhook_signing'] = b'{"current": "not-ciphertext", "created_at": "bad"}'
+    record = store.rotate_user_webhook_signing_db('uid-1', 'whsec_new')
+    assert record.previous is None
+    assert store.get_user_webhook_signing_db('uid-1').current == 'whsec_new'
+
+
+def test_signing_secrets_use_their_own_key_domain(fake_redis, fresh_reports):
     store.set_user_webhook_signing_db('uid-1', WebhookSigningSecrets.issue('whsec_new', now=NOW))
     sealed = json.loads(fake_redis.data['users:uid-1:developer:webhook_signing'])['current']
     # The user-data key for the same uid cannot open a signing secret.
     assert encryption.decrypt(sealed, 'uid-1') == sealed
 
     # Nor does a secret sealed under the user-data key read as a signing secret: unreadable,
-    # so the destination is delivered unsigned and the fallback is reported.
+    # so deliveries to that destination are held.
     fake_redis.data['users:uid-1:developer:webhook_signing'] = json.dumps(
         {'current': encryption.encrypt('whsec_new', 'uid-1'), 'created_at': NOW.isoformat()}
     ).encode()
-    assert store.get_user_webhook_signing_db('uid-1') is None
-    fallback.assert_called_once_with(
-        component='webhook', from_mode='signed', to_mode='unsigned', reason='malformed_doc', outcome='degraded'
-    )
+    with pytest.raises(store.WebhookSigningUnavailable):
+        store.get_user_webhook_signing_db('uid-1')
 
 
 def test_app_record_lives_in_a_subcollection_not_on_the_app_document(fake_redis, firestore):
@@ -279,14 +283,23 @@ def test_app_lookup_is_cached_including_the_no_secret_answer(fake_redis, firesto
     assert firestore.docs == {}
 
 
-def test_app_record_is_bound_to_its_app_id(fake_redis, firestore, fallback):
+def test_app_record_is_bound_to_its_app_id(fake_redis, firestore, fresh_reports):
     record = WebhookSigningSecrets.issue('whsec_app', now=NOW)
     store.set_app_webhook_signing_db('app-1', record, firestore_client=firestore)
     firestore.docs['plugins_data/app-2/webhook_signing/current'] = firestore.docs[
         'plugins_data/app-1/webhook_signing/current'
     ]
-    assert store.get_app_webhook_signing_db('app-2', firestore_client=firestore) is None
-    fallback.assert_called_once()
+    with pytest.raises(store.WebhookSigningUnavailable) as raised:
+        store.get_app_webhook_signing_db('app-2', firestore_client=firestore)
+    assert raised.value.key_id == 'app-2'
+
+
+def test_app_rotation_replaces_an_unreadable_record(fake_redis, fresh_reports):
+    strict = StrictFirestore()
+    strict.rows[APP_DOC] = {'current': 'not-ciphertext', 'created_at': 'bad'}
+    rotated = store.rotate_app_webhook_signing_db('app-1', 'whsec_fresh', firestore_client=strict)
+    assert rotated.previous is None
+    assert store._decode(strict.rows[APP_DOC], 'app-1') == rotated
 
 
 def test_app_rotate_runs_in_one_firestore_transaction_and_invalidates_the_cache(fake_redis):

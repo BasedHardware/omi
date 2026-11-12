@@ -22,7 +22,7 @@ from database.webhook_health import (
     enqueue_dev_webhook_dlq,
     _DEV_FAILURE_THRESHOLD,
 )
-from database.webhook_signing import WebhookSigningSecrets, get_user_webhook_signing_db, note_unsigned_delivery
+from database.webhook_signing import WebhookSigningSecrets, get_user_webhook_signing_db, note_signing_unavailable
 from models.conversation import Conversation
 from models.transcript_segment import transcript_segment_for_client
 from models.users import WebhookType, webhook_url_from_setting
@@ -39,7 +39,7 @@ from utils.http_client import (
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.notifications import send_notification
-from utils.webhook_signing import prepare_signed_body, signature_headers
+from utils.webhook_signing import WebhookSigningUnavailable, prepare_signed_body, signature_headers
 import logging
 
 logger = logging.getLogger(__name__)
@@ -166,17 +166,52 @@ def _redact_webhook_url(url: str) -> str:
 
 
 async def _load_user_signing(uid: str) -> Optional[WebhookSigningSecrets]:
-    """The user's signing record, or None to deliver unsigned.
+    """The user's signing record, or None when none is configured.
 
-    A store error here must not stop a delivery the user configured; it is reported once per
-    user per window (error log + fallback metric) so unsigned deliveries never pass silently.
+    A store that cannot be read raises WebhookSigningUnavailable and the caller holds the delivery
+    (see _hold_dev_webhook) instead of sending it unsigned: a receiver cannot tell our outage from
+    a forgery. The lookup is not retried in place: with no breaker in front of the store, a retry
+    schedule per delivery would pile up coroutines for as long as the outage lasts, and the
+    dead-letter entry already keeps the request for replay.
     """
     try:
         return await run_blocking(db_executor, get_user_webhook_signing_db, uid)
-    except Exception:
-        # Logging and the metric are blocking work; keep them off the event loop like the lookup.
-        await run_blocking(db_executor, note_unsigned_delivery, 'other', uid)
-        return None
+    except WebhookSigningUnavailable:
+        raise
+    except Exception as exc:
+        # Logging is blocking work; keep it off the event loop like the lookup.
+        await run_blocking(db_executor, note_signing_unavailable, 'other', uid)
+        raise WebhookSigningUnavailable('other', uid) from exc
+
+
+async def _hold_dev_webhook(
+    webhook_name: str,
+    webhook_url: str,
+    uid: str,
+    error: WebhookSigningUnavailable,
+    *,
+    idempotency_key: Optional[str] = None,
+    payload: Optional[dict] = None,
+) -> None:
+    """Dead-letter a delivery that could not be signed, for replay once signing is back.
+
+    The destination never saw the request, so neither the circuit breaker nor the auto-disable
+    counter moves: this is our outage, not the developer's.
+    """
+    logger.error(
+        f'{webhook_name}: delivery held, signing unavailable reason={error.reason} url={_redact_webhook_url(webhook_url)}'
+    )
+    await run_blocking(
+        db_executor,
+        enqueue_dev_webhook_dlq,
+        webhook_name=webhook_name,
+        webhook_url=webhook_url,
+        status_code=0,
+        error=f'WebhookSigningUnavailable:{error.reason}',
+        idempotency_key=idempotency_key,
+        uid=uid,
+        payload=payload,
+    )
 
 
 async def _post_dev_webhook(
@@ -379,9 +414,9 @@ async def conversation_created_webhook(uid, memory: Conversation):
             journey_attempt.fail('dependency_unavailable')
             logger.info(f'memory_created_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
             return
-        signing = await _load_user_signing(uid)
         try:
             payload = await run_blocking(db_executor, _build_conversation_webhook_payload_sync, uid, memory)
+            signing = await _load_user_signing(uid)
             response = await _post_dev_webhook(
                 'memory_created_webhook',
                 webhook_url,
@@ -408,6 +443,9 @@ async def conversation_created_webhook(uid, memory: Conversation):
                     f'HTTP {response.status_code}',
                 )
                 await _handle_dev_webhook_disable(uid, WebhookType.memory_created, should_disable)
+        except WebhookSigningUnavailable as e:
+            journey_attempt.fail('dependency_unavailable')
+            await _hold_dev_webhook('memory_created_webhook', webhook_url, uid, e, payload=payload)
         except Exception as e:
             journey_attempt.fail('upstream_timeout' if isinstance(e, TimeoutError) else 'provider_error')
             cb.record_failure()
@@ -438,17 +476,18 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
         if not cb.allow_request():
             logger.info(f'day_summary_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
             return
-        signing = await _load_user_signing(uid)
+        payload = {
+            'summary': summary,
+            'summary_json': summary_json,
+            'uid': uid,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+        }
         try:
+            signing = await _load_user_signing(uid)
             response = await _post_dev_webhook(
                 'day_summary_webhook',
                 webhook_url,
-                json={
-                    'summary': summary,
-                    'summary_json': summary_json,
-                    'uid': uid,
-                    'created_at': datetime.now(timezone.utc).isoformat(),
-                },
+                json=payload,
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
                 event=WebhookType.day_summary,
@@ -469,6 +508,8 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
                     f'HTTP {response.status_code}',
                 )
                 await _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
+        except WebhookSigningUnavailable as e:
+            await _hold_dev_webhook('day_summary_webhook', webhook_url, uid, e, payload=payload)
         except Exception as e:
             cb.record_failure()
             should_disable = await run_blocking(
@@ -497,12 +538,13 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
                 f'realtime_transcript_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}'
             )
             return
-        signing = await _load_user_signing(uid)
+        payload = {'segments': [transcript_segment_for_client(s) for s in segments], 'session_id': uid}
         try:
+            signing = await _load_user_signing(uid)
             response = await _post_dev_webhook(
                 'realtime_transcript_webhook',
                 webhook_url,
-                json={'segments': [transcript_segment_for_client(s) for s in segments], 'session_id': uid},
+                json=payload,
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
                 event=WebhookType.realtime_transcript,
@@ -535,6 +577,9 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
                     f'HTTP {response.status_code}',
                 )
                 await _handle_dev_webhook_disable(uid, WebhookType.realtime_transcript, should_disable)
+        except WebhookSigningUnavailable as e:
+            journey_attempt.fail('dependency_unavailable')
+            await _hold_dev_webhook('realtime_transcript_webhook', webhook_url, uid, e, payload=payload)
         except Exception as e:
             journey_attempt.fail('upstream_timeout' if isinstance(e, TimeoutError) else 'provider_error')
             cb.record_failure()
@@ -595,7 +640,11 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         return
 
     # One lookup per call, not per one-second chunk.
-    signing = await _load_user_signing(uid)
+    try:
+        signing = await _load_user_signing(uid)
+    except WebhookSigningUnavailable as e:
+        await _hold_dev_webhook('send_audio_bytes_developer_webhook', webhook_url, uid, e)
+        return
     lock = await _get_audio_bytes_send_lock(uid)
     async with lock:
         try:
@@ -683,8 +732,8 @@ async def _button_event_webhook_serialized(
         'timestamp': timestamp,
         'session_id': session_id,
     }
-    signing = await _load_user_signing(uid)
     try:
+        signing = await _load_user_signing(uid)
         response = await _post_dev_webhook(
             'button_event_webhook',
             webhook_url,
@@ -709,6 +758,8 @@ async def _button_event_webhook_serialized(
                 f'HTTP {response.status_code}',
             )
             await _handle_dev_webhook_disable(uid, WebhookType.button_event, should_disable)
+    except WebhookSigningUnavailable as e:
+        await _hold_dev_webhook('button_event_webhook', webhook_url, uid, e, idempotency_key=event_id, payload=payload)
     except Exception as e:
         cb.record_failure()
         should_disable = await run_blocking(

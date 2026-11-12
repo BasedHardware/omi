@@ -29,6 +29,7 @@ def _stub_webhook_db_helpers(monkeypatch):
     monkeypatch.setattr(webhooks_module, "enqueue_dev_webhook_dlq", MagicMock())
     monkeypatch.setattr(webhooks_module, "user_webhook_status_db", MagicMock(return_value=True))
     monkeypatch.setattr(webhooks_module, "get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+    monkeypatch.setattr(webhooks_module, "get_user_webhook_signing_db", MagicMock(return_value=None))
     monkeypatch.setattr(webhooks_module, "disable_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "enable_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_success", MagicMock())

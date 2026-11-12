@@ -12,7 +12,7 @@ import os
 import socket
 import types
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -79,7 +79,7 @@ def delivery(monkeypatch):
     monkeypatch.setattr(webhooks, 'user_webhook_status_db', MagicMock(return_value=True))
     monkeypatch.setattr(webhooks, 'get_user_webhook_db', MagicMock(return_value=URL))
     monkeypatch.setattr(webhooks, 'get_user_webhook_signing_db', MagicMock(return_value=None))
-    monkeypatch.setattr(webhooks, 'note_unsigned_delivery', MagicMock())
+    monkeypatch.setattr(webhooks, 'note_signing_unavailable', MagicMock())
     monkeypatch.setattr(webhooks, 'record_dev_webhook_failure', MagicMock(return_value=False))
     monkeypatch.setattr(webhooks, 'record_dev_webhook_success', MagicMock())
     monkeypatch.setattr(webhooks, 'disable_user_webhook_db', MagicMock())
@@ -324,29 +324,61 @@ async def test_audio_bytes_reads_the_secret_once_per_call_not_per_chunk(delivery
     webhooks.get_user_webhook_signing_db.assert_called_once_with(UID)
 
 
+# --- signing unavailable: hold, never send unsigned --------------------------------------------------
+
+HELD_NAMES = {
+    WebhookType.memory_created: 'memory_created_webhook',
+    WebhookType.day_summary: 'day_summary_webhook',
+    WebhookType.realtime_transcript: 'realtime_transcript_webhook',
+    WebhookType.audio_bytes: 'send_audio_bytes_developer_webhook',
+    WebhookType.button_event: 'button_event_webhook',
+}
+
+
 @pytest.mark.asyncio
-async def test_signing_store_failure_delivers_unsigned_and_reports_the_fallback(delivery):
+@pytest.mark.parametrize('kind', WEBHOOK_TYPES)
+async def test_signing_store_failure_holds_every_webhook_type_instead_of_sending_it_unsigned(delivery, kind):
     webhooks.get_user_webhook_signing_db.side_effect = RuntimeError('redis down')
+    await _deliver(kind)
+    delivery.post.assert_not_awaited()
+    # One lookup, no retry sleeps: the dead-letter entry is what keeps the request.
+    webhooks.get_user_webhook_signing_db.assert_called_once_with(UID)
+    webhooks.asyncio.sleep.assert_not_awaited()
+    webhooks.note_signing_unavailable.assert_called_once_with('other', UID)
+    # Held for replay, with the request that was not sent.
+    dlq = webhooks.enqueue_dev_webhook_dlq.call_args.kwargs
+    assert dlq['webhook_name'] == HELD_NAMES[kind]
+    assert dlq['uid'] == UID and dlq['status_code'] == 0 and dlq['error'] == 'WebhookSigningUnavailable:other'
+    assert (dlq['payload'] is None) == (kind == WebhookType.audio_bytes)
+    if kind == WebhookType.button_event:
+        assert dlq['idempotency_key'] == 'event-1'
+    # Our outage, not the developer's endpoint: no counter moves and nothing is disabled.
+    webhooks.get_webhook_circuit_breaker(URL).record_failure.assert_not_called()
+    webhooks.record_dev_webhook_failure.assert_not_called()
+    webhooks.record_dev_webhook_success.assert_not_called()
+    webhooks.disable_user_webhook_db.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_unreadable_signing_record_holds_the_delivery_at_once(delivery):
+    webhooks.get_user_webhook_signing_db.side_effect = store.WebhookSigningUnavailable('malformed_doc', UID)
     await webhooks.day_summary_webhook(UID, 'summary')
-    headers, _, _ = _sent(delivery.post.await_args)
-    assert not any(header in headers for header in SIGNATURE_HEADERS)
-    webhooks.note_unsigned_delivery.assert_called_once_with('other', UID)
-    webhooks.record_dev_webhook_success.assert_called_once_with(UID, WebhookType.day_summary)
+    delivery.post.assert_not_awaited()
+    # The store already reported it; the delivery side adds no second report.
+    webhooks.get_user_webhook_signing_db.assert_called_once_with(UID)
+    webhooks.note_signing_unavailable.assert_not_called()
+    assert webhooks.enqueue_dev_webhook_dlq.call_args.kwargs['error'] == 'WebhookSigningUnavailable:malformed_doc'
+    webhooks.record_dev_webhook_failure.assert_not_called()
 
 
-def test_note_unsigned_delivery_logs_error_once_and_records_the_fallback(monkeypatch, caplog):
+def test_note_signing_unavailable_logs_one_error_per_window(caplog):
     import logging
 
-    recorded = MagicMock()
-    monkeypatch.setattr(store, 'record_fallback', recorded)
     store._UNSIGNED_REPORTED.clear()
     with caplog.at_level(logging.ERROR, logger=store.__name__):
         for _ in range(3):
-            store.note_unsigned_delivery('other', UID)
-    assert [rec.levelname for rec in caplog.records if 'delivering unsigned' in rec.message] == ['ERROR']
-    recorded.assert_called_once_with(
-        component='webhook', from_mode='signed', to_mode='unsigned', reason='other', outcome='degraded'
-    )
+            store.note_signing_unavailable('other', UID)
+    assert [rec.levelname for rec in caplog.records if 'holding deliveries' in rec.message] == ['ERROR']
 
 
 # --- integration apps ------------------------------------------------------------------------------
@@ -375,7 +407,7 @@ def app_delivery(monkeypatch):
     )
     monkeypatch.setattr(app_integrations, 'is_app_webhook_disabled', lambda app_id: False)
     monkeypatch.setattr(app_integrations, 'get_app_webhook_signing_db', MagicMock(return_value=None))
-    monkeypatch.setattr(app_integrations, 'note_unsigned_delivery', MagicMock())
+    monkeypatch.setattr(app_integrations, 'note_signing_unavailable', MagicMock())
     monkeypatch.setattr(app_integrations, 'record_app_webhook_success', MagicMock())
     monkeypatch.setattr(app_integrations, 'record_app_webhook_failure', MagicMock(return_value=0))
     monkeypatch.setattr(app_integrations, 'record_app_usage', MagicMock())
@@ -482,10 +514,42 @@ async def test_app_audio_bytes_delivery_signs_the_raw_bytes_for_the_query_uid(ap
 
 
 @pytest.mark.asyncio
-async def test_app_signing_store_failure_delivers_unsigned_and_reports_the_fallback(app_delivery, monkeypatch):
-    monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [_app(realtime=True)])
+@pytest.mark.parametrize('path', ['realtime', 'audio'])
+async def test_app_signing_store_failure_holds_the_delivery_instead_of_sending_it_unsigned(
+    app_delivery, monkeypatch, path
+):
+    monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [_app(**{path: True})])
     app_integrations.get_app_webhook_signing_db.side_effect = RuntimeError('firestore down')
-    await app_integrations._async_trigger_realtime_integrations(UID, [{'text': 'hi'}], 'c-1')
-    assert app_delivery.post.await_args.kwargs['headers'] == {'Host': 'app.test'}
-    app_integrations.note_unsigned_delivery.assert_called_once_with('other', 'app-1')
-    app_integrations.record_app_webhook_success.assert_called_once_with('app-1')
+    if path == 'realtime':
+        await app_integrations._async_trigger_realtime_integrations(UID, [{'text': 'hi'}], 'c-1')
+    else:
+        await app_integrations._async_trigger_realtime_audio_bytes(UID, 16000, bytearray(b'\x00\x01\x02'))
+    app_delivery.post.assert_not_awaited()
+    app_integrations.note_signing_unavailable.assert_called_once_with('other', 'app-1')
+    # Our store, not the app's endpoint: no failure is counted and nothing is disabled.
+    app_integrations.get_webhook_circuit_breaker('x').record_failure.assert_not_called()
+    app_integrations.record_app_webhook_failure.assert_not_called()
+    app_integrations.record_app_webhook_success.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_app_conversation_delivery_stays_retryable_while_signing_is_unavailable(app_delivery, monkeypatch):
+    monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [_app(creation=True)])
+    monkeypatch.setattr(app_integrations, 'record_fallback', MagicMock())
+    app_integrations.get_app_webhook_signing_db.side_effect = RuntimeError('firestore down')
+    # A durable fan-out reports the held delivery so its job retries, exactly as for an open breaker.
+    with pytest.raises(app_integrations.ExternalIntegrationFanoutError):
+        await app_integrations.trigger_external_integrations(
+            UID, _conversation(), idempotency_key='fanout-1', require_delivery=True
+        )
+    app_delivery.post.assert_not_awaited()
+    app_integrations.record_app_webhook_failure.assert_not_called()
+    app_integrations.record_fallback.assert_not_called()
+    # On the job's last attempt the delivery is dropped rather than failing the whole conversation.
+    await app_integrations.trigger_external_integrations(
+        UID, _conversation(), idempotency_key='fanout-1', require_delivery=True, last_delivery_attempt=True
+    )
+    app_delivery.post.assert_not_awaited()
+    assert app_integrations.record_fallback.call_args.kwargs['to_mode'] == 'dropped'
+    # Reported on each attempt here only because the once-per-window dedupe is inside the mock.
+    assert app_integrations.note_signing_unavailable.call_args_list == [call('other', 'app-1')] * 2

@@ -36,6 +36,19 @@ SECRET_PREFIX = 'whsec_'
 DEFAULT_TOLERANCE_SECONDS = 300
 
 
+class WebhookSigningUnavailable(Exception):
+    """A destination has, or may have, a signing secret that cannot be used right now.
+
+    ``reason`` is ``malformed_doc`` for a record that exists but cannot be read, ``other`` for a
+    store that could not be reached. Deliveries and tool calls are held, never sent unsigned.
+    """
+
+    def __init__(self, reason: str, key_id: str):
+        super().__init__(f'webhook signing unavailable key_id={key_id} reason={reason}')
+        self.reason = reason
+        self.key_id = key_id
+
+
 def generate_secret() -> str:
     """A new signing secret: 32 random bytes, URL-safe, with a recognisable prefix."""
     return SECRET_PREFIX + secrets.token_urlsafe(32)
