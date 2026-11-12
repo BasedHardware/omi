@@ -350,14 +350,7 @@ final class APIClientAssistantSettingsTests: XCTestCase {
   func testUserScreenAnalysisOffSurvivesRemoteEnable() {
     let originalEnabled = AssistantSettings.shared.screenAnalysisEnabled
     let originalHold = UserDefaults.standard.object(forKey: .screenAnalysisHeldOffByUser)
-    defer {
-      AssistantSettings.shared.screenAnalysisEnabled = originalEnabled
-      if let originalHold {
-        UserDefaults.standard.set(originalHold, forKey: .screenAnalysisHeldOffByUser)
-      } else {
-        UserDefaults.standard.removeObject(forKey: .screenAnalysisHeldOffByUser)
-      }
-    }
+    defer { restoreScreenAnalysisDefaults(enabled: originalEnabled, hold: originalHold) }
 
     SettingsSyncManager.shared.setUserScreenAnalysisEnabled(false, push: false)
     SettingsSyncManager.shared.applyRemoteSettings(
@@ -371,17 +364,10 @@ final class APIClientAssistantSettingsTests: XCTestCase {
   func testRemoteScreenAnalysisEnableAppliesWhenTheUserDidNotTurnItOff() {
     let originalEnabled = AssistantSettings.shared.screenAnalysisEnabled
     let originalHold = UserDefaults.standard.object(forKey: .screenAnalysisHeldOffByUser)
-    defer {
-      AssistantSettings.shared.screenAnalysisEnabled = originalEnabled
-      if let originalHold {
-        UserDefaults.standard.set(originalHold, forKey: .screenAnalysisHeldOffByUser)
-      } else {
-        UserDefaults.standard.removeObject(forKey: .screenAnalysisHeldOffByUser)
-      }
-    }
+    defer { restoreScreenAnalysisDefaults(enabled: originalEnabled, hold: originalHold) }
 
+    SettingsSyncManager.shared.setUserScreenAnalysisEnabled(true, push: false)
     AssistantSettings.shared.screenAnalysisEnabled = false
-    UserDefaults.standard.set(false, forKey: .screenAnalysisHeldOffByUser)
     SettingsSyncManager.shared.applyRemoteSettings(
       AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true)))
 
@@ -392,14 +378,7 @@ final class APIClientAssistantSettingsTests: XCTestCase {
   func testTurningScreenAnalysisBackOnLetsLaterRemoteValuesApply() {
     let originalEnabled = AssistantSettings.shared.screenAnalysisEnabled
     let originalHold = UserDefaults.standard.object(forKey: .screenAnalysisHeldOffByUser)
-    defer {
-      AssistantSettings.shared.screenAnalysisEnabled = originalEnabled
-      if let originalHold {
-        UserDefaults.standard.set(originalHold, forKey: .screenAnalysisHeldOffByUser)
-      } else {
-        UserDefaults.standard.removeObject(forKey: .screenAnalysisHeldOffByUser)
-      }
-    }
+    defer { restoreScreenAnalysisDefaults(enabled: originalEnabled, hold: originalHold) }
 
     SettingsSyncManager.shared.setUserScreenAnalysisEnabled(false, push: false)
     SettingsSyncManager.shared.setUserScreenAnalysisEnabled(true, push: false)
@@ -411,5 +390,17 @@ final class APIClientAssistantSettingsTests: XCTestCase {
 
     XCTAssertTrue(AssistantSettings.shared.screenAnalysisEnabled)
     XCTAssertFalse(UserDefaults.standard.bool(forKey: .screenAnalysisHeldOffByUser))
+  }
+
+  @MainActor
+  private func restoreScreenAnalysisDefaults(enabled: Bool, hold: Any?) {
+    AssistantSettings.shared.screenAnalysisEnabled = enabled
+    if let hold {
+      // omi-test-quality: shared-defaults -- integration: SettingsSyncManager reads the process defaults for this hold
+      UserDefaults.standard.set(hold, forKey: .screenAnalysisHeldOffByUser)
+    } else {
+      // omi-test-quality: shared-defaults -- integration: SettingsSyncManager reads the process defaults for this hold
+      UserDefaults.standard.removeObject(forKey: .screenAnalysisHeldOffByUser)
+    }
   }
 }
