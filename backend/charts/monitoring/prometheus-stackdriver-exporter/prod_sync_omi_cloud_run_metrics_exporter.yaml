@@ -38,6 +38,11 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/'
       - 'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/'
       - 'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/'
+      # Projection finish guard (SCA-1799): OmiBatchProjectionFinishReadsPerCompletion
+      # is a PrometheusRule evaluated by the in-cluster Prometheus, which sees
+      # backend-integration only through this bridge. Both counters are required.
+      - 'prometheus.googleapis.com/omi_batch_projection_finish_reads_total/'
+      - 'prometheus.googleapis.com/omi_batch_projection_finish_completed_total/'
       - 'prometheus.googleapis.com/omi_finalization_pair_'
       - 'prometheus.googleapis.com/omi_enrichment_summary_repair_'
       # WP-C lifecycle dwell and observer health (closed labels).
