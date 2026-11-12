@@ -101,6 +101,25 @@ def _ready(data: dict, epoch: str, date: datetime) -> bool:
     )
 
 
+@read_origin('job:free_allowance_watch')
+def read_verified_transcription_seconds(uid: str, now: datetime, *, firestore_client: Any = None) -> float:
+    """Read a verified billing baseline without cohort gates, scans, or zero fallbacks.
+
+    Observation only: missing/unready projections raise, including new accounts.
+    This is not a reservation and must not authorize concurrent provider spend.
+    """
+    now = now.astimezone(timezone.utc)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    data = month_ref(client.collection('users').document(uid), now).get(timeout=2, retry=None).to_dict()
+    epoch = _epoch()
+    if not epoch or not isinstance(data, dict) or not _ready(data, epoch, now):
+        raise ValueError('unverified monthly usage')
+    value = data['totals'].get('transcription_seconds')
+    if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+        raise ValueError('invalid monthly seconds')
+    return float(value)
+
+
 def _month_rows(user_ref: Any, date: datetime, transaction: Any) -> Any:
     return (
         user_ref.collection('hourly_usage')

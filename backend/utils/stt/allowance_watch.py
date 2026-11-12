@@ -51,20 +51,9 @@ def _monthly_seconds(uid: str, now: datetime, *, firestore_client: Any = None) -
     A projection without a verified baseline is unavailable, not zero. This
     reader never scans account data, rebuilds a projection, or creates a user.
     """
-    from database._client import get_firestore_client
     from database import monthly_usage_totals
 
-    now = now.astimezone(timezone.utc)
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    ref = monthly_usage_totals.month_ref(client.collection('users').document(uid), now)
-    data = ref.get(timeout=2, retry=None).to_dict()
-    epoch = monthly_usage_totals._epoch()
-    if not epoch or not isinstance(data, dict) or not monthly_usage_totals._ready(data, epoch, now):
-        raise ValueError('unverified monthly usage')
-    value = data['totals'].get('transcription_seconds')
-    if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
-        raise ValueError('invalid monthly seconds')
-    return float(value)
+    return monthly_usage_totals.read_verified_transcription_seconds(uid, now, firestore_client=firestore_client)
 
 
 def snapshot(uid: str | None, *, customer_funded: bool = False, now: datetime | None = None) -> Snapshot:
@@ -123,7 +112,10 @@ def observe(
         result = snapshot(uid, customer_funded=customer_funded)
         decision = result.decision
         if decision == 'free':
-            decision = 'would_refuse' if result.remaining == 0 or seconds > result.remaining else 'would_allow'
+            if result.remaining is None:
+                decision = 'usage_unavailable'
+            else:
+                decision = 'would_refuse' if result.remaining == 0 or seconds > result.remaining else 'would_allow'
         DECISIONS.labels(path, provider, decision).inc()
         SECONDS.labels(path, provider, decision).inc(seconds)
         logger.info(

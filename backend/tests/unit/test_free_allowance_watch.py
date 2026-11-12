@@ -244,3 +244,11 @@ async def test_gpu_observations_cannot_starve_another_authorization(monkeypatch)
     assert receipt == {'allowed': ['segment', 'second'], 'retry_after': {}, 'held_reason': {}}
     assert len(observations) == 1
     assert observations[0][1]['timeout'] == 0.1
+
+
+def test_missing_free_balance_is_unavailable_instead_of_an_allow(monkeypatch):
+    decisions = Mock()
+    monkeypatch.setattr(watch, 'snapshot', lambda *args, **kwargs: watch.Snapshot('free'))
+    monkeypatch.setattr(watch, 'DECISIONS', decisions)
+    assert watch.observe('u', 'live_open', 'parakeet') is None
+    decisions.labels.assert_called_once_with('live_open', 'parakeet', 'usage_unavailable')
