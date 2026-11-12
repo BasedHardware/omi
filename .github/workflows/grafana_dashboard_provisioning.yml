@@ -198,6 +198,10 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          # No repository- or organization-level BUSINESS_GRAFANA_TOKEN exists
+          # (checked 2026-11-12; only the prod and monitoring-prod environments
+          # hold one), so an empty value here means this environment has no token.
+          # Never add one at repository scope: it would reach this step ungated.
           if [ -z "${BUSINESS_GRAFANA_TOKEN:-}" ]; then
             echo "::warning::BUSINESS_GRAFANA_TOKEN is not set in the grafana-dashboards-prod environment; the Omi TV boards were not applied and still need the gated prod dispatch."
             exit 0
