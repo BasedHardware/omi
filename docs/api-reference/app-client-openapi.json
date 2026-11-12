@@ -35452,6 +35452,19 @@
         "title": "SyncRequestValidationErrorResponse",
         "type": "object"
       },
+      "SyncUploadHoldReleaseResponse": {
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "title": "SyncUploadHoldReleaseResponse",
+        "type": "object"
+      },
       "SyncUserTimeZoneRequest": {
         "properties": {
           "time_zone": {
@@ -87713,7 +87726,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SyncUploadHoldReleaseResponse"
+                }
               }
             },
             "description": "Successful Response"

@@ -5772,6 +5772,10 @@ export interface SyncRequestValidationErrorResponse {
   detail: Array<Record<string, unknown>>;
 }
 
+export interface SyncUploadHoldReleaseResponse {
+  accepted: boolean;
+}
+
 export interface SyncUserTimeZoneRequest {
   time_zone: string;
 }
@@ -7411,6 +7415,7 @@ export interface OmiApiSchemas {
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
   "SyncRecoveryWindowExceededResponse": SyncRecoveryWindowExceededResponse;
   "SyncRequestValidationErrorResponse": SyncRequestValidationErrorResponse;
+  "SyncUploadHoldReleaseResponse": SyncUploadHoldReleaseResponse;
   "SyncUserTimeZoneRequest": SyncUserTimeZoneRequest;
   "SynthesizeAIUserProfileRequest": SynthesizeAIUserProfileRequest;
   "SynthesizeAIUserProfileResponse": SynthesizeAIUserProfileResponse;
@@ -12723,7 +12728,7 @@ export interface OmiApiPaths {
     post: {
       operationId: "release_sync_upload_hold_v2_sync_local_files__job_id__release_hold_post";
       responses: {
-        "200": unknown;
+        "200": SyncUploadHoldReleaseResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -23312,7 +23317,7 @@ export async function get_sync_job_status_v2_sync_local_files__job_id__get(path:
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function release_sync_upload_hold_v2_sync_local_files__job_id__release_hold_post(path: { job_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<unknown> {
+export async function release_sync_upload_hold_v2_sync_local_files__job_id__release_hold_post(path: { job_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncUploadHoldReleaseResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files/${path.job_id}/release-hold`;
   const _search = "";

@@ -335,7 +335,7 @@ async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None
             target = json.loads(bytes(response.body))['job_id']
             targets.extend([target] * len(batch))
         await run_blocking(db_executor, rows.finish, store, group, targets, clock())
-        EVENTS.labels(outcome='drained_' + group['mode']).inc()
+        EVENTS.labels(outcome='drained_merged' if group['mode'] == 'merged' else 'drained_individual').inc()
         return True
     finally:
         await run_blocking(storage_executor, directory.cleanup)

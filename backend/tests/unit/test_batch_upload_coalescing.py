@@ -21,6 +21,42 @@ def store():
     return result
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pump', ['true', 'false'])
+async def test_supervisor_drains_existing_holds_while_producer_off(monkeypatch, pump):
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+    from types import SimpleNamespace
+
+    from utils.batch_pipeline import serving, upload_coalescing
+
+    monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', pump)
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    service = serving.Serving(store())
+    service.reconcile_async = AsyncMock()
+    service.dispatch_recovery = Mock()
+    service.projector = SimpleNamespace(sweep=Mock(), has_async_followups=False, owes_drains=False)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+    monkeypatch.setattr(serving, 'drain_recordings', AsyncMock(return_value=0))
+    seen = []
+
+    async def drain_existing(target):
+        assert target is service.store
+        seen.append(target)
+        runtime[0].set()
+        return 0
+
+    monkeypatch.setattr(upload_coalescing, 'drain', drain_existing)
+    runtime = serving.start_serving_from_env()
+    try:
+        await asyncio.wait_for(runtime[1], timeout=5)
+    finally:
+        await serving.stop_serving(runtime)
+    assert seen == [service.store]
+
+
 def member(name, start=100, **changes):
     work = item('hold-' + name, owner='owner')
     return {

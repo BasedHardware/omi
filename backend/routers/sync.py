@@ -54,6 +54,7 @@ from models.sync_job_status import (
     SyncJobStatusResponse,
     SyncCaptureManifestRequest,
     SyncCaptureManifestResponse,
+    SyncUploadHoldReleaseResponse,
 )
 from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
@@ -1611,7 +1612,7 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
-@router.post('/v2/sync-local-files/{job_id}/release-hold')
+@router.post('/v2/sync-local-files/{job_id}/release-hold', response_model=SyncUploadHoldReleaseResponse)
 def release_sync_upload_hold(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Precise owner-authenticated user-open hint; no priority promotion.
 
