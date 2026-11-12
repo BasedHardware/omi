@@ -105,7 +105,10 @@ def test_site_field_survives_a_raised_and_reraised_chain(monkeypatch, caplog):
 
 
 def test_site_field_for_a_timeout_fault(monkeypatch, caplog):
-    line = _line_for(monkeypatch, caplog, ScriptedPersist([TimeoutError('deadline')]))
+    # A timeout now strikes, so the fail line requires the fault to exhaust
+    # the lane budget; the surviving fail line keeps the static site suffix.
+    fault = TimeoutError('deadline')
+    line = _line_for(monkeypatch, caplog, ScriptedPersist([fault] * 3, default=fault))
     assert 'error_class=TimeoutError' in line
     assert ' site=persist_lane_harness.py:' in line
 

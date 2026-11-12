@@ -251,7 +251,9 @@ def test_classifier_docstring_explains_the_family():
     import inspect
 
     source = inspect.getsource(bp.persist_loss_is_restrikeable)
-    assert 'Google API transport fault' in source
+    assert 'Google API transport family' in source
+    # The bare transport-timeout family is documented where the verdict is made.
+    assert 'TimeoutError' in source and 'socket.timeout' in source
 
 
 def test_delay_docstring_documents_the_schedule():

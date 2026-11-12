@@ -195,7 +195,7 @@ def persist_restrike_delay(attempt: int) -> float:
 
 
 def persist_loss_is_restrikeable(error: BaseException) -> bool:
-    """True for a Google API transport fault a fresh persist call can survive.
+    """True for a transport fault a fresh persist call can survive.
 
     The storage upload and the artifact register are separate Google API
     requests; an ``InvalidArgument``/5xx burst on one request says nothing
@@ -209,8 +209,25 @@ def persist_loss_is_restrikeable(error: BaseException) -> bool:
     register's transaction wrapper replays it internally and raises
     ``FirestoreContentionExhausted`` (a ``RuntimeError``), which lands here
     as non-strikeable and keeps its own recovery lane.
+
+    The builtin ``TimeoutError`` joins the Google API transport family's
+    verdict as its second arm. The boundary's own deadline guards raise it
+    bare — the upload stream's 15-minute deadline
+    (``utils/batch_pipeline/upload_policy.py``) and the 30-second
+    registration grace (``ArtifactStore._write``) — and raw socket read
+    timeouts surface as ``socket.timeout``, its alias on Python 3.10+. None
+    of the three is a ``GoogleAPIError``, so the former Google-only verdict
+    booked each one as a custody-class fault and the worker discarded a
+    fully completed GPU result for a burst the next strike survives (the
+    sensor's ``error_class=TimeoutError stage=persist`` family). A timeout
+    says this attempt ran out of time, not that the pinned bytes or the
+    privacy fence refused the unit — every custody class above stays
+    outside the family, and the lane's bounded strike budget and kill
+    switch are unchanged.
+
+    Failure-Class: FC-persist-socket-transport-loss-discards-completed-gpu-results
     """
-    return isinstance(error, GoogleAPIError)
+    return isinstance(error, (GoogleAPIError, TimeoutError))
 
 
 def transient_failure_evidence(stage: str, reason: str) -> dict | None:
@@ -507,8 +524,10 @@ class PipelineWorker:
     def _persist_with_restrike(self, item, payload):
         """Persist once, then re-strike transport losses with bounded backoff.
 
-        The first call is the legacy persist byte-for-byte. A Google API
-        transport loss (``persist_loss_is_restrikeable``) under the
+        The first call is the legacy persist byte-for-byte. A transport loss
+        (``persist_loss_is_restrikeable``: the Google API transport family and
+        the bare builtin ``TimeoutError`` family — the stream deadline, the
+        registration grace and raw socket timeouts) under the
         ``persist_restrike_enabled`` gate is re-struck up to
         ``PERSIST_RESTRIKE_MAX_ATTEMPTS`` times on the documented doubling
         schedule, each strike its own ``persist`` timing span, so a

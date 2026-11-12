@@ -97,13 +97,24 @@ CUSTODY_EXCEPTIONS = (
     BatchValidationError(ValidationReason.VAD_BOUNDS),
     BatchValidationError(ValidationReason.UNSUPPORTED_LANGUAGE),
     ValueError('bounded artifact identity required'),
-    TimeoutError('batch artifact upload deadline exceeded'),
     PermissionError('batch artifact policy changed during IO'),
     FirestoreContentionExhausted('register contention exhausted'),
     OSError('disk'),
     RuntimeError('worker'),
     KeyError('missing'),
     TypeError('bad shape'),
+)
+
+
+# The boundary's own deadline guards raise the builtin TimeoutError bare (the
+# upload stream's 15-minute deadline and the 30-second registration grace) and
+# raw socket read timeouts surface as socket.timeout, its alias. A timeout says
+# this attempt ran out of time, not that the pinned bytes or a fence refused
+# the unit, so the transport-timeout family strikes like the Google family.
+TRANSPORT_TIMEOUT_EXCEPTIONS = (
+    TimeoutError('batch artifact upload deadline exceeded'),
+    TimeoutError('artifact registration too old to begin upload'),
+    TimeoutError('raw socket read timed out'),
 )
 
 
@@ -304,42 +315,73 @@ def test_custody_member_07_bounded_payload_value_error_stays_non_strikeable():
     assert persist_loss_is_restrikeable(CUSTODY_EXCEPTIONS[7]) is False
 
 
-def test_custody_member_08_upload_deadline_timeout_stays_non_strikeable():
+def test_custody_member_08_policy_changed_permission_stays_non_strikeable():
     assert persist_loss_is_restrikeable(CUSTODY_EXCEPTIONS[8]) is False
 
 
-def test_custody_member_09_policy_changed_permission_stays_non_strikeable():
+def test_custody_member_09_register_contention_exhausted_stays_non_strikeable():
     assert persist_loss_is_restrikeable(CUSTODY_EXCEPTIONS[9]) is False
 
 
-def test_custody_member_10_register_contention_exhausted_stays_non_strikeable():
+def test_custody_member_10_os_error_stays_non_strikeable():
     assert persist_loss_is_restrikeable(CUSTODY_EXCEPTIONS[10]) is False
 
 
-def test_custody_member_11_os_error_stays_non_strikeable():
+def test_custody_member_11_runtime_error_stays_non_strikeable():
     assert persist_loss_is_restrikeable(CUSTODY_EXCEPTIONS[11]) is False
 
 
-def test_custody_member_12_runtime_error_stays_non_strikeable():
+def test_custody_member_12_key_error_stays_non_strikeable():
     assert persist_loss_is_restrikeable(CUSTODY_EXCEPTIONS[12]) is False
 
 
-def test_custody_member_13_key_error_stays_non_strikeable():
+def test_custody_member_13_type_error_stays_non_strikeable():
     assert persist_loss_is_restrikeable(CUSTODY_EXCEPTIONS[13]) is False
 
 
-def test_custody_member_14_type_error_stays_non_strikeable():
-    assert persist_loss_is_restrikeable(CUSTODY_EXCEPTIONS[14]) is False
-
-
 def test_every_custody_member_is_verified_non_strikeable():
-    assert len(CUSTODY_EXCEPTIONS) == 15
+    assert len(CUSTODY_EXCEPTIONS) == 14
 
 
-def test_the_google_family_is_the_whole_verdict_for_the_lane():
-    # The classifier is exactly one isinstance; nothing else can flip a verdict.
+def test_the_transport_timeout_family_is_restrikeable():
+    assert all(persist_loss_is_restrikeable(fault) is True for fault in TRANSPORT_TIMEOUT_EXCEPTIONS)
+
+
+def test_socket_timeout_is_the_builtin_and_strikes():
+    import socket
+
+    assert issubclass(socket.timeout, TimeoutError)
+    assert persist_loss_is_restrikeable(socket.timeout('read timed out')) is True
+
+
+def test_a_timeout_subclass_strikes():
+    class UploadDeadline(TimeoutError):
+        pass
+
+    assert persist_loss_is_restrikeable(UploadDeadline('deadline')) is True
+
+
+def test_os_error_is_not_the_timeout_family():
+    # A disk fault stays custody even though socket.timeout shares the OSError
+    # ancestry: the family is TimeoutError, not OSError.
+    import socket
+
+    assert issubclass(TimeoutError, OSError)
+    assert persist_loss_is_restrikeable(OSError('disk')) is False
+    assert persist_loss_is_restrikeable(socket.timeout('read timed out')) is True
+
+
+def test_the_classifier_reads_the_two_transport_families_not_the_message():
+    assert persist_loss_is_restrikeable(TimeoutError('InvalidArgument')) is True
+    assert persist_loss_is_restrikeable(InvalidArgument('timed out')) is True
+    assert persist_loss_is_restrikeable(ValueError('timed out')) is False
+
+
+def test_the_classifier_reads_the_transport_families_not_just_one():
+    # The classifier is exactly one isinstance over the two transport
+    # families; nothing else can flip a verdict.
     import inspect
 
     source = inspect.getsource(bp.persist_loss_is_restrikeable)
-    assert 'isinstance(error, GoogleAPIError)' in source
+    assert 'isinstance(error, (GoogleAPIError, TimeoutError))' in source
     assert source.count('return') == 1

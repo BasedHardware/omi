@@ -307,17 +307,21 @@ def persist_restrike_enabled() -> bool:
     worker fault, so lease recovery re-leases the unit and re-runs the entire
     GPU chain to reproduce a result the worker already held (the
     ``event=batch_worker_failed error_class=InvalidArgument stage=persist``
-    sensor family). With this gate on, the persist boundary re-plays the same
-    persist call in-process with a documented doubling backoff (0.25s -> 2.0s,
-    at most three strikes) while the worker still holds the sealed payload:
-    the durable deletion outbox registers each attempt before its upload, so a
-    strike that never lands leaves the same registered-but-unwritten reference
-    the uncertain-upload path already tolerates, and a strike that lands
-    returns its own immutable URI. Only the Google API transport family
-    classifies as a re-strikeable loss; typed custody faults
+    sensor family, joined by its bare ``error_class=TimeoutError`` siblings:
+    the upload stream's 15-minute deadline, the 30-second registration grace
+    and raw socket timeouts raise the builtin ``TimeoutError``, which no
+    Google API class hierarchy covers). With this gate on, the persist
+    boundary re-plays the same persist call in-process with a documented
+    doubling backoff (0.25s -> 2.0s, at most three strikes) while the worker
+    still holds the sealed payload: the durable deletion outbox registers each
+    attempt before its upload, so a strike that never lands leaves the same
+    registered-but-unwritten reference the uncertain-upload path already
+    tolerates, and a strike that lands returns its own immutable URI. Only the
+    Google API transport family and the builtin ``TimeoutError`` transport
+    family classify as re-strikeable losses; typed custody faults
     (StagedAudioInvalid and siblings), privacy fences, policy refusals and
-    every non-Google exception abort the lane and the legacy fail path runs
-    byte-for-byte as before. false restores the immediate fault for every
+    every other non-Google exception abort the lane and the legacy fail path
+    runs byte-for-byte as before. false restores the immediate fault for every
     loss.
 
     Failure-Class: FC-persist-transport-loss-discards-completed-gpu-results

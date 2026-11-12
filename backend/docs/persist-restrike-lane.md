@@ -34,19 +34,35 @@ reclassifying the fault.
   executor thread the persist call already occupies, so it never blocks the
   event loop and never holds a GPU chain slot; it only extends one IO
   worker's occupancy by the backoff window.
-- Only the Google API transport family classifies as a re-strikeable loss
+- Only the transport families classify as a re-strikeable loss
   (`persist_loss_is_restrikeable`, a `google.api_core` `GoogleAPIError`
   isinstance check). Every typed custody fault — `StagedAudioInvalid`,
   `StagedArtifactInvalid`, `RetainedAudioInvalid`, `BatchValidationError`,
   privacy fences (`BatchPrivacyBlocked`, `PermissionError`), the
-  bounded-payload and owner-binding `ValueError`s, and the upload-deadline
-  `TimeoutError` — and every non-Google exception aborts the lane on the
-  spot and the
-  legacy fail path runs byte-for-byte as before. Firestore contention never
-  reaches this boundary raw: the artifact register's transaction wrapper
-  replays contention internally and raises
-  `FirestoreContentionExhausted` (a `RuntimeError`), which lands here as
-  non-strikeable and keeps its own recovery lane.
+  bounded-payload and owner-binding `ValueError`s — and every other
+  non-Google exception aborts the lane on the spot and the legacy fail path
+  runs byte-for-byte as before. Firestore contention never reaches this
+  boundary raw: the artifact register's transaction wrapper replays
+  contention internally and raises `FirestoreContentionExhausted` (a
+  `RuntimeError`), which lands here as non-strikeable and keeps its own
+  recovery lane.
+- The bare builtin `TimeoutError` family joined the strikeable verdict
+  (Failure-Class: FC-persist-socket-transport-loss-discards-completed-gpu-results).
+  The boundary's own deadline guards raise it unwrapped — the upload
+  stream's 15-minute deadline (`utils/batch_pipeline/upload_policy.py`
+  raises `TimeoutError('batch artifact upload deadline exceeded')` when a
+  resumable upload exceeds its stream budget) and the 30-second
+  registration grace (`ArtifactStore._write` raises
+  `TimeoutError('artifact registration too old to begin upload')`) — and
+  raw socket read timeouts surface as `socket.timeout`, the builtin's
+  alias on Python 3.10+. None of the three is a `GoogleAPIError`, so the
+  former Google-only verdict booked each one as a custody-class fault and
+  discarded a completed GPU result for a burst the next strike survives
+  (the `event=batch_worker_failed error_class=TimeoutError stage=persist`
+  sensor family). A timeout says this attempt ran out of time, not that
+  the pinned bytes or a fence refused the unit: disk-shaped `OSError`
+  faults stay custody, the custody list above is unchanged, and the
+  strike budget and kill switch are unchanged.
 - Custody is unchanged and each strike is independently durable. The
   durable deletion outbox registers every attempt before its upload, so a
   strike that never lands leaves the same registered-but-unwritten
