@@ -73,6 +73,7 @@ class TestPublicSharedChatResilience(unittest.TestCase):
             'utils.conversations',
             'utils.conversations.shared_chat',
             'utils.executors',
+            'utils.generated_compute',
             'utils.llm',
             'utils.llm.gateway_client',
         ]:
@@ -168,6 +169,13 @@ class TestPublicSharedChatResilience(unittest.TestCase):
                     m.run_blocking = mock_run_blocking
                     m.critical_executor = MagicMock()
                     m.db_executor = MagicMock()
+                elif mod == 'utils.generated_compute':
+
+                    async def mock_require_generated_compute(*args, **kwargs):
+                        return None
+
+                    m.require_generated_compute = mock_require_generated_compute
+                    m.generated_compute_configured = lambda: False
                 sys.modules[mod] = m
 
         base_dir = os.path.abspath(os.path.dirname(__file__))
@@ -234,6 +242,17 @@ class TestPublicSharedChatResilience(unittest.TestCase):
         self.assertEqual(roles[0], 'system')
         for r in roles[1:]:
             self.assertIn(r, {'user', 'assistant'})
+
+    def test_gateway_messages_malformed_history_items_skipped_deterministically(self):
+        """Malformed history objects (None, int, non-mapping) are safely skipped."""
+        req = MockChatRequest(
+            question="Summarize",
+            history=[None, 12345, "string_history", MockHistoryMessage(role='assistant', content='Valid content')],
+        )
+        msgs = self.mod._gateway_messages(req, None)
+        self.assertEqual(len(msgs), 3)  # system + 1 valid history + user question
+        self.assertEqual(msgs[1]['role'], 'assistant')
+        self.assertEqual(msgs[1]['content'], 'Valid content')
 
     def test_override_inspection_zero_arity_callable(self):
         """Zero-argument dependency override is called without TypeError."""

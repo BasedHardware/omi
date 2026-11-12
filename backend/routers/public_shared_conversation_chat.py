@@ -1,6 +1,7 @@
 """Gateway-only chat over a server-resolved public shared conversation."""
 
 from __future__ import annotations
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 
 import inspect
 import os
@@ -305,16 +306,13 @@ def _gateway_messages(
         else []
     )
     for message in history:
-        try:
-            dumped = message.model_dump() if hasattr(message, 'model_dump') else message
-            if isinstance(dumped, Mapping):
-                role_raw = str(dumped.get('role') or 'user').strip().lower()
-                role = role_raw if role_raw in ('user', 'assistant') else 'user'
-                content = str(dumped.get('content') or '').strip()
-                if content:
-                    messages.append({'role': role, 'content': content})
-        except Exception:
-            continue
+        dumped = message.model_dump() if hasattr(message, 'model_dump') else message
+        if isinstance(dumped, Mapping):
+            role_raw = str(dumped.get('role') or 'user').strip().lower()
+            role = role_raw if role_raw in ('user', 'assistant') else 'user'
+            content = str(dumped.get('content') or '').strip()
+            if content:
+                messages.append({'role': role, 'content': content})
 
     question = str(request.question or '').strip()
     messages.append({'role': 'user', 'content': question})
@@ -391,6 +389,14 @@ async def public_shared_conversation_chat(
     except Exception as exc:
         raise _route_http_exception(503, 'Public shared conversation chat unavailable') from exc
 
+    if generated_compute_configured():
+        await run_blocking(
+            db_executor,
+            require_generated_compute,
+            signed_uid or resolved.uid,
+            'public_shared_conversation_chat',
+            allow_byok=False,
+        )
     try:
         answer = await invoke_public_shared_conversation_chat_gateway(_gateway_messages(data, resolved.conversation))
     except PublicSharedConversationChatGatewayUnavailable as exc:
