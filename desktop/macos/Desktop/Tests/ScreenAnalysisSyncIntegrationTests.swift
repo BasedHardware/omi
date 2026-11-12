@@ -46,8 +46,9 @@ private final class ScreenSettingsServer: URLProtocol {
         return (200, Self.enabled)
       }
       let body = try JSONSerialization.data(withJSONObject: ["shared": ["screen_analysis_enabled": value]])
+      let url = try XCTUnwrap(request.url)
       let response = try XCTUnwrap(
-        HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil))
+        HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil))
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
       client?.urlProtocol(self, didLoad: body)
       client?.urlProtocolDidFinishLoading(self)
