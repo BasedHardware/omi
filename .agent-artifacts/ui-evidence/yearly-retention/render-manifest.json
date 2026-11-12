@@ -55,6 +55,6 @@
     "app/lib/pages/settings/widgets/cancel_subscription_sheet.dart": "a049f3a5bda156086529967dc03c9ba6b437f0633b2d43328a4a8692aa00927f",
     "app/lib/pages/settings/widgets/yearly_retention_placement.dart": "76a9256d3ac1a022c705d751aea568b1e78b3f6c8e464da618cbe8460f6133dc",
     "app/lib/pages/settings/widgets/yearly_switch.dart": "a6490fdd2c338edaef0667ddfa84dc17a26b03a3c6d93463664e35eec3c9e4e0",
-    "app/test/widgets/yearly_retention_test.dart": "0deb1b5f264f5a8cfdd4580eacab4e6bbc4c1e3191caa916b4863a06d41dc163"
+    "app/test/widgets/yearly_retention_test.dart": "9a3edebfbccf1755e2168159910b50326d3243f8926e91aa3ca1764a29ca438c"
   }
 }

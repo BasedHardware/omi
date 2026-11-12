@@ -7,7 +7,6 @@ trap 'rm -rf "$fixture_dir"' EXIT
 git show ac02feb05f0d6389f473e08a25980397b1348b0f:app/lib/pages/settings/widgets/cancel_subscription_sheet.dart > "$fixture_dir/before.dart"
 cat > "$fixture_dir/baseline_test.dart" <<'DART'
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';

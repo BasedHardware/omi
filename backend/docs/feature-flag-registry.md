@@ -641,7 +641,7 @@ and an explicit empty literal renders as `''`.
 | `TRANSLATION_ONOPEN_ENABLED` | Serve bounded on-open translation for opt-in detail GETs | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | auditfix |
 | `VERTEX_EMBEDDING_DEDUPE_ENABLED` | Default on; same-owner exact-input Vertex vector reuse, keyed by complete text, task, title and endpoint. Successful vectors only, 600s TTL, 512 entries and 262144 scalar values per process. False bypasses batch and cross-request reuse and clears cache. | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `WAKE_WORD_ADJUDICATION_ENABLED` | Incident stop for wake-word adjudication | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | unowned |
-| `YEARLY_SWITCH_RETENTION_ENABLED` | Default on after approval/authorized rollout; explicit false stops both mobile placements while preserving UID controls and existing settings billing. | backend | env | closed | — | — | — | — | keep | keep | — | churn |
+| `YEARLY_SWITCH_RETENTION_ENABLED` | Default on after approval/authorized rollout; explicit false stops both mobile placements while preserving UID controls and existing settings billing. | backend | env | open | — | — | — | — | keep | keep | — | churn |
 | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | keep | — | auditfix |
 | `desktop-rating-prompt-disabled` | Stop the rating prompt | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `free-tier-kill-switch-v1` | Remote free-tier stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
@@ -1413,7 +1413,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)
 - `VERTEX_EMBEDDING_DEDUPE_ENABLED` — Default on; same-owner exact-input Vertex vector reuse, keyed by complete text, task, title and endpoint. Successful vectors only, 600s TTL, 512 entries and 262144 scalar values per process. False bypasses batch and cross-request reuse and clears cache. (fail: open)
 - `YEARLY_SWITCH_RETENTION_APPROVAL_REF` — Empty by default: requires exact David render/copy approval reference before admission. (fail: closed)
-- `YEARLY_SWITCH_RETENTION_ENABLED` — Default on after approval/authorized rollout; explicit false stops both mobile placements while preserving UID controls and existing settings billing. (fail: closed)
+- `YEARLY_SWITCH_RETENTION_ENABLED` — Default on after approval/authorized rollout; explicit false stops both mobile placements while preserving UID controls and existing settings billing. (fail: open)
 - `YEARLY_SWITCH_RETENTION_ROLLOUT_AUTHORIZED` — False by default; separately authorized rollout gate, never set by implementer. (fail: closed)
 
 ## Not feature flags
