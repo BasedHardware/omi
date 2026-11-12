@@ -97,16 +97,24 @@ def test_rejected_and_idempotent_writes_do_not_bump(store):
 def test_account_purge_erases_generation_head_after_source_batches(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import MagicMock
-    from database import user_data_deletion, batch_pipeline_purge
+    from database import pipeline_ledger, user_data_deletion, batch_pipeline_purge
 
+    events = []
     owner = MagicMock()
     owner.get.return_value.exists = False
     owner.collections.return_value = [SimpleNamespace(id='people_meta'), SimpleNamespace(id='people')]
+
+    def collection(name):
+        sub = MagicMock()
+        sub.id = name
+        sub.document.return_value.delete.side_effect = lambda: events.append(
+            'head_delete' if name == 'people_meta' else f'{name}_delete'
+        )
+        return sub
+
+    owner.collection.side_effect = collection
     client = MagicMock()
     client.collection.return_value.document.return_value = owner
-    events = []
-    meta = owner.collection.return_value.document.return_value
-    meta.delete.side_effect = lambda: events.append('head_delete')
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
@@ -117,5 +125,7 @@ def test_account_purge_erases_generation_head_after_source_batches(monkeypatch):
     )
     assert result['status'] == 'ok'
     assert events.index('people') < len(events) - 1
-    assert events[-1] == 'head_delete'
+    # The generation head is the last document delete; the ledger sweep follows it.
+    assert events[-2] == 'head_delete'
+    assert events[-1] == pipeline_ledger.COLLECTION
     owner.collection.assert_any_call('people_meta')
