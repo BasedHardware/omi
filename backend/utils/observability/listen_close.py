@@ -17,6 +17,8 @@ from typing import Any, Optional
 
 from prometheus_client import Counter, Histogram
 
+from utils.observability.reasons import ListenNoAudioCloseReason
+
 logger = logging.getLogger(__name__)
 
 CODE_CLASSES = ('1000', '1001', '1006', '1011', 'other')
@@ -44,6 +46,33 @@ for _initiator in INITIATORS:
         LISTEN_WS_CLOSE_FINALIZE_SECONDS.labels(initiator=_initiator, held=_held)
         for _code_class in CODE_CLASSES:
             LISTEN_WS_CLOSE_TOTAL.labels(code_class=_code_class, initiator=_initiator, held=_held)
+
+
+def no_audio_close_reason(state: Any) -> ListenNoAudioCloseReason:
+    """Bucket the first close the server observed for a session that never sent audio. Never raises.
+
+    A client frame with 1000/1001 is a normal close; any other client code (1005, 1006, 1011, app
+    codes) is abnormal. A server-initiated close is one the server issued. With no observed frame
+    and no server close, the bucket is no_close_frame. ``never_accepted`` is not decided here: the
+    teardown seam only runs for sessions that reached the runtime.
+    """
+    try:
+        initiator = getattr(state, 'ws_close_initiator', None)
+        code = getattr(state, 'ws_close_code', None)
+        if initiator == 'client':
+            normal = not isinstance(code, bool) and code in (1000, 1001)
+            return (
+                ListenNoAudioCloseReason.CLIENT_CLOSE_NORMAL
+                if normal
+                else ListenNoAudioCloseReason.CLIENT_CLOSE_ABNORMAL
+            )
+        if initiator == 'server':
+            return ListenNoAudioCloseReason.SERVER_CLOSE
+        if initiator is None:
+            return ListenNoAudioCloseReason.NO_CLOSE_FRAME
+        return ListenNoAudioCloseReason.UNKNOWN
+    except Exception:
+        return ListenNoAudioCloseReason.UNKNOWN
 
 
 def close_code_class(code: Any) -> str:

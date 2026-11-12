@@ -26,6 +26,7 @@ from utils.metrics import (
     OMI_LISTEN_ACCEPTED_TOTAL,
     OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS,
     OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
+    OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL,
     OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL,
     OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL,
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
@@ -44,6 +45,7 @@ from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
 from utils.observability.demand_cohort import record_metric
+from utils.observability.reasons import ListenNoAudioCloseReason
 from utils.observability.demand_cohort import DEMAND_COHORTS
 from utils.observability.routing_cohort import current_routing_cohort
 
@@ -578,6 +580,16 @@ def record_listen_no_audio_teardown(*, source: str | None, platform: str | None)
         transcription_source=_bounded_source(source),
         client_platform=_bounded_platform(platform),
     ).inc()
+
+
+def record_listen_no_audio_close_reason(*, platform: str | None, close_reason: ListenNoAudioCloseReason) -> None:
+    """Count one no-audio accepted session by the close the server observed. Never labeled by uid."""
+
+    try:
+        value = ListenNoAudioCloseReason(close_reason).value
+    except ValueError:
+        value = ListenNoAudioCloseReason.UNKNOWN.value
+    OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL.labels(client_platform=_bounded_platform(platform), close_reason=value).inc()
 
 
 _REALTIME_DEMAND_BUCKETS = frozenset({'visible', 'foreground', 'background', 'unreported'})

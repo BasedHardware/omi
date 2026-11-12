@@ -19,6 +19,7 @@ from utils.metrics import (
     OMI_CLIENT_JOURNEY_ISSUES_TOTAL,
     OMI_CLIENT_JOURNEY_TERMINAL_TOTAL,
     OMI_JOURNEY_ACCEPTED_TOTAL,
+    OMI_JOURNEY_FAILURE_REASON_TOTAL,
     OMI_JOURNEY_LATENCY_SECONDS,
     OMI_JOURNEY_TERMINAL_TOTAL,
 )
@@ -33,6 +34,7 @@ from utils.journey_metrics_contract import (
     bounded_client_kind,
     resolve_client_kind,
 )
+from utils.observability.reasons import ChatResponseFailureReason, ReasonFamily, reason_label
 
 JourneyName = Literal['chat_response', 'pusher_session', 'capture_finalization']
 JourneyOutcome = Literal['success', 'failure', 'cancelled', 'stale']
@@ -60,11 +62,29 @@ def record_journey_accepted(journey: JourneyName) -> None:
     OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey(journey)).inc()
 
 
-def record_journey_terminal(journey: JourneyName, outcome: JourneyOutcome, elapsed_seconds: float) -> None:
-    """Record exactly one terminal outcome and its elapsed time for one journey."""
+def record_journey_terminal(
+    journey: JourneyName,
+    outcome: JourneyOutcome,
+    elapsed_seconds: float,
+    *,
+    failure_reason: ChatResponseFailureReason | None = None,
+) -> None:
+    """Record exactly one terminal outcome and its elapsed time for one journey.
+
+    A failure terminal also counts its closed reason; a missing reason counts as ``unknown``.
+    """
     labels = {'journey': _journey(journey), 'outcome': _outcome(outcome)}
     OMI_JOURNEY_TERMINAL_TOTAL.labels(**labels).inc()
     OMI_JOURNEY_LATENCY_SECONDS.labels(**labels).observe(max(0.0, elapsed_seconds))
+    if labels['outcome'] == 'failure':
+        OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(
+            journey=labels['journey'],
+            reason=reason_label(
+                ReasonFamily.JOURNEY_FAILURE,
+                failure_reason or ChatResponseFailureReason.UNKNOWN,
+                ChatResponseFailureReason,
+            ),
+        ).inc()
 
 
 class JourneyAttempt:
@@ -80,11 +100,28 @@ class JourneyAttempt:
     def finished(self) -> bool:
         return self._finished
 
-    def finish(self, outcome: JourneyOutcome) -> None:
+    def finish(
+        self,
+        outcome: JourneyOutcome,
+        *,
+        failure_reason: ChatResponseFailureReason | None = None,
+        error_type: str | None = None,
+    ) -> None:
         if self._finished:
             return
         self._finished = True
-        record_journey_terminal(self.journey, outcome, monotonic() - self.started_at)
+        record_journey_terminal(self.journey, outcome, monotonic() - self.started_at, failure_reason=failure_reason)
+        if outcome == 'failure' and self.journey == 'chat_response':
+            # One line per failure terminal: the closed reason and the exception class name only.
+            logger.warning(
+                'Chat response failed reason=%s error_type=%s',
+                reason_label(
+                    ReasonFamily.JOURNEY_FAILURE,
+                    failure_reason or ChatResponseFailureReason.UNKNOWN,
+                    ChatResponseFailureReason,
+                ),
+                error_type or 'none',
+            )
 
 
 _StreamItem = TypeVar('_StreamItem')

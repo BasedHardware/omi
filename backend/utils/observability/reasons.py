@@ -20,6 +20,7 @@ and the batch-pipeline constants modules.
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 
 from prometheus_client import Counter
@@ -84,6 +85,8 @@ class ReasonFamily(StrEnum):
     RECORD_GAP_FILL = 'record_gap_fill'
     RECORD_RETAINED_ACK = 'record_retained_ack'
     PIPELINE_LEDGER = 'pipeline_ledger'
+    JOURNEY_FAILURE = 'journey_failure'
+    LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
 
 
 class PusherPcmStage(StrEnum):
@@ -842,3 +845,79 @@ class PipelineLedgerFailureReason(StrEnum):
     PERMISSION = 'permission'
     INVALID = 'invalid'
     OTHER = 'other'
+
+
+class ChatResponseFailureReason(StrEnum):
+    """Why a ``chat_response`` journey ended in ``failure`` (``omi_journey_failure_reason_total``).
+
+    Mapped from the values the chat path stages in ``callback_data['error']`` by
+    ``chat_response_failure_reason``. Exception class names are folded to a member
+    there, so no raw class name or message text reaches a label.
+    """
+
+    UNKNOWN = 'unknown'
+    IDLE_TIMEOUT = 'idle_timeout'
+    SETUP_TIMEOUT = 'setup_timeout'
+    TIMEOUT = 'timeout'
+    PROVIDER_ERROR = 'provider_error'
+    PROVIDER_REFUSAL = 'provider_refusal'
+    EMPTY_ANSWER = 'empty_answer'
+    STREAM_FAILURE = 'stream_failure'
+    PERSISTENCE_FAILURE = 'persistence_failure'
+
+
+class ListenNoAudioCloseReason(StrEnum):
+    """How an accepted /v4/listen session that never sent audio was closed, as the server observed it."""
+
+    UNKNOWN = 'unknown'
+    CLIENT_CLOSE_NORMAL = 'client_close_normal'
+    CLIENT_CLOSE_ABNORMAL = 'client_close_abnormal'
+    SERVER_CLOSE = 'server_close'
+    NO_CLOSE_FRAME = 'no_close_frame'
+
+
+# Values staged on callback_data['error'] by utils.retrieval (agentic, graph) and utils.chat_turn.
+_CHAT_STAGED_FAILURE_REASONS: dict[str, ChatResponseFailureReason] = {
+    'idle_timeout': ChatResponseFailureReason.IDLE_TIMEOUT,
+    'setup_timeout': ChatResponseFailureReason.SETUP_TIMEOUT,
+    'empty_answer': ChatResponseFailureReason.EMPTY_ANSWER,
+    'provider_refusal': ChatResponseFailureReason.PROVIDER_REFUSAL,
+    'stream_failure': ChatResponseFailureReason.STREAM_FAILURE,
+}
+# Exception class names that reach callback_data['error'] as type(error).__name__.
+_CHAT_EXCEPTION_FAILURE_REASONS: dict[str, ChatResponseFailureReason] = {
+    'TimeoutError': ChatResponseFailureReason.TIMEOUT,
+    'APITimeoutError': ChatResponseFailureReason.TIMEOUT,
+    'ConnectTimeout': ChatResponseFailureReason.TIMEOUT,
+    'ReadTimeout': ChatResponseFailureReason.TIMEOUT,
+    'WriteTimeout': ChatResponseFailureReason.TIMEOUT,
+    'PoolTimeout': ChatResponseFailureReason.TIMEOUT,
+    'APIError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'APIStatusError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'APIConnectionError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'AuthenticationError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'BadRequestError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'InternalServerError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'RateLimitError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'ConnectError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'ReadError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'RemoteProtocolError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'WriteError': ChatResponseFailureReason.PROVIDER_ERROR,
+}
+_EXCEPTION_CLASS_NAME = re.compile(r'[A-Z][A-Za-z0-9_]{0,79}')
+
+
+def chat_response_failure_reason(staged: object) -> ChatResponseFailureReason:
+    """Fold a staged chat error value (sentinel or exception class name) to a member; never raises."""
+    if not isinstance(staged, str):
+        return ChatResponseFailureReason.UNKNOWN
+    if staged in _CHAT_STAGED_FAILURE_REASONS:
+        return _CHAT_STAGED_FAILURE_REASONS[staged]
+    return _CHAT_EXCEPTION_FAILURE_REASONS.get(staged, ChatResponseFailureReason.UNKNOWN)
+
+
+def exception_class_name(value: object) -> str | None:
+    """The value when it is shaped like an exception class name, else None (no message text ever passes)."""
+    if isinstance(value, str) and _EXCEPTION_CLASS_NAME.fullmatch(value):
+        return value
+    return None
