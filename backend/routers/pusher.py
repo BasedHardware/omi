@@ -589,45 +589,44 @@ async def _run_websocket_util_trigger(
 
             try:
                 chunks: List[Dict[str, Any]] = []
-                for ref in refs:
-                    pcm = await run_blocking(storage_executor, read_pcm, uid, ref.receipt)
-                    pcm = pcm[ref.offset_samples * 2 : (ref.offset_samples + ref.samples) * 2]
-                    if len(pcm) != ref.samples * 2:
-                        raise ValueError('durable projection sample range is incomplete')
-                    chunk: Dict[str, Any] = {'data': pcm, 'timestamp': ref.start}
-                    if ref.frames:
-                        chunk['custody_receipt'] = ref.receipt.to_dict()
-                    if audio_timeline_v2:
-                        chunk['span'] = {
-                            'start': ref.start,
-                            'samples': ref.samples,
-                            'sample_rate': ref.sample_rate,
-                        }
-                    chunks.append(chunk)
+                with observe_work('drain_readback'):
+                    for ref in refs:
+                        pcm = await run_blocking(storage_executor, read_pcm, uid, ref.receipt)
+                        pcm = pcm[ref.offset_samples * 2 : (ref.offset_samples + ref.samples) * 2]
+                        if len(pcm) != ref.samples * 2:
+                            raise ValueError('durable projection sample range is incomplete')
+                        chunk: Dict[str, Any] = {'data': pcm, 'timestamp': ref.start}
+                        if ref.frames:
+                            chunk['custody_receipt'] = ref.receipt.to_dict()
+                        if audio_timeline_v2:
+                            chunk['span'] = {'start': ref.start, 'samples': ref.samples, 'sample_rate': ref.sample_rate}
+                        chunks.append(chunk)
                 if not audio_timeline_v2:
                     # Legacy headers are last-arrival-minus-duration estimates,
                     # not capture positions. Preserve the old continuous batch
                     # and its first timestamp; jitter cannot create v2 spans.
                     chunks = [{'data': b''.join(chunk['data'] for chunk in chunks), 'timestamp': refs[0].start}]
-                uploaded_paths = await run_blocking(
-                    storage_executor,
-                    upload_audio_chunks_batch,
-                    chunks,
-                    uid,
-                    conv_id,
-                    cached_protection_level,
-                    sample_rate=sample_rate,
-                )
+                with observe_work('drain_upload'):
+                    uploaded_paths = await run_blocking(
+                        storage_executor,
+                        upload_audio_chunks_batch,
+                        chunks,
+                        uid,
+                        conv_id,
+                        cached_protection_level,
+                        sample_rate=sample_rate,
+                    )
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if audio_timeline_v2 else 'without_spans'
                 ).inc()
-                applied = await run_blocking(
-                    storage_executor,
-                    audio_projection.refresh,
-                    conv_id,
-                    uploaded_paths,
-                    force=not websocket_active or conv_id in record_close_requests,
-                )
+                with observe_work('drain_refresh'):
+                    applied = await run_blocking(
+                        storage_executor,
+                        audio_projection.refresh,
+                        conv_id,
+                        uploaded_paths,
+                        force=not websocket_active or conv_id in record_close_requests,
+                    )
                 if applied:
                     schedule_person_voice_learning_retry(uid, conv_id)
                     if len(identity_refreshed) < 128:
