@@ -31,7 +31,13 @@ from database.batch_pipeline_projection import ProjectionBlocked, ProjectionRepl
 from database.batch_pipeline_store import PROJECTION_FINISH_STATES
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
-from utils.batch_pipeline.projection import error_site_field, error_type, projection_phase
+from utils.batch_pipeline.projection import (
+    error_site_field,
+    error_type,
+    fence_reason_field,
+    projection_block_reason,
+    projection_phase,
+)
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
@@ -366,9 +372,14 @@ class ProjectionFollowups:
             async with asyncio.timeout(FOLLOWUP_TIMEOUT_SECONDS):
                 outcome = await self._run(segment)
         except TimeoutError:
-            logger.warning('event=batch_projection_followup outcome=timeout')
+            logger.warning('event=batch_projection_followup outcome=timeout unit=%s', self.unit_key(segment))
             outcome = 'timeout'
         self.note(segment, outcome)
+
+    @staticmethod
+    def unit_key(segment: str) -> str:
+        """Correlate attempts without emitting arbitrary source IDs or content."""
+        return hashlib.sha256(segment.encode()).hexdigest()[:16]
 
     async def _run(self, segment):
         # This is a segment claim, never the owner's assignment claim. Redis
@@ -419,12 +430,19 @@ class ProjectionFollowups:
             if result is not None and result.get('reason_code') == 'source_deleted':
                 return 'source_deleted'
             return 'completed' if result is not None else 'incomplete'
-        except (ProjectionBlocked, BatchPrivacyBlocked):
-            logger.info('event=batch_projection_followup outcome=blocked')
+        except (ProjectionBlocked, BatchPrivacyBlocked) as error:
+            logger.info(
+                'event=batch_projection_followup outcome=blocked unit=%s block_reason=%s%s%s',
+                self.unit_key(segment),
+                projection_block_reason(error),
+                fence_reason_field(error),
+                error_site_field(error),
+            )
             return 'blocked'
         except Exception as error:
             logger.error(
-                'event=batch_projection_followup outcome=retry exception_type=%s%s',
+                'event=batch_projection_followup outcome=retry unit=%s exception_type=%s%s',
+                self.unit_key(segment),
                 error_type(error),
                 error_site_field(error),
             )
@@ -437,7 +455,9 @@ class ProjectionFollowups:
                     async with asyncio.timeout(CLAIM_RELEASE_TIMEOUT_SECONDS):
                         await run_blocking(db_executor, claim.__exit__, None, None, None)
                 except TimeoutError:
-                    logger.warning('event=batch_projection_followup action=release outcome=timeout')
+                    logger.warning(
+                        'event=batch_projection_followup action=release outcome=timeout unit=%s', self.unit_key(segment)
+                    )
 
     async def step(self, policy, phase, executor, function, *args, **kwargs):
         with projection_phase(phase, policy):
