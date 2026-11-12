@@ -140,6 +140,9 @@ class MemoryStore:
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
 
+    def cancel_fenced_recovery(self, segment_id):
+        raise AssertionError('privacy isolation must use real emulator transactions')
+
     # Unit-test model of the privacy defer: rows marked privacy_fenced read as blocked.
     def defer_privacy_blocked_record(self, segment_id, until, now):
         with self.lock:
