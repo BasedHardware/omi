@@ -2131,8 +2131,13 @@ void main() {
       expect(connection.openButtonSubscriptions, 0);
 
       world.controller.onAppResumed();
-      await world.settle();
-      await world.elapse(const Duration(seconds: 1));
+      // The recovery start is unawaited and does real WAL/device I/O, so a
+      // loaded runner can need more turns than one settle; wait for it, bounded.
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (world.controller.recordingState != RecordingState.pause && DateTime.now().isBefore(deadline)) {
+        await world.settle();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
       await world.settle();
       expect(world.controller.liveCaptureSource, 'omi');
       expect(world.controller.isPaused, isTrue);
