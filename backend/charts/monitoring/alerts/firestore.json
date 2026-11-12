@@ -844,5 +844,160 @@
       ]
     },
     "record": null
+  },
+  {
+    "uid": "omi-firestore-unattributed-reads",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - unattributed reads above 3% of billed reads",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "($B - $A) / $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.03
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-12T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "Unattributed Firestore reads are above 3% of billed reads on a 30m window: the instrumented read counters cover less than 97% of the native document/read_count.",
+      "threshold": "($B - $A) / $B > 0.03 for 30m, where A = sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0) and B = avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60. Same 30m window on both sides; the rule resolves at or below 0.03.",
+      "user_impact": "No direct user impact. A blind spot in read attribution means a read regression can grow without a named caller, so the next cost cut cannot be proven and the bill can rise unseen.",
+      "scope": "based-hardware, both Firestore databases, all read types (LOOKUP, QUERY, NOT_FOUND). A is the complete instrumented counter on the GMP datasource (Cloud Run and GKE); B is the native Cloud Monitoring document/read_count, which tracked the settled bill to 0.3% on the 2026-11-09 cross-check. A missing instrumented series reads as zero through or vector(0) and fires; a missing billed series is NoData and is covered by omi-firestore-metric-absent.",
+      "verification": "Exact expression replayed on GMP query_range 2026-11-02T06:51Z..2026-11-12T06:51Z at 1h steps (241 points): 0.134-0.568, mean 0.321. Daily means: 11-09 0.274, 11-10 0.196, 11-11 0.163, 11-12 0.162. No retained hour is at or below 0.03, so the resolve side is proven by fixtures, not by live history. The 95% acceptance figure in backend/docs/firestore-read-attribution.md is historical; the fresh measurement is 84% attributed.",
+      "evaluated_bad": "Live 2026-11-11T00:00Z..2026-11-12T00:00Z: 0.136-0.183 (mean 0.163), above 0.03 in every hour.",
+      "evaluated_good": "Fixture: instrumented 980/s against billed 1000/s (gap 0.02) for 2h produces no episode, and a firing episode resolves on the first tick at or below 0.03.",
+      "safe_next_action": "Read the by-caller coverage per kind on the Firestore dashboard, then confirm the instrumented fleet is on a probe build that exports by_caller. This rule reports the gap; it does not explain it, and the closed QUERY undercount RCA is not reopened here.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "isPaused=false (enabled by default). Disable: set isPaused true and re-import; re-enable: set isPaused false. Selector: membership of this UID in backend/charts/monitoring/live-alert-gate.json uids[] controls fail-closed live import and verification; it is present by default and is listed in PRODUCTION_ONLY_IMPORT_UIDS because the gmp-cloud-run datasource exists only in production."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-unattributed-reads",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
   }
 ]

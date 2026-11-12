@@ -2457,11 +2457,12 @@
   },
   "datasource_metrics": {
     "gmp-cloud-run": {
-      "captured_at": 1793733061,
+      "captured_at": 1794466281,
       "metrics": [
-        "omi_sync_queue_wait_seconds_bucket"
+        "omi_sync_queue_wait_seconds_bucket",
+        "firestore_googleapis_com:document_read_count"
       ],
-      "evidence": "GMP instant count of backfill histogram series in backend-sync|backend-sync-backfill; 561 series. The in-cluster snapshot does not contain this family.",
+      "evidence": "GMP instant and query_range reads on 2026-11-12T06:51Z: firestore_googleapis_com:document_read_count has 3 series (type=LOOKUP|QUERY|NOT_FOUND, monitored_resource=firestore_instance, project_id=based-hardware) and sums to ~1.18M per 60s (~1.70B/day), matching the native document/read_count. The in-cluster snapshot does not contain this family; omi_sync_queue_wait_seconds_bucket was the earlier scoped entry.",
       "declared_metrics": [
         "logging_googleapis_com:user_omi_pipeline_upload_admission_503",
         "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted",

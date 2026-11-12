@@ -1298,6 +1298,8 @@ EXTERNAL_ALERT_METRICS = {
     "container_memory_working_set_bytes": "cAdvisor",
     # prometheus-stackdriver-exporter
     "stackdriver_firestore_instance_firestore_googleapis_com_document_read_count": "prometheus-stackdriver-exporter",
+    # GMP Cloud Monitoring native metric (gmp-cloud-run datasource)
+    "firestore_googleapis_com:document_read_count": "GMP Cloud Monitoring native metric",
     "stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count": "prometheus-stackdriver-exporter",
     "stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket": (
         "prometheus-stackdriver-exporter"
