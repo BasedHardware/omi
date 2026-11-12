@@ -253,6 +253,7 @@ def test_streaming_export_complete_marker_is_last_section_content(monkeypatch):
         "memory_review_data",
         "memory_ledger_data",
         "jit_data",
+        "pipeline_ledger",
         "people",
         "action_items",
         "task_data",

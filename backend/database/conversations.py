@@ -2591,6 +2591,19 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     return deleted_count
 
 
+def delete_pipeline_ledger_row(uid: str, conversation_id: str) -> None:
+    """Remove the capture's sibling ledger row; a deleted capture must not leave one.
+
+    The ledger is a sibling collection, not a child of the conversation, so the
+    recursive child sweep in :func:`delete_conversation` never reaches it. A
+    nonterminal row would otherwise survive until its max-lifetime TTL.
+    """
+    try:
+        db.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id).delete()
+    except Exception:
+        logger.warning('pipeline ledger cleanup failed conversation=%s', conversation_id)
+
+
 def delete_conversation(uid, conversation_id):
     """Delete a conversation and every subcollection underneath it.
 
@@ -2618,6 +2631,9 @@ def delete_conversation(uid, conversation_id):
         processing_backlog.remove(uid, conversation_id)
     # Corrections are a sibling owner collection, not a child of the capture.
     user_ref.collection('transcript_corrections').document(conversation_id).delete()
+    # The in-flight ledger is also a sibling; the fence stops new writes but
+    # does not remove the row that already exists.
+    delete_pipeline_ledger_row(uid, conversation_id)
     invalidate_people_stats_cache(uid)
     from database.proactivity import purge_source_items
 

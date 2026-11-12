@@ -19,7 +19,8 @@
     "batch_pipeline_prod_shadow_lid_probes",
     "batch_pipeline_dev_shadow_lid_probes",
     "batch_pipeline_prod_shadow_lid_spend",
-    "batch_pipeline_dev_shadow_lid_spend"
+    "batch_pipeline_dev_shadow_lid_spend",
+    "pipeline_ledger"
   ],
   "receipt_retention_days": 45,
   "artifact_cleanup_hours_after_projection": 24,

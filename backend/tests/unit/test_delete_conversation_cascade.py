@@ -204,7 +204,11 @@ def test_delete_conversation_without_children_still_deletes_the_document(store):
     conversations_db.delete_conversation('uid-1', 'conv-1')
 
     assert not conversation.exists
-    assert store.deleted == ['users/uid-1/conversations/conv-1', 'users/uid-1/transcript_corrections/conv-1']
+    assert store.deleted == [
+        'users/uid-1/conversations/conv-1',
+        'users/uid-1/transcript_corrections/conv-1',
+        'users/uid-1/pipeline_ledger/conv-1',
+    ]
 
 
 def test_delete_conversation_purges_only_its_owner_scoped_correction_overlay(store):
