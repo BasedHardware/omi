@@ -26,7 +26,6 @@ from utils.metrics import (
     OMI_LISTEN_ACCEPTED_TOTAL,
     OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS,
     OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
-    OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL,
     OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL,
     OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL,
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
@@ -45,6 +44,7 @@ from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
 from utils.observability.demand_cohort import record_metric
+from utils.observability.listen_close import OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL, no_audio_close_reason
 from utils.observability.reasons import ListenNoAudioCloseReason
 from utils.observability.demand_cohort import DEMAND_COHORTS
 from utils.observability.routing_cohort import current_routing_cohort
@@ -568,18 +568,20 @@ def record_listen_zero_byte_session(*, source: str | None, platform: str | None)
     ).inc()
 
 
-def record_listen_no_audio_teardown(*, source: str | None, platform: str | None) -> None:
+def record_listen_no_audio_teardown(*, source: str | None, platform: str | None, state: object | None = None) -> None:
     """Count one accepted listen session that ended before its first audio byte.
 
     Emitted for every accepted session regardless of VAD or phone-call status so
     the accepted -> first_audio -> no-audio funnel covers all sources. Never
-    labeled by uid.
+    labeled by uid. ``state`` (the listen session state) also yields the close reason.
     """
 
     OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL.labels(
         transcription_source=_bounded_source(source),
         client_platform=_bounded_platform(platform),
     ).inc()
+    if state is not None:
+        record_listen_no_audio_close_reason(platform=platform, close_reason=no_audio_close_reason(state))
 
 
 def record_listen_no_audio_close_reason(*, platform: str | None, close_reason: ListenNoAudioCloseReason) -> None:

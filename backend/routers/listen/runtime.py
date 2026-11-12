@@ -64,12 +64,7 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
-from utils.observability.listen_close import (
-    CLOSE_FRAME_DRAIN_SECONDS,
-    no_audio_close_reason,
-    note_ws_close,
-    record_listen_ws_close,
-)
+from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.live_speaker_ordinals import LiveSpeakerOrdinalTracker, record_live_speaker_ordinals
 from utils.observability import soniox_idle_arm
@@ -137,11 +132,7 @@ from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
-from utils.observability.transcription import (
-    record_listen_no_audio_close_reason,
-    record_listen_no_audio_teardown,
-    record_listen_session_accepted,
-)
+from utils.observability.transcription import record_listen_no_audio_teardown, record_listen_session_accepted
 from utils.product_metrics import sanitize_app_build
 
 logger = logging.getLogger(__name__)
@@ -1502,10 +1493,5 @@ async def run_listen_session(request: ListenRequest) -> None:
         soniox_idle_arm.record_session(runtime, None)  # idempotent; covers exits that skip teardown
         if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
             record_listen_no_audio_teardown(
-                source=request.source,
-                platform=runtime.client_device_context.platform,
-            )
-            record_listen_no_audio_close_reason(
-                platform=runtime.client_device_context.platform,
-                close_reason=no_audio_close_reason(runtime.state),
+                source=request.source, platform=runtime.client_device_context.platform, state=runtime.state
             )

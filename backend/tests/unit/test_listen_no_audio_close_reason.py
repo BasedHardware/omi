@@ -7,6 +7,7 @@ import pytest
 
 from utils import metrics
 from utils.observability import transcription
+from utils.observability import listen_close
 from utils.observability.listen_close import no_audio_close_reason
 from utils.observability.reasons import ListenNoAudioCloseReason
 
@@ -61,7 +62,7 @@ def test_recorder_bounds_platform_and_counts_once(monkeypatch):
 
 def _samples():
     out = {}
-    for family in metrics.OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL.collect():
+    for family in listen_close.OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL.collect():
         for sample in family.samples:
             if sample.name.endswith('_total'):
                 out.setdefault(sample.labels['client_platform'], set()).add(sample.labels['close_reason'])

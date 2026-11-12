@@ -16,7 +16,7 @@ from utils.observability.reasons import (
 
 def _reason_samples():
     out = {}
-    for family in metrics.OMI_JOURNEY_FAILURE_REASON_TOTAL.collect():
+    for family in journeys.OMI_JOURNEY_FAILURE_REASON_TOTAL.collect():
         for sample in family.samples:
             if sample.name.endswith('_total'):
                 out[(sample.labels['journey'], sample.labels['reason'])] = sample.value

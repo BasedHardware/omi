@@ -40,12 +40,24 @@ LISTEN_WS_CLOSE_FINALIZE_SECONDS = Histogram(
     buckets=(0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 60.0, 120.0),
 )
 
+# Named differently from omi_listen_no_audio_teardown_total on purpose: that family keeps its own
+# labels (transcription_source), and one metric name cannot carry two label sets. Its client_platform
+# values mirror utils.observability.transcription._PLATFORMS; a test pins the two sets together.
+OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL = Counter(
+    'omi_listen_no_audio_close_reason_total',
+    'Accepted /v4/listen sessions that tore down before any first audio byte, by the close the server observed',
+    ['client_platform', 'close_reason'],
+)
+
 # Zero-initialise every series so ramp gates read 0, not absent, before the first close.
 for _initiator in INITIATORS:
     for _held in HELD:
         LISTEN_WS_CLOSE_FINALIZE_SECONDS.labels(initiator=_initiator, held=_held)
         for _code_class in CODE_CLASSES:
             LISTEN_WS_CLOSE_TOTAL.labels(code_class=_code_class, initiator=_initiator, held=_held)
+for _platform in ('android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'unknown', 'web', 'windows'):
+    for _close_reason in ListenNoAudioCloseReason:
+        OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL.labels(client_platform=_platform, close_reason=_close_reason.value)
 
 
 def no_audio_close_reason(state: Any) -> ListenNoAudioCloseReason:

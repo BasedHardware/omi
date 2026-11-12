@@ -88,14 +88,7 @@ PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
     'Pusher storage PCM byte budget limit; zero means no budget is enforced',
 )
 
-from utils.observability.reasons import (
-    ChatResponseFailureReason,
-    ListenNoAudioCloseReason,
-    PusherPcmErrorReason,
-    PusherPcmStage,
-    ReasonFamily,
-    reason_label,
-)
+from utils.observability.reasons import PusherPcmErrorReason, PusherPcmStage, ReasonFamily, reason_label
 
 PUSHER_STORAGE_PCM_REFUSALS_TOTAL = Counter(
     'omi_pusher_storage_pcm_refusals_total',
@@ -171,14 +164,6 @@ OMI_JOURNEY_TERMINAL_TOTAL = Counter(
     'omi_journey_terminal_total',
     'Terminal real-traffic product journey outcomes by closed journey and outcome names',
     ['journey', 'outcome'],
-)
-
-# Sibling of omi_journey_terminal_total, deliberately not a label on it (that label set is pinned
-# by the journey SLO and headline contracts). One increment per failure terminal.
-OMI_JOURNEY_FAILURE_REASON_TOTAL = Counter(
-    'omi_journey_failure_reason_total',
-    'Failed real-traffic product journey terminals by closed journey name and closed failure reason',
-    ['journey', 'reason'],
 )
 
 # 10 finite buckets, not 15: the 3x4 journey/outcome product is pre-created
@@ -462,20 +447,6 @@ for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
     for _outcome in ('success', 'failure', 'cancelled', 'stale'):
         OMI_JOURNEY_TERMINAL_TOTAL.labels(journey=_journey, outcome=_outcome)
         OMI_JOURNEY_LATENCY_SECONDS.labels(journey=_journey, outcome=_outcome)
-# Explicit members: every reason child exists at zero before the first failure.
-OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.UNKNOWN.value)
-OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.IDLE_TIMEOUT.value)
-OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.SETUP_TIMEOUT.value)
-OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.TIMEOUT.value)
-OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.PROVIDER_ERROR.value)
-OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(
-    journey='chat_response', reason=ChatResponseFailureReason.PROVIDER_REFUSAL.value
-)
-OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.EMPTY_ANSWER.value)
-OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.STREAM_FAILURE.value)
-OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(
-    journey='chat_response', reason=ChatResponseFailureReason.PERSISTENCE_FAILURE.value
-)
 for _outcome in ('requeued', 'enqueue_failed'):
     OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
 
@@ -1405,18 +1376,6 @@ OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
     ),
     ['transcription_source', 'client_platform'],
 )
-
-# Named differently from omi_listen_no_audio_teardown_total on purpose: that family keeps its own
-# labels (transcription_source), and one metric name cannot carry two label sets. Its client_platform
-# values mirror utils.observability.transcription._PLATFORMS; a test pins the two sets together.
-OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL = Counter(
-    'omi_listen_no_audio_close_reason_total',
-    'Accepted /v4/listen sessions that tore down before any first audio byte, by the close the server observed',
-    ['client_platform', 'close_reason'],
-)
-for _platform in ('android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'unknown', 'web', 'windows'):
-    for _close_reason in ListenNoAudioCloseReason:
-        OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL.labels(client_platform=_platform, close_reason=_close_reason.value)
 
 # Sync intake created-vs-merged. Emitted from ingest_sync_conversation on Cloud Run
 # backend-sync, which Prometheus does not scrape today (exporter allowlist is
