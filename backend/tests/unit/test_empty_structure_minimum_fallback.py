@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from utils.conversations import empty_structure_minimum as eligibility
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.recovery import RecoveryStructureUnavailableError
 
@@ -113,13 +114,13 @@ def _run_empty_structure_recovery(pc, conversation, *, verdict='keep', captured=
         return conv
 
     with (
-        patch.object(pc, 'is_release_probe_uid', MagicMock(return_value=False)),
+        patch.object(eligibility, 'is_release_probe_uid', MagicMock(return_value=False)),
         patch.object(pc, 'should_skip_omi_paid_postprocessing', MagicMock(return_value=False)),
         patch.object(pc, '_enrich_meeting_context', MagicMock()),
         patch.object(pc, '_get_structured', side_effect=get_structured),
         patch.object(pc, '_get_conversation_obj', side_effect=get_conversation_obj),
         patch.object(pc, '_attach_client_projection', MagicMock()),
-        patch.object(pc.notification_db, 'get_user_time_zone', MagicMock(return_value='UTC')),
+        patch.object(eligibility.notification_db, 'get_user_time_zone', MagicMock(return_value='UTC')),
         patch.object(pc, 'record_decision', side_effect=_RecoveryProbeReached()),
     ):
         return pc.process_conversation(
@@ -198,58 +199,54 @@ def _set_stored_structure(conversation, **fields):
         (_set_attribute('transcript_segments', []), {}),
     ],
 )
-def test_empty_structure_minimum_eligibility_is_narrow(pc, monkeypatch, mutate, kwargs):
+def test_empty_structure_minimum_eligibility_is_narrow(monkeypatch, mutate, kwargs):
     from models.structured import Structured
 
     monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
     conversation = _empty_structure_conversation()
     mutate(conversation)
+    structured = Structured()
+    arguments = _eligibility_arguments(conversation, structured, **kwargs)
+    with patch.object(eligibility, 'is_release_probe_uid', return_value=False):
+        result, applied = eligibility.apply_empty_structure_minimum(**arguments)
+    assert applied is False
+    assert result is structured
+
+
+def test_empty_structure_minimum_eligible_for_plain_kept_recovery(monkeypatch):
+    from models.structured import Structured
+
+    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
+    conversation = _empty_structure_conversation()
+    with patch.object(eligibility, 'is_release_probe_uid', return_value=False), patch.object(
+        eligibility.notification_db, 'get_user_time_zone', MagicMock(return_value='UTC')
+    ):
+        result, applied = eligibility.apply_empty_structure_minimum(
+            **_eligibility_arguments(conversation, Structured())
+        )
+        assert applied is True
+        assert result.title_provenance == 'server_minimum'
+        ignored, applied = eligibility.apply_empty_structure_minimum(
+            **_eligibility_arguments(conversation, Structured(), recovery_minimum_fallback=True)
+        )
+        assert applied is False
+    other_trigger = _eligibility_arguments(conversation, Structured())
+    other_trigger['trigger'] = ProcessingTrigger.CAPTURE_END
+    with patch.object(eligibility, 'is_release_probe_uid', return_value=False):
+        assert eligibility.apply_empty_structure_minimum(**other_trigger)[1] is False
+
+
+def _eligibility_arguments(conversation, structured, **overrides):
     arguments = dict(
         uid='uid-recovery',
         trigger=ProcessingTrigger.SERVER_RECOVERY,
         conversation=conversation,
-        structured=Structured(),
+        structured=structured,
         discarded=False,
         decisions=[_empty_structure_relevance('keep')],
         app_id=None,
         recovery_transcript_decoded=True,
         recovery_minimum_fallback=False,
     )
-    arguments.update(kwargs)
-    with patch.object(pc, 'is_release_probe_uid', return_value=False):
-        assert pc._recovery_empty_structure_minimum_applies(**arguments) is False
-
-
-def test_empty_structure_minimum_eligible_for_plain_kept_recovery(pc, monkeypatch):
-    from models.structured import Structured
-
-    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
-    with patch.object(pc, 'is_release_probe_uid', return_value=False):
-        assert (
-            pc._recovery_empty_structure_minimum_applies(
-                uid='uid-recovery',
-                trigger=ProcessingTrigger.SERVER_RECOVERY,
-                conversation=_empty_structure_conversation(),
-                structured=Structured(),
-                discarded=False,
-                decisions=[_empty_structure_relevance('keep')],
-                app_id=None,
-                recovery_transcript_decoded=True,
-                recovery_minimum_fallback=False,
-            )
-            is True
-        )
-        assert (
-            pc._recovery_empty_structure_minimum_applies(
-                uid='uid-recovery',
-                trigger=ProcessingTrigger.CAPTURE_END,
-                conversation=_empty_structure_conversation(),
-                structured=Structured(),
-                discarded=False,
-                decisions=[_empty_structure_relevance('keep')],
-                app_id=None,
-                recovery_transcript_decoded=True,
-                recovery_minimum_fallback=False,
-            )
-            is False
-        )
+    arguments.update(overrides)
+    return arguments

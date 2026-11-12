@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from database import conversation_finalization_jobs as jobs
+from database import finalization_due_marker_sweep as sweep
 from services import conversation_finalization as service
 from models.account_cutover import AccountCutoverRecord, AccountCutoverState
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -537,7 +538,7 @@ def test_due_marker_sweep_restores_only_old_unmarked_nonterminal_jobs(store, ove
     before = deepcopy(store.rows[JOB_PATH])
     job_ref = store.collection(jobs.FINALIZATION_JOBS_COLLECTION).document('synthetic-job')
 
-    result = jobs.firestore.transactional(jobs._restore_missing_due_marker_txn)(
+    result = jobs.firestore.transactional(sweep._restore_missing_due_marker_txn)(
         store.transaction(), job_ref, NOW - timedelta(hours=24), NOW
     )
 
@@ -552,7 +553,7 @@ def test_due_marker_sweep_restores_only_old_unmarked_nonterminal_jobs(store, ove
 def test_due_marker_sweep_skips_a_missing_job_document(store):
     job_ref = store.collection(jobs.FINALIZATION_JOBS_COLLECTION).document('absent-job')
 
-    result = jobs.firestore.transactional(jobs._restore_missing_due_marker_txn)(
+    result = jobs.firestore.transactional(sweep._restore_missing_due_marker_txn)(
         store.transaction(), job_ref, NOW - timedelta(hours=24), NOW
     )
 
@@ -624,9 +625,9 @@ def test_due_marker_sweep_pages_by_status_and_reports_each_outcome(store, monkey
     for job_id, data in rows['queued'] + rows['leased']:
         store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, job_id)] = deepcopy(data)
     index = _SweepIndexStub(store, rows)
-    monkeypatch.setattr(jobs, 'FINALIZATION_OLDEST_NONTERMINAL_QUERY', index)
+    monkeypatch.setattr(sweep, 'FINALIZATION_OLDEST_NONTERMINAL_QUERY', index)
 
-    result = jobs.remark_missing_due_markers(now=NOW, limit=50, firestore_client=store)
+    result = sweep.remark_missing_due_markers(now=NOW, limit=50, firestore_client=store)
 
     assert result == {'remarked': 2, 'skipped': 3, 'error': 0}
     assert store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, 'old-unmarked')]['reconcile_after_at'] == NOW

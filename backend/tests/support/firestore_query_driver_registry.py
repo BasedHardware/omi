@@ -1146,7 +1146,7 @@ def _due_marker_cursor(client, combo, trial):
 
 _add(
     DriverEntry(
-        'database.conversation_finalization_jobs.remark_missing_due_markers',
+        'database.finalization_due_marker_sweep.remark_missing_due_markers',
         domains={'now': [T0]},
         neutrals={
             'limit': _LIMIT,

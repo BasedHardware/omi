@@ -48,12 +48,12 @@ from utils.metrics import (
     LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS,
     LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
     LISTEN_FINALIZATION_RETRIES_TOTAL,
-    LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL,
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
     OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL,
     OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL,
     register_listen_finalization_summary_metrics,
 )
+from database import finalization_due_marker_sweep as due_marker_sweep
 from utils.observability.fallback import record_fallback
 from utils.observability.finalization import finalization_diagnostic_id
 from utils.observability.journeys import (
@@ -235,12 +235,12 @@ def reconcile_listen_finalization_jobs(
 
     # Before the candidate page is read, so a row restored to due is replayed in this pass.
     try:
-        due_markers = jobs_db.remark_missing_due_markers(firestore_client=firestore_client)
+        due_markers = due_marker_sweep.remark_missing_due_markers(firestore_client=firestore_client)
     except Exception:
         logger.exception('listen finalization due-marker sweep failed')
         due_markers = {'remarked': 0, 'skipped': 0, 'error': 1}
     for outcome, count in due_markers.items():
-        LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL.labels(outcome=outcome).inc(count)
+        due_marker_sweep.LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL.labels(outcome=outcome).inc(count)
     if due_markers['remarked']:
         logger.warning('event=listen_finalization_due_marker_sweep remarked=%s', due_markers['remarked'])
 
