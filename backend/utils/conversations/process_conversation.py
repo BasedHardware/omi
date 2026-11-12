@@ -105,6 +105,7 @@ from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingT
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
+    recovery_empty_structure_minimum_enabled,
     recovery_minimum_terminal_enabled,
     recovery_rule_discard,
     recovery_transcript_below_content_floor,
@@ -712,6 +713,46 @@ def _get_structured(
 
 
 get_structured = _get_structured
+
+
+def _recovery_empty_structure_minimum_applies(
+    *,
+    uid: str,
+    trigger: ProcessingTrigger,
+    conversation: Any,
+    structured: Structured,
+    discarded: bool,
+    decisions: list[RelevanceDecision],
+    app_id: Optional[str],
+    recovery_transcript_decoded: bool,
+    recovery_minimum_fallback: bool,
+) -> bool:
+    """Whether a recovery with no enriched structure may complete on the deterministic minimum.
+
+    Narrower than the refusal it replaces: only a kept, decoded, non-empty plain
+    conversation whose stored structure is replaceable. Every other case keeps the
+    typed refusal, so rich or titled stored content is never overwritten.
+    """
+    if not is_recovery_trigger(trigger) or not recovery_empty_structure_minimum_enabled():
+        return False
+    if recovery_minimum_fallback or discarded or structured_is_rich(structured):
+        return False
+    if not recovery_transcript_decoded or not isinstance(conversation, Conversation):
+        return False
+    if recovery_transcript_word_count(conversation) <= 0:
+        return False
+    relevance = final_relevance(decisions[0] if decisions else None, discarded=discarded)
+    if relevance is None or relevance.verdict != 'keep':
+        return False
+    if app_id or is_release_probe_uid(uid):
+        return False
+    if conversation.photos or has_explicit_reminder(conversation.transcript_segments):
+        return False
+    stored = conversation.structured
+    stored_title = (getattr(stored, 'title', '') or '').strip()
+    return not structured_is_rich(stored) and (
+        not stored_title or getattr(stored, 'title_provenance', None) == 'server_minimum'
+    )
 
 
 def _get_conversation_obj(
@@ -2837,6 +2878,40 @@ def process_conversation(
             + '\n'
         )
         sys.stdout.flush()
+    empty_structure_minimum_applied = _recovery_empty_structure_minimum_applies(
+        uid=uid,
+        trigger=trigger,
+        conversation=conversation,
+        structured=structured,
+        discarded=discarded,
+        decisions=decisions,
+        app_id=app_id,
+        recovery_transcript_decoded=recovery_transcript_decoded,
+        recovery_minimum_fallback=recovery_minimum_fallback,
+    )
+    if empty_structure_minimum_applied:
+        structured = build_deterministic_minimum_structured(
+            conversation,
+            uid=uid,
+            tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
+        )
+        logger.warning('selfheal empty structure minimum applied relevance_verdict=keep')
+        sys.stdout.write(
+            json.dumps(
+                {
+                    'event': 'selfheal_guard',
+                    'outcome': 'minimum_fallback',
+                    'reason': 'empty_structured',
+                    'structure_reason': 'no_enriched_structure',
+                    'relevance_verdict': 'keep',
+                    'uid': uid,
+                    'conversation_id': conversation.id,
+                },
+                default=str,
+            )
+            + '\n'
+        )
+        sys.stdout.flush()
     conversation = _get_conversation_obj(
         uid,
         structured,
@@ -2855,6 +2930,7 @@ def process_conversation(
         and not structured_is_rich(structured)
         and not explicit_recovery_discard
         and not recovery_minimum_fallback
+        and not empty_structure_minimum_applied
     ):
         sys.stdout.write(
             json.dumps(
