@@ -599,11 +599,7 @@ async def _run_websocket_util_trigger(
                         if ref.frames:
                             chunk['custody_receipt'] = ref.receipt.to_dict()
                         if audio_timeline_v2:
-                            chunk['span'] = {
-                                'start': ref.start,
-                                'samples': ref.samples,
-                                'sample_rate': ref.sample_rate,
-                            }
+                            chunk['span'] = {'start': ref.start, 'samples': ref.samples, 'sample_rate': ref.sample_rate}
                         chunks.append(chunk)
                 if not audio_timeline_v2:
                     # Legacy headers are last-arrival-minus-duration estimates,
