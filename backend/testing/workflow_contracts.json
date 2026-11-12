@@ -859,7 +859,7 @@
       ],
       "checks": [],
       "invariants": [
-        "production Grafana changes require explicit prod dispatch with the production Environment secret",
+        "production alert changes require explicit prod dispatch with the production Environment secret; dashboard JSON applies to prod on push from the no-reviewer grafana-dashboards-prod environment",
         "alert upserts retain unknown live rules, preserve provenance, back up before writes, and verify complete definitions",
         "dashboard imports preserve folders and authenticated requests never follow redirects",
         "GMP addition preserves local sources, HPA routing, recording rules and the history warmup pin",
