@@ -74,6 +74,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
     current = time.time() if now is None else now
     deadline = time.monotonic() + deadline_seconds(budget)
     allowed, retries, held_reason = [], {lease['segment_id']: 30 for lease in leases}, {}
+    observations = []
 
     async def stage(name, fn, *args, **kwargs):
         # Check in the executor too: a queued call must not start after expiry.
@@ -201,17 +202,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
             if await stage('seal', store.run, seal):
                 allowed.append(segment)
                 retries.pop(segment, None)
-                # Observe only sealed dispatches, within transport headroom.
-                # Telemetry cannot consume the deadline of another unit.
-                from utils.stt.allowance_watch import observe_async
-
-                await observe_async(
-                    job['owner_id'],
-                    'batch_gpu',
-                    'parakeet',
-                    float(job.get('duration_seconds', 0)),
-                    timeout=min(0.1, max(0.001, deadline - time.monotonic())),
-                )
+                observations.append((job['owner_id'], float(job.get('duration_seconds', 0))))
             else:
                 retries[segment] = 30
         except BatchPrivacyBlocked:
@@ -225,4 +216,13 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
             logger.warning(
                 'event=batch_compute_admission_unevaluated exception_class=%s', bounded_exception_class(error)
             )
+    # Finish every authorization before spending any remaining budget on telemetry.
+    # An observation cannot make another unit miss its policy/transaction deadline.
+    from utils.stt.allowance_watch import observe_async
+
+    for uid, seconds in observations:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        await observe_async(uid, 'batch_gpu', 'parakeet', seconds, timeout=min(0.1, remaining))
     return {'allowed': allowed, 'retry_after': retries, 'held_reason': held_reason}
