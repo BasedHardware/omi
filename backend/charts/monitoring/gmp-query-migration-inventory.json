@@ -2,7 +2,7 @@
   "combined_equals_split": true,
   "consumers": [
     {
-      "expression": "sum(increase(omi_app_review_config_alert_total{reason=~\"credentials_unavailable|store_api_error\"}[15m])) > bool 0",
+      "expression": "sum(increase(omi_app_review_config_alert_total{reason=~\"credentials_unavailable|store_api_error|submission_token_unavailable|submission_token_rejected\"}[3h])) >= bool 3",
       "file": "alerts/app-review-config.json",
       "issues": [],
       "metrics": [

@@ -6,12 +6,16 @@ Read status first, perform the authorized action once, then read status again. K
 Codemagic build ID and its `BRAKE_RESULT` line. A failed or uncertain mutation requires
 a fresh status read before another action; never blindly retry it.
 
-Before even a status read, disable `mobile_rollout_watch.yml` and `mobile_daily_train.yml`.
-The tool checks both are manually disabled and their GitHub runs have completed, failing
-before opening a Play edit if verification fails. Also wait for previously dispatched
-Codemagic `mobile-daily-train`, `mobile-rollout-advance`, and `mobile-store-promote` builds
-to finish. Do not run any other Play writer or use Play Console concurrently. GitHub
-dispatch completion does not prove the Codemagic build it started has finished.
+Before even a status read, disable `mobile_rollout_watch.yml` and `mobile_daily_train.yml`,
+and pause `app-review-config-sweep-hourly` through the reviewed scheduler manifest path.
+The tool checks that both workflows are manually disabled, their GitHub runs have
+completed, and the scheduler job is `PAUSED`, failing before opening a Play edit if any
+writer cannot be verified quiesced. Also wait for previously dispatched Codemagic
+`mobile-daily-train`, `mobile-rollout-advance`, and `mobile-store-promote` builds to finish.
+After pausing the scheduler, confirm any request it already started has finished in
+Scheduler history or backend-sync logs. Do not run any other Play writer or use Play
+Console concurrently. GitHub dispatch completion does not prove the Codemagic build it
+started has finished.
 Confirm that Play Console has no unrelated changes waiting to be sent for review:
 the later Play Console → Publishing overview → Send for review press submits
 every held change together, including a brake's. `CONFIRM=brake` attests these operator
@@ -52,6 +56,12 @@ shared held-changes flag, so a held stage may remain pending and fail its live r
 inspect Play Console and the live track before retrying.
 Readback must match the complete expected production track, including its original fraction.
 Unused-edit cleanup failures emit a static warning without hiding a verified result.
+
+While Play changes are held for review, a manual production submission is written as a
+`draft`. That draft blocks `BRAKE_ACTION=stage`, which requires completed releases beside
+the halted release. During an incident, handle the draft and halted rollout directly in
+Play Console; do not stage through the brake until production contains only the expected
+completed base plus the halted release.
 
 Google's contracts: [edit concurrency](https://developers.google.com/android-publisher/concurrency-considerations),
 [commit review behavior](https://developers.google.com/android-publisher/api-ref/rest/v3/edits/commit),

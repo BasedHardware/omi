@@ -107,6 +107,7 @@ class AppReviewConfigReason(StrEnum):
     RECONCILIATION_REPAIR = 'reconciliation_repair'
     LIVE_HIDE_CLEARED = 'live_hide_cleared'
     SUBMISSION_TOKEN_UNAVAILABLE = 'submission_token_unavailable'
+    SUBMISSION_TOKEN_REJECTED = 'submission_token_rejected'
 
 
 class AppReviewConfigOutcome(StrEnum):

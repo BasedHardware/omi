@@ -38,6 +38,14 @@ CLOUD_RUN_SYNC_EXPORTER_DEV = (
 )
 
 
+def test_app_review_sweep_counter_is_declared_with_its_outcome_label():
+    from utils.metrics import OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL
+
+    inventory = json.loads((MONITORING / 'metric-inventory.prod.json').read_text())
+    assert 'omi_app_review_config_sweep_total' in inventory['declared_metrics']
+    assert tuple(OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL._labelnames) == ('outcome',)
+
+
 def _cpu_millicores(value: object) -> float:
     text = str(value)
     return float(text[:-1]) if text.endswith('m') else float(text) * 1000

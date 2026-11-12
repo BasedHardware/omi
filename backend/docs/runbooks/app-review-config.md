@@ -1,83 +1,133 @@
 # App review visibility lifecycle
 
-`app_review_config.hidden_versions` remains the serving contract. The lifecycle
-records successful submissions from `mobile-store-promote` and
-`mobile-daily-train`, reconciles iOS App Store Connect and Android Play
-production state, and gives each active hide a 14-day lease. A recorded review
-adopts an already-hidden version; TTL expiry removes that version's hide and
-leaves a tombstone. After expiry, the subscription UI stays visible for that
-version until a new submission receipt is recorded. A live or terminal store
-state clears the matching hide and its lifecycle entries immediately.
+`app_review_config.hidden_versions` remains the serving contract. Successful
+manual promotion and daily-train submissions emit receipts; the lifecycle sweep
+reconciles iOS App Store Connect and Android Play production state and gives
+each active hide a 14-day lease. A recorded receipt adopts an already-hidden
+version. TTL expiry removes that version's hide and leaves a tombstone, so a
+sweep cannot silently re-arm an expired lease. A fresh, authenticated receipt
+starts a fresh lease when it races an already-past deadline.
+
+For Android, only a production release with `status == "completed"` counts as
+live. A first-seen production code on a draft, in-progress, or halted release
+creates a bounded hide even if its receipt was lost. Existing active entries
+are repaired without extending their deadline; expired tombstones prevent
+first-sight recreation. The lease starts when the held submission is recorded,
+not when an operator later presses Send for review. If the receipt is missing,
+it starts when the sweep first observes the non-completed production release.
+
+## Submission freeze before activation
+
+Do not submit to either store through manual promote or the daily train between
+merging the lifecycle change and completing every activation gate below. This
+keeps store state from advancing while the backend, scheduler, alert, and
+Codemagic receipt path are only partially active.
+
+If a submission already happened, stop further submissions and inspect its
+production status and version code. Before the first tick, snapshot both
+`app_review_config/ios` and `app_review_config/android`. A held, non-completed
+Android release without an expired tombstone should be hidden by first-sight
+reconciliation; verify the resulting active entry and expiry after the tick.
+If a tombstone already exists, do not remove it automatically: the operator
+must decide whether a fresh bounded manual hide is warranted and record that
+decision through the approved Firestore change process.
 
 ## Pre-merge Codemagic prerequisite
 
 The YAML references the `app_review_config` environment group on exactly the
 two submission workflows above. Codemagic rejects a workflow whose declared
 group does not exist, before its script can run. Create the group before merge,
-but leave it empty: do not add the submission token until the backend sweep is
-enabled and a successful tick has been confirmed. The hook treats a missing
-token or failed receipt as best effort, so a successful store submission does
-not become a failed Codemagic run.
+but leave it empty. Do not attach the submission token until the scheduler,
+deadman alert, and receipt-authentication gates below have passed.
 
-## Credentials to create after merge
+## Credentials and pre-activation probes
 
-Create these Secret Manager secrets in project `based-hardware`:
+After merge, create these Secret Manager secrets in project `based-hardware`
+and grant `roles/secretmanager.secretAccessor` on only these three secrets to
+`backend-runtime@based-hardware.iam.gserviceaccount.com`. Create the submission
+token secret early with the other credentials; keep the Codemagic group empty
+until full activation.
 
 | Secret | Value | Use |
 | --- | --- | --- |
-| `APP_REVIEW_CONFIG_SUBMISSION_TOKEN` | A new random high-entropy token | Authenticates only `/v2/internal/app-review-config/submissions`; after the first successful sweep, put the same value in the Codemagic `app_review_config` group. |
-| `APP_REVIEW_ASC_API_KEY_JSON` | JSON object with `issuer_id`, `key_id`, and `private_key` from a dedicated App Store Connect API key | Read-only version-state polling for app `6502156163`. Probe the narrowest app-scoped role that can read versions before activation; do not default to the broader App Manager role without confirming Developer cannot read them. |
-| `APP_REVIEW_PLAY_SERVICE_ACCOUNT_JSON` | JSON key for a dedicated Google service account | Read-only production-track polling for package `com.friend.ios`. The exact Play Console role required to open and delete an uncommitted edit has not been verified; do not assume “app-information viewing” is sufficient. |
+| `APP_REVIEW_CONFIG_SUBMISSION_TOKEN` | A new random high-entropy token | Authenticates only `/v2/internal/app-review-config/submissions`; stored in Secret Manager before deployment, added to Codemagic only after the gates below. |
+| `APP_REVIEW_ASC_API_KEY_JSON` | JSON object with `issuer_id`, `key_id`, and `private_key` from a dedicated App Store Connect API key | Read-only version-state polling for app `6502156163`. Before activation, perform a read-only JWT probe of the app's versions endpoint using the intended app-scoped role. Confirm the narrowest role that can read versions; do not wait for a first-tick credential alert to discover a role problem. |
+| `APP_REVIEW_PLAY_SERVICE_ACCOUNT_JSON` | JSON key for a dedicated Google service account | Read-only production-track polling for package `com.friend.ios`. Verify the role against a staging app by opening a temporary edit, reading its production track, and deleting the edit without committing it. |
 
-Grant `roles/secretmanager.secretAccessor` on only these three secrets to
-`backend-runtime@based-hardware.iam.gserviceaccount.com`. Do not put the ASC or
-Play credentials in Codemagic. The submission token cannot call admin APIs; its
-endpoint writes only the matching `app_review_config` document. Authentication
-uses a 60-second in-process secret cache, so rotation can take up to 60 seconds
-to reach every backend instance. To rotate, update the Secret Manager version
-and Codemagic group to the same new value, wait at least 60 seconds (or restart
-all backend instances), verify a receipt in staging, then revoke the old value.
-Receipts carry the submission time and are accepted only for 15 minutes after
-submission (with at most five minutes of future clock skew); replaying an old
-receipt cannot create a fresh lease. Repeated receipts for an active lease do
-not extend its expiry.
+Do not put the ASC or Play credentials in Codemagic. Deploy the backend after
+the secrets and accessor bindings exist, then verify the sweep route is mounted
+on `backend-sync`. The scheduler must remain paused during these probes.
 
 ## Activation order after merge
 
-Keep this order as a hard precondition: the Codemagic token must not be added
-until the scheduler is enabled and a successful sweep tick has completed.
+Keep this sequence as a hard gate. Enabling the scheduler requires the held
+Android draft fix from PR #25131 to be merged and present in the deployed
+revision.
 
-1. Create the App Store Connect and Play credentials above and grant the scoped
-   Secret Manager bindings. Deploy the backend revision containing the
-   submission and sweep routes. Confirm `/v2/app-review-config/sweep` is mounted
-   on `backend-sync`.
-2. Verify the Play role against a staging app before production activation: use
-   the same service-account role to create a temporary edit, read its
-   production track, and delete the edit without committing it. If any step is
-   denied, determine the narrowest app-scoped role that passes this probe; do
-   not activate Play polling based on an assumed view-only permission.
-3. In a reviewed scheduler-manifest change, remove `lifecycle: planned` and set
+1. Confirm PR #25131's write-side fix is merged: held manual Android
+   production promotions default to `draft`, and only completed releases count
+   as live. Keep manual promote and daily-train submissions frozen.
+2. Create the secrets and accessor bindings above, deploy the backend revision,
+   and confirm `/v2/app-review-config/sweep` is mounted on `backend-sync`.
+   Complete the ASC JWT probe and Play edit/read/delete role probe before
+   continuing.
+3. Before the first scheduler tick, capture a read-only snapshot of
+   `app_review_config/ios` and `app_review_config/android` for rollback and
+   comparison. Keep the snapshot in the operator's secure incident records.
+4. In a reviewed scheduler-manifest change, remove `lifecycle: planned` and set
    `state: ENABLED` on `app-review-config-sweep-hourly`. The job runs at minute
-   17, away from the rollout-watch and daily-train edit windows. Apply it using
-   the existing `gcp_scheduler_reconcile.yml` workflow with typed
-   `APPLY_PROD_SCHEDULER` confirmation. Confirm a successful route response and
-   an advancing `last_sweep_timestamp` before continuing. With missing store
-   credentials the sweep still enforces TTL, but it reports a credential alert.
-4. Only after that successful tick, create the submission-token secret and add
-   its value to the pre-created Codemagic group. Verify the group remains
-   attached only to `mobile-store-promote` and `mobile-daily-train`. The hook
-   endpoint can be pointed at staging with `APP_REVIEW_CONFIG_ENDPOINT` or
-   `--endpoint` during validation.
-5. Enable the `App Review Config - sweep silent` Grafana rule after the first
-   successful tick. The paging rule fires only for unavailable credentials or
-   store API errors; routine reconciliation repairs and live clears do not page.
+   17 UTC. Before applying, verify the deployed backend revision contains
+   PR #25131's held-draft fix. Apply with the existing
+   `gcp_scheduler_reconcile.yml` workflow and typed `APPLY_PROD_SCHEDULER`
+   confirmation.
+5. Confirm the first tick succeeds and the Prometheus gauge
+   `omi_app_review_config_last_sweep_timestamp_seconds` advances on
+   `https://monitor.omi.me`. If needed, force one tick with
+   `gcloud scheduler jobs run app-review-config-sweep-hourly --location=us-central1 --project=based-hardware`.
+   Verify the route response and backend-sync logs before proceeding.
+6. Enable the `omi-app-review-config-sweep-silent` deadman rule only after the
+   successful first tick. Verify the rule is unpaused in Grafana and its
+   provisioned definition reads back correctly. A paused deadman is not a
+   completed activation gate.
+7. Validate token authentication without writing a submission: send a validly
+   shaped but stale receipt to `/v2/internal/app-review-config/submissions`
+   through the approved operator runner, with the token supplied from Secret
+   Manager without printing it. Expect HTTP 409 (`submission receipt is stale`)
+   and confirm neither Firestore document changed. A 401 means the token is
+   missing or mismatched and must be fixed before continuing.
+8. Add the same token to the pre-created Codemagic `app_review_config` group.
+   Verify the group is attached only to `mobile-store-promote` and
+   `mobile-daily-train`, then release the submission freeze.
+
+The Codemagic hook treats a missing token or failed receipt as best effort so a
+successful store submission does not become a failed build. The first-sight
+Android reconciliation is the fallback for a missing receipt, but it does not
+replace the activation gates.
+
+## Receipt behavior and alerting
+
+Receipts are accepted only for 15 minutes after submission, with at most five
+minutes of future clock skew. Replayed receipts do not extend an active lease.
+The sweep retries Play edit conflicts five times with exponential backoff; the
+Grafana paging rule requires three lifecycle failures within three hours, so a
+single collision is visible in logs and metrics without paging. It covers
+`credentials_unavailable`, `store_api_error`, `submission_token_unavailable`,
+and `submission_token_rejected`. Routine repairs and live clears do not page.
+
+During token rotation, freeze manual and daily-train submissions first. Update
+the Secret Manager value, wait at least 60 seconds for backend token caches to
+refresh, then update the Codemagic group to the same value. Repeat the stale
+receipt authentication check above, confirm the two Firestore documents did
+not change, and resume submissions. A missing secret reports
+`submission_token_unavailable`; a missing or mismatched request token reports
+`submission_token_rejected`. Resolve either page before resuming submissions.
 
 The Play API requires an edit ID to read a track. Each poll opens a temporary
 uncommitted edit, reads only the `production` track, and deletes the edit in a
-`finally` path. It never commits an edit. Only releases with
-`status == "completed"` count as live; an `inProgress`, `draft`, or held release remains
-hidden during review. The 14-day TTL remains the backstop for staged rollouts.
-Internal and alpha tracks are not queried. An edit conflict is retried once.
+`finally` path. It never commits an edit. Only completed production codes
+clear Android hides; drafts, in-progress releases, and held releases remain
+hidden. The 14-day TTL remains the backstop for long reviews. Internal and
+alpha tracks are not queried.
 
 ## Existing entries and manual cleanup
 
@@ -90,6 +140,28 @@ entry (`1.0.80+501`) remains a separate manual cleanup decision after checking
 its store state. Unmatched legacy iOS entries also require a separate manual
 decision. Do not delete them as part of deployment or activation.
 
-Do not run the store clients against real accounts, write Firestore, create
+A held manual Android production release is a `draft`. Such a draft blocks
+`BRAKE_ACTION=stage`, which requires completed production releases beside the
+halted release. During an incident, handle the draft and halted rollout in Play
+Console; do not try to stage through the brake until the track has the expected
+completed base plus the halted release.
+
+## Rollback
+
+Freeze store submissions, then use this order:
+
+1. Remove the submission token from the Codemagic `app_review_config` group
+   first. This stops new receipt attempts while the lifecycle is being paused.
+2. Re-pause `app-review-config-sweep-hourly` through a reviewed scheduler
+   manifest change and apply it through the scheduler reconcile workflow.
+   Confirm the job is `PAUSED`.
+3. Explicitly inspect and decide each existing iOS and Android lifecycle entry:
+   retain the hide, remove it through the approved change process, or arrange
+   bounded cleanup. Pausing the sweep leaves existing entries
+   **TTL-unenforced**; their expiry will not be processed until the sweep runs
+   again.
+
+Do not run store clients against real accounts, write Firestore, create
 credentials, deploy, or activate the scheduler as part of PR validation. The
-scheduler is declared `planned` and `PAUSED` so merge alone cannot activate it.
+scheduler remains `planned` and `PAUSED` until the reviewed activation gates
+above are completed.
