@@ -23,6 +23,7 @@ the noise.
 """
 
 import asyncio
+from functools import partial
 import json
 import logging
 import time
@@ -34,6 +35,7 @@ from pydantic import BaseModel, Field
 
 from database.redis_db import r as redis_client
 from utils.executors import db_executor, run_blocking
+from utils.llm.user_voice import apply_user_voice_to_proposed_message, record_contact_handles_for_user_voice
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -294,18 +296,10 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
         # payload the device should receive.
         kwargs.pop('config', None)
         if name == 'propose_message' and isinstance(kwargs.get('text'), str):
-            try:
-                from utils.llm.user_voice import apply_user_voice_to_proposed_message
-
-                kwargs['text'] = await run_blocking(
-                    db_executor,
-                    apply_user_voice_to_proposed_message,
-                    uid,
-                    to=kwargs.get('to'),
-                    text=kwargs['text'],
-                )
-            except Exception as error:
-                logger.warning('Could not apply user voice polish uid=%s error_type=%s', uid, type(error).__name__)
+            kwargs['text'] = await run_blocking(
+                db_executor,
+                partial(apply_user_voice_to_proposed_message, uid, to=kwargs.get('to'), text=kwargs['text']),
+            )
         call_id = str(uuid.uuid4())
         request = {
             'call_id': call_id,
@@ -329,12 +323,7 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
             # Redis for the remainder of its TTL.
             await run_blocking(db_executor, clear_device_tool_inflight, uid, call_id)
         if name == 'search_contacts' and result.get('ok'):
-            try:
-                from utils.llm.user_voice import record_contact_handles_for_user_voice
-
-                record_contact_handles_for_user_voice(uid, kwargs.get('query'), result)
-            except Exception as error:
-                logger.warning('Could not record contact handles uid=%s error_type=%s', uid, type(error).__name__)
+            record_contact_handles_for_user_voice(uid, kwargs.get('query'), result)
         logger.info(
             'Device tool settled uid=%s tool=%s call_id=%s ok=%s elapsed_ms=%d',
             uid,

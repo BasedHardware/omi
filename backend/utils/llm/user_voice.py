@@ -21,11 +21,12 @@ import unicodedata
 from html import escape
 from typing import Any, Callable, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+from redis.exceptions import RedisError
 
 try:
     from database.redis_db import r as redis_client
-except Exception:  # pragma: no cover - defensive import fallback
+except ImportError:  # pragma: no cover - defensive import fallback
     redis_client = None
 
 logger = logging.getLogger(__name__)
@@ -146,35 +147,27 @@ def _load_user_voice_settings(uid: str, *, firestore_client: Any = None) -> Dict
         return dict(_MEMORY_OPT_IN[uid])
 
     if firestore_client is not None:
-        try:
-            col_fn = getattr(firestore_client, 'collection', None)
-            if callable(col_fn):
-                doc_ref = getattr(col_fn('users'), 'document')(uid)
-                snap = getattr(doc_ref, 'get')()
-                doc = snap.to_dict() if getattr(snap, 'exists', False) else {}
-                if isinstance(doc, Mapping):
-                    return dict(doc)
-        except Exception as exc:
-            logger.debug('Could not read user_voice settings uid=%s err=%s', uid, type(exc).__name__)
+        col_fn = getattr(firestore_client, 'collection', None)
+        if callable(col_fn):
+            doc_ref = getattr(col_fn('users'), 'document')(uid)
+            snap = getattr(doc_ref, 'get')()
+            doc = snap.to_dict() if getattr(snap, 'exists', False) else {}
+            if isinstance(doc, Mapping):
+                return dict(doc)
         return {}
 
     if _DISABLED_OPT_IN_UNTIL.get(uid, 0) > time.monotonic():
         return {}
 
-    try:
-        from database import users as users_db
+    from database import users as users_db
 
-        doc = users_db.get_user_profile(uid)
-        data = dict(doc or {})
-        if not data.get('user_voice_enabled') and not any((data.get('user_voice_people') or {}).values()):
-            if len(_DISABLED_OPT_IN_UNTIL) >= _CONTACT_HANDLE_LIMIT:
-                _DISABLED_OPT_IN_UNTIL.pop(next(iter(_DISABLED_OPT_IN_UNTIL)), None)
-            _DISABLED_OPT_IN_UNTIL[uid] = time.monotonic() + _DISABLED_OPT_IN_TTL_SECONDS
-        return data
-    except Exception as exc:
-        logger.debug('Could not read user_voice settings uid=%s err=%s', uid, type(exc).__name__)
-
-    return {}
+    doc = users_db.get_user_profile(uid)
+    data = dict(doc or {})
+    if not data.get('user_voice_enabled') and not any((data.get('user_voice_people') or {}).values()):
+        if len(_DISABLED_OPT_IN_UNTIL) >= _CONTACT_HANDLE_LIMIT:
+            _DISABLED_OPT_IN_UNTIL.pop(next(iter(_DISABLED_OPT_IN_UNTIL)), None)
+        _DISABLED_OPT_IN_UNTIL[uid] = time.monotonic() + _DISABLED_OPT_IN_TTL_SECONDS
+    return data
 
 
 def _load_user_conversations_and_messages(
@@ -184,39 +177,21 @@ def _load_user_conversations_and_messages(
     limit_messages: int = 50,
 ) -> Tuple[List[Any], List[Any], List[Any]]:
     """Fetch stored conversations, chat messages, and people for ``uid`` when not passed explicitly."""
-    conversations: List[Any] = []
-    messages: List[Any] = []
-    people: List[Any] = []
+    from database import chat as chat_db
+    from database import conversations as conversations_db
+    from database import users as users_db
 
-    try:
-        from database import conversations as conversations_db
-
-        loaded_convs = conversations_db.get_conversations(
-            uid=uid,
-            limit=limit_conversations,
-            statuses=['completed'],
-            include_discarded=False,
-        )
-        conversations = list(loaded_convs or [])
-    except Exception as exc:
-        logger.debug('Could not load conversations for user_voice uid=%s err=%s', uid, type(exc).__name__)
-
-    try:
-        from database import chat as chat_db
-
-        loaded_msgs = chat_db.get_messages(uid, limit=limit_messages)
-        messages = list(loaded_msgs or [])
-    except Exception as exc:
-        logger.debug('Could not load chat messages for user_voice uid=%s err=%s', uid, type(exc).__name__)
-
-    try:
-        from database import users as users_db
-
-        loaded_people = users_db.get_people(uid)
-        people = list(loaded_people or [])
-    except Exception as exc:
-        logger.debug('Could not load people for user_voice uid=%s err=%s', uid, type(exc).__name__)
-
+    loaded_convs = conversations_db.get_conversations(
+        uid=uid,
+        limit=limit_conversations,
+        statuses=['completed'],
+        include_discarded=False,
+    )
+    conversations: List[Any] = list(loaded_convs or [])
+    loaded_msgs = chat_db.get_messages(uid, limit=limit_messages)
+    messages: List[Any] = list(loaded_msgs or [])
+    loaded_people = users_db.get_people(uid)
+    people: List[Any] = list(loaded_people or [])
     return conversations, messages, people
 
 
@@ -280,6 +255,15 @@ def set_user_voice_enabled(
     firestore_client: Any = None,
 ) -> None:
     """Set account-level or per-person opt-in for user-voice drafting."""
+    if firestore_client is not None:
+        update: Dict[str, Any] = (
+            {f'user_voice_people.{person_id}': bool(enabled)} if person_id else {'user_voice_enabled': bool(enabled)}
+        )
+        col_fn = getattr(firestore_client, 'collection', None)
+        if callable(col_fn):
+            doc_ref = getattr(col_fn('users'), 'document')(uid)
+            getattr(doc_ref, 'set')(update, merge=True)
+
     entry = dict(_MEMORY_OPT_IN.get(uid) or {})
     if person_id:
         people_map = dict(entry.get('user_voice_people') or {})
@@ -289,20 +273,6 @@ def set_user_voice_enabled(
         entry['user_voice_enabled'] = bool(enabled)
     _MEMORY_OPT_IN[uid] = entry
     _DISABLED_OPT_IN_UNTIL.pop(uid, None)
-
-    if firestore_client is not None:
-        try:
-            update: Dict[str, Any] = (
-                {f'user_voice_people.{person_id}': bool(enabled)}
-                if person_id
-                else {'user_voice_enabled': bool(enabled)}
-            )
-            col_fn = getattr(firestore_client, 'collection', None)
-            if callable(col_fn):
-                doc_ref = getattr(col_fn('users'), 'document')(uid)
-                getattr(doc_ref, 'set')(update, merge=True)
-        except Exception as exc:
-            logger.warning('Could not persist user_voice opt-in uid=%s err=%s', uid, type(exc).__name__)
 
 
 def _remember_contact_handle(uid: str, handle: str, name: str) -> None:
@@ -376,7 +346,7 @@ def cache_user_voice_profile(
         if redis_client is not None:
             try:
                 redis_client.setex(key, ttl_seconds, payload)
-            except Exception as exc:
+            except (RedisError, OSError) as exc:
                 logger.debug('Redis cache write skipped for user_voice key=%s err=%s', key, type(exc).__name__)
 
 
@@ -394,7 +364,7 @@ def get_cached_user_voice_profile(
                 if isinstance(raw, bytes):
                     raw = raw.decode('utf-8')
                 return UserVoiceProfile.model_validate_json(raw)
-        except Exception as exc:
+        except (RedisError, OSError, ValidationError, ValueError, UnicodeDecodeError) as exc:
             logger.debug('Redis cache read skipped for user_voice key=%s err=%s', key, type(exc).__name__)
 
     cached = _MEMORY_CACHE.get(key)
@@ -406,7 +376,7 @@ def get_cached_user_voice_profile(
         return None
     try:
         return UserVoiceProfile.model_validate_json(payload)
-    except Exception:
+    except (ValidationError, ValueError):
         _MEMORY_CACHE.pop(key, None)
         return None
 
@@ -417,7 +387,7 @@ def invalidate_user_voice_profile(uid: str, person_key: str) -> None:
     if redis_client is not None:
         try:
             redis_client.delete(key)
-        except Exception:
+        except (RedisError, OSError):
             pass
 
 
@@ -1197,6 +1167,13 @@ def build_propose_message_voice_prompt_for_turn(
     """Return the ``<user_voice_profile>`` prompt block for ``propose_message`` when opted in."""
     if not _has_any_user_voice_opt_in(uid, user_settings=user_settings, firestore_client=firestore_client):
         return ''
+
+    if person_id or person_name or recipient:
+        for candidate in (person_id, person_name, recipient):
+            if candidate:
+                cached = get_cached_user_voice_profile(uid, candidate)
+                if cached is not None:
+                    return format_user_voice_prompt(cached)
 
     loaded_people: List[Any] = []
     if conversations is None:

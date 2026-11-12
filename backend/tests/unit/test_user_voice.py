@@ -228,7 +228,10 @@ def test_language_and_script_mix_detection():
     assert 'cjk' in profile.languages
 
 
-def test_opt_in_gate_and_seven_day_cache(two_person_fixtures):
+def test_opt_in_gate_and_seven_day_cache(two_person_fixtures, monkeypatch):
+    import database.users as users_db
+
+    monkeypatch.setattr(users_db, 'get_user_profile', lambda _uid: {})
     conversations, messages = two_person_fixtures
     uid = 'user-42'
 
@@ -573,3 +576,35 @@ def test_disabled_opt_in_lookup_is_bounded_and_expiring():
     ):
         user_voice._load_user_voice_settings('disabled')
     assert calls == ['disabled', 'disabled']
+
+
+def test_storage_errors_propagate_instead_of_returning_none():
+    import sys
+    from types import ModuleType
+    import database
+
+    failing_users = ModuleType('database.users')
+
+    def fail_profile(_uid):
+        raise RuntimeError('firestore unavailable')
+
+    failing_users.get_user_profile = fail_profile
+    with (
+        patch.object(database, 'users', failing_users, create=True),
+        patch.dict(sys.modules, {'database.users': failing_users}),
+        pytest.raises(RuntimeError, match='firestore unavailable'),
+    ):
+        get_or_build_user_voice_profile('uid-err', person_name='Alex')
+
+    failing_convs = ModuleType('database.conversations')
+
+    def fail_convs(**_kwargs):
+        raise RuntimeError('conversations down')
+
+    failing_convs.get_conversations = fail_convs
+    with (
+        patch.object(database, 'conversations', failing_convs, create=True),
+        patch.dict(sys.modules, {'database.conversations': failing_convs}),
+        pytest.raises(RuntimeError, match='conversations down'),
+    ):
+        get_or_build_user_voice_profile('uid-err', person_name='Alex', user_settings={'user_voice_enabled': True})
