@@ -1,6 +1,6 @@
 """Real Firestore paging and atomic rollback; requires an isolated loopback emulator."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import os
 from types import SimpleNamespace
 
@@ -127,6 +127,16 @@ def test_real_jobs_age_order_numeric_coverage_frozen_horizon_and_cursor(monkeypa
     from utils.batch_pipeline.record_seal_budget import SweepBudget
     from utils.batch_pipeline.record_seal_repair_cursor import RepairCursor
 
+    now = [datetime(2026, 1, 1, tzinfo=timezone.utc)]
+
+    class DiscoveryClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now[0].astimezone(tz)
+
+    # Freeze only discovery's wall clock, not Firestore or the real sweep budget.
+    # Independent passes legitimately report different ages as time advances.
+    monkeypatch.setattr(cluster, 'datetime', DiscoveryClock)
     monkeypatch.delenv('RECORD_SEAL_REPAIR_AGE_ORDER', raising=False)
     client = firestore.Client(project='demo-seal-age-order', credentials=AnonymousCredentials())
     jobs = client.collection('batch_pipeline_prod_jobs')
@@ -180,9 +190,14 @@ def test_real_jobs_age_order_numeric_coverage_frozen_horizon_and_cursor(monkeypa
                 'enqueued_at': cursor['horizon'].timestamp() + 1,
             }
         )
+        now[0] += timedelta(seconds=2)
         rest, _, end = cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor)
         assert [path for path, _ in first + rest] == expected and end is None
-        assert cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)[0] == first
+        # A resumed pass retains its original horizon and therefore its ages.
+        assert [age for _, age in first + rest] == ages
+        # A new pass retains ordering but computes age from its new horizon.
+        repeated, _, _ = cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)
+        assert repeated == [(path, age + 2) for path, age in first]
         # The legacy cursor can still be written and read, and off returns all
         # the same eligible rows in exact Firestore document-name order.
         monkeypatch.setenv('RECORD_SEAL_REPAIR_AGE_ORDER', 'off')
