@@ -87660,7 +87660,7 @@
     },
     "/v2/tts/synthesize": {
       "post": {
-        "description": "Synthesize MP3 speech through Gemini, with a legacy rollback path.",
+        "description": "Synthesize speech through Gemini (default), with legacy/direct provider paths.",
         "operationId": "tts_synthesize_v2_tts_synthesize_post",
         "parameters": [
           {
@@ -87720,7 +87720,7 @@
                 }
               }
             },
-            "description": "MP3 audio stream."
+            "description": "Audio stream in the requested output_format (MP3 by default)."
           },
           "401": {
             "$ref": "#/components/responses/Error401"
