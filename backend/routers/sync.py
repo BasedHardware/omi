@@ -1611,6 +1611,29 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
+@router.post('/v2/sync-local-files/{job_id}/release-hold')
+def release_sync_upload_hold(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Precise owner-authenticated user-open hint; no priority promotion.
+
+    Generic polling, Home refresh and app foreground never call this operation.
+    The normal per-owner limiter bounds repeated hints; wrong-owner and unknown
+    handles have the same response. The producer kill switch does not gate it.
+    """
+    if not admit_sync_job_poll(uid):
+        raise HTTPException(status_code=429, detail='Sync job polling too frequent; retry later')
+    if not job_id.startswith('bp_') or len(job_id) > 128 or '/' in job_id:
+        raise HTTPException(status_code=404, detail='Sync job not found')
+    from database.batch_pipeline_coalescing import release_for_open
+    from database.batch_pipeline_store import FirestoreStore
+    from utils.sync.stage import current_stage
+
+    try:
+        release_for_open(FirestoreStore(f'batch_pipeline_{current_stage()}'), uid, job_id, time.time())
+    except BatchPrivacyBlocked:
+        return privacy_blocked_response()
+    return {'accepted': True}
+
+
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(
     job_id: str,

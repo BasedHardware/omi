@@ -12719,6 +12719,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v2/sync-local-files/{job_id}/release-hold": {
+    post: {
+      operationId: "release_sync_upload_hold_v2_sync_local_files__job_id__release_hold_post";
+      responses: {
+        "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v2/tts/synthesize": {
     post: {
       operationId: "tts_synthesize_v2_tts_synthesize_post";
@@ -23302,6 +23312,25 @@ export async function get_sync_job_status_v2_sync_local_files__job_id__get(path:
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function release_sync_upload_hold_v2_sync_local_files__job_id__release_hold_post(path: { job_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<unknown> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/sync-local-files/${path.job_id}/release-hold`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_campaign_v2_users_me_referral_campaign_get(header: { authorization?: string }, init?: OmiApiClientInit): Promise<CampaignSnapshotResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/users/me/referral/campaign`;
@@ -23876,4 +23905,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 545 client methods generated.
+// Total: 546 client methods generated.

@@ -45,7 +45,15 @@ from database.legal_holds import settles_unknown_erasure
 
 PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow')
 DISCOVER_TABLES = ('jobs', 'results')
-DEPENDENT_TABLES = ('artifacts', 'projections', 'intakes', 'shadow_jobs')
+DEPENDENT_TABLES = (
+    'artifacts',
+    'projections',
+    'intakes',
+    'shadow_jobs',
+    'coalesce_groups',
+    'coalesce_sources',
+    'coalesce_heads',
+)
 # A unit stops starting rows at either bound; each row is a few bounded RPCs.
 UNIT_MAX_ROWS = 10
 UNIT_BUDGET_SECONDS = 1.5
@@ -210,6 +218,11 @@ def purge_conversation(
                 _erase_artifact(
                     uid, namespace, snapshot, data, remote_delete(authority), fence=authority.fence, client=client
                 )
+                return
+            if table == 'coalesce_groups':
+                from database.batch_pipeline_coalescing import purge_group
+
+                purge_group(client, namespace, snapshot.id, uid, fence=authority.fence)
                 return
             for uri in _references(data):
                 remote_delete(authority)(uid, uri)

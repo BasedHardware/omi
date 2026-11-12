@@ -229,6 +229,7 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
 
 def durable_status(store, uid: str, job_id: str) -> dict | None:
     from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
+    from utils.batch_pipeline.upload_coalescing import member_status
 
     spent_redrives: list[str] = []
 
@@ -239,6 +240,8 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             return None
         if intake['owner_id'] != uid:
             raise HTTPException(status_code=403, detail='Not authorized to view this sync job')
+        if intake.get('coalesce_group'):
+            return {'_coalescing_intake': intake}
         ledger = tx.get('content', f"{uid}/{intake['content_id']}")
         jobs = [tx.get('jobs', segment) for segment in intake['segment_ids']]
         sources = {job.get('conversation_id') for job in jobs if job.get('conversation_id')}
@@ -402,6 +405,8 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         }
 
     status = store.run(read)
+    if status is not None and '_coalescing_intake' in status:
+        return member_status(store, uid, status['_coalescing_intake'], durable_status)
     if spent_redrives:
         # Class 6 counter: same signal as the nightly scan, once per committed poll re-drive.
         from utils.backlog_metrics import record_transition
@@ -442,6 +447,7 @@ async def accept_upload(
     repair_job_id: str | None = None,
     vendor_table: bool = True,
     release: str | None = None,
+    _coalescing_group: dict | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
@@ -462,6 +468,14 @@ async def accept_upload(
             db_executor, lambda: shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
         )
         previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
+        if _coalescing_group is not None:
+            from database.batch_pipeline_coalescing import guard
+
+            await run_blocking(db_executor, store.run, lambda tx: guard(tx, _coalescing_group, time.time()))
+            if _coalescing_group['mode'] == 'individual' and previous.get('job_id') == public_job_id:
+                held = await run_blocking(db_executor, store.run, lambda tx: tx.get('intakes', public_job_id))
+                if held.get('coalesce_group') == _coalescing_group['id'] and not held.get('coalesce_target'):
+                    previous = {}
         refused = await _repair_prior_upload(
             store,
             previous,
@@ -562,8 +576,24 @@ async def accept_upload(
         phase = 'authorization'
         snapshots = {}
         context = await run_blocking(db_executor, batch_artifact_authorize, store, seed, snapshots=snapshots)
+        if _coalescing_group is not None and context.generation != _coalescing_group['privacy_generation']:
+            raise BatchPrivacyBlocked('coalescing_generation_changed')
         user = snapshots['user']
         target = snapshots.get('conversations', {}).get(conversation_id) or {}
+        if _coalescing_group is not None:
+            # Only an initially declared, supported input language is eligible
+            # for a hold. Keep that admission decision immutable across later
+            # preference changes; all privacy/consent fields remain live.
+            pinned_language = _coalescing_group['members'][0]['language']
+            user = {
+                **user,
+                'language': pinned_language,
+                'transcription_preferences': {
+                    **(user.get('transcription_preferences') or {}),
+                    'single_language_mode': True,
+                },
+            }
+            target = {**target, 'language': pinned_language}
         # Privacy authorization already loaded this row. Rollback may drain a
         # native owner here without adding an ownership-discovery read to dark
         # uploads, or accidentally admitting a second GPU job.
@@ -750,6 +780,51 @@ async def accept_upload(
         )
         phase = 'artifact_setup'
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        if (
+            _coalescing_group is None
+            and not previous
+            and adopt is None
+            and not provider
+            and not sampled
+            and not record_origin
+            and decode is None
+            and repair_job_id is None
+            and not release
+            and not usage_period
+            and not serving_for('CAPTURE_COVERAGE_MODE', uid)
+            and language in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
+            and language not in {'', 'multi'}
+            and input_language == language
+        ):
+            from utils.batch_pipeline.upload_coalescing import offer
+
+            held_response = await offer(
+                store,
+                artifacts,
+                seed,
+                context=context,
+                language=language,
+                policy=policy,
+                arguments={
+                    'uid': uid,
+                    'job_id': job_id,
+                    'content_id': content_id,
+                    'paths': paths,
+                    'lane': lane,
+                    'recording_age_seconds': recording_age_seconds,
+                    'source': source,
+                    'should_lock': should_lock,
+                    'conversation_id': conversation_id,
+                    'client_device_id': client_device_id,
+                    'client_platform': client_platform,
+                    'byok_enabled': byok_enabled,
+                    'intake_context': intake_context,
+                },
+            )
+            if held_response is not None:
+                if evidence is not None and held_response.status_code == 202:
+                    evidence.batch_accepted = True
+                return held_response
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
             raise ValueError('serving intake requires a dedicated batch GPU pool')
@@ -961,6 +1036,7 @@ async def accept_upload(
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,
+            coalescing_group=_coalescing_group,
         )
         phase = 'wake'
         for row_id, wake_token in wakes.items():

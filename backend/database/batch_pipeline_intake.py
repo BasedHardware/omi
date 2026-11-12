@@ -35,6 +35,7 @@ def admit(
     enqueue: Callable[..., bool] | None = None,
     adopt: Callable[[dict], bool] | None = None,
     record_barrier: dict | None = None,
+    coalescing_group: dict | None = None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -61,6 +62,10 @@ def admit(
         serialized_binding.pop('partial_record')
 
     def commit(tx):
+        if coalescing_group is not None:
+            from database.batch_pipeline_coalescing import guard
+
+            guard(tx, coalescing_group, now)
         row = {}
         partial_parent = (intake or {}).get('record_partial_parent')
         if binding.record_origin:
@@ -83,6 +88,14 @@ def admit(
                 if restore_pending(row, *(tx.get('jobs', key) for key in obligation_ids)):
                     raise ValueError('registered record target unavailable')
         existing = tx.get('content', content_key)
+        if (
+            coalescing_group is not None
+            and coalescing_group['mode'] == 'individual'
+            and existing.get('job_id') == binding.job_id
+        ):
+            held = tx.get('intakes', binding.job_id)
+            if held.get('coalesce_group') == coalescing_group['id'] and not held.get('coalesce_target'):
+                existing = {}  # Fenced conversion of this exact original receipt.
         if existing.get('dispatch_protocol') == PROTOCOL:
             return {'outcome': 'batch', 'job_id': existing['job_id']}
         if existing.get('status') == 'completed' and is_valid_completed_sync_content_result(existing.get('result')):
