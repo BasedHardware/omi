@@ -425,7 +425,7 @@ jobs:
                   'filter': job + 'textPayload:"daily_summary_user_failed "',
                   'labels': [
                       label('reason', 'generation_error or user_budget_exceeded.'),
-                      label('error_type', 'Exception class name; TimeoutError for budget timeouts.'),
+                      label('error_type', 'Exception class name; empty for budget timeouts.'),
                   ],
                   'labelExtractors': {
                       'reason': 'REGEXP_EXTRACT(textPayload, "reason=([a-z_]+)")',
