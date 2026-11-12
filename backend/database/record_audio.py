@@ -36,6 +36,12 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     @firestore.transactional
     def commit(tx):
         nonlocal admitted, source_revision, failed_at
+        # A transactional retry re-runs this body; reset every observation so a
+        # retry that takes an earlier return path cannot write a SEALED row for
+        # a seal that never committed.
+        admitted = False
+        source_revision = 0
+        failed_at = None
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
         source_revision = pipeline_ledger.source_revision(snapshot)
@@ -55,11 +61,16 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             # missing tail. Repair refreshes the separate partial barrier.
             return None
         if not row.get('record_audio_closed') or row.get('record_seal_refused_at') is not None:
-            patch: dict[str, bool | None] = {'record_audio_closed': True}
+            patch: dict[str, bool | None | float] = {'record_audio_closed': True}
             if row.get('record_seal_refused_at') is not None:
                 patch['record_seal_refused_at'] = None
+            # Admission is a durable per-capture fact, not a per-seal event. A
+            # reconnect re-opens the row; the next seal must not count a second
+            # admission or reset the ledger deadline.
+            if row.get('record_admitted_at') is None:
+                patch['record_admitted_at'] = time.time()
+                admitted = True
             tx.update(ref, patch)
-            admitted = True
         return None
 
     result = run_transactional(client, commit, transient=True)

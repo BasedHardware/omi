@@ -62,11 +62,14 @@ async def test_reconnect_finalize_without_audio_seals_persisted_batch_owner(reco
     assert records.rows[PATH]['record_audio_closed'] is True
     assert records.rows[PATH]['opaque_content'] == 'preserved'
     # The in-flight ledger may join the seal transaction; the conversation row
-    # itself must still be updated, never replaced or recreated.
+    # itself must still be updated, never replaced or recreated. Every
+    # non-conversation set/create must target the sibling ledger collection.
     assert all(
         not any(path == PATH for path, _ in tx.sets) and not any(path == PATH for path, _ in tx.creates)
         for tx in records.transactions
     )
+    non_path_writes = [path for tx in records.transactions for path, _ in (*tx.sets, *tx.creates) if path != PATH]
+    assert all(path[:3] == ('users', 'uid-at', 'pipeline_ledger') for path in non_path_writes)
 
 
 @pytest.mark.parametrize('owner', [None, 'legacy_final_pass_v1'])
@@ -108,6 +111,23 @@ def test_failure_invalidates_prior_seal_and_is_sticky(records):
     assert mark_record_upload_failed('uid-at', 'record', firestore_client=records)
     assert seal_record_audio('uid-at', 'record', firestore_client=records) == 'upload_failed'
     assert records.rows[PATH]['record_upload_failed'] and not records.rows[PATH]['record_audio_closed']
+
+
+def test_reconnect_reseal_admits_once_per_capture(records, monkeypatch):
+    admits = []
+    monkeypatch.setattr(record_audio_db.pipeline_ledger, 'observe_admission', lambda: admits.append(1))
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert set_record_upload_pending('uid-at', 'record', 'token', True, firestore_client=records)
+    assert set_record_upload_pending('uid-at', 'record', 'token', False, firestore_client=records)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert len(admits) == 1
+    assert records.rows[PATH]['record_admitted_at'] is not None
+
+
+def test_mark_record_upload_failed_persists_the_firing_clock(records, monkeypatch):
+    monkeypatch.setattr(record_audio_db.time, 'time', lambda: 1234.5)
+    assert mark_record_upload_failed('uid-at', 'record', firestore_client=records)
+    assert records.rows[PATH]['record_upload_failed_at'] == 1234.5
 
 
 def test_missing_row_never_recreated(records):
@@ -599,7 +619,7 @@ def test_first_refusal_clock_is_stable_and_success_clears_atomically(records, mo
         for _, payload in transaction.updates
         if payload.get('record_audio_closed') is True
     ]
-    assert seal_updates == [{'record_audio_closed': True, 'record_seal_refused_at': None}]
+    assert seal_updates == [{'record_audio_closed': True, 'record_seal_refused_at': None, 'record_admitted_at': 200}]
 
 
 def test_refusal_stamp_kill_switch_preserves_old_no_write_contract(records, monkeypatch):

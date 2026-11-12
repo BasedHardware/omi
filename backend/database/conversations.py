@@ -1330,6 +1330,17 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             owner_ref=user_ref,
             firestore_client=db,
         )
+        # The first durable summary is the Home-ready point. Record the terminal
+        # so a noted row cannot sit past its deadline and page forever. No
+        # explicit revision: the ledger advances from the row's own revision.
+        pipeline_ledger.advance(
+            uid,
+            conversation_data['id'],
+            pipeline_ledger.DONE,
+            source_ref=conversation_ref,
+            owner_ref=user_ref,
+            firestore_client=db,
+        )
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
@@ -1641,6 +1652,17 @@ def persist_processing_result_with_lifecycle(
             pipeline_ledger.NOTED,
             revision=max(1, source_revision),
             reopen=True,
+            source_ref=conversation_ref,
+            owner_ref=user_ref,
+            firestore_client=db,
+        )
+        # The first durable summary is the Home-ready point. Record the terminal
+        # so a noted row cannot sit past its deadline and page forever. No
+        # explicit revision: the ledger advances from the row's own revision.
+        pipeline_ledger.advance(
+            uid,
+            conversation_data['id'],
+            pipeline_ledger.DONE,
             source_ref=conversation_ref,
             owner_ref=user_ref,
             firestore_client=db,
@@ -2640,6 +2662,19 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     return deleted_count
 
 
+def delete_pipeline_ledger_row(uid: str, conversation_id: str) -> None:
+    """Remove the capture's sibling ledger row; a deleted capture must not leave one.
+
+    The ledger is a sibling collection, not a child of the conversation, so the
+    recursive child sweep in :func:`delete_conversation` never reaches it. A
+    nonterminal row would otherwise survive until its max-lifetime TTL.
+    """
+    try:
+        db.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id).delete()
+    except Exception:
+        logger.warning('pipeline ledger cleanup failed conversation=%s', conversation_id)
+
+
 def delete_conversation(uid, conversation_id):
     """Delete a conversation and every subcollection underneath it.
 
@@ -2667,6 +2702,9 @@ def delete_conversation(uid, conversation_id):
         processing_backlog.remove(uid, conversation_id)
     # Corrections are a sibling owner collection, not a child of the capture.
     user_ref.collection('transcript_corrections').document(conversation_id).delete()
+    # The in-flight ledger is also a sibling; the fence stops new writes but
+    # does not remove the row that already exists.
+    delete_pipeline_ledger_row(uid, conversation_id)
     invalidate_people_stats_cache(uid)
     from database.proactivity import purge_source_items
 

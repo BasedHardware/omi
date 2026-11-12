@@ -45,6 +45,9 @@ COLLECTION = 'pipeline_ledger'
 MAX_TRANSITIONS = 16
 DEFAULT_TERMINAL_TTL_SECONDS = 93600  # 26h: 24h exact census + 2h grace.
 MAX_TERMINAL_TTL_SECONDS = 7 * 86400
+# A nonterminal row is refreshed on every transition. The max lifetime is a
+# backstop for a row that never transitions again, not a serving deadline.
+NONTERMINAL_TTL_SECONDS = MAX_TERMINAL_TTL_SECONDS
 DEFAULT_WINDOW_LIMIT = 5000
 
 CAPTURING, SEALED, TRANSCRIBED, NOTED, DONE = 'capturing', 'sealed', 'transcribed', 'noted', 'done'
@@ -151,22 +154,6 @@ def terminal_ttl_seconds() -> int:
     except (TypeError, ValueError):
         value = DEFAULT_TERMINAL_TTL_SECONDS
     return max(DEFAULT_TERMINAL_TTL_SECONDS, min(MAX_TERMINAL_TTL_SECONDS, value))
-
-
-def end_type_for_trigger(trigger: Any, *, quiet_cause: bool = False) -> str:
-    """Map an existing ``ProcessingTrigger`` to a bounded end type.
-
-    Only an observed trigger maps to a known type. A bare disconnect
-    (``capture_end``) or a generic recovery without a proven quiet cause stays
-    ``unknown``. There is no Jev finalizer on main, so ``jev_initiated`` is
-    never inferred.
-    """
-    value = getattr(trigger, 'value', trigger)
-    if value == 'client_finalize':
-        return 'user_initiated'
-    if value == 'server_recovery' and quiet_cause:
-        return 'silence_backstop'
-    return 'unknown'
 
 
 def _epoch(value: Any) -> float | None:
@@ -302,7 +289,11 @@ def plan_advance(
         'episode_done_at': _epoch(_pick(episode_done_at, existing, 'episode_done_at')),
         'transitions': transitions,
         # Firestore TTL policies require a timestamp field, not a numeric epoch.
-        'expires_at': datetime.fromtimestamp(current + terminal_ttl_seconds(), tz=timezone.utc) if terminal else None,
+        # Nonterminal rows get a bounded max lifetime too, refreshed on every
+        # transition, so a stalled row cannot live forever.
+        'expires_at': datetime.fromtimestamp(
+            current + (terminal_ttl_seconds() if terminal else NONTERMINAL_TTL_SECONDS), tz=timezone.utc
+        ),
     }
     return Plan(doc, 'written')
 
@@ -353,7 +344,9 @@ def source_revision(snapshot: Any) -> int:
     """Ordered, persisted source revision from a Firestore snapshot's update_time."""
     update_time = getattr(snapshot, 'update_time', None)
     if isinstance(update_time, datetime):
-        return int(update_time.timestamp() * 1_000_000)
+        # Integer seconds plus microseconds avoids the float64 ulp at 2026
+        # epochs collapsing two distinct commits into one revision.
+        return int(update_time.timestamp()) * 1_000_000 + update_time.microsecond
     return 0
 
 

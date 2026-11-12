@@ -1194,3 +1194,6 @@ def _handle_merge_failure(
 def delete_merged_source(uid: str, conversation_id: str, target_id: str) -> None:
     """Replay the existing idempotent derived/source retraction for a sealed merge."""
     _delete_conversation_and_related_data(uid, conversation_id, merged_into=target_id)
+    # The merge-source delete path also owns the sibling ledger row; the
+    # conversation delete above normally removes it, and this is idempotent.
+    conversations_db.delete_pipeline_ledger_row(uid, conversation_id)

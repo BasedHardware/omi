@@ -11,7 +11,7 @@ import pytest
 
 from database import conversations
 from database import pipeline_ledger
-from database.record_audio import seal_record_audio
+from database.record_audio import seal_record_audio, set_record_upload_pending
 
 pytestmark = pytest.mark.integration
 
@@ -59,7 +59,7 @@ def test_seal_writes_ledger_after_real_state(client, monkeypatch):
     assert doc['stage'] == pipeline_ledger.SEALED
     assert doc['attempt'] == 1
     assert doc['deadline_at'] is not None
-    assert doc['expires_at'] is None
+    assert doc['expires_at'] is not None
     assert doc['schema_version'] == 1
     assert doc['owner_key'] == pipeline_ledger.owner_key(uid)
 
@@ -77,6 +77,21 @@ def test_duplicate_seal_does_not_double_count(client, monkeypatch):
     assert len(doc['transitions']) == 1
 
 
+def test_reconnect_reseal_admits_once_per_capture(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    uid, capture_id = 'u-readmit', 'c-readmit'
+    _seed(client, uid, capture_id)
+
+    assert seal_record_audio(uid, capture_id, firestore_client=client) is None
+    assert set_record_upload_pending(uid, capture_id, 'token', True, firestore_client=client)
+    assert set_record_upload_pending(uid, capture_id, 'token', False, firestore_client=client)
+    assert seal_record_audio(uid, capture_id, firestore_client=client) is None
+
+    doc = _ledger(client, uid, capture_id)
+    assert doc['attempt'] == 1
+    assert [entry['stage'] for entry in doc['transitions']].count(pipeline_ledger.SEALED) == 1
+
+
 def test_upload_failure_writes_a_bounded_terminal(client, monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'on')
     uid, capture_id = 'u-fail', 'c-fail'
@@ -91,6 +106,64 @@ def test_upload_failure_writes_a_bounded_terminal(client, monkeypatch):
     assert doc['end_type'] == 'unknown'
     assert doc['end_at'] is not None
     assert doc['expires_at'] is not None
+
+
+def test_upload_failure_uses_the_persisted_failure_clock(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    uid, capture_id = 'u-failclock', 'c-failclock'
+    _seed(client, uid, capture_id, record_upload_failed=True, record_upload_failed_at=1234.5)
+
+    assert seal_record_audio(uid, capture_id, firestore_client=client) == 'upload_failed'
+
+    doc = _ledger(client, uid, capture_id)
+    assert doc['end_at'] == 1234.5
+
+
+def test_delete_conversation_removes_the_sibling_ledger_row(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    monkeypatch.setattr(conversations, 'db', client)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations, '_delete_conversation_search_index', lambda *_: None)
+    monkeypatch.setattr(conversations, 'stop_quiet_check_for_conversation', lambda *_, **__: None)
+    monkeypatch.setattr(conversations, 'leave_capture_group', lambda *_, **__: None)
+    monkeypatch.setattr(conversations.speaker_auto_enroll, 'retract_conversation', lambda *_, **__: None)
+    monkeypatch.setattr('database.proactivity.purge_source_items', lambda **_: None)
+    uid, capture_id = 'u-delete', 'c-delete'
+    _seed(client, uid, capture_id)
+    assert pipeline_ledger.advance(uid, capture_id, pipeline_ledger.SEALED, now=100, firestore_client=client)
+    assert _ledger(client, uid, capture_id) is not None
+
+    conversations.delete_conversation(uid, capture_id)
+
+    assert _conversation_ref(client, uid, capture_id).get().exists is False
+    assert _ledger(client, uid, capture_id) is None
+
+
+def test_account_erasure_removes_the_pipeline_ledger(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from database import user_data_deletion
+    from database._client import delete_collection_recursive
+
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    uid, capture_id = 'u-erase', 'c-erase'
+    _seed(client, uid, capture_id)
+    assert pipeline_ledger.advance(uid, capture_id, pipeline_ledger.SEALED, now=100, firestore_client=client)
+    assert _ledger(client, uid, capture_id) is not None
+
+    monkeypatch.setattr('database.batch_pipeline_purge.purge_batch_owner', lambda _uid: None)
+    monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: client)
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
+    monkeypatch.setattr(user_data_deletion, 'delete_generic_cache', lambda *_a, **_kw: None)
+    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', lambda *_a, **_kw: None)
+    monkeypatch.setattr(user_data_deletion, 'generation_ref', lambda _ref: SimpleNamespace(delete=lambda: None))
+
+    result = user_data_deletion.purge_user_subtree(
+        uid, client, lambda sub, **kw: delete_collection_recursive(sub, client=client)
+    )
+
+    assert result['status'] == 'ok'
+    assert _ledger(client, uid, capture_id) is None
 
 
 def test_delayed_ledger_write_does_not_recreate_after_source_delete(client, monkeypatch):
@@ -182,9 +255,10 @@ def test_notes_writes_noted_after_real_state(client, monkeypatch):
     row = _conversation_ref(client, uid, capture_id).get().to_dict()
     assert row['summary_completed_at']
     doc = _ledger(client, uid, capture_id)
-    assert doc['stage'] == pipeline_ledger.NOTED
-    assert doc['attempt'] == 1
+    assert doc['stage'] == pipeline_ledger.DONE
+    assert doc['attempt'] == 2
     assert doc['home_ready_at'] is not None
+    assert [entry['stage'] for entry in doc['transitions']] == [pipeline_ledger.NOTED, pipeline_ledger.DONE]
 
 
 def test_disabled_ledger_leaves_real_state_unchanged(client, monkeypatch):
