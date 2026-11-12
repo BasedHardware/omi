@@ -1,15 +1,32 @@
 """Metadata-only live overlap admission; never treats a near-time stub as proof."""
 
+import math
 import os
 from datetime import timedelta
 
-from utils.conversations.recorded_time import conversation_span, segment_span
+from utils.conversations.recorded_time import conversation_span, segment_span, segment_span_is_exact
 
 from config import refactor_modes
 from utils.capture.identity import compatible_keys, same_explicit_key
 from utils.capture.shadow import compare
 
 from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
+
+# A tolerance beyond a day cannot describe a plausible capture window, so it is
+# malformed rather than merely strict. Keeping the bound also keeps the
+# datetime arithmetic below inside range.
+MAX_TOLERANCE_SECONDS = 86_400.0
+
+
+def _tolerance(tolerance_seconds: float) -> timedelta:
+    """A malformed tolerance resolves strict (0) instead of raising or loosening."""
+    try:
+        value = float(tolerance_seconds)
+    except (TypeError, ValueError):
+        return timedelta(0)
+    if not math.isfinite(value) or value < 0 or value > MAX_TOLERANCE_SECONDS:
+        return timedelta(0)
+    return timedelta(seconds=min(value, MAX_TOLERANCE_SECONDS))
 
 
 def live_overlap_enabled() -> bool:
@@ -52,6 +69,11 @@ def span_contained(donor: dict, target: dict, *, tolerance_seconds: float = 0.0)
     not proof the target captured the donor's speech, so it refuses rather than
     authorizes the merge and the donor stays standalone.
 
+    The donor must also carry no segment that proves no position. An
+    ``unplaced`` segment has no proven offset, so it cannot be shown to be
+    inside the target; the donor's extent would then cover only part of its
+    speech and absorbing it would lose the rest.
+
     Tolerance tightens the target window and never loosens it, so it can only
     refuse more. Shrinking the donor span is never acceptable: a donor holding
     speech just outside the target would then pass and its audio would be lost.
@@ -60,11 +82,15 @@ def span_contained(donor: dict, target: dict, *, tolerance_seconds: float = 0.0)
     target_span = segment_span(target)
     if donor_span is None or target_span is None:
         return False
-    tolerance = timedelta(seconds=max(0.0, tolerance_seconds))
+    if not segment_span_is_exact(donor):
+        return False
+    tolerance = _tolerance(tolerance_seconds)
     donor_start, donor_end = donor_span
     target_start, target_end = target_span
-    if target_end - tolerance < target_start + tolerance:
-        return False
+    # Clamp to half the target width before subtracting: a wider tolerance
+    # inverts the window and refuses anyway, and the clamp keeps the arithmetic
+    # inside datetime range.
+    tolerance = min(tolerance, (target_end - target_start) / 2)
     return donor_start >= target_start + tolerance and donor_end <= target_end - tolerance
 
 

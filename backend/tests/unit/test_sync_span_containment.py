@@ -17,12 +17,10 @@ from utils.sync.live_overlap import span_contained
 ORIGIN = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
 # L7a ships no config module; L7b wires the configured tolerance. The matrix
-# pins zero, the reviewed 0.5 s, and the configured value so a stricter setting
-# can only refuse more.
+# pins zero and the reviewed 0.5 s so a stricter setting can only refuse more.
 TOLERANCES = {
     'zero': 0.0,
     'reviewed': 0.5,
-    'configured': 0.5,
 }
 
 
@@ -81,11 +79,39 @@ def test_donor_strictly_inside_is_accepted(tolerance):
     assert span_contained(donor, target(), tolerance_seconds=tolerance)
 
 
-def test_tolerance_that_empties_the_target_interval_refuses():
-    # A 0.4 s target cannot survive a 0.5 s inward tolerance on both sides.
+def test_tolerance_wider_than_the_target_interval_refuses():
+    # A 0.4 s target cannot survive a 0.5 s inward tolerance on both sides. The
+    # tightened window inverts, so the final comparison cannot hold; this is a
+    # shape case, not coverage of a separate guard.
     narrow = row(placed(0.0, 0.4))
     donor = row(placed(0.1, 0.3))
     assert not span_contained(donor, narrow, tolerance_seconds=0.5)
+
+
+@pytest.mark.parametrize('tolerance', [float('inf'), float('-inf'), float('nan'), 1e12, -1.0])
+def test_malformed_tolerance_resolves_strict_without_raising(tolerance):
+    # A malformed config value must refuse, not crash the caller. Resolving to
+    # zero keeps the equal-boundary donor accepted and the outside donor refused.
+    assert span_contained(row(placed(0.0, 20.0)), target(), tolerance_seconds=tolerance)
+    assert not span_contained(row(placed(-0.4, 10.0)), target(), tolerance_seconds=tolerance)
+
+
+def test_tolerance_near_datetime_max_does_not_overflow():
+    # The clamp to half the target width keeps the subtraction in range even
+    # when the target ends at the datetime ceiling.
+    near_max = datetime.max.replace(tzinfo=timezone.utc) - timedelta(seconds=10)
+    target_row = row(placed(0.0, 10.0), started_at=near_max)
+    donor = row(placed(1.0, 9.0), started_at=near_max)
+    assert span_contained(donor, target_row, tolerance_seconds=1e12)
+    assert not span_contained(donor, target_row, tolerance_seconds=5.0)
+
+
+def test_donor_with_unplaced_speech_is_refused():
+    # The placed extent is inside the target, but the unplaced segment has no
+    # proven position, so the donor's whole speech cannot be shown contained.
+    donor = row(placed(0.0, 20.0), placed(90.0, 95.0, alignment='unplaced'))
+    assert segment_span(donor) == (ORIGIN, ORIGIN + timedelta(seconds=20))
+    assert not span_contained(donor, target(), tolerance_seconds=0.0)
 
 
 def test_wall_clock_envelope_only_is_refused():
