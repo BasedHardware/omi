@@ -263,7 +263,7 @@ FIELD_SITES = {
         (
             'ProjectionSession.persist',
             'state',
-            "'ready' if superseded else 'persisted'",
+            "'ready' if superseded or silence else 'persisted'",
             (
                 'audio_required',
                 'conversation_id',
