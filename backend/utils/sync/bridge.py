@@ -41,6 +41,7 @@ from utils.conversations.merge_conversations import copy_sync_bridge_audio, retr
 from utils.metrics import OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL, OMI_SYNC_BRIDGE_RETRACTION_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.observability.reasons import ContainedDonorShadowOutcome, ReasonFamily, reason_label
+from utils.sync.assignment import auto_mergeable
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
     SyncAssignmentConflictReason,
@@ -170,6 +171,11 @@ def _shadow_contained_donor(uid: str, source: dict, target_id: str) -> None:
             outcome = ContainedDonorShadowOutcome.OPEN_TARGET
         elif choose_live_overlap([target], source, uid=uid, record_comparison=False) != target_id:
             outcome = ContainedDonorShadowOutcome.NO_OVERLAP
+        elif not auto_mergeable(source) or source.get('manual_speaker_assignments'):
+            # The transaction refuses a user-managed anchor or a manual speaker
+            # receipt before planning the merge. Counting it as would_absorb
+            # would overstate the shadow-to-on ramp, so classify it separately.
+            outcome = ContainedDonorShadowOutcome.DONOR_INELIGIBLE
         elif segment_span(source) is None or segment_span(target) is None:
             outcome = ContainedDonorShadowOutcome.NO_SEGMENT_SPAN
         elif not segment_span_is_exact(source):

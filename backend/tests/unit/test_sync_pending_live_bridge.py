@@ -1,7 +1,7 @@
 """A live overlap hint holds standalone visibility until proof, keep or expiry."""
 
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import re
@@ -26,9 +26,13 @@ from database import conversations as db
 from tests.unit.test_sync_live_overlap import assign, live_row, seeded
 from tests.unit.test_sync_cross_job_assignment import chunk
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing, _rows_from_store
+from utils.capture.shadow import SHADOW
+from utils.conversations.recorded_time import conversation_span, segment_span
+from utils.metrics import OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL
 from utils.sync import bridge, bridge_pending
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.sync.intake_completion import complete_sync_intake
+from utils.sync.live_overlap import span_contained
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -302,7 +306,6 @@ def test_off_refuses_contained_processed_donor_before_any_target_read(monkeypatc
 
 
 def test_shadow_does_not_emit_capture_coverage_comparisons(monkeypatch, caplog, pending):
-    from utils.capture.shadow import SHADOW
 
     monkeypatch.setenv(ENV, 'shadow')
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
@@ -328,7 +331,6 @@ def test_shadow_does_not_emit_capture_coverage_comparisons(monkeypatch, caplog, 
 
 
 def test_shadow_target_read_failure_still_refuses(monkeypatch, caplog, pending):
-    from utils.metrics import OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL
 
     monkeypatch.setenv(ENV, 'shadow')
     store, _, _, _ = pending
@@ -366,7 +368,6 @@ def test_off_is_byte_identical_to_the_pre_change_refusal(monkeypatch, pending):
 
 
 def test_shadow_counts_and_never_merges(monkeypatch, caplog, pending):
-    from utils.metrics import OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL
 
     monkeypatch.setenv(ENV, 'shadow')
     store, _, _, _ = pending
@@ -434,6 +435,19 @@ def test_shadow_outcome_marks_a_wall_clock_only_span(monkeypatch, caplog, pendin
     assert 'outcome=no_segment_span' in caplog.text
 
 
+def test_shadow_outcome_marks_a_user_managed_donor_ineligible(monkeypatch, caplog, pending):
+    monkeypatch.setenv(ENV, 'shadow')
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    # A manual speaker receipt makes the transaction refuse the anchor before
+    # planning the merge, so shadow must not count it as would_absorb.
+    source['manual_speaker_assignments'] = {'0': 'person-1'}
+    _finish_target(store, end_seconds=20.0)
+    with caplog.at_level('INFO', logger='utils.sync.bridge'):
+        assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+    assert 'outcome=donor_ineligible' in caplog.text
+
+
 def test_shadow_outcome_marks_unplaced_donor_speech(monkeypatch, caplog, pending):
     monkeypatch.setenv(ENV, 'shadow')
     store, _, _, _ = pending
@@ -457,8 +471,6 @@ def test_shadow_outcome_marks_unplaced_donor_speech(monkeypatch, caplog, pending
 
 @pytest.mark.parametrize('recorded_segments', [True, False])
 def test_contained_donor_requires_a_segment_span_on_both_sides(monkeypatch, pending, recorded_segments):
-    from utils.conversations.recorded_time import conversation_span, segment_span
-    from utils.sync.live_overlap import span_contained
 
     monkeypatch.setenv(ENV, 'on')
     store, _, _, _ = pending
@@ -511,11 +523,28 @@ def test_contained_donor_strictly_inside_merges_in_on_mode(monkeypatch, pending)
     assert donor['deleted'] and donor['sync_merged_into'] == 'live'
 
 
+def test_repeat_only_contained_donor_still_commits_the_redirect_in_on_mode(monkeypatch, pending):
+    monkeypatch.setenv(ENV, 'on')
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'u')
+    store, _, _, _ = pending
+    source = _mark_processed(store)
+    # The donor repeats the target's speech exactly, so live dedupe drops every
+    # incoming line. The repeat-only shortcut must not skip the donor redirect
+    # this call explicitly requested.
+    source['transcript_segments'][0]['speaker_id_scope'] = 'sync:wal'
+    target = _finish_target(store, end_seconds=9.5)
+    target['started_at'] = source['started_at']
+    target['transcript_segments'][0]['text'] = source['transcript_segments'][0]['text']
+    target['transcript_segments'][0]['speaker_id_scope'] = 'sync:wal'
+    assert bridge.finish_sync_bridges('u', 'wal') == 'live'
+    donor = store.rows[('users', 'u', 'conversations', 'wal')]
+    assert donor['deleted'] and donor['sync_merged_into'] == 'live'
+    assert 'wal' in store.rows[('users', 'u', 'conversations', 'live')]['sync_merged_from']
+
+
 def test_identical_boundary_donor_passes_the_configured_tolerance():
-    from datetime import datetime, timezone
-
-    from utils.sync.live_overlap import span_contained
-
     origin = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
     donor = {'started_at': origin, 'transcript_segments': [{'start': 0.0, 'end': 9.5}]}
     target = {'started_at': origin, 'transcript_segments': [{'start': 0.0, 'end': 9.5}]}

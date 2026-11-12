@@ -319,6 +319,7 @@ class ContainedDonorShadowOutcome(StrEnum):
     NO_OVERLAP = 'no_overlap'
     NO_SEGMENT_SPAN = 'no_segment_span'
     UNPLACED_DONOR = 'unplaced_donor'
+    DONOR_INELIGIBLE = 'donor_ineligible'
     ERROR = 'error'
 
 

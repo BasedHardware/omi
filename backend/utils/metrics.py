@@ -1123,7 +1123,7 @@ OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL = Counter(
     (
         'Shadow-mode outcomes for a processed sync donor the contained-donor bridge merge would consider. '
         'Labels are a closed set: '
-        'outcome=would_absorb|partial_overlap|no_segment_span|unplaced_donor|open_target|no_overlap|error. '
+        'outcome=would_absorb|partial_overlap|no_segment_span|unplaced_donor|donor_ineligible|open_target|no_overlap|error. '
         'Never labeled by uid, conversation id, or content.'
     ),
     ['outcome'],

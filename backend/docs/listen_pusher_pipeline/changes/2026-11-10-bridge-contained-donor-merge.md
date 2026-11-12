@@ -18,7 +18,11 @@ only blocker is that fence.
   or content. It also emits no capture-coverage `live_bind` comparison, so it
   cannot inject samples into that rollout's evidence, and a target read that
   raises counts the bounded `outcome=error` and still refuses instead of
-  propagating. This is the plan's dry-run count.
+  propagating. A donor the transaction would refuse before planning (a
+  user-managed anchor or a manual speaker receipt) counts
+  `outcome=donor_ineligible`, and a donor carrying unplaced speech counts
+  `outcome=unplaced_donor`, so the dry-run count does not overstate eligible
+  merges. This is the plan's dry-run count.
 - `on` lets the bridge absorb such a donor. Containment is proven by placed
   transcript-segment spans on both sides (`segment_span`); a row whose only span
   is the `finished_at` wall-clock envelope never authorizes it, and that donor
@@ -42,6 +46,11 @@ the donor visible. The existing donor retraction path then discards the donor's
 standalone notes, copies its audio, and regenerates notes from the merged
 transcript.
 
+A contained donor whose speech is an exact repeat of the live target is still
+absorbed: the repeat-only fast path in `assign_in_transaction` is skipped when
+this call requested donor absorption, so the donor redirect is committed instead
+of being acknowledged as a no-op.
+
 Only the documented lowercase words select a mode (`on`, `true`, `yes`,
 `enabled`, `shadow`). An absent, blank, unknown, misspelled or numeric value
 resolves `off` in every capture-coverage mode, so a typo disables the merge and
@@ -59,11 +68,13 @@ contained donor merging in `on`, a legacy donor whose only span is the
 `finished_at` envelope refused, partial overlap refused, an open target refused,
 a donor with a 0.1 s overhang past the target refused, an identical-boundary
 donor accepted at the configured `0.0` tolerance, a donor carrying unplaced
-speech refused, the `off` refusal, the `shadow` dry-run that never assigns or
-retracts and emits no capture-coverage comparison, a shadow target read failure
-that still refuses with `outcome=error`, the mode parser's fail-closed values,
-and the surface agreement between the parser, the registry, the runtime-env
-manifest and the deployment-setting classification.
+speech refused, a user-managed donor counted `donor_ineligible` in shadow, a
+repeat-only contained donor still committing its redirect, the `off` refusal,
+the `shadow` dry-run that never assigns or retracts and emits no capture-coverage
+comparison, a shadow target read failure that still refuses with
+`outcome=error`, the mode parser's fail-closed values, and the surface agreement
+between the parser, the registry, the runtime-env manifest and the
+deployment-setting classification.
 `tests/unit/test_sync_live_overlap.py` and
 `tests/unit/test_sync_cross_job_assignment.py` retain the ordinary assignment
 and overlap contracts.

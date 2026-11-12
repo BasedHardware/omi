@@ -1186,10 +1186,13 @@ def assign_in_transaction(
         and not chosen.created
         and chosen.canonical == target_id
         and target is not None
+        and not (absorb_contained_processed_donor and chosen.donor_updates)
     ):
         # Every incoming segment repeated speech already on the explicit live
         # target. Acknowledge without any writes; a sync-scoped retry still
-        # completes the enrichment the earlier commit owed.
+        # completes the enrichment the earlier commit owed. A requested
+        # contained-donor absorption is the exception: the donor redirect is a
+        # write this call owes, so the shortcut must not skip it.
         no_op = decode(chosen.matched[chosen.canonical])
         no_op['id'] = chosen.canonical
         no_op['sync_live_target'] = chosen.result['sync_live_target']
