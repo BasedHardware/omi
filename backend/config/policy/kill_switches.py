@@ -23,6 +23,7 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED': True,
+    'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED': False,
     'BATCH_PIPELINE_OWNER_DRAIN_ENABLED': True,
     'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP': True,
     'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': False,
@@ -38,8 +39,23 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED': True,
     'BATCH_PIPELINE_HELD_PARTIAL_ENABLED': True,
+    # Backlog state machine (config/backlog_state_machine.py). Defaults follow the
+    # lead2 rule: ON only where the change just cuts wasted work or retries, OFF
+    # where it changes custody, settle or expiry semantics.
+    'CAPTURE_RETRY_CAP_ENFORCED': False,
+    'BATCH_HELD_REDRIVE_COUNTER_ENABLED': True,
+    'BATCH_HELD_REDRIVE_BUDGET_ENABLED': False,
 }
 DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
+# Trimmed, case-insensitive true means on; never use the capture-coverage
+# serve-mode parser, which treats an unset default-off switch as on.
+BACKLOG_STATE_MACHINE_SWITCHES = frozenset(
+    {
+        'CAPTURE_RETRY_CAP_ENFORCED',
+        'BATCH_HELD_REDRIVE_COUNTER_ENABLED',
+        'BATCH_HELD_REDRIVE_BUDGET_ENABLED',
+    }
+)
 logger = logging.getLogger(__name__)
 
 
@@ -47,6 +63,16 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     if name not in KILL_SWITCHES:
         raise ValueError('unregistered live batch switch')
     env = os.environ if flags is None else flags
+    if name in BACKLOG_STATE_MACHINE_SWITCHES:
+        # Match the other true-only switches: trim and case-fold; unknown
+        # values fail closed and unset uses the registered default.
+        raw = env.get(name)
+        enabled = KILL_SWITCHES[name] if raw is None else raw.strip().lower() == 'true'
+        if log:
+            logger.info(
+                'event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled
+            )
+        return enabled
     value = env.get(name, str(KILL_SWITCHES[name])).strip().lower()
     if name in {
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
@@ -73,6 +99,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
         'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',
+        'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED',
         'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED',
         'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED',
         'BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED',

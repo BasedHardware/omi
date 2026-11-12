@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "FC-home-processing-on-past-days",
+  "violated_contract": "Home processing rows belong only to the viewer's current local day. Older pending work must stay reachable from Activity, and completion must restore the normal row on its recorded day. Failed conversations belong only in Activity with retry, never on Home (David relays 9e09f1/714b03, mobile/web/macOS). Notes failures with kept tasks/events must remain reachable through server attention items (relay-cl1 94a9ed / David 4ddd04).",
+  "canonical_prevention": "Keep server classification independent of timezone. Apply a local-day boundary to both grouped Home rows and local processing insertions, and use the same projection to populate Activity from filter-independent pending work and loaded conversations. Finished rows override stale pending snapshots. Contract tests exercise midnight, rollback, episode waits, completion and conversation links. Filter failed status/projection in every Home insertion path and episode membership; Activity merges pending home_step and loaded rows, deduplicates ledger items and preserves failed retry actions. The kill switch restores previous placement. Consume the notes-only ledger kind with a per-item retry, never infer attention from noise, keep unknown kinds display-only, and deduplicate ledger/projected rows by conversation. Accepted retries suppress stale reads; errors and account fences preserve reachability and kept outputs.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/processing_today_test.dart",
+    "app/test/widgets/processing_today_render_test.dart",
+    "backend/tests/unit/test_pending_work.py",
+    "web/app/src/components/conversations/__tests__/ConversationSplitView.starToggle.test.tsx",
+    "desktop/macos/Desktop/Tests/HomeFailurePlacementTests.swift",
+    "app/test/services/notes_attention_test.dart",
+    "web/app/src/hooks/__tests__/useAttentionItems.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/conversations/home_rows.dart",
+    "app/lib/pages/activity/",
+    "backend/database/processing_attention.py",
+    "web/app/src/components/conversations/",
+    "desktop/macos/Desktop/Sources/MainWindow/Conversations/HomeFailurePlacement.swift"
+  ],
+  "status": "open"
+}

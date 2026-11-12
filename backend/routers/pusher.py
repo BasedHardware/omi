@@ -965,11 +965,21 @@ async def _run_websocket_util_trigger(
                 batch['data'] = bytearray()
                 return
             conv_id = batch['conversation_id']
+            if not await record_barrier.renew_recording(conv_id):
+                # Metadata refusal is not a storage attempt. Retain the batch
+                # and its audio-budget reservation without spending retries.
+                batch['retry_at'] = time.monotonic() + PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL
+                ready_batches.append(batch)
+                if not websocket_active:
+                    # The shutdown event is already set; pace the bounded drain.
+                    await wait_for_event(asyncio.Event(), PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+                return
             chunk_data = bytes(batch['data'])
             del batch['data']  # free bytearray immediately — chunk_data holds the bytes copy
             timestamp = batch['timestamp']
             retries = batch.get('retries', 0)
             try:
+                late_append = conv_id in record_barrier.late_appends
                 upload_chunk: Dict[str, Any] = {'data': chunk_data, 'timestamp': timestamp}
                 if batch.get('span'):
                     upload_chunk['span'] = {**batch['span'], 'start': timestamp}
@@ -996,6 +1006,8 @@ async def _run_websocket_util_trigger(
                     sample_rate=sample_rate,
                     reconcile_prefix=reconcile_prefix,
                 )
+                if uploaded_paths:
+                    record_barrier.append_committed(conv_id, observed=late_append)
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if batch.get('span') is not None else 'without_spans'
                 ).inc()
@@ -1326,14 +1338,20 @@ async def _run_websocket_util_trigger(
             nonlocal durable_tail_has_receipt
             nonlocal durable_commit_unresolved
             durable_tail_has_receipt = False
+            late_append = False
 
             def committed():
                 nonlocal durable_tail_has_receipt
                 durable_tail_has_receipt = True
+                record_barrier.append_committed(window.conversation_id, observed=late_append)
                 refused_windows.popleft()
                 window.payload.clear()
                 window.frames.clear()
 
+            if window.conversation_id and window.payload:
+                if not await record_barrier.renew_recording(window.conversation_id):
+                    return None  # Keep this window and its WAL unacknowledged.
+                late_append = window.conversation_id in record_barrier.late_appends
             try:
                 return await _commit_durable_audio_window(
                     uid=uid,
@@ -1803,6 +1821,7 @@ async def _run_websocket_util_trigger(
                     if current_conversation_id:
                         with observe_work('record_begin'):
                             await record_barrier.begin_recording(current_conversation_id)
+                            await record_barrier.renew_recording(current_conversation_id)
                     if private_cloud_chunk_start_time is None:
                         # Use timestamp from first buffer of this 5-second chunk
                         private_cloud_chunk_start_time = buffer_start_timestamp

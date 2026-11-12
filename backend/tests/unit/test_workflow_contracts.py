@@ -134,6 +134,23 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         assert selected == all_tests
 
 
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend/charts/backend-secrets/templates/metrics-scrape-token.yaml',
+        'backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml',
+        'backend/charts/pusher/templates/podmonitoring.yaml',
+        'backend/charts/backend-listen/templates/collector-rbac.yaml',
+    ],
+)
+def test_monitoring_sources_select_scrape_auth_contracts(selector_and_all_tests, source):
+    selector, all_tests = selector_and_all_tests
+    selected, reason = selector.tests_for_changed_paths([source], all_tests)
+    assert 'tests/unit/test_serving_podmonitoring_chart.py' in selected
+    assert 'tests/unit/test_backend_secrets_chart.py' in selected
+    assert reason == 'selected backend unit tests from changed paths and workflow contracts'
+
+
 def test_workflow_contract_directory_glob_selects_nested_chart_test(selector_and_all_tests):
     selector, all_tests = selector_and_all_tests
 
@@ -1517,6 +1534,7 @@ def test_firestore_gate_policy_rejects_orphaned_readiness_dependency():
 
 _LANE_SOURCE_BINDINGS = {
     'gcp_backend.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
+    'gcp_diarizer.yml': '${{ steps.vars.outputs.source_sha }}',
     'gcp_backend_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'desktop_backend_prod.yml': '${{ steps.admitted-source.outputs.source_sha }}',
     'desktop_backend_auto_dev.yml': '${{ steps.candidate-identity.outputs.source_sha }}',

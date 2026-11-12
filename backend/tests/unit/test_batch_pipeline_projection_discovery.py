@@ -143,3 +143,32 @@ def test_existing_followup_seed_is_preserved(monkeypatch):
     scan.after = (1200.0, '')
     assert scan.next() == []
     assert query.calls == [((1200.0,), 100)]
+
+
+def test_due_before_mode_resets_the_cursor_and_seeds_on_the_clock(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', raising=False)
+    monkeypatch.setattr(projection_discovery, 'projection_discovery_stripe', lambda: 2048)
+    monkeypatch.setattr(projection_discovery.time, 'time', lambda: 1256.0)
+    store = Mock()
+    store.projection_page.side_effect = [
+        (['head'], (1000.0, 'head')),
+        (['a', 'b'], (1060.0, 5.0, 'b')),
+        (['head'], (1000.0, 'head')),
+        (['legacy'], None),
+    ]
+    scan = ProjectionDiscovery(store, states=('persisted', 'ready'))
+    assert scan.next(limit=2, due_before=1060.0) == ['a', 'b']
+    assert scan.due_mode is True
+    assert scan.after == (1060.0, 5.0, 'b')
+    # The due ordering seeds at the stripe offset on the clock, not on wall time.
+    assert store.projection_page.call_args_list[0].kwargs == {
+        'limit': 1,
+        'after': None,
+        'states': ('persisted', 'ready'),
+        'due_before': 1060.0,
+    }
+    assert store.projection_page.call_args_list[1].kwargs['after'] == (1030.0,)
+    # A cursor from the due ordering is not reused in the legacy ordering.
+    assert scan.next(limit=2) == ['legacy']
+    assert scan.due_mode is False and scan.after is None

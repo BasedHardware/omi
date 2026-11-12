@@ -32,6 +32,18 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
+# Terminal exclusion keeps future nonterminal strings visible; the census gates missing/null state.
+MERGE_POLL_TERMINAL_STATES = tuple(
+    'committed dead quarantined privacy_blocked partial_retired provider_superseded'.split()
+)
+
+
+def held_poll_skip_enabled() -> bool:
+    from config.refactor_modes import default_off
+
+    return default_off('BATCH_HELD_POLL_SKIP_ENABLED')
+
+
 # A full grace window is also given to pre-field rows on first observation.
 HELD_DEAD_LETTER_SECONDS = 7 * 86400
 RECORD_DEAD_LETTER_SECONDS = 14 * 86400
@@ -553,6 +565,31 @@ def projection_striping_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
+
+
+PROJECTION_FINISH_BACKOFF_SECONDS = (60.0, 300.0, 900.0)
+
+
+def projection_finish_backoff_enabled() -> bool:
+    """Default off; only ``true`` defers an unchanged persisted/ready finish walk.
+
+    Dark read lever: with this off the finish page keeps its exact shape and no
+    result field is written. With it on, a finish walk that changed nothing
+    writes a durable next-attempt clock on the row and the page skips rows whose
+    clock has not passed, so a replay of already-projected work costs no reads.
+    A state change clears the clock in the same transaction, so no obligation
+    waits on it. Rollback is this one switch; the field is additive and unused
+    when off, so no backfill is needed.
+    """
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PROJECTION_FINISH_BACKOFF_ENABLED')
+
+
+def projection_finish_backoff_delay(step: int) -> float:
+    """60 s, then 300 s, then 900 s for a repeatedly unchanged row; capped."""
+    index = max(0, min(int(step), len(PROJECTION_FINISH_BACKOFF_SECONDS) - 1))
+    return PROJECTION_FINISH_BACKOFF_SECONDS[index]
 
 
 PROJECTION_DISCOVERY_STRIPES = 4096

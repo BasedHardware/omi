@@ -10,7 +10,7 @@ SPLIT = {r['uid']: r for p in (MON / 'alerts').glob('*.json') for r in json.load
 COMBINED = {r['uid']: r for r in json.loads((MON / 'alert-rules.json').read_text())}
 PAUSED = {
     'omi-pipeline-held-row-age': ('$A > 21600', '10m', '21600s'),
-    'omi-batch-unit-unpublished-2h': ('($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)', '5m', '7200s'),
+    'omi-batch-unit-unpublished-2h': ('($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120)', '5m', '7200s'),
     'omi-record-pending-dwell': (7200, '10m', '7200s'),
     'omi-enrichment-fresh-dwell': (3600, '10m', '3600s'),
     'omi-pipeline-projection-drain-stall': ('($A > 0.5 || $B < 10) && $C > 0', '15m', '10 rows/s'),
