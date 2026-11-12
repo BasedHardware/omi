@@ -879,6 +879,7 @@ for _app_review_platform in ('ios', 'android'):
         AppReviewConfigReason.RECONCILIATION_REPAIR,
         AppReviewConfigReason.LIVE_HIDE_CLEARED,
         AppReviewConfigReason.SUBMISSION_TOKEN_UNAVAILABLE,
+        AppReviewConfigReason.SUBMISSION_TOKEN_REJECTED,
     ):
         OMI_APP_REVIEW_CONFIG_ALERT_TOTAL.labels(
             platform=_app_review_platform,

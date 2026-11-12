@@ -7,6 +7,7 @@ import copy
 import json
 import math
 import os
+import subprocess
 import sys
 from pathlib import Path
 import urllib.parse
@@ -38,8 +39,32 @@ def github_json(path: str) -> object:
         return json.load(response)
 
 
-def require_quiesced_writers(fetch=github_json) -> None:
-    """Opening even a read edit invalidates another edit by this API user."""
+def scheduler_job_json() -> object:
+    result = subprocess.run(
+        [
+            "gcloud",
+            "scheduler",
+            "jobs",
+            "describe",
+            "app-review-config-sweep-hourly",
+            "--location=us-central1",
+            "--project=based-hardware",
+            "--format=json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode:
+        raise BrakeError("cannot verify app-review-config-sweep-hourly is paused")
+    try:
+        return json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        raise BrakeError("cannot verify app-review-config-sweep-hourly is paused") from None
+
+
+def require_quiesced_writers(fetch=github_json, scheduler_fetch=scheduler_job_json) -> None:
+    """Require the scheduled sweep and both GitHub Play writers to be paused."""
     try:
         for workflow in ("mobile_rollout_watch.yml", "mobile_daily_train.yml"):
             metadata = fetch(f"actions/workflows/{workflow}")
@@ -50,6 +75,9 @@ def require_quiesced_writers(fetch=github_json) -> None:
                 raise BrakeError("cannot verify Play writer workflows are drained")
             if any(not isinstance(run, dict) or run.get("status") != "completed" for run in payload["workflow_runs"]):
                 raise BrakeError("wait for all mobile Play writer workflow runs to finish before using the brake")
+        scheduler = scheduler_fetch()
+        if not isinstance(scheduler, dict) or scheduler.get("state") != "PAUSED":
+            raise BrakeError("pause app-review-config-sweep-hourly before using the brake")
     except BrakeError:
         raise
     except Exception as exc:

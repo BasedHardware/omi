@@ -26,6 +26,43 @@ class InputTests(unittest.TestCase):
     def test_play_commits_are_held_for_console_review_by_default(self):
         self.assertTrue(promote.CHANGES_NOT_SENT_FOR_REVIEW)
 
+    def test_play_edit_retries_concurrent_edit_conflicts_and_reports_persistent_failure(self):
+        class Conflict(Exception):
+            def __init__(self):
+                self.resp = Mock(status=409)
+                super().__init__("HTTP 409")
+
+        client = Mock()
+        execute = client.edits.return_value.insert.return_value.execute
+        execute.side_effect = [Conflict(), Conflict(), Conflict(), Conflict(), {"id": "retry-edit"}]
+        sleeps = []
+        with (
+            patch.dict(promote.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": "{}"}),
+            patch(
+                "google.oauth2.service_account.Credentials.from_service_account_info",
+                return_value=object(),
+            ),
+            patch("googleapiclient.discovery.build", return_value=client),
+            patch.object(promote.time, "sleep", sleeps.append),
+        ):
+            self.assertEqual(promote.play_edit(), (client, "retry-edit"))
+        self.assertEqual(execute.call_count, 5)
+        self.assertEqual(sleeps, [1, 2, 4, 8])
+
+        execute.reset_mock()
+        execute.side_effect = [Conflict()] * promote.PLAY_EDIT_CREATE_ATTEMPTS
+        with (
+            patch.dict(promote.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": "{}"}),
+            patch(
+                "google.oauth2.service_account.Credentials.from_service_account_info",
+                return_value=object(),
+            ),
+            patch("googleapiclient.discovery.build", return_value=client),
+            patch.object(promote.time, "sleep"),
+        ):
+            with self.assertRaisesRegex(promote.PromotionError, "Google Play edit creation failed"):
+                promote.play_edit()
+
     def test_android_build_tag_must_bind_to_the_promoted_version(self):
         self.assertEqual(promote.require_build_tag(BUILD_TAG, "1.2.3"), BUILD_TAG)
         for invalid in (

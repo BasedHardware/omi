@@ -177,7 +177,13 @@ Manual promotion: the `mobile-store-promote` Codemagic lane runs only on an
 explicit trigger, requires `CONFIRM=submit-for-review`, selects an
 already-uploaded build, and attaches the derived notes as the store "What's
 New" text. Deriving notes never submits anything; a missing or invalid release
-file fails the promotion closed.
+file fails the promotion closed. With held-changes mode enabled, an Android
+production release is written as `draft` and committed with
+`changesNotSentForReview=true`; it stays hidden until Play reports the release
+as completed. A successful manual submission and the daily train both emit an
+app-review receipt. If a receipt is missing, the lifecycle sweep creates a
+bounded hide on first sight of a non-completed production release; an expired
+tombstone prevents later sweeps from re-arming that version.
 
 ## Daily store train
 
@@ -367,4 +373,11 @@ on 2026-10-14 is the queue point: after approval, releases proceed without a
 further human console press (previously: manual developer release on iOS and
 a Play production draft). The Play Publishing overview → Send for review
 press required 2026-10-26 → 2026-10-27 and again since 2026-10-28 is part of
-Play's held-changes mode (see "Store and distribution behavior").
+Play's held-changes mode (see "Store and distribution behavior"). The app-review
+lease begins when the successful held submission is recorded, or when the
+sweep first observes its non-completed production release if the receipt is
+missing. It does not begin when an operator later presses Send for review;
+time spent waiting in Publishing overview therefore uses part of the 14-day
+protection window. A held production draft also blocks the rollout brake's
+stage path by design; use Play Console to resolve that state during an
+incident.

@@ -58,6 +58,9 @@ SECRET_NAMES = {
 PLATFORMS = ('ios', 'android')
 _CACHE_KEY_PREFIX = 'app_review_config:'
 _VISIBLE_VERSION_PATTERN = re.compile(r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:\+[0-9]+)?$")
+_PLAY_RELEASE_NAME_VERSION_PATTERN = re.compile(
+    r"^\s*v?((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?=$|[\s(\[+])"
+)
 SUBMISSION_SECRET_CACHE_TTL_SECONDS = 60
 _submission_secret_cache_lock = threading.Lock()
 _submission_secret_cache: tuple[str | None, float] | None = None
@@ -154,6 +157,13 @@ def record_submission_config(
         ),
         None,
     )
+    if previous is not None:
+        previous_deadline = _parse_time(previous.get('expires_at'))
+        if previous_deadline is None or previous_deadline <= now:
+            # A fresh, authenticated receipt can race the expiry sweep. Do not
+            # adopt an already-dead lease: the next sweep would tombstone it
+            # again and the expired tombstone would suppress reconciliation.
+            previous = None
     # A recorded submission adopts an already-hidden version. This lets the
     # lease expiry and store-terminal paths release legacy/manual hides too.
     _append_hidden(hidden, version)
@@ -262,12 +272,49 @@ def reconcile_ios_config(
     return result, repairs, clears
 
 
-def reconcile_android_config(config: dict[str, Any], *, production_codes: set[str]) -> tuple[dict[str, Any], int, int]:
-    """Clear active Android entries once their rollout is completed on production."""
+def reconcile_android_config(
+    config: dict[str, Any],
+    *,
+    production_codes: set[str],
+    pending_versions_by_code: dict[str, str] | None = None,
+    now: datetime | None = None,
+) -> tuple[dict[str, Any], int, int]:
+    """Create first-sight hides and clear entries once production is completed."""
     hidden = _hidden(config)
     entries = _entries(config)
     repaired = 0
     clears = 0
+
+    # A missing receipt must not leave a held/draft/in-progress production
+    # release visible. Create a bounded lease once, while preserving expired
+    # tombstones so a sweep cannot silently re-arm a version after its lease.
+    for code, version in (pending_versions_by_code or {}).items():
+        same_version = [
+            entry
+            for entry in entries
+            if entry.get('platform') == 'android'
+            and isinstance(entry.get('version'), str)
+            and _same_visible_version(entry['version'], version)
+        ]
+        if any(entry.get('state') == 'active' for entry in same_version):
+            continue
+        if any(entry.get('state') == 'expired' for entry in same_version):
+            continue
+        _append_hidden(hidden, version)
+        current = now or _now_utc()
+        entries.append(
+            {
+                'platform': 'android',
+                'version': version,
+                'version_code': code,
+                'submitted_at': _iso(current),
+                'expires_at': _iso(current + DEFAULT_TTL),
+                'state': 'active',
+                'owns_hidden_version': True,
+                'source': 'reconciliation',
+            }
+        )
+        repaired += 1
 
     kept: list[dict[str, Any]] = []
     for entry in entries:
@@ -428,7 +475,14 @@ def _apple_versions() -> dict[str, str]:
         raise RuntimeError('App Store Connect state read failed') from exc
 
 
-def _play_production_codes() -> set[str]:
+def _play_release_version(name: object) -> str | None:
+    if not isinstance(name, str):
+        return None
+    match = _PLAY_RELEASE_NAME_VERSION_PATTERN.match(name)
+    return match.group(1) if match else None
+
+
+def _play_production_state() -> tuple[set[str], dict[str, str]]:
     edit_id: str | None = None
     session: Any = None
     try:
@@ -441,13 +495,14 @@ def _play_production_codes() -> set[str]:
         session = AuthorizedSession(credentials)
         app_url = f"{PLAY_API}/{ANDROID_PACKAGE}/edits"
         created = None
-        for attempt in range(2):
+        for attempt in range(5):
             created = session.post(app_url, json={}, timeout=15)
-            if created.status_code != 409 or attempt == 1:
+            if created.status_code != 409 or attempt == 4:
                 break
-            # Play allows only one open edit per app. A short retry handles a
-            # transient collision with the rollout watcher or daily train.
-            time.sleep(2)
+            # Play allows one open edit per app. Exponential backoff absorbs
+            # short collisions with the train, rollout watcher, or brake while
+            # remaining well inside the scheduler's 300-second attempt limit.
+            time.sleep(2**attempt)
         if created is None:
             raise RuntimeError("Play edit creation returned no response")
         created.raise_for_status()
@@ -462,14 +517,22 @@ def _play_production_codes() -> set[str]:
         releases = track.get('releases', []) if isinstance(track, dict) else []
         if not isinstance(releases, list):
             raise ValueError('Play production track response is invalid')
-        codes: set[str] = set()
+        completed_codes: set[str] = set()
+        pending_versions_by_code: dict[str, str] = {}
         for release in releases:
-            if not isinstance(release, dict) or release.get("status") != "completed":
+            if not isinstance(release, dict):
                 continue
             raw_codes = release.get('versionCodes', [])
-            if isinstance(raw_codes, list):
-                codes.update(str(code) for code in raw_codes)
-        return codes
+            if not isinstance(raw_codes, list):
+                continue
+            codes = {str(code) for code in raw_codes}
+            if release.get('status') == 'completed':
+                completed_codes.update(codes)
+            elif isinstance(release.get('status'), str):
+                version = _play_release_version(release.get('name'))
+                if version is not None:
+                    pending_versions_by_code.update({code: version for code in codes})
+        return completed_codes, pending_versions_by_code
     except StoreCredentialsUnavailable:
         raise
     except Exception as exc:
@@ -534,13 +597,23 @@ def run_app_review_config_sweep(*, now: datetime | None = None) -> dict[str, int
                     lambda config: reconcile_ios_config(config, version_states=states, now=current)[0],
                 )
             else:
-                codes = _play_production_codes()
+                codes, pending_versions = _play_production_state()
                 before = _firestore_config(platform)
-                updated, repairs, clears = reconcile_android_config(before, production_codes=codes)
+                updated, repairs, clears = reconcile_android_config(
+                    before,
+                    production_codes=codes,
+                    pending_versions_by_code=pending_versions,
+                    now=current,
+                )
                 if updated != before:
                     _update_config(
                         platform,
-                        lambda config: reconcile_android_config(config, production_codes=codes)[0],
+                        lambda config: reconcile_android_config(
+                            config,
+                            production_codes=codes,
+                            pending_versions_by_code=pending_versions,
+                            now=current,
+                        )[0],
                     )
             summary['repaired'] += repairs
             summary['cleared'] += clears

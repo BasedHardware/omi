@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -35,6 +36,7 @@ BUILD_TAG_RE = re.compile(
 # 2026-10-27 error said this parameter must not be set; keep this switch aligned
 # with the current Play response and both Codemagic publishing blocks.
 CHANGES_NOT_SENT_FOR_REVIEW = True
+PLAY_EDIT_CREATE_ATTEMPTS = 5
 
 
 def record_review_submission(platform: str, version: str, version_code: str | None = None) -> None:
@@ -425,10 +427,28 @@ def play_edit() -> tuple[object, str]:
             json.loads(credentials_raw), scopes=["https://www.googleapis.com/auth/androidpublisher"]
         )
         client = build("androidpublisher", "v3", credentials=credentials, cache_discovery=False)
-        edit_id = client.edits().insert(packageName=PACKAGE_NAME, body={}).execute()["id"]
     except Exception as exc:
         raise PromotionError("Google Play authentication failed") from exc
-    return client, edit_id
+    for attempt in range(PLAY_EDIT_CREATE_ATTEMPTS):
+        try:
+            response = client.edits().insert(packageName=PACKAGE_NAME, body={}).execute()
+            edit_id = response.get("id") if isinstance(response, dict) else None
+            if not isinstance(edit_id, str) or not edit_id:
+                raise PromotionError("Google Play edit creation returned an invalid response")
+            return client, edit_id
+        except PromotionError:
+            raise
+        except Exception as exc:
+            response = getattr(exc, "resp", None)
+            status = getattr(response, "status", None)
+            if status is None:
+                status = getattr(exc, "status_code", None)
+            if status == 409 and attempt + 1 < PLAY_EDIT_CREATE_ATTEMPTS:
+                time.sleep(2**attempt)
+                continue
+            detail = f": {exc}" if str(exc).strip() else ""
+            raise PromotionError(f"Google Play edit creation failed{detail}") from exc
+    raise PromotionError("Google Play edit creation failed after bounded retries")
 
 
 def play_track(client: object, edit_id: str, track: str) -> object:

@@ -33621,7 +33621,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_app_review_config_alert_total{reason=~\"credentials_unavailable|store_api_error|submission_token_unavailable\"}[15m])) > bool 0",
+          "expr": "sum(increase(omi_app_review_config_alert_total{reason=~\"credentials_unavailable|store_api_error|submission_token_unavailable|submission_token_rejected\"}[3h])) >= bool 3",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -33721,12 +33721,12 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "The app-review lifecycle could not reconcile visibility because store credentials, a submission token, or a store API are unavailable",
-      "threshold": "sum(increase(omi_app_review_config_alert_total{reason=~\"credentials_unavailable|store_api_error|submission_token_unavailable\"}[15m])) > 0",
+      "summary": "Repeated app-review lifecycle reconciliation failures need attention",
+      "threshold": "sum(increase(omi_app_review_config_alert_total{reason=~\"credentials_unavailable|store_api_error|submission_token_unavailable|submission_token_rejected\"}[3h])) >= 3",
       "user_impact": "A store review state may not match subscription visibility; token failures can also leave Android review hides unapplied.",
       "scope": "Hourly app-review config sweep on backend-sync and Codemagic submission receipt hook.",
       "verification": "Check backend-sync logs for app_review_config platform/reason, then inspect the submission-token and store-credential bindings in backend/docs/runbooks/app-review-config.md.",
-      "safe_next_action": "Restore unavailable submission-token or read-only store credentials, or resolve the store API error. Routine reconciliation repairs and clears do not page.",
+      "safe_next_action": "Restore the submission token or read-only store credentials, or resolve the store API error. A single failure is retained in logs and metrics; three failures within three hours page. Routine reconciliation repairs and clears do not page.",
       "runbook": "backend/docs/runbooks/app-review-config.md"
     },
     "labels": {

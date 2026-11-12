@@ -409,10 +409,24 @@ class BrakeTests(unittest.TestCase):
             paths.append(path)
             return {"workflow_runs": [{"status": "completed"}]} if "/runs?" in path else {"state": "disabled_manually"}
 
-        brake.require_quiesced_writers(fetch)
+        scheduler_reads = []
+
+        def scheduler_fetch():
+            scheduler_reads.append("app-review-config-sweep-hourly")
+            return {"state": "PAUSED"}
+
+        brake.require_quiesced_writers(fetch, scheduler_fetch)
         self.assertEqual(len(paths), 4)
+        self.assertEqual(scheduler_reads, ["app-review-config-sweep-hourly"])
         for workflow in ["mobile_rollout_watch.yml", "mobile_daily_train.yml"]:
             self.assertIn(f"actions/workflows/{workflow}", paths)
+
+    def test_active_app_review_scheduler_refuses_to_open_a_play_edit(self):
+        def fetch(path):
+            return {"workflow_runs": [{"status": "completed"}]} if "/runs?" in path else {"state": "disabled_manually"}
+
+        with self.assertRaisesRegex(brake.BrakeError, "app-review-config-sweep-hourly"):
+            brake.require_quiesced_writers(fetch, lambda: {"state": "ENABLED"})
 
     def test_active_unknown_or_unavailable_writers_refuse(self):
         for state in [{"state": "active"}, {}, {"state": "disabled_inactivity"}]:
