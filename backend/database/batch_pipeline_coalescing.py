@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from config import batch_pipeline_coalescing as config
-from utils.batch_pipeline.scheduler import owner_key
 
 
 def digest(value):

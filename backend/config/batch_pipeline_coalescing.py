@@ -19,7 +19,9 @@ def enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', '').strip().lower() == 'true'
 
 
-def hold_seconds(*, deadline=None, reserve=None, now, batch_pre_unit=False) -> float:
+def hold_seconds(
+    *, deadline: float | None = None, reserve: float | None = None, now: float, batch_pre_unit: bool = False
+) -> float:
     """No guessed reserve or refreshed stale clock. Batch pre-unit has no Redis job.
 
     A caller with an applicable processing deadline must supply BOTH that
@@ -29,12 +31,8 @@ def hold_seconds(*, deadline=None, reserve=None, now, batch_pre_unit=False) -> f
     """
     if batch_pre_unit and deadline is None and reserve is None:
         return HOLD_SECONDS
-    if (
-        any(
-            isinstance(v, bool) or not isinstance(v, (float, int)) or not math.isfinite(v)
-            for v in (deadline, reserve, now)
-        )
-        or reserve < 0
-    ):
+    if deadline is None or reserve is None:
+        return 0.0
+    if any(isinstance(v, bool) or not math.isfinite(v) for v in (deadline, reserve, now)) or reserve < 0:
         return 0.0
     return max(0.0, min(HOLD_SECONDS, deadline - reserve - now))

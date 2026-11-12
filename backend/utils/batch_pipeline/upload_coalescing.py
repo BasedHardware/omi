@@ -332,7 +332,7 @@ async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None
             response = await admit_upload(**args)
             if response is None or response.status_code != 202:
                 raise ValueError('held upload admission remains uncommitted')
-            target = json.loads(response.body)['job_id']
+            target = json.loads(bytes(response.body))['job_id']
             targets.extend([target] * len(batch))
         await run_blocking(db_executor, rows.finish, store, group, targets, clock())
         EVENTS.labels(outcome='drained_' + group['mode']).inc()
