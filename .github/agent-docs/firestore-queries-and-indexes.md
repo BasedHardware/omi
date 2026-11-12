@@ -26,6 +26,14 @@ Merging a manifest PR triggers `.github/workflows/gcp_firestore_indexes.yml`. De
 
 The real-Firestore oracle is `backend/scripts/firestore_index_oracle.py`. Use it when validating a query/index change against Firestore's actual planning response or investigating a suspected index gap. It is an oracle and does not provision indexes.
 
+## Budget a new queue, job or lease collection
+
+A new Firestore collection that stores queue, job, lease, dispatch, retry, progress or recovery state must declare a read budget in `.github/firestore-collection-budgets.json` in the same PR that introduces it. The batch pipeline's job/queue/lease collections reached ~1.36B of ~1.83B reads/day before anyone wrote the number down, so the number is now a merge-time requirement rather than a post-incident discovery.
+
+`firestore-collection-budget` (`.github/scripts/check_firestore_collection_budget.py`) is diff-scoped: a collection that already exists at the merge base is grandfathered, and only a name that first appears in the change needs an entry. An entry names the owning lane, the unit of work, `reads_per_unit_budget`, `reads_per_day_budget`, `basis` (`measured` or `planning-bound`), the source of the number, and the review date. A `planning-bound` entry is an estimate and is never booked as a saving. If the token heuristic misclassifies a name, add it to the registry's `exempt` list with a reason instead of inventing a budget.
+
+The guard is a disclosure ratchet, not semantic analysis: a collection name built at runtime (an f-string, a function argument, a value read from config) cannot be resolved statically and escapes detection. `FIRESTORE_COLLECTION_BUDGET_GUARD_ENABLED=0` disables it for an approved rollback and requires `FIRESTORE_COLLECTION_BUDGET_GUARD_DISABLE_REASON` so the disable is visible in the run log.
+
 ## Respond to a missing-index alert
 
 The backend provisions a missing-index alert through `.github/scripts/ensure_firestore_missing_index_alert.py`. Follow `backend/docs/runbooks/firestore-missing-index.md`: confirm the actual query and platform suggestion, declare the composite or collection-group field requirement in the registry, regenerate the manifest, and verify the request after readiness. Never copy a suggested index directly into a project.

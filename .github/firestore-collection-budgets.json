@@ -1,0 +1,21 @@
+{
+  "policy": {
+    "rule": "Every new Firestore collection that stores queue, job, lease, dispatch, retry, progress or recovery state must declare a read budget here in the same pull request that introduces it (M8, firestore-reads-program).",
+    "program": "omi-knowledge-base/projects/admin-omi-tv-dashboard/firestore-reads-program.md",
+    "guard": ".github/scripts/check_firestore_collection_budget.py",
+    "kill_switch": "FIRESTORE_COLLECTION_BUDGET_GUARD_ENABLED=0 disables the guard for an approved rollback and requires FIRESTORE_COLLECTION_BUDGET_GUARD_DISABLE_REASON.",
+    "note": "The guard is diff-scoped: a collection that already exists at the merge base is grandfathered, so this list starts empty and grows one reviewed entry per new work-state collection. Offline fixtures in .github/scripts/test_check_firestore_collection_budget.py prove both directions: an unbudgeted new queue/job/lease collection fails, a budgeted one passes.",
+    "entry_fields": {
+      "collection": "Firestore collection id, lowercase snake_case",
+      "owner": "lane that owns the collection and its budget",
+      "unit": "unit of work the per-unit budget divides by (job, batch unit, active user-day, ...)",
+      "reads_per_unit_budget": "positive integer, reads per unit of work",
+      "reads_per_day_budget": "positive integer, reads per day at the expected volume",
+      "basis": "measured (settled billing or a caller counter) or planning-bound (an estimate, never booked as a saving)",
+      "source": "where the number came from: query, dashboard, or document",
+      "reviewed": "YYYY-MM-DD date the budget was reviewed"
+    }
+  },
+  "budgets": [],
+  "exempt": []
+}

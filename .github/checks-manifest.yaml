@@ -1152,6 +1152,16 @@ checks:
     triggers: ["backend/database/**/*.py", ".github/scripts/check_firestore_model_read_boundary.py", ".github/scripts/firestore_model_read_boundary_baseline.json"]
     lanes: ["local", "ci"]
     reason: "#9494 -> #9696 malformed Firestore documents must use the shared read boundary"
+  - id: firestore-collection-budget
+    command: ["python3", ".github/scripts/check_firestore_collection_budget.py", "--base", "{base}"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_firestore_collection_budget.py", ".github/firestore-collection-budgets.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "M8 / firestore-reads-program: a new Firestore queue/job/lease collection must state a reviewed read budget before it ships; the batch pipeline reached ~1.36B reads/day on unbudgeted job/queue/lease state"
+  - id: firestore-collection-budget-fixtures
+    command: ["python3", ".github/scripts/test_check_firestore_collection_budget.py"]
+    triggers: [".github/scripts/check_firestore_collection_budget.py", ".github/scripts/test_check_firestore_collection_budget.py", ".github/firestore-collection-budgets.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "offline fixtures pin both directions: an unbudgeted new queue/job/lease collection fails, a budgeted one passes, and an existing collection is grandfathered"
   - id: lifecycle-header-checker-tests
     command: ["python3", ".github/scripts/test_check_lifecycle_headers.py"]
     triggers: [".github/scripts/check_lifecycle_headers.py", ".github/scripts/test_check_lifecycle_headers.py", ".github/checks-manifest.yaml"]
