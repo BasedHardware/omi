@@ -673,10 +673,30 @@ class _Call:
     allowance_period: str | None = None
 
 
-def _default_allowed(owner_id: str, seconds: float, service: str) -> bool:
-    from utils.stt_cap_dispatch import sync_allowed
+def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool, str]:
+    from utils.stt_cap_dispatch import sync_admission
 
-    return sync_allowed(owner_id, seconds, service, lane='batch', path=DispatchPath.BATCH_PROVIDER)
+    return sync_admission(owner_id, seconds, service, lane='batch', path=DispatchPath.BATCH_PROVIDER)
+
+
+# An exhausted allowance or usage budget lasts until the plan changes, so a refused unit
+# parks for the same hold window GPU compute admission uses (admission.authorize).
+# Re-checking every FUNDING_RETRY_SECONDS made each refused unit a new Cloud Task per minute;
+# on 2026-11-12 those loops took most of the provider-stt queue's 10/s and starved
+# entitled owners' units for a week. Transient denials keep the short retry.
+_DURABLE_DENIALS = frozenset({DispatchReason.ALLOWANCE_EXHAUSTED.value, DispatchReason.BUDGET_EXHAUSTED.value})
+
+
+def funding_retry_seconds(decision: bool | tuple[bool, str]) -> float | None:
+    """None when funded; otherwise how long the refused unit waits before re-checking."""
+    permitted, reason = decision if isinstance(decision, tuple) else (bool(decision), None)
+    if permitted:
+        return None
+    if reason in _DURABLE_DENIALS:
+        from config.batch_pipeline import allowance_hold_retry_seconds
+
+        return float(allowance_hold_retry_seconds())
+    return FUNDING_RETRY_SECONDS
 
 
 def _default_health() -> VendorHealth:
@@ -725,7 +745,7 @@ class ProviderSttStage:
         *,
         stt: Callable[..., dict] = transcribe,
         stt_async: Callable[..., Awaitable[dict]] | None = None,
-        allowed: Callable[[str, float, str], bool] = _default_allowed,
+        allowed: Callable[[str, float, str], bool | tuple[bool, str]] = _default_allowed,
         inspect: Callable[[WorkItem, bytes], tuple] = inspect_audio,
         clock: Callable[[], float] = time.time,
         health: VendorHealth | None = None,
@@ -859,8 +879,10 @@ class ProviderSttStage:
         # A BYOK unit was funded at admission; the keyless re-check would hold it forever.
         if route.provider_reason == 'byok':
             record_decision(DispatchPath.BATCH_PROVIDER, True, DispatchReason.BYOK)
-        elif not self.allowed(item.owner_id, item.duration_seconds, route.provider_service):
-            return UnitOutcome('deferred', 'not_due', self.clock() + FUNDING_RETRY_SECONDS)
+        elif (
+            wait := funding_retry_seconds(self.allowed(item.owner_id, item.duration_seconds, route.provider_service))
+        ) is not None:
+            return UnitOutcome('deferred', 'not_due', self.clock() + wait)
         audio = self.artifacts.fetch_audio(item)
         inspected, failure = None, None
         try:
@@ -869,10 +891,16 @@ class ProviderSttStage:
             failure = {'stage': error.stage, 'reason': error.reason}
         # Download/inspection can queue behind other work. Recheck before the
         # one durable provider intent; denial must leave it unspent.
-        if route.provider_reason != 'byok' and not self.allowed(
-            item.owner_id, item.duration_seconds, route.provider_service
+        if (
+            route.provider_reason != 'byok'
+            and (
+                wait := funding_retry_seconds(
+                    self.allowed(item.owner_id, item.duration_seconds, route.provider_service)
+                )
+            )
+            is not None
         ):
-            return UnitOutcome('deferred', 'not_due', self.clock() + FUNDING_RETRY_SECONDS)
+            return UnitOutcome('deferred', 'not_due', self.clock() + wait)
         attempts = attempts_of(job)
         candidates = self._candidates(route)
         open_services = [service for service in candidates if _can_attempt(attempts, service)]

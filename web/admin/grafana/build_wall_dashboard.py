@@ -129,6 +129,14 @@ def legend_right(panel):
     panel["options"]["legend"]["placement"] = "right"
 
 
+def mrr_extra(panel):
+    """Legend beside the plot, and a break across missing book days: the Stripe book
+    has no snapshot from 2026-10-07 to 2026-11-07, and a smooth ramp across that
+    month reads as measured growth."""
+    legend_right(panel)
+    disconnect_after(1.5)(panel)
+
+
 def dashed(name, hex_):
     return {"matcher": {"id": "byName", "options": name}, "properties": [
         {"id": "displayName", "value": name},
@@ -301,7 +309,7 @@ def columns():
                   [target("growth", "weekly", [DATE, *PLATFORM_COLUMNS, ("mcp", "MCP-only", "number")])],
                   unit="short", draw="bars", stack=True, overrides=PLATFORM_OVERRIDES,
                   time_from="182d")),
-        (6, chart("New, returning & lost users",
+        (6, chart("New, returning, lost",
                   "Each week's active users = returning (also active the prior 7 days) + back after a break + new (first seen this week). Lost = last week's users not active this week, drawn below zero.",
                   [target("growth", "weekly", [DATE, ("retained", "Returning", "number"),
                                                ("resurrected", "Back after a break", "number"),
@@ -367,11 +375,11 @@ def columns():
              [("headline", "mrr", "MRR", "currencyUSD", 1), ("headline", "arpmau", "Per user", "currencyUSD", 2),
               ("headline", "hardware", "Hardware", "currencyUSD", 0)]),
         (5, chart("MRR by plan",
-                   "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
+                   "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). A day with no snapshot is a gap, never a line drawn across it (no book exists from 2026-10-07 to 2026-11-07). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
                    [target("revenue", "mrr", [DATE, *[(k, n, "number") for k, n in PLAN_NAMES.items()],
                                               ("other", "Other", "number")])],
                    unit="currencyUSD", stack=True, time_from="40d",
-                   overrides=[color(n, h) for n, h in PLANS.items()], extra=legend_right)),
+                   overrides=[color(n, h) for n, h in PLANS.items()], extra=mrr_extra)),
         (6, chart("Shopify sales per week",
                    "Mon–Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
                    [target("revenue", "hardware", [("date", "Week ending", "timestamp"),

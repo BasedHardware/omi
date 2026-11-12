@@ -9369,6 +9369,42 @@ to be retried after visibility expiry, so a longer capture still converges after
 it ends. A deleted/incompatible target or size refusal never authorizes a forced
 merge; the standalone recording remains recoverable.
 
+A donor summarized before its live target closed is otherwise refused forever by
+the `already_processed` fence. `SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED` is a
+three-value mode, **default `off`**:
+
+- `off` is the pre-change refusal, byte for byte: the processed donor is refused
+  by the blanket `already_processed` fence, no span is compared, and no
+  assignment is attempted.
+- `shadow` runs the containment predicate and the span comparison, emits a
+  bounded counter and one log line, and returns the same refusal. It never
+  assigns, tombstones, retracts notes or memories, and never emits an identifier
+  or content. A donor the transaction would refuse before planning (a
+  user-managed anchor or a manual speaker receipt) counts
+  `outcome=donor_ineligible`, and a donor carrying unplaced speech counts
+  `outcome=unplaced_donor`, so the dry-run count does not overstate eligible
+  merges.
+- `on` lets the bridge absorb the donor only when both the donor's and the
+  target's placed transcript-segment spans exist and the donor's is fully inside
+  the target's. The merged predicate applies tolerance inward, so the configured
+  tolerance is `0.0`: exact containment (the identical re-upload shape) passes,
+  and a donor that extends even slightly past the target is refused. A stricter
+  value can only refuse more.
+
+A row whose only span is the `finished_at` wall-clock envelope never authorizes
+the merge; that donor stays standalone. User curation, an open target,
+`choose_live_overlap`, privacy and size fences are unchanged, and partial overlap
+keeps the standalone row. The assignment transaction re-proves containment on the
+rows it merges and refuses the whole assignment with
+`contained_donor_not_contained` when the donor grew past the target. A contained
+donor whose speech is an exact repeat of the live target is still absorbed: the
+repeat-only fast path is skipped when this call requested donor absorption, so
+the donor redirect is committed instead of being acknowledged as a no-op. Only
+the documented lowercase words select a mode (`on`, `true`, `yes`, `enabled`,
+`shadow`); an absent, blank, unknown, misspelled or numeric value resolves `off`
+in every capture-coverage mode, so a typo disables the merge and never enables
+it.
+
 Committed donor absorption and published-row counters are documented in [Sync bridge absorption](sync-bridge-absorption.md).
 
 A finalizer losing its processing-result CAS checks the current job lease and

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-durable-denial-retried-at-transient-cadence",
+  "violated_contract": "A unit refused for a reason that lasts until an owner's plan changes (exhausted allowance or usage budget) must not be re-delivered at a transient retry cadence through a queue it shares with other owners. On 2026-11-12 the provider-STT stage re-checked refused owners every 60 seconds, each re-check minting a new Cloud Task, so about 83 over-allowance owners held most of the provider-stt queue's 10 dispatches per second while 393,949 entitled units waited up to a week.",
+  "canonical_prevention": "Classify the denial reason at every spend gate and park durable denials for the shared hold window (allowance_hold_retry_seconds), keeping the short retry only for transient denials. Test both the durable and the transient reason at each gate that defers.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_provider_stt.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/**",
+    "backend/utils/stt_cap_dispatch.py"
+  ],
+  "status": "open"
+}
