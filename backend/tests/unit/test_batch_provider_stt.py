@@ -300,6 +300,45 @@ def test_unfunded_owner_is_deferred_without_download_or_spend(world, monkeypatch
     assert job(store, 'p1')['state'] == PENDING
 
 
+@pytest.mark.parametrize('reason', ['allowance_exhausted', 'budget_exhausted'])
+def test_exhausted_allowance_parks_for_the_hold_window_not_a_minute(world, monkeypatch, reason):
+    """A durable denial must not re-wake every minute: those loops starved entitled owners (2026-11-12)."""
+    _, store = world
+    monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '1800')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    outcome = stage(store, artifacts, vendor, allowed=lambda *_: (False, reason)).run('p1')
+    assert (outcome.outcome, outcome.reason, outcome.available_at) == ('deferred', 'not_due', 2000.0)
+    assert artifacts.fetches == 0 and vendor.calls == 0
+    assert job(store, 'p1')['state'] == PENDING
+
+
+def test_transient_denial_keeps_the_short_funding_retry(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    outcome = stage(store, Artifacts(), Vendor(), allowed=lambda *_: (False, 'allowance_unavailable')).run('p1')
+    assert (outcome.outcome, outcome.available_at) == ('deferred', 200.0 + provider_stt.FUNDING_RETRY_SECONDS)
+
+
+def test_exhausted_allowance_after_inspection_also_parks(world, monkeypatch):
+    _, store = world
+    monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '1800')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    vendor = Vendor()
+    allowed = Mock(side_effect=[(True, 'entitled'), (False, 'allowance_exhausted')])
+    outcome = stage(store, Artifacts(), vendor, allowed=allowed).run('p1')
+    assert (outcome.outcome, outcome.available_at) == ('deferred', 2000.0)
+    assert vendor.calls == 0 and 'provider_intent' not in job(store, 'p1')
+
+
+def test_funded_tuple_decision_proceeds_to_the_vendor(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    vendor = Vendor()
+    assert stage(store, Artifacts(), vendor, allowed=lambda *_: (True, 'entitled')).run('p1').reason == 'processed'
+    assert vendor.calls == 1
+
+
 def test_crash_after_paid_call_reconciles_without_a_second_call(world, monkeypatch):
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
