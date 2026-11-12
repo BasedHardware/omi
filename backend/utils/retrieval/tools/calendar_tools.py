@@ -50,6 +50,7 @@ import logging
 
 from utils.retrieval.tools.calendar_render import render_calendar_event
 from utils.retrieval.google_calendar_selection import event_path, event_reference, read_ids
+from utils.retrieval import google_calendar_catalog_cache
 
 logger = logging.getLogger(__name__)
 
@@ -413,8 +414,15 @@ async def get_google_calendar_events(
     *,
     uid: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    async with asyncio.timeout(20):
-        return await _get_selected_calendar_events(access_token, time_min, time_max, max_results, search_query, uid=uid)
+    try:
+        async with asyncio.timeout(20):
+            return await _get_selected_calendar_events(
+                access_token, time_min, time_max, max_results, search_query, uid=uid
+            )
+    except GoogleAPIError:
+        if uid:
+            google_calendar_catalog_cache.invalidate(uid)
+        raise
 
 
 async def _get_selected_calendar_events(
@@ -462,6 +470,8 @@ async def _get_selected_calendar_events(
                 )
             except GoogleAPIError as error:
                 if calendar_id != 'primary' and error.status_code in {403, 404, 410}:
+                    if uid:
+                        google_calendar_catalog_cache.invalidate(uid)
                     # Access can disappear after catalog enumeration. Keep other
                     # selected calendars; never substitute an unselected primary.
                     break

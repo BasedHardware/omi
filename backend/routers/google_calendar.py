@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 import database.conversations as conversations_db
 import database.users as users_db
 from database import google_calendar_preferences
-from utils.retrieval import google_calendar_selection
+from utils.retrieval import google_calendar_selection, google_calendar_catalog_cache
 from utils.retrieval.tools.google_utils import GoogleAPIError
 from utils.conversations.calendar_linking import select_capture_gaps
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
@@ -59,6 +59,9 @@ class CalendarSelectionUpdate(BaseModel):
 
 
 async def _selection_catalog(uid: str) -> dict[str, Any]:
+    # Explicit refresh/save always revalidates live provider access. Hot event
+    # reads use the short-lived metadata cache instead.
+    google_calendar_catalog_cache.invalidate(uid)
     try:
         async with asyncio.timeout(20):
             return await _selection_catalog_with_refresh(uid)
@@ -87,13 +90,16 @@ async def _selection_catalog_with_refresh(uid: str) -> dict[str, Any]:
 
 
 @router.get('/v1/calendar/google/calendars', response_model=CalendarSelection, tags=['google_calendar'])
-async def list_readable_google_calendars(uid: str = Depends(auth.get_current_user_uid)):
+async def list_readable_google_calendars(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'calendar:catalog', fail_closed=True)),
+):
     return await _selection_catalog(uid)
 
 
 @router.put('/v1/calendar/google/calendars', response_model=CalendarSelection, tags=['google_calendar'])
 async def save_google_calendar_selection(
-    request: CalendarSelectionUpdate, uid: str = Depends(auth.get_current_user_uid)
+    request: CalendarSelectionUpdate,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'calendar:catalog', fail_closed=True)),
 ):
     current = await _selection_catalog(uid)
     if request.account_id != current['account_id']:
@@ -106,6 +112,7 @@ async def save_google_calendar_selection(
     # Store canonical primary identity so a differently named Google account
     # never inherits this selection. Disconnect does not erase preferences.
     await run_blocking(db_executor, google_calendar_preferences.save_selection, uid, request.account_id, ids)
+    google_calendar_catalog_cache.invalidate(uid)
     return {**current, 'selected_ids': ids}
 
 

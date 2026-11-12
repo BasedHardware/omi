@@ -57,6 +57,8 @@ async def calendar_fixture(uid: str = 'calendar-qa', project: str = 'demo-omi-ca
                 items.pop()
             return httpx.Response(200, json={'items': items})
         primary = '/calendars/primary/' in path
+        if not primary and not state['secondary_available']:
+            return httpx.Response(403, json={'error': {'message': 'Synthetic revoked calendar'}})
         return httpx.Response(
             200,
             json={
@@ -125,8 +127,12 @@ async def calendar_fixture(uid: str = 'calendar-qa', project: str = 'demo-omi-ca
             patch.object(
                 integration_routes.users_db,
                 'get_integration',
-                lambda *_: {'connected': state['connected'], 'access_token': 'synthetic-token'},
+                lambda *_: {
+                    'connected': state['connected'],
+                    'access_token': 'synthetic-token:' + state['google_account'],
+                },
             ),
+            patch.object(routes.auth, 'check_rate_limit', lambda *_: (True, 11, 0)),
             patch.object(google_utils, 'get_auth_client', lambda: google),
             patch.object(preferences, 'get_selections', partial(get_preferences, firestore_client=db)),
             patch.object(preferences, 'save_selection', partial(save_preferences, firestore_client=db)),

@@ -8,6 +8,7 @@ from urllib.parse import quote
 from database import google_calendar_preferences as preferences
 from utils.google_calendar_identity import account_key
 from utils.executors import db_executor, run_blocking
+from utils.retrieval import google_calendar_catalog_cache as catalog_cache
 
 BASE = 'https://www.googleapis.com/calendar/v3'
 MAX_SELECTED = 25
@@ -96,8 +97,14 @@ async def read_ids(uid: str, access_token: str) -> list[str]:
         # Released users retain the exact primary-only lane, including legacy
         # grants that can read events but cannot enumerate the calendar catalog.
         return ['primary']
-    primary, rows = await readable_calendars(access_token)
-    readable = {row['id'] for row in rows}
+    key = catalog_cache.cache_key(uid, access_token, selections)
+    cached = catalog_cache.get(key)
+    if cached is None:
+        primary, rows = await readable_calendars(access_token)
+        readable = frozenset(row['id'] for row in rows)
+        catalog_cache.put(key, primary, readable)
+    else:
+        primary, readable = cached
     return [
         'primary' if value == primary else value
         for value in selected_ids(selections, primary)

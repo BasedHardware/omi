@@ -1,12 +1,14 @@
 """Behavioral selection, pagination, account isolation and event-reference coverage."""
 
 import pytest
+from cachetools import TTLCache
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from database import google_calendar_preferences as prefs
 from routers import google_calendar as routes
 from utils.retrieval import google_calendar_selection as selection
+from utils.retrieval import google_calendar_catalog_cache as cache
 from utils.retrieval.tools import calendar_tools as tools
 from utils.retrieval.tools.google_utils import GoogleAPIError
 
@@ -25,7 +27,23 @@ def event(identifier, hour):
 
 
 @pytest.fixture
-def provider(monkeypatch):
+def catalog_clock(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(
+        cache,
+        '_cache',
+        TTLCache(
+            maxsize=cache.MAX_CACHED_CALENDARS,
+            ttl=cache.CATALOG_TTL_SECONDS,
+            timer=lambda: now[0],
+            getsizeof=lambda value: 1 + len(value[1]),
+        ),
+    )
+    return now
+
+
+@pytest.fixture
+def provider(monkeypatch, catalog_clock):
     # Persistence is owned by the real database helper; this fixture substitutes
     # its I/O only. Emulator integration separately checks its Firestore merge.
     store = {}
@@ -54,6 +72,7 @@ def provider(monkeypatch):
 
     monkeypatch.setattr(prefs, 'save_selection', save)
     monkeypatch.setattr(routes, '_get_google_calendar_token', lambda uid: ('synthetic-token', {'connected': True}))
+    monkeypatch.setattr(routes.auth, 'check_rate_limit', lambda *args: (True, 11, 0))
     return store, owner, calendars, calls
 
 
@@ -247,3 +266,136 @@ def test_disconnected_grant_status_keeps_explicit_scope_and_owner_isolation(prov
     status = integrations.get_integration('google_calendar', uid='omi-A')
     assert status.connected is False and status.read_selection_configured is True
     assert integrations.get_integration('google_calendar', uid='omi-B').read_selection_configured is False
+
+
+@pytest.mark.asyncio
+async def test_catalog_cache_bounds_discovery_and_expires_without_caching_events(provider, catalog_clock):
+    store, owner, _, calls = provider
+    store['omi-A'] = {prefs.account_key(owner['primary']): ['team/#?@group.test']}
+    for _ in range(3):
+        await tools.get_google_calendar_events('token', uid='omi-A')
+    assert sum(url.endswith('/calendarList') for _, url, _ in calls) == 1
+    assert sum('/events' in url for _, url, _ in calls) == 3
+    catalog_clock[0] += cache.CATALOG_TTL_SECONDS
+    await tools.get_google_calendar_events('token', uid='omi-A')
+    assert sum(url.endswith('/calendarList') for _, url, _ in calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_cache_cannot_reuse_different_owner_grant_or_saved_selection(provider):
+    store, owner, _, calls = provider
+    for uid in ['omi-A', 'omi-B']:
+        store[uid] = {prefs.account_key(owner['primary']): ['team/#?@group.test']}
+    await tools.get_google_calendar_events('grant-one', uid='omi-A')
+    await tools.get_google_calendar_events('grant-one', uid='omi-B')
+    await tools.get_google_calendar_events('refreshed-grant', uid='omi-A')
+    # Shared storage changes the cache identity in every worker, not only the saver.
+    store['omi-A'][prefs.account_key(owner['primary'])] = [owner['primary']]
+    rows = await tools.get_google_calendar_events('refreshed-grant', uid='omi-A')
+    assert [row['id'] for row in rows] == ['same-id']
+    assert sum(url.endswith('/calendarList') for _, url, _ in calls) == 4
+
+
+@pytest.mark.asyncio
+async def test_warm_catalog_does_not_hide_provider_revocation(provider, monkeypatch):
+    store, owner, _, calls = provider
+    store['omi-A'] = {prefs.account_key(owner['primary']): ['team/#?@group.test']}
+    await tools.get_google_calendar_events('token', uid='omi-A')
+
+    async def revoked(*args, **kwargs):
+        raise GoogleAPIError(403, 'revoked')
+
+    monkeypatch.setattr(tools, 'google_api_request', revoked)
+    assert await tools.get_google_calendar_events('token', uid='omi-A') == []
+    assert cache.get(cache.cache_key('omi-A', 'token', store['omi-A'])) is None
+    await tools.get_google_calendar_events('token', uid='omi-A')
+    assert sum(url.endswith('/calendarList') for _, url, _ in calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_discovery_failure_is_not_cached_or_replaced_with_stale_data(provider, catalog_clock, monkeypatch):
+    store, owner, _, calls = provider
+    store['omi-A'] = {prefs.account_key(owner['primary']): ['team/#?@group.test']}
+    await tools.get_google_calendar_events('token', uid='omi-A')
+    catalog_clock[0] += cache.CATALOG_TTL_SECONDS
+
+    async def unavailable(*args, **kwargs):
+        raise GoogleAPIError(500, 'provider failed')
+
+    monkeypatch.setattr(selection, 'google_api_request', unavailable)
+    with pytest.raises(GoogleAPIError):
+        await tools.get_google_calendar_events('token', uid='omi-A')
+    assert cache.get(cache.cache_key('omi-A', 'token', store['omi-A'])) is None
+    assert sum('/events' in url for _, url, _ in calls) == 1
+
+
+def test_cache_memory_bound_and_no_raw_credentials(catalog_clock, monkeypatch):
+    monkeypatch.setattr(cache, '_cache', TTLCache(maxsize=4, ttl=30, getsizeof=lambda value: 1 + len(value[1])))
+    first = cache.cache_key('private-owner', 'private-token', {'private-calendar': ['id']})
+    assert all('private' not in item for item in first)
+    cache.put(first, 'primary', frozenset({'one', 'two'}))
+    second = cache.cache_key('owner-b', 'token-b', {})
+    cache.put(second, 'other', frozenset({'three'}))
+    assert cache.get(first) is None
+    assert cache.get(second) == ('other', frozenset({'three'}))
+    # An unusually large catalog must remain readable without exceeding the
+    # optimization's memory budget or raising a cache insertion error.
+    cache.put(first, 'primary', frozenset({'one', 'two', 'three', 'four'}))
+    assert cache.get(first) is None
+    assert cache.get(second) == ('other', frozenset({'three'}))
+
+
+@pytest.mark.asyncio
+async def test_catalog_routes_share_budget_and_reject_before_google(provider, monkeypatch):
+    from utils.rate_limit_config import get_effective_limit
+
+    _, owner, _, calls = provider
+    seen = []
+
+    def budget(uid, policy, limit, window):
+        seen.append((uid, policy, limit, window))
+        return len(seen) <= 1, 0, 45
+
+    monkeypatch.setattr(routes.auth, 'check_rate_limit', budget)
+    monkeypatch.setattr(routes.auth, 'RATE_LIMIT_SHADOW', False)
+    assert get_effective_limit('calendar:catalog', boost=100) == (12, 60)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'omi-A'
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://omi.test') as client:
+        assert (await client.get('/v1/calendar/google/calendars')).status_code == 200
+        before = len(calls)
+        result = await client.put(
+            '/v1/calendar/google/calendars', json={'account_id': owner['primary'], 'selected_ids': [owner['primary']]}
+        )
+        assert result.status_code == 429 and result.headers['Retry-After'] == '45'
+        assert len(calls) == before
+    assert seen == [('omi-A', 'calendar:catalog', 12, 60)] * 2
+
+
+@pytest.mark.asyncio
+async def test_catalog_limiter_failure_does_not_spend_provider_quota(provider, monkeypatch):
+    import redis
+
+    _, _, _, calls = provider
+
+    def unavailable(*args):
+        raise redis.exceptions.ConnectionError('synthetic unavailable')
+
+    monkeypatch.setattr(routes.auth, 'check_rate_limit', unavailable)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'omi-A'
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://omi.test') as client:
+        assert (await client.get('/v1/calendar/google/calendars')).status_code == 503
+    assert not calls
+
+
+@pytest.mark.asyncio
+async def test_google_documented_private_restricted_writer_is_readable(provider):
+    # Google CalendarList accessRole documents writerWithoutPrivateAccess:
+    # https://developers.google.com/workspace/calendar/api/v3/reference/calendarList
+    _, _, calendars, _ = provider
+    calendars.append(calendar('restricted-writer', role='writerWithoutPrivateAccess'))
+    _, rows = await selection.readable_calendars('token')
+    assert any(row['id'] == 'restricted-writer' for row in rows)

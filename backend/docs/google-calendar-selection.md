@@ -29,6 +29,31 @@ context and failed-finalization calendar protection. Each calendar has its own
 pagination cursor; results are merged chronologically with a global cap. One
 multi-calendar read is bounded by a 20-second deadline.
 
+## Discovery quota and freshness
+
+Opted-in event reads cache only verified primary/calendar IDs for 30 seconds per
+process, bounded to 20,000 calendar IDs (including primary-entry overhead).
+Cache keys digest the Omi owner, current access token and current persisted
+selection. No raw token, calendar title, event or stale preference is cached.
+Preferences are read on every operation: saving a different selection invalidates
+the key in every worker, while a refreshed/reconnected grant has a new token key.
+An explicit catalog refresh/save bypasses and invalidates the local read cache.
+Discovery errors never serve stale data. Event requests always go to Google;
+403/404/410 on a secondary calendar excludes it and evicts local discovery metadata.
+Google remains the authorization boundary even during the 30-second metadata TTL.
+
+GET and PUT catalog routes share the Redis-backed `calendar:catalog` budget of
+12 requests per UID per minute, exempt from event-wide rate-limit boosts.
+Exhaustion returns 429 with Retry-After before any Google call; Redis failure
+returns 503. Existing operational shadow-mode override still applies. The cache
+reduces repeated conversation-read discovery, while this fleet-wide rate limit
+bounds manual refresh/save traffic. Simultaneous cold misses may each discover;
+the cache does not claim cross-worker single-flight or replace Google quota limits.
+
+`writerWithoutPrivateAccess` remains readable: it is documented in Google's
+[CalendarList accessRole contract](https://developers.google.com/workspace/calendar/api/v3/reference/calendarList).
+Google hides private-event details for this role; Omi does not broaden that access.
+
 Secondary event references encode both calendar and event ID. Primary event IDs
 remain unchanged for released-client compatibility. Linking, imported evidence
 dedupe and update/delete round-trip that opaque reference; URL path segments are
@@ -78,6 +103,12 @@ No production calendar mutation, credential change or customer test is authorize
 as part of the local verification.
 
 ## Release order and remaining qualification
+
+November 12 follow-up checks:
+- [x] Cache expiry, owner/grant/selection separation, revocation and error/no-stale-data regressions
+- [x] Shared route rate budget, 429 Retry-After and limiter-outage 503 before provider calls
+- [x] Production routes with real local Firestore persistence and synthetic provider revocation
+- [ ] Current follow-up commit CI
 
 Deploy the additive backend API before publishing clients that expose the picker.
 Existing released clients keep their primary-only behavior until a user saves a
