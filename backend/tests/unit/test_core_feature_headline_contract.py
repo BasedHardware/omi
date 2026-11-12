@@ -217,7 +217,17 @@ def test_server_journeys_use_only_their_emitting_jobs():
                 assert journey is not None, (panel['id'], expr)
                 journey = journey[1]
                 assert journey in owners, (panel['id'], journey)
-                assert f'job="{owners[journey]}"' in selector, (panel['id'], selector)
+                owner = owners[journey]
+                # Live capture is accepted by backend-listen and settled by pusher
+                # (prod 2026-11-12: 49,870 accepted on backend-listen, 0 on pusher, 2d).
+                if journey == 'capture_finalization' and f'omi_journey_accepted_total{selector}' in expr:
+                    owner = 'backend-listen-metrics'
+                # Exactly one job matcher: repeated matchers must all match, so a second
+                # job would select nothing while a substring check still passed.
+                assert re.findall(r'\bjob\s*(=~|!~|!=|=)\s*"([^"]*)"', selector) == [('=', owner)], (
+                    panel['id'],
+                    selector,
+                )
                 seen.add(journey)
             # Client and server journey names are disjoint, not join keys.
             for selector in re.findall(r'\bomi_client_journey_\w+\{([^}]*)\}', expr):
@@ -266,7 +276,7 @@ def test_non_journey_metrics_match_the_observed_production_labels():
             },
         },
         'omi_subscription_events_total': {
-            'job': {'backend-listen-metrics', 'cloud-run-application-metrics'},
+            'job': {'cloud-run-application-metrics'},
             'event': {'cancellation_requested', 'cancellation_reverted', 'created', 'ended', 'payment_failed'},
         },
     }
@@ -294,4 +304,7 @@ def test_scoped_stats_preserve_missing_telemetry_instead_of_fabricating_zero():
         # A present but idle denominator must also leave the stat empty.
         assert panels[panel_id]['targets'][0]['expr'].endswith(' > 0)'), panels[panel_id]['title']
     for panel_id in (12, 13, 14, 15):
-        assert '0 * sum(increase(omi_subscription_events_total[$__range]))' in panels[panel_id]['targets'][0]['expr']
+        expr = panels[panel_id]['targets'][0]['expr']
+        assert '0 * sum(increase(omi_subscription_events_total{job="cloud-run-application-metrics"}[$__range]))' in expr
+        # Unscoped, the query also scans the always-zero listen series and times out (2026-11-12).
+        assert 'omi_subscription_events_total[' not in expr and 'omi_subscription_events_total{event' not in expr
