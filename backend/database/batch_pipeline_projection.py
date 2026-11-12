@@ -95,6 +95,42 @@ class ProjectionStore:
         except Exception:
             logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
 
+    def _observe_transcription(self, binding: ProjectionBinding, now: float, accounting: dict, result: dict) -> None:
+        """Fail-open C1 transcript-landed write: ``sealed -> transcribed``.
+
+        Runs after the durable completion that published this capture's
+        transcript, on the same event clock (``now``) the completion used. Only a
+        first completion reaches here: a replay returns an earlier result with
+        no write, and a source deletion keeps its erasure fence and gets no new
+        durable row. Speech counters come from the immutable completion summary,
+        never from a query.
+        """
+        capture_id = binding.target_conversation_id
+        if not isinstance(capture_id, str) or not capture_id:
+            return
+        if accounting.get('source_deleted') or (result or {}).get('reason_code') == 'source_deleted':
+            return
+        seconds = accounting.get('seconds')
+        speech_seconds = float(seconds) if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) else 0.0
+        try:
+            from database import pipeline_ledger
+
+            pipeline_ledger.advance(
+                binding.owner_id,
+                capture_id,
+                pipeline_ledger.TRANSCRIBED,
+                now=now,
+                speech_seconds=speech_seconds,
+                has_speech=speech_seconds > 0,
+                speech_basis='transcript',
+                firestore_client=self.client,
+            )
+        except Exception as error:  # The durable completion is already authoritative.
+            logger.warning(
+                'event=batch_projection action=ledger outcome=error stage=transcribed exception_type=%s',
+                type(error).__name__,
+            )
+
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
         job: dict[str, Any] = self.ref('jobs', segment_id).get().to_dict() or {}
@@ -702,6 +738,7 @@ class ProjectionStore:
             result, changed, seconds = self.run(commit, policy=policy)
         self._mirror(binding)
         if changed:
+            self._observe_transcription(binding, now, accounting, result)
             if result.get('reason_code') == 'source_deleted':
                 SOURCE_DELETED_JOBS.inc()
                 logger.info('event=batch_projection action=completion outcome=source_deleted')
