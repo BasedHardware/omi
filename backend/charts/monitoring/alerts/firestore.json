@@ -844,5 +844,198 @@
       ]
     },
     "record": null
+  },
+  {
+    "uid": "omi-firestore-caller-overflow",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - caller label set overflowed into other",
+    "condition": "F",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(omi_firestore_caller_label_overflow_total[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 || $B > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "vector(1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$C * $D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "F",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "F"
+                ],
+                "type": "query"
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "E",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "F",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-12T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "The Firestore read caller label set has overflowed into other: a new call site is no longer named, so by-caller attribution is silently folding.",
+      "user_impact": "No direct user impact; this is an attribution and cost-visibility signal. Reads keep being served, but a new or changed read path stops being named in the by-caller counter, so a read regression on it can no longer be attributed to a call site.",
+      "scope": "omi_firestore_billed_reads_by_caller_total{caller=\"other\"} and omi_firestore_caller_label_overflow_total from the Python Firestore read probe (backend/database/firestore_document_probe.py), across every instrumented process. The cap is MAX_CALLERS (1536) distinct module:function labels per process.",
+      "verification": "Run sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) and sum(rate(omi_firestore_caller_label_overflow_total[5m])). A non-zero overflow rate means a well-formed new caller arrived after the cap filled; a non-zero other read rate without overflow means a malformed or frame-less caller label. Both are folding. Confirm the probe image is current before changing the cap.",
+      "safe_next_action": "Identify the folded call site from the deploy that started serving just before the first overflow, then either raise MAX_CALLERS in a reviewed PR with the measured function count, or fix the malformed label. Never add a uid, document id or query text as a label. Kill switch: set node D (vector(1)) to vector(0) and re-provision; restore vector(1) to re-enable. The rule also ships isPaused=false; pausing it is the operational switch.",
+      "threshold": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) > 0 OR sum(rate(omi_firestore_caller_label_overflow_total[5m])) > 0, sustained 5m, gated by the enable selector node D vector(1).",
+      "evaluated_bad": "Fixture, not a live backtest: the counter is new in this program and no production overflow window exists yet. With MAX_CALLERS=1 a second well-formed caller folds to other and omi_firestore_caller_label_overflow_total increments by 1; the rule evaluates to 1. See backend/tests/unit/test_firestore_caller_overflow_alert.py.",
+      "evaluated_good": "Fixture: with the caller set not full, bound_caller returns the named label, the overflow counter does not move, and the rule evaluates to 0. Same test file.",
+      "kill_switch": "Enable selector node D vector(1) in this rule, enabled by default. Disable: set node D to vector(0) and run python3 backend/scripts/provision_monitoring_alerts.py --apply. Re-enable: restore vector(1) and re-provision. Operational switch: isPaused (ships false). No actuator flips either automatically."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-caller-overflow",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability",
+      "kill_switch": "omi-firestore-caller-overflow"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
   }
 ]
