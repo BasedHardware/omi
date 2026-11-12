@@ -224,7 +224,10 @@ def test_server_journeys_use_only_their_emitting_jobs():
                     owner = 'backend-listen-metrics'
                 # Exactly one job matcher: repeated matchers must all match, so a second
                 # job would select nothing while a substring check still passed.
-                assert re.findall(r'\bjob(=~|!~|!=|=)"([^"]*)"', selector) == [('=', owner)], (panel['id'], selector)
+                assert re.findall(r'\bjob\s*(=~|!~|!=|=)\s*"([^"]*)"', selector) == [('=', owner)], (
+                    panel['id'],
+                    selector,
+                )
                 seen.add(journey)
             # Client and server journey names are disjoint, not join keys.
             for selector in re.findall(r'\bomi_client_journey_\w+\{([^}]*)\}', expr):
