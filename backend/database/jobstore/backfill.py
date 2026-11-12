@@ -6,7 +6,7 @@ Firestore stays the primary and the only authority. Each copy goes through the A
 primary's current state. A backfill page therefore never regresses a row that a live mirror updated after the
 census read it, and a document deleted meanwhile is deleted from Postgres too. Rerunnable and idempotent.
 
-Only the eight mirrored batch tables are read; customer documents (``conversations``, ``content``) never
+Only the ten mirrored batch tables are read; customer documents (``conversations``, ``content``) never
 are. The report holds counts only, never a key, id or value. Postgres-only rows are counted, not deleted.
 """
 

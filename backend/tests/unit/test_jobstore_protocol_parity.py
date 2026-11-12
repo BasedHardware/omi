@@ -65,3 +65,23 @@ def test_pg_sim_forwards_the_due_page_cursor():
     store.pg.projection_page.return_value = (['a'], (10.0, 3.0, 'a'))
     assert store.projection_page(1, after=(5.0,), states=('ready',), due_before=10.0) == (['a'], (10.0, 3.0, 'a'))
     store.pg.projection_page.assert_called_once_with(1, after=(5.0,), states=('ready',), due_before=10.0)
+
+
+def test_every_serving_read_is_in_the_executable_parity_census():
+    from database.jobstore.serving_parity import STORE_QUERIES, TRANSACTION_QUERIES
+
+    mutations = {
+        'run',
+        'acquire_pull_claim',
+        'quarantine_fenced',
+        'cancel_fenced_recovery',
+        'defer_privacy_blocked_record',
+    }
+    assert STORE_QUERIES == _public(firestore_store.FirestoreStore) - mutations - {'client'}
+    assert TRANSACTION_QUERIES == _public(firestore_store.FirestoreTransaction) - {
+        'put',
+        'patch',
+        'defer_set',
+        'check_privacy',
+        'flush',
+    }

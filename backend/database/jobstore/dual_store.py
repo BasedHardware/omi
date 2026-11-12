@@ -27,8 +27,9 @@ returns at once, without constructing anything, unless this process runs ``BATCH
 Customer documents (``conversations``, ``content``) are never mirrored. The selector is
 ``BATCH_JOBSTORE_MODE=shadow`` (default ``firestore``: no shadow, no Postgres connection), and the live
 stop lever is the ops kill switch ``JOBSTORE_SHADOW_WRITES`` (on unless set off; cross-plan L3/X3).
-The ``batch_pipeline_prod`` namespace is refused until account deletion purges the Postgres copy too,
-except in staging on the staging Firestore database, which keeps that worker namespace
+Every namespace requires explicit ``JOBSTORE_SHADOW_NAMESPACES`` admission (default empty).
+The ``batch_pipeline_prod`` namespace is additionally refused outside a staging deployment
+on the staging Firestore database, which keeps that worker namespace
 (``utils.staging_fence.jobstore_shadow_admits``, ruling L02-2).
 """
 
@@ -65,7 +66,9 @@ PURGE_TIMEOUT_S = 30.0
 PURGE_CHUNK = 200
 # Second-scan delay: longer than a mirror copy's pool wait plus one primary get_all in practice.
 PURGE_SETTLE_S = 2.0
-MIRRORED_TABLES = frozenset({'jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts'})
+MIRRORED_TABLES = frozenset(
+    {'jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts', 'pull_claims', 'merge_holds'}
+)
 # The original-capture lineage a missing-input repair restages with (geolocation, capture claims) stays
 # Firestore-only: the mirror does not follow the intake receipt TTL (Luna #24366 r3), and a repair that
 # finds no record holds rather than guessing.
@@ -229,7 +232,7 @@ def read_current(primary: Any, keys: list[tuple[str, str]]) -> dict[tuple[str, s
     """
     from database.batch_pipeline_store import FirestoreStore
 
-    if not isinstance(primary, FirestoreStore):
+    if not isinstance(primary, (FirestoreStore, _ErasurePrimary)):
         return primary.run(lambda tx: {address: tx.get(*address) for address in keys})
     client = primary.client
     refs = [client.collection(f'{primary.namespace}_{table}').document(key) for table, key in keys]
@@ -289,8 +292,36 @@ class DualStore:
         self._tracker: threading.Thread | None = None
 
     def __getattr__(self, name: str) -> Any:
-        # due / oldest / oldest_retry / control_candidate / quarantine_fenced / projection_* / client / namespace
-        return getattr(self.primary, name)
+        from database.jobstore.serving_parity import STORE_QUERIES
+
+        method = getattr(self.primary, name)
+        if name not in STORE_QUERIES:
+            return method
+
+        def observed(*args, **kwargs):
+            result = method(*args, **kwargs)
+            # An additional operator opt-in; no query traffic with current defaults.
+            if os.getenv('JOBSTORE_SHADOW_QUERY_PARITY', '').strip().lower() == 'on':
+                self._observe_query(name, args, kwargs)
+            return result
+
+        return observed
+
+    def _observe_query(self, name, args, kwargs):
+        from database.jobstore.serving_parity import SERVING_PARITY_TOTAL
+
+        try:
+            self._queue.put_nowait(('query', name, (deepcopy(args), deepcopy(kwargs))))
+            self._ensure_worker()
+        except Exception:
+            SERVING_PARITY_TOTAL.labels(query=name, outcome='unknown').inc()
+
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        # Only Firestore claims. Its CAS bypasses run(), so refresh the cold copy after success.
+        acquired = self.primary.acquire_pull_claim(shard, token, now, ttl)
+        if acquired:
+            self.refresh([('pull_claims', shard)])
+        return acquired
 
     def run(self, body: Callable[[Any], T]) -> T:
         attempt: dict[str, _Recorder] = {}
@@ -342,7 +373,12 @@ class DualStore:
         while True:
             kind, first, second = self._queue.get()
             try:
-                if kind == 'refresh':
+                if kind == 'query':
+                    from database.jobstore.serving_parity import compare_serving_query
+
+                    args, kwargs = second
+                    compare_serving_query(self.primary, self.shadow, first, *args, budget_s=self.budget_s, **kwargs)
+                elif kind == 'refresh':
                     self.refresh_now(first)
                 else:
                     self.mirror(first, second)
@@ -419,7 +455,8 @@ class DualStore:
         from database.batch_pipeline_privacy import privacy_owner_key
 
         namespace, key = self.shadow.namespace, privacy_owner_key(owner_id)
-        rows = {('control', scheduler_control_key(key)), ('owners', key)}
+        shard = scheduler_control_key(key)
+        rows = {('control', shard), ('pull_claims', shard), ('owners', key), ('merge_holds', key)}
         rows.update(('queues', f'{priority}_{key}') for priority in range(3))
         owner_match = "(doc->>'owner_key' = %s OR doc->>'owner_id' = %s)"
         jobs = conn.execute(
@@ -702,6 +739,25 @@ _SHADOWED: dict[str, DualStore] = {}
 _SHADOWED_LOCK = threading.Lock()
 
 
+class _ErasurePrimary:
+    """Read-only erasure view across both stage namespaces on the customer data plane.
+
+    Purge intentionally visits prod and dev irrespective of runtime stage. It
+    cannot use the stage-qualified serving factory or grant a write transaction.
+    """
+
+    def __init__(self, namespace: str):
+        if namespace not in {'batch_pipeline_prod', 'batch_pipeline_dev'}:
+            raise ValueError('erasure view requires an explicit stage namespace')
+        self.namespace = namespace
+
+    @property
+    def client(self):
+        from database._client import get_data_plane_firestore_client
+
+        return get_data_plane_firestore_client()
+
+
 def shadow_from_env(primary: Any) -> Any:
     """``primary`` unchanged unless ``BATCH_JOBSTORE_MODE=shadow`` and the staging Postgres is configured.
 
@@ -717,47 +773,63 @@ def shadow_from_env(primary: Any) -> Any:
         return primary
     namespace = getattr(primary, 'namespace', '')
     if not jobstore_shadow_admits(namespace):
-        logger.warning('event=jobstore_shadow outcome=refused reason=prod_namespace')
-        return primary
-    target = [os.getenv(name, '').strip() for name in ('JOBSTORE_PG_HOST', 'JOBSTORE_PG_DATABASE', 'JOBSTORE_PG_USER')]
-    if not all(target):
-        logger.warning('event=jobstore_shadow outcome=refused reason=unconfigured')
-        return primary
-    if importlib.util.find_spec('psycopg') is None:  # an image without the driver would only count errors
-        logger.warning('event=jobstore_shadow outcome=refused reason=driver_missing')
+        logger.warning('event=jobstore_shadow outcome=refused reason=namespace_admission')
         return primary
     with _SHADOWED_LOCK:
         if namespace in _SHADOWED:
             return _SHADOWED[namespace]
-        from database.jobstore.connection import Pool, iam_connector
-        from database.jobstore.postgres_store import PostgresStore
+        try:
+            store = _configured_copy(primary)
+        except RuntimeError:
+            logger.warning('event=jobstore_shadow outcome=refused reason=configuration')
+            return primary
+        if store is None:
+            return primary
+        _SHADOWED[namespace] = store
+        return store
 
-        pool = Pool('', size=2, connect=iam_connector(*target))
-        shadow = PostgresStore(namespace, pool=pool, customer_client=None)
-        _SHADOWED[namespace] = DualStore(primary, shadow)
-        logger.info('event=jobstore_shadow outcome=enabled')
-        return _SHADOWED[namespace]
+
+def _configured_copy(primary: Any) -> DualStore | None:
+    """Build a lazy copy handle, independently of writer mode/admission. Also used by erasure."""
+    target = [os.getenv(name, '').strip() for name in ('JOBSTORE_PG_HOST', 'JOBSTORE_PG_DATABASE', 'JOBSTORE_PG_USER')]
+    if not any(target):
+        return None
+    if not all(target):
+        raise RuntimeError('incomplete jobstore purge target configuration')
+    if importlib.util.find_spec('psycopg') is None:
+        raise RuntimeError('jobstore purge target configured without Postgres driver')
+    from database.jobstore.connection import Pool, iam_connector
+    from database.jobstore.postgres_store import PostgresStore
+
+    pool = Pool('', size=2, connect=iam_connector(*target))
+    return DualStore(primary, PostgresStore(primary.namespace, pool=pool, customer_client=None))
 
 
 def purge_owner(namespace: str, owner_id: str) -> int:
-    """A5 deletion hook: reconcile ``owner_id``'s Postgres rows with the purged primary. RAISES on failure.
+    """Erase retained copies even with mirror mode, admission and writes disabled.
 
-    A no-op (0, nothing constructed) unless this process runs ``BATCH_JOBSTORE_MODE=shadow`` on an admitted
-    namespace with Postgres configured, exactly when the mirror could have copied the owner's documents.
-    ``JOBSTORE_SHADOW_WRITES=off`` stops new copies, not erasure of old ones, so it does not skip this.
+    Keep the PG target configured until all retained copies have been retired. Partial
+    configuration, missing drivers and database failures raise so erasure retries.
+    No new target is opened when no copy target was ever configured.
     """
-    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or not jobstore_shadow_admits(
-        namespace
+    store = _SHADOWED.get(namespace)
+    if store is not None:
+        return store.purge_owner_now(owner_id)
+    if not any(
+        os.getenv(name, '').strip() for name in ('JOBSTORE_PG_HOST', 'JOBSTORE_PG_DATABASE', 'JOBSTORE_PG_USER')
     ):
         return 0
-    store = _SHADOWED.get(namespace)
-    if store is None:
-        from database.batch_pipeline_store import FirestoreStore
+    # Test namespaces retain FirestoreStore's loopback-only validation.
+    from database.batch_pipeline_store import FirestoreStore
 
-        store = shadow_from_env(FirestoreStore(namespace))
-    if not isinstance(store, DualStore):
-        return 0  # shadow refused (unconfigured or no driver): the mirror never ran here
-    return store.purge_owner_now(owner_id)
+    primary = FirestoreStore(namespace) if namespace.startswith('batch_pipeline_test_') else _ErasurePrimary(namespace)
+    store = _configured_copy(primary)
+    if store is None:
+        return 0
+    try:
+        return store.purge_owner_now(owner_id)
+    finally:
+        store.shadow.pool.close()
 
 
 def mirror_refresh(namespace: str, keys) -> None:

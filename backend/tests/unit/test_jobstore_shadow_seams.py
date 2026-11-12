@@ -43,6 +43,7 @@ def isolated(monkeypatch):
 
 def _shadow_settings(monkeypatch):
     monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+    monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
     monkeypatch.setenv('JOBSTORE_PG_HOST', '10.0.0.1')
     monkeypatch.setenv('JOBSTORE_PG_DATABASE', 'jobstore_staging')
     monkeypatch.setenv('JOBSTORE_PG_USER', 'svc@example.iam')
@@ -131,16 +132,18 @@ def test_secondary_writer_stores_are_the_shadow_seam(module_name, function):
 
 
 # -- A5: privacy erasure of the Postgres copy ---------------------------------------------------------------
-def test_purge_hook_is_a_no_op_without_shadow_mode(monkeypatch):
-    monkeypatch.setattr(dual_store, 'purge_owner', lambda *a: pytest.fail('must not reach the job store'))
+def test_purge_hook_reaches_retained_copies_without_shadow_mode(monkeypatch):
+    monkeypatch.setattr(dual_store, 'purge_owner', lambda *a: 0)
     assert hook.purge_owner('batch_pipeline_dev', 'synthetic-uid') == 0
 
 
-def test_purge_hook_skips_the_refused_prod_namespace(monkeypatch):
+def test_purge_hook_does_not_use_write_admission_to_skip_erasure(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     _shadow_settings(monkeypatch)
-    monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _p: pytest.fail('prod is refused before any store'))
-    assert hook.purge_owner('batch_pipeline_prod', 'synthetic-uid') == 0
+    calls = []
+    monkeypatch.setattr(dual_store, 'purge_owner', lambda *args: calls.append(args) or 3)
+    assert hook.purge_owner('batch_pipeline_prod', 'synthetic-uid') == 3
+    assert calls == [('batch_pipeline_prod', 'synthetic-uid')]
 
 
 def test_purge_hook_reconciles_through_the_shadow_store_and_raises_its_failures(monkeypatch):
