@@ -494,6 +494,7 @@ def entries():
                 'namespace': namespaces,
                 'state': ['leased', 'retry', 'result_ready', 'record_pending', 'record_recovery_waiting'],
                 'limit': [1, 100, 500, 999],
+                'promote_recoveries': [False, True],
             },
             neutrals={'now': (1.0, 'timestamp operand only')},
         ),
