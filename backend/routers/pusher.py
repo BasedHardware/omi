@@ -585,6 +585,13 @@ async def _run_websocket_util_trigger(
     # sentence: the classification the terminal outcome needs (the session
     # ended as keepalive churn, not an application fault).
     peer_keepalive_timeout = False
+    # Set when the storage authority refuses this account's writes because a
+    # destructive operation owns the gate (account deletion in progress): the
+    # refusal is permanent for the session, so later batches drop fast instead
+    # of replaying the same fenced write every flush. Session-scoped so every
+    # custody commit path — the encoded-batch uploader and the durable window
+    # flush alike — latches and honors the same fence.
+    upload_fenced: bool = False
     # Set by the wind-down watcher when the pod drain ends this session
     # itself; guards the close-code and crash classification below.
     drain_winddown_triggered = False
@@ -905,6 +912,13 @@ async def _run_websocket_util_trigger(
                 ):
                     await flush_refs(conv_id)
             for conv_id in list(record_close_requests):
+                if upload_fenced or record_barrier.record_upload_failed:
+                    # A session-wide fence (or a failed boundary) refuses the
+                    # recording-finish write too: settle the close as retired
+                    # — the encoded uploader's loop retires the same way —
+                    # instead of burning a doomed write per session.
+                    retire_record_close(conv_id)
+                    continue
                 if (
                     conv_id == inline_finish_conversation
                     and conv_id not in pending_refs
@@ -979,6 +993,7 @@ async def _run_websocket_util_trigger(
         """
         nonlocal websocket_active
         nonlocal application_failed
+        nonlocal upload_fenced
 
         if durable_audio:
             await process_durable_private_cloud_queue()
@@ -996,11 +1011,6 @@ async def _run_websocket_util_trigger(
         # Their chunks can never be referenced, played or cleaned up again, so we
         # stop uploading rather than leaving more orphans in the bucket (#11742).
         identity_refreshed: set[str] = set()
-        # Set when the storage authority refuses this account's writes because a
-        # destructive operation owns the gate (account deletion in progress): the
-        # refusal is permanent for the session, so later batches drop fast instead
-        # of replaying the same fenced write every flush.
-        upload_fenced: bool = False
 
         async def _add_to_batch(chunk_info: PrivateCloudChunk) -> None:
             conv_id = chunk_info['conversation_id']
@@ -1475,6 +1485,15 @@ async def _run_websocket_util_trigger(
                     on_committed=committed,
                     framed=framed_audio,
                 )
+            except DestructiveOperationInProgress:
+                # The deletion fence refused this window before any storage
+                # operation: the owner gate check precedes the upload, so
+                # there is no unknown remote outcome to protect. Re-raise
+                # without latching ``durable_commit_unresolved`` — the
+                # refusal is a permanent policy state the flush settles as
+                # a policy drop (``_queue_private_cloud_chunk``), never an
+                # unresolved commit and never a replayable custody failure.
+                raise
             except BaseException:
                 # A failed/cancelled dispatch can have committed remotely. The
                 # shutdown tail must never rerun that unknown storage operation.
@@ -1483,9 +1502,20 @@ async def _run_websocket_util_trigger(
                 raise
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False) -> None:
+            nonlocal upload_fenced
             if current_conversation_id in deleted_conversations:
                 # A gone-owner result is terminal for both encoded projection
                 # and future raw custody windows in this socket.
+                audio_budget.release(len(private_cloud_sync_buffer))
+                _reset_private_cloud_buffer()
+                durable_window_frames.clear()
+                return
+            if upload_fenced:
+                # The storage authority fenced this account earlier in the
+                # session: every later flush would answer with the same
+                # permanent policy refusal, so drop at enqueue — release the
+                # buffer's budget and keep the session healthy instead of
+                # replaying a fenced write every window.
                 audio_budget.release(len(private_cloud_sync_buffer))
                 _reset_private_cloud_buffer()
                 durable_window_frames.clear()
@@ -1496,7 +1526,35 @@ async def _run_websocket_util_trigger(
                 # Custody never drops a zero run: it is captured audio, and
                 # the projection reads it back exactly like any other frame.
                 if private_cloud_sync_enabled and len(private_cloud_sync_buffer) > 0:
-                    await commit_durable_window()
+                    try:
+                        await commit_durable_window()
+                    except DestructiveOperationInProgress:
+                        # The account's writes are fenced by a destructive
+                        # operation (account deletion owns the gate): the
+                        # refusal is permanent — no retry of this window can
+                        # pass the fence, and every later window would burn
+                        # the same refusal against the same authority reads.
+                        # Latch the session exactly like the encoded-batch
+                        # uploader: drop this window as a policy drop,
+                        # fast-refuse the rest, and keep the session healthy
+                        # (the closure is by design, not a fault).
+                        upload_fenced = True
+                        audio_budget.release(len(private_cloud_sync_buffer))
+                        _reset_private_cloud_buffer()
+                        durable_window_frames.clear()
+                        PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc()
+                        record_fallback(
+                            component='pusher',
+                            from_mode='private_cloud_sync',
+                            to_mode='drop',
+                            reason='policy',
+                            outcome='exhausted',
+                            log=logger,
+                        )
+                        logger.warning(
+                            f'Durable custody window refused: account writes are fenced by a destructive '
+                            f'operation (no retry) {uid} {current_conversation_id}'
+                        )
                 return
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
                 return
@@ -1576,7 +1634,11 @@ async def _run_websocket_util_trigger(
             durable_tail_has_receipt = False
             try:
                 await _queue_private_cloud_chunk()
-                tail_committed = durable_audio
+                # A fence-latched session committed nothing at the tail: the
+                # refusal dropped the window as a policy drop, so no inline
+                # finish may run against a recording the account's deletion
+                # is about to erase.
+                tail_committed = durable_audio and not upload_fenced
             except ProjectionQueueWaitTimeout:
                 observation.reason = 'queue_wait_timeout'
                 websocket_close_code = 1011
