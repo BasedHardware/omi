@@ -715,6 +715,16 @@ recovery behavior.
 
 ## Funded transcription cap
 
+The SCA-1750 draft adds aggregate-only observation via
+`STT_FREE_ALLOWANCE_WATCH_ENABLED` (default `true`; `false`, `0`, `off`, or `no`
+disables observation). The observer reads verified monthly transcription billing
+seconds without launch-date/cohort fallbacks and cannot change an admission
+result. Async observations wait at most 2.5 seconds; sealed GPU authorization
+observations use at most 100 ms of remaining authorization budget. No wire or
+payload fields change. This is not a shared reservation or enforcement rollout;
+coverage, duration semantics, and remaining work are documented in
+[the change note](listen_pusher_pipeline/changes/2026-11-12-free-allowance-watch.md).
+
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
 shared live admission state, including multichannel, replay and replacement legs.
 Denial preserves receiving and existing audio storage paths; accepted provider

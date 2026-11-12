@@ -209,6 +209,9 @@ async def stt_transcribe(
             del audio_bytes
             raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
 
+        from utils.stt.allowance_watch import observe_async
+
+        await observe_async(uid, 'one_shot', provider, seconds)
         if retired:
             try:
                 payload = await vendor_proxy_payload(

@@ -201,6 +201,17 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
             if await stage('seal', store.run, seal):
                 allowed.append(segment)
                 retries.pop(segment, None)
+                # Observe only sealed dispatches, within transport headroom.
+                # Telemetry cannot consume the deadline of another unit.
+                from utils.stt.allowance_watch import observe_async
+
+                await observe_async(
+                    job['owner_id'],
+                    'batch_gpu',
+                    'parakeet',
+                    float(job.get('duration_seconds', 0)),
+                    timeout=min(0.1, max(0.001, deadline - time.monotonic())),
+                )
             else:
                 retries[segment] = 30
         except BatchPrivacyBlocked:

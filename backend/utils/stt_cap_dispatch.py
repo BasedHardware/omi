@@ -413,6 +413,15 @@ def live_provider(provider, rate_index):
         @wraps(fn)
         async def connect(*args, **kwargs):
             admission = current_live_admission.get()
+            from utils.byok import get_byok_uid
+            from utils.stt.allowance_watch import observe_async
+
+            await observe_async(
+                admission.uid if admission is not None else get_byok_uid(),
+                'live_open',
+                provider,
+                customer_funded=customer_funded(provider),
+            )
             if admission is not None and not execution_admission_enabled(admission.uid, 'live'):
                 admission = None
             if admission is None:

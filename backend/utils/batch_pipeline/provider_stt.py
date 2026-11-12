@@ -591,10 +591,12 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
     from utils.batch_pipeline.word_validation import validate_words
+    from utils.stt.allowance_watch import observe_async
 
     pcm, duration, spans = inspected
     if service not in _CALLABLE_SERVICES:
         raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.LOCAL_FAILURE)
+    await observe_async(item.owner_id, 'batch_provider', service, duration)
     try:
         response = await _vendor_words(service, _wav(pcm), duration, language)
     except (RecoveryFailure, BatchPrivacyBlocked):

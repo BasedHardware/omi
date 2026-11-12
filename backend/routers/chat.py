@@ -1246,7 +1246,7 @@ async def transcribe_voice_message_stream(
         await close_stt_failure('send_failed')
         return False
 
-    def record_stt_usage_once() -> None:
+    async def record_stt_usage_once() -> None:
         """Settle the connect-time reservation after a successful provider drain."""
         nonlocal usage_recorded
         if usage_recorded or bytes_per_second <= 0:
@@ -1260,6 +1260,11 @@ async def transcribe_voice_message_stream(
             # Fail-open path never reserved; keep force-record tracking.
             record_actual_duration(uid, actual_duration_ms)
         usage_recorded = True
+        from utils.stt.allowance_watch import observe_async
+        from utils.stt_cap_dispatch import customer_funded
+
+        provider = serving_provider()
+        await observe_async(uid, 'ptt', provider, actual_duration_ms / 1000, customer_funded=customer_funded(provider))
 
     def refund_reservation_once() -> None:
         """Release an unused reservation when the session never drained successfully."""
@@ -1374,7 +1379,7 @@ async def transcribe_voice_message_stream(
                         accepted_audio_bytes += len(stt_audio_buffer)
                         stt_audio_buffer.clear()
                     if await drain_stt_or_close():
-                        record_stt_usage_once()
+                        await record_stt_usage_once()
                     else:
                         break
                 continue
@@ -1434,7 +1439,7 @@ async def transcribe_voice_message_stream(
         # Await a healthy provider's final tail before stopping the segment sender.
         # A rejected send still gets a best-effort close but no final transcript or usage charge.
         if dg_socket and not stt_send_failed and await drain_stt_or_close():
-            record_stt_usage_once()
+            await record_stt_usage_once()
         else:
             # Provider never drained successfully — refund the connect-time reservation.
             refund_reservation_once()

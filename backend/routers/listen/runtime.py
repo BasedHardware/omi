@@ -977,6 +977,14 @@ class ListenSessionRuntime:
             held_seconds=admission.held_seconds_between if admission is not None else None,
         )
         words = self.state.words_transcribed_since_last_record
+        if seconds:
+            from utils.stt.allowance_watch import observe_async
+            from utils.stt_cap_dispatch import customer_funded
+
+            provider = getattr(self, 'stt_service', None)
+            await observe_async(
+                self.request.uid, 'live_billing', provider, seconds, customer_funded=customer_funded(provider)
+            )
         self.state.words_transcribed_since_last_record = 0
         usage_metadata: Dict[str, Any] = live_usage_metadata(self)
         if (
