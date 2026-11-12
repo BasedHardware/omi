@@ -1031,6 +1031,8 @@ class ListenSessionRuntime:
                     else {}
                 ),
             )
+        elif final and scope is not None:
+            await self.persistence.call(scope.billed, 0)
         if not final:
             self.state.last_usage_record_timestamp = now
             if scope is not None and scope.reference is None and scope.provider != 'unknown':
@@ -1243,9 +1245,7 @@ class ListenSessionRuntime:
             background.extend(
                 [
                     self.task_supervisor.create_lifetime_task(self._heartbeat(), name='heartbeat'),
-                    self.task_supervisor.create_lifetime_task(
-                        self.allowance_operation.monitor(), name='allowance_watch'
-                    ),
+                    self.task_supervisor.create_lifetime_task(self._allowance_watch(), name='allowance_watch'),
                     self.task_supervisor.create_lifetime_task(
                         self.transcripts.process_loop(), name='stream_transcript'
                     ),
