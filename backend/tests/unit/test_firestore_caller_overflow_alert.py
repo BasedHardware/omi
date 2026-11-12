@@ -167,6 +167,16 @@ def test_enable_selector_disables_and_re_enables_the_rule():
     assert _evaluate(rule, 1, 1, enable=1) == {(): 1}
 
 
+def test_pending_and_resolution_episode():
+    # The 5m pending is real: a sustained fold fires after five minutes and
+    # resolves when the fold stops.
+    rule = _rule()
+    samples = [(t, {(): 1.0 if t <= 420 else 0.0}) for t in range(0, 600, 60)]
+    result = backtest.episodes(rule, samples, 0, 540, 60)
+    assert result['episodes'] == 1
+    assert result['longest_seconds'] == 180
+
+
 def _fires(rule):
     """Grafana evaluates an unpaused rule; a paused rule never produces an instance."""
     if rule['isPaused']:
