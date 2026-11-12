@@ -1,16 +1,22 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
-Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, String? promotionCode}) async {
+Future<Map<String, dynamic>?> createCheckoutSession({
+  required String priceId,
+  String? promotionCode,
+  int? trialDays,
+}) async {
   final body = <String, dynamic>{'price_id': priceId};
   if (promotionCode != null && promotionCode.trim().isNotEmpty) {
     body['promotion_code'] = promotionCode.trim();
   }
+  if (trialDays != null && trialDays > 0) body['trial_days'] = trialDays;
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/checkout-session',
     headers: {},
@@ -68,10 +74,67 @@ Future<bool> cancelSubscription({String? reason, String? reasonDetails}) async {
   return false;
 }
 
-Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, String? promotionCode}) async {
+/// The stay offer on the last cancel step; null when it cannot be read.
+Future<wire.GeneratedRetentionOfferResponse?> getRetentionOffer() async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/retention-offer',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    return wire.GeneratedRetentionOfferResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Applies the stay offer and keeps the subscription renewing.
+Future<bool> acceptRetentionOffer() async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/retention-offer',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  return response != null && response.statusCode == 200;
+}
+
+/// The monthly-to-yearly switch for this reader; with [preview], Stripe's charge today and renewal
+/// date. Null when it cannot be read: the offer is optional and never throws into its host screen.
+Future<wire.GeneratedYearlySwitchResponse?> getYearlySwitch({bool preview = false}) async {
+  try {
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/payments/yearly-switch${preview ? '?preview=true' : ''}',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+    if (response == null || response.statusCode != 200) return null;
+    return wire.GeneratedYearlySwitchResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// [switchNow] charges a monthly-to-yearly change today (prorated) instead of scheduling it: only
+/// [expectedAmountDue], the amount the yearly-switch preview showed at its [prorationDate].
+Future<Map<String, dynamic>?> upgradeSubscription({
+  required String priceId,
+  String? promotionCode,
+  bool switchNow = false,
+  int? prorationDate,
+  int? expectedAmountDue,
+}) async {
   final body = <String, dynamic>{'price_id': priceId};
   if (promotionCode != null && promotionCode.trim().isNotEmpty) {
     body['promotion_code'] = promotionCode.trim();
+  }
+  if (switchNow) {
+    body['switch_now'] = true;
+    body['proration_date'] = prorationDate;
+    body['expected_amount_due'] = expectedAmountDue;
   }
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/upgrade-subscription',
@@ -87,7 +150,7 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, Stri
     Logger.debug('upgradeSubscription response: ${response.body}');
     return generated.toJson();
   }
-  if (response.statusCode == 400 || response.statusCode == 409) {
+  if (response.statusCode == 400 || response.statusCode == 402 || response.statusCode == 409) {
     return _paymentError(response);
   }
   return null;
@@ -113,7 +176,7 @@ Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
 Future<Map<String, dynamic>?> getAvailablePlans() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/available-plans',
-    headers: {},
+    headers: {'X-Omi-Billing-Currency': '1'},
     method: 'GET',
     body: '',
   );
@@ -159,4 +222,29 @@ Future<Map<String, dynamic>?> cancelAppSubscription(String appId) async {
     return jsonResponse;
   }
   return null;
+}
+
+/// Applies only to the existing subscription. No price, interval or checkout input.
+/// Never retain the code or display/log free-form server responses.
+Future<ApiResult<bool>> redeemSubscriptionCode(String code, {ApiSend? send, bool Function()? canSend}) async {
+  final trimmed = code.trim();
+  if (trimmed.isEmpty || trimmed.length > 64) {
+    return const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 400));
+  }
+  return executeApi<bool>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v1/payments/redeem-code',
+      method: 'POST',
+      body: jsonEncode({'code': trimmed}),
+    ),
+    send: send,
+    canSend: canSend,
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map || decoded['status'] != 'applied') {
+        throw const FormatException('Expected applied redemption');
+      }
+      return true;
+    },
+  );
 }

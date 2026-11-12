@@ -18,6 +18,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/ui.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 
 class _ThrottledSync extends ChangeNotifier implements SyncProvider {
   @override
@@ -61,7 +62,7 @@ class _User extends ChangeNotifier implements UserProvider {
 }
 
 void main() {
-  testWidgets('Offline Sync renders a neutral edge pause without a global busy banner', (tester) async {
+  testWidgets('Offline Sync shows no pause for an edge throttle that clears by itself', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     tester.view.physicalSize = const Size(390, 844);
@@ -96,6 +97,13 @@ void main() {
           }
           await loader.load();
         }
+
+        for (final family in ['SF Pro Display']) {
+          final loader = FontLoader(family);
+          loader.addFont(sfProFont('SFPRODISPLAYREGULAR.OTF'));
+          loader.addFont(sfProFont('SFPRODISPLAYMEDIUM.OTF'));
+          await loader.load();
+        }
       });
     }
     await tester.pumpWidget(MultiProvider(
@@ -116,7 +124,8 @@ void main() {
           )),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Syncing paused briefly — it will resume automatically'), findsOneWidget);
+    // David, 11-02: "remove the syncing paused briefly since it's not actionable by the user".
+    expect(find.text('Syncing paused briefly — it will resume automatically'), findsNothing);
     expect(find.textContaining('Omi servers are busy'), findsNothing);
     expect(tester.takeException(), isNull);
     if (evidence.isNotEmpty) {

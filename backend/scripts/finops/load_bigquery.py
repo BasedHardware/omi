@@ -11,6 +11,11 @@ Tables (all partitioned by `date`, no partition expiry):
   unit_cost_reconciliation what each pool cost vs what landed on user-days
   plan_revenue_daily       Stripe snapshot, carrying snapshot_date so it stays honest
   unit_cost_user_day       per (date, uid_hash) allocation. HASHED uids only, never raw.
+  mercury_*                vendor-spend aggregates (load_mercury; dark when Mercury is off)
+  stripe_fee_daily         measured Stripe processing fees (dark while the fee scope is missing)
+  vendor_balance_snapshot  Soniox prepaid-balance snapshots (dark while the org key is off)
+  vendor_balance_spend_daily  daily spend derived from consecutive snapshots
+  stt_modulate_modelled_daily modelled Modulate STT cost (Prometheus seconds x committed price)
 """
 
 from __future__ import annotations
@@ -18,12 +23,14 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+from decimal import Decimal, InvalidOperation
 import json
 import os
 import pathlib
 import subprocess
 import sys
 import tempfile
+import uuid
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -78,6 +85,10 @@ SCHEMAS = {
         ("snapshot_date", "DATE"),
         ("run_id", "STRING"),
         ("computed_at", "TIMESTAMP"),
+        # Added 2026-10-22 (nullable; `ensure_table` reconciles the live table before the load).
+        # Book-wide distinct counts repeated on every plan row of a snapshot.
+        ("paying_customers", "INT64"),
+        ("non_usd_paying_subs", "INT64"),
     ],
     "unit_cost_user_day": [
         ("date", "DATE"),
@@ -104,6 +115,317 @@ CLUSTER = {
 
 SCHEMAS.update(load_mercury.SCHEMAS)
 CLUSTER.update(load_mercury.CLUSTER)
+
+# Measured Stripe processing fees (net of refunds), refreshed with the daily run
+# from balance transactions. Dark while the restricted key lacks the scope: a
+# skipped artifact means no table reads, writes or creation, exactly like Mercury.
+SCHEMAS["stripe_fee_daily"] = [
+    ("date", "DATE"),
+    ("fee_usd", "NUMERIC"),
+    ("volume_usd", "NUMERIC"),
+    ("transaction_count", "INT64"),
+    ("foreign_transaction_count", "INT64"),
+    ("run_id", "STRING"),
+    ("computed_at", "TIMESTAMP"),
+]
+CLUSTER["stripe_fee_daily"] = ["run_id"]
+STRIPE_FEE_KEYS = {"date", "fee_usd", "volume_usd", "transaction_count", "foreign_transaction_count"}
+
+# Soniox prepaid-balance snapshots (the org key has no usage/invoice API) and
+# the per-UTC-day spend derived from consecutive snapshots. Dark while the org
+# key is unmounted: a skipped artifact creates and writes nothing.
+SCHEMAS["vendor_balance_snapshot"] = [
+    ("date", "DATE"),
+    ("ts", "TIMESTAMP"),
+    ("vendor", "STRING"),
+    ("used_usd", "NUMERIC"),
+    ("available_usd", "NUMERIC"),
+    ("invoice_billing_enabled", "BOOL"),
+    ("run_id", "STRING"),
+    ("computed_at", "TIMESTAMP"),
+]
+CLUSTER["vendor_balance_snapshot"] = ["vendor"]
+SNAPSHOT_KEYS = {"status", "vendor", "ts", "used_usd", "available_usd", "invoice_billing_enabled"}
+SCHEMAS["vendor_balance_spend_daily"] = [
+    ("date", "DATE"),
+    ("vendor", "STRING"),
+    ("usd", "NUMERIC"),
+    ("flag", "STRING"),
+    ("interval_start", "TIMESTAMP"),
+    ("interval_end", "TIMESTAMP"),
+    ("run_id", "STRING"),
+    ("computed_at", "TIMESTAMP"),
+]
+CLUSTER["vendor_balance_spend_daily"] = ["vendor", "flag"]
+
+# Modelled Modulate STT cost: measured Prometheus audio seconds x the committed
+# live/REST prices. Dark while an input is missing; never a guessed number.
+SCHEMAS["stt_modulate_modelled_daily"] = [
+    ("date", "DATE"),
+    ("audio_seconds", "FLOAT64"),
+    ("live_seconds", "FLOAT64"),
+    ("rest_stt_seconds", "FLOAT64"),
+    ("lid_seconds", "FLOAT64"),
+    ("rest_price_usd_per_hour", "NUMERIC"),
+    ("lid_price_usd_per_hour", "NUMERIC"),
+    ("usd", "NUMERIC"),
+    ("price_usd_per_hour", "NUMERIC"),
+    ("price_as_of", "DATE"),
+    ("method", "STRING"),
+    ("run_id", "STRING"),
+    ("computed_at", "TIMESTAMP"),
+]
+CLUSTER["stt_modulate_modelled_daily"] = ["run_id"]
+MODULATE_ROW_KEYS = {"date", "audio_seconds", "live_seconds", "rest_stt_seconds", "lid_seconds", "usd"}
+
+
+SCHEMAS["spend_daily"] = [
+    ("date", "DATE"),
+    ("line", "STRING"),
+    ("source", "STRING"),
+    ("status", "STRING"),
+    ("usd", "FLOAT64"),
+    ("in_all_in", "BOOL"),
+    ("in_margin_basis", "BOOL"),
+    ("basis_class", "STRING"),
+    ("basis_version", "STRING"),
+    ("note", "STRING"),
+    ("inputs_settled", "BOOL"),
+    ("run_id", "STRING"),
+    ("computed_at", "TIMESTAMP"),
+]
+CLUSTER["spend_daily"] = ["line", "source"]
+SCHEMAS["spend_daily_gcp_sku"] = [
+    ("date", "DATE"),
+    ("project_class", "STRING"),
+    ("service", "STRING"),
+    ("sku", "STRING"),
+    ("usd_net", "FLOAT64"),
+    ("run_id", "STRING"),
+    ("computed_at", "TIMESTAMP"),
+]
+CLUSTER["spend_daily_gcp_sku"] = ["service", "project_class"]
+SPEND_SOURCES = {
+    "billing_export",
+    "openai_admin_api",
+    "anthropic_admin_api",
+    "soniox_usage_api",
+    "deepgram_billing_api",
+    "stripe_api",
+    "mercury",
+    "prometheus",
+    "rate_card",
+}
+
+
+def load_spend_daily(
+    raw: pathlib.Path, derived: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_replace
+) -> dict:
+    from assemble_spend_daily import assemble, read
+
+    path = derived / "spend_daily.json"
+    if not path.exists():
+        return {}
+    artifact = json.loads(path.read_text())
+    # Mercury's existing loader retained older annual history when deriving these
+    # rates. Reassemble offline with those exact rates, without a second BQ read.
+    rates = read(derived, "mercury_run_rates.json")
+    if rates is not None:
+        window = artifact["modelled_window"]
+        if window:
+            artifact = assemble(raw, derived, min(window), max(window), artifact["frontier"], mercury_rates=rates)
+    frontier = dt.date.fromisoformat(artifact["frontier"]).isoformat()
+    scopes = artifact["scopes"]
+    if not set(scopes) <= SPEND_SOURCES:
+        raise ValueError("producer may only replace its own spend sources")
+    keys = set()
+    for row in artifact["rows"]:
+        key = tuple(row[k] for k in ("date", "line", "source", "status"))
+        if (
+            key in keys
+            or row["source"] not in scopes
+            or row["date"] not in scopes[row["source"]]
+            or row["date"] > frontier
+            or row["status"] not in {"billed", "measured", "estimate", "carry"}
+            or row["inputs_settled"] is not True
+        ):
+            raise ValueError("invalid settled spend row")
+        keys.add(key)
+    ensure_table("spend_daily")
+    detail = json.loads((derived / "spend_daily_gcp_sku.json").read_text())
+    companion = None
+    if "billing_export" in scopes:
+        ensure_table("spend_daily_gcp_sku")
+        companion = (
+            "spend_daily_gcp_sku",
+            [dict(r, run_id=run_id, computed_at=computed_at) for r in detail],
+            scopes["billing_export"],
+        )
+    loaded = 0
+    for source, dates in sorted(scopes.items()):
+        for day in dates:
+            if dt.date.fromisoformat(day).isoformat() != day or day > frontier:
+                raise ValueError("invalid spend replacement date")
+        # Re-evaluate cash/model preference in the same transaction, including
+        # Mercury's wider refresh window and previously loaded modelled days.
+        in_list = ", ".join("DATE('%s')" % d for d in dates)
+        housekeeping = """
+DELETE FROM `{p}.{ds}.spend_daily` WHERE status = 'provisional' AND date < DATE('{frontier}');
+UPDATE `{p}.{ds}.spend_daily` AS cash
+SET in_all_in = NOT EXISTS (
+  SELECT 1 FROM `{p}.{ds}.spend_daily` AS model
+  WHERE model.date = cash.date AND model.line = 'stt_modulate_modelled'
+    AND model.source = 'prometheus' AND model.status = 'estimate'
+)
+WHERE cash.source = 'mercury' AND cash.line = 'stt_modulate_cash' AND cash.date IN ({dates});
+""".format(p=PROJECT, ds=DATASET, frontier=frontier, dates=in_list)
+        rows = [dict(r, run_id=run_id, computed_at=computed_at) for r in artifact["rows"] if r["source"] == source]
+        loaded += load_replace(
+            "spend_daily",
+            rows,
+            dates,
+            extra_delete=" AND source = '%s'" % source,
+            after_insert=housekeeping,
+            related=companion if source == "billing_export" else None,
+        )
+    result = {"spend_daily": loaded}
+    if companion is not None:
+        result["spend_daily_gcp_sku"] = len(detail)
+    return result
+
+
+def load_stripe_fees(raw: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_replace) -> dict:
+    path = raw / "stripe_fee_daily.json"
+    if not path.exists():
+        return {}
+    snapshot = json.loads(path.read_text())
+    if snapshot.get("status") == "skipped":
+        return {}  # unavailable is not zero: no rows, no table creation, no guess
+    if set(snapshot) != {"status", "start", "end", "rows"} or snapshot["status"] != "ready":
+        raise SystemExit("invalid Stripe fee artifact")
+    window = set(load_mercury.days(snapshot["start"], snapshot["end"]))
+    for row in snapshot["rows"]:
+        if set(row) != STRIPE_FEE_KEYS or row["date"] not in window:
+            raise SystemExit("invalid Stripe fee aggregate")
+        counts = (row["transaction_count"], row["foreign_transaction_count"])
+        if any(type(c) is not int or c < 0 for c in counts):
+            raise SystemExit("invalid Stripe fee counts")
+        if row["volume_usd"] is None or float(row["volume_usd"]) < 0:
+            raise SystemExit("invalid Stripe fee volume")
+        # fee_usd may be negative: refunds return fees on their own day.
+    dates = sorted(window)
+    ensure_table("stripe_fee_daily")
+    rows = [dict(row, run_id=run_id, computed_at=computed_at) for row in snapshot["rows"]]
+    return {"stripe_fee_daily": load_replace("stripe_fee_daily", rows, dates)}
+
+
+def load_vendor_balance(raw: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_replace, bq) -> dict:
+    """Insert today's Soniox balance snapshot, then republish the derived daily
+    spend over the trailing snapshot window (recomputed whole, so the spread and
+    reset rules can change without backfilling). Dark while the artifact is
+    skipped: no table reads, writes or creation."""
+    import pull_vendor_balance
+
+    path = raw / "vendor_balance_snapshot.json"
+    if not path.exists():
+        return {}
+    snapshot = json.loads(path.read_text())
+    if snapshot.get("status") == "skipped":
+        return {}
+    if set(snapshot) != SNAPSHOT_KEYS or snapshot["status"] != "ready":
+        raise SystemExit("invalid vendor balance artifact")
+    if snapshot["vendor"] != pull_vendor_balance.VENDOR:
+        raise SystemExit("unknown vendor balance vendor")
+    if not str(snapshot["ts"]).endswith("Z"):
+        raise SystemExit("vendor balance ts must be UTC ISO with Z")
+    pull_vendor_balance.usd(snapshot["used_usd"])
+    pull_vendor_balance.usd(snapshot["available_usd"])
+    if type(snapshot["invoice_billing_enabled"]) is not bool:
+        raise SystemExit("invalid vendor balance invoice flag")
+    vendor = snapshot["vendor"]
+    day = snapshot["ts"][:10]
+    ensure_table("vendor_balance_snapshot")
+    loaded = {
+        "vendor_balance_snapshot": load_replace(
+            "vendor_balance_snapshot",
+            [dict(snapshot, date=day, run_id=run_id, computed_at=computed_at)],
+            [day],
+            extra_delete=" AND vendor = '%s'" % vendor,
+        )
+    }
+    # Read the trailing snapshots back (including this run's) and rederive spend.
+    sql = (
+        "SELECT FORMAT_TIMESTAMP('%%Y-%%m-%%dT%%H:%%M:%%SZ', ts) AS ts, used_usd "
+        "FROM `%s.%s.vendor_balance_snapshot` "
+        "WHERE vendor = '%s' AND date >= DATE_SUB(CURRENT_DATE(), INTERVAL 40 DAY) "
+        "ORDER BY ts"
+    ) % (PROJECT, DATASET, vendor)
+    rows = json.loads(bq(["query", "--use_legacy_sql=false", "--format=json"], stdin=sql))
+    deltas = pull_vendor_balance.daily_deltas(rows)
+    if not deltas:
+        return loaded  # first snapshot: baseline only, no spend rows yet
+    for row in deltas:
+        if not {"date", "vendor", "usd", "flag", "interval_start", "interval_end"} <= set(row):
+            raise SystemExit("invalid vendor balance delta row")
+    dates = sorted({row["date"] for row in deltas})
+    ensure_table("vendor_balance_spend_daily")
+    loaded["vendor_balance_spend_daily"] = load_replace(
+        "vendor_balance_spend_daily",
+        [dict(row, run_id=run_id, computed_at=computed_at) for row in deltas],
+        dates,
+        extra_delete=" AND vendor = '%s'" % vendor,
+    )
+    return loaded
+
+
+def load_modulate_modelled(raw: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_replace) -> dict:
+    path = raw / "stt_modulate_modelled_daily.json"
+    if not path.exists():
+        return {}
+    artifact = json.loads(path.read_text())
+    if artifact.get("status") == "skipped":
+        return {}
+    required = {"status", "method", "rows"} | {
+        prefix + key
+        for prefix in ("", "rest_", "lid_")
+        for key in ("price_usd_per_hour", "price_source", "price_as_of")
+    }
+    if set(artifact) != required or artifact["status"] != "ready" or artifact["method"] != "modelled":
+        raise SystemExit("invalid Modulate modelled artifact")
+    for prefix in ("", "rest_", "lid_"):
+        dt.date.fromisoformat(artifact[prefix + "price_as_of"])
+        try:
+            price = Decimal(str(artifact[prefix + "price_usd_per_hour"]))
+            if not price.is_finite() or price <= 0:
+                raise ValueError("invalid price")
+        except (ValueError, InvalidOperation):
+            raise SystemExit("invalid Modulate modelled price") from None
+    for row in artifact["rows"]:
+        if set(row) != MODULATE_ROW_KEYS:
+            raise SystemExit("invalid Modulate modelled row")
+        for key in MODULATE_ROW_KEYS - {"date"}:
+            try:
+                amount = Decimal(str(row[key]))
+                if not amount.is_finite() or amount < 0:
+                    raise ValueError("invalid amount")
+            except (ValueError, InvalidOperation):
+                raise SystemExit("invalid Modulate modelled amounts") from None
+    dates = sorted({row["date"] for row in artifact["rows"]})
+    ensure_table("stt_modulate_modelled_daily")
+    rows = [
+        dict(
+            row,
+            price_usd_per_hour=artifact["price_usd_per_hour"],
+            rest_price_usd_per_hour=artifact["rest_price_usd_per_hour"],
+            lid_price_usd_per_hour=artifact["lid_price_usd_per_hour"],
+            price_as_of=artifact["price_as_of"],
+            method="modelled",
+            run_id=run_id,
+            computed_at=computed_at,
+        )
+        for row in artifact["rows"]
+    ]
+    return {"stt_modulate_modelled_daily": load_replace("stt_modulate_modelled_daily", rows, dates)}
 
 
 def _bq_cmd() -> list[str]:
@@ -148,12 +470,26 @@ def ensure_dataset() -> None:
 
 
 def ensure_table(name: str) -> None:
+    """Create the table when absent; when present, reconcile its columns to SCHEMAS[name] first."""
     ref = "%s:%s.%s" % (PROJECT, DATASET, name)
     p = subprocess.run(
         _bq_cmd() + ["--project_id=" + PROJECT, "show", "--format=json", ref], capture_output=True, text=True
     )
     if p.returncode == 0:
         sys.stderr.write("table %s exists\n" % name)
+        ensure_columns(name)
+        return
+    if name == "spend_daily":
+        keys = {"date", "line", "source", "status"}
+        columns = ", ".join(c + " " + t + (" NOT NULL" if c in keys else "") for c, t in SCHEMAS[name])
+        bq(
+            ["query", "--use_legacy_sql=false", "--format=none"],
+            stdin=(
+                "CREATE TABLE IF NOT EXISTS `%s.%s.spend_daily` (%s, "
+                "PRIMARY KEY (date, line, source, status) NOT ENFORCED) "
+                "PARTITION BY date CLUSTER BY line, source" % (PROJECT, DATASET, columns)
+            ),
+        )
         return
     schema = ",".join("%s:%s" % (c, t.replace("FLOAT64", "FLOAT").replace("BOOL", "BOOLEAN")) for c, t in SCHEMAS[name])
     bq(
@@ -170,34 +506,120 @@ def ensure_table(name: str) -> None:
     sys.stderr.write("created table %s\n" % name)
 
 
-def load_replace(name: str, rows: list[dict], dates: list[str]) -> int:
-    """Delete the run's dates then insert, in one transaction. Idempotent per date."""
-    if not rows:
+# The live table is reconciled to SCHEMAS[name] before every load: a column the
+# code added is appended in place (nullable, metadata-only DDL), so the daily
+# job keeps working on an older table and old artifacts (missing values load as
+# NULL). Columns are never dropped or retyped — a type disagreement is a hard
+# stop because it needs a migration, not a guess. A table that does not exist
+# is still created whole by `ensure_table`.
+_TYPE_ALIASES = {
+    "INTEGER": "INT",
+    "INT64": "INT",
+    "FLOAT": "FLOAT",
+    "FLOAT64": "FLOAT",
+    "BOOLEAN": "BOOL",
+    "BOOL": "BOOL",
+}
+
+
+def _canonical_type(t: str) -> str:
+    return _TYPE_ALIASES.get(t.strip().upper(), t.strip().upper())
+
+
+def ensure_columns(name: str, show=None, run=None) -> list[str]:
+    """Add SCHEMAS[name] columns missing from the live table (nullable); returns what was added."""
+    ref = "%s:%s.%s" % (PROJECT, DATASET, name)
+    show = show or (
+        lambda: subprocess.run(
+            _bq_cmd() + ["--project_id=" + PROJECT, "show", "--format=json", ref], capture_output=True, text=True
+        )
+    )
+    p = show()
+    if p.returncode != 0:
+        raise SystemExit("bq show %s failed:\n%s" % (name, p.stderr[-2000:]))
+    live = {f["name"]: f.get("type", "") for f in json.loads(p.stdout).get("schema", {}).get("fields", [])}
+    wanted = dict(SCHEMAS[name])
+    clashes = sorted(
+        "%s is %s in the table but %s in code" % (c, live[c] or "?", t)
+        for c, t in wanted.items()
+        if c in live and _canonical_type(live[c]) != _canonical_type(t)
+    )
+    if clashes:
+        raise SystemExit(
+            "table %s disagrees with the loader schema (a migration is required; the loader only adds columns): %s"
+            % (name, "; ".join(clashes))
+        )
+    missing = [c for c in wanted if c not in live]
+    if not missing:
+        return []
+    sql = "ALTER TABLE `%s.%s.%s`\n%s;" % (
+        PROJECT,
+        DATASET,
+        name,
+        ",\n".join("ADD COLUMN IF NOT EXISTS %s %s" % (c, wanted[c]) for c in missing),
+    )
+    (run or (lambda s: bq(["query", "--use_legacy_sql=false", "--format=none"], stdin=s)))(sql)
+    sys.stderr.write("table %s: added columns %s\n" % (name, ", ".join(missing)))
+    return missing
+
+
+def load_replace(
+    name: str,
+    rows: list[dict],
+    dates: list[str],
+    extra_delete: str = "",
+    after_insert: str = "",
+    related: tuple[str, list[dict], list[str]] | None = None,
+) -> int:
+    """Replace scoped dates transactionally, optionally with a diagnostic table.
+
+    ``extra_delete`` narrows only the primary DELETE (e.g. one source family).
+    Both stages load before the transaction. Diagnostic replacement and spend
+    housekeeping commit with the primary rows, so readers never see half a pair.
+    """
+    if not rows and name not in ("spend_daily", "spend_daily_gcp_sku") and related is None:
         sys.stderr.write("  %s: nothing to load\n" % name)
         return 0
-    cols = [c for c, _ in SCHEMAS[name]]
-    stage = "_stage_%s_%d" % (name, int(dt.datetime.now().timestamp()))
-    stage_ref = "%s:%s.%s" % (PROJECT, DATASET, stage)
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
-        for r in rows:
-            fh.write(json.dumps({c: r.get(c) for c in cols}) + "\n")
-        path = fh.name
-    schema = ",".join("%s:%s" % (c, t.replace("FLOAT64", "FLOAT").replace("BOOL", "BOOLEAN")) for c, t in SCHEMAS[name])
+    batches = [(name, rows, dates, extra_delete)]
+    if related is not None:
+        table, detail_rows, detail_dates = related
+        batches.append((table, detail_rows, detail_dates, ""))
+    stages, statements = [], []
     try:
-        bq(["load", "--source_format=NEWLINE_DELIMITED_JSON", "--replace", stage_ref, path, schema])
-        in_list = ", ".join("DATE('%s')" % d for d in dates)
-        sql = (
-            "BEGIN TRANSACTION;\n"
-            "DELETE FROM `{p}.{ds}.{t}` WHERE date IN ({dates});\n"
-            "INSERT INTO `{p}.{ds}.{t}` ({cols}) SELECT {cols} FROM `{p}.{ds}.{stage}`;\n"
-            "COMMIT TRANSACTION;"
-        ).format(p=PROJECT, ds=DATASET, t=name, dates=in_list, cols=", ".join(cols), stage=stage)
+        for table, batch, window, extra in batches:
+            in_list = ", ".join("DATE('%s')" % dt.date.fromisoformat(d).isoformat() for d in window)
+            statements.append(
+                "DELETE FROM `%s.%s.%s` WHERE date IN (%s)%s;" % (PROJECT, DATASET, table, in_list, extra)
+            )
+            if not batch:
+                continue  # a known empty window deletes stale rows without fake zeros
+            cols = [c for c, _ in SCHEMAS[table]]
+            stage = "_stage_%s_%s" % (table, uuid.uuid4().hex[:12])
+            stage_ref = "%s:%s.%s" % (PROJECT, DATASET, stage)
+            stages.append(stage_ref)
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+                for row in batch:
+                    fh.write(json.dumps({c: row.get(c) for c in cols}) + "\n")
+                path = pathlib.Path(fh.name)
+            schema = ",".join(
+                "%s:%s" % (c, t.replace("FLOAT64", "FLOAT").replace("BOOL", "BOOLEAN")) for c, t in SCHEMAS[table]
+            )
+            try:
+                bq(["load", "--source_format=NEWLINE_DELIMITED_JSON", "--replace", stage_ref, str(path), schema])
+            finally:
+                path.unlink(missing_ok=True)
+            columns = ", ".join(cols)
+            statements.append(
+                "INSERT INTO `%s.%s.%s` (%s) SELECT %s FROM `%s.%s.%s`;"
+                % (PROJECT, DATASET, table, columns, columns, PROJECT, DATASET, stage)
+            )
+        sql = "BEGIN TRANSACTION;\n" + "\n".join(statements) + "\n" + after_insert + "\nCOMMIT TRANSACTION;"
         bq(["query", "--use_legacy_sql=false", "--format=none"], stdin=sql)
     finally:
-        subprocess.run(
-            _bq_cmd() + ["--project_id=" + PROJECT, "rm", "-f", "-t", stage_ref], capture_output=True, text=True
-        )
-        pathlib.Path(path).unlink(missing_ok=True)
+        for stage_ref in stages:
+            subprocess.run(
+                _bq_cmd() + ["--project_id=" + PROJECT, "rm", "-f", "-t", stage_ref], capture_output=True, text=True
+            )
     sys.stderr.write("  %s: replaced %d dates, inserted %d rows\n" % (name, len(dates), len(rows)))
     return len(rows)
 
@@ -288,6 +710,9 @@ def build_rows(
                         "trialing_subs": x["trialing_subs"],
                         "mrr_usd": x["mrr_usd"],
                         "arpu_usd": x["arpu_usd"],
+                        # NULL on artifacts written before the columns existed.
+                        "paying_customers": x.get("paying_customers"),
+                        "non_usd_paying_subs": x.get("non_usd_paying_subs"),
                         "snapshot_date": snapshot_date,
                         "run_id": run_id,
                         "computed_at": computed_at,
@@ -319,10 +744,24 @@ def main() -> None:
         return
     ensure_dataset()
     loaded = {}
-    for name in ("unit_cost_daily", "unit_cost_reconciliation", "plan_revenue_daily", "unit_cost_user_day"):
+    loaded.update(
+        load_mercury.load(
+            pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq, derived=pathlib.Path(a.derived)
+        )
+    )
+    loaded.update(load_stripe_fees(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace))
+    loaded.update(load_vendor_balance(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq))
+    loaded.update(load_modulate_modelled(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace))
+    loaded.update(
+        load_spend_daily(
+            pathlib.Path(a.raw), pathlib.Path(a.derived), a.run_id, computed_at, ensure_table, load_replace
+        )
+    )
+    # Publish the discoverable unit-cost total last. Gap-fill checks its run_id
+    # against spend's billing rows, so a failed spend load cannot hide a hole.
+    for name in ("unit_cost_reconciliation", "plan_revenue_daily", "unit_cost_user_day", "unit_cost_daily"):
         ensure_table(name)
         loaded[name] = load_replace(name, tables[name], dates)
-    loaded.update(load_mercury.load(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq))
     print(
         json.dumps(
             {"run_id": a.run_id, "dates": dates, "rows_loaded": loaded, "dataset": "%s.%s" % (PROJECT, DATASET)},

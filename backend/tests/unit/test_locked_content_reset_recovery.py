@@ -5,6 +5,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
@@ -93,7 +95,6 @@ def env(monkeypatch):
     fakes['database.redis_db'].set_credits_invalidation_signal = signal
     fakes['database._client'].db = db
     fakes['utils.subscription'].resolve_transcription_allowance = allowance
-    fakes['utils.subscription'].clear_trial_paywall_cache = cache
     fakes['utils.observability.fallback'].record_fallback = MagicMock()
     fakes['utils.fair_use'].invalidate_enforcement_cache = MagicMock()
     monkeypatch.setenv('LOCKED_CONTENT_RESET_RECOVERY_ENABLED', 'true')
@@ -129,7 +130,6 @@ def test_idempotent_same_period_and_next_reset(env):
     assert env.state_data['completed_period'] == '2026-11'
     assert env.calls == ['memories', 'actions', 'conversations']
     env.signal.assert_called_once_with('test-user')
-    env.cache.assert_called_once_with('test-user')
     env.fakes['utils.fair_use'].invalidate_enforcement_cache.assert_called_once_with('test-user')
     # Content locked later in this period is held until its next reset.
     env.locks['conversations'] = 1
@@ -167,7 +167,6 @@ def test_partial_child_failure_resumes_without_repeating_committed_writes(env):
     assert env.locks == dict(canonical_memories=0, memories=0, actions=5, conversations=5)
     assert not env.state_data
     env.signal.assert_called_once_with('test-user')
-    env.cache.assert_called_once_with('test-user')
     env.fakes['utils.fair_use'].invalidate_enforcement_cache.assert_called_once_with('test-user')
     assert not any(k.endswith(':lease') for k in env.redis.values)
     env.fakes['database.action_items'].unlock_all_action_items = original
@@ -179,15 +178,15 @@ def test_partial_child_failure_resumes_without_repeating_committed_writes(env):
 
 def test_invalidation_failure_is_repaired_before_completion(env):
     env.locks['conversations'] = 3
-    env.cache.side_effect = RuntimeError('simulated')
+    env.fakes['utils.fair_use'].invalidate_enforcement_cache.side_effect = RuntimeError('simulated')
     env.module.recover_locked_content('test-user', now=NOW)
     assert env.locks['conversations'] == 0 and not env.state_data
     env.fakes['utils.fair_use'].invalidate_enforcement_cache.assert_called_once_with('test-user')
-    env.cache.side_effect = None
+    env.fakes['utils.fair_use'].invalidate_enforcement_cache.side_effect = None
     env.redis.next_request()
     env.module.recover_locked_content('test-user', now=NOW)
     assert env.state_data['completed_period'] == '2026-11'
-    assert env.cache.call_count == 2
+    assert env.fakes['utils.fair_use'].invalidate_enforcement_cache.call_count == 2
 
 
 @pytest.mark.parametrize(
@@ -208,7 +207,6 @@ def test_exhausted_or_untrusted_or_override_stays_locked(env, reason):
     assert env.calls == [] and not env.state_data
     assert env.locks == dict(canonical_memories=0, memories=3, actions=3, conversations=3)
     env.signal.assert_not_called()
-    env.cache.assert_not_called()
 
 
 def test_allowance_rechecked_between_collections(env):
@@ -253,7 +251,6 @@ def test_allowance_recheck_repairs_caches_after_committed_pages(env, committed_c
     assert env.locks['conversations'] == 3
     assert env.calls == ['memories', 'actions'][:committed_collections]
     env.signal.assert_called_once_with('test-user')
-    env.cache.assert_called_once_with('test-user')
     env.fakes['utils.fair_use'].invalidate_enforcement_cache.assert_called_once_with('test-user')
     assert not env.state_data
     assert not any(':done:' in key or key.endswith(':lease') for key in env.redis.values)
@@ -295,17 +292,3 @@ def test_initial_enablement_drains_backlog_midmonth(env):
     env.module.recover_locked_content('test-user', now=midmonth)
     assert not any(env.locks.values())
     assert env.state_data['completed_period'] == '2026-11'
-
-
-def test_cap_audio_recovery_is_kicked_even_with_legacy_reset_flag_off(env, monkeypatch):
-    from unittest.mock import Mock
-
-    fake = ModuleType('utils.sync.cap_hold_recovery')
-    fake.kick = Mock()
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    monkeypatch.setenv('LOCKED_CONTENT_RESET_RECOVERY_ENABLED', 'false')
-    env.module.register_cap_audio_recovery(fake.kick)
-    env.module.recover_locked_content('test-user', now=NOW)
-    env.module.recover_locked_content('test-user', now=NOW)
-    assert fake.kick.call_count == 2
-    env.state.get.assert_not_called()

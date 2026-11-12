@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import typer
 from rich.markup import escape
 
 from omi_cli.client import path_segment
-from omi_cli.datetime_options import ISO_DATETIME_FORMATS
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS, as_utc
 from omi_cli.errors import UsageError
 from omi_cli.json_input import load_json_input
-from omi_cli.models import ConversationTextSource
+from omi_cli.models import CONVERSATION_TEXT_MAX_LENGTH, CONVERSATION_TITLE_MAX_LENGTH, ConversationTextSource
 from omi_cli.output import shorten
 
 if TYPE_CHECKING:
@@ -29,6 +30,14 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
     if obj is None:  # pragma: no cover
         raise RuntimeError("AppContext not initialized")
     return obj  # type: ignore[no-any-return]
+
+
+def _probe(check: Callable[[], bool]) -> bool:
+    """A best-effort ``Path.is_*`` that never turns a read error into a new one."""
+    try:
+        return bool(check())
+    except OSError:
+        return False
 
 
 _LIST_COLUMNS = ["id", "title", "category", "started_at", "source"]
@@ -48,6 +57,11 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
+    if start_date is not None and end_date is not None and as_utc(start_date) > as_utc(end_date):
+        raise UsageError(
+            message="Invalid date filter range",
+            detail="--start-date cannot be after --end-date.",
+        )
     server_page_size = 200
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
@@ -153,6 +167,16 @@ def create_conversation(
             message="Empty text",
             detail="Conversation text cannot be empty or whitespace.",
         )
+    if len(cleaned_text) > CONVERSATION_TEXT_MAX_LENGTH:
+        # Sending it anyway spends one of the 25 hourly conversation writes on
+        # a request the server can only reject.
+        raise UsageError(
+            message="Text too long",
+            detail=(
+                f"Conversation text is limited to {CONVERSATION_TEXT_MAX_LENGTH:,} characters; "
+                f"got {len(cleaned_text):,}."
+            ),
+        )
 
     cleaned_lang = language.strip()
     if not cleaned_lang:
@@ -168,6 +192,11 @@ def create_conversation(
     }
     if text_source_spec is not None:
         body["text_source_spec"] = text_source_spec
+    if started_at is not None and finished_at is not None and as_utc(started_at) > as_utc(finished_at):
+        raise UsageError(
+            message="Invalid datetime range",
+            detail="--started-at cannot be after --finished-at.",
+        )
     if started_at is not None:
         body["started_at"] = started_at.isoformat()
     if finished_at is not None:
@@ -197,17 +226,36 @@ def from_segments(
             message="Invalid language",
             detail="Language code cannot be empty.",
         )
-    if not segments_file.exists():
-        raise UsageError(message=f"File not found: {segments_file}")
-    if segments_file.is_dir():
+    # Open directly. ``Path.exists()`` re-raises ``PermissionError`` (an
+    # unsearchable parent) and swallows ``ENOTDIR`` as "missing", so a stat
+    # pre-check either escapes as an unexpected error or hides the real one.
+    try:
+        data = segments_file.read_bytes()
+    except IsADirectoryError as exc:
         raise UsageError(
             message=f"Expected a file, but found a directory: {segments_file}",
             detail="Provide the path to a JSON file containing transcript_segments.",
-        )
-    try:
-        data = segments_file.read_bytes()
+        ) from exc
+    except FileNotFoundError as exc:
+        # Windows reports a path under a regular file as not found (POSIX: ENOTDIR).
+        # Win32 collapses `..` before the filesystem sees it (except for \\?\ and
+        # \\.\ paths), so walk the path the OS actually resolved.
+        raw = str(segments_file)
+        resolved = segments_file if raw.startswith(("\\\\?\\", "\\\\.\\")) else Path(os.path.normpath(raw))
+        blocker = next((parent for parent in resolved.parents if _probe(parent.is_file)), None)
+        if blocker is not None:
+            raise UsageError(
+                message=f"Cannot read file {segments_file}", detail=f"Not a directory: {blocker}"
+            ) from exc
+        raise UsageError(message=f"File not found: {segments_file}") from exc
     except OSError as exc:
-        raise UsageError(message=f"Cannot read file {segments_file}", detail=str(exc))
+        # Windows opens a directory as PermissionError, not IsADirectoryError.
+        if _probe(segments_file.is_dir):
+            raise UsageError(
+                message=f"Expected a file, but found a directory: {segments_file}",
+                detail="Provide the path to a JSON file containing transcript_segments.",
+            ) from exc
+        raise UsageError(message=f"Cannot read file {segments_file}", detail=str(exc)) from exc
 
     try:
         payload = load_json_input(data)
@@ -224,6 +272,11 @@ def from_segments(
     body: dict[str, object] = {"transcript_segments": segments, "language": cleaned_lang}
     if source is not None:
         body["source"] = source
+    if started_at is not None and finished_at is not None and as_utc(started_at) > as_utc(finished_at):
+        raise UsageError(
+            message="Invalid datetime range",
+            detail="--started-at cannot be after --finished-at.",
+        )
     if started_at is not None:
         body["started_at"] = started_at.isoformat()
     if finished_at is not None:
@@ -248,6 +301,14 @@ def update_conversation(
         cleaned_title = title.strip()
         if not cleaned_title:
             raise UsageError(message="Invalid title", detail="Title cannot be empty or whitespace.")
+        if len(cleaned_title) > CONVERSATION_TITLE_MAX_LENGTH:
+            raise UsageError(
+                message="Title too long",
+                detail=(
+                    f"Conversation titles are limited to {CONVERSATION_TITLE_MAX_LENGTH} characters; "
+                    f"got {len(cleaned_title)}."
+                ),
+            )
         body["title"] = cleaned_title
     if discarded is not None:
         body["discarded"] = discarded
@@ -267,7 +328,7 @@ def delete_conversation(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete conversation {conversation_id}?", abort=True)
+        typer.confirm(f"Delete conversation {conversation_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/conversations/{path_segment(conversation_id)}")
     if ctx.renderer.json_mode:

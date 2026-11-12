@@ -126,6 +126,8 @@ _SCAN_FILES: tuple[str, ...] = (
     'models/client_processing.py',
     'models/conversation.py',
     'routers/developer.py',
+    'routers/developer_segments.py',
+    'routers/developer_segments_models.py',
     'utils/memory/developer_memory_list.py',
     'utils/conversations/meeting_context.py',
     'utils/conversations/process_conversation.py',
@@ -144,7 +146,6 @@ _SCAN_FILES: tuple[str, ...] = (
     'utils/app_integrations.py',
     'utils/webhooks.py',
     'utils/llm/external_integrations.py',
-    'utils/memory/daily_memory_sweep.py',
     'utils/other/notifications.py',
     # Goals.
     'utils/llm/goals.py',
@@ -177,8 +178,6 @@ _SCAN_FILES: tuple[str, ...] = (
     'utils/retrieval/tool_services/action_items.py',
     'utils/retrieval/tools/__init__.py',
     'utils/retrieval/tools/conversation_tools.py',
-    'utils/retrieval/tools/conversation_jit.py',
-    'utils/retrieval/tools/conversation_jit_gate.py',
     'utils/retrieval/tools/memory_tools.py',
     'utils/retrieval/tools/action_item_tools.py',
     'utils/retrieval/tools/app_tools.py',
@@ -192,12 +191,8 @@ _SCAN_FILES: tuple[str, ...] = (
     'utils/retrieval/tools/notification_settings_tools.py',
     'utils/retrieval/tools/screen_activity_tools.py',
     'utils/retrieval/tools/graph_tools.py',
-    'utils/retrieval/tools/knowledge_ledger_tools.py',
-    'utils/retrieval/tools/knowledge_ledger_write_tools.py',
-    'utils/retrieval/tools/entity_timeline_tools.py',
     'utils/retrieval/tools/chart_tools.py',
     'utils/retrieval/tools/apple_health_tools.py',
-    'utils/retrieval/tools/frame_request_tools.py',
     'utils/retrieval/tools/integration_base.py',
     'utils/retrieval/tools/google_utils.py',
     'utils/retrieval/tools/result_bounds.py',
@@ -211,20 +206,29 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         (_SCHEMA_MODULE, '*'),
         ('models/conversation.py', '<module>'),
         ('models/conversation.py', 'Conversation'),
+        ('models/conversation.py', 'ProcessConversationRequest'),
         ('routers/developer.py', '<module>'),
-        ('routers/developer.py', 'CreateConversationFromTranscriptRequest'),
+        ('routers/developer_segments_models.py', 'CreateConversationFromTranscriptRequest'),
         ('routers/developer.py', '_accepted_client_projection'),
-        ('routers/developer.py', '_create_conversation_from_segments'),
+        ('routers/developer.py', '_ingest_conversation_from_segments'),
+        # Encrypted continuation custody carries only the display projection;
+        # admission clears it when the underlying transcript is filtered.
+        ('routers/developer_segments.py', 'admit_segments'),
+        ('routers/developer_segments.py', 'common'),
+        ('routers/developer_segments.py', 'continuation'),
+        ('routers/developer_segments.py', 'stage_chunk'),
         ('utils/conversations/process_conversation.py', '<module>'),
         ('utils/conversations/process_conversation.py', 'process_conversation'),
         ('utils/conversations/process_conversation.py', '_attach_client_projection'),
-        ('utils/conversations/process_conversation.py', '_store_projected_conversation'),
-        ('utils/conversations/process_conversation.py', '_store_deterministic_minimum'),
         ('utils/conversations/process_conversation.py', '_store_deferred_conversation'),
+        # Model-free backlog persistence: display projection never enters canonical structure.
+        ('utils/conversations/process_conversation.py', '_store_budget_waiting'),
+        # Storage-only budget-denial wrapper forwards validated display projection
+        # to _store_budget_waiting; no model or intelligence reads it.
+        ('utils/conversations/process_conversation.py', 'preserve_capture'),
         # Flag-off eager deny: threads the display projection into the same
         # persist helpers; has_projection is the existing S6 plan input, not
         # an intelligence read of projection contents.
-        ('utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny'),
         ('utils/conversations/projection_payload.py', 'strip_client_processing'),
         ('utils/conversations/projection_payload.py', 'client_processing_mutation'),
         # Serialization sink: family-set definition + integration redaction.
@@ -262,8 +266,8 @@ class Reference(NamedTuple):
 # display-only trust boundary and added here. Schema-module hits collapse to one
 # wildcard so the Pydantic field list can evolve without a pin churn.
 #
-# Reviewed production hits: schema + Conversation field + developer request
-# field + process_conversation storage/coordinator seams + locked-integration
+# Reviewed production hits: schema + Conversation field + request fields
+# + process_conversation storage/coordinator seams + locked-integration
 # redaction + transcript-edit genuine clear + live-capture overlap clear.
 # ``_get_structured``, ``extract_memories``, ``save_structured_vector``,
 # and RAG are absent. ``conversation_to_dict`` is a dump without a named read.
@@ -274,15 +278,21 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('models/conversation.py', 'Conversation', 'client_processing'),
         Reference('models/conversation.py', 'Conversation', 'ClientProcessing'),
         Reference('routers/developer.py', '<module>', 'ClientProcessing'),
-        Reference('routers/developer.py', 'CreateConversationFromTranscriptRequest', 'client_processing'),
+        Reference(
+            'routers/developer_segments_models.py', 'CreateConversationFromTranscriptRequest', 'client_processing'
+        ),
         Reference('routers/developer.py', '_accepted_client_projection', 'ClientProcessing'),
         Reference('routers/developer.py', '_accepted_client_projection', 'client_processing'),
         Reference('routers/developer.py', '_parse_client_projection', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_projection_to_segments', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_late_client_projection', 'client_processing'),
-        Reference('routers/developer.py', '_create_conversation_from_segments', 'client_projection'),
+        Reference('routers/developer.py', '_ingest_conversation_from_segments', 'client_projection'),
+        Reference('routers/developer_segments.py', 'admit_segments', 'client_processing'),
+        Reference('routers/developer_segments.py', 'common', 'client_processing'),
+        Reference('routers/developer_segments.py', 'continuation', 'client_processing'),
+        Reference('routers/developer_segments.py', 'stage_chunk', 'client_processing'),
         Reference('routers/conversations.py', '<module>', 'ClientProcessing'),
-        Reference('routers/conversations.py', 'ProcessConversationRequest', 'client_processing'),
+        Reference('models/conversation.py', 'ProcessConversationRequest', 'client_processing'),
         Reference('routers/conversations.py', '_accepted_client_projection', 'ClientProcessing'),
         Reference('routers/conversations.py', 'finalize_conversation', 'client_processing'),
         Reference('routers/conversations.py', 'finalize_conversation', 'client_projection'),
@@ -294,23 +304,14 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('utils/conversations/process_conversation.py', '<module>', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', 'process_conversation', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', 'process_conversation', 'client_projection'),
-        Reference('utils/conversations/process_conversation.py', 'process_conversation', 'client_processing'),
+        Reference('utils/conversations/process_conversation.py', '_store_budget_waiting', 'client_processing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'client_processing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'client_projection'),
-        Reference('utils/conversations/process_conversation.py', '_store_projected_conversation', 'ClientProcessing'),
-        Reference('utils/conversations/process_conversation.py', '_store_projected_conversation', 'client_projection'),
-        Reference('utils/conversations/process_conversation.py', '_store_deterministic_minimum', 'ClientProcessing'),
-        Reference('utils/conversations/process_conversation.py', '_store_deterministic_minimum', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'client_projection'),
-        Reference('utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'ClientProcessing'),
-        Reference(
-            'utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'client_processing'
-        ),
-        Reference(
-            'utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'client_projection'
-        ),
+        Reference('utils/conversations/process_conversation.py', '_store_budget_waiting', 'client_projection'),
+        Reference('utils/conversations/process_conversation.py', 'preserve_capture', 'client_projection'),
         Reference(
             'utils/conversations/projection_payload.py',
             'client_processing_mutation',
@@ -502,8 +503,21 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/webhooks.py', '_build_conversation_webhook_payload_sync', 'conversation_to_dict'),
         DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
         DumpSite('utils/goals_response.py', 'list_developer_goals', 'model_dump'),
-        DumpSite('routers/developer.py', '_create_conversation_from_segments', 'model_dump'),
+        # Blank-session retry identity only: the request dump has an explicit
+        # field allowlist and feeds a hash, never a client or intelligence view.
+        DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
+        DumpSite('routers/developer.py', '_ingest_conversation_from_segments', 'model_dump'),
+        # Blank-session retry identity hashes only fixed recording facts;
+        # client_processing and other display projections are excluded. This
+        # serialization derives the digest only; it is not persisted or sent
+        # to an intelligence consumer.
+        DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
+        # Request serialization goes only to encrypted staging, never intelligence.
+        DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
+        # FolderEntity serialization for the Developer API folder response;
+        # this path neither reads a Conversation nor feeds intelligence.
+        DumpSite('routers/developer.py', 'get_user_folders', 'model_dump'),
         # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
         # conversation content; transcripts reach the LLM via
         # conversations_to_string. Reviewed with the daily-summary work (#12636).
@@ -522,9 +536,13 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             'model_dump',
         ),
         DumpSite('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'dict'),
-        DumpSite('utils/conversations/process_conversation.py', '_terminal_persist_payload', 'dict'),
+        # Storage payload strips the projection before the initial-create-only mutation.
+        DumpSite('utils/conversations/process_conversation.py', '_store_budget_waiting', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
         DumpSite('utils/conversations/meeting_context.py', 'store_meeting_context', 'model_dump'),
+        # CalendarMeetingContext only; derived member context is
+        # persisted separately from Conversation.external_data.calendar_meeting_context.
+        DumpSite('utils/conversations/process_conversation.py', '_enrich_meeting_context', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', 'process_user_emotion', 'dict'),
         DumpSite(
@@ -554,8 +572,17 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/llm/goals.py', 'suggest_goal', 'dict'),
         DumpSite('database/goals.py', 'normalize_goal_storage', 'model_dump'),
         DumpSite('database/goals.py', '_new_goal_payload', 'model_dump'),
-        DumpSite('database/goals.py', 'update_goal', 'model_dump'),
+        DumpSite('database/goals.py', 'update_document', 'model_dump'),
         DumpSite('database/goals.py', 'apply', 'model_dump'),
+        # A2a repository serialization: the task list's key only extracts sort
+        # fields from ActionItemEntity; goal CAS maps GoalEntity's stored fields,
+        # and progress methods map GoalProgressEvent storage/wire values. None
+        # serializes a Conversation or supplies conversation content to intelligence.
+        DumpSite('database/action_items.py', 'key', 'model_dump'),
+        DumpSite('database/goals.py', 'update', 'model_dump'),
+        DumpSite('database/goals.py', 'update_progress_document', 'model_dump'),
+        DumpSite('database/goals.py', 'append_progress_event', 'model_dump'),
+        DumpSite('database/goals.py', 'list_progress_events', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'create_intervention', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'publish', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'create_feedback', 'model_dump'),
@@ -571,22 +598,12 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # MemoryDB has no client_processing field.
         DumpSite('utils/apps.py', 'generate_persona_prompt', 'dict'),
         DumpSite('utils/apps.py', 'generate_persona_desc', 'dict'),
-        DumpSite('utils/memory/daily_memory_sweep.py', 'digest', 'model_dump'),
-        DumpSite('utils/memory/daily_memory_sweep.py', 'reconcile', 'model_dump'),
-        DumpSite('utils/memory/daily_memory_sweep.py', '_bounded_candidate_channel', 'model_dump'),
-        DumpSite('utils/memory/daily_memory_sweep.py', 'build_candidate_page', 'model_dump'),
-        DumpSite(
-            'utils/memory/daily_memory_sweep.py',
-            '_load_or_stage_onboarding_candidates',
-            'model_dump',
-        ),
-        DumpSite(
-            'utils/memory/daily_memory_sweep.py',
-            '_load_or_stage_daily_summary_candidates',
-            'model_dump',
-        ),
         DumpSite('utils/task_intelligence/backend_capture.py', 'policy_signals', 'model_dump'),
         DumpSite('utils/task_intelligence/conversation_capture.py', 'canonical_fields', 'model_dump'),
+        # These serialize TaskDue, CandidateCreateRequest and ReminderOrigin only.
+        # None can carry Conversation.client_processing or display projections.
+        DumpSite('utils/task_intelligence/conversation_capture.py', '_capture_decision', 'model_dump'),
+        DumpSite('utils/task_intelligence/conversation_capture.py', 'process_before_legacy', 'model_dump'),
         # Daily-summary stats payload (not Conversation); scanner matches any model_dump.
         DumpSite('utils/llm/external_integrations.py', '_basic_daily_summary', 'model_dump'),
         DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
@@ -609,21 +626,37 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'updated_at',
         'started_at',
         'finished_at',
+        # Server-computed recording and episode metadata, not display projections.
+        'recorded_start',
+        'recorded_end',
+        # Source-clock timezone metadata, not client-authored display text.
+        'capture_timezone',
+        'arrival_at',
+        'clock',
+        'episode_id',
         'source',
         'language',
         'uses_custom_stt',
         # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
         'record_lane_owner',
+        # Server-authored partial audio proof metadata, not client display text.
+        'record_audio_partial',
         'structured',
         'client_processing',
         # Authenticated owner-confirmed edits, not device-authored display projections.
         # Corrections deliberately enter summarization; overview is the owned override.
         'user_corrections',
         'user_overview',
+        # Stored manual-edit read authority, not client display projection.
+        # Excluded from dumps/schema; its raw database field stays owned by manual edits.
+        # test_short_clip_authority.py proves that exclusion and floor admission.
+        'user_title',
         # S3 (§1.7): server-authored, NOT projection-family. It says why
         # `structured` is the deterministic minimum; it carries no client text,
         # so the integration redactor must not strip it.
         'processing_state',
+        # Server-authored funding/queue state, not client display text or projection-family.
+        'processing_deferred',
         # Server-authored dead-letter retry marker, written only by the
         # finalization dead-letter transaction and cleared by processing
         # persists. A bool, no client text: NOT projection-family.
@@ -639,6 +672,11 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Retained by persistence/transcript-edit sinks and app views; explicitly
         # stripped as private capture metadata by the integration redactor.
         'capture_coverage',
+        # Server-authored projection of the manual speaker receipt's still-
+        # winning whole-voice not_a_person exclusions. First-party capture
+        # reconciliation signal, not client-authored display; stripped by the
+        # integration redactor like capture_coverage.
+        'excluded_speakers',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',
@@ -652,6 +690,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'plugins_results',
         'external_data',
         'app_id',
+        # Server-authored media/noise eligibility metadata, not a display projection.
+        'content_kind',
         'discarded',
         'imported',
         'visibility',
@@ -664,6 +704,13 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'data_protection_level',
         'folder_id',
         'call_id',
+        # V4 finalizer projects boundary-derived identity and owner/remote location scope.
+        # These are server metadata, not client-authored display projection siblings.
+        'is_call',
+        'call_platform',
+        'calendar_event_id',
+        'geolocation_scope',
+        'other_participants_location',
         'calendar_event',
         'client_device_id',
         'client_platform',
@@ -705,6 +752,12 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Server-authored counts/enums/durations/ids only; no client display
         # projection. Internal metadata, excluded from API and integrations.
         'owner_recognition_diagnostics',
+        # Server-computed Home row contract stamp on list reads
+        # (utils/conversations/home_step.py): a read-time wire projection of
+        # the processing step, never stored and never client-authored. NOT
+        # projection-family — it must survive the integration redactor so
+        # clients receive it; the model serializer omits it when unset.
+        'home_step',
     }
 )
 
@@ -913,7 +966,6 @@ def test_scan_covers_required_plumbing() -> None:
         'utils/apps.py',
         'utils/app_integrations.py',
         'utils/llm/external_integrations.py',
-        'utils/memory/daily_memory_sweep.py',
         'utils/retrieval/rag.py',
         'utils/llm/goals.py',
         'database/goals.py',
@@ -973,6 +1025,7 @@ def test_conversation_field_set_is_pinned(render_mod: ModuleType) -> None:
     current = frozenset(Conversation.model_fields)
     new = sorted(current - PINNED_CONVERSATION_FIELDS)
     gone = sorted(PINNED_CONVERSATION_FIELDS - current)
+    assert 'user_title' not in family  # Stored manual-edit authority, never client projection.
     assert family <= PINNED_CONVERSATION_FIELDS
     assert family <= current
     assert current == PINNED_CONVERSATION_FIELDS, (
@@ -1568,12 +1621,19 @@ PINNED_INTENT_TXN_CALLEES: FrozenSet[str] = frozenset(
     {
         'conversation_ref.get',
         '_conversation_has_finalization_content',
-        '_has_active_recording_session_lease',
+        'recording_session_lease_expiry',
+        'account_deletion_ref.get',
         'existing_ref.get',
         'job_ref.get',
         'transaction.set',
         '_record_projection_delta',
         '_apply_snapshot_bound_projection',
+        # Silent-backfill admission fences (read-only: owner inflight state,
+        # user privacy/byok doc, recording-session revision snapshot). Their
+        # only writes stay in this txn's direct transaction.set sites.
+        'backfill_owner_available',
+        'user_ref.get',
+        '<dynamic>.get',
     }
 )
 

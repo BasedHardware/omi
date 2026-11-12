@@ -1,5 +1,9 @@
 # ADR-001: Full-Text vs Delta Translation in Streaming Coordinator
 
+> **Pricing note (2026-11-02):** the dollar figures below are from the Google Translate V3 era. Translation now
+> runs on Luna (gpt-6-luna); price it from `backend/llm_gateway/config/cost_rate_cards.yaml`
+> (`openai.gpt-6-luna.2026-09-22`, $0.10/M input and $0.60/M output tokens) and the gateway ledger.
+
 ## Status
 
 **Accepted** (2026-03-31, implicit — original implementation)  

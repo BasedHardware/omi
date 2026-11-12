@@ -16,6 +16,44 @@ def test_default_off(monkeypatch):
     assert not levers.lever_enabled('singleton_loops', 'pod-1')
 
 
+@pytest.mark.parametrize(
+    'name',
+    [
+        'conversation_list_cursor',
+        'finjob_candidate_queries',
+        'sync_snapshot_resolve_cache',
+        'episode_members_cache',
+        'privacy_negative_lookup_cache',
+    ],
+)
+@pytest.mark.parametrize('raw', [None, '', '{}', '{"singleton_loops":100}'])
+def test_registered_lever_stays_off_when_key_absent(monkeypatch, name, raw):
+    if raw is None:
+        monkeypatch.delenv(levers.ENV_KEY, raising=False)
+    else:
+        monkeypatch.setenv(levers.ENV_KEY, raw)
+    assert name in levers.KNOWN_LEVERS
+    assert levers.lever_percent(name) == 0
+    assert not levers.lever_enabled(name)
+    assert not levers.lever_enabled(name, 'uid-1')
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        'conversation_list_cursor',
+        'finjob_candidate_queries',
+        'sync_snapshot_resolve_cache',
+        'episode_members_cache',
+        'privacy_negative_lookup_cache',
+    ],
+)
+def test_registered_lever_is_addressable(monkeypatch, name):
+    monkeypatch.setenv(levers.ENV_KEY, '{"%s":100}' % name)
+    assert levers.lever_percent(name) == 100
+    assert levers.lever_enabled(name, 'uid-1')
+
+
 def test_full_rollout_needs_no_key(monkeypatch):
     monkeypatch.setenv(levers.ENV_KEY, '{"singleton_loops": 100}')
     assert levers.lever_enabled('singleton_loops')
@@ -43,3 +81,18 @@ def test_unknown_names(monkeypatch):
     assert levers.lever_enabled('listen_poll')
     with pytest.raises(ValueError):
         levers.lever_percent('bogus')
+
+
+@pytest.mark.parametrize('raw', ['', '{}', '{"singleton_loops":100}'])
+def test_oldest_metrics_lever_defaults_on(monkeypatch, raw):
+    monkeypatch.setenv(levers.ENV_KEY, raw)
+    assert levers.lever_percent('batch_metrics_oldest_leader') == 100
+    assert levers.lever_enabled('batch_metrics_oldest_leader')
+
+
+@pytest.mark.parametrize('value', [0, False, 'off', 101])
+def test_oldest_metrics_explicit_off_or_invalid_restores_old_behavior(monkeypatch, value):
+    import json
+
+    monkeypatch.setenv(levers.ENV_KEY, json.dumps({'batch_metrics_oldest_leader': value}))
+    assert not levers.lever_enabled('batch_metrics_oldest_leader')

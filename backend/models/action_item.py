@@ -14,6 +14,7 @@ from pydantic import (
 )
 
 from models.task_intelligence import StableId
+from models.task_due import ReminderOrigin, TaskDue
 
 
 class TaskStatus(str, Enum):
@@ -87,6 +88,7 @@ class CanonicalTaskCreate(BaseModel):
     goal_id: Optional[StableId] = None
     workstream_id: Optional[StableId] = None
     owner: TaskOwner = TaskOwner.user
+    due: Optional[TaskDue] = None
     due_at: Optional[AwareDatetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     source: str = Field(default="manual", min_length=1, max_length=64)
@@ -102,6 +104,17 @@ class CanonicalTaskCreate(BaseModel):
     export_date: Optional[AwareDatetime] = None
     export_platform: Optional[str] = Field(default=None, max_length=64)
     apple_reminder_id: Optional[str] = Field(default=None, max_length=512)
+
+    @model_validator(mode="after")
+    def reconcile_due_precision(self):
+        if self.due is not None:
+            if self.due.kind != 'instant' and self.due_at is not None:
+                raise ValueError('date/none/unresolved due cannot carry due_at')
+            if self.due.kind == 'instant':
+                if self.due_at is not None and self.due_at != self.due.instant:
+                    raise ValueError('due_at must agree with due.instant')
+                self.due_at = self.due.instant
+        return self
 
     @model_validator(mode="after")
     def reconcile_legacy_completed(self):
@@ -130,6 +143,7 @@ class CanonicalTaskUpdate(BaseModel):
     goal_id: Optional[StableId] = None
     workstream_id: Optional[StableId] = None
     owner: Optional[TaskOwner] = None
+    due: Optional[TaskDue] = None
     due_at: Optional[AwareDatetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     source: Optional[str] = Field(default=None, min_length=1, max_length=64)
@@ -144,6 +158,17 @@ class CanonicalTaskUpdate(BaseModel):
     export_date: Optional[AwareDatetime] = None
     export_platform: Optional[str] = Field(default=None, max_length=64)
     apple_reminder_id: Optional[str] = Field(default=None, max_length=512)
+
+    @model_validator(mode="after")
+    def reconcile_due_precision(self):
+        if self.due is not None:
+            if self.due.kind != 'instant' and self.due_at is not None:
+                raise ValueError('date/none/unresolved due cannot carry due_at')
+            if self.due.kind == 'instant':
+                if self.due_at is not None and self.due_at != self.due.instant:
+                    raise ValueError('due_at must agree with due.instant')
+                self.due_at = self.due.instant
+        return self
 
     @model_validator(mode="after")
     def reconcile_legacy_completed(self):
@@ -216,12 +241,15 @@ class ActionItemResponse(BaseModel):
 
     id: StableId
     task_id: Optional[StableId] = None
+    reminder_origin: Optional[ReminderOrigin] = None
+    creation_receipt: Optional[dict[str, Any]] = None
     description: str
     status: TaskStatus = TaskStatus.active
     completed: bool
     goal_id: Optional[StableId] = None
     workstream_id: Optional[StableId] = None
     owner: TaskOwner = TaskOwner.unknown
+    due: Optional[TaskDue] = None
     due_at: Optional[datetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     source: str = "legacy"
@@ -322,11 +350,23 @@ class TaskCreatePayload(BaseModel):
 
     description: str = Field(min_length=1, max_length=4096)
     owner: TaskOwner = TaskOwner.unknown
+    due: Optional[TaskDue] = None
     due_at: Optional[AwareDatetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     priority: Optional[TaskPriority] = None
     recurrence_rule: Optional[str] = Field(default=None, max_length=128)
     recurrence_parent_id: Optional[StableId] = None
+
+    @model_validator(mode="after")
+    def reconcile_due_precision(self):
+        if self.due is not None:
+            if self.due.kind != 'instant' and self.due_at is not None:
+                raise ValueError('date/none/unresolved due cannot carry due_at')
+            if self.due.kind == 'instant':
+                if self.due_at is not None and self.due_at != self.due.instant:
+                    raise ValueError('due_at must agree with due.instant')
+                self.due_at = self.due.instant
+        return self
 
 
 class TaskChangePayload(BaseModel):
@@ -335,12 +375,24 @@ class TaskChangePayload(BaseModel):
     description: Optional[str] = Field(default=None, min_length=1, max_length=4096)
     status: Optional[TaskStatus] = None
     owner: Optional[TaskOwner] = None
+    due: Optional[TaskDue] = None
     due_at: Optional[AwareDatetime] = None
     due_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     priority: Optional[TaskPriority] = None
     recurrence_rule: Optional[str] = Field(default=None, max_length=128)
     recurrence_parent_id: Optional[StableId] = None
     superseded_by: Optional[StableId] = None
+
+    @model_validator(mode="after")
+    def reconcile_due_precision(self):
+        if self.due is not None:
+            if self.due.kind != 'instant' and self.due_at is not None:
+                raise ValueError('date/none/unresolved due cannot carry due_at')
+            if self.due.kind == 'instant':
+                if self.due_at is not None and self.due_at != self.due.instant:
+                    raise ValueError('due_at must agree with due.instant')
+                self.due_at = self.due.instant
+        return self
 
     @model_validator(mode="after")
     def require_change(self):

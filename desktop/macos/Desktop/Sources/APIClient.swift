@@ -158,6 +158,7 @@ actor APIClient {
 
   func get<T: Decodable>(
     _ endpoint: String,
+    queryItems: [URLQueryItem] = [],
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
@@ -170,8 +171,21 @@ actor APIClient {
     let authOwnerId = authPolicy.expectedAuthOwnerId
     try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
-    guard let url = URL(string: base + endpoint) else {
-      throw APIError.invalidResponse
+    let url: URL
+    if queryItems.isEmpty {
+      guard let endpointURL = URL(string: base + endpoint) else {
+        throw APIError.invalidResponse
+      }
+      url = endpointURL
+    } else {
+      guard var components = URLComponents(string: base + endpoint) else {
+        throw APIError.invalidResponse
+      }
+      components.queryItems = (components.queryItems ?? []) + queryItems
+      guard let endpointURL = components.url else {
+        throw APIError.invalidResponse
+      }
+      url = endpointURL
     }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
@@ -234,7 +248,8 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    idempotencyKey: String? = nil
   ) async throws -> T {
     let authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
@@ -252,6 +267,9 @@ actor APIClient {
       includeBYOK: includeBYOK,
       expectedAuthOwnerId: authOwnerId)
     try validateExpectedOwner(authPolicy)
+    if let idempotencyKey {
+      request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+    }
 
     return try await performRequest(
       request,
@@ -916,8 +934,19 @@ extension APIClient {
   }
 
   /// Fetches a single conversation by ID
-  func getConversation(id: String) async throws -> ServerConversation {
-    return try await get("v1/conversations/\(id)")
+  func getConversation(
+    id: String,
+    includeDiscarded: Bool? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ServerConversation {
+    let queryItems =
+      includeDiscarded.map {
+        [URLQueryItem(name: "include_discarded", value: String($0))]
+      } ?? []
+    return try await get(
+      "v1/conversations/\(id)",
+      queryItems: queryItems,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Reads conversation-lifetime photo bytes. Storage-backed photos no longer

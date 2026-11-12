@@ -7,6 +7,13 @@ Run this explicit, local-only gauntlet when changing the listen WebSocket,
 backend/testing/listen_pusher_stack/run.sh --keep
 ```
 
+On a loaded development host, `--startup-timeout 120` gives each owned process
+up to 120 seconds to bind its loopback port. This bounded option accepts 20–300
+seconds and leaves the normal 20-second floor (45 seconds for backend/worker)
+unchanged. It does not alter scenario assertions or production settings.
+The live-client restart scenario waits for its owned pusher in a worker thread
+so a slow import cannot block the harness WebSocket's ping/pong processing.
+
 Prerequisites are the backend virtual environment (`backend/scripts/sync-python-deps.sh`),
 the root Node dependencies (`npm ci`), Redis, and Java 21+. The runner discovers
 Homebrew's `openjdk@21` automatically when `java` is not already on `PATH` and
@@ -30,14 +37,17 @@ The child-process environment is allowlisted: it has a private empty
 `HOME`/cloud config directory and receives no provider credentials, developer
 proxies, ADC configuration, or production project settings. The harness also
 rejects a non-loopback Firestore endpoint.
+Numerical library pools are limited to one thread in each owned child,
+including pusher restarts.
 
 The test deliberately exercises the production listen runtime (`main:app`),
 real pusher router, binary frames 101/102/103/104/201, Firestore finalization
 jobs, leases, fanout admission/idempotency, recording-session binding,
 reconnect code, and the real Cloud Tasks finalization handler.
-It seeds private-cloud mode only to make the real 103 + 101 audio frames flow;
-the provider/storage leaves are disabled because this harness has no cloud
-credentials.
+It seeds private-cloud mode to exercise 103 + 101 and the default durable
+archive barrier. Media and manifests use the owned filesystem adapter with
+create-only writes, persisted metadata and generation pins. Derived audio
+projection remains instrumented. No cloud credentials are available.
 
 The Cloud Tasks entrypoint replaces only provider-side leaves below the real
 processing persistence and memory safety fence:
@@ -71,7 +81,9 @@ header remain in the request path.
 It does not prove LLM/vector output quality, GCS delivery, downstream
 integration delivery, Cloud Tasks IAM provisioning, or Google OIDC signature
 verification. Trace files record durable IDs, frame metadata, and byte counts,
-never audio or transcript text.
+never audio or transcript text. Local test audio objects are confined to each
+scenario's `audio-storage/` directory and are removed with the owned run state.
+Their existence is harness evidence, not production pod-loss durability.
 
 Scenarios:
 
@@ -92,9 +104,13 @@ Scenarios:
 7. a session closes during the deferred pending-finalization window; the real
    recovery path from #9960 enqueues one opaque Cloud Tasks task, then a real
    worker retry preserves `processing` until it completes the same job;
-8. a worker exhausting its two-attempt test budget atomically dead-letters the
-   job with `terminal_outcome=failure` and marks the still-current conversation
-   `failed`/`discarded`, while a later duplicate delivery is fenced;
+8. a worker exhausting its two-attempt test budget is granted exactly one
+   delayed requeue (the row parks with a reset budget, `budget_requeue_count=1`,
+   and no early task); once the park is due, the reconciler dispatches the
+   requeued generation, and that life's exhaustion atomically dead-letters the
+   job with `terminal_outcome=failure`, `budget_requeue_count=1`, and the
+   still-current conversation closed with `finalization_status=dead_letter`,
+   while later duplicate deliveries of both generations are fenced;
 9. an integration failure after processing retries only durable fanout, never
    re-runs completed conversation processing.
 10. in `RECORDING_SESSION_MODE=enforce`, one operation-scoped `completed`

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import { toGrafanaActivationPayload } from "@/lib/activation-compat";
 import { posthogResults } from "@/lib/posthog";
@@ -46,7 +46,7 @@ function nycDate(iso: string): string {
 }
 
 export function rollUpDaily(
-  members: readonly ActivationCohortMember[],
+  members: readonly ActivationCohortMember[]
 ): ActivationDailyPoint[] {
   const byDay = new Map<string, { signups: number; activated: number }>();
   for (const member of members) {
@@ -67,7 +67,7 @@ export function rollUpDaily(
 }
 
 export async function computeActivation(
-  days: number,
+  days: number
 ): Promise<
   ActivationSeries & { daily: ActivationDailyPoint[]; erroredUsers: number }
 > {
@@ -75,7 +75,7 @@ export async function computeActivation(
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(
     /\/$/,
-    "",
+    ""
   );
   if (!apiKey || !projectId) {
     throw new Error("PostHog credentials not configured");
@@ -117,14 +117,14 @@ export async function computeActivation(
         ON COALESCE(e.person_id, e.distinct_id) = f.actor
         AND e.timestamp >= now() - INTERVAL ${days + 2} DAY
       GROUP BY f.actor
-    `,
+    `
   )) as any[];
 
   const members: ActivationCohortMember[] = (rows ?? []).map(
     ([firstTs, questions]) => ({
       signupAt: new Date(String(firstTs).replace(" ", "T") + "Z").toISOString(),
       activated: Number(questions) >= ACTIVATION_QUESTIONS,
-    }),
+    })
   );
 
   return {
@@ -135,38 +135,39 @@ export async function computeActivation(
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
     // A non-numeric `days` would otherwise reach the query as NaN.
     const requestedDays = parseInt(
       request.nextUrl.searchParams.get("days") || "60",
-      10,
+      10
     );
     const days = Number.isFinite(requestedDays)
       ? Math.min(Math.max(requestedDays, 1), 180)
       : 60;
     const key = activationCacheKey(days);
 
-    const cached =
-      await getPayload<Awaited<ReturnType<typeof computeActivation>>>(key);
+    const cached = await getPayload<
+      Awaited<ReturnType<typeof computeActivation>>
+    >(key);
     if (cached) {
-      return NextResponse.json(
-        withFreshness(toGrafanaActivationPayload(cached.data), cached.freshAt),
+      return authResult.json(
+        withFreshness(toGrafanaActivationPayload(cached.data), cached.freshAt)
       );
     }
 
     const payload = await computeActivation(days);
     await setPayload(key, payload);
-    return NextResponse.json(
-      withFreshness(toGrafanaActivationPayload(payload), Date.now()),
+    return authResult.json(
+      withFreshness(toGrafanaActivationPayload(payload), Date.now())
     );
   } catch (error: any) {
     console.error("Activation error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to compute activation" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

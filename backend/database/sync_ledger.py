@@ -12,9 +12,13 @@ from google.cloud import firestore
 from config.sync_telemetry import SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS
 from database._client import get_firestore_client
 from database.sync_jobs import get_sync_job
+from database.sync_ledger_ownership import ledger_owner_matches
 from utils.sync import stage as sync_stage
 
 LEDGER_RETENTION_DAYS = 45
+# Terminal batch_v1 ledger state: every failed unit is held with no recovery
+# path left; projected siblings are published, the held span is counted.
+BATCH_PARTIAL_STATUS = 'partial'
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
 REPEAT_FAILURE_LIMIT = 3
 REPEAT_FAILURE_WINDOW = timedelta(hours=24)
@@ -102,31 +106,6 @@ def _ledger_ref(client: Any, uid: str, content_id: str) -> Any:
     return client.collection('users').document(uid).collection(collection).document(content_id)
 
 
-def _ledger_owner_matches(
-    existing: Dict[str, Any],
-    job_id: str,
-    run_token: str | None,
-    run_epoch: int | None = None,
-    *,
-    allow_batch: bool = False,
-) -> bool:
-    """Return whether a worker still owns this ledger mutation boundary.
-
-    Tokenless callers are admission/recovery exceptions only. They may mutate a
-    claim that has never been bound, but can never overwrite a live worker that
-    has recorded a run token.
-    """
-    if existing.get('dispatch_protocol') == 'batch_v1' and not allow_batch:
-        return False
-    if existing.get('status') != 'processing' or existing.get('job_id') != job_id:
-        return False
-    bound_token = existing.get('ledger_run_token')
-    bound_epoch = existing.get('ledger_run_epoch')
-    if run_token is None:
-        return bound_token is None and bound_epoch is None
-    return bound_token == run_token and bound_epoch == run_epoch
-
-
 def sync_content_reference(client: Any, uid: str, content_id: str) -> Any:
     """Share the canonical owner-scoped reference with a custody transfer."""
     return _ledger_ref(client, uid, content_id)
@@ -136,7 +115,7 @@ def sync_content_owner_matches(
     existing: Dict[str, Any], job_id: str, run_token: str | None, run_epoch: int | None = None
 ) -> bool:
     """Custody transfer uses the same token/epoch fence as normal completion."""
-    return _ledger_owner_matches(existing, job_id, run_token, run_epoch)
+    return ledger_owner_matches(existing, job_id, run_token, run_epoch)
 
 
 def is_valid_completed_sync_content_result(result: Any) -> bool:
@@ -169,6 +148,35 @@ def is_valid_completed_sync_content_result(result: Any) -> bool:
         # zero-segment records predate the silence-vs-decode-failure contract.
         return total_segments > 0
     return outcome in {'success', 'expected_silence'}
+
+
+def is_valid_partial_sync_content_result(result: Any) -> bool:
+    """A batch partial: every failed segment is a held unit, none is an error.
+
+    Never an all-success result, so no legacy path converges Redis from it.
+    """
+    if not isinstance(result, dict) or result.get('outcome') != 'partial' or result.get('held_audio') is True:
+        return False
+    failed, held, total = result.get('failed_segments'), result.get('held_segments'), result.get('total_segments')
+    if not all(isinstance(value, int) and not isinstance(value, bool) for value in (failed, held, total)):
+        return False
+    assert isinstance(failed, int) and isinstance(held, int) and isinstance(total, int)
+    return (
+        0 < held == failed <= total
+        and result.get('errors') == []
+        and all(isinstance(result.get(key), list) for key in ('new_memories', 'updated_memories'))
+    )
+
+
+def batch_ledger_owes_held_units(ledger: Dict[str, Any]) -> bool:
+    """Operator redrive precondition: nothing is charged yet, or a partial still counts held units.
+
+    A partial charged only its projected siblings, so a reviewed redrive of a
+    held unit stays allowed; its ordinary completion charges the remainder.
+    """
+    if ledger.get('status') == BATCH_PARTIAL_STATUS:
+        return is_valid_partial_sync_content_result(ledger.get('result'))
+    return ledger.get('status') != 'completed' and ledger.get('usage_committed_at') is None
 
 
 def is_valid_held_sync_content_result(result: Any) -> bool:
@@ -424,7 +432,7 @@ def _side_effect_transaction(
     timestamp_field = _SIDE_EFFECT_FIELDS[tag]
     if existing.get(timestamp_field) is not None:
         return False
-    if not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
+    if not ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
     transaction.set(ref, {timestamp_field: now, f'{tag}_value': value, 'updated_at': now}, merge=True)
     return True
@@ -517,7 +525,7 @@ def _checkpoint_partial_result_transaction(
     """Checkpoint only while the same ledger job still owns the content."""
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
-    if not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
+    if not ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
     transaction.set(ref, {'partial_result': partial_result, 'updated_at': now}, merge=True)
     return True
@@ -547,6 +555,77 @@ def checkpoint_sync_content_partial_result(
     )
 
 
+SEGMENT_MARKED = 'marked'
+SEGMENT_ALREADY_PROCESSED = 'already_processed'
+SEGMENT_FOREIGN_OWNER = 'foreign_owner'
+
+
+@firestore.transactional
+def _checkpoint_and_mark_transaction(
+    transaction: Any,
+    ref: Any,
+    job_id: str,
+    partial_result: Dict[str, Any],
+    segment_id: str,
+    now: datetime,
+    run_token: str | None = None,
+    run_epoch: int | None = None,
+) -> str:
+    """Checkpoint and processed marker in one commit (one billed write, not two).
+
+    Same outcomes as the checkpoint transaction followed by the processed
+    transaction: a foreign owner writes nothing (the checkpoint would have
+    failed); an already-processed segment still checkpoints (only the marker
+    would have failed).
+    """
+    snapshot = ref.get(transaction=transaction)
+    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    if not ledger_owner_matches(existing, job_id, run_token, run_epoch):
+        return SEGMENT_FOREIGN_OWNER
+    if segment_id in (existing.get('processed_segment_ids') or []):
+        transaction.set(ref, {'partial_result': partial_result, 'updated_at': now}, merge=True)
+        return SEGMENT_ALREADY_PROCESSED
+    transaction.set(
+        ref,
+        {
+            'partial_result': partial_result,
+            'processed_segment_ids': firestore.ArrayUnion([segment_id]),
+            'updated_at': now,
+        },
+        merge=True,
+    )
+    return SEGMENT_MARKED
+
+
+def checkpoint_and_mark_sync_segment(
+    uid: str,
+    content_id: str,
+    job_id: str,
+    partial_result: Dict[str, Any],
+    segment_id: str,
+    *,
+    run_token: str | None = None,
+    run_epoch: int | None = None,
+    firestore_client: Any = None,
+) -> str:
+    """Checkpoint a segment's partial result and mark it processed atomically.
+
+    The marker can never precede its result contribution, which the separate
+    calls only guaranteed by ordering.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return _checkpoint_and_mark_transaction(
+        client.transaction(),
+        _ledger_ref(client, uid, content_id),
+        job_id,
+        partial_result,
+        segment_id,
+        datetime.now(timezone.utc),
+        run_token,
+        run_epoch,
+    )
+
+
 @firestore.transactional
 def _processed_segment_transaction(
     transaction: Any,
@@ -562,7 +641,7 @@ def _processed_segment_transaction(
     processed = existing.get('processed_segment_ids') or []
     if segment_id in processed:
         return False
-    if not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
+    if not ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
     transaction.set(
         ref,
@@ -603,6 +682,7 @@ def _mark_completed_transaction(
     now: datetime,
     run_token: str | None = None,
     run_epoch: int | None = None,
+    staging_custody: Dict[str, Any] | None = None,
 ) -> bool:
     """Publish completion only while ``job_id`` still owns the ledger entry."""
     # The caller-side pipeline checks this too, but completion is a durable
@@ -613,13 +693,14 @@ def _mark_completed_transaction(
         return False
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
-    if not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
+    if not ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
     transaction.set(
         ref,
         {
             'status': 'completed',
             'result': result,
+            **({'staging_custody': staging_custody} if staging_custody else {}),
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
         },
@@ -637,6 +718,7 @@ def mark_sync_content_completed(
     run_token: str | None = None,
     run_epoch: int | None = None,
     firestore_client: Any = None,
+    staging_custody: Dict[str, Any] | None = None,
 ) -> bool:
     """Atomically publish a completed result for the matching ledger owner."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -650,6 +732,7 @@ def mark_sync_content_completed(
         now,
         run_token,
         run_epoch,
+        staging_custody,
     )
 
 
@@ -673,7 +756,7 @@ def _release_claim_transaction(
     """
     snapshot = ref.get(transaction=transaction)
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
-    if existing.get('status') == 'completed' or not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
+    if existing.get('status') == 'completed' or not ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
     transaction.set(
         ref,
@@ -794,7 +877,7 @@ def complete_batch_projection_in_transaction(
     if (
         existing.get('dispatch_protocol') != 'batch_v1'
         or not is_valid_completed_sync_content_result(result)
-        or not _ledger_owner_matches(
+        or not ledger_owner_matches(
             existing,
             job_id,
             run_token,
@@ -814,16 +897,35 @@ def complete_batch_projection_in_transaction(
     )
 
 
+def complete_batch_partial_in_transaction(
+    transaction: Any,
+    ref: Any,
+    existing: Dict[str, Any],
+    job_id: str,
+    result: Dict[str, Any],
+    now: datetime,
+    *,
+    run_token: str | None = None,
+    run_epoch: int | None = None,
+) -> None:
+    """Write-only partial completion; the batch owner keeps the row for an upgrade."""
+    if (
+        existing.get('dispatch_protocol') != 'batch_v1'
+        or not is_valid_partial_sync_content_result(result)
+        or not ledger_owner_matches(existing, job_id, run_token, run_epoch, allow_batch=True)
+    ):
+        raise RuntimeError('batch partial lost content ledger ownership')
+    transaction.update(
+        ref,
+        {
+            'status': BATCH_PARTIAL_STATUS,
+            'result': result,
+            'updated_at': now,
+            'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
+        },
+    )
+
+
 def sync_content_ledger_ref(client: Any, uid: str, content_id: str) -> Any:
     """Shared transaction address for atomic batch admission/projection."""
     return _ledger_ref(client, uid, content_id)
-
-
-def batch_projection_ledger_owner_matches(
-    existing: Dict[str, Any],
-    job_id: str,
-    run_token: str | None,
-    run_epoch: int | None,
-) -> bool:
-    """Explicit batch owner check; ordinary legacy mutations never use it."""
-    return _ledger_owner_matches(existing, job_id, run_token, run_epoch, allow_batch=True)

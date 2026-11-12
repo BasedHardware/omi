@@ -1,7 +1,7 @@
 import base64
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncGenerator, List, Optional, Tuple
+from typing import Any, AsyncGenerator, List, Optional, Tuple
 
 from fastapi import HTTPException
 
@@ -29,6 +29,7 @@ from utils.stt.pre_recorded import (
     prerecorded_from_bytes,
     get_prerecorded_service,
 )
+from utils.stt.parakeet_request_metrics import parakeet_caller
 from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
@@ -172,18 +173,35 @@ def _transcribe_voice_message_url(
     path: str,
     language: str,
     detect_language: bool = True,
-) -> Tuple[Optional[str], Optional[str]]:
+    *,
+    return_provider: bool = False,
+) -> Any:
     """Run the synchronous prerecorded-STT pipeline for one signed URL."""
     provider, stt_language, stt_model = get_prerecorded_service(language)
+    served_provider = provider
+    served_model = stt_model
     is_multi = stt_language == 'multi'
+    wants_language = is_multi and detect_language
     try:
-        if is_multi and detect_language:
-            words, detected_language = prerecorded(
-                url, diarize=False, language=stt_language, return_language=True, model=stt_model
+        with parakeet_caller('voice_message'):
+            result = prerecorded(
+                url,
+                diarize=False,
+                language=stt_language,
+                return_language=wants_language,
+                model=stt_model,
+                **({"return_provider": True} if return_provider else {}),
             )
+        if return_provider:
+            words_result, served_provider, served_model = result
         else:
-            words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
+            words_result = result
+        if wants_language:
+            words, detected_language = words_result
+        else:
+            words = words_result
             detected_language = stt_language
+        provider = served_provider
     except Exception as error:
         failure = failure_from_exception(error, provider=provider)
         logger.warning(
@@ -209,6 +227,8 @@ def _transcribe_voice_message_url(
     if len(text) == 0:
         raise empty_unexpected_failure(provider)
 
+    if return_provider:
+        return text, detected_language, served_provider, served_model
     return text, detected_language
 
 
@@ -216,18 +236,22 @@ def transcribe_voice_message_segment(
     path: str,
     uid: str,
     language: str = 'multi',
-) -> Tuple[Optional[str], Optional[str]]:
+    *,
+    return_provider: bool = False,
+) -> Any:
     if not language:
         language = resolve_voice_message_language(uid, None)
-    provider, provider_language, _ = get_prerecorded_service(language)
+    provider, provider_language, provider_model = get_prerecorded_service(language)
     # Schedule deletion before the VAD gate as well: silence is a valid
     # terminal outcome, not a reason to retain temporary customer audio.
     url = _prepare_voice_message_url(path)
     if _validated_wav_is_silent(path, provider=provider):
         detected_language = provider_language if provider_language != 'multi' else None
+        if return_provider:
+            return None, detected_language, provider, provider_model
         return None, detected_language
 
-    return _transcribe_voice_message_url(url, path, language)
+    return _transcribe_voice_message_url(url, path, language, **({"return_provider": True} if return_provider else {}))
 
 
 def transcribe_pcm_bytes(
@@ -238,7 +262,9 @@ def transcribe_pcm_bytes(
     sample_rate: int = 16000,
     channels: int = 1,
     keywords: Optional[List[str]] = None,
-) -> Tuple[Optional[str], Optional[str]]:
+    *,
+    return_provider: bool = False,
+) -> Any:
     """Transcribe raw PCM audio bytes through the selected pre-recorded STT provider.
 
     Skips GCS upload and WAV conversion for maximum speed.
@@ -253,6 +279,8 @@ def transcribe_pcm_bytes(
     if encoding == 'linear16':
         try:
             if linear16_pcm_is_silent(audio_bytes, sample_rate=sample_rate, channels=channels):
+                if return_provider:
+                    return None, stt_language if not is_multi else None, provider, stt_model
                 return None, stt_language if not is_multi else None
         except VADAudioDecodeError as error:
             raise TranscriptionFailure(
@@ -263,8 +291,10 @@ def transcribe_pcm_bytes(
         except VADProcessingError as error:
             raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
 
+    served_provider = provider
+    served_model = stt_model
     try:
-        if is_multi:
+        with parakeet_caller('voice_message'):
             result = prerecorded_from_bytes(
                 audio_bytes,
                 sample_rate=sample_rate,
@@ -273,22 +303,20 @@ def transcribe_pcm_bytes(
                 channels=channels,
                 language=stt_language,
                 model=stt_model,
-                return_language=True,
+                **({"return_language": True} if is_multi else {}),
                 keywords=keywords,
+                **({"return_provider": True} if return_provider else {}),
             )
-            words, detected_language = result
+        if return_provider:
+            words_result, served_provider, served_model = result
         else:
-            words = prerecorded_from_bytes(
-                audio_bytes,
-                sample_rate=sample_rate,
-                diarize=False,
-                encoding=encoding,
-                channels=channels,
-                language=stt_language,
-                model=stt_model,
-                keywords=keywords,
-            )
+            words_result = result
+        if is_multi:
+            words, detected_language = words_result
+        else:
+            words = words_result
             detected_language = stt_language
+        provider = served_provider
     except Exception as error:
         raise failure_from_exception(error, provider=provider) from error
 
@@ -308,6 +336,8 @@ def transcribe_pcm_bytes(
     if len(text) == 0:
         raise empty_unexpected_failure(provider)
 
+    if return_provider:
+        return text, detected_language, served_provider, served_model
     return text, detected_language
 
 

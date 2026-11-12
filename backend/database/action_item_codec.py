@@ -4,12 +4,22 @@ from datetime import datetime, timezone
 import logging
 from typing import Any, Dict
 
+from database.read_boundary import parse_payload_strict
+from models.task_due import TaskDue
+
 logger = logging.getLogger(__name__)
 
 
 def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:
     """Prepare action item data for writing to database"""
     action_item_data = dict(action_item_data)
+    if partial and 'due_at' in action_item_data and 'due' not in action_item_data:
+        action_item_data['due'] = None
+    due_payload = action_item_data.get('due')
+    if due_payload is not None:
+        due: TaskDue = parse_payload_strict(TaskDue, due_payload, document_path='action_items/<write>/due')
+        action_item_data['due'] = due.model_dump(mode='python')
+        action_item_data['due_at'] = due.instant if due.kind == 'instant' else None
     if not partial or 'status' in action_item_data or 'completed' in action_item_data:
         status = action_item_data.get('status')
         completed = action_item_data.get('completed')
@@ -89,7 +99,22 @@ def prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, 
     action_item_data.setdefault('sort_order', 0)
     action_item_data.setdefault('indent_level', 0)
     for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
-        if field in action_item_data and action_item_data[field]:
-            if hasattr(action_item_data[field], 'timestamp'):
-                action_item_data[field] = datetime.fromtimestamp(action_item_data[field].timestamp(), tz=timezone.utc)
+        value = action_item_data.get(field)
+        if not value:
+            continue
+        if hasattr(value, 'timestamp'):
+            action_item_data[field] = datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
+        elif isinstance(value, str):
+            # Legacy/externally-written rows (webhook syncs, migrations, pre-normalization
+            # writes) can still hold a raw ISO string. Downstream sort keys (e.g.
+            # ``_action_item_list_sort_key``) compare this field against datetimes and crash
+            # with a TypeError on a string, so coerce here or drop it rather than 500ing
+            # every reader of this document.
+            try:
+                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                action_item_data[field] = parsed.astimezone(timezone.utc)
+            except (ValueError, OverflowError):
+                action_item_data.pop(field, None)
     return action_item_data

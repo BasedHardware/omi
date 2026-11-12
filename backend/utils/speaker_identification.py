@@ -45,6 +45,8 @@ from utils.speaker_audio import legacy_speaker_clip_pcm
 from utils.other.audio_chunks import AudioChunkReadSession
 from utils.speaker_tag_prompts.clips import v2_relevant_timestamps
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
+from database import speaker_auto_enroll as auto_enroll_db
+from utils.speakers import auto_enroll
 import logging
 
 logger = logging.getLogger(__name__)
@@ -141,6 +143,17 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
     return np.concatenate(trimmed_samples).astype(np.int16).tobytes()
 
 
+# A Latin-script name: a capital letter, then any letters. With ASCII-only classes,
+# "Me llamo José", "Ich heiße Jürgen" and "Nazywam się Łukasz" matched nothing: the
+# trailing \b cannot fall inside a word. Python's re has no \p{Lu}, so the capital is
+# spelled out as every uppercase letter in Basic Latin through Latin Extended-B, plus
+# Latin Extended Additional for Vietnamese capitals such as "Ấ". The first letter must
+# still be uppercase, so "Ich bin müde" and "Tôi là đàn ông" name nobody.
+_LATIN_UPPERCASE = ''.join(
+    char for char in map(chr, [*range(0x0041, 0x0250), *range(0x1E00, 0x1F00)]) if char.isupper()
+)
+_LATIN_NAME = rf"[{_LATIN_UPPERCASE}][^\W\d_]*"
+
 # Language-specific patterns for speaker identification from text
 # Each pattern should have a capture group for the name.
 # The name is expected to be the last capture group.
@@ -149,53 +162,53 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"\b(Аз съм|аз съм|Казвам се|казвам се|Името ми е|името ми е)\s+([А-Я][а-я]*)\b",
     ],
     'ca': [  # Catalan
-        r"\b(Sóc|sóc|Em dic|em dic|El meu nom és|el meu nom és)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Sóc|sóc|Em dic|em dic|El meu nom és|el meu nom és)\s+({_LATIN_NAME})\b",
     ],
     'zh': [  # Chinese
         r"(我的名字是|我叫)\s*([\u4e00-\u9fa5]{2,5}?)(?:[，。！？、,.!?\s]|$)",
         r"(我是)\s*([\u4e00-\u9fa5]{2,4}?)(?:[，。！？、,.!?\s]|$)",
     ],
     'cs': [  # Czech
-        r"\b(Jsem|jsem|Jmenuji se|jmenuji se)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Jsem|jsem|Jmenuji se|jmenuji se)\s+({_LATIN_NAME})\b",
     ],
     'da': [  # Danish
-        r"\b(Jeg er|jeg er|Jeg hedder|jeg hedder|Mit navn er|mit navn er)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Jeg er|jeg er|Jeg hedder|jeg hedder|Mit navn er|mit navn er)\s+({_LATIN_NAME})\b",
     ],
     'de': [  # German
-        r"\b(ich bin|Ich bin|ich heiße|Ich heiße|mein Name ist|Mein Name ist)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(ich bin|Ich bin|ich heiße|Ich heiße|mein Name ist|Mein Name ist)\s+({_LATIN_NAME})\b",
     ],
     'el': [  # Greek
         r"\b(Είμαι|είμαι|Με λένε|με λένε|Το όνομά μου είναι|το όνομά μου είναι)\s+([\u0370-\u03ff\u1f00-\u1fff]+)\b",
     ],
     'en': [  # English
-        r"\b(I am|I'm|i am|i'm|My name is|my name is)\s+([A-Z][a-zA-Z]*)\b",
-        r"\b([A-Z][a-zA-Z]*)\s+is my name\b",
+        rf"\b(I am|I'm|i am|i'm|My name is|my name is)\s+({_LATIN_NAME})\b",
+        rf"\b({_LATIN_NAME})\s+is my name\b",
     ],
     'es': [  # Spanish
-        r"\b(soy|Soy|me llamo|Me llamo|mi nombre es|Mi nombre es)\s+([A-Z][a-zA-Z]*)\b",
-        r"\b([A-Z][a-zA-Z]*)\s+es mi nombre\b",
+        rf"\b(soy|Soy|me llamo|Me llamo|mi nombre es|Mi nombre es)\s+({_LATIN_NAME})\b",
+        rf"\b({_LATIN_NAME})\s+es mi nombre\b",
     ],
     'et': [  # Estonian
-        r"\b(Ma olen|ma olen|Minu nimi on|minu nimi on)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Ma olen|ma olen|Minu nimi on|minu nimi on)\s+({_LATIN_NAME})\b",
     ],
     'fi': [  # Finnish
-        r"\b(Olen|olen|Minun nimeni on|minun nimeni on)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Olen|olen|Minun nimeni on|minun nimeni on)\s+({_LATIN_NAME})\b",
     ],
     'fr': [  # French
-        r"\b(je suis|Je suis|je m'appelle|Je m'appelle|mon nom est|Mon nom est)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(je suis|Je suis|je m'appelle|Je m'appelle|mon nom est|Mon nom est)\s+({_LATIN_NAME})\b",
     ],
     'hi': [  # Hindi
         r"(मैं हूँ|मेरा नाम है)\s+([\u0900-\u097F]+)",
     ],
     'hu': [  # Hungarian
-        r"\b(Én vagyok|én vagyok|A nevem|a nevem)\s+([A-Z][a-zA-Z]*)\b",
-        r"\b([A-Z][a-zA-Z]*)\s+vagyok\b",
+        rf"\b(Én vagyok|én vagyok|A nevem|a nevem)\s+({_LATIN_NAME})\b",
+        rf"\b({_LATIN_NAME})\s+vagyok\b",
     ],
     'id': [  # Indonesian
-        r"\b(Saya|saya|Nama saya|nama saya)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Saya|saya|Nama saya|nama saya)\s+({_LATIN_NAME})\b",
     ],
     'it': [  # Italian
-        r"\b(Sono|sono|Mi chiamo|mi chiamo|Il mio nome è|il mio nome è)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Sono|sono|Mi chiamo|mi chiamo|Il mio nome è|il mio nome è)\s+({_LATIN_NAME})\b",
     ],
     'ja': [  # Japanese
         r"(私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、。，．！？!?\s]|$)",
@@ -205,49 +218,49 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"(저는|제\s*이름은)\s*([\uac00-\ud7a3]{2,5}?)(?:입니다|이에요|예요|이라고\s*합니다|라고\s*합니다|이야|야|[.,!?\s]|$)",
     ],
     'lt': [  # Lithuanian
-        r"\b(Aš esu|aš esu|Mano vardas yra|mano vardas yra)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Aš esu|aš esu|Mano vardas yra|mano vardas yra)\s+({_LATIN_NAME})\b",
     ],
     'lv': [  # Latvian
-        r"\b(Es esmu|es esmu|Mans vārds ir|mans vārds ir)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Es esmu|es esmu|Mans vārds ir|mans vārds ir)\s+({_LATIN_NAME})\b",
     ],
     'ms': [  # Malay
-        r"\b(Saya|saya|Nama saya|nama saya)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Saya|saya|Nama saya|nama saya)\s+({_LATIN_NAME})\b",
     ],
     'nl': [  # Dutch / Flemish
-        r"\b(Ik ben|ik ben|Mijn naam is|mijn naam is|Ik heet|ik heet)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Ik ben|ik ben|Mijn naam is|mijn naam is|Ik heet|ik heet)\s+({_LATIN_NAME})\b",
     ],
     'no': [  # Norwegian
-        r"\b(Jeg er|jeg er|Jeg heter|jeg heter|Navnet mitt er|navnet mitt er)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Jeg er|jeg er|Jeg heter|jeg heter|Navnet mitt er|navnet mitt er)\s+({_LATIN_NAME})\b",
     ],
     'pl': [  # Polish
-        r"\b(Jestem|jestem|Nazywam się|nazywam się|Mam na imię|mam na imię)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Jestem|jestem|Nazywam się|nazywam się|Mam na imię|mam na imię)\s+({_LATIN_NAME})\b",
     ],
     'pt': [  # Portuguese
-        r"\b(Eu sou|eu sou|Chamo-me|chamo-me|O meu nome é|o meu nome é)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Eu sou|eu sou|Chamo-me|chamo-me|O meu nome é|o meu nome é)\s+({_LATIN_NAME})\b",
     ],
     'ro': [  # Romanian
-        r"\b(Sunt|sunt|Mă numesc|mă numesc|Numele meu este|numele meu este)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Sunt|sunt|Mă numesc|mă numesc|Numele meu este|numele meu este)\s+({_LATIN_NAME})\b",
     ],
-    'ru': [  # Russian
-        r"\b(Я|я|Меня зовут|меня зовут|Моё имя|моё имя)\s+([А-Я][а-я]*)\b",
+    'ru': [  # Russian; Ё/ё sit outside the А-Я/а-я ranges ("Фёдор", "Пётр")
+        r"\b(Я|я|Меня зовут|меня зовут|Моё имя|моё имя)\s+([А-ЯЁ][а-яё]*)\b",
     ],
     'sk': [  # Slovak
-        r"\b(Som|som|Volám sa|volám sa)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Som|som|Volám sa|volám sa)\s+({_LATIN_NAME})\b",
     ],
     'sv': [  # Swedish
-        r"\b(Jag är|jag är|Jag heter|jag heter|Mitt namn är|mitt namn är)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Jag är|jag är|Jag heter|jag heter|Mitt namn är|mitt namn är)\s+({_LATIN_NAME})\b",
     ],
     'th': [  # Thai
         r"(ผมชื่อ|ฉันชื่อ|ผมคือ|ฉันคือ)\s*([\u0e00-\u0e7f]+)",
     ],
     'tr': [  # Turkish
-        r"\b(Benim adım|benim adım)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Benim adım|benim adım)\s+({_LATIN_NAME})\b",
     ],
     'uk': [  # Ukrainian
         r"\b(Я|я|Мене звати|мене звати|Моє ім'я|моє ім'я)\s+([А-ЯІЇЄҐ][а-яіїєґ]*)\b",
     ],
     'vi': [  # Vietnamese
-        r"\b(Tôi là|tôi là|Tên tôi là|tên tôi là)\s+([A-Z][a-zA-Z]*)\b",
+        rf"\b(Tôi là|tôi là|Tên tôi là|tên tôi là)\s+({_LATIN_NAME})\b",
     ],
 }
 
@@ -308,7 +321,7 @@ COPULAR_SELF_REFERENCE_LEAD_INS = frozenset(
 # Name-first patterns capture the name in group 1, so there is no lead-in to
 # classify. Only Hungarian "<Name> vagyok" is a bare copula; "<Name> is my name"
 # and "<Name> es mi nombre" are explicit introductions.
-_NAME_FIRST_COPULAR_PATTERNS = frozenset({r"\b([A-Z][a-zA-Z]*)\s+vagyok\b"})
+_NAME_FIRST_COPULAR_PATTERNS = frozenset({rf"\b({_LATIN_NAME})\s+vagyok\b"})
 
 # CJK stopwords and grammatical elements to avoid false-positive speaker creation
 # from ordinary conversational sentences (#12900).
@@ -768,10 +781,12 @@ def detect_speaker_introduction(text: str, language: Optional[str] = None) -> Op
             if not _is_valid_cjk_speaker_name(name, pattern_lang=matched_lang):
                 continue
 
+            # Capitalize only the first letter. People are looked up by exact name, and
+            # str.capitalize() lowercased the rest: "McDonald" became "Mcdonald".
             normalized = (
                 name
                 if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name)
-                else name.capitalize()
+                else name[:1].capitalize() + name[1:]
             )
             return SpeakerNameDetection(name=normalized, explicit=_is_explicit_introduction(pattern, match))
     return None
@@ -785,12 +800,64 @@ def _verify_outcome(reason: str) -> str:
     return outcome if outcome in _VERIFY_OUTCOMES else 'error'
 
 
+async def _audio_enrollment_guard(uid: str, required: bool) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    if not required:
+        return None, None
+    guard = await run_blocking(db_executor, auto_enroll_db.audio_guard, uid)
+    if not auto_enroll.retained(guard):
+        return guard, 'disabled'
+    if auto_enroll.unit(guard.get('speaker_embedding')) is None:
+        return guard, 'rejected_embedding'
+    return guard, None
+
+
+def _audio_enrollment_allows(guard: Optional[Dict[str, Any]], embedding: List[float]) -> bool:
+    return guard is None or auto_enroll.audio_allowed(guard, embedding, guard.get(auto_enroll_db.PRIVACY_VERSION, 0))
+
+
+def _audio_enrollment_kwargs(guard: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    return {'enrollment_privacy_version': guard.get(auto_enroll_db.PRIVACY_VERSION, 0)} if guard is not None else {}
+
+
+def _audio_source_outcome(required: bool, conversation: Dict[str, Any], person_id: str) -> Optional[str]:
+    if not required:
+        return None
+    if conversation.get('private_cloud_sync_enabled') is not True:
+        return 'disabled'
+    return None if auto_enroll.explicit_segments(conversation, person_id) else 'no_authorized_segments'
+
+
+def _audio_teaching_segments(conversation: Dict[str, Any], person_id: str, required: bool) -> Any:
+    return (
+        auto_enroll.explicit_segments(conversation, person_id)
+        if required
+        else authorized_teaching_segments(conversation, person_id)
+    )
+
+
+async def _person_sample_embedding(
+    wav_bytes: bytes, guard: Optional[Dict[str, Any]]
+) -> Tuple[Optional[List[float]], str]:
+    try:
+        embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
+    except Exception:
+        return None, 'embedding_failed'
+    embedding_list = embedding.flatten().tolist()
+    if not embedding_list or not np.isfinite(embedding).all() or not np.any(embedding):
+        return None, 'embedding_failed'
+    if not _audio_enrollment_allows(guard, embedding_list):
+        return None, 'rejected_embedding'
+    return embedding_list, 'stored'
+
+
 async def extract_speaker_samples(
     uid: str,
     person_id: str,
     conversation_id: str,
     segment_ids: List[str],
     sample_rate: int = 16000,
+    *,
+    require_owner_exclusion: bool = False,
 ) -> str:
     """
     Extract a pooled speech sample for ``person_id`` and store it as their voice profile.
@@ -805,6 +872,10 @@ async def extract_speaker_samples(
     person: Optional[Dict[str, Any]] = None
     clean_seconds = 0.0
     try:
+        enrollment_guard, guard_outcome = await _audio_enrollment_guard(uid, require_owner_exclusion)
+        if guard_outcome:
+            outcome = guard_outcome
+            return outcome
         # The user can turn off saving other people's voices; this is the one choke
         # point every teaching path (tag sheet, tag prompts, live socket) reaches.
         settings = await run_blocking(db_executor, voice_profiles_db.get_voice_profile_settings, uid)
@@ -824,6 +895,10 @@ async def extract_speaker_samples(
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation:
             outcome = 'conversation_missing'
+            return outcome
+        source_outcome = _audio_source_outcome(require_owner_exclusion, conversation, person_id)
+        if source_outcome:
+            outcome = source_outcome
             return outcome
 
         # Sample extraction runs live, while the conversation is still processing, so
@@ -859,7 +934,7 @@ async def extract_speaker_samples(
         requested_ids = {sid for sid in (segment_ids or []) if sid}
         receipt = conversation.get('manual_speaker_assignments') or {}
         if receipt.get('segments') or receipt.get('speakers'):
-            authorized = authorized_teaching_segments(conversation, person_id)
+            authorized = _audio_teaching_segments(conversation, person_id, require_owner_exclusion)
             anchor_groups = {segment_group(s) for s in authorized if s.get('id') in requested_ids}
             if not anchor_groups:
                 anchor_groups = {segment_group(s) for s in authorized}
@@ -1091,14 +1166,9 @@ async def extract_speaker_samples(
 
         # Complete embedding work before replacing anything. A failed provider
         # call leaves the prior profile intact and allows a later retry.
-        try:
-            embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
-        except Exception:
-            outcome = 'embedding_failed'
-            return outcome
-        embedding_list = embedding.flatten().tolist()
-        if not embedding_list or not np.isfinite(embedding).all() or not np.any(embedding):
-            outcome = 'embedding_failed'
+        embedding_list, embedding_outcome = await _person_sample_embedding(wav_bytes, enrollment_guard)
+        if embedding_list is None:
+            outcome = embedding_outcome
             return outcome
         path = await run_blocking(
             storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
@@ -1116,6 +1186,7 @@ async def extract_speaker_samples(
             contributing_ids,
             speech_seconds=clean_seconds,
             expected_receipt_generation=receipt.get('generation', 0),
+            **_audio_enrollment_kwargs(enrollment_guard),
         )
         if old_samples is None:
             await run_blocking(storage_executor, delete_sample_from_storage, path)

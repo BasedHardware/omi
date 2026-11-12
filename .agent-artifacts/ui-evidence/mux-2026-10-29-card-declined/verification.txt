@@ -1,0 +1,35 @@
+Round 1, source 4e7904d217f77309af5e37dec83522a2581b8838; dev/local_dev iPhone 17 Pro simulator, iOS 26.2.
+Backend: 578 passed. App: 16 passed. Changed Dart sources/tests: static analysis clean.
+All 51 selected repository checks passed across initial/resumed runs and the pinned-SDK l10n rerun.
+l10n: 49 locales, 4350 keys; generated output current under Flutter 3.44.5.
+
+Observed user path:
+- Light Home: Your card was declined / Update it to get Omi Pro back; one Update pill above Today.
+- Open attempted subscription_update invoice, $255.27: backend returns payment_issue=None; real Home row absent.
+- Restore subscription_cycle invoice: row returns.
+- Update and unpaid return, twice: native portal HTML loaded and row stays both times.
+- Third Update: native portal loads; inject paid only through offline fixture; app return refresh restores unlimited_v2 and removes payment_issue.
+- Relaunch: backend remains unlimited_v2 with no payment_issue and row stays absent.
+- All three portal visits had the native page's onLoaded callback reported; no payment outcome event is claimed.
+- All non-GET Stripe stub paths were enumerated: only offline fixture controls and 3 existing customer-portal session POSTs; zero charge/subscription-change calls.
+
+Image inspection:
+- before/light/01-home.png: original main 92bff3c2d5, no recovery row, retained baseline.
+- after/light/01-home-row.png: accurate copy, red dot, semibold title, black Update pill.
+- after/light/02-failed-upgrade-hidden.png: conversation-list view after failed-upgrade exclusion; header collapsed. Kept as diagnostic, omitted from PR gallery; backend assertion is in checks.txt.
+- after/light/03-portal.png: actual native web view, visible Billing portal (offline stub), no spinner.
+- after/light/04-home-row-after-unpaid-visit.png: accurate copy still present.
+- after/light/05-home-after-paid.png: recovery absent, existing main yearly offer visible.
+- after/light/06-home-relaunch.png: conversation-list view, recovery absent, backend still Pro.
+- after/light/07-locale-de.png: translated get-back copy fits; existing small bottom/input overflow outside this row remains.
+- after/light/08-locale-ja.png: Japanese copy wraps naturally and Update remains reachable.
+- after/light/09-locale-ar.png: Arabic RTL and LTR product name fit; Update on the left.
+- after/dark/01-home-row.png: dark surfaces and white Update pill, accurate secondary copy readable.
+- after/xxxl/01-home-row.png: recovery headline/message/button fit and stack; existing surrounding Home/Tasks header, conversation and input overflows remain, as on main.
+- demo.mp4: 20.48 seconds, unmodified continuous native recording. Frames 0,5,10,15,20 and final inspected; start has recovery, middle has loaded portal, final has Pro restored and recovery absent.
+- before-after.png: unmodified native before/after screenshots placed side by side, inspected.
+
+Tooling: shared lane sim.2 and public resource guard throughout. After one Auth-emulator timeout, local pipeline commit 9e70478 added opt-in bounded MUX_FIREBASE_HEALTH_TIMEOUT (1..300s); this run used 180s. Default deadlines, resource limits and lane ports are unchanged. No private pipeline copy or foreground app/browser control used this round.
+Original capture-script cleanup error was corrected; attempt1-light is retained as diagnostics. Final light, dark and maximum-text runs all exited 0.
+
+UNVERIFIED: real Stripe portal/card entry/payment retry/webhooks; physical iPhone; Android; production impact. Draft only. No merge, release, rollout, live flag or live Stripe/Firestore writes.

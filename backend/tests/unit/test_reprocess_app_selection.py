@@ -213,26 +213,96 @@ def test_successful_reprocess_schedules_durable_learning():
     assert tasks[0] == (run_speaker_learning_jobs, ('u1', 'c1'))
 
 
-@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
-def test_busy_claim_answers_409_only_under_the_result_contract(monkeypatch, enabled):
+def test_busy_claim_answers_409(monkeypatch):
     """Another writer owns the conversation: never report the stale row as an update."""
     from database import processing_attention as attention
 
-    if enabled:
-        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
-    else:
-        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
     monkeypatch.setattr(attention, 'claim', lambda *a, **k: ({'operation_id': 'other'}, False))
     model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
     with p1, p2, p3, p4, p5, p6, process_patch as process:
-        if enabled:
-            with pytest.raises(HTTPException) as exc:
-                conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
-            assert exc.value.status_code == 409
-            assert exc.value.detail['code'] == 'conversation_processing_in_progress'
-        else:
-            assert conv_router.reprocess_conversation(conversation_id='c1', uid='u1') is model
+        with pytest.raises(HTTPException) as exc:
+            conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
+    assert exc.value.status_code == 409
+    assert exc.value.detail['code'] == 'conversation_processing_in_progress'
     process.assert_not_called()
+
+
+def test_source_omi_asks_processing_for_first_party_notes_only():
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
+    with p1, p2, p3, p4 as raw_lookup, p5, p6, process_patch as process:
+        assert conv_router.reprocess_conversation(conversation_id='c1', source='omi', uid='u1') is model
+
+    raw_lookup.assert_not_called()
+    assert process.call_args.kwargs['app_id'] is None
+    assert process.call_args.kwargs['first_party_only'] is True
+
+
+def test_legacy_plain_regenerate_keeps_the_preferred_app_path():
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
+    with p1, p2, p3, p4, p5, p6, process_patch as process:
+        conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
+
+    assert process.call_args.kwargs['first_party_only'] is False
+
+
+def test_source_omi_with_an_app_is_rejected_before_processing():
+    selected = _app()
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app={'id': selected.id}, available_app=selected, enabled=True
+    )
+    with p1, p2, p3, p4, p5, p6, process_patch as process:
+        with pytest.raises(HTTPException) as exc:
+            conv_router.reprocess_conversation(conversation_id='c1', app_id=selected.id, source='omi', uid='u1')
+
+    assert exc.value.status_code == 400
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize(('discarded', 'expected'), [(False, 'digest-a'), (True, None)])
+def test_stored_derived_effects_digest_reaches_processing_unless_the_row_was_hidden(discarded, expected):
+    from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD
+
+    selected = _app()
+    model, p1, _p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app={'id': selected.id}, available_app=selected, enabled=True
+    )
+    row = {'id': 'c1', 'status': 'completed', 'discarded': discarded, DERIVED_EFFECTS_TRANSCRIPT_FIELD: 'digest-a'}
+    p1 = patch.object(conv_router, '_get_valid_conversation_by_id', return_value=row)
+    model.discarded = False
+    model.sync_relevance = 'keep'
+    restore = patch.object(conv_router.lifecycle_service, 'restore_discarded', return_value=True)
+    with p1, _p2, p3, p4, p5, p6, process_patch as process, restore:
+        conv_router.reprocess_conversation(conversation_id='c1', app_id=selected.id, uid='u1')
+
+    assert process.call_args.kwargs['derived_effects_transcript_sha256'] == expected
+
+
+@pytest.mark.parametrize(
+    'discarded,stored_keep,expected', [(True, False, True), (False, True, True), (False, False, False)]
+)
+@pytest.mark.parametrize('status', ['completed', 'failed'])
+def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classification(
+    discarded, stored_keep, expected, status
+):
+    model, _p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
+    row = {'id': 'c1', 'status': status, 'discarded': discarded, 'sync_relevance_user_kept': stored_keep}
+    model.discarded = False
+    model.sync_relevance = 'review'
+    with (
+        patch.object(conv_router, '_get_valid_conversation_by_id', return_value=row),
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        process_patch as process,
+        patch.object(conv_router.lifecycle_service, 'restore_discarded', return_value=True) as restore,
+    ):
+        result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
+    assert result is model
+    assert process.call_args.kwargs['user_kept'] is expected
+    # A user_kept row re-runs restore registration on reprocess (register-first retry).
+    assert restore.call_count == int(discarded or stored_keep)
 
 
 @pytest.mark.parametrize(
@@ -304,8 +374,9 @@ def test_hydrate_suggested_app_adds_user_specific_fields(monkeypatch):
     monkeypatch.setattr(
         conv_router, 'get_app_thumbnail_url', lambda thumbnail_id: f'https://cdn.example/{thumbnail_id}'
     )
-    with patch('utils.apps.get_available_app_by_id_with_reviews', return_value=dict(app_data)), patch(
-        'utils.apps.get_is_user_paid_app', return_value=True
+    with (
+        patch('utils.apps.get_available_app_by_id_with_reviews', return_value=dict(app_data)),
+        patch('utils.apps.get_is_user_paid_app', return_value=True),
     ):
         app = conv_router._hydrate_suggested_app('good', 'u1')
     with patch('utils.apps.get_available_app_by_id_with_reviews', return_value=None):
@@ -331,3 +402,16 @@ def retry_ledger(monkeypatch):
             return fn(client.transaction(), *args, **kwargs)
 
     monkeypatch.setattr(attention, 'run_transactional', run)
+
+
+def test_builtin_default_needs_no_marketplace_install():
+    from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID
+
+    with patch('database.apps.get_app_by_id_db') as catalog, patch('utils.apps.is_user_app_enabled') as enabled:
+        app = conv_router._validate_reprocess_app_selection('new-user', DEFAULT_SUMMARY_APP_ID)
+    assert app.works_with_memories()
+    assert app.enabled
+    catalog.assert_not_called()
+    enabled.assert_not_called()
+    assert 'requested output language' in app.memory_prompt
+    assert 'Never add external quotations' in app.memory_prompt

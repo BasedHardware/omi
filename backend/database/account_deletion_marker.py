@@ -9,12 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from database.fsr_read_cache import cached_read, memo, plane_id, ttl
-
-from database._client import get_data_plane_firestore_client
-from database.account_deletion_policy import normalize_account_deletion_status
-from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
-
 ACCOUNT_DELETION_COLLECTION = "account_deletions"
 
 
@@ -27,6 +21,8 @@ def account_deletion_firestore_client(*, firestore_client: Any | None = None) ->
     """
     if firestore_client is not None:
         return firestore_client
+    from database._client import get_data_plane_firestore_client
+
     return get_data_plane_firestore_client()
 
 
@@ -40,22 +36,70 @@ def account_deletion_document(uid: str, *, firestore_client: Any | None = None) 
 
 def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
     """Negative-only cache, generation-fenced by every marker writer."""
-    client = account_deletion_firestore_client(firestore_client=firestore_client)
-    return memo(
-        uid,
-        ('deletion', plane_id(client)),
-        lambda: cached_read(
+    from database import privacy_check_metrics as metrics
+    from database.account_deletion_policy import account_deletion_blocks_access
+    from database.fsr_read_cache import cached_read, plane_id, ttl
+
+    metrics.called('deletion_marker')
+    try:
+        client = account_deletion_firestore_client(firestore_client=firestore_client)
+        status = cached_read(
             'deletion_marker_cache',
             uid,
             'absent:' + plane_id(client),
             lambda: _s4_read_deletion_status(uid, firestore_client=client),
             seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
             cacheable=lambda status: status is None,
-        ),
+        )
+    except Exception:
+        metrics.decision('deletion_marker', 'authority_unavailable', uid=uid)
+        raise
+    metrics.decision(
+        'deletion_marker', 'account_deleted' if account_deletion_blocks_access(status) else 'allow', uid=uid
     )
+    return status
+
+
+def account_deletion_blocks_user_work(uid: str, *, firestore_client: Any | None = None) -> bool:
+    """Shared fail-closed predicate for per-user background and public work.
+
+    Keep this aligned with the normal account access fence: only explicitly
+    restored/pre-acceptance statuses permit work. An unavailable authority
+    raises so callers cannot silently process a deleting account.
+    """
+    if not uid or not uid.strip():
+        raise ValueError('uid is required')
+    from database.account_deletion_policy import account_deletion_blocks_access
+
+    return account_deletion_blocks_access(get_user_deletion_wipe_status(uid, firestore_client=firestore_client))
 
 
 def _s4_read_deletion_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
+    from database.privacy_check_metrics import read_snapshot
+    from database.account_deletion_policy import normalize_account_deletion_status
+    from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
+
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
+    snapshot = read_snapshot('deletion_marker', account_deletion_document(uid, firestore_client=client), uid=uid)
+    record_document_read(
+        FirestoreReadSite.USER_DELETION_WIPE_STATUS,
+        FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
+    )
+    if not snapshot.exists:
+        return None
+    status = (snapshot.to_dict() or {}).get("wipe_status")
+    status = normalize_account_deletion_status(marker_exists=True, raw_status=status)
+    return status
+
+
+def read_account_deletion_marker(uid: str, *, firestore_client: Any | None = None) -> dict[str, Any] | None:
+    """Full marker payload for the owner-facing deletion-status surface.
+
+    Uncached direct read: it is a cold, owner-initiated endpoint and the
+    grace window fields (``wipe_due_at``) must be exact at read time.
+    """
+    from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
+
     client = account_deletion_firestore_client(firestore_client=firestore_client)
     snapshot = account_deletion_document(uid, firestore_client=client).get()
     record_document_read(
@@ -64,8 +108,7 @@ def _s4_read_deletion_status(uid: str, *, firestore_client: Any | None = None) -
     )
     if not snapshot.exists:
         return None
-    status = (snapshot.to_dict() or {}).get("wipe_status")
-    return normalize_account_deletion_status(marker_exists=True, raw_status=status)
+    return dict(snapshot.to_dict() or {})
 
 
 __all__ = [
@@ -73,5 +116,7 @@ __all__ = [
     "account_deletion_collection",
     "account_deletion_document",
     "account_deletion_firestore_client",
+    "account_deletion_blocks_user_work",
     "get_user_deletion_wipe_status",
+    "read_account_deletion_marker",
 ]

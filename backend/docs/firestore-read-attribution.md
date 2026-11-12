@@ -9,8 +9,7 @@ The daily bill-reconcile coverage numerator is the cumulative JSON read ledger
 emitted when `FIRESTORE_READ_LEDGER=1`. The service label is
 `FIRESTORE_READ_LEDGER_SERVICE` when that is set, otherwise Cloud Run
 `K_SERVICE` or `CLOUD_RUN_JOB`, otherwise `DD_SERVICE`. GKE listen and pusher
-use `DD_SERVICE` (`backend-listen` and `pusher`). `memory-maintenance-job`
-uses `CLOUD_RUN_JOB` so runtime env does not add another copy of that job name. The ledger reuses the probe's billed
+use `DD_SERVICE` (`backend-listen` and `pusher`). The ledger reuses the probe's billed
 `amount` and `kind`, scoped to clients in `based-hardware`; unknown client
 projects are counted and mark the day incomplete. It is sampled at p=1, so
 sampling error is zero. `backend` and `backend-listen` must show a snapshot
@@ -34,6 +33,38 @@ The separate Prometheus counter is `omi_firestore_billed_reads_total`. Do not ad
 `omi_firestore_documents_per_operation`, or
 `omi_firestore_document_reads_by_site_total` to it. Those answer different
 questions and would double-count.
+
+## Export parity and service identity
+
+The tier and caller counters increment by the same amount in `_record()`.
+Both Cloud Run GMP profiles must retain both names; retaining only
+`firestore_billed_reads_by_*_total` silently removes the tier counter on sync,
+backfill and integration services. `test_firestore_attribution_export.py`
+exercises SDK responses, counter exposition and the actual keep expressions.
+Tier resolution stays local and bounded; missing ownership is `unattributed`.
+
+GKE `DD_SERVICE` names the JSON ledger, not Prometheus samples. The workload
+charts set a static `service_name` pod label. GMP PodMonitoring and the
+in-cluster Prometheus scrape jobs copy that label onto their samples. Seal
+CronJobs carry their own pod identity for Alloy logs only; their pods are not
+scraped. The sync-backfill-worker pilot carries the label and GMP mapping for
+its future deployment.
+
+The checked-in production seal-worker values set `runtimeEnabled: false`.
+That worker serves its private metrics registry but performs no discovery or
+claims, so it need not expose any lazy read-counter children. Both read
+collectors are already registered there, and completed repair-child totals are
+folded into the parent. Absent read series alone do not establish a scrape bug.
+
+The probe observes snapshots consumed from the SDK, not every document the
+server might bill after a caller abandons a stream. It must not drain streams,
+enable Explain, or infer returned-document counts from a configured limit:
+those change reads or invent counts. Fully consumed stream/get/transaction,
+collection-group, limit and batch paths are covered by real SDK conversion
+tests with only the RPC replaced. A fleet coverage residual alone does not
+prove which of these paths lost documents. Processes that never install the
+probe and non-Python readers remain separate coverage boundaries; admin server
+reads, for example, emit their own log ledger rather than the Python counters.
 
 ## Kind and Cloud Monitoring type
 
@@ -141,12 +172,9 @@ entrypoints do that before they read:
 |---|---|---|
 | backend, backend-listen, backend-sync, backend-sync-backfill | `backend/main.py` | imports `routers`, which import `database` |
 | backend-integration | `backend/main.py` | imports the same database-backed router process and is included in the required ledger service set |
-| llm_gateway | `backend/llm_gateway/main.py` | Legacy JIT proactivity reservation reads retired; the gateway still records provider accounting through its retained accounting boundary |
+| llm_gateway | `backend/llm_gateway/main.py` | Gateway still records provider accounting through its retained accounting boundary |
 | desktop-backend | `backend/desktop_backend.py` | imports `routers` |
 | pusher | `backend/pusher/main.py` | imports `routers.pusher`, which imports `database.users` |
-| memory-maintenance-job | `backend/modal/memory_maintenance_job.py` | maintenance cron imports `database._client` |
-| daily-memory-sweep-job | `backend/modal/daily_memory_sweep_job.py` | imports `database._client` |
-| knowledge-ledger-drain-job | `backend/modal/knowledge_ledger_drain_job.py` | drain module imports `database._client` |
 | day3-reengagement-email-job | `backend/modal/day3_reengagement_email_job.py` | imports `database._client` |
 | frame-request-retention-job | `backend/modal/frame_request_retention_job.py` | retention service imports `database._client` |
 | notifications-job | `backend/modal/job.py` | `utils/other/jobs.py` imports `utils/x_connector.py`, which imports `database._client` |
@@ -205,9 +233,9 @@ from database.firestore_read_origin import read_origin
 with read_origin('job:daily_summary'):
     run_daily_summary()
 
-@read_origin('job:memory_maintenance')
-async def maintain():
-    await run_maintenance()
+@read_origin('job:x_connector_sync')
+async def sync():
+    await run_sync()
 ```
 
 Use source-code constants, never uid/job/session IDs, payload fields or raw URLs.
@@ -323,9 +351,6 @@ and an overlapping context for the same entrypoint.
 | S2's `main.py:_run_fsr_loop` (alternative fine-grained override around its existing body; loop names are S2's fixed registry) | `with read_origin(f'job:{loop_name}'):` |
 | `modal/job.py:main` (notifications + daily summaries) | `@read_origin('job:notifications')` |
 | `modal/x_connector_sync_job.py:main` | `@read_origin('job:x_connector_sync')` |
-| `modal/memory_maintenance_job.py:main` | `@read_origin('job:memory_maintenance')` |
-| `modal/daily_memory_sweep_job.py:main` | `@read_origin('job:daily_memory_sweep')` |
-| `modal/knowledge_ledger_drain_job.py:main` | `@read_origin('job:knowledge_ledger_drain')` |
 | `modal/frame_request_retention_job.py:main` | `@read_origin('job:frame_request_retention')` |
 | `modal/day3_reengagement_email_job.py:main` | `@read_origin('job:day3_reengagement_email')` |
 | `modal/conversation_selfheal_job.py:main` | `@read_origin('job:conversation_selfheal')` |
@@ -337,9 +362,9 @@ and an overlapping context for the same entrypoint.
 | `routers/feedback_admin.py:generate_feedback_report` (scheduled/manual dated backfill) | `@read_origin('job:feedback_report_generate')` |
 
 Cron HTTP routes already receive their route-template origins without these
-optional job decorators. `main.py` also launches live-STT refresh, Soniox runway,
+optional job decorators. `main.py` also launches live-STT refresh,
 executor health and proactive dispatch with constant names; those receive
-`task:live_stt_fleet_health`, `task:soniox_runway`, `task:executor_health` and
+`task:live_stt_fleet_health`, `task:executor_health` and
 `task:proactive_message_dispatcher` automatically. S2's new startup queue publisher
 receives `task:startup_durable_queue_age_publish` automatically.
 

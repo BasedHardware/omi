@@ -9,6 +9,7 @@ class PostHogManager {
   static let shared = PostHogManager()
 
   private var isInitialized = false
+  private var flagOwnerID: String?
 
   // PostHog configuration
   private let apiKey = "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
@@ -30,9 +31,15 @@ class PostHogManager {
     // lifecycle event (App Launched / First Launch) manually via AnalyticsManager.shared.
     config.captureApplicationLifecycleEvents = false
     config.captureScreenViews = true
-    config.preloadFeatureFlags = true
+    config.preloadFeatureFlags = false
+    config.urlSessionConfiguration = PostHogFlagRequestBlocker.sessionConfiguration()
 
     PostHogSDK.shared.setup(config)
+
+    // Remove the retired identity experiment's persisted super-properties.
+    for key in ["experiment_id", "variant", "experiment_forced"] {
+      PostHogSDK.shared.unregister(key)
+    }
 
     // Release-identity super-properties (#10425): every captured event carries the
     // app version + build + release channel, so PostHog (including
@@ -93,8 +100,13 @@ class PostHogManager {
       properties["name"] = name
     }
 
+    if flagOwnerID != uid {
+      OmiFlagStore.shared.reset()
+      flagOwnerID = uid
+    }
     PostHogSDK.shared.identify(uid, userProperties: properties)
     log("PostHog: Identified user \(uid)")
+    OmiFlagStore.shared.refresh()
   }
 
   /// Set person properties in one identify call.
@@ -110,24 +122,6 @@ class PostHogManager {
     guard isInitialized else { return }
     PostHogSDK.shared.capture(eventName, properties: properties)
     log("PostHog: Tracked event '\(eventName)'")
-  }
-
-  /// EXP-002: attach `experiment_id` + `variant` to every captured event as
-  /// super-properties, so all product events (`question_asked`/`question_answered`,
-  /// `desktop_daily_summary`, PTT lifecycle) are sliceable by
-  /// arm without per-event plumbing. Distinct id stays the uid — the variant is
-  /// a property, never an identity. Called once the launch's arm resolves.
-  func setExperimentContext(experimentId: String, variant: String, forced: Bool) {
-    guard isInitialized else {
-      log("PostHog: experiment context skipped (not initialized)")
-      return
-    }
-    PostHogSDK.shared.register([
-      "experiment_id": experimentId,
-      "variant": variant,
-      "experiment_forced": forced,
-    ])
-    log("PostHog: registered experiment context \(experimentId)/\(variant)")
   }
 
   nonisolated static func diagnosticErrorClass(_ value: String) -> String {
@@ -208,33 +202,34 @@ class PostHogManager {
   func reset() {
     guard isInitialized else { return }
     PostHogSDK.shared.reset()
+    OmiFlagStore.shared.reset()
+    flagOwnerID = nil
     log("PostHog: Reset user")
   }
 
   // MARK: - Feature Flags
+  // Omi is the only flag authority; missing keys use the caller's default.
 
   /// Check if a feature flag is enabled
   func isFeatureEnabled(_ flag: String) -> Bool {
     guard isInitialized else { return false }
-    return PostHogSDK.shared.isFeatureEnabled(flag)
+    return OmiFlagStore.shared.flag(flag)?.enabled ?? false
   }
 
   /// Get feature flag value
   func getFeatureFlag(_ flag: String) -> Any? {
     guard isInitialized else { return nil }
-    return PostHogSDK.shared.getFeatureFlag(flag)
+    return OmiFlagStore.shared.value(flag)
   }
 
   /// Get the JSON payload configured on a feature flag
   func getFeatureFlagPayload(_ flag: String) -> Any? {
     guard isInitialized else { return nil }
-    return PostHogSDK.shared.getFeatureFlagResult(flag)?.payload
+    return OmiFlagStore.shared.payload(flag)
   }
 
-  /// The SDK's own flag-delivery signal (posted on the main queue after the
-  /// initial preload and after every reload) — re-exported so observers get a
-  /// compile-checked symbol instead of a raw notification-name string.
-  static var featureFlagsDidLoad: Notification.Name { PostHogSDK.didReceiveFeatureFlags }
+  /// Posted by OmiFlagStore when its resolved snapshot changes.
+  static let featureFlagsDidLoad = Notification.Name("OmiFeatureFlagsDidLoad")
 
   func screenTaskFrameTerminal(ownerID: String?, properties: [String: Any]) {
     guard isInitialized else { return }
@@ -249,40 +244,13 @@ class PostHogManager {
       "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
   }
 
-  /// Fresh admission for the screen-task kill switch. SDK reload callbacks may
-  /// return cached values on quota/failure, so they cannot renew an upload lease.
-  func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {
-    guard isInitialized, !PostHogSDK.shared.isOptOut(), RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
-      let url = URL(string: host + "/flags/?v=2")
-    else { throw ScreenTaskFailure.stopped }
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = 5
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.httpBody = try JSONSerialization.data(withJSONObject: [
-      "token": apiKey, "distinct_id": authorization.ownerID,
-      "person_properties": [
-        "platform": "macos",
-        "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
-        "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
-        "update_channel": AppBuild.currentUpdateChannel,
-      ],
-    ])
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
-      throw ScreenTaskFailure.stopped
-    }
-    return try ScreenTaskFreshFlagResponse.enabled(data)
-  }
+  /// Analytics opt-out also withholds the screen-task flag lease, as the retired fresh flag read did.
+  var screenTaskFlagWithheld: Bool { PostHogSDK.shared.isOptOut() }
 
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
-    PostHogSDK.shared.reloadFeatureFlags()
+    OmiFlagStore.shared.refresh()
   }
 }
 

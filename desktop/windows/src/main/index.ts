@@ -75,7 +75,6 @@ import { registerAssistantSettingsHandlers } from './ipc/assistantSettings'
 import { registerBillingIpc } from './billing/checkoutWindow'
 import { registerAppsIpc } from './apps/checkAppSetup'
 import { helperProcess } from './ocr/helperProcess'
-import { registerProactivityConsumer } from './proactivity/register'
 import { registerInsightHandlers } from './ipc/insight'
 import {
   createInsightToastWindow,
@@ -127,8 +126,6 @@ import { registerMemoryAssistant } from './assistants/memory/register'
 import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
 import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
-import { registerKnowledgeLedgerMirrorSync } from './jit/register'
-import { clearRendererConversationBinding } from './jit/rendererConversationBinding'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import {
@@ -446,7 +443,6 @@ import {
   getLocalConversation,
   listLocalConversations,
   deleteLocalConversation,
-  deleteJitConversationKeyframe,
   updateLocalConversationTitle,
   updateLocalConversationSync,
   claimConversationForPosting,
@@ -799,9 +795,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:deleteLocalConversation', async (_e, id: string) =>
     deleteLocalConversation(id)
   )
-  ipcMain.handle('jit:conversationDeleted', async (_e, id: string) =>
-    deleteJitConversationKeyframe(id)
-  )
   ipcMain.handle('db:updateLocalConversationTitle', async (_e, id: string, title: string) =>
     updateLocalConversationTitle(id, title)
   )
@@ -895,16 +888,7 @@ app.whenReady().then(async () => {
   registerIntegrationsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
-  registerRewindHandlers({
-    focusFrame: (frameId) => {
-      withMainWindow((win) => {
-        if (win.isMinimized()) win.restore()
-        win.show()
-        win.focus()
-        win.webContents.send('rewind:focus-frame', frameId)
-      })
-    }
-  })
+  registerRewindHandlers()
   registerScreenHandlers()
   registerChatPrivacyHandlers()
   registerAssistantSettingsHandlers()
@@ -920,7 +904,6 @@ app.whenReady().then(async () => {
     }
   })
   registerInsightHandlers()
-  registerProactivityConsumer(() => mainWindow)
   registerMeetingHandlers()
   // What's-new toast (Phase 8): the renderer pulls the pending payload on mount
   // (push-during-load race), and opens the release notes in the system browser.
@@ -1006,7 +989,6 @@ app.whenReady().then(async () => {
   onSessionReset(() => {
     resetPendingDeletes()
     resetBackendDegraded()
-    clearRendererConversationBinding()
   })
   // FIX (ii): keep the in-memory task-embedding index consistent — every hard-delete
   // path in the sync engine (deleteTask + the reconcile sweep) hands the storage-
@@ -1271,7 +1253,6 @@ app.whenReady().then(async () => {
         // Suggest IPC and starts the periodic scheduler; both no-op until a session is
         // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
         { name: 'goalGeneration', run: () => registerGoalGeneration() },
-        { name: 'knowledgeLedgerMirror', run: () => registerKnowledgeLedgerMirrorSync() }
       ],
       undefined,
       undefined,

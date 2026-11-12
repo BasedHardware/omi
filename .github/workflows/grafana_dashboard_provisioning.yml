@@ -20,6 +20,7 @@ on:
       - '.github/scripts/provision_grafana_dashboards.py'
       - '.github/scripts/grafana_business.py'
       - 'web/admin/grafana/dashboards/omi-tv-v2.json'
+      - 'web/admin/grafana/dashboards/omi-tv-funnel.json'
   workflow_dispatch:
     inputs:
       environment:
@@ -35,6 +36,12 @@ permissions:
 concurrency:
   group: grafana-dashboard-provisioning-${{ github.event.inputs.environment || 'dev' }}
   cancel-in-progress: false
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   validate:
@@ -78,8 +85,8 @@ jobs:
       - name: Provision dashboards
         env:
           # Ops Grafana service-account token (same secret family the pusher
-          # auto-deploy uses for alert-route verification). Do not use
-          # GRAFANA_TOKEN; that belongs to the TV Cloud Run instance.
+          # auto-deploy uses for alert-route verification). The former TV
+          # instance credential is reserved for the separate retirement tool.
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
           GRAFANA_URL: ${{ matrix.environment == 'prod' && 'https://monitor.omi.me' || 'https://monitor.omiapi.com' }}
           GIT_SHORT_SHA: ${{ github.sha }}
@@ -111,10 +118,12 @@ jobs:
             --grafana-url "$GRAFANA_URL" \
             --token-env BUSINESS_GRAFANA_TOKEN \
             --source-sha "$GIT_SHORT_SHA" \
-            --allowlist omi-tv-v2.json \
+            --allowlist omi-tv-v2.json,omi-tv-funnel.json \
             --folder-uid business
       - name: Apply production alert definitions and check drift
-        if: matrix.environment == 'prod'
+        # Dispatch-only: a push resolves to the dev environment anyway, so no
+        # dashboard-path push can reach this prod step.
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod'
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
@@ -135,5 +144,53 @@ jobs:
         with:
           name: grafana-alert-backup-${{ github.run_id }}
           path: ${{ runner.temp }}/grafana-alert-backup.json
+          if-no-files-found: ignore
+          retention-days: 15
+
+  # Auto-apply for prod Ops dashboard JSON (David approved 2026-11-09). Every
+  # push to main that matches the trigger paths applies the current Ops
+  # dashboards to prod without a dispatch. The apply is idempotent and runs on
+  # every surviving push, so a superseded push run cannot skip a dashboard
+  # change (review P1). It uses the production Grafana token from the
+  # grafana-dashboards-prod environment, which holds only that token and has no
+  # required reviewers, so it runs without an approval tap. The repo-level
+  # MONITOR_GRAFANA_TOKEN is the dev token and must never reach monitor.omi.me.
+  # The Business TV boards keep the gated prod path because their token lives
+  # only in the prod environment. Alert rules and the admin deploy keep their gates.
+  provision-prod-ops-dashboards:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: grafana-dashboards-prod
+    # Same group as a prod dispatch run, so an approval-waiting dispatch and an
+    # automatic apply never write the same Ops UIDs at once.
+    concurrency:
+      group: grafana-dashboard-provisioning-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Provision prod Ops dashboards (dashboard JSON only)
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          GIT_SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          python3 backend/scripts/provision_grafana_dashboards.py \
+            --dashboards-dir backend/charts/monitoring/dashboards \
+            --grafana-url https://monitor.omi.me \
+            --token-env MONITOR_GRAFANA_TOKEN \
+            --source-sha "$GIT_SHORT_SHA" \
+            --backup-file "$RUNNER_TEMP/grafana-dashboard-backup.json" \
+            --allowlist 'omi-core-features.json,omi-translation.json,resilience-fallbacks.json,omi-services-overview.json,fleet-telemetry.json'
+      - name: Preserve pre-apply dashboard definitions for reviewed rollback
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: grafana-dashboard-backup-prod-auto-${{ github.run_id }}
+          path: ${{ runner.temp }}/grafana-dashboard-backup.json
           if-no-files-found: ignore
           retention-days: 15

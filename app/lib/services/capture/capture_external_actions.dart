@@ -1,3 +1,4 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -10,7 +11,7 @@ abstract interface class CaptureExternalActions {
 
   String? get topConversationId;
 
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
@@ -39,9 +40,18 @@ abstract interface class CaptureExternalActions {
 
   void clearEmptyRecordingExplanation();
 
+  /// The person ended the live conversation (Wrap up, a pendant double-tap, Finish). The live
+  /// episode closes and a fresh one starts counting from now (David 2026-10-23).
+  void onLiveFinalized();
+
   Future<Person?> createPerson(String name);
 
-  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId});
+  int get lastSpeakerAppliedCount;
+
+  bool get lastSpeakerCoverageComplete;
+
+  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId,
+      {int? speakerId, (String, String)? voice});
 
   Future<void> refreshPeople();
 
@@ -62,13 +72,14 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
   String? get topConversationId => null;
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
-  }) async {}
+  }) async =>
+      const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
 
   @override
   void addProcessingConversation(ServerConversation conversation) {}
@@ -92,10 +103,20 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
   void clearEmptyRecordingExplanation() {}
 
   @override
+  void onLiveFinalized() {}
+
+  @override
   Future<Person?> createPerson(String name) async => null;
 
   @override
-  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) async =>
+  int get lastSpeakerAppliedCount => 0;
+
+  @override
+  bool get lastSpeakerCoverageComplete => false;
+
+  @override
+  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId,
+          {int? speakerId, (String, String)? voice}) async =>
       false;
 
   @override

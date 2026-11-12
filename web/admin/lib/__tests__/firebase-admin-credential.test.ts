@@ -1,5 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { planFirebaseAdminInit } from "@/lib/firebase/admin";
+import {
+  isFirebaseTokenError,
+  planFirebaseAdminInit,
+} from "@/lib/firebase/admin";
+
+describe("isFirebaseTokenError", () => {
+  it("classifies the SDK's bad-token codes (malformed, bad signature, expired, revoked)", () => {
+    for (const code of [
+      "auth/argument-error",
+      "auth/id-token-expired",
+      "auth/id-token-revoked",
+    ]) {
+      expect(
+        isFirebaseTokenError(Object.assign(new Error(code), { code })),
+        code
+      ).toBe(true);
+    }
+  });
+
+  it("does not classify server faults as token faults", () => {
+    for (const code of ["auth/internal-error", "auth/network-request-failed"]) {
+      expect(
+        isFirebaseTokenError(Object.assign(new Error(code), { code })),
+        code
+      ).toBe(false);
+    }
+    expect(isFirebaseTokenError(new Error("plain"))).toBe(false);
+    expect(isFirebaseTokenError(null)).toBe(false);
+    expect(isFirebaseTokenError("auth/argument-error")).toBe(false);
+  });
+});
 
 describe("planFirebaseAdminInit", () => {
   it("uses the runtime service account when no key is configured", () => {

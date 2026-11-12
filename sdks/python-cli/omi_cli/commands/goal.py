@@ -12,6 +12,7 @@ from omi_cli.client import path_segment
 from omi_cli.errors import UsageError
 from omi_cli.models import GoalType
 from omi_cli.output import shorten
+from omi_cli.validation import bounded_text
 
 if TYPE_CHECKING:
     from omi_cli.main import AppContext
@@ -102,6 +103,7 @@ def create_goal(
     ),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    title = bounded_text(title, label="goal title")
     has_metrics = any(value is not None for value in (target_value, goal_type, current_value, min_value, max_value))
     if unit is not None and not has_metrics:
         # The backend only persists ``unit`` on metric-backed goals; sending it on a
@@ -116,6 +118,13 @@ def create_goal(
         raise UsageError(
             message="--target is required when using metric options",
             detail="Pass --target, or omit --type/--current/--min/--max/--unit to create a qualitative goal.",
+        )
+    if min_value is not None and max_value is not None and min_value > max_value:
+        # A scale with an inverted range can never show progress; reject it before
+        # the request instead of letting the backend store a broken goal.
+        raise UsageError(
+            message="Invalid scale range: --min cannot be greater than --max",
+            detail=f"--min ({min_value}) cannot be greater than --max ({max_value}).",
         )
     body: dict[str, object] = {"title": title}
     if unit is not None:
@@ -151,7 +160,7 @@ def update_goal(
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
     body: dict[str, object] = {}
     if title is not None:
-        body["title"] = title
+        body["title"] = bounded_text(title, label="goal title")
     if target_value is not None:
         body["target_value"] = target_value
     if current_value is not None:
@@ -164,6 +173,11 @@ def update_goal(
         body["unit"] = None
     elif unit is not None:
         body["unit"] = unit
+    if min_value is not None and max_value is not None and min_value > max_value:
+        raise UsageError(
+            message="Invalid scale range: --min cannot be greater than --max",
+            detail=f"--min ({min_value}) cannot be greater than --max ({max_value}).",
+        )
     if not body:
         raise UsageError(
             message="No fields to update",
@@ -211,7 +225,7 @@ def delete_goal(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete goal {goal_id}?", abort=True)
+        typer.confirm(f"Delete goal {goal_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/goals/{path_segment(goal_id)}")
     if ctx.renderer.json_mode:

@@ -9,6 +9,8 @@ raises and verification returns 403 — the handler ships in the shared image
 to services that must never accept task traffic. A caller that has already
 staged audio must not start an inline worker after an enqueue exception: a
 lost create-task acknowledgement can mean the deterministic named task exists.
+Quarantine recovery is separately fenced by RecoveryStore.start: its task and
+inline fallback adopt the same paid token and cannot both invoke the provider.
 """
 
 from config import audio_archive
@@ -17,9 +19,11 @@ import json
 import logging
 import hashlib
 import os
+import re
 import time
 import uuid
 from typing import Any, Dict, Iterable, NamedTuple, Optional
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 from google.api_core.exceptions import AlreadyExists, NotFound
@@ -68,7 +72,20 @@ SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_
 # Present only when the upload carried parsed S1 capture-evidence claims
 # (routers/sync.py). An exact-set check without this key raised ValueError at
 # enqueue for every claims-bearing upload and wedged that uid's sequencer.
-SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims'})
+# ``budget_deferrals`` rides only on handler-budget replacement tasks: the count
+# of whole-budget attempts the job has already spent (routers/sync.py).
+# ``redrive_mode`` rides only on operator-built redrive payloads and must survive
+# budget replacements and sequencer re-dispatch (utils/sync/minimal_redrive.py).
+SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset(
+    {
+        'capture_evidence_claims',
+        'capture_received_at',
+        'budget_deferrals',
+        'redrive_mode',
+        'raw_capture_paths',
+        'worker_eligible',
+    }
+)
 
 
 def sync_job_payload_keys_valid(keys: Iterable[str], *, allow_sequenced: bool = True) -> bool:
@@ -226,22 +243,130 @@ def assert_account_deletion_queue_exists(client: Any = None) -> None:
         logger.warning('account-deletion queue existence probe inconclusive: %s', sanitize(str(exc)))
 
 
+CONVERSATION_BATCH_PURGE_PATH = '/v1/conversations/deletion-batch-purges/run'
+
+
+def _conversation_batch_purge_handler_url() -> str:
+    """Same backend-sync host as the account-deletion handler, different path."""
+    deletion_url = os.getenv('ACCOUNT_DELETION_HANDLER_URL', '').strip()
+    if not deletion_url:
+        return ''
+    parts = urlsplit(deletion_url)
+    if not parts.scheme or not parts.netloc:
+        return ''
+    return f'{parts.scheme}://{parts.netloc}{CONVERSATION_BATCH_PURGE_PATH}'
+
+
+def is_conversation_batch_purge_dispatch_configured() -> bool:
+    """Conversation batch purges ride the account-deletion queue and invoker identity."""
+    return bool(
+        is_account_deletion_dispatch_enabled()
+        and os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip()
+        and _conversation_batch_purge_handler_url()
+        and _invoker_sa()
+    )
+
+
+def conversation_batch_purge_task_id(job_id: str, generation: int) -> str:
+    # One name per dispatch generation: a completed, deleted or still-reserved
+    # name (Cloud Tasks keeps them for up to 24 h) never swallows a redrive.
+    return f'conversation-batch-purge-{job_id}-g{int(generation)}'
+
+
+def enqueue_conversation_batch_purge(job_id: str, generation: int) -> None:
+    """Dispatch one generation of a durable purge obligation to backend-sync (opaque payload)."""
+    enqueue_named_task(
+        os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip(),
+        _conversation_batch_purge_handler_url(),
+        conversation_batch_purge_task_id(job_id, generation),
+        {'job_id': job_id, 'generation': int(generation)},
+        audience=_conversation_batch_purge_handler_url(),
+        invoker_sa=_invoker_sa(),
+    )
+
+
+def conversation_batch_purge_consumer_ready() -> Optional[bool]:
+    """Probe the live handler URL without credentials: does the serving consumer have the route?
+
+    The new handler rejects the unauthenticated probe with its own 403
+    ("Missing bearer token"); a revision without the route answers 404/405.
+    None means the probe itself failed (network), which proves nothing.
+    """
+    url = _conversation_batch_purge_handler_url()
+    if not url:
+        return False
+    try:
+        response = _get_auth_request()(
+            url, method='POST', body=b'{}', headers={'Content-Type': 'application/json'}, timeout=5
+        )
+    except Exception as exc:  # noqa: BLE001 - an unreachable probe is an unanswered question
+        logger.warning('conversation batch purge consumer probe failed: %s', type(exc).__name__)
+        return None
+    if response.status in (404, 405):
+        return False
+    try:
+        detail = json.loads(response.data or b'{}').get('detail')
+    except Exception:  # noqa: BLE001
+        detail = None
+    return response.status == 403 and detail == 'Missing bearer token'
+
+
 def is_listen_finalization_dispatch_enabled() -> bool:
     """Whether platform-key listen finalization uses its durable worker."""
     return os.getenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
-def is_listen_finalization_dispatch_configured() -> bool:
-    """Whether the durable finalizer can be admitted without an inline fallback."""
-    return is_listen_finalization_dispatch_enabled() and all(
-        (
-            os.getenv('SYNC_TASKS_PROJECT', ''),
-            os.getenv('SYNC_TASKS_LOCATION', ''),
-            os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
-            _listen_finalization_handler_url(),
-            _listen_finalization_invoker_sa(),
-        )
+def _listen_finalization_tasks_binding() -> tuple[str, str, str, str, str]:
+    return (
+        os.getenv('SYNC_TASKS_PROJECT', ''),
+        os.getenv('SYNC_TASKS_LOCATION', ''),
+        os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
+        _listen_finalization_handler_url(),
+        _listen_finalization_invoker_sa(),
     )
+
+
+def is_listen_finalization_dispatch_configured() -> bool:
+    """Retain the existing live-admission mode and nonempty-binding contract."""
+    return is_listen_finalization_dispatch_enabled() and all(_listen_finalization_tasks_binding())
+
+
+def is_listen_finalization_tasks_configured() -> bool:
+    """Validate the replay worker binding without changing live admission.
+
+    This is syntax validation, not a queue-existence or IAM probe. Validate the
+    raw values used by enqueue, rather than accepting whitespace after strip().
+    """
+    project, location, queue, url, invoker = _listen_finalization_tasks_binding()
+    if not (
+        re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:-]*', project)
+        and re.fullmatch(r'[a-z]+(?:-[a-z]+)+[0-9]+', location)
+        and re.fullmatch(r'[A-Za-z0-9-]{1,100}', queue)
+        and re.fullmatch(
+            r'[a-z0-9](?:[a-z0-9-]*[a-z0-9])?@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.iam|developer)\.gserviceaccount\.com',
+            invoker,
+        )
+    ):
+        return False
+    if not url or len(url) > 2083 or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        return bool(
+            parsed.scheme in ('http', 'https')
+            and parsed.hostname
+            and len(parsed.hostname) <= 253
+            and all(
+                re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', label)
+                for label in parsed.hostname.split('.')
+            )
+            and parsed.username is None
+            and parsed.password is None
+            and '#' not in url
+            and (parsed.port is None or 0 < parsed.port <= 65535)
+        )
+    except ValueError:
+        return False
 
 
 def get_account_deletion_tasks_max_attempts() -> int:
@@ -294,7 +419,31 @@ def enqueue_named_task(
         logger.info('task %s already enqueued, skipping duplicate', task_id)
 
 
-def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> None:
+def named_task_exists(queue: str, task_id: str) -> bool:
+    """Probe scheduling custody only; never request a task's FULL payload view.
+
+    Only an authoritative NotFound permits replacing an exhausted wake. A
+    permission/transport error must preserve the old name and durable debt.
+    """
+    project, location = os.getenv('SYNC_TASKS_PROJECT', ''), os.getenv('SYNC_TASKS_LOCATION', '')
+    if not all((project, location, queue, task_id)):
+        raise RuntimeError('Cloud Tasks watchdog binding is incomplete')
+    client = _get_tasks_client()
+    try:
+        client.get_task(
+            request=tasks_v2.GetTaskRequest(
+                name=client.task_path(project, location, queue, task_id),
+                response_view=tasks_v2.Task.View.BASIC,
+            ),
+            retry=None,
+            timeout=3,
+        )
+        return True
+    except NotFound:
+        return False
+
+
+def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0, schedule_at: Optional[int] = None) -> None:
     """Enqueue one named HTTP task for a sync job.
 
     Sequenced redrives use a persisted dispatch attempt in the task name while
@@ -329,7 +478,11 @@ def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> N
         if sequencer_epoch is None or dispatch_attempt < 0:
             raise ValueError('sync job dispatch attempt requires a sequencer epoch and a positive value')
         task_id += f'-d{dispatch_attempt}'
-    schedule_at = direct_schedule_at(payload)
+    _enqueue_sync_job_routed(payload, task_id, schedule_at if schedule_at is not None else direct_schedule_at(payload))
+
+
+def _enqueue_sync_job_routed(payload: Dict[str, Any], task_id: str, schedule_at: Optional[int]) -> None:
+    """Create one named sync-job task, preferring the gated backfill queue."""
     schedule_options: Dict[str, Any] = {'schedule_at': schedule_at} if schedule_at is not None else {}
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
@@ -345,6 +498,21 @@ def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> N
             )
             return
     enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload, **schedule_options)
+
+
+def enqueue_sync_job_budget_replacement(payload: Dict[str, Any], schedule_at: int) -> None:
+    """Schedule the delayed replacement for a handler-budget expiry.
+
+    The completing task's own name stays tombstoned by Cloud Tasks for about
+    an hour, so the replacement embeds the schedule in its ``-rb`` name:
+    concurrent expiries deduplicate, and a later expiry of the same job gets a
+    fresh name instead of being swallowed. The caller schedules past the
+    preserved run lock's TTL so the replacement never defers against its own
+    predecessor.
+    """
+    if not sync_job_payload_keys_valid(payload):
+        raise ValueError('sync job payload does not match the durable worker schema')
+    _enqueue_sync_job_routed(payload, f"{payload['job_id']}-rb{schedule_at}", schedule_at)
 
 
 def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
@@ -397,6 +565,10 @@ def _audio_merge_task_id(payload: Dict[str, Any]) -> str:
     suffix = f"-d{int(payload['requested_at'] // 3600)}" if payload.get('on_demand') else ''
     if not payload.get('on_demand') and payload.get('playback_epoch'):
         suffix = f"-r{payload['playback_epoch']}"
+    if payload.get('recovery_epoch'):
+        # The failed marker generation is stable across polls and hour changes.
+        # One failed retry rewrites the marker and starts a fresh cooldown.
+        suffix = f"-r{payload['recovery_epoch']}"
     if payload.get('schema_version') == 2:
         return f"amc-{payload['conversation_id']}-{payload['fingerprint']}{suffix}"
     return f"am-{payload['conversation_id']}-{payload['audio_file_id']}{suffix}"
@@ -462,7 +634,9 @@ def listen_finalization_binding() -> dict[str, str]:
     }
 
 
-def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> None:
+def enqueue_listen_finalization_job(
+    job_id: str, dispatch_generation: int, *, schedule_at: Optional[int] = None
+) -> None:
     """Wake the finalizer with opaque routing data only.
 
     The Firestore job is canonical.  The task intentionally contains neither a
@@ -476,6 +650,7 @@ def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> No
         {'job_id': job_id, 'dispatch_generation': dispatch_generation},
         audience=_listen_finalization_audience(),
         invoker_sa=_listen_finalization_invoker_sa(),
+        schedule_at=schedule_at,
     )
 
 
@@ -541,6 +716,13 @@ def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletio
         log_failure=False,
     )
     return AccountDeletionTaskAuthentication(retry_count=retry_count)
+
+
+def verify_conversation_batch_purge_cloud_tasks_oidc(request: Request) -> int:
+    """Audience is this handler's own URL, minted from the same env as the task URL."""
+    return verify_configured_cloud_tasks_oidc(
+        request, audience=_conversation_batch_purge_handler_url(), invoker_sa=_invoker_sa()
+    )
 
 
 def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:

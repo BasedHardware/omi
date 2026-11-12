@@ -17,6 +17,14 @@ def test_overage_policy_matrix_uses_one_catalog_predicate():
     assert not hasattr(overage, 'is_overage_plan')
 
 
+def test_gemini_flash_reference_rates_match_vertex_standard_tier():
+    # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+    rates = overage.PROVIDER_REFERENCE_RATES
+    assert rates['gemini_flash_input_per_mtok'] == 0.30
+    assert rates['gemini_flash_output_per_mtok'] == 2.50
+
+
 def test_reporting_preserves_catalog_units_and_hard_caps(monkeypatch):
     usage = {
         'questions': 501,
@@ -79,7 +87,6 @@ class TestChatLimitZeroSemantics:
             sub_mod.users_db, 'get_user_valid_subscription', lambda *a, **k: Subscription(plan=PlanType.basic)
         )
         monkeypatch.setattr(sub_mod, 'get_plan_limits', lambda *a, **k: limits)
-        monkeypatch.setattr(sub_mod, 'is_trial_paywalled', lambda *a, **k: False)
         monkeypatch.setattr(
             sub_mod.user_usage_db,
             'get_monthly_chat_usage',

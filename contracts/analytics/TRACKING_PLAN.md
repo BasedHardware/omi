@@ -4,6 +4,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 
 | API | Wire name | Properties | Status | Consumers |
 | --- | --- | --- | --- | --- |
+| savedPendantReconnectObserved | Saved Pendant Reconnect | trigger, attempt, result, disconnected_ms | active | saved-pendant-reconnect |
 | onboardingCompleted | Onboarding Completed | none | active | mobile-instrumentation-presence |
 | recordingProducedNoConversation | Recording Produced No Conversation | source, duration_s, transcript_observed, reason | active | onboarding-activation-funnel |
 | onboardingWelcomeShown | Onboarding Welcome Shown | none | active | onboarding-activation-funnel |
@@ -177,6 +178,12 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionCancelConfirmed | Subscription Cancel Confirmed | reason, has_details | active | subscription-funnel |
 | subscriptionCancelKeptPlan | Subscription Cancel Kept Plan | step, reason | active | subscription-funnel |
 | subscriptionCancelAbandoned | Subscription Cancel Abandoned | step, reason | active | subscription-funnel |
+| subscriptionYearlySwitchShown | Subscription Yearly Switch Shown | surface | active | subscription-funnel |
+| subscriptionYearlySwitchOpened | Subscription Yearly Switch Opened | surface | active | subscription-funnel |
+| subscriptionYearlySwitchConfirmed | Subscription Yearly Switch Confirmed | surface | active | subscription-funnel |
+| subscriptionYearlySwitchSucceeded | Subscription Yearly Switch Succeeded | surface | active | subscription-funnel |
+| subscriptionYearlySwitchFailed | Subscription Yearly Switch Failed | surface, reason | active | subscription-funnel |
+| subscriptionYearlySwitchDismissed | Subscription Yearly Switch Dismissed | surface | active | subscription-funnel |
 | guidedIntroPayoffShown | Guided Intro Payoff Shown | memories_count, answer_source, latency_ms | active | guided-intro-payoff-presence |
 | guidedIntroPayoffContinued | Guided Intro Payoff Continued | none | active | guided-intro-payoff-presence |
 | onboardingFirstCaptureShown | Onboarding First Capture Shown | none | active | mobile-instrumentation-presence |
@@ -189,9 +196,26 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingStepCompleted | Onboarding Step Completed | step, index, elapsed_ms, skipped, platform, exit_reason | active | mobile-instrumentation-presence |
 | paywallVariantShown | Paywall Variant Shown | variant, source | active | mobile-instrumentation-presence |
 | paywallVariantFallback | Paywall Variant Fallback | variant, reason | active | mobile-instrumentation-presence |
+| paywallMonthlyFallbackShown | Paywall Monthly Fallback Shown | trial | active | mobile-instrumentation-presence |
+| paywallMonthlyFallbackAccepted | Paywall Monthly Fallback Accepted | trial, outcome | active | mobile-instrumentation-presence |
+| paywallMonthlyFallbackDismissed | Paywall Monthly Fallback Dismissed | trial | active | mobile-instrumentation-presence |
 | onboardingWebviewShown | Onboarding Webview Shown | none | active | mobile-instrumentation-presence |
 | onboardingWebviewCompleted | Onboarding Webview Completed | none | active | mobile-instrumentation-presence |
 | onboardingWebviewFallback | Onboarding Webview Fallback | reason | active | mobile-instrumentation-presence |
+| captureRecoveryObserved | Capture Recovery Observed | kind, trigger | active | capture-recovery |
+| pendantFramesDropped | Pendant Frames Dropped | count, reason | active | wal-backlog-health |
+| walReconcilePollSummary | WAL Reconcile Poll Summary | backlog_jobs, polled_jobs, transient_jobs, throttled_jobs, missing_confirmation_jobs, locally_deferred_jobs | active | wal-backlog-health |
+| nativeCustodyObserved | Native Custody Observed | outcome | active | native-custody-health |
+| livePreviewEngineSelected | Live Preview Engine | engine, reason, platform, os_major, bundled_installed | active | live-preview |
+| livePreviewFirstWord | Live Preview First Word | engine, latency_ms | active | live-preview |
+| livePreviewSessionEnded | Live Preview Session Ended | engine, preview_words, preview_audio_ms, dropped_audio_ms | active | live-preview |
+| livePreviewNotRequested | Live Preview Not Requested | reason, mid_session | active | live-preview |
+| livePreviewVerdict | Live Preview Verdict | verdict, platform, verdict_latency_ms, hold_duration_ms, held_frames, hold_timeout_replayed | active | live-preview |
+| livePreviewNotes | Live Preview Notes | engine, outcome, latency_ms, bullet_count | active | live-preview |
+| walUploadRefused | WAL Upload Refused | reason, status_code | active | wal-upload-refusals |
+| subscriptionPaymentIssueShown | Subscription Payment Issue Shown | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueUpdateTapped | Subscription Payment Issue Update Tapped | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssuePortalOpened | Subscription Payment Issue Portal Opened | none | active | subscription-payment-recovery |
 
 ## App Review Opportunity decisions
 

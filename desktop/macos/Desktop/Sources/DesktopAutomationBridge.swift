@@ -1,3 +1,10 @@
+// The local automation bridge: the HTTP surface (omi-ctl state/navigate/actions)
+// that calls the app's real code in-process for agent and e2e verification.
+//
+// It never synthesizes mouse events, auto-enables only on non-production
+// bundles, and every registered action must declare its effects so read-only
+// verification cannot mutate app state
+// (.github/agent-docs/desktop-automation-effects.md).
 import AppKit
 import CryptoKit
 import Foundation
@@ -2103,6 +2110,25 @@ final class DesktopAutomationActionRegistry {
         return ["error": error]
       }
       return ["reset": "true"]
+    }
+
+    register(
+      name: "clear_main_chat",
+      effects: [.localState, .networkOrModel, .remoteWrite],
+      summary: "Run the main chat's Clear Chat action (the menu item's path, without its confirmation)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "clear_main_chat is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      await provider.clearChat()
+      if let error = provider.errorMessage, !error.isEmpty {
+        return ["error": error]
+      }
+      return ["cleared": "true"]
     }
 
     register(
@@ -4294,15 +4320,15 @@ final class DesktopAutomationActionRegistry {
     }
 
     // SET-02: assemble the exact payload FeedbackView.submitFeedback() would
-    // attach — the report title plus a redacted incident diagnostics attachment —
-    // WITHOUT calling SentrySDK. The dry-run uses the same builders as the real
-    // submit path, so a harness can secret-scan the attachment without a cloud
-    // side effect and cannot drift toward a raw-log upload.
+    // record — the report title plus a redacted incident diagnostics attachment —
+    // without any cloud submission. The dry-run uses the same builders as the
+    // real submit path, so a harness can secret-scan the attachment and cannot
+    // drift toward a raw-log upload.
     register(
       name: "dump_feedback_payload_dryrun",
       effects: [.localArtifact],
       summary:
-        "Assemble the feedback report payload (title + redacted desktop_diagnostics.json) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
+        "Assemble the feedback report payload (title + redacted desktop_diagnostics.json) without submitting anywhere; returns the diagnostics JSON for secret-scanning. Non-prod only.",
       params: ["message"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -4310,10 +4336,10 @@ final class DesktopAutomationActionRegistry {
       }
       let message = (params["message"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       var detail: [String: String] = [
-        "sentry_message": feedbackReportTitle(for: message),
+        "report_title": feedbackReportTitle(for: message),
         "diagnostics_filename": feedbackDiagnosticsAttachmentFilename,
-        "sentry_capture_invoked": "false",
-        "would_submit_to_sentry": "false",
+        "cloud_submission_invoked": "false",
+        "would_submit_to_cloud": "false",
       ]
 
       if let url = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(

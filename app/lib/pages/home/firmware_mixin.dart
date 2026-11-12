@@ -19,6 +19,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/analytics/firmware_update_telemetry.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
+import 'package:omi/utils/firmware_install_verification.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/manifest/manifest.dart';
 
@@ -29,11 +30,9 @@ enum FirmwareUpdateFailure {
 
   /// The device did not accept the update (connection lost, device rejected it).
   install,
+  notInstalled,
+  noReconnect,
 }
-
-/// The lowest battery an Omi firmware update may start at. Enforced in code, not left to a
-/// checklist.
-const int kFirmwareUpdateMinBattery = 15;
 
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   FirmwareUpdateBuildPolicy get firmwareUpdatePolicy => FirmwareUpdateBuildPolicy.current;
@@ -44,6 +43,8 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   int downloadProgress = 0;
   bool isInstalling = false;
   bool isInstalled = false;
+  bool isVerifying = false;
+  String? observedFirmwareVersion;
   int installProgress = 0;
   bool isLegacySecureDFU = true;
   List<String> otaUpdateSteps = [];
@@ -57,6 +58,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     setState(() {
       isDownloading = false;
       isInstalling = false;
+      isVerifying = false;
       updateFailure = failure;
     });
     Provider.of<DeviceProvider>(context, listen: false).resetFirmwareUpdateState();
@@ -72,6 +74,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       firmwareUpdatePolicy.allowsOmiFirmwareUpdate ? mcumgr.FirmwareUpdateManagerFactory() : null;
   mcumgr.FirmwareUpdateManager? _mcuUpdateManager;
   FirmwareUpdateTelemetry? _firmwareTelemetry;
+
+  void _startFirmwareTelemetry(BtDevice device, String protocol) {
+    final current = Provider.of<DeviceProvider>(context, listen: false).pairedDevice;
+    _firmwareTelemetry = FirmwareUpdateTelemetry.start(
+      device: current?.id == device.id ? current! : device,
+      protocol: protocol,
+    );
+  }
 
   /// Process ZIP file and return firmware image list
   Future<List<mcumgr.Image>> processZipFile(Uint8List zipFileData) async {
@@ -123,20 +133,19 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       return;
     }
     if (isLegacySecureDFU) {
-      _firmwareTelemetry = FirmwareUpdateTelemetry.start(device: btDevice, protocol: 'nordic_dfu');
       return startLegacyDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
     }
     return startMCUDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
   }
 
   Future<void> killMcuUpdateManager() async {
-    if (_mcuUpdateManager != null) {
-      try {
-        await _mcuUpdateManager!.kill();
-      } catch (e) {
-        Logger.debug('Error killing update manager: $e');
-      }
-      _mcuUpdateManager = null;
+    final manager = _mcuUpdateManager;
+    _mcuUpdateManager = null;
+    if (manager == null) return;
+    try {
+      await manager.kill();
+    } catch (e) {
+      Logger.debug('Error killing update manager: $e');
     }
   }
 
@@ -145,9 +154,12 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       Logger.debug('MCU firmware updates are unavailable in the Ray-Ban DAT build');
       return;
     }
-    _firmwareTelemetry = FirmwareUpdateTelemetry.start(device: btDevice, protocol: 'mcumgr');
+    _startFirmwareTelemetry(btDevice, 'mcumgr');
     setState(() {
       isInstalling = true;
+      isInstalled = false;
+      isVerifying = false;
+      observedFirmwareVersion = null;
       updateFailure = null;
     });
     await Provider.of<DeviceProvider>(context, listen: false).prepareDFU();
@@ -161,7 +173,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       _fail(FirmwareUpdateFailure.download);
       return;
     }
-    final bytes = await file.readAsBytes();
+    final Uint8List bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } catch (e) {
+      _firmwareTelemetry?.failed(failureClass: 'firmware_file_missing');
+      _fail(FirmwareUpdateFailure.download);
+      return;
+    }
     const configuration = mcumgr.FirmwareUpgradeConfiguration(
       estimatedSwapTime: Duration(seconds: 0),
       eraseAppSettings: true,
@@ -188,28 +207,39 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
 
     // The stream reports every stage (validate, upload, test, reset, confirm) and ends in success;
     // a failure arrives as a stream error, and a cancel closes the stream without success.
-    var succeeded = false;
+    var transportFinished = false;
+    var lastState = mcumgr.FirmwareUpgradeState.none;
+    String failureClass() => lastState == mcumgr.FirmwareUpgradeState.upload
+        ? 'upload_error'
+        : lastState == mcumgr.FirmwareUpgradeState.test || lastState == mcumgr.FirmwareUpgradeState.reset
+            ? 'mark_error'
+            : 'native_dfu_error';
     updateStream.listen(
       (state) {
+        if (transportFinished) return;
+        lastState = state;
         Logger.debug('update state: $state');
+        if (state == mcumgr.FirmwareUpgradeState.test || state == mcumgr.FirmwareUpgradeState.reset) {
+          _firmwareTelemetry?.uploadFinished();
+        }
+        // Entering confirm means the test mark and reset stages have completed.
+        if (state == mcumgr.FirmwareUpgradeState.confirm) _firmwareTelemetry?.installRequested();
         if (state != mcumgr.FirmwareUpgradeState.success) return;
-        succeeded = true;
-        _firmwareTelemetry?.completed(toVersion: latestFirmwareDetails['version']?.toString());
-        Logger.debug('update success');
-        killMcuUpdateManager();
-        if (!mounted) return;
-        setState(() {
-          isInstalling = false;
-          isInstalled = true;
-        });
+        transportFinished = true;
+        _firmwareTelemetry?.uploadFinished();
+        _firmwareTelemetry?.installRequested();
+        unawaited(_verifyInstallation(btDevice));
       },
       onError: (Object error) {
-        _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
+        if (transportFinished) return;
+        transportFinished = true;
+        _firmwareTelemetry?.failed(failureClass: failureClass());
         Logger.debug('update error: $error');
         _fail(FirmwareUpdateFailure.install);
       },
       onDone: () {
-        if (succeeded || !isInstalling) return;
+        if (transportFinished || !isInstalling) return;
+        transportFinished = true;
         _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
         _fail(FirmwareUpdateFailure.install);
       },
@@ -232,7 +262,9 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     try {
       await updateManager.update(images, configuration: configuration);
     } catch (e) {
-      _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
+      if (transportFinished) return;
+      transportFinished = true;
+      _firmwareTelemetry?.failed(failureClass: failureClass());
       Logger.debug('update start failed: $e');
       _fail(FirmwareUpdateFailure.install);
     }
@@ -243,54 +275,115 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       Logger.debug('Legacy firmware updates are unavailable in the Ray-Ban DAT build');
       return;
     }
+    _startFirmwareTelemetry(btDevice, 'nordic_dfu');
     setState(() {
       isInstalling = true;
+      isInstalled = false;
+      isVerifying = false;
+      observedFirmwareVersion = null;
       updateFailure = null;
     });
     await Provider.of<DeviceProvider>(context, listen: false).prepareDFU();
     await Future.delayed(const Duration(seconds: 2));
     String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
+    if (!fileInAssets && !await File(firmwareFile).exists()) {
+      _firmwareTelemetry?.failed(failureClass: 'firmware_file_missing');
+      _fail(FirmwareUpdateFailure.download);
+      return;
+    }
     NordicDfu dfu = NordicDfu();
-    await dfu.startDfu(
-      btDevice.id,
-      firmwareFile,
-      fileInAsset: fileInAssets,
-      numberOfPackets: 8,
-      enableUnsafeExperimentalButtonlessServiceInSecureDfu: true,
-      iosSpecialParameter: const IosSpecialParameter(
-        packetReceiptNotificationParameter: 8,
-        forceScanningForNewAddressInLegacyDfu: true,
-        connectionTimeout: 60,
-      ),
-      androidSpecialParameter: const AndroidSpecialParameter(packetReceiptNotificationsEnabled: true, rebootTime: 1000),
-      onProgressChanged: (deviceAddress, percent, speed, avgSpeed, currentPart, partsTotal) {
-        Logger.debug('deviceAddress: $deviceAddress, percent: $percent');
-        if (!mounted) return;
-        setState(() {
-          installProgress = percent.toInt();
-        });
-      },
-      onError: (deviceAddress, error, errorType, message) {
-        _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
-        Logger.debug('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
-        _fail(FirmwareUpdateFailure.install);
-      },
-      onDeviceConnecting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnecting'),
-      onDeviceConnected: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnected'),
-      onDfuProcessStarting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarting'),
-      onDfuProcessStarted: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarted'),
-      onEnablingDfuMode: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onEnablingDfuMode'),
-      onFirmwareValidating: (deviceAddress) => Logger.debug('address: $deviceAddress, onFirmwareValidating'),
-      onDfuCompleted: (deviceAddress) {
-        _firmwareTelemetry?.completed(toVersion: latestFirmwareDetails['version']?.toString());
-        Logger.debug('deviceAddress: $deviceAddress, onDfuCompleted');
-        if (!mounted) return;
-        setState(() {
-          isInstalling = false;
-          isInstalled = true;
-        });
-      },
+    var dfuFinished = false;
+    try {
+      await dfu.startDfu(
+        btDevice.id,
+        firmwareFile,
+        fileInAsset: fileInAssets,
+        numberOfPackets: 8,
+        enableUnsafeExperimentalButtonlessServiceInSecureDfu: true,
+        iosSpecialParameter: const IosSpecialParameter(
+          packetReceiptNotificationParameter: 8,
+          forceScanningForNewAddressInLegacyDfu: true,
+          connectionTimeout: 60,
+        ),
+        androidSpecialParameter:
+            const AndroidSpecialParameter(packetReceiptNotificationsEnabled: true, rebootTime: 1000),
+        onProgressChanged: (deviceAddress, percent, speed, avgSpeed, currentPart, partsTotal) {
+          if (percent >= 100 && currentPart == partsTotal) _firmwareTelemetry?.uploadFinished();
+          Logger.debug('deviceAddress: $deviceAddress, percent: $percent');
+          if (!mounted) return;
+          setState(() {
+            installProgress = percent.toInt();
+          });
+        },
+        onError: (deviceAddress, error, errorType, message) {
+          if (dfuFinished) return;
+          dfuFinished = true;
+          _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
+          Logger.debug('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
+          _fail(FirmwareUpdateFailure.install);
+        },
+        onDeviceConnecting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnecting'),
+        onDeviceConnected: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnected'),
+        onDfuProcessStarting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarting'),
+        onDfuProcessStarted: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarted'),
+        onEnablingDfuMode: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onEnablingDfuMode'),
+        onFirmwareValidating: (deviceAddress) => Logger.debug('address: $deviceAddress, onFirmwareValidating'),
+        onDfuCompleted: (deviceAddress) {
+          if (dfuFinished) return;
+          dfuFinished = true;
+          _firmwareTelemetry?.uploadFinished();
+          // Nordic exposes the activate/reset completion as one callback.
+          _firmwareTelemetry?.installRequested();
+          unawaited(_verifyInstallation(btDevice));
+        },
+      );
+    } catch (e) {
+      if (dfuFinished) return;
+      _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
+      Logger.debug('Legacy DFU failed: $e');
+      _fail(FirmwareUpdateFailure.install);
+    }
+  }
+
+  Future<void> _verifyInstallation(BtDevice device) async {
+    final attempt = _firmwareTelemetry;
+    if (attempt == null || !mounted || isVerifying) return;
+    final provider = Provider.of<DeviceProvider>(context, listen: false);
+    setState(() => isVerifying = true);
+    // Subscribe before resuming the existing native reconnect path. The stream
+    // contains fresh DIS reads only, never the persisted pre-update revision.
+    final verification = verifyFirmwareInstallation(
+      observations: provider.firmwareRevisions,
+      deviceId: device.id,
+      fromVersion: attempt.fromVersion,
+      targetVersion: latestFirmwareDetails['version']?.toString(),
     );
+    // Killing the DFU owner must not extend the verification deadline.
+    await killMcuUpdateManager().timeout(const Duration(seconds: 5), onTimeout: () {
+      Logger.debug('DFU manager cleanup timed out; resuming reconnect verification');
+    });
+    provider.resetFirmwareUpdateState();
+    final result = await verification;
+    switch (result.outcome) {
+      case FirmwareInstallOutcome.installed:
+        attempt.completed(observedVersion: result.observedVersion!);
+      case FirmwareInstallOutcome.notInstalled:
+        attempt.failed(failureClass: 'not_installed');
+      case FirmwareInstallOutcome.noReconnect:
+        attempt.failed(failureClass: 'no_reconnect');
+    }
+    if (!mounted) return;
+    setState(() {
+      isVerifying = false;
+      isInstalling = false;
+      observedFirmwareVersion = result.observedVersion;
+      isInstalled = result.outcome == FirmwareInstallOutcome.installed;
+      updateFailure = switch (result.outcome) {
+        FirmwareInstallOutcome.installed => null,
+        FirmwareInstallOutcome.notInstalled => FirmwareUpdateFailure.notInstalled,
+        FirmwareInstallOutcome.noReconnect => FirmwareUpdateFailure.noReconnect,
+      };
+    });
   }
 
   Future getLatestVersion({
@@ -298,12 +391,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     required String firmwareRevision,
     required String hardwareRevision,
     required String manufacturerName,
+    String? serialNumber,
   }) async {
     latestFirmwareDetails = await getLatestFirmwareVersion(
       deviceModelNumber: deviceModelNumber,
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
+      serialNumber: serialNumber,
     );
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);

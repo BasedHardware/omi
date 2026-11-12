@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-byok-account-state-escapes-as-server-fault",
+  "violated_contract": "A provider error that reports the user's own BYOK account state (credit balance, usage limit, insufficient quota, rate limit on the user's key, rejected key) must leave the composition boundary as the typed throttled response with one structured WARNING line, because it is account state only the user can fix. When a spelling is missing from the classifier, the boundary answers the generic 500 and severity=ERROR counts (and tracebacks) fire per attempt: investigators mistake a user's spent provider account for an Omi server fault and retries can never succeed. Observed spellings so far: gateway byok_quota/byok_auth envelopes, Anthropic 400 'credit balance is too low' (#21779), OpenRouter 402 openrouter_credits, Anthropic 400 'reached your specified API usage limits' (2026-10-24 window).",
+  "canonical_prevention": "Every new provider spelling is classified by the single classifier at the conversation-processing composition boundary (utils/llm/gateway_error_contract.py), gated on the request carrying the user's validated key for that provider so the same error on Omi's server-paid key stays a loud server fault. A contract test must cover each spelling plus the server-paid negative, assert the typed 429 answer, and assert the boundary logs exactly one structured WARNING (byok=true failure_class=...) with nothing at ERROR.",
+  "canonical_prevention_artifact": [
+    "backend/utils/llm/gateway_error_contract.py",
+    "backend/tests/unit/test_conversation_structure_byok_quota.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/llm/gateway_error_contract.py",
+    "backend/utils/conversations/process_conversation.py",
+    "backend/utils/llm/byok_errors.py"
+  ],
+  "status": "open"
+}

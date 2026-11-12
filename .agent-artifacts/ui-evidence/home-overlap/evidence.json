@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-overlap-before.png",
+      "platform": "mobile-ios",
+      "description": "Before: Listening now plus Processing for the same three episode members",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-overlap-after.png",
+      "platform": "mobile-ios",
+      "description": "After: same episode appears once as Listening now",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "wal-upload-refusals",
+  "kind": "question",
+  "owner": "dazheng",
+  "events": [
+    "walUploadRefused"
+  ],
+  "namespace_property": "$app_namespace",
+  "question": "Which sync upload refusals need a server correction, by build, bounded reason and HTTP status?",
+  "zero_policy": "No events is unknown until build identity, consent and ingestion are verified.",
+  "query": "contracts/analytics/consumers/wal-upload-refusals.sql",
+  "posthog_query": "SELECT properties['reason'] AS reason, properties['status_code'] AS status_code, count() FROM events WHERE event = 'WAL Upload Refused' AND properties['$app_namespace'] = '{app_namespace}' AND properties['build_number'] = '{build_number}' GROUP BY reason, status_code"
+}

@@ -58,25 +58,60 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-window-post-latency",
     "omi-stt-replay-continuity",
     "omi-stt-evidence-loss",
+    "omi-stt-evidence-loss-critical",
     "omi-stt-leg-lifecycle-gap",
+    "omi-stt-leg-settlement-omission",
     "omi-stt-snapshot-unready",
     "omi-stt-stage-disagreement",
     "omi-stt-enabled-state-unknown",
+    "omi-stt-capacity-full-exhausted",
+    "omi-stt-local-delivery-exhausted",
+    "omi-stt-provider-terminal-failure-ratio",
+    "omi-stt-chain-exhausted-ratio",
+    "omi-stt-no-full-stage-target",
+    "omi-stt-pressure-sampler-stuck",
 )
 DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-monitoring")
+# These native Cloud Monitoring queries explicitly select the production
+# project and datasource. The automatic development import must not install
+# production pages there or assume an equivalent native datasource exists.
+PRODUCTION_ONLY_IMPORT_UIDS = ("omi-enrichment-queue-depth-page", "omi-incluster-guard-unsafe-page")
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
-LIVE_STT_PENDING_UIDS = ("omi-soniox-runway-70", "omi-soniox-runway-90")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
 REQUIRED_METRICS = {
     "omi_capture_finalization_failures_total",
     "omi_journey_accepted_total",
     "omi_journey_terminal_total",
 }
+PUSHER_RECEIVE_METRICS = {
+    'omi_pusher_record_close_abandoned_outstanding',
+    'omi_pusher_record_close_outstanding_refusals_total',
+    'pusher_socket_frames_total',
+    'pusher_receive_work_stalls_total',
+    'pusher_receive_work_stalled_handlers',
+    'pusher_receive_work_duration_seconds_count',
+    'pusher_socket_closed_total',
+}
+METRIC_COVERAGE_QUERY = (
+    'count({__name__=~"'
+    + '|'.join(sorted(REQUIRED_METRICS))
+    + '",job=~"pusher-metrics|backend-listen-metrics"} or {__name__=~"'
+    + '|'.join(sorted(PUSHER_RECEIVE_METRICS))
+    + '",job="pusher-metrics"}) by (__name__,job)'
+)
 REQUIRED_JOBS = {"pusher-metrics", "backend-listen-metrics"}
 # Per-target `up` series. Pusher and backend-listen additionalScrapeConfigs both
 # relabel namespace and pod. min(up) is applied in process to the series that
 # remain after confirmed deletions are removed. Do not replace this with max(up).
 SERVING_UP_QUERY = 'up{job=~"pusher-metrics|backend-listen-metrics"}'
+# Before publishing, the gate checks the *currently serving* fleet. One missed
+# scrape on any of the many backend-listen pods made a single instant read fail
+# the release (backend-listen-metrics=0 on 2026-10-16/17 with every pod serving).
+# A target therefore counts as up when any scrape succeeded in the last window;
+# a target down for the whole window still fails. Post-rollout keeps instant up.
+PREPUBLISH_UP_WINDOW = "2m"
+PREPUBLISH_UP_QUERY = f"max_over_time({SERVING_UP_QUERY}[{PREPUBLISH_UP_WINDOW}])"
+PREPUBLISH_DEFAULT_ATTEMPTS = 6
 # kube-state-metrics v2.16 emits this gauge only when metadata.deletionTimestamp
 # is set. Labels are namespace, pod, and uid — the same namespace/pod keys as the
 # scrape targets. Both Deployments use terminationGracePeriodSeconds 120 plus a
@@ -96,6 +131,8 @@ GRAFANA_ASSIGNED_MODEL_DEFAULTS = {"intervalMs": 1000, "maxDataPoints": 43200}
 SINGLE_RULE_SIZE_LIMIT = 1_000_000
 FLEET_LIST_SIZE_LIMIT = 4_000_000
 ALERT_RULE_LIST_PATH = "/api/v1/provisioning/alert-rules"
+MUTE_TIMING_PATH = "/api/v1/provisioning/mute-timings"
+MUTE_TIMINGS_FILE = ROOT / "backend/charts/monitoring/mute-timings.json"
 
 
 class AlertRouteError(ValueError):
@@ -122,7 +159,9 @@ def _token(path: Path) -> str:
     return value
 
 
-def _request_json(base_url: str, path: str, token: str, *, size_limit: int = SINGLE_RULE_SIZE_LIMIT) -> Any:
+def _request_json(
+    base_url: str, path: str, token: str, *, size_limit: int = SINGLE_RULE_SIZE_LIMIT, allow_missing: bool = False
+) -> Any:
     url = base_url.rstrip("/") + path
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
     try:
@@ -134,6 +173,8 @@ def _request_json(base_url: str, path: str, token: str, *, size_limit: int = SIN
         # revoked token (401) — two failures with completely different owners and fixes.
         # Status and reason phrase only: the response body can carry Grafana detail we do
         # not want in a public log.
+        if allow_missing and exc.code == 404:
+            return None
         raise AlertRouteError(f"Grafana API request failed for {path}: HTTP {exc.code} {exc.reason}") from exc
     except urllib.error.URLError as exc:
         # Subclass of OSError, superclass of HTTPError, so it has to sit between the two.
@@ -172,6 +213,155 @@ def _write_rule(base_url: str, uid: str, rule: dict[str, Any], token: str, *, ex
         raise AlertRouteError(f"Grafana API request failed for {path}: {type(exc).__name__}") from exc
 
 
+def _create_mute_timing(base_url: str, timing: dict[str, Any], token: str) -> None:
+    # Name the timing in failures: the collection path alone could not say
+    # which interval Grafana refused (the 2026-10-25 HTTP 400 on the first
+    # merge attempt pointed only at /mute-timings).
+    name = timing.get("name")
+    label = name if isinstance(name, str) and name else "unnamed"
+    detail = f"{MUTE_TIMING_PATH}/{label}"
+    request = urllib.request.Request(
+        base_url.rstrip("/") + MUTE_TIMING_PATH,
+        data=json.dumps(timing, separators=(",", ":")).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            response.read(SINGLE_RULE_SIZE_LIMIT + 1)
+    except urllib.error.HTTPError as exc:
+        raise AlertRouteError(f"Grafana API request failed for {detail}: HTTP {exc.code} {exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise AlertRouteError(f"Grafana API request failed for {detail}: URLError {exc.reason}") from exc
+    except OSError as exc:
+        raise AlertRouteError(f"Grafana API request failed for {detail}: {type(exc).__name__}") from exc
+
+
+def load_committed_mute_timings() -> dict[str, dict[str, Any]]:
+    loaded: object = json.loads(MUTE_TIMINGS_FILE.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict) or not isinstance(loaded.get("mute_timings"), list):
+        raise AlertRouteError("committed mute timing file must be an object with a mute_timings list")
+    timings: dict[str, dict[str, Any]] = {}
+    for item in loaded["mute_timings"]:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"]:
+            raise AlertRouteError("committed mute timing entries must carry a non-empty name")
+        if item["name"] in timings:
+            raise AlertRouteError(f"committed mute timing {item['name']} is declared twice")
+        if not isinstance(item.get("time_intervals"), list) or not item["time_intervals"]:
+            raise AlertRouteError(f"committed mute timing {item['name']} has no time_intervals")
+        timings[item["name"]] = item
+    return timings
+
+
+def _referenced_mute_timings(rules: dict[str, dict[str, Any]]) -> tuple[str, ...]:
+    names: set[str] = set()
+    for rule in rules.values():
+        settings = rule.get("notification_settings")
+        referenced = settings.get("mute_time_intervals") if isinstance(settings, dict) else None
+        if isinstance(referenced, list):
+            names.update(name for name in referenced if isinstance(name, str) and name)
+    return tuple(sorted(names))
+
+
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_ALL_DAY_TIMES = frozenset((("00:00", "24:00"),))
+# Calendar selectors with no enumerable "full" form (years are unbounded, and
+# days_of_month mixes ranges with negatives). They restrict the window when
+# present, so absent-on-both-sides matches and any value on either side alone
+# is a real difference.
+_CALENDAR_SELECTORS = ("days_of_month", "months", "years")
+
+
+def _calendar_selector(interval: dict[str, Any], key: str) -> tuple[str, ...]:
+    values = interval.get(key)
+    if not isinstance(values, list):
+        return ()
+    return tuple(sorted(str(value) for value in values))
+
+
+def _mute_timing_signature(timing: dict[str, Any]) -> tuple:
+    """Order-insensitive mute window, with Grafana's omissions normalized.
+
+    An interval that omits ``weekdays`` or ``times`` covers every day or the
+    whole day respectively — the shape the UI writes for an always-on mute —
+    so it must equal the explicitly enumerated committed form. The calendar
+    selectors (``days_of_month``, ``months``, ``years``) are compared as
+    provided: absent on both sides is the same unrestricted window, any value
+    on either side alone narrows it. Anything else (narrower weekdays,
+    business-hours times, a non-UTC location) stays a real difference and
+    fails the drift comparison.
+    """
+
+    intervals = timing.get("time_intervals")
+    items: set[tuple] = set()
+    if isinstance(intervals, list):
+        for interval in intervals:
+            if not isinstance(interval, dict):
+                return ("invalid",)
+            weekdays = interval.get("weekdays")
+            if not isinstance(weekdays, list) or not weekdays:
+                weekdays = list(_WEEKDAYS)
+            times = interval.get("times")
+            normalized_times: set[tuple[str, str]] = set()
+            if isinstance(times, list) and times:
+                for time_range in times:
+                    if isinstance(time_range, dict):
+                        begin = time_range.get("begin_time")
+                        end = time_range.get("end_time")
+                        if isinstance(begin, str) and isinstance(end, str):
+                            normalized_times.add((begin, end))
+            if not normalized_times:
+                normalized_times = set(_ALL_DAY_TIMES)
+            location = interval.get("location")
+            # Grafana falls back to the server time zone when the interval omits
+            # location; both Grafana instances run UTC, so an omitted location is
+            # the same window as an explicit UTC.
+            if not isinstance(location, str) or location.strip() in ("", "UTC"):
+                location = "UTC"
+            items.add(
+                (
+                    tuple(sorted(weekdays)),
+                    tuple(sorted(normalized_times)),
+                    location,
+                    *(_calendar_selector(interval, key) for key in _CALENDAR_SELECTORS),
+                )
+            )
+    return tuple(sorted(items))
+
+
+def _ensure_mute_timings(base_url: str, rules: dict[str, dict[str, Any]], token: str) -> None:
+    # Grafana rejects a rule whose notification_settings name a mute timing it
+    # does not know, and it answers that validation failure with HTTP 500 on
+    # the rule upsert — not a 4xx naming the interval. On 2026-10-25 the dev
+    # import died that way on its first rule (#23590 shipped rules muted by
+    # omi-tier-silent, which existed only in prod), every following rule was
+    # skipped, and pusher dev qualification went red on label drift. Establish
+    # every referenced timing before the first rule write. A live timing is
+    # never overwritten (prod's predates this file), but its window must equal
+    # the committed one: a drifted narrower mute would let agent-tier rules
+    # page Telegram outside the intended silence.
+    committed = load_committed_mute_timings()
+    for name in _referenced_mute_timings(rules):
+        if name not in committed:
+            raise AlertRouteError(
+                f"alert rules reference mute timing {name} with no committed definition; refusing to import"
+            )
+        path = f"{MUTE_TIMING_PATH}/{urllib.parse.quote(name, safe='')}"
+        live = _request_json(base_url, path, token, allow_missing=True)
+        if live is not None:
+            if not isinstance(live, dict) or _mute_timing_signature(live) != _mute_timing_signature(committed[name]):
+                raise AlertRouteError(f"live mute timing {name} differs from the committed definition")
+            continue
+        _create_mute_timing(base_url, committed[name], token)
+        if _request_json(base_url, path, token, allow_missing=True) is None:
+            raise AlertRouteError(f"mute timing {name} did not become readable after creation")
+        print(f"CREATED mute timing {name}")
+
+
 def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str, Any]]:
     loaded: object = json.loads((ALERT_SOURCES / "live-stt.json").read_text(encoding="utf-8"))
     if not isinstance(loaded, list):
@@ -184,8 +374,8 @@ def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str
         if not isinstance(uid, str) or not uid or uid in by_uid:
             raise AlertRouteError("committed live-STT alert file contains a missing or duplicate uid")
         by_uid[uid] = item
-    if set(by_uid) != set(LIVE_STT_IMPORT_UIDS) | set(LIVE_STT_PENDING_UIDS):
-        raise AlertRouteError("committed live-STT rules do not match the import allowlist and pending set")
+    if set(by_uid) != set(LIVE_STT_IMPORT_UIDS):
+        raise AlertRouteError("committed live-STT rules do not match the import allowlist")
     rules = {uid: by_uid[uid] for uid in LIVE_STT_IMPORT_UIDS}
     committed = load_all_committed_rules()
     canary_uids = DATASOURCE_CANARY_UIDS if production else ()
@@ -237,6 +427,7 @@ def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
     contacts = _request_json(grafana_url, "/api/v1/provisioning/contact-points", token)
     if not _has_telegram_receiver(contacts, TELEGRAM_RECEIVER):
         return ["verified Telegram alert receiver is missing or resolve notifications are disabled"]
+    _ensure_mute_timings(grafana_url, rules, token)
     # Establish and read back the replacement pages before KeepLast reaches any
     # business rule. The GMP canary belongs to its separately deployed datasource.
     for uid in canary_uids:
@@ -263,6 +454,8 @@ def _development_rules(rules: dict[str, dict[str, Any]]) -> dict[str, dict[str, 
     # No verified development sentinel exists. Development keeps error pages
     # instead of KeepLast, on a detached copy so canonical rules never change.
     rules = copy.deepcopy(rules)
+    for uid in PRODUCTION_ONLY_IMPORT_UIDS:
+        rules.pop(uid, None)
     for rule in rules.values():
         if rule.get("execErrState") == "KeepLast":
             rule["execErrState"] = "Error"
@@ -383,6 +576,10 @@ def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -
             continue
         if live.get(key) != expected.get(key):
             keys.append(key)
+    # Only an explicit source pause authorizes a live pause. Compare booleans
+    # strictly so missing/malformed live state cannot satisfy either contract.
+    if live.get("isPaused") is not (expected.get("isPaused") is True):
+        keys.append("isPaused")
     receiver = _receiver(expected)
     if not isinstance(receiver, str) or _receiver(live) != receiver:
         keys.append("receiver")
@@ -392,8 +589,6 @@ def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -
 def rule_definition_errors(uid: str, live: dict[str, Any], expected: dict[str, Any]) -> list[str]:
     keys = mismatched_definition_keys(live, expected)
     errors = [f"live alert rule {uid} {key} does not match the committed rule" for key in keys if key != "receiver"]
-    if live.get("isPaused") is not False:
-        errors.append(f"live alert rule {uid} must be unpaused")
     if "receiver" in keys:
         errors.append(f"live alert rule {uid} receiver does not match the committed route")
     return errors
@@ -417,7 +612,7 @@ def classify_fleet_coverage(
             present_but_paused.append(uid)
         if keys:
             present_but_divergent.append(f"{uid} ({','.join(keys)})")
-        if not paused and not keys:
+        if not keys:
             live_and_matching.append(uid)
     live_but_uncommitted = tuple(sorted(uid for uid in live_by_uid if uid not in committed))
     return FleetCoverage(
@@ -472,10 +667,9 @@ def fleet_gate_failures(coverage: FleetCoverage, gated_uids: tuple[str, ...], fa
     if fail_on == "none":
         return []
     absent = set(coverage.committed_but_absent)
-    paused = set(coverage.present_but_paused)
     divergent = {_divergent_uid(entry): entry for entry in coverage.present_but_divergent}
     uncommitted = set(coverage.live_but_uncommitted)
-    uids = gated_uids if fail_on == "gated" else tuple(sorted(absent | paused | set(divergent) | uncommitted))
+    uids = gated_uids if fail_on == "gated" else tuple(sorted(absent | set(divergent) | uncommitted))
     failures: list[str] = []
     for uid in uids:
         if uid in uncommitted:
@@ -483,8 +677,6 @@ def fleet_gate_failures(coverage: FleetCoverage, gated_uids: tuple[str, ...], fa
             continue
         if uid in absent:
             failures.append(f"live alert rule {uid} is absent from Grafana")
-        if uid in paused:
-            failures.append(f"live alert rule {uid} must be unpaused")
         if uid in divergent:
             failures.append(f"live alert rule {divergent[uid]} does not match the committed rule")
     return failures
@@ -655,8 +847,13 @@ def validate_live_route(
         if isinstance(item, dict) and isinstance(item.get("metric"), dict)
     }
     required_metric_jobs = {(metric, job) for metric in REQUIRED_METRICS for job in REQUIRED_JOBS}
-    if phase == "postrollout" and observed_metrics != required_metric_jobs:
+    if phase == "postrollout" and not required_metric_jobs <= observed_metrics:
         errors.append("live Prometheus finalization telemetry sources are missing or incomplete")
+    if (
+        phase == 'postrollout'
+        and not {(metric, 'pusher-metrics') for metric in PUSHER_RECEIVE_METRICS} <= observed_metrics
+    ):
+        errors.append('live Prometheus pusher receive-work telemetry sources are missing or incomplete')
     points = contact_points if isinstance(contact_points, list) else []
     for receiver in receivers:
         if not any(
@@ -699,23 +896,29 @@ def _prometheus_instant_query_or_error(base_url: str, token: str, query: str) ->
 
 def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) -> list[str]:
     metric_query_path = "/api/datasources/proxy/uid/prometheus/api/v1/query?" + urllib.parse.urlencode(
-        {
-            "query": 'count({__name__=~"omi_capture_finalization_failures_total|omi_journey_accepted_total|omi_journey_terminal_total",job=~"pusher-metrics|backend-listen-metrics"}) by (__name__,job)'
-        }
+        {"query": METRIC_COVERAGE_QUERY}
     )
+    up_query = PREPUBLISH_UP_QUERY if phase == "prepublish" else SERVING_UP_QUERY
     failures: list[str] = []
     for attempt in range(attempts):
-        failures = validate_live_route(
-            {uid: _request_json(grafana_url, f"/api/v1/provisioning/alert-rules/{uid}", token) for uid in RULE_UIDS},
-            _request_json(grafana_url, "/api/datasources/uid/prometheus/health", token),
-            _prometheus_instant_query(grafana_url, token, SERVING_UP_QUERY),
-            _request_json(grafana_url, metric_query_path, token),
-            _request_json(grafana_url, "/api/v1/provisioning/contact-points", token),
-            phase=phase,
-            deletion_query=_prometheus_instant_query_or_error(grafana_url, token, POD_DELETION_TIMESTAMP_QUERY),
-            ksm_presence_query=_prometheus_instant_query_or_error(grafana_url, token, KSM_POD_INFO_COUNT_QUERY),
-            production=grafana_url == "https://monitor.omi.me",
-        )
+        try:
+            failures = validate_live_route(
+                {
+                    uid: _request_json(grafana_url, f"/api/v1/provisioning/alert-rules/{uid}", token)
+                    for uid in RULE_UIDS
+                },
+                _request_json(grafana_url, "/api/datasources/uid/prometheus/health", token),
+                _prometheus_instant_query(grafana_url, token, up_query),
+                _request_json(grafana_url, metric_query_path, token),
+                _request_json(grafana_url, "/api/v1/provisioning/contact-points", token),
+                phase=phase,
+                deletion_query=_prometheus_instant_query_or_error(grafana_url, token, POD_DELETION_TIMESTAMP_QUERY),
+                ksm_presence_query=_prometheus_instant_query_or_error(grafana_url, token, KSM_POD_INFO_COUNT_QUERY),
+                production=grafana_url == "https://monitor.omi.me",
+            )
+        except AlertRouteError as exc:
+            # A transient Grafana/Prometheus request failure is retried like a miss.
+            failures = [str(exc)]
         if not failures or attempt + 1 == attempts:
             break
         time.sleep(5)
@@ -753,6 +956,12 @@ def _run_fleet_coverage(
     return fleet_gate_failures(coverage, gated_uids, fail_on), report
 
 
+def resolve_attempts(requested: int | None, *, mode: str, phase: str | None) -> int:
+    if requested is not None:
+        return requested
+    return PREPUBLISH_DEFAULT_ATTEMPTS if mode == "pusher" and phase == "prepublish" else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--grafana-url", required=True)
@@ -761,7 +970,12 @@ def main() -> int:
     parser.add_argument("--mode", choices=("pusher", "fleet", "import"), default="pusher")
     parser.add_argument("--alert-set", choices=("all", "live-stt"), default="all")
     parser.add_argument("--fail-on", choices=("none", "gated", "all"))
-    parser.add_argument("--attempts", type=int, default=1)
+    parser.add_argument(
+        "--attempts",
+        type=int,
+        default=None,
+        help=f"default {PREPUBLISH_DEFAULT_ATTEMPTS} for --phase prepublish, otherwise 1",
+    )
     args = parser.parse_args()
     if not _approved_grafana_url(args.grafana_url):
         print("FAIL: Grafana URL must be an approved HTTPS monitoring origin")
@@ -782,20 +996,21 @@ def main() -> int:
     report_lines: list[str] = []
     try:
         token = _token(args.token_file)
-        if args.attempts < 1 or args.attempts > 12:
+        attempts = resolve_attempts(args.attempts, mode=args.mode, phase=args.phase)
+        if attempts < 1 or attempts > 12:
             raise AlertRouteError("attempts must be between 1 and 12")
         if args.mode == "pusher":
             phase = args.phase
             if phase is None:
                 raise AlertRouteError("pusher mode requires --phase")
-            failures = _run_pusher_gate(args.grafana_url, token, phase, args.attempts)
+            failures = _run_pusher_gate(args.grafana_url, token, phase, attempts)
         elif args.mode == "import":
             failures = _run_live_stt_import(args.grafana_url, token)
         else:
             if fail_on is None:
                 raise AlertRouteError("fleet mode requires --fail-on none, gated, or all")
             failures, report_lines = _run_fleet_coverage(
-                args.grafana_url, token, args.attempts, fail_on, alert_set=args.alert_set
+                args.grafana_url, token, attempts, fail_on, alert_set=args.alert_set
             )
     except (AlertRouteError, OSError, json.JSONDecodeError) as exc:
         failures = [str(exc)]

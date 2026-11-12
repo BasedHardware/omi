@@ -51,7 +51,7 @@ def client(monkeypatch):
 
 def test_cardinality_and_generated_contract():
     assert json.loads((ROOT / 'fleet_schema.json').read_text()) == schema(registry())
-    assert max_series() == 3962
+    assert max_series() == 3842
     assert max_series() < 5000
     assert not set(registry()['server_observed_events']) & set(registry()['events'])
 
@@ -203,7 +203,6 @@ def test_fleet_auth_preserves_security_without_registration_or_recovery(monkeypa
     monkeypatch.setattr(endpoints, 'verify_token', lambda token: 'synthetic-local-user')
     hooks = {}
     for name in (
-        'enforce_jit_qa_uid',
         'enforce_account_deletion_http_access',
         '_enforce_cutover_http_if_request',
         'validate_byok_request',
@@ -216,7 +215,6 @@ def test_fleet_auth_preserves_security_without_registration_or_recovery(monkeypa
     request = Request({'type': 'http', 'path': '/v1/telemetry/fleet', 'headers': [], 'query_string': b''})
     assert endpoints.get_current_user_uid(authorization='Bearer local-token', request=request) == 'synthetic-local-user'
     for name in (
-        'enforce_jit_qa_uid',
         'enforce_account_deletion_http_access',
         '_enforce_cutover_http_if_request',
         'validate_byok_request',

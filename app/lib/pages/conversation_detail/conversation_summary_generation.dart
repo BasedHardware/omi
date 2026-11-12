@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -12,11 +13,17 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/logger.dart';
 
+const builtInSummaryTemplateAppId = 'omi-default-summary';
+
 /// Installed summary templates; throws when the list could not be read (never an empty list).
 typedef EnabledSummaryAppsFetch = Future<List<App>> Function();
 
 /// Templates suggested for one conversation; throws when the list could not be read.
 typedef SuggestedSummaryAppsFetch = Future<List<App>> Function(String conversationId);
+
+/// Saves [appId] as the server preferred template, or clears it (null: Omi's own summary).
+/// Resolves false when the server did not store it.
+typedef PreferredSummaryAppWrite = Future<bool> Function(String? appId);
 
 /// Where a template list fetch stands. [failed] is distinct from an empty [loaded] list.
 enum SummaryTemplatesLoad { idle, loading, loaded, failed }
@@ -50,15 +57,18 @@ class SummaryFailure {
 
 /// Whether [conversation] carries the summary a reprocess asked for: the template's non-empty
 /// result when [appId] is set, otherwise a non-empty Omi summary — the compatibility overview or
-/// the rendered sections, which is exactly what [ConversationSummarySelection.firstParty] accepts —
-/// or any non-empty result.
+/// the rendered sections, which is exactly what [ConversationSummarySelection.firstParty] accepts.
+/// A template result never stands in for Omi's own: a stale stored one would read as success.
 bool conversationHasRequestedSummary(ServerConversation conversation, String? appId) {
   if (appId != null) {
     return conversation.appResults.any((result) => result.appId == appId && result.content.trim().isNotEmpty);
   }
-  return ConversationSummarySelection.firstParty(conversation).kind != ConversationSummaryKind.empty ||
-      conversation.appResults.any((result) => result.content.trim().isNotEmpty);
+  return ConversationSummarySelection.firstParty(conversation).kind != ConversationSummaryKind.empty;
 }
+
+/// The production [PreferredSummaryAppWrite]: `PUT` for a template, `DELETE` for Omi.
+Future<bool> writeServerPreferredSummaryApp(String? appId) =>
+    appId == null ? clearPreferredSummarizationAppServer() : setPreferredSummarizationAppServer(appId);
 
 /// Installed summary templates that work on conversations; throws when the list cannot be read.
 Future<List<App>> fetchInstalledSummaryApps() async {
@@ -83,11 +93,46 @@ Future<List<App>> fetchConversationSuggestedSummaryApps(String conversationId) a
 /// states and stale-response guards), the last failed summary request, the saved default template
 /// and which summary source the Summary tab shows. ConversationDetailProvider mixes it in.
 mixin ConversationSummaryGeneration on ChangeNotifier {
+  String? _preferredSummarizationAppId;
+
+  String? get preferredSummarizationAppId => _preferredSummarizationAppId;
+
+  Future<bool> setPreferredSummarizationApp(String appId) async {
+    if (!await preferredSummaryAppWrite(appId)) return false;
+    rememberDefaultSummaryTemplateAppId(appId);
+    _preferredSummarizationAppId = appId;
+    SharedPreferencesUtil().preferredSummarizationAppId = appId;
+    notifyListeners();
+    return true;
+  }
+
+  void loadPreferredSummarizationApp() {
+    _preferredSummarizationAppId = SharedPreferencesUtil().preferredSummarizationAppId;
+  }
+
+  void trackLastUsedSummarizationApp(String appId) {
+    SharedPreferencesUtil().lastUsedSummarizationAppId = appId;
+    notifyListeners();
+  }
+
+  String? getLastUsedSummarizationAppId() {
+    final lastUsedId = SharedPreferencesUtil().lastUsedSummarizationAppId;
+    return lastUsedId.isEmpty ? null : lastUsedId;
+  }
+
+  App? getLastUsedSummarizationApp() {
+    final lastUsedId = getLastUsedSummarizationAppId();
+    if (lastUsedId == null || appProvider == null) return null;
+
+    return appProvider!.apps.firstWhereOrNull((app) => app.id == lastUsedId && app.worksWithMemories() && app.enabled);
+  }
+
   ServerConversation? get conversationOrNull;
   ServerConversation get conversation;
   AppProvider? get appProvider;
   EnabledSummaryAppsFetch get enabledSummaryAppsFetch;
   SuggestedSummaryAppsFetch get suggestedSummaryAppsFetch;
+  PreferredSummaryAppWrite get preferredSummaryAppWrite;
 
   /// Whether the provider is disposed; late responses must not notify.
   bool get summaryGenerationDisposed;
@@ -242,6 +287,23 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   /// Finds an app by ID from cached apps
   App? findAppById(String? appId) {
     if (appId == null) return null;
+    if (appId == builtInSummaryTemplateAppId) {
+      return App(
+          id: appId,
+          name: 'The Best Summarizer',
+          author: 'Omi',
+          description: '',
+          image: '',
+          capabilities: {'memories'},
+          status: 'approved',
+          category: 'productivity',
+          approved: true,
+          ratingCount: 0,
+          enabled: true,
+          deleted: false,
+          isPaid: false,
+          isUserPaid: false);
+    }
 
     final enabledApp = _cachedEnabledConversationApps.firstWhereOrNull((app) => app.id == appId);
     if (enabledApp != null) return enabledApp;
@@ -315,12 +377,30 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   static String _defaultTemplateKey() => 'defaultSummaryTemplateAppId:${SharedPreferencesUtil().uid}';
 
   String? get defaultSummaryTemplateAppId {
-    final id = SharedPreferencesUtil().getString(_defaultTemplateKey());
+    final prefs = SharedPreferencesUtil();
+    final legacy = prefs.preferredSummarizationAppId;
+    final id =
+        prefs.getString(_defaultTemplateKey(), defaultValue: legacy.isNotEmpty ? legacy : builtInSummaryTemplateAppId);
     return id.isEmpty ? null : id;
   }
 
-  void setDefaultSummaryTemplateAppId(String? appId) {
+  /// Saves the default locally (the sheet's initial choice on this device) and on the server, which
+  /// owns what automatic processing runs: a template is set as the preferred app, Omi clears it.
+  /// Resolves whether the server stored it; the local choice is kept either way.
+  void rememberDefaultSummaryTemplateAppId(String? appId) {
     SharedPreferencesUtil().saveString(_defaultTemplateKey(), appId ?? '');
     notifyListeners();
+  }
+
+  Future<bool> setDefaultSummaryTemplateAppId(String? appId) async {
+    rememberDefaultSummaryTemplateAppId(appId);
+    try {
+      final stored = await preferredSummaryAppWrite(appId);
+      if (!stored) Logger.debug('preferred summary app was not stored on the server');
+      return stored;
+    } catch (e) {
+      Logger.debug('preferred summary app write failed: ${e.runtimeType}');
+      return false;
+    }
   }
 }

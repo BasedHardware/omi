@@ -21,6 +21,7 @@ class RayBanDatBuildWrapperTest < Minitest::Test
     export "DART_DEFINES=default-defines"
     export "FLAVOR=dev"
   SHELL
+  DEFAULT_PROJECT = "// !$*UTF8*$!\n{ objects = { }; }\n"
 
   def setup
     assert File.file?(WRAPPER), "missing DAT build wrapper: #{WRAPPER}"
@@ -165,7 +166,12 @@ class RayBanDatBuildWrapperTest < Minitest::Test
         File.join(state_dir, 'default_flutter_export_environment.sh'),
         DEFAULT_EXPORT_ENVIRONMENT
       )
+      File.write(File.join(state_dir, 'default_project.pbxproj'), DEFAULT_PROJECT)
       File.write(File.join(app, 'ios', 'Podfile.lock'), "PODS:\n  - MWDATCore\n")
+      File.write(
+        File.join(app, 'ios', 'Runner.xcodeproj', 'project.pbxproj'),
+        "#{DEFAULT_PROJECT}// integrated by pod install (OMI_RAYBAN_DAT=1)\n"
+      )
       File.write(
         File.join(app, 'ios', 'Flutter', 'Generated.xcconfig'),
         "DART_DEFINES=T01JX1JBWUJBTl9EQVQ9dHJ1ZQ==\nFLAVOR=raybanDat\n"
@@ -284,7 +290,9 @@ class RayBanDatBuildWrapperTest < Minitest::Test
       fake_bin = File.join(root, 'fake-bin')
       log = File.join(root, 'commands.log')
 
-      [scripts, flutter, runner, fake_bin].each { |directory| FileUtils.mkdir_p(directory) }
+      project = File.join(ios, 'Runner.xcodeproj')
+      [scripts, flutter, runner, project, fake_bin].each { |directory| FileUtils.mkdir_p(directory) }
+      File.write(File.join(project, 'project.pbxproj'), DEFAULT_PROJECT)
       FileUtils.cp(WRAPPER, File.join(scripts, 'rayban_dat.sh'))
       FileUtils.chmod(0o755, File.join(scripts, 'rayban_dat.sh'))
       File.write(File.join(ios, 'Podfile.lock'), DEFAULT_LOCK)
@@ -385,6 +393,8 @@ class RayBanDatBuildWrapperTest < Minitest::Test
 
       [[ "$(pwd -P)" == "$FIXTURE_APP/ios" ]]
       mkdir -p Pods
+      # Real CocoaPods rewrites the tracked project on every install.
+      printf '// integrated by pod install (OMI_RAYBAN_DAT=%s)\n' "${OMI_RAYBAN_DAT-}" >> Runner.xcodeproj/project.pbxproj
 
       if [[ "${OMI_RAYBAN_DAT-}" == "1" ]]; then
         ! grep -q '"ios":\[{"name":"mcumgr_flutter"}' ../.flutter-plugins-dependencies
@@ -442,6 +452,7 @@ class RayBanDatBuildWrapperTest < Minitest::Test
       refute File.exist?(File.join(app, 'ios', 'Flutter', 'Generated.xcconfig'))
       refute File.exist?(File.join(app, 'ios', 'Flutter', 'flutter_export_environment.sh'))
     end
+    assert_equal DEFAULT_PROJECT, File.binread(File.join(app, 'ios', 'Runner.xcodeproj', 'project.pbxproj'))
     assert_equal "API_BASE_URL=http://192.168.1.196:8083/\n", File.binread(File.join(app, '.dev.env'))
     refute Dir.exist?(File.join(app, '.dart_tool', 'rayban_dat_build'))
   end

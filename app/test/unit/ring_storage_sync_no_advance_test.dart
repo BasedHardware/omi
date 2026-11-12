@@ -13,6 +13,7 @@ import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/services/wals/wal_syncs.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -247,6 +248,18 @@ void main() {
         storageTotalBytes: 444,
       );
 
+  // Transfer to Phone reaches the ring through WalSyncs.syncWal, which sends
+  // the ring's virtual recording (fileNum -1) to RingStorageSyncImpl.
+  WalSyncs walSyncsWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal) {
+    final syncs = WalSyncs(_Listener());
+    syncs.ring
+      ..testConnection = card
+      ..testWals = [wal]
+      ..setLocalSync(local)
+      ..setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40));
+    return syncs;
+  }
+
   for (final partialAudio in [false, true]) {
     test('idle read after BEGIN stops safely (partial audio=$partialAudio)', () async {
       final card = _FakeRingDevice(
@@ -279,11 +292,13 @@ void main() {
       card.emit(_readBegin(5, 2));
       await Future<void>.delayed(Duration.zero);
       timers.last.fire();
-      await transfer;
+      await expectLater(transfer, throwsException);
       expect(card.stopCalls, hasLength(1));
       expect(card.advanceCalls, isEmpty);
       expect(wal.status, WalStatus.miss);
       expect(sync.isSyncing, isFalse);
+      expect(wal.isSyncing, isFalse);
+      expect(wal.syncStartedAt, isNull);
       expect(timers.every((timer) => !timer.isActive), isTrue);
       expect(local.added, hasLength(partialAudio ? 1 : 0));
       if (partialAudio) {
@@ -307,7 +322,7 @@ void main() {
         timers.add(timer);
         return timer;
       });
-      await sync.syncWal(wal: wal);
+      await expectLater(sync.syncWal(wal: wal), throwsException);
       // A callback racing with cancellation must not re-arm the cleaned-up timer.
       card.emit(_readBegin(5, 1));
       expect(timers, isEmpty);
@@ -349,6 +364,45 @@ void main() {
     expect(card.stopCalls, isEmpty);
   });
 
+  test('a transfer marks the listed recording as syncing for the whole read', () async {
+    final card = _FakeRingDevice(
+        ringInfo: RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444));
+    final local = _FakeLocalSync();
+    final wal = ringWal();
+    final timers = <_ManualTimer>[];
+    final sync = syncWith(local, card, wal, transferTimer: (_, callback) {
+      final timer = _ManualTimer(callback);
+      timers.add(timer);
+      return timer;
+    });
+    addTearDown(sync.stop);
+    addTearDown(card.controller.close);
+    // A recording page opened before setDevice() rebuilt the list holds its own
+    // instance; the transfer UI reads the listed one.
+    final stale = Wal(
+      timerStart: wal.timerStart,
+      codec: wal.codec,
+      seconds: wal.seconds,
+      status: wal.status,
+      storage: wal.storage,
+      device: wal.device,
+      storageTotalBytes: wal.storageTotalBytes,
+    );
+    final transfer = sync.syncWal(wal: stale);
+    await _until(() => card.readCalls.isNotEmpty);
+    expect(wal.isSyncing, isTrue);
+    expect(wal.syncStartedAt, isNotNull);
+    card.emit(_readBegin(5, 1));
+    card.emit(_record());
+    card.emit(_done(0, 6));
+    await transfer;
+    expect(wal.status, WalStatus.synced);
+    expect(wal.isSyncing, isFalse);
+    expect(wal.syncStartedAt, isNull);
+    expect(wal.syncEtaSeconds, isNull);
+    expect(wal.syncSpeedKBps, isNull);
+  });
+
   for (final receivedDone in [false, true]) {
     test('slow custody work preserves accepted bytes (DONE received=$receivedDone)', () async {
       final recordCount = receivedDone ? 2 : 3;
@@ -382,7 +436,7 @@ void main() {
       timers.last.fire();
       if (!receivedDone) await _until(() => card.stopCalls.isNotEmpty);
       custody.firstRecord.complete(false);
-      await transfer;
+      await expectLater(transfer, receivedDone ? completes : throwsException);
       expect(local.added.single.totalFrames, 2, reason: 'both received records survive slow custody work');
       expect(card.stopCalls, hasLength(receivedDone ? 0 : 1));
       expect(card.advanceCalls, receivedDone ? [7] : isEmpty);
@@ -403,7 +457,7 @@ void main() {
     card.emit(_readBegin(9, 1)); // wrong start: requested readStart was 5
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
@@ -424,7 +478,7 @@ void main() {
     card.emit(_record());
     card.emit(_record());
     card.emit(_done(0, 6)); // consumed 2 records but DONE only covers 1
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
@@ -444,7 +498,7 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
@@ -464,7 +518,7 @@ void main() {
     await _until(() => card.statusRequested);
     card.custodyEpochValue = 11;
     card.statusGate!.complete(RingStatus(usedBytes: 0, unreadPackets: 1, freeBytes: 0, rtcValid: 1));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.readCalls, isEmpty);
     expect(card.advanceCalls, isEmpty);
@@ -484,7 +538,7 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(card.stopCalls, isNotEmpty);
@@ -525,11 +579,53 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(3, 6)); // status error
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
     await card.controller.close();
     await sync.stop();
+  });
+
+  test('WalSyncs.syncWal fails a ring transfer that the device ends with an error', () async {
+    final info = RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444);
+    final card = _FakeRingDevice(ringInfo: info);
+    final local = _FakeLocalSync();
+    final wal = ringWal()..fileNum = -1;
+    final syncs = walSyncsWith(local, card, wal);
+
+    // Transfer to Phone reports "Transfer complete" whenever this call returns.
+    final transfer = syncs.syncWal(wal: wal);
+    await _until(() => card.readCalls.isNotEmpty);
+    card.emit(_readBegin(5, 1));
+    card.emit(_record());
+    card.emit(_done(3, 6)); // status error
+    await expectLater(transfer, throwsException);
+
+    expect(card.advanceCalls, isEmpty);
+    expect(wal.status, WalStatus.miss);
+    expect(syncs.ring.isSyncing, isFalse);
+    expect(local.added, hasLength(1), reason: 'the audio that arrived stays saved on the phone');
+    await card.controller.close();
+    await syncs.ring.stop();
+  });
+
+  test('WalSyncs.syncWal rethrows a ring transfer error instead of returning an empty success', () async {
+    final info = RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444);
+    final card = _FakeRingDevice(ringInfo: info)..statusGate = Completer<RingStatus?>();
+    final wal = ringWal()..fileNum = -1;
+    final syncs = walSyncsWith(_FakeLocalSync(), card, wal);
+    final error = StateError('synthetic GATT failure');
+
+    final transfer = syncs.syncWal(wal: wal);
+    await _until(() => card.statusRequested);
+    card.statusGate!.completeError(error);
+    await expectLater(transfer, throwsA(same(error)));
+
+    expect(card.readCalls, isEmpty);
+    expect(wal.status, WalStatus.miss);
+    expect(syncs.ring.isSyncing, isFalse);
+    await card.controller.close();
+    await syncs.ring.stop();
   });
 }

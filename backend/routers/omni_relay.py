@@ -17,6 +17,7 @@ from utils.byok import (
 )
 from utils.async_tasks import drain_tasks
 from utils.executors import db_executor, run_blocking
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 from utils.llm.managed_spend_ledger import (
     DESKTOP_REALTIME_FEATURE,
@@ -39,7 +40,7 @@ import database.user_usage as user_usage_db
 import database.users as users_db
 from config.plan_catalog import plan_uses_overage
 from database._client import get_customer_firestore_client
-from utils.subscription import get_chat_quota_snapshot, is_trial_paywalled
+from utils.subscription import get_chat_quota_snapshot
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -259,18 +260,11 @@ async def omni_relay(websocket: WebSocket):
         await websocket.close(code=1011, reason=f"unsupported provider: {provider}"[:120])
         return
 
-    # Same desktop gate as /v4/listen: Operator/Architect + BYOK pass; un-entitled
-    # desktop users past their trial are paywalled.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop", required_byok_provider=provider):
-        logger.info(f"omni relay paywalled uid={uid}")
-        await websocket.close(code=1008, reason="trial_expired")
-        return
-
     await _relay_entitled(websocket, uid, provider, validated_byok)
 
 
 async def _relay_entitled(websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str]) -> None:
-    """The relay past auth and the paywall: quota admission, then the pumps."""
+    """The relay past auth: quota admission, then the pumps."""
 
     # Monthly free-tier chat quota: realtime turns count as questions, so they
     # must also be blocked past the cap. Exempt only when THIS session will
@@ -295,6 +289,11 @@ async def _relay_entitled(websocket: WebSocket, uid: str, provider: str, validat
             log=logger,
         )
     if not byok_serves_session:
+        if generated_compute_configured() and not await run_blocking(
+            db_executor, generated_compute_allowed, uid, 'omni_relay', allow_byok=False
+        ):
+            await websocket.close(code=1008, reason="quota_exceeded")
+            return
         try:
             snapshot = await run_blocking(db_executor, get_chat_quota_snapshot, uid, "desktop")
         except Exception as exc:
@@ -383,6 +382,10 @@ async def _relay_session(
             nonlocal enrolled
             if payer != "omi":
                 return
+            if generated_compute_configured() and not await run_blocking(
+                db_executor, generated_compute_allowed, uid, 'omni_relay', allow_byok=False
+            ):
+                raise QuotaStop("quota_exceeded")
             try:
                 responses, snapshot = await run_blocking(db_executor, _count_relay_response, uid)
             except Exception as exc:

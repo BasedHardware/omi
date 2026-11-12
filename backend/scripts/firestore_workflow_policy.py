@@ -189,7 +189,14 @@ def has_direct_firestore_mutation(run: str) -> bool:
 READINESS_ACTION = './.github/firestore-workflow/.github/actions/firestore-readiness'
 READINESS_CONTROL_PATH = '.github/firestore-workflow'
 READINESS_CONTROL_REF = '${{ github.workflow_sha }}'
-READINESS_CREDENTIALS = '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
+READINESS_SERVICE_ACCOUNT = 'omi-ci-index-check@based-hardware.iam.gserviceaccount.com'
+READINESS_DEPLOY_PROVIDERS = (
+    'workloadIdentityPools/omi-gha-deploy-prod/providers/github',
+    'workloadIdentityPools/omi-gha-deploy-dev/providers/github',
+    # gcp_notifications_job.yml's own pools, each admitting only that workflow on main.
+    'workloadIdentityPools/omi-gha-notif-prod/providers/github',
+    'workloadIdentityPools/omi-gha-notif-dev/providers/github',
+)
 RUNTIME_PROJECT_INPUT = '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
 QA_PROJECT_INPUT = '${{ env.QA_PROJECT }}'
 QA_DATABASE_INPUT = '${{ env.QA_FIRESTORE_DATABASE }}'
@@ -203,10 +210,8 @@ NON_FIRESTORE_IMAGE_EXCLUSIONS = {
     'parakeet': 'self-hosted STT service with its own source root; queries no Firestore collections',
     'nllb-translation': 'self-hosted translation service with its own source root; queries no Firestore collections',
     'plugins': 'built from the plugins tree, not backend source',
-    'typesense-jit-qa': 'JIT QA repins the upstream Typesense image; it carries no backend query code',
 }
 NON_BACKEND_DOCKERFILE_EXCLUSIONS = {
-    'backend/Dockerfile.jit_qa_typesense': 'JIT QA repins the upstream Typesense image',
     'backend/modal/Dockerfile.finops_unit_cost_job': (
         'batch unit-cost job reads Firestore as a pull input and does not serve a Firestore-backed API'
     ),
@@ -239,7 +244,7 @@ _CUTOVER = re.compile(r'sync_ledger_fence_cutover\.py\s+(?:stage|activate)')
 _CUTOVER_WORKFLOW = 'sync_ledger_fence_cutover.yml'
 _LISTEN_REPLAY = re.compile(r'BACKEND_LISTEN_IMAGE_TAG|\brollback\b')
 _LISTEN_MUTATION_RUN = re.compile(
-    r'deploy-backend-config\.sh|deploy-backend-secrets\.sh|\bhelm\s+(?:upgrade|rollback)\b'
+    r'deploy-backend-config\.sh|deploy-backend-secrets\.sh|\bhelm\s+(?:[^\s]+\s+){0,4}(?:upgrade|rollback)\b'
 )
 _LISTEN_SELECT_STEP = 'Resolve backend-listen image tag'
 _LISTEN_DEPLOY_IF = "${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}"
@@ -776,8 +781,13 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
         errors.append('readiness gate source_sha must be the deployed source, not the workflow commit')
     elif not (re.fullmatch(r'[0-9a-f]{40}', source_sha) or 'sha' in source_sha.lower()):
         errors.append('readiness gate source_sha must resolve to a full source commit SHA')
-    if str(with_block.get('credentials_json', '')) != READINESS_CREDENTIALS:
-        errors.append('readiness gate must receive secrets.GCP_FIRESTORE_READONLY_CREDENTIALS')
+    if str(with_block.get('service_account', '')) != READINESS_SERVICE_ACCOUNT:
+        errors.append('readiness gate must sign in as the omi-ci-index-check@ read-only service account')
+    provider = str(with_block.get('workload_identity_provider', ''))
+    if not any(candidate in provider for candidate in READINESS_DEPLOY_PROVIDERS):
+        errors.append(
+            'readiness gate must authenticate through an omi-gha-deploy or omi-gha-notif workload identity provider'
+        )
     project = str(with_block.get('project_id', ''))
     database = str(with_block.get('database', ''))
     if project == RUNTIME_PROJECT_INPUT:
@@ -994,6 +1004,7 @@ def workflow_gate_violations(
             )
 
     gate_jobs: set[str] = set()
+    listen_mutation_jobs: set[str] = set()
     uncovered: dict[str, list[frozenset[str]]] = {}
     job_if_atoms: dict[str, frozenset | None] = {}
     for job_id, job in jobs.items():
@@ -1035,16 +1046,14 @@ def workflow_gate_violations(
         gate_positions = [(index, scope) for index, _step, scope in valid_gates]
         if is_listen:
             gate_index = next((index for index, _step, scope in valid_gates if scope == {_LISTEN_SOURCE_ATOM}), None)
-            if gate_index is None:
-                errors.append(
-                    f'{name}:{job_id}: listen requires the env.BACKEND_LISTEN_SOURCE_SHA-conditional readiness gate'
-                )
             mutations = [
                 index
                 for index, step in enumerate(expanded)
                 if isinstance(step.get('run'), str) and _LISTEN_MUTATION_RUN.search(step['run'])
             ]
-            if mutations and (gate_index is None or gate_index > min(mutations)):
+            if mutations:
+                listen_mutation_jobs.add(job_id)
+            if mutations and gate_index is not None and gate_index > min(mutations):
                 errors.append(
                     f'{name}:{job_id}: the conditional readiness gate must run before any '
                     'backend config, secret, or Helm mutation step'
@@ -1077,6 +1086,12 @@ def workflow_gate_violations(
                     protected.add(job_id)
                     changed = True
                     break
+
+    for job_id in listen_mutation_jobs - protected:
+        errors.append(
+            f'{name}:{job_id}: listen requires the env.BACKEND_LISTEN_SOURCE_SHA-conditional readiness gate '
+            'in this job or a successful required job'
+        )
 
     for job_id, names_list in uncovered.items():
         if job_id not in gate_jobs and job_id in protected:

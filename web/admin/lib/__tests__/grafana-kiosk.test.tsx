@@ -64,18 +64,8 @@ it("shows the honest notice over a stale embed when renewal fails", () => {
   expect(screen.getByText("TV dashboard unavailable")).toBeTruthy();
 });
 
-it("keeps the legacy board only while it is open anonymously", () => {
-  state.embed = { enabled: false, legacy: true };
-  const { container } = render(
-    createElement(GrafanaKiosk, { token: "t".repeat(43) })
-  );
-  expect(container.querySelector("iframe")?.getAttribute("src")).toContain(
-    "/grafana/d/"
-  );
-});
-
-it("shows the notice when legacy is closed and the flag is off", () => {
-  state.embed = { enabled: false, legacy: false };
+it("shows the notice when the Business embed is disabled", () => {
+  state.embed = { enabled: false };
   const { container } = render(
     createElement(GrafanaKiosk, { token: "t".repeat(43) })
   );

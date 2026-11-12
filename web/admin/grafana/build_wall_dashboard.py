@@ -20,8 +20,16 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# Variable-margin goal, shared with lib/wall-cost.ts (VARIABLE_MARGIN_TARGET).
+MARGIN_GOAL_PCT = json.loads((HERE.parent / "lib/omi-tv-goals.json").read_text())["variableMarginTargetPct"]
+GOAL_COST = f"{MARGIN_GOAL_PCT:g}% target cost"
 DS = {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"}
 BASE = "http://127.0.0.1:8899/api/omi/stats/wall/series"
+# Uptime is served by the Grafana pod's stats sidecar from fixed PromQL
+# (backend/charts/monitoring/grafana/stats_proxy.py), not by the admin API.
+UPTIME_URL = "http://127.0.0.1:8899/api/omi/stats/uptime"
+JOURNEYS = {"Live capture": "#d55181", "Conversation saved": "#008300", "Chat answer": "#c4bdf4",
+            "Push-to-talk": "#a8a69e"}  # slots 6, 7, lilac, neutral: never a platform hue
 COLUMNS = ["Growth", "Activation", "Retention", "Revenue", "Health"]
 
 # Reference categorical palette, dark-surface steps (dataviz palette.md). Platform
@@ -48,9 +56,10 @@ FREE = "Free $/day"
 # a board test keeps them equal). The API flags them stale after 35 days.
 ESTIMATES_AS_OF = "2026-10-16"
 COST = {"GCP": "#5c6b80", "Vertex LLM": "#8494ab", "OpenAI": "#aab6c6", "Anthropic": "#cdd5df"}
-# Estimated lines are drawn apart from invoiced ones: sand, low opacity.
+# Estimated lines are drawn apart from measured/invoiced ones: sand, low opacity.
 ESTIMATE_OPACITY = 55  # invoiced bars use 88
-ESTIMATE = {"STT est.": "#d8b46a", "SaaS est.": "#eedcb3"}  # sand, not the MCP-only yellow
+ESTIMATE = {"STT est.": "#d8b46a", "SaaS est.": "#eedcb3", "Modulate modelled": "#e3c98a"}  # sand, not the MCP-only yellow
+MEASURED = {"STT measured": "#aab6c6", "STT cash (Mercury)": "#bfc9d6", "SaaS measured (Mercury)": "#8494ab"}
 GOOD_MARK, BAD_MARK = "​", "⁠"  # tone markers set by the series API
 # Cohort curve: one neutral ramp, oldest dimmest → newest brightest and thickest
 # (no platform hue: the curve is not a platform split). Index = cohort age.
@@ -71,8 +80,9 @@ STAT_VALUE_SIZE, STAT_LABEL_SIZE = 26, 13
 
 
 def target(series, frame, columns, ref="A"):
+    url = UPTIME_URL if series == "uptime" else f"{BASE}/{series}"
     return {"refId": ref, "datasource": DS, "type": "json", "source": "url", "format": "table",
-            "parser": "backend", "url": f"{BASE}/{series}", "url_options": {"method": "GET"},
+            "parser": "backend", "url": url, "url_options": {"method": "GET"},
             "root_selector": f"frames.{frame}",
             "columns": [{"selector": s, "text": t, "type": ty} for s, t, ty in columns]}
 
@@ -98,6 +108,25 @@ def prop(name, *props):
 def hidden(name):
     """In the tooltip only (counts behind a rate, an unplotted total)."""
     return prop(name, ("custom.hideFrom", {"legend": True, "tooltip": False, "viz": True}))
+
+
+def short_label(override, label):
+    """Shorter legend label for a series' own override, so a legend beside the plot stays narrow."""
+    for prop_ in override["properties"]:
+        if prop_["id"] == "displayName":
+            prop_["value"] = label
+    return override
+
+
+# Legend labels for the cost stack, short enough for a legend beside a 4-column plot.
+STACK_LABELS = {"GCP": "GCP", "Vertex LLM": "Vertex", "OpenAI": "OpenAI", "Anthropic": "Anthropic",
+                "STT measured": "STT meas.", "STT cash (Mercury)": "STT cash", "SaaS measured (Mercury)": "SaaS meas.",
+                "STT est.": "STT est.", "SaaS est.": "SaaS est.", "Modulate modelled": "Modulate"}
+
+
+def legend_right(panel):
+    """The legend beside the plot, not a list under it: a short panel has no room for the list."""
+    panel["options"]["legend"]["placement"] = "right"
 
 
 def dashed(name, hex_):
@@ -207,7 +236,7 @@ def delta_strip(column, keys, description):
 def data_through():
     """The wall's single freshness line (headline `through` frame)."""
     return {"type": "stat", "title": "", "transparent": True, "datasource": DS,
-            "description": "Oldest data-through day (UTC) across every chart on the wall, and how many series are still filling; the wall shows stale-but-real data rather than waiting. Sources without a defensible read path (crash-free, answer ratings, payer churn, activated → paid, gross margin) stay off the wall; the full classified reasons are in /api/omi/stats/wall/series/headline.",
+            "description": "Day before the oldest source read behind the wall's charts (UTC), how many series are still filling, and how many headline stats are a retained earlier value because their source failed; the wall shows stale-but-real data rather than waiting. A chart's own last point can be older (cost settles D−2; Margin by plan has its own line). Sources without a defensible read path (crash-free, answer ratings, payer churn, activated → paid, gross margin) stay off the wall; the full classified reasons are in /api/omi/stats/wall/series/headline.",
             "targets": [target("headline", "through", [("text", "Data through", "string")])],
             "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": MUTED}, "noValue": "Data through —"},
                             "overrides": []},
@@ -246,10 +275,20 @@ USERS = ("Users are deduplicated persons with qualified use (v2 definitions): a 
 QUALIFIED_MAU = ("MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event "
                  "PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. ")
 ALL_IN = ("All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), "
-          "Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is "
-          f"a $5.3K/month estimate from the Soniox console (estimate as of {ESTIMATES_AS_OF}; the FinOps "
-          f"stt_vendor_low model overstated it ~2×). SaaS is a fixed $4.8K/month estimate as of {ESTIMATES_AS_OF}. "
-          "An estimate older than 35 days is marked stale under Margin by plan. ")
+          "Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month "
+          f"Soniox-console estimate as of {ESTIMATES_AS_OF} until a measured FinOps line exists (the FinOps "
+          f"stt_vendor_low model overstated it ~2×). SaaS uses the dated fixed $4.8K/month estimate as of "
+          f"{ESTIMATES_AS_OF} until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). "
+          "Measured lines are labeled by source; "
+          "an estimate older than 35 days is marked stale under Margin by plan. ")
+
+
+UPTIME = ("Uptime: of every settled attempt in a core journey over the last 7 days, the share that went the "
+          "way it should (attempt-weighted, so busy journeys weigh more). Journeys: live capture (an audio "
+          "session not cut by a queue wait or application error), conversation saved (finalization job "
+          "success), chat answer (server chat_response) and cloud push-to-talk. Cancelled, degraded and "
+          "unknown outcomes are not settled. Same counters as Omi Core Features, read from in-cluster "
+          "Prometheus by the board's own sidecar. Change below: percentage points vs the prior 7 days. ")
 
 
 def columns():
@@ -327,13 +366,13 @@ def columns():
         stat("Revenue", "MRR: live Stripe Omi-plan book (change = same-source FinOps 7-day change). Per user = MRR ÷ monthly users (qualified MAU; change vs prior week). Hardware: Shopify net device sales, last complete Mon–Sun week vs the prior week. Relative % change.",
              [("headline", "mrr", "MRR", "currencyUSD", 1), ("headline", "arpmau", "Per user", "currencyUSD", 2),
               ("headline", "hardware", "Hardware", "currencyUSD", 0)]),
-        (7, chart("MRR by plan",
+        (5, chart("MRR by plan",
                    "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
                    [target("revenue", "mrr", [DATE, *[(k, n, "number") for k, n in PLAN_NAMES.items()],
                                               ("other", "Other", "number")])],
                    unit="currencyUSD", stack=True, time_from="40d",
-                   overrides=[color(n, h) for n, h in PLANS.items()])),
-        (5, chart("Shopify sales per week",
+                   overrides=[color(n, h) for n, h in PLANS.items()], extra=legend_right)),
+        (6, chart("Shopify sales per week",
                    "Mon–Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
                    [target("revenue", "hardware", [("date", "Week ending", "timestamp"),
                                                    ("hardwareUsd", "Hardware", "number"),
@@ -343,38 +382,55 @@ def columns():
                    overrides=[color("Hardware", REVENUE), color("Plan prepay (cash)", MUTED),
                               hidden("Devices"), prop("Devices", ("unit", "short"))],
                    extra=barchart_options(time_x=True))),
-        (10, margin_by_plan()),
-        (1, margin_status()),
+        (4, variable_margin_stat()),
+        (8, margin_by_plan()),
     ]
     health = [
-        stat("Health", ALL_IN + "Cost / day is the settled day D−2; cost / user is the 30-day all-in cost ÷ monthly users. " + QUALIFIED_MAU + "Relative % change; up is bad.",
-             [("headline", "netCost", "Cost / day", "currencyUSD", 2),
-              ("headline", "costPerMau", "Cost / user", "currencyUSD", 2)]),
+        stat("Health", ALL_IN + "All-in/day: the settled day D−2, every line of the all-in stack above (it excludes the margin-only lines OpenRouter and Pinecone); relative % change, up is bad. "
+                       + UPTIME,
+             [("headline", "netCost", "All-in/day", "currencyUSD", 2),
+              ("uptime", "headline", "Uptime", "percent", 1)]),
         (12, chart("Cost vs revenue",
-                   ALL_IN + "Settled through D−2. Invoiced lines are the solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are the sand-colored segments. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR ÷ 30.4.",
+                   ALL_IN + "Settled through D−2. Measured/invoiced lines are solid blue-greys: STT measured is the Soniox prepaid-balance delta plus measured Deepgram usage only; STT cash is Mercury vendor cash; measured SaaS (Mercury) is the daily SaaS aggregate. Modulate modelled (measured volume × committed price), STT est. (Soniox console) and SaaS est. (fixed) are sand-colored because they are not measured. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR ÷ 30.4.",
                    [target("health", "cost", [DATE, ("gcp", "GCP", "number"),
                                               ("vertexLlm", "Vertex LLM", "number"),
                                               ("openai", "OpenAI", "number"), ("anthropic", "Anthropic", "number"),
-                                              ("stt", "STT est.", "number"),
-                                              ("saas", "SaaS est.", "number"),
+                                              ("sttMeasuredUsd", "STT measured", "number"),
+                                              ("sttCashUsd", "STT cash (Mercury)", "number"),
+                                              ("sttModulateModelledUsd", "Modulate modelled", "number"),
+                                              ("sttEstimateUsd", "STT est.", "number"),
+                                              ("saasMeasuredUsd", "SaaS measured (Mercury)", "number"),
+                                              ("saasEstimateUsd", "SaaS est.", "number"),
                                               ("revenuePerDay", "Revenue", "number"),
                                               ("oneTimeExcluded", "One-time excluded", "number"),
                                               ("total", "All-in total", "number")])],
+                   # Legend under the plot, not beside it: Health is a 4-column
+                   # panel, and a right-hand legend left the 35 days ~100px wide.
                    unit="currencyUSD", draw="bars", stack=True, time_from="35d",
-                   overrides=[*[color(n, h) for n, h in COST.items()],
-                              *[estimate(n, h) for n, h in ESTIMATE.items()],
+                   overrides=[*[short_label(color(n, h), STACK_LABELS[n]) for n, h in COST.items()],
+                              *[short_label(color(n, h), STACK_LABELS[n]) for n, h in MEASURED.items()],
+                              *[short_label(estimate(n, h), STACK_LABELS[n]) for n, h in ESTIMATE.items()],
                               line("Revenue", REVENUE, 3),
                               hidden("One-time excluded"), hidden("All-in total")])),
-        (10, chart("Unit economics",
-                   "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR ÷ that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). Cost = all-in 30-day cost through D−2 ÷ the same window's monthly users (the latest point is the Cost / user stat). The gap between the lines is the per-user margin. A day with no book snapshot breaks the line rather than being drawn. " + QUALIFIED_MAU,
-                   [target("revenue", "arpmau", [DATE, ("arpmau", "Revenue / user", "number")], "A"),
-                    target("health", "costPerMau", [DATE, ("costPerMau", "Cost / user", "number")], "B")],
-                   unit="currencyUSD", decimals=2, time_from="35d", soft_min=None,  # the crossover is the story
-                   overrides=[color("Revenue / user", REVENUE), color("Cost / user", COST["OpenAI"])],
-                   extra=disconnect_after(2))),
+        (10, chart("Uptime by journey",
+                   UPTIME + "One point per UTC day (that day's settled attempts); the white line is all journeys "
+                   "together. A journey with no settled attempts that day draws nothing, not 0%. Attempts and "
+                   "failures for the last 7 days are in the Health stat's source frame `journeys`.",
+                   [target("uptime", "daily", [DATE, ("all", "All journeys", "number"),
+                                               ("capture", "Live capture", "number"),
+                                               ("saved", "Conversation saved", "number"),
+                                               ("chat", "Chat answer", "number"),
+                                               ("ptt", "Push-to-talk", "number")])],
+                   unit="percent", decimals=1, time_from="35d", soft_min=None,
+                   overrides=[prop("All journeys", ("displayName", "All journeys"), ("custom.lineWidth", 3)),
+                              *[color(n, h) for n, h in JOURNEYS.items()]],
+                   extra=disconnect_after(1.5))),
         (1, data_through()),
     ]
     return dict(zip(COLUMNS, [growth, activation, retention, revenue, health]))
+
+
+MARGIN_EMPTY = "No day in the last 35 has both plan cost and revenue"
 
 
 def margin_by_plan():
@@ -397,6 +453,9 @@ def margin_by_plan():
 
     def centre(panel):
         panel["fieldConfig"]["defaults"]["custom"]["axisCenteredZero"] = True
+        # An empty frame is a real answer here (no day in the window has both a
+        # settled plan cost and a revenue book), not a load still in flight.
+        panel["fieldConfig"]["defaults"]["noValue"] = MARGIN_EMPTY
         disconnect_after(1.5)(panel)  # any missing day is a gap (e.g. no 09-29 book)
 
     return chart("Margin by plan",
@@ -404,7 +463,7 @@ def margin_by_plan():
                  "fully-loaded plan cost + the shared pool (TV all-in − FinOps: BigQuery, STT, SaaS) split by each "
                  "plan's cost-active user-days. Lines: margin % (left); Free: −$/day bars (right); $/day and the "
                  "unattributed row in the tooltip. FinOps plan cost settles ~3 days back, so this chart ends earlier "
-                 "than the wall (line below); a day without both cost and revenue is a gap. Caveats: STT is not "
+                 "than the wall (its data-through day is the marginStatus frame of /api/omi/stats/wall/series/health); a day without both cost and revenue is a gap. Caveats: STT is not "
                  "invoiced per plan (vendor cost is pooled; GCP audio is allocated by speech seconds), and plan "
                  "membership comes from a point-in-time snapshot.",
                  [target("health", "marginByPlan", [DATE, *pct, ("basicMargin", FREE, "number"), *money])],
@@ -424,14 +483,42 @@ def tooltip_only(name):
                 ("custom.hideFrom", {"legend": True, "tooltip": False, "viz": False}))
 
 
-def margin_status():
-    """Margin by plan's own data-through day and how STT/SaaS were priced."""
-    panel = data_through()
-    panel["description"] = ("Margin by plan's last day with both a settled FinOps plan cost and a book snapshot, "
-                            "and the date the STT and SaaS estimates were read (\"stale\" after 35 days; "
-                            "\"STT measured\" once FinOps carries a vendor line).")
-    panel["targets"] = [target("health", "marginStatus", [("text", "Margin status", "string")])]
-    panel["fieldConfig"]["defaults"]["noValue"] = "Margin through —"
+VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR − real monthly cost) ÷ MRR. "
+                   "Real monthly cost = the trailing-7-day run rate (× 30.44) of GCP net of credits with only the "
+                   "prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, "
+                   "Soniox, Modulate (Mercury cash), OpenRouter and Pinecone (configured, dated estimates) and Stripe "
+                   "fees. The development project's GCP is excluded. It excludes "
+                   "marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). "
+                   "MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure "
+                   "and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for "
+                   "today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D−2 beneath it; "
+                   "the sparkline is the daily trailing-7d series over 60 days. "
+                   f"Goal {MARGIN_GOAL_PCT:g}%: green at or above, red below. When the latest day has no MRR book snapshot the "
+                   "headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame "
+                   "names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
+
+
+def variable_margin_stat():
+    """The tile's big number: the latest margin % with the 60-day sparkline
+    behind it (Grafana draws the series history in the stat's background).
+    The reducer is `last`, NOT `lastNotNull`: a day without an MRR book
+    snapshot nulls that day's margin, and the headline must show that absence
+    (the explicit no-value marker) rather than an older non-null margin."""
+    panel = {"type": "stat", "title": "Variable margin (live est.)", "description": VARIABLE_MARGIN, "datasource": DS,
+             "targets": [target("health", "variableMargin", [("marginPct", "Variable margin", "number")])],
+             "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "no live est.",
+                                          # Below the goal is red; at/above is green.
+                                          "color": {"mode": "thresholds"},
+                                          "thresholds": {"mode": "absolute", "steps": [
+                                              {"color": STATUS_BAD, "value": None},
+                                              {"color": STATUS_GOOD, "value": MARGIN_GOAL_PCT}]}},
+                             "overrides": []},
+             "options": {"reduceOptions": {"calcs": ["last"], "fields": "", "values": False},
+                         "textMode": "value", "colorMode": "value", "graphMode": "area",
+                         "justifyMode": "center", "orientation": "vertical", "wideLayout": False,
+                         "showPercentChange": False,
+                         "text": {"titleSize": STAT_LABEL_SIZE, "valueSize": STAT_VALUE_SIZE}},
+             "timeFrom": "62d", "hideTimeOverride": True}
     return panel
 
 
@@ -498,31 +585,80 @@ def curve_options(panel):
     d["noValue"] = "Cohorts still filling"  # an empty frame, not "Cannot visualize data"
 
 
+def funnel_row():
+    """The funnel board: a full-width row that fills the 1920×1080 kiosk, in its own rotation."""
+    proxy = ("Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as "
+             "organic, and pairing is itself an early success, so the gap between the two is overstated. ")
+    series_colors = [color("Device", MAGENTA), color("Organic", NEUTRAL)]
+    funnel = chart("Funnel · device vs organic",
+                   proxy + "Latest matured weekly new-user cohort, except Kept, which uses the newest cohort old "
+                   "enough to measure it. Onboarded counts only people who arrived on iOS, Android or Mac, the "
+                   "clients that report it. Install is not shown because PostHog sees nobody before sign-up; first "
+                   "summary is not shown because it has no event.",
+                   [target("activation", "funnel", [("step", "Step", "string"), ("Device", "Device", "number"),
+                                                    ("Organic", "Organic", "number")])],
+                   unit="percent", decimals=0, kind="barchart", overrides=series_colors,
+                   extra=barchart_options(max_value=100, value_size=13))
+    weekly = chart("Activated · device vs organic",
+                   proxy + "Week-one activation for each matured weekly cohort, dated by its last day.",
+                   [target("activation", "funnelWeekly", [DATE, ("Device", "Device", "number"),
+                                                          ("Organic", "Organic", "number")])],
+                   unit="percent", decimals=0, soft_min=0, time_from="60d", overrides=series_colors)
+    platforms = chart("Funnel by platform",
+                      proxy + "Week-one activation in the latest matured weekly new-user cohort, by the platform users "
+                      "first arrived on, with its size in the label. Small platforms move a lot week to week.",
+                      [target("activation", "funnelPlatforms", [("platform", "Platform", "string"),
+                                                                ("Device", "Device", "number"),
+                                                                ("Organic", "Organic", "number")])],
+                      unit="percent", decimals=0, kind="barchart", overrides=series_colors,
+                      extra=barchart_options(horizontal=True, max_value=100, value_size=13))
+    return [(11, funnel), (7, weekly), (6, platforms)]
+
+
 def build_wall_board():
     panels = []
     for name, items in columns().items():
         x, w = GEOMETRY[name]
         head, *charts = items
-        keys = [t["root_selector"].split(".")[-1] for t in head["targets"]]
+        keys = [t["root_selector"].split(".")[-1] for t in head["targets"] if t["url"] != UPTIME_URL]
+        strip = delta_strip(name, keys, f"{name}: change vs the prior period, from the series API.")
+        if len(keys) < len(head["targets"]):  # Uptime's change comes with Uptime, from the sidecar
+            strip["targets"].append(target("uptime", "strip", [("uptime", "uptime", "string")], "B"))
+            strip["transformations"] = [organize(keys + ["uptime"])]
         panels.append({**head, "gridPos": {"x": x, "y": 0, "w": w, "h": STAT_H}})
-        panels.append({**delta_strip(name, keys, f"{name}: change vs the prior period, from the series API."),
-                       "gridPos": {"x": x, "y": STAT_H, "w": w, "h": STRIP_H}})
+        panels.append({**strip, "gridPos": {"x": x, "y": STAT_H, "w": w, "h": STRIP_H}})
         y = STAT_H + STRIP_H
         for h, panel in charts:
             panels.append({**panel, "gridPos": {"x": x, "y": y, "w": w, "h": h}})
             y += h
         assert y == WALL_H, (name, y)  # every column fills the TV exactly, no scroll
+    return _board("omi-tv-v2", "Omi TV · v3", panels,
+                  "Growth → Activation → Retention → Revenue → Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. The data-through day is the line under Health.")
+
+
+def build_funnel_board():
+    """Funnel and cohorts in their own rotation: three charts that fill the kiosk, no scroll."""
+    panels, x = [], 0
+    for w, panel in funnel_row():
+        panels.append({**panel, "gridPos": {"x": x, "y": 0, "w": w, "h": WALL_H}})
+        x += w
+    assert x == 24
+    return _board("omi-tv-funnel", "Omi TV · funnel", panels,
+                  "Device vs organic funnel, weekly activation and platform split. Its own rotation board: it fills the 1920×1080 kiosk.")
+
+
+def _board(uid, title, panels, description):
     for i, panel in enumerate(panels, 1):
         panel["id"] = i
-    return {"uid": "omi-tv-v2", "title": "Omi TV · v3", "schemaVersion": 39, "version": 1, "timezone": "utc",
+    return {"uid": uid, "title": title, "schemaVersion": 39, "version": 1, "timezone": "utc",
             "refresh": "1m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
             "time": {"from": "now-182d", "to": "now"}, "timepicker": {"hidden": True}, "templating": {"list": []},
-            "annotations": {"list": []}, "panels": panels, "links": [],
-            "description": "Growth → Activation → Retention → Revenue → Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. The data-through day is the line under Health."}
+            "annotations": {"list": []}, "panels": panels, "links": [], "description": description}
 
 
 def write_wall_board():
-    (HERE / "dashboards/omi-tv-v2.json").write_text(json.dumps(build_wall_board(), indent=2) + "\n")
+    for uid, board in (("omi-tv-v2", build_wall_board()), ("omi-tv-funnel", build_funnel_board())):
+        (HERE / f"dashboards/{uid}.json").write_text(json.dumps(board, indent=2) + "\n")
 
 
 if __name__ == "__main__":

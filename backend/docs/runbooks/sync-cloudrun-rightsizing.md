@@ -28,9 +28,18 @@ The supplied `backend-sync-backfill-container-memory-utilizations.json` has dail
 
 At concurrency 3, 4 GiB leaves at least 2.24 GiB relative to that sampled upper bucket. 2 GiB leaves only 0.24 GiB (12%); reject the 2-GiB rollout. Minute samples do not rule out transient decode/PCM copies, downloaded audio or memory-backed temporary files. At concurrency 6, a deliberately conservative doubling of the complete 1.76-GiB sampled footprint is 3.52 GiB: just 0.48 GiB (12%) under 4 GiB, before unsampled bursts. This is a risk bound, not a load-test result; do not approve 4 GiB/concurrency 6 from these aggregates alone. No customer audio was read or replayed.
 
+2026-11-02 re-measure (ro-prod, same 1% histogram method, 1-min points per revision): at concurrency 6 the per-instance upper bound was 1.52 GiB on 10-22 (8 GiB limit; about 1h at 1.2–1.52 GiB across 16–22 instances, a backlog drain) and at most 1.04 GiB every day after the 10-24 move to 4 GiB. Revisions before 10-19 are past the revision listing, so the measured window is 10-19..11-02. 2 GiB would leave 1.32× over that window's max and 1.14× over the Oct 1 1.76-GiB sample, so prod backfill goes 4 → **3 GiB**: 2.0× over 1.52, 1.7× over 1.76. A memory termination, or a utilization max above 75% of 3 GiB during a drain, means roll back to 4 GiB.
+
 Memory-only rollout: backfill 8 → 4 GiB, keep 2 vCPU, concurrency 3, min/max 3/18 and request billing. Estimated saving `4 * $0.0000025 * 3600 * (180.8–269.1 h/day) * 30` = **$195–291/month** active memory, with additional idle saving possible. Compare a complete day with baseline for memory upper-tail, instance aborts/restarts, retries, job latency and queue age. Roll back the setting to 8 GiB or the previous serving revision through the normal path on any memory termination or persistent latency/retry regression.
 
 ## Concurrency and dispatch
+
+Production `backend-integration` deploys declare `--max-instances=35` in
+`.github/actions/deploy-backend-stack/action.yml` (David, 2026-11-05 16:01Z;
+coordinator `ac3408`). Hold only while CPU p50 stays below approximately 0.75,
+queues fall, and drain stays near 11 rows/s; otherwise restore 50. Non-production
+retains 50. Rollback: set the live service to `--max-instances=50` and restore the
+production deploy declaration to 50 so the next deploy preserves the rollback.
 
 Updated 2026-10-15 for Train 1: `.github/actions/sync-backfill-lifecycle/action.yml` sets revision max 40 **and** service max 40, concurrency 6, CPU 2, memory 8 GiB, min 3. Both queue create/update branches set 90 concurrent dispatches / 15 per second,5–60s retry backoff. This is source configuration; verify the applied revision, traffic, worker capacity and queue separately. The earlier 40/10 and concurrency 3 sizing proposals below are historical, not current settings.
 
@@ -51,10 +60,9 @@ Do not combine this train with 4 GiB memory, concurrency >6, lower minima, GPU a
 | Sync reprocess webhook | `backend/utils/sync/pipeline.py:1085` | Submitted, not awaited; durable task or join within request. |
 | Conversation vectors, action items, goal updates and webhook | `backend/utils/conversations/process_conversation.py:3291`, `:3293`, `:3305`, `:3310`, `:3342` | Conditional non-reprocess effects outlive parent; reprocess paths await some writes, but vectors/webhooks and shared routes still need audit/durable dispatch. |
 | Conversation integration auto-sync | `backend/utils/conversations/process_conversation.py:2246`, `:2251` | Fire-and-forget integrations; queue separately. |
-| Relevance/owner/transcription shadows | `backend/utils/conversations/jev_shadow.py:138`, `backend/utils/conversations/transcription_shadow.py:125` | Flag-dependent background work; disable on request-billed worker or use durable jobs. |
+| Transcription shadow | `backend/utils/conversations/transcription_shadow.py:125` | Flag-dependent background work; disable on request-billed worker or use durable jobs. |
 | Live STT fleet-health refresh and result/bench writes | `backend/main.py:356`, `backend/utils/stt/live_health.py:394`, `:545`, `:750` | Recurring/background; separate service role or scheduled durable refresh. |
 | Batch-pressure refresh | `backend/main.py:357`, `backend/utils/stt/batch_pressure.py:73` | Periodic async task, env-dependent; move/disable by service role. |
-| Soniox runway poller | `backend/main.py:359` | Conditional recurring task; disable on sync role or move owner. |
 | Executor health loop | `backend/main.py:362` | Periodic reporting; use request-bound metrics or worker role gating. |
 | Startup deletion, finalization, stale processing/in-progress, BYOK and meeting receipt reconciles | `backend/main.py:365`, `:372`, `:376`, `:380`, `:384`, `:388` | Startup tasks are scheduled without waiting and can exceed startup CPU window; move to durable scheduler/worker. |
 | Periodic deletion/finalization reconciles | `backend/main.py:371`, `:392` | Recurring repair work; move to durable scheduled requests first. |

@@ -42,6 +42,8 @@ run_hermetic() {
     --source-only \
     --runtime-env deploy/runtime_env.yaml \
     --contract deploy/frame-request-bucket-contract.json
+  python3 scripts/validate_object_lake_bucket_contract.py --source-only \
+    --runtime-env deploy/runtime_env.yaml --contract deploy/storage-lifecycle/lake-forward.json
   python3 ../.github/scripts/check_backend_deploy_source_admission.py
   python3 ../.github/scripts/test_check_backend_deploy_source_admission.py
   python3 scripts/check_mcp_oauth_deploy_contract.py
@@ -52,6 +54,7 @@ run_hermetic() {
     tests/unit/test_repair_cloud_run_traffic.py \
     tests/unit/test_cloud_run_traffic_snapshot.py \
     tests/unit/test_preflight_cloud_run_deploy.py \
+    tests/unit/test_check_cloud_run_env_drift.py \
     tests/unit/test_deploy_status_report.py \
     tests/unit/test_verify_backend_release_vector.py \
     tests/unit/test_mcp_oauth_deploy_contract.py -q

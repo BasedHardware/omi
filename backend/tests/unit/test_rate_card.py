@@ -48,7 +48,7 @@ def test_v1_bytes_are_immutable_and_loading_derivation_matches(monkeypatch):
 
 def test_v2_is_hash_pinned_selectable_and_keeps_v1_prices_separate(monkeypatch):
     raw = Path(__file__).parents[2].joinpath('config/rate_card_v2.json').read_bytes()
-    expected_sha = '292e2326d4d5009160cba7d0cb9921f9de8df3c0b6682af8da17fe29dc1e6b56'
+    expected_sha = '1243f8029abe7e4c2378cb0ec666ea993379cf5598b8a6e7bc4309f65c7e956f'
     assert hashlib.sha256(raw).hexdigest() == expected_sha
     from config.rate_card_versions import RATE_CARD_SHA256
 
@@ -57,14 +57,16 @@ def test_v2_is_hash_pinned_selectable_and_keeps_v1_prices_separate(monkeypatch):
     assert get_rate_card_version() == 'v2'
     card = get_rate_card()
     assert card['version'] == 'v2'
+    # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
     assert card['models']['gemini:gemini-2.5-flash'] == {
         'model': 'gemini-2.5-flash',
         'provider': 'gemini',
-        'input_micro_usd_per_million': 540000,
-        'cached_input_micro_usd_per_million': 54000,
-        'output_micro_usd_per_million': 4500000,
-        'source': 'backend/llm_gateway/config/cost_rate_cards.yaml@vertex.gemini-2.5-flash.2026-10-15',
-        'observed': '2026-10-15',
+        'input_micro_usd_per_million': 300000,
+        'cached_input_micro_usd_per_million': 30000,
+        'output_micro_usd_per_million': 2500000,
+        'source': 'https://cloud.google.com/vertex-ai/generative-ai/pricing',
+        'observed': '2026-10-18',
         'status': 'card',
     }
     assert card['models']['gemini:gemini-3.8-flash']['input_micro_usd_per_million'] == 1500000
@@ -80,15 +82,32 @@ def test_v2_is_hash_pinned_selectable_and_keeps_v1_prices_separate(monkeypatch):
         if model_key != 'gemini:gemini-2.5-flash':
             assert card['models'][model_key] == model
 
-    flash_event = event(
-        provider='gemini',
-        configured_model='gemini-2.5-flash',
-        uncached_input_tokens=1_000_000,
-        output_tokens=0,
-    )
-    v1_units = price_llm_attempt(flash_event, rate_card_version='v1')['micro_units']
-    v2_units = price_llm_attempt(flash_event)['micro_units']
-    assert 1.79 < v2_units / v1_units < 1.81
+    # The corrected v2 Flash card carries the same Standard rates as v1, so
+    # identical events must price identically across the two card versions.
+    for flash_event in (
+        event(
+            provider='gemini',
+            configured_model='gemini-2.5-flash',
+            uncached_input_tokens=1_000_000,
+            output_tokens=0,
+        ),
+        event(
+            provider='gemini',
+            configured_model='gemini-2.5-flash',
+            uncached_input_tokens=0,
+            cached_input_tokens=1_000_000,
+            output_tokens=0,
+        ),
+        event(
+            provider='gemini',
+            configured_model='gemini-2.5-flash',
+            uncached_input_tokens=0,
+            output_tokens=1_000_000,
+        ),
+    ):
+        v1_units = price_llm_attempt(flash_event, rate_card_version='v1')['micro_units']
+        v2_units = price_llm_attempt(flash_event)['micro_units']
+        assert v1_units == v2_units
     assert free_budget_units('v1') == free_budget_units('v2') == 4853
     assert budget_units({'budget': {'kind': 'units', 'value': 16360}}, rate_card_version='v2') == 16360
 
@@ -364,3 +383,17 @@ def test_self_hosted_deepgram_retains_unknown_compute_proxy():
     assert 'provider_unknown' in priced['reasons']
     assert get_rate_card()['transcription']['unknown']['micro_usd_per_hour'] == 258000
     assert get_rate_card()['transcription']['deepgram']['micro_usd_per_hour'] == 468000
+
+
+def test_recording_v2_identity_and_detached_copy():
+    from config.rate_card import recording_rate_card
+    from config.rate_card_versions import RATE_CARD_SHA256
+    from pathlib import Path
+    import hashlib
+
+    raw = (Path(__file__).parents[2] / 'config/rate_card_v2.json').read_bytes()
+    expected = '1243f8029abe7e4c2378cb0ec666ea993379cf5598b8a6e7bc4309f65c7e956f'
+    assert hashlib.sha256(raw).hexdigest() == RATE_CARD_SHA256['v2'] == expected
+    detached = recording_rate_card()
+    detached['recording']['units_per_recorded_hour']['batch'] = '1'
+    assert recording_rate_card()['recording']['units_per_recorded_hour']['batch'] == '130'

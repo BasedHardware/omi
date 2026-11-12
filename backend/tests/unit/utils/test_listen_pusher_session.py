@@ -3,6 +3,8 @@ import json
 import logging
 import struct
 import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from websockets.exceptions import ConnectionClosedError
@@ -19,6 +21,7 @@ from utils.listen_pusher_session import (
     ListenPusherSessionDeps,
 )
 from utils.pusher_protocol import audio_timeline_ack_frame
+from utils.other.live_audio_archive import LiveAudioArchive
 
 
 class FakePusherWebSocket:
@@ -268,7 +271,8 @@ async def test_disconnected_conversation_buffer_respects_max_pending_requests():
     assert list(session.pending_conversation_requests.keys()) == ["conv-2", "conv-3"]
 
 
-def test_bounded_audio_and_transcript_buffers():
+def test_emergency_legacy_bounded_audio_and_transcript_buffers(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     session = make_session(config_overrides={"max_segment_buffer_size": 2, "max_audio_buffer_size": 5})
 
     session.transcript_send([{"id": "seg-1"}, {"id": "seg-2"}, {"id": "seg-3"}])
@@ -284,6 +288,91 @@ def test_bounded_audio_and_transcript_buffers():
     session.audio_bytes_send(b"123456789", received_at=3.0)
     assert b"".join(run.data for run in session.audio_runs) == b"56789"
     assert session.audio_total_size == 5
+
+
+def test_default_audio_pressure_retains_prefix_and_unacknowledged_input(monkeypatch):
+    monkeypatch.delenv('AUDIO_DURABLE_OUTBOX_ENABLED', raising=False)
+    session = make_session(config_overrides={'max_audio_buffer_size': 5})
+    session.audio_bytes_send(b'abc', received_at=1)
+    with pytest.raises(pusher_session.AudioBackpressure) as error:
+        session.audio_bytes_send(b'def', received_at=2)
+    assert error.value.pending == b'def'
+    assert [run.data for run in session.audio_runs] == [b'abc']
+    assert session.audio_total_size == 3
+
+
+@pytest.mark.anyio
+async def test_live_relay_keeps_its_cadence_while_original_window_is_unacknowledged(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    h = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic', codec='pcm16', sample_rate=16000),
+        private_cloud_sync_enabled=True,
+        spawn=lambda coro, **kwargs: asyncio.create_task(coro),
+    )
+    archive = LiveAudioArchive(h)
+    write = AsyncMock()
+    monkeypatch.setattr(archive, '_write', write)
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+    for second in range(10):
+        await archive.append(b'abcd', 'conv-1', 1000 + second, 2)
+        session.audio_bytes_send(b'abcd', received_at=1000 + second)
+        await session._audio_bytes_flush()
+        assert len([frame for frame in ws.sent if frame_type(frame) == 101]) == second + 1
+    write.assert_not_awaited()
+    assert archive.packs[0].data == b'abcd' * 10
+    assert session.audio_total_size == 0
+    await archive.close()
+    write.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_slow_window_commit_does_not_block_live_relay_or_release_custody(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    h = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic', codec='pcm16', sample_rate=16000),
+        private_cloud_sync_enabled=True,
+        spawn=lambda coro, **kwargs: asyncio.create_task(coro),
+    )
+    archive = LiveAudioArchive(h)
+    release = asyncio.Event()
+    started = asyncio.Event()
+    acknowledged = []
+
+    async def slow_write(*args):
+        started.set()
+        await release.wait()
+
+    async def ack():
+        acknowledged.append(True)
+
+    monkeypatch.setattr(archive, '_write', slow_write)
+    # A real 60s boundary schedules storage but does not await its upload.
+    await archive.append(b'\x01\x00' * 16000 * 60, 'conv-1', 1000, 16000 * 60)
+    await archive.defer_ack('conv-1', ack)
+    await started.wait()
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+    relay = None
+    try:
+        for second in range(10):
+            await archive.append(b'abcd', 'conv-1', 1060 + second, 2)
+            session.audio_bytes_send(b'abcd', received_at=1060 + second)
+            relay = asyncio.create_task(session._audio_bytes_flush())
+            await asyncio.sleep(0)
+            assert relay.done()  # No wall-clock threshold: storage is still blocked.
+            await relay
+            assert not acknowledged and archive.uncommitted
+            assert len([frame for frame in ws.sent if frame_type(frame) == 101]) == second + 1
+        assert archive.packs[0].data == b'abcd' * 10
+    finally:
+        release.set()
+        if relay is not None:
+            await relay
+        await archive.close()
+    assert acknowledged == [True]
 
 
 @pytest.mark.anyio
@@ -1553,3 +1642,63 @@ async def test_replaced_socket_close_does_not_disconnect_new_socket():
     assert session.pusher_connected
     assert session.pusher_ws is fresh
     assert session.reconnect_task is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('failure_code', [None, 'transient_processing_failed'])
+async def test_recovery_bursts_have_a_total_send_cap(monkeypatch, caplog, failure_code):
+    clock = [1000.0]
+    active_ref = {'active': True}
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, active_ref=active_ref, deps_overrides={'now': lambda: clock[0]})
+
+    async def receive():
+        clock[0] += pusher_session.PENDING_REQUEST_RECOVERY_COOLDOWN + pusher_session.PENDING_REQUEST_TIMEOUT + 1
+        if not session.pending_conversation_requests:
+            active_ref['active'] = False
+        if failure_code is None:
+            raise asyncio.TimeoutError
+        return (
+            struct.pack('<I', 201)
+            + json.dumps({'conversation_id': 'conv-1', 'error': failure_code, 'terminal': False}).encode()
+        )
+
+    ws.recv = receive
+    session.pusher_connected, session.pusher_ws = True, ws
+    await session.request_conversation_processing('conv-1', 'job-1', 1)
+    session.deps.is_active = lambda: bool(session.pending_conversation_requests)
+    with caplog.at_level(logging.WARNING):
+        await asyncio.wait_for(session.pusher_receive(), 2)
+    frames = [f for f in ws.sent if frame_type(f) == 104]
+    assert len(frames) == pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS
+    assert not session.pending_conversation_requests
+    assert any('failed terminally' in r.message for r in caplog.records)
+    assert not await session.request_conversation_processing('conv-1', 'job-1', 1)
+    # A durable replay generation is allowed a fresh, finite budget.
+    assert await session.request_conversation_processing('conv-1', 'job-1', 2)
+    assert session.pending_conversation_requests['conv-1']['attempts'] == 1
+
+
+@pytest.mark.anyio
+async def test_reconnect_replay_cannot_reset_processing_send_budget():
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    for _ in range(pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS + 3):
+        await session.request_conversation_processing('conv-1', 'job-1', 1)
+        await session.connect()
+    assert len([f for f in ws.sent if frame_type(f) == 104]) == pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS
+    assert not session.pending_conversation_requests
+
+
+@pytest.mark.anyio
+async def test_new_generation_at_pending_capacity_does_not_evict_another_conversation():
+    clock = [1000.0]
+    session = make_session(config_overrides={'max_pending_requests': 2}, deps_overrides={'now': lambda: clock[0]})
+    await session.request_conversation_processing('conv-1', 'job-1', 1)
+    clock[0] += 1
+    await session.request_conversation_processing('conv-2', 'job-2', 1)
+    await session.request_conversation_processing('conv-2', 'job-2', 2)
+    assert set(session.pending_conversation_requests) == {'conv-1', 'conv-2'}
+    assert session.pending_conversation_requests['conv-1']['dispatch_generation'] == 1
+    assert session.pending_conversation_requests['conv-2']['dispatch_generation'] == 2
+    assert session.pending_conversation_requests['conv-2']['attempts'] == 0

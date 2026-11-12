@@ -1,13 +1,13 @@
 """Non-paid terminal disposition CAS; immutable paid intents are never reset."""
 
 from copy import deepcopy
-from dataclasses import asdict
 from uuid import uuid4
+from config.batch_language_recovery import guarded_exhausted, language_guarded
 
-from config.batch_pipeline import terminal_empty_disposition_enabled, recovery_enabled_for
+from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from utils.batch_pipeline.contracts import WorkResult
+from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
 
@@ -70,8 +70,11 @@ def idle(job, existing, now):
 
 
 class TerminalEmptyStore:
-    def __init__(self, store):
+    def __init__(self, store, *, server_flags):
+        """Operator-only. `server_flags` is the serving role's live settings for an
+        unpinned unit, or None to refuse it; never this process's environment."""
         self.store = store
+        self.server_flags = server_flags
 
     def checked(self, tx, sid):
         return RecoveryStore(self.store).checked(
@@ -79,14 +82,27 @@ class TerminalEmptyStore:
         )
 
     def prepare(self, sid, uid, plan, snapshot, outcome, historical_attestation, now):
-        if not terminal_empty_disposition_enabled() or not recovery_enabled_for(uid):
-            raise ProjectionBlocked('terminal disposition disabled')
+        candidates, observations = {}, []
         token = uuid4().hex
 
         def commit(tx):
+            observations.clear()
             job, binding = self.checked(tx, sid)
+            policy = stage_in_transaction(
+                tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
+            )
+            if not policy.terminal_empty_disposition or not policy.recovery_enabled:
+                raise ProjectionBlocked('terminal disposition disabled')
             existing = tx.get('results', sid)
             marker = job.get('terminal_disposition') or {}
+            if (
+                language_guarded(job)
+                and marker.get('state') != 'completed'
+                and not (outcome == 'no_recoverable_speech' and guarded_exhausted(job))
+            ):
+                # A guarded unit settles no-speech only with every recognizer's
+                # validated empty receipt; without them it stays held.
+                raise ProjectionBlocked('independent recovery required')
             if (
                 binding.owner_id != uid
                 or intent_snapshot(job) != snapshot
@@ -102,17 +118,21 @@ class TerminalEmptyStore:
                     or marker.get('historical_attestation') != historical_attestation
                 ):
                     raise ProjectionBlocked('different terminal disposition')
+                if marker.get('state') != 'completed' and outcome == 'silence' and not held_silence_allowed(job, 0):
+                    raise ProjectionBlocked('held speech blocks no-provider silence')
                 return job
+            if outcome == 'silence' and not held_silence_allowed(job, 0):
+                raise ProjectionBlocked('held speech blocks no-provider silence')
             if not idle(job, existing, now) or not (spent_canary(job) or exhausted(job, historical_attestation)):
                 raise ProjectionBlocked('exhausted or spent canary required')
             if outcome == 'canary_recovery' and not spent_canary(job):
                 raise ProjectionBlocked('unattempted canary epoch 2 required')
             if outcome == 'no_recoverable_speech' and not exhausted(job, historical_attestation):
                 raise ProjectionBlocked('multilingual exhaustion required')
-            if (
-                outcome == 'no_recoverable_speech'
-                and not historical_attestation
-                and job.get('worker_empty_evidence') != {'padded_retry': 'empty', 'version': 1}
+            if outcome == 'no_recoverable_speech' and not (
+                job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1}
+                or historical_attestation
+                and not job.get('worker_empty_evidence')
             ):
                 raise ProjectionBlocked('padded retry evidence required')
             job['terminal_disposition'] = {
@@ -128,10 +148,13 @@ class TerminalEmptyStore:
             tx.put('jobs', sid, job)
             return job
 
-        return self.store.run(commit)
+        result = self.store.run(commit)
+        record_policy_observations(observations)
+        return result
 
-    def complete(self, sid, token, plan, uri, now):
-        if not terminal_empty_disposition_enabled():
+    def complete(self, sid, token, plan, uri, now, *, measured_held_vad_speech_seconds=None):
+        _, policy = load_stage_policy(self.store, sid, 'recovery', server_flags=self.server_flags)
+        if policy is None or not policy.terminal_empty_disposition:
             return False
 
         def commit(tx):
@@ -139,7 +162,7 @@ class TerminalEmptyStore:
             existing = tx.get('results', sid)
             marker = job.get('terminal_disposition') or {}
             if (
-                not recovery_enabled_for(binding.owner_id)
+                not policy.recovery_enabled
                 or marker.get('token') != token
                 or marker.get('plan_digest') != plan
                 or marker.get('privacy_generation') != binding.privacy_generation
@@ -147,15 +170,29 @@ class TerminalEmptyStore:
             ):
                 return False, 0, None
             outcome = marker['outcome']
-            result = asdict(WorkResult(sid, uri, outcome))
+            result = WorkResult(sid, uri, outcome).to_dict()
             if marker.get('state') == 'completed':
                 return job.get('result') == result, 0, outcome
             if marker.get('state') != 'prepared' or not idle(job, existing, now):
                 return False, 0, None
+            census = held_vad_census(job, measured_held_vad_speech_seconds)
+            if language_guarded(job) and not (outcome == 'no_recoverable_speech' and guarded_exhausted(job)):
+                if job.get('measured_held_vad_speech_seconds') != census:
+                    job['measured_held_vad_speech_seconds'] = census
+                    tx.put('jobs', sid, job)
+                return False, 0, None
+            if outcome == 'silence' and not held_silence_allowed(job, measured_held_vad_speech_seconds):
+                if job.get('measured_held_vad_speech_seconds') != census:
+                    job['measured_held_vad_speech_seconds'] = census
+                    tx.put('jobs', sid, job)
+                return False, 0, None
             owner = tx.get('owners', owner_key(binding.owner_id))
+            job['measured_held_vad_speech_seconds'] = held_vad_census(job, measured_held_vad_speech_seconds)
             owner['revision'] = owner.get('revision', 0) + 1
             marker.update(state='completed', completed_at=now)
-            job.update(state='result_ready', merge_pending=True, recovery_state='recovered', result=result)
+            job.update(
+                state='result_ready', merge_pending=True, recovery_state='recovered', result=result, ready_at=now
+            )
             tx.put('owners', owner_key(binding.owner_id), owner)
             tx.put('jobs', sid, job)
             return True, job['duration_seconds'], outcome

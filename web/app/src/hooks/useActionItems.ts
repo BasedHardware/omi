@@ -10,146 +10,17 @@ import {
   deleteActionItem,
   type CreateActionItemParams,
 } from '@/lib/api';
+import { groupActionItems } from '@/lib/actionItemGroups';
 import { prependOrReplaceById } from '@/lib/actionItemList';
 import { onCacheInvalidation, invalidationPatterns } from '@/lib/cache';
+import {
+  taskDueDays,
+  editsDueAsDate,
+  editAllDayDue,
+  snoozeAllDayDue,
+} from '@/lib/taskDue';
+import { formatDateInputValue } from '@/lib/dateInput';
 import type { ActionItem, GroupedActionItems } from '@/types/conversation';
-
-/**
- * Check if a date is today
- */
-function isToday(date: Date): boolean {
-  const today = new Date();
-  return (
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear()
-  );
-}
-
-/**
- * Check if a date is tomorrow
- */
-function isTomorrow(date: Date): boolean {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return (
-    date.getDate() === tomorrow.getDate() &&
-    date.getMonth() === tomorrow.getMonth() &&
-    date.getFullYear() === tomorrow.getFullYear()
-  );
-}
-
-/**
- * Check if a date is within this week (next 7 days)
- */
-function isThisWeek(date: Date): boolean {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const weekFromNow = new Date(today);
-  weekFromNow.setDate(weekFromNow.getDate() + 7);
-  return date >= today && date <= weekFromNow;
-}
-
-/**
- * Check if a date is overdue (before today)
- */
-function isOverdue(date: Date): boolean {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return date < today;
-}
-
-/**
- * Group action items by time period
- */
-function groupActionItems(items: ActionItem[]): GroupedActionItems {
-  // Ensure items is an array
-  if (!Array.isArray(items)) {
-    console.warn('groupActionItems: items is not an array', items);
-    return {
-      overdue: [],
-      today: [],
-      tomorrow: [],
-      thisWeek: [],
-      later: [],
-      noDueDate: [],
-      completed: [],
-    };
-  }
-
-  const groups: GroupedActionItems = {
-    overdue: [],
-    today: [],
-    tomorrow: [],
-    thisWeek: [],
-    later: [],
-    noDueDate: [],
-    completed: [],
-  };
-
-  for (const item of items) {
-    if (item.completed) {
-      groups.completed.push(item);
-      continue;
-    }
-
-    if (!item.due_at) {
-      // No due date goes to dedicated group
-      groups.noDueDate.push(item);
-      continue;
-    }
-
-    const dueDate = new Date(item.due_at);
-
-    if (isOverdue(dueDate)) {
-      groups.overdue.push(item);
-    } else if (isToday(dueDate)) {
-      groups.today.push(item);
-    } else if (isTomorrow(dueDate)) {
-      groups.tomorrow.push(item);
-    } else if (isThisWeek(dueDate)) {
-      groups.thisWeek.push(item);
-    } else {
-      groups.later.push(item);
-    }
-  }
-
-  // Sort each group by due date (earliest first), then by created_at
-  const sortByDueDate = (a: ActionItem, b: ActionItem) => {
-    if (a.due_at && b.due_at) {
-      return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
-    }
-    if (a.due_at) return -1;
-    if (b.due_at) return 1;
-    // Fall back to created_at
-    const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return bCreated - aCreated;
-  };
-
-  // Sort by created_at (newest first) for items without due date
-  const sortByCreatedAt = (a: ActionItem, b: ActionItem) => {
-    const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return bCreated - aCreated;
-  };
-
-  groups.overdue.sort(sortByDueDate);
-  groups.today.sort(sortByDueDate);
-  groups.tomorrow.sort(sortByDueDate);
-  groups.thisWeek.sort(sortByDueDate);
-  groups.later.sort(sortByDueDate);
-  groups.noDueDate.sort(sortByCreatedAt);
-
-  // Sort completed by completion date (most recent first)
-  groups.completed.sort((a, b) => {
-    const aCompleted = a.completed_at ? new Date(a.completed_at).getTime() : 0;
-    const bCompleted = b.completed_at ? new Date(b.completed_at).getTime() : 0;
-    return bCompleted - aCompleted;
-  });
-
-  return groups;
-}
 
 /**
  * Calculate task counts for a specific date
@@ -162,13 +33,16 @@ function getTaskCountsForDate(
     return { pending: 0, completed: 0 };
   }
 
-  const dateStr = date.toDateString();
+  const dateStr = formatDateInputValue(date);
   let pending = 0;
   let completed = 0;
 
   for (const item of items) {
-    if (!item.due_at) continue;
-    const itemDate = new Date(item.due_at).toDateString();
+    if (!item.due_at && item.due?.kind !== 'date') continue;
+    const itemDate =
+      item.due?.kind === 'date'
+        ? item.due.date
+        : formatDateInputValue(new Date(item.due_at!));
     if (itemDate === dateStr) {
       if (item.completed) {
         completed++;
@@ -241,14 +115,27 @@ export function useActionItems(): UseActionItemsReturn {
   // even if `items` is already populated.
   const hasLoadedRef = useRef(false);
 
-  // Fetch action items
-  const fetchItems = useCallback(async () => {
+  // One list read at a time. Each successful delete invalidates the action-items
+  // cache, so bulk-deleting N tasks asked for N reloads at once. Past the backend's
+  // 12 list reads per minute the extra reads were 429ed and the page showed that
+  // error although every delete had succeeded; and whichever read answered last
+  // won, even one that predated a later delete, so deleted tasks came back. A
+  // reload requested while one is in flight now shares it and queues one more read.
+  const fetchInFlightRef = useRef<Promise<void> | null>(null);
+  const refetchQueuedRef = useRef(false);
+
+  // Read the task list once
+  const loadItems = useCallback(async () => {
     try {
       if (!hasLoadedRef.current) {
         setLoading(true);
       }
       setError(null);
       const { items: data } = await getActionItems({ limit: 500 });
+      // Another reload was requested while this read was in flight, usually
+      // because a delete committed, so this answer can still list that task.
+      // Keep what is shown; the queued read replaces it.
+      if (refetchQueuedRef.current && hasLoadedRef.current) return;
       // Ensure we always set an array
       setItems(Array.isArray(data) ? data : []);
       hasLoadedRef.current = true;
@@ -262,6 +149,26 @@ export function useActionItems(): UseActionItemsReturn {
       setLoading(false);
     }
   }, []);
+
+  // Fetch action items
+  const fetchItems = useCallback((): Promise<void> => {
+    if (fetchInFlightRef.current) {
+      refetchQueuedRef.current = true;
+      return fetchInFlightRef.current;
+    }
+    const run = (async () => {
+      try {
+        do {
+          refetchQueuedRef.current = false;
+          await loadItems();
+        } while (refetchQueuedRef.current);
+      } finally {
+        fetchInFlightRef.current = null;
+      }
+    })();
+    fetchInFlightRef.current = run;
+    return run;
+  }, [loadItems]);
 
   // Initial fetch
   useEffect(() => {
@@ -287,7 +194,7 @@ export function useActionItems(): UseActionItemsReturn {
     const pending = items.filter((i) => !i.completed).length;
     const overdue = groupedItems.overdue.length;
     const noDueDateCount = groupedItems.noDueDate.length;
-    const todayItems = items.filter((i) => i.due_at && isToday(new Date(i.due_at)));
+    const todayItems = items.filter((i) => taskDueDays(i) === 0);
     const todayCompleted = todayItems.filter((i) => i.completed).length;
 
     // Calculate weekly stats (last 7 days)
@@ -297,10 +204,8 @@ export function useActionItems(): UseActionItemsReturn {
     weekAgo.setDate(weekAgo.getDate() - 7);
 
     const weekItems = items.filter((i) => {
-      if (!i.due_at) return false;
-      const dueDate = new Date(i.due_at);
-      dueDate.setHours(0, 0, 0, 0);
-      return dueDate >= weekAgo && dueDate <= today;
+      const days = taskDueDays(i);
+      return days !== null && days >= -7 && days <= 0;
     });
     const weekCompleted = weekItems.filter((i) => i.completed).length;
     const weekPending = weekItems.filter((i) => !i.completed).length;
@@ -390,17 +295,20 @@ export function useActionItems(): UseActionItemsReturn {
 
     // Sort pending: by due date (soonest first), items without due date go last
     pending.sort((a, b) => {
+      if (a.due_at && b.due_at)
+        return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
       // Handle no due date (goes last)
-      if (!a.due_at && !b.due_at) {
+      const aDays = taskDueDays(a);
+      const bDays = taskDueDays(b);
+      if (aDays === null && bDays === null) {
         // Both no due date: sort by created_at (newest first)
         const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
         const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
         return bCreated - aCreated;
       }
-      if (!a.due_at) return 1;
-      if (!b.due_at) return -1;
-
-      return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+      if (aDays === null) return 1;
+      if (bDays === null) return -1;
+      return aDays - bDays;
     });
 
     // Sort completed by completion date (most recent first)
@@ -430,33 +338,42 @@ export function useActionItems(): UseActionItemsReturn {
   );
 
   // Toggle completion
-  const toggleComplete = useCallback(async (id: string, completed: boolean) => {
-    // Optimistic update
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              completed,
-              completed_at: completed ? new Date().toISOString() : null,
-            }
-          : item,
-      ),
-    );
+  const toggleComplete = useCallback(
+    async (id: string, completed: boolean) => {
+      const item = items.find((i) => i.id === id);
+      if (!item) return;
 
-    try {
-      await toggleActionItemCompleted(id, completed);
-    } catch (err) {
-      console.error('Failed to toggle completion:', err);
-      // Revert on error
+      // Optimistic update
       setItems((prev) =>
-        prev.map((item) =>
-          item.id === id ? { ...item, completed: !completed, completed_at: null } : item,
+        prev.map((i) =>
+          i.id === id
+            ? {
+                ...i,
+                completed,
+                completed_at: completed ? new Date().toISOString() : null,
+              }
+            : i,
         ),
       );
-      setError(err instanceof Error ? err.message : 'Failed to update task');
-    }
-  }, []);
+
+      try {
+        await toggleActionItemCompleted(id, completed);
+      } catch (err) {
+        console.error('Failed to toggle completion:', err);
+        // Revert on error to the values this toggle replaced, so a task that
+        // fails to reopen keeps the date it was completed on
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === id
+              ? { ...i, completed: item.completed, completed_at: item.completed_at }
+              : i,
+          ),
+        );
+        setError(err instanceof Error ? err.message : 'Failed to update task');
+      }
+    },
+    [items],
+  );
 
   // Snooze (add days to due date)
   const snooze = useCallback(
@@ -464,6 +381,23 @@ export function useActionItems(): UseActionItemsReturn {
       const item = items.find((i) => i.id === id);
       if (!item) return;
 
+      if (editsDueAsDate(item)) {
+        const due = snoozeAllDayDue(item.due, days);
+        setItems((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, due_at: null, due } : i)),
+        );
+        try {
+          await updateActionItemDueDate(id, null, due);
+        } catch (err) {
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === id ? { ...i, due: item.due, due_at: item.due_at } : i,
+            ),
+          );
+          setError(err instanceof Error ? err.message : 'Failed to snooze task');
+        }
+        return;
+      }
       const newDate = new Date();
       if (item.due_at) {
         const currentDate = new Date(item.due_at);
@@ -502,18 +436,23 @@ export function useActionItems(): UseActionItemsReturn {
       const item = items.find((i) => i.id === id);
       if (!item) return;
 
-      const newDueAt = date ? date.toISOString() : null;
+      const due = editsDueAsDate(item) && date ? editAllDayDue(item.due, date) : null;
+      const newDueAt = due ? null : date ? date.toISOString() : null;
 
       // Optimistic update
-      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, due_at: newDueAt } : i)));
+      setItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, due_at: newDueAt, due } : i)),
+      );
 
       try {
-        await updateActionItemDueDate(id, newDueAt);
+        await updateActionItemDueDate(id, newDueAt, due);
       } catch (err) {
         console.error('Failed to update due date:', err);
         // Revert on error
         setItems((prev) =>
-          prev.map((i) => (i.id === id ? { ...i, due_at: item.due_at } : i)),
+          prev.map((i) =>
+            i.id === id ? { ...i, due_at: item.due_at, due: item.due } : i,
+          ),
         );
         setError(err instanceof Error ? err.message : 'Failed to update due date');
       }
@@ -599,13 +538,20 @@ export function useActionItems(): UseActionItemsReturn {
       // Optimistic update
       setItems((prev) => prev.filter((i) => !ids.includes(i.id)));
 
-      try {
-        await Promise.all(ids.map((id) => deleteActionItem(id)));
-      } catch (err) {
-        console.error('Failed to bulk delete:', err);
-        // Revert on error
-        setItems((prev) => [...prev, ...deletedItems]);
-        setError(err instanceof Error ? err.message : 'Failed to delete tasks');
+      const results = await Promise.allSettled(ids.map((id) => deleteActionItem(id)));
+      const failedIds = new Set(
+        ids.filter((_, index) => results[index].status === 'rejected'),
+      );
+
+      if (failedIds.size > 0) {
+        console.error(
+          'Failed to bulk delete:',
+          results.filter((r) => r.status === 'rejected'),
+        );
+        // Only restore the tasks whose delete failed; tasks the server
+        // already deleted must stay gone.
+        setItems((prev) => [...prev, ...deletedItems.filter((i) => failedIds.has(i.id))]);
+        setError('Failed to delete some tasks');
       }
     },
     [items],
@@ -614,6 +560,10 @@ export function useActionItems(): UseActionItemsReturn {
   // Bulk snooze
   const bulkSnooze = useCallback(
     async (ids: string[], days: number) => {
+      if (items.some((i) => ids.includes(i.id) && editsDueAsDate(i))) {
+        await Promise.all(ids.map((id) => snooze(id, days)));
+        return;
+      }
       const newDate = new Date();
       newDate.setDate(newDate.getDate() + days);
       const newDueAt = newDate.toISOString();
@@ -634,12 +584,16 @@ export function useActionItems(): UseActionItemsReturn {
         setError(err instanceof Error ? err.message : 'Failed to snooze tasks');
       }
     },
-    [fetchItems],
+    [fetchItems, items, snooze],
   );
 
   // Bulk set due date (for no-due-date items)
   const bulkSetDueDate = useCallback(
     async (ids: string[], date: Date | null) => {
+      if (items.some((i) => ids.includes(i.id) && editsDueAsDate(i))) {
+        await Promise.all(ids.map((id) => setDueDate(id, date)));
+        return;
+      }
       const newDueAt = date ? date.toISOString() : null;
 
       // Optimistic update
@@ -658,7 +612,7 @@ export function useActionItems(): UseActionItemsReturn {
         setError(err instanceof Error ? err.message : 'Failed to set due dates');
       }
     },
-    [fetchItems],
+    [fetchItems, items, setDueDate],
   );
 
   return {

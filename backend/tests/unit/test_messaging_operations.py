@@ -3,6 +3,7 @@
 import copy
 import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
@@ -11,6 +12,7 @@ import pytest
 from scripts import messaging_operations as ops
 from utils.messaging import maintenance
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 IMAGE = 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64
 CHANNELS = ['projects/based-hardware/notificationChannels/123']
 
@@ -208,6 +210,51 @@ def test_log_metrics_require_explicit_apply_and_verify_then_become_noop():
     assert all(c[0] == 'GET' for c in session.calls)
 
 
+def test_batch_projection_log_metrics_match_without_writes(capsys):
+    bodies = json.loads(ops.BATCH_PROJECTION_LOG_METRICS.read_text())
+    session = Session()
+    session.metrics = {body['name']: body for body in bodies}
+    assert not ops.reconcile_log_metrics(session, 'apply', ops.BATCH_PROJECTION_LOG_METRICS)
+    assert capsys.readouterr().out.splitlines() == ['MATCH ' + body['name'] for body in bodies]
+    assert all(call[0] == 'GET' for call in session.calls)
+
+
+def test_batch_projection_cli_check_then_create_and_verify(monkeypatch, capsys):
+    session = Session()
+    monkeypatch.setattr(sys, 'argv', ['messaging_operations.py', 'batch-projection-log-metrics', '--check'])
+    monkeypatch.setattr(ops.subprocess, 'run', lambda *a, **kw: SimpleNamespace(returncode=0, stdout='fake-token'))
+    monkeypatch.setattr(ops, 'AuthorizedSession', lambda credentials: session)
+    bodies = json.loads(ops.BATCH_PROJECTION_LOG_METRICS.read_text())
+    assert ops.main() == 1
+    assert capsys.readouterr().out.splitlines() == ['DIFF ' + body['name'] for body in bodies]
+    assert all(call[0] == 'GET' for call in session.calls)
+    assert not session.metrics
+    session.calls.clear()
+    monkeypatch.setattr(sys, 'argv', ['messaging_operations.py', 'batch-projection-log-metrics', '--apply'])
+    assert ops.main() == 0
+    assert session.metrics == {body['name']: body for body in bodies}
+    assert [call[0] for call in session.calls] == ['GET'] * len(bodies) + ['PUT', 'GET'] * len(bodies)
+    assert [call[2]['json'] for call in session.calls if call[0] == 'PUT'] == bodies
+    assert 'VERIFIED omi_pipeline_owner_drain_advanced' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('mismatch', ['metricKind', 'valueType', 'labels'])
+def test_batch_projection_schema_drift_refuses_all_writes(mismatch):
+    session = Session()
+    bodies = json.loads(ops.BATCH_PROJECTION_LOG_METRICS.read_text())
+    session.metrics = {body['name']: body for body in bodies}
+    bodies[0]['description'] = 'Compatible drift must not be written before the full schema audit'
+    descriptor = session.metrics['omi_pipeline_owner_drain_advanced']['metricDescriptor']
+    descriptor[mismatch] = {
+        'metricKind': 'GAUGE',
+        'valueType': 'INT64',
+        'labels': [{'key': 'unmanaged', 'valueType': 'STRING'}],
+    }[mismatch]
+    with pytest.raises(RuntimeError, match='schema differs'):
+        ops.reconcile_log_metrics(session, 'apply', ops.BATCH_PROJECTION_LOG_METRICS)
+    assert all(call[0] == 'GET' for call in session.calls)
+
+
 @pytest.mark.parametrize('mismatch', ['value_type', 'reason_type', 'extra_label'])
 def test_incompatible_existing_log_metric_fails_before_any_write(mismatch):
     session = Session()
@@ -284,11 +331,36 @@ def test_existing_log_alert_is_replaced_by_threshold_preserving_condition_identi
 
 
 @pytest.mark.parametrize(
-    'image', ['latest', 'gcr.io/based-hardware/backend:main', 'gcr.io/other/backend@sha256:' + 'a' * 64]
+    'image',
+    [
+        'latest',
+        'gcr.io/based-hardware/backend:main',
+        'gcr.io/other/backend@sha256:' + 'a' * 64,
+        # Plan B B3: only the fat backend image or its workers role image runs the job.
+        'gcr.io/based-hardware-dev/backend-workers@sha256:' + 'a' * 64,
+        'gcr.io/based-hardware/backend-api@sha256:' + 'a' * 64,
+        'gcr.io/based-hardware/pusher@sha256:' + 'a' * 64,
+        'us-docker.pkg.dev/based-hardware/backend-workers@sha256:' + 'a' * 64,
+        'gcr.io/based-hardware/backend-workers:aaaaaaa',
+    ],
 )
 def test_job_rejects_unpinned_or_foreign_images(image):
     with pytest.raises(ValueError):
         ops.desired_job(image)
+
+
+@pytest.mark.parametrize('image', [IMAGE, 'gcr.io/based-hardware/backend-workers@sha256:' + 'a' * 64])
+def test_job_admits_the_backend_image_and_its_workers_role_digest(image):
+    assert ops.desired_job(image)['template']['template']['containers'][0]['image'] == image
+
+
+def test_job_images_follow_the_runtime_image_registry():
+    registry = json.loads((BACKEND_DIR / 'runtime_images.json').read_text(encoding='utf-8'))
+    spec = registry['services']['messaging-maintenance']
+    assert ops.MAINTENANCE_JOB_IMAGES == (spec['current_image'], spec['image'])
+    assert spec['role'] == 'workers'
+    workers = next(image for image in registry['images'] if image['name'] == spec['image'])
+    assert 'utils.messaging.maintenance' in workers['entrypoints']
 
 
 def test_maintenance_failure_is_redacted_and_nonzero(monkeypatch, caplog):

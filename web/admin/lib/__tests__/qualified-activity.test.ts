@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   completeWeek,
   completeWindow,
+  DEFINITION_VERSION,
   entryPlatform,
   EXCLUSIONS_SQL,
   FOREGROUND_SQL,
@@ -92,5 +93,48 @@ describe("qualified activity v2", () => {
       freshness("2026-10-15T11:59Z", "2026-10-13", "settled", now).stale
     ).toBe(false);
     expect(freshness(null, null, "daily", now).stale).toBe(true);
+  });
+  /** Regression (David, 2026-10-22): the 2026-10-15 "real snapshot" evidence
+   * recorded engagement.mau = 7,163 for [2026-09-13, 2026-10-13) from a
+   * hand-built HogQL query using only the six original wire events. The wall
+   * (qualified-v2-2026-10-15, commit 474c1105, shipped 12:19 UTC that day,
+   * ~3h after the snapshot ran) widened the allowlist with the macOS UI events
+   * (Memory List Item Clicked, search) and the mobile UI events (tab/list
+   * clicks, action items, fact search); the same window under the shipped
+   * definition is 9,665 (+35%). A snapshot or reproduction query built from a
+   * reduced event set silently redefines MAU. This test pins the shipped
+   * inventory and requires the definition version to move with any change. */
+  it("pins the full v2 event inventory so MAU cannot silently narrow", () => {
+    expect(DEFINITION_VERSION).toBe("qualified-v2-2026-10-15");
+    // The three event families that produced the 7,163 → 9,665 gap.
+    for (const event of [
+      "Memory List Item Clicked",
+      "Search Result Opened",
+      "Conversation Opened From Search",
+      "Conversation List Item Clicked",
+      "Live Transcript Card Clicked",
+      "Bottom Navigation Tab Clicked",
+      "Action Item Completed",
+      "Fact List Item Clicked",
+      "Fact Searched",
+      "Conversation Detail Search Query Entered",
+      "Daily Summary Detail Viewed",
+    ])
+      expect(QUALIFIED_EVENT_NAMES).toContain(event);
+    // The original six wire/saved events stay qualified.
+    for (const event of [
+      "question_asked",
+      "Chat Message Sent",
+      "floating_bar_query_sent",
+      "Conversation Action",
+      "Phone Mic Recording Started",
+      "Memory Created",
+    ])
+      expect(QUALIFIED_EVENT_NAMES).toContain(event);
+    // Every query that counts people must scan every allowlisted event: a
+    // hand-built reproduction using a subset is the exact 10-15 failure.
+    const sql = activityQuery(new Date("2026-10-15"), 30, "active", 1);
+    for (const event of QUALIFIED_EVENT_NAMES)
+      expect(sql).toContain(`'${event}'`);
   });
 });

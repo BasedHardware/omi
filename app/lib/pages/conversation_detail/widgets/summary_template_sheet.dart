@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -97,6 +99,7 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
   bool _isSuggested(App app) => _provider.cachedSuggestedApps.any((suggested) => suggested.id == app.id);
 
   bool _isEnabled(App app) =>
+      app.id == builtInSummaryTemplateAppId ||
       _provider.cachedEnabledConversationApps.any((enabled) => enabled.id == app.id) ||
       _provider.isSuggestedAppAvailable(app.id);
 
@@ -131,7 +134,8 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
       selectedAppId: appId ?? _omiAnalyticsId,
       previousAppId: previous.isApp ? previous.appId : null,
     );
-    if (_useForNewConversations) provider.setDefaultSummaryTemplateAppId(appId);
+    // The server preference write runs alongside the summary; this request names its source itself.
+    if (_useForNewConversations) unawaited(provider.setDefaultSummaryTemplateAppId(appId));
     if (mounted) Navigator.of(context).pop();
     await startSummary(provider, appId);
   }
@@ -150,6 +154,8 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
     final busy = provider.loadingReprocessConversation || _installingAppId != null || !_selectionResolves;
 
     final templates = <Widget>[
+      _appRow(provider.findAppById(builtInSummaryTemplateAppId)!,
+          isLastUsed: lastUsedId == builtInSummaryTemplateAppId),
       if (enabled.isNotEmpty)
         for (final app in enabled) _appRow(app, isLastUsed: app.id == lastUsedId)
       else if (load == SummaryTemplatesLoad.failed)

@@ -55,8 +55,10 @@ class OmiButtonColors {
 /// ```
 ///
 /// When [onPressed] returns a [Future], the button shows a spinner and ignores taps until it
-/// completes — also when it throws: the error is reported through [FlutterError.reportError] and
+/// completes — also when it throws: the error is reported through [reportOnPressedError] and
 /// the button becomes tappable again. Pass [isLoading] to drive the spinner from outside.
+/// A handler that must not spin for the whole future (a confirm dialog in front of the button)
+/// should stay synchronous and report detached failures with [reportOnPressedError].
 /// A null [onPressed] disables the button.
 ///
 /// Labels are Title Case verbs ("Save", "Try Again", "Delete Conversation").
@@ -71,6 +73,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
     this.colors,
     this.width,
     this.height,
@@ -87,6 +90,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
   })  : variant = OmiButtonVariant.secondary,
         colors = null,
         width = null,
@@ -103,6 +107,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
   })  : variant = OmiButtonVariant.destructive,
         colors = null,
         width = null,
@@ -119,6 +124,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
   })  : variant = OmiButtonVariant.tertiary,
         colors = null,
         width = null,
@@ -136,6 +142,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.pill = false,
   })  : variant = OmiButtonVariant.toolbar,
         colors = null,
         width = null,
@@ -165,6 +172,9 @@ class OmiButton extends StatefulWidget {
   /// Fill the available width.
   final bool expand;
 
+  /// Use the pill radius for a compact action.
+  final bool pill;
+
   /// Legacy colour override; see [OmiButtonColors]. Wins over [variant].
   final OmiButtonColors? colors;
 
@@ -177,8 +187,21 @@ class OmiButton extends StatefulWidget {
   /// Legacy label style. Its colour is ignored; the foreground colour always wins.
   final TextStyle? labelStyle;
 
-  /// Lines before the label ellipsizes. Storefront prices use 2 so a backend CTA can wrap.
-  final int maxLines;
+  /// Lines before the label ellipsizes; null wraps the full label without truncation.
+  final int? maxLines;
+
+  /// Reports [error] the same way a thrown [onPressed] future is reported.
+  ///
+  /// Use this when the handler must not return that future — a confirm dialog would
+  /// otherwise spin the button until it closes — but the failure must not escape the zone.
+  static void reportOnPressedError(Object error, StackTrace stack, {required String label}) {
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: error,
+      stack: stack,
+      library: 'omi ui',
+      context: ErrorDescription('while running OmiButton "$label" onPressed'),
+    ));
+  }
 
   @override
   State<OmiButton> createState() => _OmiButtonState();
@@ -210,12 +233,7 @@ class _OmiButtonState extends State<OmiButton> {
   }
 
   void _report(Object error, StackTrace stack) {
-    FlutterError.reportError(FlutterErrorDetails(
-      exception: error,
-      stack: stack,
-      library: 'omi ui',
-      context: ErrorDescription('while running OmiButton "${widget.label}" onPressed'),
-    ));
+    OmiButton.reportOnPressedError(error, stack, label: widget.label);
   }
 
   ({Color background, Color foreground}) _colors(bool enabled) {
@@ -256,7 +274,7 @@ class _OmiButtonState extends State<OmiButton> {
       widget.label,
       style: textStyle,
       maxLines: widget.maxLines,
-      overflow: TextOverflow.ellipsis,
+      overflow: widget.maxLines == null ? TextOverflow.visible : TextOverflow.ellipsis,
       textAlign: TextAlign.center,
     );
     if (widget.leading != null || widget.icon != null) {
@@ -296,7 +314,9 @@ class _OmiButtonState extends State<OmiButton> {
         padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: horizontalPadding)),
         minimumSize: WidgetStatePropertyAll(Size(widget.width ?? visualHeight, visualHeight)),
         fixedSize: widget.width != null ? WidgetStatePropertyAll(Size(widget.width!, visualHeight)) : null,
-        shape: const WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: OmiRadius.mdAll)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: widget.pill ? OmiRadius.pillAll : OmiRadius.mdAll),
+        ),
         // A visual under 44pt gets padded out to a 48pt target; a 48pt button needs no padding.
         tapTargetSize: visualHeight < 44 ? MaterialTapTargetSize.padded : MaterialTapTargetSize.shrinkWrap,
         textStyle: WidgetStatePropertyAll(textStyle),

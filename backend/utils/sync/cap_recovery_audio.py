@@ -9,13 +9,31 @@ from utils.sync import recording_lineage
 from utils.sync.files import get_timestamp_from_path, get_wav_duration
 from utils.sync.pipeline import retrieve_vad_segments, cleanup_recovered_sync_files
 from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
-from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
+from utils.capture.sync_coverage import (
+    apply_sync_coverage as apply_sync_wal_audio_coverage,
+    held_segment,
+    legacy_audio_trim,
+)
 
 
 async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dict]:
+    if meta.get('origin') == 'live':
+        segments, errors, offsets = set(), [], {}
+        await run_blocking(
+            sync_executor,
+            retrieve_vad_segments,
+            path,
+            segments,
+            errors,
+            keep_short=True,
+            source_frame_map={'live_source_slice': True} if meta.get('live_custody_version') == 4 else None,
+            segment_source_maps=offsets,
+        )
+        if errors:
+            raise RuntimeError('held live VAD failed')
+        return segments, offsets, {}, {}
     if not meta.get('full_capture'):
-        position = meta.get('source_position_map')
-        return {path}, {path: tuple(position) if position else None}, {}, {}
+        return await run_blocking(db_executor, held_segment, uid, path, meta)
     mapping = meta.get('source_frame_map') or {}
     offsets = mapping.get('offsets') or []
     frames = [end - start for start, end in zip(offsets, offsets[1:])]
@@ -34,7 +52,8 @@ async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dic
         storage_executor=storage_executor,
         cleanup_files=cleanup_recovered_sync_files,
     )
-    if sync_safety_wal_enabled():
+    # refactor: superseded by utils.capture.coverage when CAPTURE_COVERAGE_MODE=serve
+    if sync_safety_wal_enabled() and legacy_audio_trim(uid):
         inputs = list(paths)
         paths, _ = await apply_safety_wal_coverage(
             uid,
@@ -44,7 +63,7 @@ async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dic
             db_executor=db_executor,
             storage_executor=storage_executor,
             job_ref='cap_recovery',
-            protected_paths=source_maps,
+            protected_paths=set(paths) | set(source_maps) if meta.get('early_capture_offset') else source_maps,
             capture_partition={
                 'source': meta['source'],
                 'client_device_id': meta.get('client_device_id'),
@@ -73,7 +92,11 @@ async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dic
             db_executor,
             recording_lineage.plan_segment_targets,
             sorted(segments, key=get_timestamp_from_path),
-            get_timestamp_from_path,
+            (
+                (lambda path: get_timestamp_from_path(path) - meta['early_capture_offset'])
+                if meta.get('early_capture_offset')
+                else get_timestamp_from_path
+            ),
             get_wav_duration,
             uid,
             origin,

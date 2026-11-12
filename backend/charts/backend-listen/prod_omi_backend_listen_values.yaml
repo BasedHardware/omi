@@ -1,4 +1,4 @@
-progressDeadlineSeconds: 1800
+progressDeadlineSeconds: 4200
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -17,6 +17,9 @@ image:
 gcpProjectId: based-hardware
 runtimeGcpProjectId: based-hardware
 
+# Reject key credentials even when supplied through protected private values.
+workloadIdentityOnly: true
+
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
 # This is to override the chart name.
@@ -30,9 +33,9 @@ serviceAccount:
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
   # Annotations to add to the service account.
-  # Keyless runtime identity (Workload Identity) that replaces the nik-164
-  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
-  # present the JSON still wins. Shared by the listen canary deployments.
+  # Keyless runtime identity (Workload Identity), shared by listen canaries.
+  # Do not inject SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS:
+  # they override ADC and can resurrect a revoked key on the next rollout.
   annotations:
     iam.gke.io/gcp-service-account: backend-listen-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
@@ -47,7 +50,8 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  service_name: backend-listen
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -90,7 +94,48 @@ envFrom:
   - configMapRef:
       name: prod-omi-backend-config
 
+# NAME: "string" env values the prod listen workflow renders from the
+# protected-environment secret LISTEN_PRIVATE_VALUES_YAML, in the same Helm
+# rollout. Never commit values here. A key replaces the env entry of the same
+# name below (e.g. the STT_CAP_DISPATCH_* defaults).
+privateEnv: {}
+
 env:
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
+  - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
+    value: "true"
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
+  - name: CONVERSATION_TERMINAL_FAMILY_MODE
+    value: "on"
+  - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
+    value: "true"
+  - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
+    value: "7200"
+  - name: HOME_PROCESSING_MAX_AGE_SECONDS
+    value: "21600"
+  - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED
+    value: "true"
+  # Production retirement; false restores the old routes only after GPUs are ready.
+  - name: STT_GPU_FLEET_OFF
+    value: "true"
+  - name: STT_CAP_DISPATCH_ENFORCEMENT
+    value: "false"
+  - name: STT_CAP_DISPATCH_COHORT
+    value: ""
+  - name: STT_CAP_DISPATCH_LANES
+    value: "live"
   - name: DEMAND_PROCESSING_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_LAZY_ENABLED
@@ -103,10 +148,36 @@ env:
     value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
+  - name: BATCH_CONTROL_CANDIDATE_FANOUT
+    value: "16"
+  - name: BATCH_ADMISSION_PARALLEL_CALLS
+    value: "true"
+  - name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS
+    value: "10"
+  - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
+    value: "af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh"
+  - name: SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT
+    value: "100"
+  - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
+    value: "g1"
+  - name: BATCH_INPUT_EXPIRING_ENABLED
+    value: "true"
+  - name: BATCH_HELD_DEAD_LETTER_ENABLED
+    value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
-  - name: BATCH_PIPELINE_PERCENT
+  - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
+    value: "false"
+  - name: BATCH_LIVE_STT_RETIRE_PERCENT
     value: "0"
+  - name: SERVER_BATCH_ONLY_MOBILE_PERCENT
+    value: "100"
+  # Expand only after the new web bundle is live; cached bundles lack batch UI.
+  - name: SERVER_BATCH_ONLY_WEB_PERCENT
+    value: "0"
+  # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
+  - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
+    value: "true"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED
@@ -124,11 +195,9 @@ env:
   - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
     value: "false"
   - name: PLAYBACK_ON_DEMAND_ENABLED
-    value: "false"
-  - name: REPEAT_WORK_REVISION_ENABLED
-    value: "false"
-  - name: REPEAT_WORK_LLM_VERSION
-    value: "2026-10-16-v1"
+    value: "true"
+  - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
+    value: "true"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
@@ -149,28 +218,38 @@ env:
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED
+    value: "true"
+  - name: BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED
+    value: 'true'
+  - name: BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED
+    value: "true"
+  - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
+    value: "false"
   - name: BATCH_PIPELINE_RECOVERY_MODE
     value: "off"
   - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
     value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_SYNC_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: ""
+  - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
+    value: "0"
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -180,10 +259,16 @@ env:
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
   - name: PROACTIVITY_V2_POSTHOG_HOST
     value: "https://us.posthog.com"
+  - name: OMI_FLAGS_FIRESTORE_PROJECT
+    value: "based-hardware"
+  - name: OMI_FLAGS_FIRESTORE_DATABASE
+    value: "omi-flags"
+  - name: OMI_FLAGS_SOURCE
+    value: "dual"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
+    value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -194,10 +279,12 @@ env:
     value: "300"
   - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
     value: "30"
+  - name: FSR_USAGE_MONTH_TOTAL_EPOCH
+    value: "v1"
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
-    value: "60"
+    value: "55"
   - name: FSR_SERVING_CONFIG_TTL_SECONDS
     value: "60"
   - name: ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS
@@ -225,20 +312,17 @@ env:
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
+  - name: BATCH_FINAL_PASS_ENABLED
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: BATCH_FINAL_PASS_ENABLED
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
-  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
-    value: "shadow"
-  - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
-    value: "true"
-  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+  - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
-  - name: DESKTOP_PENDANT_CALL_LINK_MODE
-    value: "shadow"
-  - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
-    value: "100"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -247,12 +331,8 @@ env:
     value: "208440318997-compute@developer.gserviceaccount.com"
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://omi.me"
-  - name: FREE_TIER_LOCAL_PROCESSING
-    value: "false"
-  - name: FREE_TIER_EMERGENCY_STOP
-    value: "false"
-  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
-    value: ""
+  - name: CLIENT_SUMMARIES_AT_CAP_ENABLED
+    value: "true"
   - name: ACCOUNT_DELETION_DISPATCH_MODE
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE
@@ -314,10 +394,6 @@ env:
     value: "10"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: SPEAKER_GROUPING_MODE
-    value: "incumbent"
-  - name: SPEAKER_MATCH_SCORES_ENABLED
-    value: "true"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
   - name: DREAM_AGENT_ENABLED
@@ -327,41 +403,42 @@ env:
   - name: DREAM_AGENT_UID_ALLOWLIST
     value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
   - name: DREAM_ON_DEMAND_ENABLED
-    value: 'true'
+    value: 'false'
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
-  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
+  # Replay-only binding: keep live/stale-conversation admission in inline mode.
+  - name: LISTEN_FINALIZATION_REPLAY_ENABLED
     value: "true"
-  - name: CONVERSATION_OCR_CONTEXT_ENABLED
+  - name: LISTEN_FINALIZATION_TASKS_QUEUE
+    value: "conversation-finalization"
+  - name: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+    value: "https://backend-sync-hhibjajaja-uc.a.run.app/v1/conversation-finalization-jobs/run"
+  - name: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+    value: "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+  - name: LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS
+    value: "5"
+  - name: BUCKET_OBJECT_LAKE
+    value: ""
+  - name: OBJECT_LAKE_KMS_KEY
+    value: ""
+  - name: OBJECT_LAKE_WRITE_ENABLED
+    value: "false"
+  - name: OBJECT_LAKE_WRITE_PERCENT
+    value: "0"
+  - name: OBJECT_LAKE_READ_ENABLED
     value: "true"
-  - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
-    value: "true"
+  - name: OBJECT_LAKE_INLINE_MAX_BYTES
+    value: "4096"
   - name: BUCKET_SCREEN_FRAMES
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
     value: "25"
-  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
-    value: "false"
-  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
-    value: "100"
-  - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
-    value: "100"
-  - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
-    value: "0"
-  - name: CONVERSATION_RELEVANCE_JEV_RESCUE
-    value: "shadow"
-  - name: CONVERSATION_RELEVANCE_JEV_ENABLED
-    value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
     value: "100"
   - name: NOTES_TIER_ESCALATION_ENABLED
     value: 'true'
-  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
-    value: "60000"
-  - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
-    value: "60000"
   # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
   # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
   - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
@@ -385,17 +462,11 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
-  - name: MEMORY_BELIEF_MODEL_ENABLED
-    value: "false"
-  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
-    value: "false"
   - name: MEMORY_V3_CURSOR_SECRET
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MEMORY_V3_CURSOR_SECRET
-  - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
-    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -406,10 +477,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
+  # In-cluster callers reach these services by ClusterIP DNS; the internal-ALB
+  # routes stay for Cloud Run callers only (billed per GB inbound).
   - name: HOSTED_VAD_API_URL
-    value: "http://172.16.160.20/vad/v1/vad"
+    value: "http://prod-omi-vad.prod-omi-backend.svc.cluster.local:8080/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://172.16.160.20/diarizer"
+    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -454,20 +527,10 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
   - name: OMI_CUSTOMER_DATA_PROJECT
     value: "based-hardware"
   - name: HOSTED_PUSHER_API_URL
-    value: "http://pusher.omi.me"
+    value: "http://prod-omi-pusher.prod-omi-backend.svc.cluster.local:8080"
   - name: BUCKET_PLUGINS_LOGOS
     value: "omi_plugins"
   - name: LANGCHAIN_TRACING_V2
@@ -547,12 +610,14 @@ env:
         key: POSTHOG_PROJECT_API_KEY
   - name: GCP_LOCATION
     value: "us-central1"
+  - name: HOSTED_LID_API_URL
+    value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
+  - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
+    value: "true"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
@@ -567,12 +632,8 @@ env:
     value: "true"
   - name: MOBILE_STANDARD_BATCH_PERCENT
     value: "0"
-  - name: MOBILE_STANDARD_BATCH_UIDS
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
-  - name: SONIOX_IDLE_CLOSE_SECONDS
-    value: "45"
   - name: STT_ROUTING_MODE
     value: "on"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
@@ -587,22 +648,17 @@ env:
     value: "30"
   - name: STT_NO_TEXT_RESCUE_ENABLED
     value: "true"
-  - name: SONIOX_MONTHLY_CEILING_USD
-    value: "10000"
-  - name: SONIOX_ESTIMATED_USD_PER_HOUR
-    value: "0.07537"
-  - name: STT_MULTI_LANGUAGE_HINTS
-    value: "true"
-  - name: SONIOX_CONTEXT_TERMS
-    value: "false"
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "100"
+    value: "0"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
     value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
     value: "16"
+  # Keep off until deadline-capped POST timeouts are censored as first-text deadlines.
+  - name: PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED
+    value: "false"
   - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
     value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
   - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
@@ -610,8 +666,6 @@ env:
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
-    value: "false"
-  - name: PARAKEET_WINDOW_DEADLINE_CUT_ENABLED
     value: "false"
   - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
     value: "1.2"
@@ -635,30 +689,30 @@ env:
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
+  # Cohort off 2026-11-01: at 5% the treatment arm fell well below control on words per capture second and transcribed share
+  # (2 s drain cap; #24278 widens it). Treatment is now the speech gate: close 10 s after the first silent frame (6 s past
+  # the hangover), re-arm 2 s, cap 120/h. Percent stays 0 until the lead ramps it; rollback SONIOX_IDLE_COHORT_PERCENT=0.
+  - name: SONIOX_IDLE_COHORT_PERCENT
+    value: "0"
+  - name: SONIOX_IDLE_COHORT_CLOSE_SECONDS
+    value: "10"
+  - name: SONIOX_IDLE_COHORT_REARM_SECONDS
+    value: "2"
+  - name: SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR
+    value: "120"
   - name: STT_SERVICE_MODELS
     value: "parakeet-window,modulate-velma-2,soniox"
-  - name: HOSTED_TRANSLATION_API_URL
-    value: "http://172.16.160.20/nllb"
+  # All live translation runs on Luna; the NLLB GPU service is retired in prod.
   - name: TRANSLATION_SERVICE_MODELS
-    value: "nllb,gemini"
+    value: "luna"
   - name: TRANSLATION_CACHE_TTL
     value: "86400"
   - name: TRANSLATION_NEGATIVE_CACHE_TTL
     value: "21600"
-  - name: TRANSLATION_DEMAND_SHADOW_ENABLED
-    value: "false"
   - name: TRANSLATION_DEMAND_GATE_ENABLED
-    value: "true"
-  - name: TRANSLATION_DEMAND_LEASE_V1_ENABLED
-    value: "true"
-  - name: TRANSLATION_ONDEMAND_GEMINI_ENABLED
     value: "true"
   - name: TRANSLATION_ONOPEN_ENABLED
     value: "true"
-  - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
-    value: "100"
-  - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
-    value: ""
   - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
     value: "50"
   - name: TRANSLATION_ONDEMAND_MAX_CHARS
@@ -706,19 +760,24 @@ env:
         key: TWILIO_API_KEY_SECRET
   - name: VAD_GATE_MODE
     value: "active"
+  # D2 edge shadow (plan D): mirror a static uid-hash cohort's raw frames to
+  # listen-edge for decode+VAD agreement. The URL alone mirrors nothing: the
+  # mirror needs EDGE_SHADOW_PERCENT > 0, which stays 0 until the lead ramps
+  # it per the EDGE_SHADOW_PERCENT registry row
+  # (backend/docs/runbooks/edge-shadow-rollout.md).
+  - name: EDGE_SHADOW_URL
+    value: "ws://prod-omi-listen-edge.prod-omi-backend.svc.cluster.local:8080/v1/shadow"
+  # EDGE_SHADOW_TOKEN (sent as x-edge-shadow-token; must match listen-edge's)
+  # is a secret: never committed here, set only through privateEnv
+  # (LISTEN_PRIVATE_VALUES_YAML), which adds the entry at rollout. Unset,
+  # listen sends no token.
+  - name: EDGE_SHADOW_PERCENT
+    value: "0"
   # Audio-timeline v2: one capture coordinate for segments and stored audio.
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: AUDIO_TIMELINE_SPANS
-    value: "true"
-  - name: LIVE_SPEAKER_SPAN_RESOLUTION
-    value: "true"
-  - name: LIVE_CAPTURE_WINDOW_RETENTION
-    value: 'false'
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
@@ -730,10 +789,6 @@ env:
   - name: SONIOX_ORDERED_FINALIZE
     value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
-    value: "true"
-  # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
-  # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
-  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
     value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
@@ -784,6 +839,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_CLIENTS_JSON
+  - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
+  # Quiet-check empty exit; evaluated on backend-sync (Cloud Tasks handler), pinned here for consistency (lead2 9b4ffd).
+  - name: QUIET_EMPTY_EXIT_ENABLED
+    value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
 
@@ -827,7 +887,10 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 12
+  # retire100: planned live residual is ~31% excluded conversations plus
+  # ~5-6% desktop. Qualify the floor against fresh batch-100 demand before
+  # applying; max 60 and all scale-out signals stay intact. Rollback: 30.
+  minReplicas: 20
   maxReplicas: 60
   behavior:
     scaleDown:
@@ -850,11 +913,18 @@ autoscaling:
         value: 5
         periodSeconds: 15
       selectPolicy: Max
-  # targetCPUUtilizationPercentage: 70
+  # D0b: CPU is the primary signal. The HPA takes the max across metrics and
+  # ignores ratios within 10% of target, so 55% acts above ~60% mean CPU. On the
+  # 2026-10-19 incident, mean listen CPU peaked at 0.56-0.65 of request while
+  # the hottest pods saturated, so a 60-70% target would never have fired.
+  targetCPUUtilizationPercentage: 55
   # targetMemoryUtilizationPercentage: 70
   # failedResponseCode: 10
-  requestsPerPod: 10
-  activeConnectionsPerPod: 22
+  # Socket guards stay as secondary metrics so a CPU dip cannot strand
+  # sockets on too few pods. Raised 10->16 and 22->35 together (D0b plan) so
+  # they bind only on connection surges, not at ordinary load.
+  requestsPerPod: 16
+  activeConnectionsPerPod: 35
 
 podDisruptionBudget:
   minAvailable: "80%"
@@ -908,3 +978,24 @@ affinity:
               operator: In
               values:
                 - high-cpu
+    # Soft preference only: the required labels above still admit the N2
+    # fallback/rescue pools, so peak capacity and availability cannot
+    # regress. Without this term the scheduler spreads evenly across every
+    # eligible node, which strands pods on the dearer n2d-standard-4
+    # fallback nodes 24/7 (11 nodes ≈ $52/day, 2026-10-29) because listen
+    # pods never reschedule on their own and the nodes stay above the
+    # autoscaler's scale-down utilization threshold.
+    # Deploy gate: this is a pod-template change, so per
+    # backend/docs/runbooks/audio-fleet.md it must NOT be rolled onto active
+    # sessions — only a verified traffic-free window or a qualified
+    # admission drain (audio-fleet.md "Retire one node/pool" steps) makes
+    # the reschedule safe; a plain off-peak window is not sufficient.
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: cloud.google.com/gke-nodepool
+              operator: In
+              values:
+                - backend-listen-pool-v2
+                - backend-listen-pool-v2-b

@@ -12,7 +12,7 @@ approved version nobody released (PENDING_DEVELOPER_RELEASE) is developer-releas
 phased rollout is attached, so the newest build still ships without discarding an approval.
 Apple now phases every release itself, so the train also advances the live rollout: a
 phased release that started more than IOS_PHASED_JUMP_HOURS ago and is not PAUSED is
-released to everyone (DELETE appStoreVersionPhasedRelease) — exposure is ~1% during the
+released to everyone (PATCH appStoreVersionPhasedReleases/{id} to COMPLETE) — exposure is ~1% during the
 observation window and 100% after it, matching the operator gate's ~4-hour audit cadence
 (the agreed 12-hour exposure window).
 
@@ -21,7 +21,10 @@ production release is written to production as a staged rollout at 1% (haltable 
 Console) and promoted one ladder hop per advancing run (1% -> 10% -> 50% -> full, one run
 every ~4 hours — a full ramp in about 12 hours). Every advancing action stamps a
 minute-precision gate receipt into the release name so a retry inside the observation
-window cannot hop twice.
+window cannot hop twice. While Play holds changes for manual review submission
+(held-changes mode) the ladder parks — except that a train-written held staged release
+is superseded by the gate-pinned newer build at the SAME fraction, so a stale held
+commit cannot wedge production off a fix (plan_held_supersede).
 
 The operator release gate audits the candidate before dispatching; its audited
 platform/version/build identifiers travel as TRAIN_PIN_IOS / TRAIN_PIN_ANDROID and the train
@@ -52,6 +55,7 @@ from typing import Callable, Iterable, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import mobile_capture_health as capture_health  # noqa: E402
 import mobile_store_promote as promote  # noqa: E402
 
 APP_ID = promote.APP_ID
@@ -90,11 +94,12 @@ STAGED_ROLLOUT_FRACTION = 0.01
 STAGED_ROLLOUT_LADDER = (0.01, 0.10, 0.50, 1.0)
 # Apple's phased release starts at 1% and reaches 100% only on day 7, and its
 # schedule is not customizable. The train therefore releases to everyone once
-# the live rollout has been observable for this many hours: DELETE
-# appStoreVersionPhasedRelease ("release to everyone"). With the gate running
-# every ~4 hours, a candidate gets audited at least twice inside this window
-# before the jump. A PAUSED rollout (the operator brake) never jumps; DELETEing
-# it would both end the operator's hold and complete a rollout they stopped.
+# the live rollout has been observable for this many hours: PATCH
+# appStoreVersionPhasedReleases/{id} to COMPLETE ("release to everyone"; the
+# to-one relationship path is read-only and answers DELETE with 405). With the
+# gate running every ~4 hours, a candidate gets audited at least twice inside
+# this window before the jump. Only an ACTIVE rollout jumps: a PAUSED one is the
+# operator brake, and completing it would end their hold on a rollout they stopped.
 IOS_PHASED_JUMP_HOURS = 12.0
 # Minimum gap between two advancing actions on the same staged rollout (the
 # observation window between exposure steps; the operator gate audits every
@@ -126,6 +131,18 @@ def _gate_receipt_dt(name: str) -> datetime | None:
 
 class TrainError(Exception):
     pass
+
+
+def capture_health_hold(platform: str, *, build: str | None) -> str | None:
+    """Why a rollout hop must hold on capture health, or None to proceed.
+
+    Read-only PostHog check (mobile_capture_health.py), mirroring the operator
+    gate's judge per (platform, build): the Android version code, or the iOS
+    build attached to the live App Store version. No build holds. Fails closed; TRAIN_CAPTURE_HEALTH_OVERRIDE=<reason> lets a hop through.
+    """
+    verdict = capture_health.check_rollout(platform, build=build)
+    log(f"{platform} capture health: {verdict.reason}")
+    return verdict.reason if verdict.hold else None
 
 
 def log(message: str) -> None:
@@ -419,6 +436,27 @@ def ios_phased_release(live_version_id: str) -> dict[str, object] | None:
     return payload["data"]
 
 
+def ios_version_build_number(version_id: str) -> str | None:
+    """The build number (CFBundleVersion) attached to an App Store version, or None.
+
+    Reads GET /v1/appStoreVersions/{id}/build. The capture-health hold judges
+    the exact store build, never a same-version TestFlight sibling; an
+    unreadable build returns None, and the hold then fails closed.
+    """
+    try:
+        token = _asc_rest_token()
+        url = f"https://api.appstoreconnect.apple.com/v1/appStoreVersions/{version_id}/build"
+        request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = json.load(response)
+        data = payload.get("data") if isinstance(payload, dict) else None
+        number = _attributes(data).get("version") if isinstance(data, dict) else None
+    except Exception as exc:  # noqa: BLE001 - any failure, including a malformed body, means "unknown build", which holds
+        log(f"App Store Connect build lookup failed for {version_id}: {exc}")
+        return None
+    return str(number) if isinstance(number, (str, int)) and str(number).isdigit() else None
+
+
 def ios_phased_release_paused(live_version_id: str) -> bool:
     """Whether the live version's phased rollout is PAUSED (the operator brake)."""
     phased = ios_phased_release(live_version_id)
@@ -437,11 +475,13 @@ def _phased_started_at(phased: dict[str, object]) -> datetime:
 def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | None = None) -> tuple[bool, str]:
     """Whether the live phased rollout should be released to everyone right now.
 
-    True after IOS_PHASED_JUMP_HOURS with the rollout still ACTIVE (DELETE
-    appStoreVersionPhasedRelease is Apple's "release to everyone"). A PAUSED
-    rollout is the operator brake and never jumps; a SUPPRESSED/COMPLETED
-    rollout is already fully out. Anything unreadable fails closed (False with
-    the reason — never True on an error).
+    True after IOS_PHASED_JUMP_HOURS with the rollout still ACTIVE (COMPLETE is
+    Apple's "release to everyone"). A PAUSED rollout is the operator brake and
+    never jumps; any other state (COMPLETE, INACTIVE, or one Apple adds later)
+    is not a live rollout to advance. Anything unreadable fails closed (False
+    with the reason — never True on an error).
+    The jump also waits on capture health for the live version's exact build
+    (ios_version_build_number, capture_health_hold).
     """
     now = now or datetime.now(timezone.utc)
     try:
@@ -454,8 +494,8 @@ def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | 
     state = str(attrs.get("phasedReleaseState"))
     if state == "PAUSED":
         return False, "phased rollout is PAUSED — the operator brake"
-    if state in ("SUPPRESSED", "COMPLETED"):
-        return False, f"phased rollout is already {state}"
+    if state != "ACTIVE":
+        return False, f"phased rollout is {state}, not ACTIVE"
     try:
         started = _phased_started_at(phased)
     except TrainError as exc:
@@ -463,27 +503,55 @@ def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | 
     age_hours = (now - started).total_seconds() / 3600
     if age_hours < IOS_PHASED_JUMP_HOURS:
         return False, f"phased rollout is {age_hours:.1f}h old (< {IOS_PHASED_JUMP_HOURS:g}h observation window)"
+    hold = capture_health_hold("ios", build=ios_version_build_number(live_version_id))
+    if hold:
+        return False, f"phased rollout is {age_hours:.1f}h old; held on capture health: {hold}"
     return True, f"phased rollout is {age_hours:.1f}h old; releasing to everyone"
 
 
-def _delete_phased_release(live_version_id: str) -> None:
-    """Release to everyone: DELETE the live version's phased rollout (Apple's completed/jump act)."""
+def _complete_phased_release(live_version_id: str) -> None:
+    """Release to everyone: PATCH the live version's phased rollout to COMPLETE.
+
+    Apple's jump is an update of the appStoreVersionPhasedReleases resource by its
+    own id; DELETE on that resource only cancels a rollout that has not started,
+    and the version's relationship path answers DELETE with 405 (seen live
+    2026-10-18 on 1.0.564). The response is read back so a 200 that did not take
+    is still a failure.
+    """
+    phased = ios_phased_release(live_version_id)
+    if phased is None or not isinstance(phased.get("id"), str):
+        raise TrainError(f"App Store Connect phased release for {live_version_id} has no readable id")
+    phased_id = phased["id"]
     token = _asc_rest_token()
-    url = (
-        "https://api.appstoreconnect.apple.com/v1/appStoreVersions/"
-        f"{live_version_id}/appStoreVersionPhasedRelease"
+    url = f"https://api.appstoreconnect.apple.com/v1/appStoreVersionPhasedReleases/{phased_id}"
+    body = json.dumps(
+        {
+            "data": {
+                "type": "appStoreVersionPhasedReleases",
+                "id": phased_id,
+                "attributes": {"phasedReleaseState": "COMPLETE"},
+            }
+        }
+    ).encode()
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method="PATCH",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
     )
-    request = urllib.request.Request(url, method="DELETE", headers={"Authorization": f"Bearer {token}"})
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
-            if response.status not in (200, 202, 204):
-                raise TrainError(f"phased-release delete for {live_version_id}: unexpected HTTP {response.status}")
+            payload = json.load(response)
     except urllib.error.HTTPError as exc:
         raise TrainError(
-            f"App Store Connect phased-release delete failed for {live_version_id}: HTTP {exc.code}"
+            f"App Store Connect phased-release complete failed for {live_version_id}: HTTP {exc.code}"
         ) from exc
     except (urllib.error.URLError, ValueError) as exc:
-        raise TrainError(f"App Store Connect phased-release delete failed for {live_version_id}: {exc}") from exc
+        raise TrainError(f"App Store Connect phased-release complete failed for {live_version_id}: {exc}") from exc
+    data = payload.get("data") if isinstance(payload, dict) else None
+    state = _attributes(data).get("phasedReleaseState") if isinstance(data, dict) else None
+    if state != "COMPLETE":
+        raise TrainError(f"phased-release complete for {live_version_id} read back state {state!r}, not COMPLETE")
 
 
 def _release_approved_version(version_id: str, version: str) -> None:
@@ -774,10 +842,10 @@ def run_ios(*, dry_run: bool, release_date: str, advance_only: bool = False, asc
         jump_note = jump_reason
         if should_complete:
             if dry_run:
-                log("DRY RUN: would delete the live phased rollout (release to everyone)")
+                log("DRY RUN: would complete the live phased rollout (release to everyone)")
                 jump_note = "would release to everyone now (dry run)"
             else:
-                _delete_phased_release(live_id)
+                _complete_phased_release(live_id)
                 log("released the live phased rollout to everyone (jump to 100%)")
                 jump_note = "released to everyone (jump to 100%)"
     if advance_only:
@@ -795,7 +863,17 @@ def run_ios(*, dry_run: bool, release_date: str, advance_only: bool = False, asc
                     f"ios=dry-run:release-approved {pending.version} "
                     "(attach the phased rollout, then POST appStoreVersionReleaseRequests)"
                 )
-            _attach_phased_release(pending.id)
+            try:
+                _attach_phased_release(pending.id)
+            except TrainError as exc:
+                # Same read-back as the submit path: this train's own submit
+                # already attached the phased rollout (or a retry follows an
+                # attach that landed before the release request failed), so
+                # Apple rejects the duplicate. Release only when a phased
+                # rollout is confirmed attached; otherwise keep failing closed.
+                if ios_phased_release(pending.id) is None:
+                    raise TrainError(f"phased rollout is not attached to approved {pending.version}: {exc}") from exc
+                log(f"phased rollout already attached to {pending.version}; the create was rejected as a duplicate")
             _release_approved_version(pending.id, pending.version)
             log(f"released approved {pending.version} with the phased rollout attached (day 1 = 1%)")
             return f"ios={plan.action}: released approved {pending.version} (phased rollout attached)"
@@ -925,6 +1003,85 @@ def existing_production_staged(production: object) -> dict[str, object] | None:
     return staged[0] if staged else None
 
 
+@dataclass(frozen=True)
+class HeldSupersedePlan:
+    action: str  # supersede | park | refuse
+    reason: str
+
+
+def plan_held_supersede(
+    *,
+    staged_name: object,
+    staged_version: str,
+    staged_code: object,
+    candidate: PlayCandidate | None,
+    pin: StorePin | None,
+    advance_only: bool,
+) -> HeldSupersedePlan:
+    """Whether held-changes mode may supersede the staged production release.
+
+    Parking the ladder in held mode has one wedge: the staged release is itself a
+    held, never-live commit (2026-10-28: 1.0.578/1522 was staged before the Play
+    currency-policy fix, the fixed 1.0.579/1527 sat on internal, and production
+    could never reach it — discarding the pending change in Play Console reverts
+    the track and the train parks again). When the staged release is
+    train-written and the operator gate's pin names a strictly newer build, one
+    held commit replaces it at the SAME userFraction — the completed base
+    release rides along unchanged, so exposure never rises — and the operator
+    still presses Send for review in Play Console.
+
+    The Play API cannot tell a held-pending commit from a live staged rollout —
+    both read `inProgress` at the same fraction — so the gate receipt in the
+    release name is the only proxy this repo controls. The limitation is real
+    and documented: if the operator already sent the held change and the
+    fraction went live, a supersede swaps that live cohort's binary at an
+    unchanged fraction. A name without a receipt may be human-edited
+    (renamed in Play Console, or in flight from before receipts) and is never
+    superseded.
+
+    Everything else keeps parking: an advance-only run (the rollout watch never
+    writes a candidate), no candidate, no pin (an unpinned dispatch stays
+    unpinned — an unaudited build must not replace the held rollout), or a
+    candidate that is not strictly newer in version AND version code. A set pin
+    that does not match the selected candidate refuses exactly like the
+    selection path: a build that appeared in the audit→dispatch gap is
+    unaudited.
+    """
+    if advance_only:
+        return HeldSupersedePlan("park", "advance-only run; the watch never writes a candidate")
+    if _gate_receipt_dt(str(staged_name or "")) is None:
+        return HeldSupersedePlan(
+            "park",
+            "the staged release carries no gate receipt — it may be human-edited, and the Play API "
+            "cannot tell a held commit from a live rollout",
+        )
+    if candidate is None:
+        return HeldSupersedePlan("park", "no internal/alpha build is newer than live production")
+    if pin is None:
+        return HeldSupersedePlan(
+            "park", "no TRAIN_PIN_ANDROID audit names this candidate; an unpinned build must not replace the rollout"
+        )
+    if pin.is_none or not pin.matches(candidate.version, candidate.version_code):
+        return HeldSupersedePlan(
+            "refuse",
+            f"TRAIN_PIN_ANDROID {'none' if pin.is_none else f'{pin.version}/{pin.build}'} does not match the selected "
+            f"candidate {candidate.version}/{candidate.version_code}; refusing to release an unaudited build",
+        )
+    if not promote.BUILD_RE.fullmatch(str(staged_code)):
+        return HeldSupersedePlan("park", f"the staged release has an unreadable version code ({staged_code!r})")
+    if promote.version_parts(candidate.version) <= promote.version_parts(staged_version):
+        return HeldSupersedePlan(
+            "park", f"candidate {candidate.version} ({candidate.version_code}) is not newer than staged {staged_version}"
+        )
+    if int(candidate.version_code) <= int(str(staged_code)):
+        return HeldSupersedePlan(
+            "park", f"candidate code {candidate.version_code} is not higher than the staged code {staged_code}"
+        )
+    return HeldSupersedePlan(
+        "supersede", f"pinned {candidate.version}/{candidate.version_code} replaces held {staged_version} {staged_code}"
+    )
+
+
 def _staged_release_notes(staged: dict[str, object]) -> str | None:
     """The exact en-US What's-New text Play already holds for this rollout.
 
@@ -994,26 +1151,149 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
                 f"a human decides halt or resume in Play Console"
             )
             return f"android=staged-halted {staged_version} {codes[0]}"
-        receipt = _gate_receipt_dt(str(staged.get("name") or ""))
-        now = datetime.now(timezone.utc)
-        if receipt is not None:
-            age_hours = (now - receipt).total_seconds() / 3600
-            if age_hours < ROLLOUT_HOP_MIN_HOURS:
-                # This rollout was advanced inside its observation window
-                # (today's gate, or a same-day retry of a train whose other
-                # platform failed — main() runs both platforms before exiting
-                # nonzero). One advancing action per window keeps the exposure
-                # ladder's observation gap real.
+        if promote.CHANGES_NOT_SENT_FOR_REVIEW:
+            # Held-changes mode: every hop would commit held (queued in Play's
+            # Publishing overview, invisible to this API), so the train cannot
+            # know the previous hop is live. Hopping blind stacks held hops and
+            # a single Send-for-review press would then release full exposure
+            # with no observation windows. The ladder parks: the operator sends
+            # each held change for review and advances exposure in Play Console
+            # until Play again accepts automated review submission (see
+            # .github/agent-docs/mobile-release-process.md). One parked shape is
+            # a wedge, though — the staged release is itself a stale held
+            # commit — so a train-written staged release with a strictly newer
+            # gate-pinned candidate is superseded in place instead
+            # (plan_held_supersede; exposure never rises).
+            plan = plan_held_supersede(
+                staged_name=staged_name,
+                staged_version=staged_version,
+                staged_code=codes[0],
+                candidate=candidate,
+                pin=pin,
+                advance_only=advance_only,
+            )
+            if plan.action == "refuse":
+                raise TrainError(plan.reason)
+            if plan.action == "supersede":
                 log(
-                    f"Android production staged {staged_version} {codes[0]} was advanced "
-                    f"{age_hours:.1f}h ago; holding at {current:.0%} until the "
-                    f"{ROLLOUT_HOP_MIN_HOURS:g}h observation window closes"
+                    f"Android production staged {staged_version} {codes[0]} @{current:.0%} is a held train commit; "
+                    f"{plan.reason}; writing the replacement at the same {current:.0%} fraction (exposure never rises)"
+                )
+                release_path = ensure_release_notes(candidate.version, release_date, write=not dry_run)
+                if dry_run:
+                    return (
+                        f"android=dry-run:staged-superseded {staged_version} {codes[0]} -> "
+                        f"{candidate.version} {candidate.version_code} @{current:.0%} (held; would supersede)"
+                    )
+                try:
+                    notes = promote.require_notes(release_path, candidate.version, "android")
+                except promote.PromotionError as exc:
+                    raise TrainError(f"candidate {candidate.version} has no usable What's-New text: {exc}") from exc
+                try:
+                    promote.select_play_release(
+                        tracks[candidate.track],
+                        production,
+                        candidate.version,
+                        candidate.version_code,
+                        source_track=candidate.track,
+                    )
+                    # tracks.update replaces the whole releases list, so every
+                    # other production release rides along unchanged — above all
+                    # the completed base release the users outside the staged
+                    # fraction keep serving from; exposure never changes. No
+                    # base_release for the written release: the old staged
+                    # release's metadata and What's-New belong to the old
+                    # version; the candidate ships its own collected notes and
+                    # a fresh gate receipt.
+                    retained = [dict(release) for release in _releases(production, "production") if release is not staged]
+                    promote.submit_android(
+                        client,
+                        edit_id,
+                        candidate.version,
+                        candidate.version_code,
+                        notes,
+                        status="inProgress",
+                        user_fraction=current,
+                        release_name=_staged_name_with_receipt(candidate.version),
+                        retained_releases=retained,
+                    )
+                except promote.PromotionError as exc:
+                    raise TrainError(str(exc)) from exc
+                log(
+                    f"Android production staged rollout superseded: {candidate.version} ({candidate.version_code}) "
+                    f"replaces held {staged_version} ({codes[0]}) at {current:.0%}; held for review submission — "
+                    f"send it from Play Console -> Publishing overview"
                 )
                 return (
-                    f"android=staged {staged_version} {codes[0]} @{current:.0%} "
-                    f"(advanced {age_hours:.1f}h ago; window {ROLLOUT_HOP_MIN_HOURS:g}h)"
+                    f"android=staged-superseded {staged_version} {codes[0]} -> {candidate.version} "
+                    f"{candidate.version_code} @{current:.0%} (held; send for review in Console)"
                 )
-            log(f"Android staged {staged_version} last advanced {age_hours:.1f}h ago; window has closed")
+            log(
+                f"Android production staged {staged_version} {codes[0]} @{current:.0%} parked: Play holds "
+                f"committed changes for manual review submission; a human sends them and advances "
+                f"exposure in Play Console ({plan.reason})"
+            )
+            return (
+                f"android=staged {staged_version} {codes[0]} @{current:.0%} "
+                f"parked (held-changes mode; manual review submission)"
+            )
+        receipt = _gate_receipt_dt(str(staged.get("name") or ""))
+        now = datetime.now(timezone.utc)
+        if receipt is None:
+            # No receipt means no proof of when this fraction was reached: a
+            # rollout started before receipts existed, or a name edited in Play
+            # Console. Hopping now could expand exposure minutes after the last
+            # step, so fail closed: stamp a receipt at the current fraction
+            # (no exposure change) and let the next advance after the
+            # observation window take the hop.
+            log(
+                f"Android production staged {staged_version} {codes[0]} at {current:.0%} has no gate receipt; "
+                f"stamping one and holding for the {ROLLOUT_HOP_MIN_HOURS:g}h observation window"
+            )
+            try:
+                notes = _staged_release_notes(staged) or promote.require_notes(
+                    ensure_release_notes(staged_version, release_date, write=False), staged_version, "android"
+                )
+            except promote.PromotionError as exc:
+                raise TrainError(f"staged {staged_version} has no usable What's-New text: {exc}") from exc
+            if dry_run:
+                return f"android=dry-run:staged-stamp {staged_version} {codes[0]} @{current:.0%} (no gate receipt; would stamp and hold)"
+            try:
+                promote.submit_android(
+                    client,
+                    edit_id,
+                    staged_version,
+                    codes[0],
+                    notes,
+                    status="inProgress",
+                    user_fraction=current,
+                    extra_codes=codes[1:],
+                    base_release=staged,
+                    release_name=_staged_name_with_receipt(staged_version),
+                )
+            except promote.PromotionError as exc:
+                raise TrainError(str(exc)) from exc
+            return (
+                f"android=staged {staged_version} {codes[0]} @{current:.0%} "
+                f"(no gate receipt; stamped, holding {ROLLOUT_HOP_MIN_HOURS:g}h)"
+            )
+        age_hours = (now - receipt).total_seconds() / 3600
+        if age_hours < ROLLOUT_HOP_MIN_HOURS:
+            # This rollout was advanced inside its observation window
+            # (today's gate, or a same-day retry of a train whose other
+            # platform failed — main() runs both platforms before exiting
+            # nonzero). One advancing action per window keeps the exposure
+            # ladder's observation gap real.
+            log(
+                f"Android production staged {staged_version} {codes[0]} was advanced "
+                f"{age_hours:.1f}h ago; holding at {current:.0%} until the "
+                f"{ROLLOUT_HOP_MIN_HOURS:g}h observation window closes"
+            )
+            return (
+                f"android=staged {staged_version} {codes[0]} @{current:.0%} "
+                f"(advanced {age_hours:.1f}h ago; window {ROLLOUT_HOP_MIN_HOURS:g}h)"
+            )
+        log(f"Android staged {staged_version} last advanced {age_hours:.1f}h ago; window has closed")
         if candidate is not None:
             # A newer internal build exists, but Play allows only one staged
             # release at a time, so it starts only after this rollout
@@ -1024,6 +1304,9 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
                 f"newer candidate {candidate.version} ({candidate.version_code}) waits for staged "
                 f"{staged_version} to complete; continuing the ladder"
             )
+        hold = capture_health_hold("android", build=codes[0])
+        if hold:
+            return f"android=staged {staged_version} {codes[0]} @{current:.0%} held on capture health ({hold})"
         next_hops = [hop for hop in STAGED_ROLLOUT_LADDER if hop > current + 1e-9]
         if not next_hops:
             log(f"Android production staged {staged_version} at {current:.0%} is at or past the ladder top; nothing to do")
@@ -1080,6 +1363,14 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
             return f"android=completed {staged_version} {codes[0]} 100%"
         log(f"Android production staged now {staged_version} {codes[0]} at {hop:.0%}")
         return f"android=staged {staged_version} {codes[0]} @{hop:.0%}"
+    if advance_only:
+        # The advance mode only moves a rollout that is already in flight.
+        # Starting one from a candidate is the daily gate's audited job: with
+        # no staged release, falling through would put an unaudited build at
+        # 1% of production (the watch passes no pin).
+        waiting = f"; candidate {candidate.version} ({candidate.version_code}) waits for the gate" if candidate else ""
+        log(f"Android live {live}; no staged rollout in flight{waiting}")
+        return f"android=advance (no staged rollout in flight{waiting})"
     if candidate is None:
         if pin is not None and not pin.is_none:
             # The gate pinned an audited build the store no longer offers;
@@ -1148,6 +1439,16 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
     except promote.PromotionError as exc:
         raise TrainError(str(exc)) from exc
     if STAGED_ROLLOUT_FRACTION is not None:
+        if promote.CHANGES_NOT_SENT_FOR_REVIEW:
+            log(
+                f"Android production staged rollout started: {candidate.version} ({candidate.version_code}) "
+                f"at {STAGED_ROLLOUT_FRACTION:.0%}; held for review submission — send it from Play Console "
+                f"-> Publishing overview; haltable in Play Console"
+            )
+            return (
+                f"android=staged {candidate.version} ({candidate.version_code}) "
+                f"@{STAGED_ROLLOUT_FRACTION:.0%} (held; send for review in Play Console)"
+            )
         log(
             f"Android production staged rollout started: {candidate.version} ({candidate.version_code}) "
             f"at {STAGED_ROLLOUT_FRACTION:.0%}; haltable in Play Console"

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import os
 import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
+from config.parakeet_ja import ja_window_allocated, ja_window_configured
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, STTServingSurface, parakeet_supports_language
 from config.live_stt_replay import ReplayLimits, parse_replay_limits
 
@@ -28,10 +28,17 @@ class Target:
     replay: ReplayLimits | None = None
 
     def capable(self, language: str | None, features: frozenset[str] = frozenset({'streaming'})) -> bool:
+        from config.stt_provider_policy import provider_is_enabled
+
+        if not provider_is_enabled(self.family, STTServingSurface.STREAMING):
+            return False
         lang = (language or 'multi').lower().split('-', 1)[0]
         if not features.issubset(self.features) or (self.languages and lang not in self.languages):
             return False
         if self.family == 'parakeet':
+            if lang == 'ja':
+                # Owner ramp is applied by `window_ja_admits` where the uid is known.
+                return ja_window_configured()
             return parakeet_supports_language(STTServingSurface.PRERECORDED, lang)
         if self.family == 'modulate':
             return lang in MODULATE_SUPPORTED_LANGUAGES
@@ -39,43 +46,55 @@ class Target:
 
     def ramp(self) -> float:
         if self.id == 'parakeet-window':
-            return min(self.ramp_percent, percent('PARAKEET_WINDOW_ALLOCATION_PERCENT', 0))
+            from config.policy.listen import window_percent
+
+            return min(self.ramp_percent, window_percent(strict=True))
         return self.ramp_percent
 
     def at_capacity(self) -> bool:
-        return bool(self.capacity_env and os.getenv(self.capacity_env, 'false').lower() == 'true')
+        from config.refactor_switches import default_off
 
-
-def percent(name: str, default: float) -> float:
-    value = float(os.getenv(name, str(default)))
-    if not math.isfinite(value) or not 0 <= value <= 100:
-        raise ValueError(f'invalid {name}')
-    return value
+        return bool(
+            self.capacity_env
+            and default_off(self.capacity_env, os.getenv(self.capacity_env, 'false').lower() == 'true')
+        )
 
 
 def assigned(uid: str | None, salt: str, share: float) -> bool:
-    if not uid:
-        return False
-    bucket = int.from_bytes(hashlib.sha256(f'{salt}:{uid}'.encode()).digest()[:8], 'big')
-    return bucket / 2**64 * 100 < share
+    from config.policy.batch import cohort_bucket
+
+    return bool(uid) and cohort_bucket(uid, salt, bits=64) < share
+
+
+def window_ja_admits(target: Target, uid: str | None, language: str | None) -> bool:
+    """A Parakeet target serves Japanese only to owners inside the ja window ramp."""
+    lang = (language or 'multi').lower().split('-', 1)[0]
+    return target.family != 'parakeet' or lang != 'ja' or ja_window_allocated(uid)
 
 
 def routing_on(uid: str | None) -> bool:
-    return os.getenv('STT_ROUTING_MODE', 'off').lower() == 'on' and assigned(
-        uid, 'stt-routing-on', percent('STT_ROUTING_ON_PERCENT', 0)
-    )
+    from config.policy.listen import routing_enabled
+
+    return routing_enabled(uid)
 
 
 DEFAULT_TARGETS = (
     Target('parakeet-window', 'parakeet', 0.02),
-    Target('modulate-velma-2', 'modulate', 0.055),
+    Target('modulate-velma-2', 'modulate', 0.055, ramp_percent=0),
     Target('soniox', 'soniox', 0.0754),
 )
 DEFAULT_IDS = {target.family: target.id for target in DEFAULT_TARGETS}
 
 
 def registry() -> tuple[Target, ...]:
-    raw = os.getenv('STT_ROUTING_TARGETS_JSON', '').strip()
+    from config.policy.listen import current_listen_policy, routing_targets_json
+
+    policy = current_listen_policy.get()
+    return policy.targets if policy is not None else parse_registry(routing_targets_json())
+
+
+def parse_registry(raw: str) -> tuple[Target, ...]:
+    raw = raw.strip()
     targets: tuple[Target, ...] = DEFAULT_TARGETS
     if raw:
         entries = json.loads(raw)

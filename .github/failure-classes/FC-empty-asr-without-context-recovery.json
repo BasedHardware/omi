@@ -4,7 +4,8 @@
   "violated_contract": "VAD-detected captured speech with no owned ASR words must retain its transcription obligation and try a bounded full-capture context recovery before quarantine; repeated identical fragmented ASR is not recovery.",
   "canonical_prevention": "Use one single-item, full-capture ASR retry with silence padding and exact capture-relative clock restoration. Bound its padded GPU quantum without truncating audio; retain still-empty and oversized units for fenced legacy recovery. Behavioral worker tests cover blank output, context-only words, padded-only hypotheses, unchanged speech accounting and failure isolation.",
   "canonical_prevention_artifact": [
-    "backend/tests/unit/test_batch_pipeline_worker.py"
+    "backend/tests/unit/test_batch_pipeline_worker.py",
+    "backend/tests/unit/test_batch_pipeline_empty_safety.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

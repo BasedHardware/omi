@@ -1,3 +1,12 @@
+"""Chat surface: /v2/messages agentic chat with SSE streaming, voice-message
+transcription, chat files, ratings, shares, and device-tool result intake.
+
+The route's real responsibility is stream discipline -- setup/first-event
+deadlines, heartbeats, the typed failure protocol for opted-in clients, and
+bounded provider retries -- while prompt assembly and tool loops live in
+utils.chat_turn (backend/docs/chat-system.md).
+"""
+
 from utils.chat_turn import (
     run_chat_turn,
     TurnOptions,
@@ -43,6 +52,7 @@ from multipart.multipart import shutil
 from pydantic import BaseModel
 
 import database.chat as chat_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.notifications as notification_db
 from utils.chat_session_target import resolve_chat_target
 import database.llm_usage as llm_usage_db
@@ -75,11 +85,13 @@ from utils.chat import (
     transcribe_pcm_bytes,
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
+from routers import chat_video
 from utils.stt.streaming import STTService, connect_stt_socket_with_fallback, drain_stt_socket
 from utils.stt.streaming import get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
+from models.transcription_wire import TranscriptionOutcome as WireTranscriptionOutcome
 from config.stt_provider_policy import MODULATE_PROVIDER, STTServingSurface, provider_for_service
 from utils.stt.outcomes import TranscriptionFailure, bounded_provider, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
@@ -90,7 +102,7 @@ from utils.chat_rating_triage import extract_rating_triage_fields
 from utils.feedback import record_chat_message_feedback
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
-from utils.subscription import enforce_chat_quota, is_trial_paywalled
+from utils.subscription import enforce_chat_quota
 from utils import share_links
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool, UnsupportedChatFileError, safe_file_chats
@@ -142,12 +154,14 @@ class VoiceMessageTranscriptionResponse(BaseModel):
     language: Optional[str] = None
     stt_provider: Optional[str] = None
     stt_model: Optional[str] = None
-    outcome: Optional[TranscriptionOutcome] = None
+    # Wire vocabulary frozen by the released app-client contract; internal-only
+    # outcome values map onto their public counterpart (models/transcription_wire).
+    outcome: Optional[WireTranscriptionOutcome] = None
 
 
 class TranscriptionErrorDetail(BaseModel):
     error: str
-    outcome: TranscriptionOutcome
+    outcome: WireTranscriptionOutcome
     provider: str
     retryable: bool
     message: str
@@ -566,12 +580,6 @@ async def transcribe_voice_message(
 
     Returns {"transcript": "...", "language": "..."}.
     """
-    # Trial paywall: reject paywalled desktop PTT before hitting Deepgram.
-    # Narrow to trial-only on purpose — full enforce_chat_quota here would
-    # change mobile behavior for users past their existing 30/mo chat cap.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
-        raise HTTPException(status_code=402, detail={'error': 'quota_exceeded', 'plan_type': 'basic'})
-
     content_type = request.headers.get("content-type", "")
 
     if "application/octet-stream" in content_type:
@@ -669,7 +677,7 @@ async def transcribe_voice_message(
             audio_seconds=duration_ms / 1000 if encoding == 'linear16' else None,
         )
         try:
-            transcript, detected_language = await run_blocking(
+            transcription_result = await run_blocking(
                 sync_executor,
                 transcribe_pcm_bytes,
                 audio_bytes,
@@ -679,7 +687,14 @@ async def transcribe_voice_message(
                 sample_rate=sample_rate,
                 channels=channels,
                 keywords=context_keywords,
+                return_provider=True,
             )
+            # Legacy transcription adapters return (text, language). Provider
+            # metadata is optional; retain the selected provider when absent.
+            if len(transcription_result) == 4:
+                transcript, detected_language, stt_provider, stt_model = transcription_result
+            else:
+                transcript, detected_language = transcription_result
             outcome = TranscriptionOutcome.SUCCESS if transcript else TranscriptionOutcome.EXPECTED_SILENCE
             parity_capture.observe(
                 "inbound",
@@ -797,9 +812,21 @@ async def transcribe_voice_message(
             audio_seconds=measured_duration_ms / 1000,
         )
         for wav_path in wav_paths:
-            transcript, detected_language = await run_blocking(
-                sync_executor, transcribe_voice_message_segment, wav_path, uid, language=resolved_language
+            transcription_result = await run_blocking(
+                sync_executor,
+                transcribe_voice_message_segment,
+                wav_path,
+                uid,
+                language=resolved_language,
+                return_provider=True,
             )
+            if len(transcription_result) == 4:
+                transcript, detected_language, segment_provider, segment_model = transcription_result
+                # A multipart response must disclose Soniox if any segment used it.
+                if stt_provider != 'soniox':
+                    stt_provider, stt_model = segment_provider, segment_model
+            else:
+                transcript, detected_language = transcription_result
             if transcript:
                 transcripts.append(transcript)
             if is_multi and detected_language:
@@ -933,12 +960,6 @@ async def transcribe_voice_message_stream(
     )
 
     await websocket.accept()
-
-    # Paywalled desktop users — close before opening a provider connection for
-    # a PTT stream that would not be allowed to chat anyway.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
-        await websocket.close(code=1008, reason='trial_expired')
-        return
 
     if codec != 'linear16':
         await websocket.close(code=1008, reason='Unsupported codec; only linear16 is supported')
@@ -1462,6 +1483,7 @@ def upload_file_chat(
     thumbs_name = []
     thumb_source_by_name = {}
     files_chat = []
+    stored_videos: dict[int, FileChat] = {}  # by upload position; answered in that order
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
         safe_suffix = Path(file.filename).name if file.filename else "upload"
@@ -1469,6 +1491,12 @@ def upload_file_chat(
         try:
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
+
+            if chat_video.is_video_upload(safe_suffix, file.content_type):
+                stored_videos[len(files_chat) + len(stored_videos)] = chat_video.store_uploaded_clip(
+                    uid, temp_file, safe_suffix
+                )
+                continue
 
             try:
                 result = FileChatTool.upload(temp_file, file_name=safe_suffix)
@@ -1512,7 +1540,10 @@ def upload_file_chat(
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.model_dump() for fc in files_chat]
+    ordered = iter(files_chat)
+    response = [
+        (stored_videos.get(i) or next(ordered)).client_dump() for i in range(len(files_chat) + len(stored_videos))
+    ]
 
     return response
 
@@ -1767,6 +1798,14 @@ def get_shared_chat_messages(token: str):
 
     sender_uid = share_data['uid']
     message_ids = share_data['message_ids']
+
+    try:
+        if account_deletion_blocks_user_work(sender_uid):
+            raise HTTPException(status_code=404, detail='Share link expired or not found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared chat unavailable') from exc
 
     messages = []
     for mid in message_ids:

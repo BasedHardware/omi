@@ -10,6 +10,7 @@ from google.cloud import firestore
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge, privacy_owner_key
+from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 
 NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
@@ -21,6 +22,7 @@ def _belongs(data: dict, conversation_id: str | None) -> bool:
     binding = data.get('projection_binding') or {}
     identities = {
         data.get('conversation_id'),
+        (data.get('item') or {}).get('conversation_id'),
         data.get('source_conversation_id'),
         (data.get('projection_binding') or {}).get('target_conversation_id'),
         *(data.get('conversation_ids') or []),
@@ -47,11 +49,26 @@ def _references(data: dict) -> set[str]:
     return {uri for uri in (data.get('audio_uri'), result.get('result_uri'), data.get('uri')) if uri}
 
 
-def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: bool) -> None:
-    """Unlink one job while contending on scheduler control/queue fences."""
+def _delete_job(
+    client: Any,
+    namespace: str,
+    snapshot: Any,
+    *,
+    retain_ordering: bool,
+    fence: Callable[[Any], None] | None = None,
+) -> None:
+    """Unlink one job while contending on scheduler control/queue fences.
+
+    ``fence`` re-proves the caller's deletion authority inside this same
+    transaction, so the erase cannot commit after that authority is lost.
+    """
+    touched: list[tuple[str, str]] = []  # A2 shadow: documents to re-copy after commit
 
     @firestore.transactional
     def remove(transaction):
+        touched.clear()
+        if fence is not None:
+            fence(transaction)
         job = snapshot.reference.get(transaction=transaction).to_dict() or {}
         if not job:
             return
@@ -69,6 +86,8 @@ def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: 
         predecessors = queries.predecessor_documents(client, namespace, snapshot.id, transaction)
         if predecessors and (predecessors[0].to_dict() or {}).get('owner_key') != key:
             raise RuntimeError('batch queue ownership mismatch')
+        touched.extend([('jobs', snapshot.id), ('results', snapshot.id), ('owners', key), ('queues', queue_key)])
+        touched.extend([('control', scheduler_control_key(key)), *(('jobs', p.id) for p in predecessors)])
         if queue.get('head') == snapshot.id:
             queue['head'] = job.get('next', '')
         if queue.get('tail') == snapshot.id:
@@ -90,6 +109,53 @@ def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: 
             transaction.delete(result_ref)
 
     remove(client.transaction())
+    mirror_refresh(namespace, touched)
+
+
+def _erase_artifact(
+    uid: str,
+    namespace: str,
+    snapshot: Any,
+    data: dict[str, Any],
+    delete_uri: Callable[[str, str], None],
+    fence: Callable[[Any], None] | None = None,
+    client: Any = None,
+) -> None:
+    # The default deleter enforces the requested owner's configured storage
+    # prefix before any metadata repair. A foreign URI raises, so the purge
+    # cannot acknowledge erasure or transfer deletion authority to that row.
+    for uri in _references(data):
+        delete_uri(uid, uri)
+    pending_until = data.get('write_pending_until', datetime.min.replace(tzinfo=timezone.utc))
+    pending = pending_until > datetime.now(timezone.utc)
+    # Privacy intent is authoritative, even if routine cleanup parked this
+    # row. Keep late-upload erasure reachable and clear any racing TTL.
+    repair = {
+        'owner_id': uid,
+        'owner_key': privacy_owner_key(uid),
+        'erasure_requested': True,
+        'cleanup_after': pending_until,
+        'expires_at': firestore.DELETE_FIELD,
+    }
+    if fence is None:
+        if pending:
+            snapshot.reference.update(repair)
+        else:
+            snapshot.reference.delete()
+    else:
+
+        @firestore.transactional
+        def fenced(transaction):
+            fence(transaction)  # authority re-proven in the erasing transaction
+            if pending:
+                transaction.update(snapshot.reference, repair)
+            else:
+                transaction.delete(snapshot.reference)
+
+        if client is None:
+            raise ValueError('a fenced artifact erase needs the client that owns the row')
+        fenced(client.transaction())
+    mirror_refresh(namespace, [('artifacts', snapshot.id)])
 
 
 def purge_batch_owner(
@@ -136,7 +202,7 @@ def purge_batch_owner(
     deleted = 0
     for namespace in namespaces:
         segments = set()
-        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes'):
+        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes', 'shadow_jobs'):
             after = None
             while True:
                 rows = queries.owner_documents(client, namespace, table, key, after=after)
@@ -159,32 +225,49 @@ def purge_batch_owner(
                         continue
                     if table in {'jobs', 'results'}:
                         segments.add(snapshot.id)
+                    if table == 'artifacts':
+                        _erase_artifact(uid, namespace, snapshot, data, delete_uri)
+                        deleted += 1
+                        continue
                     for uri in _references(data):
                         delete_uri(uid, uri)
                     if table == 'jobs':
                         for uri in _references(result):
                             delete_uri(uid, uri)
                         _delete_job(client, namespace, snapshot, retain_ordering=conversation_id is not None)
-                    elif table == 'artifacts' and data.get(
-                        'write_pending_until', datetime.min.replace(tzinfo=timezone.utc)
-                    ) > datetime.now(timezone.utc):
-                        # An upload already in flight can finish after the first
-                        # erase (including after process death). Keep its unique
-                        # name in the cleanup outbox until the bounded IO ends.
-                        snapshot.reference.update(
-                            {'erasure_requested': True, 'cleanup_after': data['write_pending_until']}
-                        )
                     elif table == 'results' and conversation_id is not None:
                         _erase_result(client, namespace, snapshot)
                     else:
                         snapshot.reference.delete()
+                    if table != 'jobs':
+                        mirror_refresh(namespace, [(table, snapshot.id)])
                     deleted += 1
+        # A routine owner-mismatch flag must never hide accepted audio from
+        # privacy erasure. This bounded, single-field fallback reaches parked
+        # rows without scanning other owners or trusting a foreign URI.
+        after = None
+        while True:
+            rows = queries.artifacts_by_owner_id(client, namespace, uid, after=after)
+            if not rows:
+                break
+            after = rows[-1]
+            for snapshot in rows:
+                data = snapshot.to_dict() or {}
+                if data.get('owner_key') == key:
+                    continue  # Already handled above, including pending writes.
+                if not _belongs(data, conversation_id) and data.get('segment_id') not in segments:
+                    continue
+                _erase_artifact(uid, namespace, snapshot, data, delete_uri)
+                deleted += 1
         if conversation_id is None:
             _purge_owner_fairness(client, namespace, key)
             if default_storage_cleanup:
                 from utils.batch_pipeline.retention import purge_batch_storage_owner
 
                 purge_batch_storage_owner(uid, namespace)
+        # A5: the Postgres copy (A2 shadow) is erased in the same retryable flow, before the purge is
+        # recorded as finished; a failure raises and the caller retries. No-op outside shadow mode.
+        purge_jobstore_owner(namespace, uid)
     if conversation_id is None:
         finish_privacy_purge(client, uid, generation)
     return deleted
@@ -204,15 +287,22 @@ def _purge_owner_fairness(client: Any, namespace: str, key: str) -> None:
         for queue_key in queue_keys:
             transaction.delete(client.collection(f'{namespace}_queues').document(queue_key))
         transaction.delete(client.collection(f'{namespace}_owners').document(key))
+        transaction.delete(client.collection(f'{namespace}_merge_holds').document(key))
 
     remove(client.transaction())
+    queues = [('queues', f'{priority}_{key}') for priority in range(3)]
+    mirror_refresh(namespace, [('control', scheduler_control_key(key)), ('owners', key), *queues])
 
 
 def _write_erased_result(transaction: Any, result_ref: Any, result: dict, owner_ref: Any, owner: dict) -> None:
-    """Retain only the ordering edge; no body, source identity, or reference."""
+    """Retain only the ordering edge; no body, source identity, or reference.
+
+    ``log_sequence`` (a log position) keeps an erased projection watermark
+    usable for the merge's catch-up depth.
+    """
     erased = {
         field: result[field]
-        for field in ('segment_id', 'owner_key', 'capture_at', 'protocol_version')
+        for field in ('segment_id', 'owner_key', 'capture_at', 'protocol_version', 'log_sequence')
         if field in result
     }
     erased.update(projection_state='erased', previous_segment_id=result.get('previous_segment_id'))
@@ -224,9 +314,11 @@ def _write_erased_result(transaction: Any, result_ref: Any, result: dict, owner_
     transaction.set(result_ref, erased)
 
 
-def _erase_result(client: Any, namespace: str, snapshot: Any) -> None:
+def _erase_result(client: Any, namespace: str, snapshot: Any, fence: Callable[[Any], None] | None = None) -> None:
     @firestore.transactional
     def erase(transaction):
+        if fence is not None:
+            fence(transaction)
         result = snapshot.reference.get(transaction=transaction).to_dict() or {}
         if not result:
             return
@@ -235,3 +327,14 @@ def _erase_result(client: Any, namespace: str, snapshot: Any) -> None:
         _write_erased_result(transaction, snapshot.reference, result, owner_ref, owner)
 
     erase(client.transaction())
+    owner_key = (snapshot.to_dict() or {}).get('owner_key')
+    mirror_refresh(namespace, [('results', snapshot.id), *([('owners', owner_key)] if owner_key else [])])
+
+
+# Shared with the resumable conversation purge (database.batch_pipeline_conversation_purge),
+# which must match and erase rows exactly as this pass does.
+row_belongs = _belongs
+row_references = _references
+delete_job = _delete_job
+erase_artifact = _erase_artifact
+erase_result = _erase_result

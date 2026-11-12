@@ -1,147 +1,248 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/backend/http/api/goals.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/conversations/widgets/date_list_item.dart';
-import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/goals_provider.dart';
-import 'package:omi/services/capture/optimistic_processing.dart';
-import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 
 import '../support/typed_conversation_screen.dart';
 
-Future<void> pumpPage(WidgetTester tester, ConversationProvider provider) async {
-  tester.view.physicalSize = const Size(800, 1400);
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.resetPhysicalSize);
-  addTearDown(tester.view.resetDevicePixelRatio);
-  final screen = await buildTypedConversationScreen(provider);
-  final goals = GoalsProvider(
-      goalsFetcher: () async => [
-            Goal.fromJson({'id': 'goal', 'title': 'Read a book'})
-          ]);
-  addTearDown(goals.dispose);
-  await goals.init();
-  await tester.pumpWidget(ChangeNotifierProvider.value(value: goals, child: screen));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 250));
-}
-
-ServerConversation completed(String id, {DateTime? createdAt, DateTime? startedAt, DateTime? finishedAt}) =>
-    ServerConversation(
-      id: id,
-      createdAt: createdAt ?? DateTime.now(),
-      startedAt: startedAt,
-      finishedAt: finishedAt,
-      structured: Structured('Finished recording', 'Overview', emoji: '🧠'),
-      status: ConversationStatus.completed,
-    );
+List<TranscriptSegment> _finishedSpeech() => [
+      TranscriptSegment(
+        id: 'speech',
+        text: 'A finished recording.',
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        personId: null,
+        start: 0,
+        end: 10,
+        translations: const [],
+      ),
+    ];
 
 void main() {
   setUp(() => VisibilityDetectorController.instance.updateInterval = Duration.zero);
+  for (final live in [false, true]) {
+    testWidgets('Home closing episode (live snapshot=$live) has one processing row until all members finish',
+        (tester) async {
+      tester.view.physicalSize = const Size(390, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      // Keep this lifecycle fixture outside the unrelated, wall-clock New badge window.
+      final now = DateTime.now().subtract(const Duration(hours: 1));
+      ServerConversation member(String id, ConversationStatus status) => ServerConversation(
+            id: id,
+            createdAt: now,
+            startedAt: now,
+            status: status,
+            structured: Structured(status == ConversationStatus.completed ? 'Finished $id' : '', ''),
+          );
+      final a = member('a', ConversationStatus.completed);
+      final b = member('b', ConversationStatus.processing);
+      final c = member('c', ConversationStatus.processing);
+      Episode episode(bool live) => Episode(
+            id: 'closing',
+            live: live,
+            startedAt: now,
+            lastActivityAt: now,
+            conversationIds: const ['a', 'b', 'c'],
+            members: [a, b, c],
+            title: 'Dinner and plans',
+            // Not composed yet: members still processing hold the row. A composed episode keeps
+            // its notes row instead (home_rows_test).
+          );
+      final provider = ConversationProvider(isSignedIn: () => false)
+        ..isLoadingConversations = false
+        ..conversations = [a]
+        ..processingConversations = [b, c]
+        ..groupConversationsByDate();
+      final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [episode(live)])),
+      );
+      addTearDown(provider.dispose);
+      final screen = await buildTypedConversationScreen(provider, episodes: episodes);
+      episodes
+        ..debugSetLive(null)
+        ..debugSetHomeEpisodes([episode(live)]);
+      await tester.pumpWidget(screen);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+      expect(find.byType(ConversationListItem), findsNothing);
+      provider.removeProcessingConversation('b');
+      await tester.pump();
+      expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+      provider.removeProcessingConversation('c');
+      provider
+        ..processingConversations = []
+        ..conversations = [a, member('b', ConversationStatus.completed), member('c', ConversationStatus.completed)]
+        ..groupConversationsByDate();
+      episodes.debugSetHomeEpisodes([episode(false)]);
+      await tester.pump();
+      expect(find.byKey(const Key('home_processing_row')), findsNothing);
+      expect(find.byType(ConversationListItem), findsOneWidget);
+      expect(find.text('Dinner and plans'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      // Dispose before the test ends: a processing hold re-reads on a timer that must not outlive the page.
+      episodes.dispose();
+    });
+  }
 
-  final pendingRow = find.byKey(const Key('home_pending_row'));
-
-  // A conversation still processing is not a card of its own: it joins Home's one pending row under
-  // Today, and slow work never says it is taking longer.
-  testWidgets('processing joins the pending row under Today, above same-day conversations', (tester) async {
-    final provider = ConversationProvider(isSignedIn: () => false);
+  testWidgets('Home local Processing row expires without a server response', (tester) async {
+    tester.view.physicalSize = const Size(390, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final provider = ConversationProvider(isSignedIn: () => false)..isLoadingConversations = false;
     addTearDown(provider.dispose);
-    await pumpPage(tester, provider);
-    await provider.addConversation(completed('older'));
+    final screen = await buildTypedConversationScreen(provider);
     provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    await tester.pumpWidget(screen);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+    await tester.pump(OptimisticProcessingPlaceholder.timeout);
     await tester.pump();
-
-    final header = find.byType(DateListItem);
-    final item = find.byType(ConversationListItem);
-    expect(header, findsOneWidget);
-    expect(pendingRow, findsOneWidget);
-    expect(item, findsOneWidget);
-    expect(find.text('Processing'), findsOneWidget);
-    expect(find.textContaining('taking longer'), findsNothing);
-    expect(tester.widget<DateListItem>(header).date, conversationLocalDayKey(DateTime.now()));
-    expect(tester.getBottomLeft(header).dy, lessThanOrEqualTo(tester.getTopLeft(pendingRow).dy));
-    expect(tester.getBottomLeft(pendingRow).dy, lessThanOrEqualTo(tester.getTopLeft(item).dy));
+    expect(find.byKey(const Key('home_processing_row')), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('processing-only account shows the row, not an empty state; it clears when done', (tester) async {
-    final provider = ConversationProvider(isSignedIn: () => false);
+  testWidgets('Home optimistic row becomes the completed server row without title or emoji', (tester) async {
+    tester.view.physicalSize = const Size(390, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final completed = ServerConversation(
+      id: 'finished',
+      createdAt: DateTime.now(),
+      structured: Structured('', ''),
+      status: ConversationStatus.completed,
+      transcriptSegments: _finishedSpeech(),
+    );
+    final provider = ConversationProvider(
+      isSignedIn: () => true,
+      conversationListFetcher: () async => (items: [completed], ok: true),
+      conversationLifecycleFetcher: (_) async => (item: completed, ok: true),
+    )..isLoadingConversations = false;
     addTearDown(provider.dispose);
-    await pumpPage(tester, provider);
-    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    final screen = await buildTypedConversationScreen(provider);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'finished'));
+    await tester.pumpWidget(screen);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+    await provider.forceRefreshConversations();
     await tester.pump();
-
-    expect(pendingRow, findsOneWidget);
-    expect(find.byType(EmptyConversationsWidget), findsNothing);
-    expect(find.byType(DateListItem), findsOneWidget);
-
-    provider.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
-    await provider.addConversation(completed('real'));
-    await tester.pump();
-    expect(pendingRow, findsNothing);
+    expect(find.byKey(const Key('home_processing_row')), findsNothing);
     expect(find.byType(ConversationListItem), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('several processing conversations, across days, are still one row in Today', (tester) async {
-    final provider = ConversationProvider(isSignedIn: () => false);
-    addTearDown(provider.dispose);
-    await pumpPage(tester, provider);
+  testWidgets('Home keeps a transcript-free server replacement reachable until speech lands', (tester) async {
+    tester.view.physicalSize = const Size(390, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final now = DateTime.now();
-    final yesterdayNoon = DateTime(now.year, now.month, now.day - 1, 12);
-    provider.addProcessingConversation(
-      completed('older', createdAt: yesterdayNoon, startedAt: yesterdayNoon)..status = ConversationStatus.processing,
+    var server = ServerConversation(
+      id: 'finished',
+      createdAt: now,
+      structured: Structured('', ''),
+      status: ConversationStatus.completed,
     );
-    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    final provider = ConversationProvider(
+      isSignedIn: () => true,
+      conversationListFetcher: () async => (items: [server], ok: true),
+      conversationLifecycleFetcher: (_) async => (item: server, ok: true),
+    )..isLoadingConversations = false;
+    addTearDown(provider.dispose);
+    final screen = await buildTypedConversationScreen(provider);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'finished'));
+    await tester.pumpWidget(screen);
+    await tester.pump(const Duration(milliseconds: 300));
+    await provider.forceRefreshConversations();
     await tester.pump();
-    expect(pendingRow, findsOneWidget);
-    expect(
-      tester.widgetList<DateListItem>(find.byType(DateListItem)).map((header) => header.date),
-      [conversationLocalDayKey(now)],
+    expect(provider.processingConversations, isEmpty, reason: 'the local optimistic placeholder has retired');
+    expect(find.text('Processing…'), findsOneWidget);
+    final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+    expect(row.episode!.conversationIds, ['finished']);
+    expect(row.episode!.members.single, same(provider.conversations.single));
+
+    server = ServerConversation(
+      id: 'finished',
+      createdAt: now,
+      structured: Structured('', ''),
+      status: ConversationStatus.completed,
+      transcriptSegments: _finishedSpeech(),
     );
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('the row shows while the first page is still loading', (tester) async {
-    final provider = ConversationProvider(isSignedIn: () => false);
-    addTearDown(provider.dispose);
-    provider.setLoadingConversations(true);
-    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
-    await pumpPage(tester, provider);
+    await provider.forceRefreshConversations();
     await tester.pump();
-
-    expect(pendingRow, findsOneWidget);
-    expect(find.byType(EmptyConversationsWidget), findsNothing);
+    expect(find.byType(ProcessingConversationRow), findsNothing);
+    expect(find.byKey(const ValueKey('finished')), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('a just-captured conversation stays visible with an active filter and no results', (tester) async {
-    final provider = ConversationProvider(isSignedIn: () => false);
-    addTearDown(provider.dispose);
-    await pumpPage(tester, provider);
-    provider.selectedFolderId = 'folder';
-    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
-    await tester.pump();
-    expect(pendingRow, findsOneWidget);
-    expect(find.byType(EmptyConversationsWidget), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('pending conversation stays on the Conversations list, never a recaps mode', (tester) async {
-    final provider = ConversationProvider(isSignedIn: () => false);
-    addTearDown(provider.dispose);
-    await pumpPage(tester, provider);
-    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
-    await tester.pump();
-    // Daily Recaps is its own page now; this tab must never switch into a
-    // recap mode, and the pending capture stays in the Conversations list.
-    expect(find.text('Daily Recaps'), findsNothing);
-    expect(pendingRow, findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  for (final targets in <List<String>>[
+    [],
+    ['a'],
+    ['a', 'b']
+  ]) {
+    for (final loading in [false, true]) {
+      testWidgets('Home has no pending row for server targets=$targets, loading=$loading', (tester) async {
+        tester.view.physicalSize = const Size(390, 1400);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final store = PendingWorkStore(
+          loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, attentionUnseenCount: 0, items: [
+            PendingWorkItem(
+                id: 'sync:job',
+                kind: 'sync_job',
+                state: 'transcribing',
+                conversationIds: targets,
+                durationSeconds: 720),
+          ])),
+          loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+        );
+        final provider = ConversationProvider(isSignedIn: () => false)..isLoadingConversations = loading;
+        addTearDown(store.dispose);
+        addTearDown(provider.dispose);
+        final screen = await buildTypedConversationScreen(provider, pendingWork: store);
+        await store.refresh();
+        provider.processingConversations = [
+          ServerConversation(
+              id: 'processing',
+              createdAt: DateTime.now(),
+              structured: Structured('', ''),
+              status: ConversationStatus.processing),
+        ];
+        await tester.pumpWidget(screen);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byKey(const Key('home_pending_row')), findsNothing);
+        expect(find.text('Conversations on the way'), findsNothing);
+        expect(find.text('Catching up on earlier audio'), findsNothing);
+        provider.removeProcessingConversation('processing');
+        await provider.addConversation(ServerConversation(
+            id: 'done',
+            createdAt: DateTime.now(),
+            structured: Structured('Finished recording', 'Overview'),
+            status: ConversationStatus.completed));
+        provider.setLoadingConversations(false);
+        await tester.pump();
+        expect(find.byKey(const Key('home_pending_row')), findsNothing);
+        expect(find.byType(ConversationListItem), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
 }

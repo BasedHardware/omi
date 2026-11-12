@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 
 import pytest
 from google.api_core.exceptions import InvalidArgument
+from google.cloud.firestore_v1._helpers import DocumentExtractorForUpdate
 
 from database import conversations as conversations_db
 
@@ -28,10 +29,15 @@ class _FakeSnapshot:
 
 
 class _FakeDocumentReference:
-    def __init__(self, client: '_FakeFirestoreClient'):
+    def __init__(self, client: '_FakeFirestoreClient', document_id: str):
         self._client = client
+        self.id = document_id
 
     def get(self, transaction=None) -> _FakeSnapshot:
+        # Every reference reads through the shared doc_ref, so tests that patch
+        # store.doc_ref.get still control reads made via document(<id>).
+        if self is not self._client.doc_ref:
+            return self._client.doc_ref.get(transaction=transaction)
         return _FakeSnapshot(self._client.document)
 
     def collection(self, _collection_id: str) -> '_FakeCollectionReference':
@@ -42,8 +48,8 @@ class _FakeCollectionReference:
     def __init__(self, client: '_FakeFirestoreClient'):
         self._client = client
 
-    def document(self, _document_id: str) -> Any:
-        return self._client.doc_ref
+    def document(self, document_id: str) -> Any:
+        return _FakeDocumentReference(self._client, document_id)
 
     def collection(self, _collection_id: str) -> '_FakeCollectionReference':
         return self
@@ -73,6 +79,10 @@ class _FakeTransaction:
     def set(self, _doc_ref: Any, payload: Dict[str, Any], merge: bool = False) -> None:
         self.payload = payload
 
+    def update(self, _doc_ref: Any, payload: Dict[str, Any]) -> None:
+        # Use the real SDK's field-path parser for the atomic persist update.
+        self.payload = DocumentExtractorForUpdate(payload).set_fields
+
     def _commit(self) -> None:
         if self._client.commit_errors:
             raise self._client.commit_errors.pop(0)
@@ -85,7 +95,7 @@ class _FakeFirestoreClient:
         self.commit_errors = list(commit_errors or [])
         self.commits: List[Dict[str, Any] | None] = []
         self.transactions: List[_FakeTransaction] = []
-        self.doc_ref = _FakeDocumentReference(self)
+        self.doc_ref = _FakeDocumentReference(self, 'doc')
 
     def collection(self, _collection_id: str) -> _FakeCollectionReference:
         return _FakeCollectionReference(self)
@@ -123,3 +133,30 @@ def test_expired_transaction_retries_and_persist_processing_result_lands(monkeyp
     assert written['id'] == 'conversation-1'
     assert written['status'] == 'completed'
     assert written['structured']['title'] == 'Recovered'
+
+
+@pytest.mark.parametrize('fails', [False, True])
+def test_delivery_counter_only_after_committed_result_not_transaction_attempts(monkeypatch, fails):
+    client = _FakeFirestoreClient(
+        {'status': 'processing', 'data_protection_level': 'standard'},
+        [RuntimeError('aborted')] if fails else [InvalidArgument(EXPIRED_MESSAGE)],
+    )
+    monkeypatch.setattr(conversations_db, 'db', client)
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda _uid: None)
+    calls = []
+    monkeypatch.setattr(conversations_db.summary_delivery, 'record_delivery', lambda *args: calls.append(args))
+    payload = dict(
+        id='synthetic',
+        status='completed',
+        data_protection_level='standard',
+        summary_output_present=True,
+        structured={'title': 'Recovered', 'overview': 'Summary'},
+    )
+    if fails:
+        with pytest.raises(RuntimeError, match='aborted'):
+            conversations_db.persist_processing_result_with_lifecycle('synthetic', payload)
+        assert not calls and not client.commits
+    else:
+        assert conversations_db.persist_processing_result_with_lifecycle('synthetic', payload)
+        assert len(client.transactions) == 2 and len(client.commits) == 1
+        assert calls == [('summary', 'delivered')]

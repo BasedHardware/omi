@@ -38,7 +38,7 @@ CHAT_FIRST_E2E_ACTION ?= prepare
 CHAT_FIRST_E2E_CASE ?= enabled
 CHAT_FIRST_E2E_SECONDS ?= 86400
 
-.PHONY: setup setup-main setup-hooks setup-backend lane-backend lane-bootstrap preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs mobile-session mobile-verify dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-maintenance
+.PHONY: setup setup-main setup-hooks setup-backend lane-backend lane-bootstrap preflight backend-ratchet-preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs mobile-session mobile-verify dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-maintenance
 
 # Baseline setup is deliberately limited to prerequisites that the default
 # pre-push gate may require; app and desktop runtime environments stay opt-in.
@@ -64,6 +64,42 @@ lane-bootstrap:
 
 preflight:
 	$(PYTHON_RUNNER) .github/scripts/pr_preflight.py --lane local --base origin/main
+
+# Offline operator gate: the caller wraps this target in omi-heavy on shared hosts.
+.PHONY: batch-replay
+batch-replay:
+	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CORPUS)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CORPUS OUTPUT'; exit 2)
+	backend/.venv/bin/python -I backend/testing/batch_replay/gate.py --ref "$(REF)" --base "$(BASE)" --corpus "$(CORPUS)" --output "$(OUTPUT)"
+
+# Local stage replay; expected incident stops are successful reproductions.
+CASES ?= backend/testing/replay_harness/fixtures/privacy-transitions-smoke
+
+REPLAY_RUNTIME_ARGS = $(if $(RUNTIME_ENV),--runtime-env "$(RUNTIME_ENV)")
+
+REPLAY_DECRYPT_ARGS = $(if $(SECRET_FILE),--secret-file "$(abspath $(SECRET_FILE))") $(if $(UID_FILE),--uid-file "$(abspath $(UID_FILE))") $(if $(CONSENT_FILE),--consent-file "$(abspath $(CONSENT_FILE))")
+
+.PHONY: replay-harness replay-privacy-full
+replay-harness:
+	@test -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: CASES OUTPUT'; exit 2)
+	cd backend && .venv/bin/python -m testing.replay_harness run $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(REPLAY_DECRYPT_ARGS) $(REPLAY_RUNTIME_ARGS) $(if $(PRIVACY_TTL_OVERRIDE_S),--privacy-ttl-override-s $(PRIVACY_TTL_OVERRIDE_S))
+
+# Large synthetic privacy qualification stays on the caller's heavy lane.
+replay-privacy-full:
+	@test -n "$(OUTPUT)" || (echo 'Required: OUTPUT'; exit 2)
+	cd backend && .venv/bin/python -m testing.replay_harness.gen_privacy_timeline --transitions 1400 --output "$(abspath $(OUTPUT))/privacy-transitions-full"
+	$(MAKE) replay-harness CASES="$(abspath $(OUTPUT))/privacy-transitions-full" OUTPUT="$(abspath $(OUTPUT))/report"
+
+# Fixed adapter against immutable product refs; caller owns the emulator session.
+.PHONY: replay-gate
+replay-gate:
+	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CASES OUTPUT'; exit 2)
+	@backend/.venv/bin/python -I backend/testing/replay_harness/gate.py --ref "$(REF)" --base "$(BASE)" $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(REPLAY_DECRYPT_ARGS) $(REPLAY_RUNTIME_ARGS) $(if $(K),--repeats "$(K)") $(if $(filter 1,$(REGRESSION_ONLY)),--regression-only) $(if $(WORKER_TIMEOUT),--worker-timeout "$(WORKER_TIMEOUT)")
+
+# Backend ratchet guard tests (test_*ratchet*.py plus the reason-label enums)
+# through backend/test.sh; included by scripts/pr-preflight --all for backend
+# changes so CI-only ratchets surface before the push, not after it.
+backend-ratchet-preflight:
+	$(BASH) scripts/backend-ratchet-preflight
 
 runtime-image-source-closure:
 	$(PYTHON_RUNNER) backend/scripts/runtime_image_contracts.py check

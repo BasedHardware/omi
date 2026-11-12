@@ -56,8 +56,10 @@ struct Person: Codable, Identifiable {
 
 extension APIClient {
 
-  func getUserSubscription() async throws -> UserSubscriptionResponse {
-    return try await get("v1/users/me/subscription")
+  func getUserSubscription(authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil) async throws
+    -> UserSubscriptionResponse
+  {
+    return try await get("v1/users/me/subscription", authorizationSnapshot: authorizationSnapshot)
   }
 
   func getTrialMetadata() async throws -> TrialMetadataResponse {
@@ -287,7 +289,30 @@ extension APIClient {
 
   /// Current-month chat usage + the plan's cap. Backed by Python backend
   /// endpoint `/v1/users/me/usage-quota` which reads `users/{uid}/llm_usage/*`.
+  struct ChatAtCap: Decodable, Equatable {
+    let state: String
+    let title: String
+    let body: String
+    let resetAt: Int
+    let resetLine: String
+    let trigger: String
+    let upgradePlan: String?
+    let upgradeLabel: String?
+    var active: Bool {
+      state == "paused" && trigger == "usage_budget" && Double(resetAt) > Date().timeIntervalSince1970
+    }
+    enum CodingKeys: String, CodingKey {
+      case state, title, body, trigger
+      case resetAt = "reset_at"
+      case resetLine = "reset_line"
+      case upgradePlan = "upgrade_plan"
+      case upgradeLabel = "upgrade_label"
+    }
+  }
+
   struct ChatUsageQuota: Decodable {
+    var chatAtCap: ChatAtCap? = nil
+    var usesSharedBudget: Bool? = nil
     let plan: String  // display name: "Free" | "Plus" | "Pro"
     let planType: String  // internal id: "basic" | "unlimited" | "architect"
     let unit: String  // "questions" | "cost_usd"
@@ -312,6 +337,8 @@ extension APIClient {
       case allowed
       case resetAt = "reset_at"
       case isOveragePlan = "is_overage_plan"
+      case chatAtCap = "chat_at_cap"
+      case usesSharedBudget = "uses_shared_budget"
     }
   }
 

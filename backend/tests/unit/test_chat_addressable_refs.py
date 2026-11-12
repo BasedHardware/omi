@@ -3,6 +3,9 @@
 import asyncio
 import copy
 import json
+import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -13,14 +16,13 @@ from models.conversation import Conversation
 from models.other import Person
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
+from utils.chat_citations import resolve_conversation_citations
 from utils.conversations.render import conversations_to_string
 from utils.conversations.mcp_transcript_search import ChatTranscriptSearch, chat_transcript_excerpts
 from utils.retrieval import agentic
 from utils.retrieval.chat_mount import EDIT_GUARDRAIL
 from utils.retrieval.chat_scope import build_chat_scope
 from utils.retrieval.tools import conversation_tools, edit_tools, memory_tools, action_item_tools
-from utils.retrieval.tools import entity_timeline_tools as timeline_tools
-from utils.retrieval.tools.conversation_jit import format_active_jit_conversations
 from utils.retrieval.turn_refs import initialize_turn_refs, register_record_ref, resolve_edit_ref
 
 
@@ -70,7 +72,7 @@ def _stub_mutations(monkeypatch):
     return reads, writes, receipts
 
 
-def test_non_jit_chat_reads_show_record_segment_and_person_refs(monkeypatch):
+def test_chat_reads_show_record_segment_and_person_refs(monkeypatch):
     cfg = _config()
     conversation = _conversation()
     people = [Person(id='person-1', name='Example Person')]
@@ -115,17 +117,49 @@ def test_oversized_conversation_does_not_advertise_partial_refs(monkeypatch):
     assert ('people', 'person-1') not in cfg['turn_refs'].seen
 
 
-def test_jit_refs_align_and_retain_evidence_contract():
+def test_reread_conversation_keeps_its_citation_number():
     cfg = _config()
-    text = format_active_jit_conversations(
-        [_conversation('read-1').model_dump(mode='python')], configurable=cfg, max_transcript_segments=1
+    first = conversation_tools._render_addressable_conversations([_conversation('read-1')], configurable=cfg)
+    second = conversation_tools._render_addressable_conversations(
+        [_conversation('read-2'), _conversation('read-1')], configurable=cfg
     )
-    assert 'ref: conversations/read-1' in text
-    assert 'conversation_ref: conversation:read-1' in text
-    assert 'segment_id: segment-1' in text
-    assert ('conversations', 'read-1') in cfg['turn_refs'].seen
-    assert cfg['conversations_collected'][0]['id'] == 'read-1'
-    assert any(ref['kind'] == 'conversation_segment' for ref in cfg['evidence_references'])
+    assert 'Conversation #1\nref: conversations/read-1' in first
+    assert 'Conversation #2\nref: conversations/read-2' in second
+    assert 'Conversation #1\nref: conversations/read-1' in second
+    assert [card['id'] for card in cfg['conversations_collected']] == ['read-1', 'read-2']
+    # Citing every number the model was shown attaches each source card once.
+    cited = ' '.join(f'[{number}]' for number in re.findall(r'Conversation #(\d+)', first + second))
+    _, cards = resolve_conversation_citations(cited, cfg['conversations_collected'])
+    assert [card['id'] for card in cards] == ['read-1', 'read-2']
+
+
+def test_parallel_conversation_reads_cite_their_own_cards(monkeypatch):
+    cfg = _config()
+    render = conversation_tools.conversations_to_string
+    overlap = threading.Barrier(2, timeout=1)
+
+    def render_then_overlap(*args, **kwargs):
+        text = render(*args, **kwargs)
+        try:
+            # Unserialized reads both number their record here before either appends its card.
+            overlap.wait()
+        except threading.BrokenBarrierError:
+            pass  # Serialized reads never meet here.
+        return text
+
+    monkeypatch.setattr(conversation_tools, 'conversations_to_string', render_then_overlap)
+    conversations = [_conversation('read-1'), _conversation('read-2')]
+
+    def read(conversation):
+        return conversation_tools._render_addressable_conversations([conversation], configurable=cfg)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        texts = list(executor.map(read, conversations))
+    collected = cfg['conversations_collected']
+    assert sorted(card['id'] for card in collected) == ['read-1', 'read-2']
+    for conversation, text in zip(conversations, texts):
+        number = int(re.search(r'Conversation #(\d+)', text).group(1))
+        assert collected[number - 1]['id'] == conversation.id
 
 
 def test_search_excerpts_include_segment_ids_without_changing_chunk_positions():
@@ -197,44 +231,6 @@ def test_reusable_registry_distinguishes_domains():
     target, error = resolve_edit_ref(cfg, 'memories', 'same-id', parameter='memory_id')
     assert target is None and json.loads(error)['error']['code'] == 'unseen_record_ref'
     assert resolve_edit_ref(cfg, 'people', 'people/same-id', parameter='person_id') == ('same-id', None)
-
-
-@pytest.mark.parametrize('owned', [False, True])
-def test_owned_person_timeline_read_registers_only_verified_person_ref(monkeypatch, owned):
-    cfg = _config()
-    monkeypatch.setattr(timeline_tools.database_client, 'get_firestore_client', lambda: object())
-    monkeypatch.setattr(
-        timeline_tools,
-        '_resolve_entity_aliases',
-        lambda uid, entity, **kwargs: timeline_tools.EntityAliases(entity=entity, resolved=owned),
-    )
-    monkeypatch.setattr(timeline_tools, '_iter_authoritative_items', lambda *args, **kwargs: iter(()))
-    result = timeline_tools.get_entity_timeline_tool.invoke(
-        {'entity': 'person:person-1', 'sources': ['ledger']}, config={'configurable': cfg}
-    )
-    assert ('ref: people/person-1' in result) is owned
-    assert (('people', 'person-1') in cfg['turn_refs'].seen) is owned
-
-
-def test_timeline_registry_admission_follows_output_budget(monkeypatch):
-    entries = tuple(
-        timeline_tools.TimelineEntry(
-            source=timeline_tools.TimelineSource.conversations,
-            record_id=f'record-{i}',
-            content='Example summary ' * 10,
-            occurred_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-        for i in range(3)
-    )
-    timeline = timeline_tools.EntityTimeline(
-        entity=timeline_tools.EntityReference(kind='user', identifier='user'), entries=entries
-    )
-    monkeypatch.setattr(timeline_tools, 'MAX_TIMELINE_RESULT_CHARS', 400)
-    included = []
-    result = timeline_tools.format_entity_timeline(timeline, included_entries=included)
-    assert len(included) == 1
-    assert 'ref: conversations/record-0' in result
-    assert 'ref: conversations/record-1' not in result
 
 
 @pytest.mark.parametrize('history_count', [0, 12])
@@ -359,7 +355,6 @@ def test_memory_cards_and_refs_only_include_whole_admitted_evidence(monkeypatch)
             return memories
 
     monkeypatch.setattr(memory_tools, 'MemoryService', Service)
-    monkeypatch.setattr(memory_tools, 'belief_model_enabled', lambda: False)
     monkeypatch.setattr(memory_tools, 'MAX_MEMORY_EVIDENCE_CHARS', 1000)
     text = memory_tools.get_memories_tool.invoke({}, config={'configurable': cfg})
     assert 'memory_id: memory-1' in text and 'memory_id: memory-2' not in text

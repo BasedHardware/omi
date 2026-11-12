@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Device performance harness only: three new heavy-profile windows, a bash 3.2 runner fix and an iOS 27 frame total-span fix; no production UI or app behavior change."
+}

@@ -130,13 +130,13 @@ class FakeCircuit:
     def account_cooldown_elapsed(self):
         return True
 
-    def record_account_rejection(self):
+    def record_account_rejection(self, **_kwargs):
         self.account_failures += 1
 
     def record_account_failure(self, *_args, **_kwargs):
         self.account_failures += 1
 
-    def record_failure(self):
+    def record_failure(self, **_kwargs):
         self.selection_failures += 1
 
     def record_success(self, **_kwargs):

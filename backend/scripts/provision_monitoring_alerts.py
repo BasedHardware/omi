@@ -105,6 +105,18 @@ def comparable(rule: dict) -> dict:
     return result
 
 
+def regenerate_export(path: Path) -> None:
+    """Offline only: preserve existing rule order, append new UIDs in split-source order."""
+    sources = []
+    for source in sorted((path.parent / 'alerts').glob('*.json')):
+        sources.extend(json.loads(source.read_text()))
+    indexed = index_rules(sources)
+    previous = index_rules(json.loads(path.read_text())) if path.exists() else {}
+    ordered = [indexed.pop(uid) for uid in previous if uid in indexed]
+    ordered.extend(indexed.values())
+    path.write_text(json.dumps(ordered, indent=2, ensure_ascii=False) + '\n')
+
+
 def load_rules(path: Path) -> dict[str, dict]:
     rules = index_rules(json.loads(path.read_text()))
     sources = []
@@ -333,9 +345,16 @@ def main() -> int:
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--backup-file', type=Path)
     parser.add_argument('--lint', action='store_true')
+    parser.add_argument('--regenerate', action='store_true', help='offline: rebuild combined export from split sources')
     parser.add_argument('--probe-datasources', action='store_true', help='read-only canary queries through Grafana')
     args = parser.parse_args()
     try:
+        if args.regenerate:
+            if args.apply or args.backup_file or args.probe_datasources:
+                raise ValueError('regeneration is offline only')
+            regenerate_export(args.rules)
+            print(f'Regenerated {len(load_rules(args.rules))} combined/split alert definitions')
+            return 0
         rules = load_rules(args.rules)
         if args.probe_datasources and (args.lint or args.apply or args.backup_file):
             raise ValueError('datasource probes are read-only and cannot be combined with other modes')

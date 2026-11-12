@@ -212,3 +212,36 @@ def test_actual_http_routes_preserve_the_competing_choice(settings, monkeypatch,
     assert fired
     assert saved['enabled'] is False
     assert saved['hour'] == (22 if method in {'put', 'post'} else 0)
+
+
+def test_delayed_ordered_http_write_cannot_replace_newer_token_or_timezone(settings, monkeypatch):
+    uid, _, user = settings
+    monkeypatch.setattr(notification_routes, 'emit_posthog_event', lambda *args, **kwargs: None)
+    app = FastAPI()
+    app.include_router(notification_routes.router)
+    app.dependency_overrides[notification_routes.auth.get_current_user_uid] = lambda: uid
+    headers = {'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'synthetic'}
+    token = user.collection('fcm_tokens').document('ios_synthetic')
+    user.update({'daily_summary_enabled': False})
+    latest = {'fcm_token': 'rotated-test-token', 'time_zone': 'Asia/Tokyo', 'registration_order': 2}
+    delayed = {'fcm_token': 'old-test-token', 'time_zone': 'America/New_York', 'registration_order': 1}
+    with TestClient(app) as client:
+        url = '/v1/users/fcm-token'
+        assert client.post(url, json=latest, headers=headers).status_code == 200
+        assert client.post(url, json=delayed, headers=headers).status_code == 409
+        assert client.post(url, json={**delayed, 'registration_order': 2}, headers=headers).status_code == 409
+        assert token.get().to_dict()['token'] == latest['fcm_token']
+        assert user.get().to_dict()['time_zone'] == latest['time_zone']
+        assert user.get().to_dict()['daily_summary_enabled'] is False
+
+        # Transport retries are idempotent, including schedule changes made
+        # through another route since the first request committed.
+        notifications.set_user_time_zone(uid, 'Asia/Kolkata')
+        assert client.post(url, json=latest, headers=headers).status_code == 200
+        assert user.get().to_dict()['time_zone'] == 'Asia/Kolkata'
+
+        # Old clients still register and update their own device record.
+        legacy = {'fcm_token': 'legacy-test-token', 'time_zone': 'UTC'}
+        assert client.post(url, json=legacy).status_code == 200
+        assert user.collection('fcm_tokens').document('unknown_default').get().to_dict()['token'] == legacy['fcm_token']
+        assert token.get().to_dict()['registration_order'] == 2

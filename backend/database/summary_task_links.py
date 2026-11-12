@@ -16,6 +16,7 @@ from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskCre
 from models.candidate import CandidateCreate, SummaryTaskReference
 from models.structured import ActionItem
 from models.task_intelligence import StableId
+from models.task_due import TaskDue
 
 
 class SummaryTaskNotFoundError(Exception):
@@ -36,7 +37,13 @@ class SummaryTaskRow:
 
     def linked_patch(self, task_id: str) -> dict[str, Any]:
         structured = deepcopy(self.structured)
-        structured['action_items'][self.index]['target_task_id'] = task_id
+        selected = structured['action_items'][self.index]
+        if isinstance(selected, str):
+            # Released summaries also stored plain-text rows. Upgrade only the
+            # selected row when acceptance commits its durable task identity.
+            selected = {'description': selected}
+            structured['action_items'][self.index] = selected
+        selected['target_task_id'] = task_id
         return {'structured': structured}
 
     def proposal(self) -> CandidateCreate:
@@ -49,6 +56,15 @@ class SummaryTaskRow:
                     description=self.item.description,
                     owner=TaskOwner(self.item.capture_owner or 'unknown'),
                     due_at=self.item.due_at,
+                    due=(
+                        parse_payload_strict(
+                            TaskDue,
+                            self.item.due.model_dump(mode='python'),
+                            document_path=f'conversations/{self.conversation_id}/structured/action_items/{self.index}/due',
+                        )
+                        if self.item.due
+                        else None
+                    ),
                     due_confidence=1.0 if self.item.due_at else None,
                 ),
                 'capture_confidence': self.item.capture_confidence if self.item.capture_confidence is not None else 0.5,
@@ -56,11 +72,15 @@ class SummaryTaskRow:
                     self.item.ownership_confidence if self.item.ownership_confidence is not None else 0.5
                 ),
                 'source_surface': 'conversation',
+                'reminder_origin': (
+                    self.item.reminder_origin.model_dump(mode='python') if self.item.reminder_origin else None
+                ),
                 'evidence_refs': [
                     EvidenceRef(
                         kind=EvidenceKind.conversation,
                         scope=EvidenceScope.canonical,
                         id=self.conversation_id,
+                        version=self.item.reminder_origin.input_revision if self.item.reminder_origin else None,
                         transcript_segment_ids=self.item.source_segment_ids,
                     )
                 ],
@@ -89,6 +109,8 @@ def read_summary_task_row(
     if not isinstance(items, list) or selected.action_item_index >= len(items):
         raise SummaryTaskNotFoundError('Summary action item not found')
     raw_item = items[selected.action_item_index]
+    if isinstance(raw_item, str):
+        raw_item = {'description': raw_item}
     if not isinstance(raw_item, dict) or raw_item.get('deleted'):
         raise SummaryTaskNotFoundError('Summary action item not found')
     try:

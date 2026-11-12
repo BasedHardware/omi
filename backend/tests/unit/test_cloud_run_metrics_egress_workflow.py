@@ -41,7 +41,9 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
         'backend/charts/monitoring/alerts/live-stt.json',
         'backend/charts/monitoring/alerts/resilience.json',
         'backend/charts/monitoring/live-alert-gate.json',
+        'backend/charts/monitoring/mute-timings.json',
         'backend/charts/monitoring/gmp/frontend-values.prod.yaml',
+        'backend/scripts/verify_pusher_live_alert_route.py',
         '.github/workflows/gcp_cloud_run_metrics_egress.yml',
     }
     environment = triggers['workflow_dispatch']['inputs']['environment']
@@ -172,7 +174,7 @@ def test_grafana_writers_share_environment_lock_and_prod_checks_query_path():
     alert_step = next(
         s for s in writer['steps'] if s.get('name') == 'Apply production alert definitions and check drift'
     )
-    assert alert_step['if'] == "matrix.environment == 'prod'"
+    assert alert_step['if'] == "github.event_name == 'workflow_dispatch' && matrix.environment == 'prod'"
     assert '--backup-file' in alert_step['run']
 
 
@@ -186,7 +188,7 @@ def test_workflow_provisions_live_stt_alerts_independently_of_helm() -> None:
     assert 'Import allowlisted live-STT Grafana alerts' not in deploy_names
     assert 'Verify imported live-STT Grafana alert coverage' not in deploy_names
 
-    assert provision['if'] == "github.ref == 'refs/heads/main'"
+    assert provision['if'] == "github.ref == 'refs/heads/main' && github.event.inputs.import_grafana != 'false'"
     assert provision['environment'] == deploy['environment']
     assert provision['permissions'] == {'contents': 'read'}
     assert 'needs' not in provision

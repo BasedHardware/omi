@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -119,6 +120,74 @@ void main() {
     expect(emitted, isEmpty);
   });
 
+  testWidgets('an age-failed processing row is terminal and its existing Retry starts a new attempt', (tester) async {
+    final calls = <String>[];
+    final provider = await _pumpRow(
+      tester,
+      conversation: _conversation(title: 'Processing', status: ConversationStatus.processing, summaryRetryable: false)
+          .withHomeStep('failed'),
+      reprocess: (id) async {
+        calls.add(id);
+        return _conversation(status: ConversationStatus.processing, summaryRetryable: false);
+      },
+    );
+    expect(find.text("Omi couldn't finish"), findsOneWidget);
+    expect(find.text('Processing'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(_retryButton, findsOneWidget);
+    await tester.tap(_retryButton);
+    await tester.pumpAndSettle();
+    expect(calls, ['c1']);
+    expect(provider.processingConversations, hasLength(1));
+    provider.removeProcessingConversation('c1');
+    await tester.pump();
+  });
+
+  for (final homeStep in <String?>['failed', null]) {
+    testWidgets('calendar link/unlink keeps row presentation for home_step=$homeStep', (tester) async {
+      final original = _conversation(status: ConversationStatus.processing, summaryRetryable: false);
+      final provider =
+          await _pumpRow(tester, conversation: homeStep == null ? original : original.withHomeStep(homeStep));
+      final event = CalendarEventLink(
+          eventId: 'planning',
+          title: 'Planning',
+          startTime: original.createdAt,
+          endTime: original.createdAt.add(const Duration(hours: 1)));
+      final detail = ConversationDetailProvider(
+        linkCalendar: (id, eventId) async {
+          expect(id, 'c1');
+          expect(eventId, event.eventId);
+          return event;
+        },
+        unlinkCalendar: (_) async => true,
+        autoLinkCalendar: (_) async => event,
+      )
+        ..conversationProvider = provider
+        ..selectedDate = conversationLocalDayKey(original.createdAt)
+        ..setCachedConversation(provider.conversations.single);
+      addTearDown(detail.dispose);
+      void expectPresentation() {
+        expect(provider.conversations.single.homeStep, homeStep);
+        expect(find.text("Omi couldn't finish"), homeStep == 'failed' ? findsOneWidget : findsNothing);
+        expect(_retryButton, homeStep == 'failed' ? findsOneWidget : findsNothing);
+        if (homeStep == null) expect(find.text(original.structured.title), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      }
+
+      expect(await detail.linkCalendarEvent(event.eventId), same(event));
+      await tester.pump();
+      expect(provider.conversations.single.calendarEvent, same(event));
+      expectPresentation();
+      expect(await detail.unlinkCalendarEvent(), isTrue);
+      await tester.pump();
+      expect(provider.conversations.single.calendarEvent, isNull);
+      expectPresentation();
+      expect(await detail.autoLinkCalendarEvent(), same(event));
+      await tester.pump();
+      expectPresentation();
+    });
+  }
+
   testWidgets('a row the model found nothing in keeps its title and offers no retry', (tester) async {
     await _pumpRow(tester, conversation: _conversation(summaryRetryable: false));
 
@@ -196,6 +265,12 @@ void main() {
     expect(provider.conversations, isEmpty);
     expect(_indicator, findsNothing);
     expect(find.text('moved-to-processing'), findsOneWidget);
+
+    // A live processing row keeps the provider's periodic reconcile timer
+    // armed, and the binding rejects pending timers before addTearDown runs.
+    // End the row so the timer cancels within the test body.
+    provider.removeProcessingConversation(provider.processingConversations.single.id);
+    await tester.pump();
   });
 
   testWidgets('a successful Retry refreshes the row and clears the chip', (tester) async {

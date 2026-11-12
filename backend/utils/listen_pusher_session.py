@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 else:
     WebSocketClientProtocol = Any
 
+from config.conversation_processing_retry import PROCESSING_BURST_ATTEMPTS, TRANSIENT_PROCESSING_FAILURE
 from utils.executors import run_blocking, storage_executor
 from utils.metrics import (
     OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL,
@@ -26,9 +27,11 @@ from utils.other.storage import reconcile_audio_chunk_prefix
 from utils.observability.fallback import record_fallback
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
 from utils.pusher_protocol import (
+    AudioBackpressure,
     AUDIO_TIMELINE_PROTOCOL,
     PUSHER_AUDIO_TIMELINE_ACK_OPCODE,
 )
+from config.audio_outbox import enabled as audio_outbox_enabled
 
 # Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
 # `callable` builtin as a parameter annotation; cast to the proper signature.
@@ -95,8 +98,9 @@ PUSHER_DEGRADED_COOLDOWN = 60.0
 PUSHER_RECONNECT_BASE_DELAY = 1.0
 PUSHER_RECONNECT_MAX_DELAY = 60.0
 PENDING_REQUEST_TIMEOUT = 120
-MAX_RETRIES_PER_REQUEST = 3
+MAX_RETRIES_PER_REQUEST = PROCESSING_BURST_ATTEMPTS - 1
 PENDING_REQUEST_RECOVERY_COOLDOWN = 300
+MAX_PROCESSING_REQUEST_ATTEMPTS = 1 + 2 * MAX_RETRIES_PER_REQUEST
 # Wire contract with utils.pusher_finalization: a claim rejected because a live
 # lease is already finalizing this job reports the non-terminal `job_leased`
 # error. That is healthy in-flight work, not a failed attempt.
@@ -192,11 +196,15 @@ class ListenPusherSession:
         self.last_synced_conversation_id: Optional[str] = None
         self.pending_conversation_requests: Dict[str, Dict[str, Any]] = {}
         self.pending_request_event = asyncio.Event()
+        # Terminal generations cannot re-enter via reconnect or a duplicate
+        # caller. A new durable generation is an explicit new obligation.
+        self.terminal_conversation_requests: Dict[str, Tuple[Optional[str], int]] = {}
         self.pending_speaker_sample_requests: Deque[Tuple[str, str, List[str]]] = deque(
             maxlen=config.max_pending_speaker_sample_requests
         )
         self.audio_runs: Deque[AudioRun] = deque()
         self.audio_total_size = 0
+        self.audio_inflight_size = 0
         self.audio_buffer_last_received: Optional[float] = None
         # Audio-timeline v2 handshake state. ``audio_timeline_active`` means a
         # pusher acknowledged v2 on this or a previous connection of this
@@ -225,7 +233,15 @@ class ListenPusherSession:
         dispatch_generation: Optional[int] = None,
     ):
         existing = self.pending_conversation_requests.get(conversation_id)
-        if existing is None and len(self.pending_conversation_requests) >= self.config.max_pending_requests:
+        if existing is not None and (
+            (finalization_job_id is not None and finalization_job_id != existing.get('finalization_job_id'))
+            or (dispatch_generation is not None and dispatch_generation != existing.get('dispatch_generation'))
+        ):
+            existing = None
+        if (
+            conversation_id not in self.pending_conversation_requests
+            and len(self.pending_conversation_requests) >= self.config.max_pending_requests
+        ):
             oldest_id = min(
                 self.pending_conversation_requests,
                 key=lambda k: self.pending_conversation_requests[k]['sent_at'],
@@ -236,8 +252,10 @@ class ListenPusherSession:
             del self.pending_conversation_requests[oldest_id]
             existing = None
         self.pending_conversation_requests[conversation_id] = {
+            **(existing or {}),
             'sent_at': self.deps.now(),
             'retries': (existing or {}).get('retries', 0),
+            'attempts': (existing or {}).get('attempts', 0),
             'finalization_job_id': finalization_job_id or (existing or {}).get('finalization_job_id'),
             'dispatch_generation': dispatch_generation or (existing or {}).get('dispatch_generation'),
         }
@@ -250,6 +268,9 @@ class ListenPusherSession:
         dispatch_generation: Optional[int] = None,
     ):
         """Request pusher to process a conversation through its durable lease."""
+        terminal = self.terminal_conversation_requests.get(conversation_id)
+        if terminal == (finalization_job_id, dispatch_generation or 1):
+            return False
         if not self.pusher_connected or not self.pusher_ws:
             logger.info(
                 f"Pusher not connected for {conversation_id}, will retry on reconnect {self.uid} {self.session_id}"
@@ -267,6 +288,10 @@ class ListenPusherSession:
                 dispatch_generation=dispatch_generation,
             )
             pending = self.pending_conversation_requests[conversation_id]
+            if pending['attempts'] >= MAX_PROCESSING_REQUEST_ATTEMPTS:
+                self._processing_request_terminal(conversation_id)
+                return False
+            pending['attempts'] += 1
             data = bytearray()
             data.extend(struct.pack("I", 104))
             payload: Dict[str, Any] = {
@@ -285,6 +310,16 @@ class ListenPusherSession:
         except Exception as e:
             logger.error(f"Failed to send process_conversation request: {e} {self.uid} {self.session_id}")
             return False
+
+    def _processing_request_terminal(self, conversation_id: str) -> None:
+        pending = self.pending_conversation_requests.pop(conversation_id, None)
+        if pending is None:
+            return
+        self.terminal_conversation_requests[conversation_id] = (
+            pending.get('finalization_job_id'),
+            pending.get('dispatch_generation') or 1,
+        )
+        logger.error(f"Conversation processing failed terminally: {conversation_id} {self.uid} {self.session_id}")
 
     async def _transcript_flush(self):
         async with self.transcript_flush_lock:
@@ -357,6 +392,13 @@ class ListenPusherSession:
         """
         chunk = audio_bytes
         chunk_start_wall = start_wall
+        if (
+            audio_outbox_enabled()
+            and self.audio_total_size + self.audio_inflight_size + len(chunk) > self.config.max_audio_buffer_size
+        ):
+            # The receive loop pauses/ends with the input explicitly unacked;
+            # it must not clip the new frame or evict the accepted prefix.
+            raise AudioBackpressure('listen_budget', chunk)
         if len(chunk) > self.config.max_audio_buffer_size:
             dropped = len(chunk) - self.config.max_audio_buffer_size
             chunk = chunk[-self.config.max_audio_buffer_size :]
@@ -372,6 +414,8 @@ class ListenPusherSession:
 
     async def _audio_bytes_flush(self):
         async with self.audio_flush_lock:
+            # Relay delivery never waits for storage. The raw archive retains
+            # the original bytes; only its window checkpoint releases WAL.
             current_conversation_id = self.deps.get_current_conversation_id()
             pusher_ws = self.pusher_ws
             if not (self.pusher_connected and pusher_ws):
@@ -383,6 +427,7 @@ class ListenPusherSession:
                 return
             pending_runs = self.audio_runs
             pending_total_size = self.audio_total_size
+            self.audio_inflight_size = pending_total_size
             self.audio_runs = deque()
             self.audio_total_size = 0
             timeline_active = self.audio_timeline_active
@@ -535,8 +580,9 @@ class ListenPusherSession:
                         unsent.append(envelope)
                 self.audio_runs.extendleft(reversed(unsent))
                 self.audio_total_size += sum(len(run.data) for run in unsent)
-                while self.audio_total_size > self.config.max_audio_buffer_size and self.audio_runs:
-                    self.audio_total_size -= len(self.audio_runs.popleft().data)
+                if not audio_outbox_enabled():
+                    while self.audio_total_size > self.config.max_audio_buffer_size and self.audio_runs:
+                        self.audio_total_size -= len(self.audio_runs.popleft().data)
                 if isinstance(e, asyncio.CancelledError):
                     raise
                 elif isinstance(e, ConnectionClosed):
@@ -553,6 +599,8 @@ class ListenPusherSession:
                         self._mark_disconnected()
                 else:
                     logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
+            finally:
+                self.audio_inflight_size = 0
 
     async def audio_bytes_consume(self):
         while self.deps.is_active():
@@ -626,10 +674,7 @@ class ListenPusherSession:
                         elif result.get("terminal"):
                             # The job reached its attempt budget and is now
                             # dead-lettered. Retrying it would never converge.
-                            self.pending_conversation_requests.pop(conversation_id, None)
-                            logger.error(
-                                f"Conversation processing failed terminally: {conversation_id} {self.uid} {self.session_id}"
-                            )
+                            self._processing_request_terminal(conversation_id)
                         elif result.get("error") == FINALIZATION_IN_FLIGHT_ERROR:
                             # Another dispatch of this same job holds a live lease
                             # and is finalizing right now. Re-requesting it can only
@@ -645,7 +690,15 @@ class ListenPusherSession:
                                 # The pusher has released its durable lease back to
                                 # queued. Keep the request so this live session can
                                 # reclaim it instead of stranding `processing`.
-                                pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
+                                pending['failure_code'] = result['error']
+                                if result['error'] == 'job_queued':
+                                    # A deferred/parked durable owner must get its
+                                    # recovery window, not immediate opcode-104 spam.
+                                    pending['sent_at'] = (
+                                        self.deps.now() + PENDING_REQUEST_RECOVERY_COOLDOWN - PENDING_REQUEST_TIMEOUT
+                                    )
+                                else:
+                                    pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
                             # The pusher released its durable lease back to queued
                             # and the pending entry stays armed for bounded retry —
                             # this is in-flight work with a live recovery path, not
@@ -699,12 +752,20 @@ class ListenPusherSession:
                 if not info:
                     continue
                 if info['retries'] >= MAX_RETRIES_PER_REQUEST:
+                    if (
+                        info.get('failure_code') not in (None, TRANSIENT_PROCESSING_FAILURE, 'job_queued')
+                        or info.get('attempts', 0) >= MAX_PROCESSING_REQUEST_ATTEMPTS
+                    ):
+                        self._processing_request_terminal(cid)
+                        continue
                     logger.warning(
                         f"Conversation {cid} retry burst exhausted; scheduling recovery cooldown {self.uid} {self.session_id}"
                     )
-                    # Continue in bounded bursts rather than permanently
-                    # dropping a queued durable finalization after one live
-                    # session's transient provider failures.
+                    record_fallback(
+                        component='pusher', from_mode='none', to_mode='none', reason='timeout', outcome='degraded'
+                    )
+                    # One recovery burst, with a send budget that survives
+                    # buffering and reconnect replay. No unbounded resets.
                     info['retries'] = 0
                     info['sent_at'] = now + PENDING_REQUEST_RECOVERY_COOLDOWN - PENDING_REQUEST_TIMEOUT
                     continue

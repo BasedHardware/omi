@@ -14,7 +14,6 @@ import config.speaker_match_scores as scores
 
 @pytest.fixture(autouse=True)
 def enabled(monkeypatch):
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'true')
     # Import IO-ful dependencies in fixture setup, outside the per-test CPU budget.
     import database.conversations
     import routers.listen.speakers
@@ -74,15 +73,6 @@ def test_cap_and_latest_snapshot_per_stage_scope():
     assert scores.merge(rows, [updated])[0] == updated
     assert len(scores.merge(None, [row(scope='a'), row(scope='b')])) == 2
     assert len(json.dumps(rows).encode()) < 24000
-
-
-@pytest.mark.parametrize('stage,expected', [('dev', True), ('local', True), ('offline', True), ('prod', False)])
-def test_rollout_default_and_kill_switch(monkeypatch, stage, expected):
-    monkeypatch.delenv('SPEAKER_MATCH_SCORES_ENABLED')
-    monkeypatch.setenv('OMI_ENV_STAGE', stage)
-    assert scores.enabled() is expected
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'typo')
-    assert not scores.enabled()
 
 
 def test_rounding_does_not_change_threshold_or_owner_arbitration():
@@ -300,12 +290,11 @@ def test_duplicate_person_summary_reports_the_final_sync_abstention():
     assert value['decision'] == 'duplicate_person'
 
 
-def test_flag_off_drops_new_evidence_and_preserves_old_scores(monkeypatch):
+def test_new_evidence_and_old_scores_are_both_preserved(monkeypatch):
     import database.conversations as db
 
-    monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', 'false')
     data = {'transcript_segments': [{'speaker_match_scores': row()}]}
-    assert scores.FIELD not in db.encode_conversation_for_write('u', data)
+    assert db.prepare_conversation_for_read(db.encode_conversation_for_write('u', data), 'u')[scores.FIELD] == [row()]
     existing = {'speaker_match_scores': [row()]}
     assert db.prepare_conversation_for_read(db.encode_conversation_for_write('u', existing), 'u')[scores.FIELD] == [
         row()
@@ -342,7 +331,6 @@ def test_live_score_only_update_does_not_advance_content_revision(monkeypatch):
     planned = SimpleNamespace(segments=[scored], absorbed_into={}, with_segments=lambda accepted: accepted)
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(db, 'merge_live_segments', lambda *args, **kwargs: planned)
-    monkeypatch.setattr(db, 'sync_lineage_resolve_active_for', lambda uid: True)
     result = db.update_conversation_segments('u', 'c', [scored], live_segments=[scored])
     assert store.rows[path]['sync_content_revision'] == 7
     assert scores.FIELD not in result[0]
@@ -810,7 +798,7 @@ def test_manual_merge_retains_bounded_donor_scores(monkeypatch, score_merge_modu
     failures = []
     monkeypatch.setattr(merge.conversations_db, 'get_conversation', lambda uid, cid: sources[cid])
     monkeypatch.setattr(merge, '_collect_all_photos', lambda *a: [])
-    monkeypatch.setattr(merge, '_copy_audio_chunks_for_merge', lambda *a: [])
+    monkeypatch.setattr(merge, '_copy_audio_chunks_for_merge', lambda *a, **_kw: [])
     monkeypatch.setattr(
         merge.lifecycle_service, 'create_processing_conversation', lambda uid, data: captured.append(data)
     )
@@ -931,6 +919,7 @@ def manual_score_routes(monkeypatch):
     from fastapi.testclient import TestClient
     import database.conversations as db
     import database.speaker_learning_jobs as learning_jobs
+    import database.voice_profiles as voice_profiles_db
     import routers.conversations as assignment_router
     import routers.speaker_labels as rejection_router
     import utils.other.endpoints as auth
@@ -939,6 +928,9 @@ def manual_score_routes(monkeypatch):
     store = StrictFirestore()
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(db, 'db', store)
+    # Positive assignments retire ignored-voice markers through voice_profiles;
+    # keep that write on the hermetic store like test_speaker_rejections does.
+    monkeypatch.setattr(voice_profiles_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
     monkeypatch.setattr(db, 'record_speaker_review', lambda *a: None)
     monkeypatch.setattr(learning_jobs, 'record_speaker_learning_job_events', lambda *a: None)

@@ -8,6 +8,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/review/recent_changes_page.dart';
 import 'package:omi/ui/ui.dart';
 import '../../../integration_test/support/dream_changes_fixture.dart';
+import '../../helpers/sfpro_font_fixtures.dart';
 import '../../widgets/guided_voice_render_test.dart' show loadFonts;
 
 void main() {
@@ -17,13 +18,13 @@ void main() {
     for (final family in ['CupertinoSystemText', 'CupertinoSystemDisplay']) {
       final loader = FontLoader(family);
       for (final weight in ['REGULAR', 'MEDIUM', 'BOLD']) {
-        loader.addFont(rootBundle.load('assets/fonts/SFPRODISPLAY$weight.OTF'));
+        loader.addFont(sfProFont('SFPRODISPLAY$weight.OTF'));
       }
       await loader.load();
     }
   });
   for (final scale in [1.0, 2.0]) {
-    testWidgets('applied spelling shows before → after, speech in the sheet; Undo and Redo at $scale scale',
+    testWidgets('applied spelling shows its title with Undo and Redo, speech in the sheet at $scale scale',
         (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -50,12 +51,10 @@ void main() {
         ),
       ));
       await tester.pumpAndSettle();
-      // A row without a server diff still shows the change itself, its source, and no raw id.
-      expect(find.text('NAMES AND TERMS'), findsOneWidget);
-      expect(find.text('UL'), findsOneWidget);
-      expect(find.text('URL'), findsOneWidget);
+      // The row shows the change's title only, with no raw id and no diff.
+      expect(find.text('Spelling'), findsOneWidget);
+      expect(find.text('UL'), findsNothing);
       expect(find.textContaining('synthetic-launch'), findsNothing);
-      expect(find.text('Spelling'), findsNothing);
       expect(tester.takeException(), isNull);
       final toggle = find.byKey(const ValueKey('recent_change_toggle_synthetic-spelling-change'));
       expect(toggle, findsOneWidget);

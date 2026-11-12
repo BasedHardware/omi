@@ -1,6 +1,6 @@
 """Independent Cloud Run Job entrypoint for EXP-001's day-3 re-engagement email.
 
-Modeled on ``daily_memory_sweep_job.py``: a thin entrypoint that resolves its
+This thin entrypoint resolves its
 own authority before touching any user data, then delegates every decision to
 ``utils.email.day3_reengagement``. See
 ``backend/docs/experiments/EXP-001-day3-reengagement.md`` for the experiment
@@ -20,6 +20,7 @@ from database._client import db as default_db_client
 from database.auth import get_user_from_uid
 from database.firestore_read_origin import read_origin
 from utils.env_loader import firebase_admin_options
+from utils.observability.firestore_probe_export import terminal_probe_totals
 from utils.email.day3_reengagement import (
     authority_from_environment,
     collect_day3_candidates,
@@ -76,6 +77,7 @@ def run_day3_reengagement_email_job() -> None:
 
 
 @read_origin('job:day3_reengagement_email')
+@terminal_probe_totals('day3-reengagement-email-job')
 def main() -> None:
     _init_firebase()
     logger.info("Starting day3-reengagement-email-job...")

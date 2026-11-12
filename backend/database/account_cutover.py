@@ -2,15 +2,91 @@
 
 from __future__ import annotations
 
+import base64
+import secrets
+from contextlib import contextmanager
 from copy import deepcopy
 from typing import Any, Optional, cast
 
-from database import _client
+from database import _client, redis_db
 from database.read_boundary import MalformedDocError, parse_snapshot_strict
 from models.account_cutover import AccountCutoverRecord, AccountCutoverState
 
 CONTROL_COLLECTION = 'account_cutover'
 CONTROL_DOCUMENT = 'state'
+CUTOVER_IDLE_TTL_SECONDS = 60
+
+# Redis fences cache publication, not the authoritative document read. Track
+# in-flight writes too: a reader starting after INCR but before the Firestore
+# commit must not cache an old document. A crashed writer leaves caching off
+# (authoritative reads continue), rather than reopening the account.
+_BEGIN_CACHE_WRITE = '''
+redis.call('SET', KEYS[1], ARGV[1], 'NX')
+redis.call('INCR', KEYS[1])
+redis.call('INCR', KEYS[2])
+redis.call('DEL', KEYS[3])
+return 1
+'''
+_END_CACHE_WRITE = '''
+redis.call('INCR', KEYS[1])
+redis.call('DECR', KEYS[2])
+redis.call('DEL', KEYS[3])
+return 1
+'''
+_READ_CACHE_EPOCH = '''
+if (redis.call('GET', KEYS[2]) or '0') ~= '0' then return false end
+redis.call('SET', KEYS[1], ARGV[1], 'NX')
+return redis.call('GET', KEYS[1])
+'''
+_PUBLISH_IDLE = '''
+if (redis.call('GET', KEYS[2]) or '0') ~= '0' then return 0 end
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+redis.call('SET', KEYS[3], '1', 'EX', ARGV[2])
+return 1
+'''
+
+
+def _cache_keys(uid: str) -> tuple[str, str, str]:
+    idle = base64.b64encode(f'cutover-idle:{uid}'.encode()).decode()
+    return f'cutover-epoch:{uid}', f'cutover-writing:{uid}', f'cache:{idle}'
+
+
+def cutover_cache_epoch(uid: str) -> str | None:
+    """Capture before the doc read; Redis loss/in-flight writes disable caching."""
+    try:
+        # Random initialization also rejects late readers across Redis key loss;
+        # no missing-key == epoch-zero ABA after a restart or cache flush.
+        epoch = redis_db.r.eval(_READ_CACHE_EPOCH, 2, *_cache_keys(uid)[:2], str(secrets.randbits(52)))
+        if epoch is None:
+            return None
+        return epoch.decode() if isinstance(epoch, bytes) else str(epoch)
+    except Exception:
+        return None
+
+
+def publish_cutover_idle(uid: str, epoch: str | None) -> bool:
+    """Atomically refuse a late cache write if a state write crossed the read."""
+    if epoch is None:
+        return False
+    try:
+        return bool(redis_db.r.eval(_PUBLISH_IDLE, 3, *_cache_keys(uid), epoch, CUTOVER_IDLE_TTL_SECONDS))
+    except Exception:
+        return False
+
+
+@contextmanager
+def _cutover_cache_write(uid: str):
+    # If Redis cannot fence existing cached readers, do not commit a pause.
+    # State writes retry; request reads remain authoritative during outages.
+    redis_db.r.eval(_BEGIN_CACHE_WRITE, 3, *_cache_keys(uid), str(secrets.randbits(52)))
+    redis_db.delete_generic_cache(f'cutover-idle:{uid}')
+    try:
+        yield
+    finally:
+        try:
+            redis_db.r.eval(_END_CACHE_WRITE, 3, *_cache_keys(uid))
+        finally:
+            redis_db.delete_generic_cache(f'cutover-idle:{uid}')
 
 
 class AccountCutoverConcurrencyError(RuntimeError):
@@ -100,7 +176,9 @@ def _assert_cas_matches(
         )
 
 
-def get_account_cutover_record(uid: str, *, firestore_client: Any = None) -> AccountCutoverRecord:
+def get_account_cutover_record(
+    uid: str, *, firestore_client: Any = None, transaction: Any = None
+) -> AccountCutoverRecord:
     """Return the persisted cutover record, or an implicit legacy default.
 
     Missing documents remain legacy-compatible. Existing but malformed documents
@@ -108,7 +186,8 @@ def get_account_cutover_record(uid: str, *, firestore_client: Any = None) -> Acc
     legacy and reopen product traffic. Embedded ``uid`` must match the path uid.
     """
 
-    snapshot = _control_ref(uid, firestore_client=firestore_client).get()
+    ref = _control_ref(uid, firestore_client=firestore_client)
+    snapshot = ref.get(transaction=transaction) if transaction is not None else ref.get()
     if getattr(snapshot, 'exists', False) is not True:
         return default_legacy_record(uid)
     return _parse_bound_record(uid, snapshot)
@@ -122,7 +201,8 @@ def set_account_cutover_record(
 ) -> None:
     if record.uid != uid:
         raise ValueError('cutover record uid mismatch')
-    _write_document(_control_ref(uid, firestore_client=firestore_client), record.persisted_payload())
+    with _cutover_cache_write(uid):
+        _write_document(_control_ref(uid, firestore_client=firestore_client), record.persisted_payload())
 
 
 def get_account_cutover_record_optional(
@@ -201,8 +281,9 @@ def cas_set_account_cutover_record(
         return record
 
     if lock is not None:
-        with lock:
-            return _locked_cas()
+        with _cutover_cache_write(uid), lock:
+            result = _locked_cas()
+        return result
 
     transaction_factory = getattr(client, 'transaction', None)
     if callable(transaction_factory):
@@ -233,7 +314,9 @@ def cas_set_account_cutover_record(
             transaction.set(doc_ref, payload)
             return record
 
-        return cast(Any, _txn)(transaction_factory())
+        with _cutover_cache_write(uid):
+            result = cast(Any, _txn)(transaction_factory())
+        return result
 
     raise AccountCutoverConcurrencyError(
         'firestore client does not support transactional/locked cutover CAS',

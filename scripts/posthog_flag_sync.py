@@ -237,7 +237,7 @@ def main() -> int:
         return 2
 
     registry = _parse_yaml_subset(args.root.resolve() / REGISTRY_PATH)
-    schema_errors = validate_registry(registry)
+    schema_errors = validate_registry(registry, root=args.root.resolve())
     if schema_errors:
         for error in schema_errors:
             print(f"posthog-flag-sync: registry: {error}", file=sys.stderr)

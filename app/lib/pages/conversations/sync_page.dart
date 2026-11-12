@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -60,7 +62,9 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.syncing) {
       return (Colors.grey.shade300, l.syncStatusBackingUp);
     }
-    if (hasError) return (Colors.redAccent, l.failedStatus);
+    // A stored refusal token outranks the generic failed-sync banner: the row
+    // says which refusal it was even when this WAL is the last failed sync.
+    if (hasError && state != WalSyncDisplayState.uploadRejected) return (Colors.redAccent, l.failedStatus);
     switch (state) {
       case WalSyncDisplayState.synced:
         return (Colors.grey.shade500, l.statusProcessed);
@@ -77,7 +81,8 @@ class WalListItem extends StatelessWidget {
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, l.syncStatusUnsupportedAudio);
       case WalSyncDisplayState.uploadRejected:
-        return (Colors.redAccent, l.failedStatus);
+        // Which refusal it was, in On the Way's words.
+        return (Colors.grey.shade500, walAttentionLabel(state, l, rejectionReason: wal.uploadRejectionReason));
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -89,7 +94,10 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.syncing) {
       return const OmiSpinner(size: OmiSpinnerSize.small);
     }
-    if (hasError || state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
+    // Refusals recover through the daily policy, including stale error banners.
+    // An explicit removal remains available in the full inventory.
+    final uploadRefusal = state == WalSyncDisplayState.uploadRejected;
+    if (!uploadRefusal && (hasError || walRetryCanHelp(wal) || state == WalSyncDisplayState.retrying)) {
       return OmiButton.secondary(
         label: context.l10n.tryAgain,
         size: OmiButtonSize.compact,
@@ -97,11 +105,11 @@ class WalListItem extends StatelessWidget {
       );
     }
     // No upload can resolve these, so offer removal rather than a chevron that
-    // leads to a detail page with nothing actionable on it.
+    // leads to a detail page with nothing actionable on it. A refusal is not
+    // offered here: the swipe still removes it, after confirmation.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio ||
-        state == WalSyncDisplayState.uploadRejected) {
+        state == WalSyncDisplayState.unsupportedAudio) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,
@@ -481,7 +489,9 @@ class _SyncPageState extends State<SyncPage> {
     final readyToSync = syncProvider.missingWals.length;
     final step = _runTracker.update(s, syncProvider.allWals);
     String dur(int seconds) => OmiDuration.compact(seconds, l);
-    final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimited;
+    // An edge throttle clears by itself and needs nothing from the user, so it is not shown (David, 11-02).
+    final paused = syncProvider.isRateLimited && syncProvider.rateLimitReason != RateLimitReason.edgeThrottle;
+    final bool showSpinner = (isActive || uploaded > 0) && !paused;
 
     String title;
     String? subtitle;
@@ -518,7 +528,7 @@ class _SyncPageState extends State<SyncPage> {
           }
           break;
       }
-    } else if (syncProvider.isRateLimited) {
+    } else if (paused) {
       title = syncCooldownTitle(syncProvider.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
@@ -775,6 +785,7 @@ class _SyncPageState extends State<SyncPage> {
                     children: [
                       const SizedBox(height: 16),
                       _buildProcessCard(syncProvider),
+                      const OnDeviceChargerWaitLine(),
                       const SizedBox(height: 16),
                       _buildConversationsCreatedCard(syncProvider),
                       _buildSettingsCard(),

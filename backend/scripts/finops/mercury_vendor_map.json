@@ -1,39 +1,525 @@
 {
-  "schema_version": 1,
-  "excluded_kinds": ["internalTransfer", "treasuryTransfer", "creditCardCredit", "debitCardCredit", "expenseReimbursement", "currencyCloudReturn"],
-  "excluded_categories": ["payroll", "salary", "salaries", "taxes", "hardware cogs", "hardware inventory", "refunds", "transfers"],
+  "schema_version": 2,
+  "max_uncategorized_usd": "2500",
+  "uncategorized_kind_rules": {
+    "outgoingPayment": "other_opex"
+  },
+  "excluded_kinds": [
+    "internalTransfer",
+    "treasuryTransfer",
+    "creditCardCredit",
+    "debitCardCredit",
+    "expenseReimbursement",
+    "currencyCloudReturn"
+  ],
+  "excluded_categories": [
+    "payroll",
+    "salary",
+    "salaries",
+    "taxes",
+    "hardware cogs",
+    "hardware inventory",
+    "refunds",
+    "transfers"
+  ],
+  "mercury_category_rules": {
+    "advertising": "marketing",
+    "software": "saas",
+    "restaurants": "travel_meals",
+    "fooddelivery": "travel_meals",
+    "alcoholandbars": "travel_meals",
+    "airlines": "travel_meals",
+    "lodging": "travel_meals",
+    "rideshareandtaxis": "travel_meals",
+    "ridesharandtaxis": "travel_meals",
+    "othertravel": "travel_meals",
+    "entertainment": "travel_meals",
+    "shipping": "fulfillment",
+    "professionalservices": "professional_services",
+    "legal": "professional_services",
+    "fees": "other_opex",
+    "retail": "other_opex"
+  },
+  "category_data_rules": {
+    "marketing advertising": "marketing",
+    "software subscriptions": "saas",
+    "software costs": "saas",
+    "manufacturing": "hardware_cogs",
+    "inventory materials": "hardware_cogs",
+    "shipping postage": "fulfillment",
+    "legal professional services": "professional_services",
+    "travel transportation": "travel_meals",
+    "business meals": "travel_meals",
+    "food and groceries": "travel_meals",
+    "entertainment": "travel_meals",
+    "office supplies equipment": "other_opex",
+    "phone bill": "other_opex",
+    "transfer": "excluded"
+  },
   "vendors": {
-    "soniox": {"category": "stt_vendor", "annual": false, "aliases": ["soniox"]},
-    "deepgram": {"category": "stt_vendor", "annual": false, "aliases": ["deepgram"]},
-    "modulate": {"category": "stt_vendor", "annual": false, "aliases": ["modulate", "modulate ai"]},
-    "openai": {"category": "llm_vendor", "annual": false, "aliases": ["openai", "open ai"]},
-    "anthropic": {"category": "llm_vendor", "annual": false, "aliases": ["anthropic", "claude ai"]},
-    "openrouter": {"category": "llm_vendor", "annual": false, "aliases": ["openrouter", "open router"]},
-    "perplexity": {"category": "llm_vendor", "annual": false, "aliases": ["perplexity"]},
-    "groq": {"category": "llm_vendor", "annual": false, "aliases": ["groq"]},
-    "upstash": {"category": "saas", "annual": false, "aliases": ["upstash"]},
-    "vercel": {"category": "saas", "annual": false, "aliases": ["vercel"]},
-    "posthog": {"category": "saas", "annual": false, "aliases": ["posthog", "post hog"]},
-    "grafana": {"category": "saas", "annual": false, "aliases": ["grafana", "grafana labs"]},
-    "sentry": {"category": "saas", "annual": false, "aliases": ["sentry", "functional software"]},
-    "redis": {"category": "saas", "annual": false, "aliases": ["redis", "redis labs", "redis cloud"]},
-    "pinecone": {"category": "saas", "annual": false, "aliases": ["pinecone"]},
-    "github": {"category": "saas", "annual": false, "aliases": ["github"]},
-    "linear": {"category": "saas", "annual": false, "aliases": ["linear app", "linear orbit"]},
-    "notion": {"category": "saas", "annual": false, "aliases": ["notion labs", "notion so"]},
-    "figma": {"category": "saas", "annual": false, "aliases": ["figma"]},
-    "google_workspace": {"category": "saas", "annual": false, "aliases": ["google workspace", "google gsuite", "google g suite"]},
-    "apple_developer": {"category": "saas", "annual": false, "aliases": ["apple developer"]},
-    "stripe_fees": {"category": "infra_non_gcp", "annual": false, "aliases": ["stripe fees", "stripe fee"]},
-    "modal": {"category": "infra_non_gcp", "annual": false, "aliases": ["modal labs", "modal com"]},
-    "aws": {"category": "infra_non_gcp", "annual": false, "aliases": ["amazon web services", "aws"]},
-    "azure": {"category": "infra_non_gcp", "annual": false, "aliases": ["microsoft azure", "azure"]},
-    "cloudflare": {"category": "infra_non_gcp", "annual": false, "aliases": ["cloudflare"]},
-    "runpod": {"category": "infra_non_gcp", "annual": false, "aliases": ["runpod"]},
-    "gcp": {"category": "gcp", "annual": false, "aliases": ["google cloud", "google cloud platform", "google gcp", "google services cloud"]},
-    "payroll": {"category": "excluded", "annual": false, "aliases": ["gusto", "rippling", "deel", "remote com"]},
-    "taxes": {"category": "excluded", "annual": false, "aliases": ["irs", "us treasury tax", "eftps", "franchise tax board"]},
-    "hardware_cogs": {"category": "excluded", "annual": false, "aliases": ["jlcpcb", "lcsc", "pcbway", "seeed", "digikey", "digi key", "mouser"]},
-    "card_repayment": {"category": "excluded", "annual": false, "aliases": ["mercury io autopay", "mercury credit", "mercury card payment"]}
+    "soniox": {
+      "category": "stt_vendor",
+      "annual": false,
+      "aliases": [
+        "soniox"
+      ]
+    },
+    "deepgram": {
+      "category": "stt_vendor",
+      "annual": false,
+      "aliases": [
+        "deepgram",
+        "www deepgram com"
+      ]
+    },
+    "modulate": {
+      "category": "stt_vendor",
+      "annual": false,
+      "aliases": [
+        "modulate",
+        "modulate ai"
+      ]
+    },
+    "openai": {
+      "category": "llm_vendor",
+      "annual": false,
+      "aliases": [
+        "openai",
+        "open ai"
+      ]
+    },
+    "anthropic": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "anthropic",
+        "claude ai"
+      ]
+    },
+    "openrouter": {
+      "category": "llm_vendor",
+      "annual": false,
+      "aliases": [
+        "openrouter",
+        "open router"
+      ]
+    },
+    "perplexity": {
+      "category": "llm_vendor",
+      "annual": false,
+      "aliases": [
+        "perplexity"
+      ]
+    },
+    "groq": {
+      "category": "llm_vendor",
+      "annual": false,
+      "aliases": [
+        "groq"
+      ]
+    },
+    "upstash": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "upstash"
+      ]
+    },
+    "vercel": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "vercel"
+      ]
+    },
+    "posthog": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "posthog",
+        "post hog"
+      ]
+    },
+    "grafana": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "grafana",
+        "grafana labs"
+      ]
+    },
+    "sentry": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "sentry",
+        "functional software"
+      ]
+    },
+    "redis": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "redis",
+        "redis labs",
+        "redis cloud"
+      ]
+    },
+    "pinecone": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "pinecone"
+      ]
+    },
+    "github": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "github"
+      ]
+    },
+    "shopify": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "shopify"
+      ]
+    },
+    "klaviyo": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "klaviyo"
+      ]
+    },
+    "replicate": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "replicate"
+      ]
+    },
+    "airtable": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "airtable"
+      ]
+    },
+    "intercom": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "intercom"
+      ]
+    },
+    "typesense": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "typesense"
+      ]
+    },
+    "featurebase": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "featurebase"
+      ]
+    },
+    "databox": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "databox"
+      ]
+    },
+    "semrush": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "semrush"
+      ]
+    },
+    "railway": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "railway"
+      ]
+    },
+    "twilio": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "twilio"
+      ]
+    },
+    "cognition": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "cognition"
+      ]
+    },
+    "ashby": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "ashby"
+      ]
+    },
+    "nevercode": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "nevercode"
+      ]
+    },
+    "linear": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "linear app",
+        "linear orbit"
+      ]
+    },
+    "notion": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "notion labs",
+        "notion so"
+      ]
+    },
+    "figma": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "figma"
+      ]
+    },
+    "google_workspace": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "google workspace",
+        "google gsuite",
+        "google g suite"
+      ]
+    },
+    "apple_developer": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "apple developer"
+      ]
+    },
+    "stripe_fees": {
+      "category": "infra_non_gcp",
+      "annual": false,
+      "aliases": [
+        "stripe fees",
+        "stripe fee"
+      ]
+    },
+    "modal": {
+      "category": "infra_non_gcp",
+      "annual": false,
+      "aliases": [
+        "modal labs",
+        "modal com",
+        "modal group"
+      ]
+    },
+    "vanta": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "vanta"
+      ]
+    },
+    "mintlify": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "mintlify"
+      ]
+    },
+    "greptile": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "greptile"
+      ]
+    },
+    "aws": {
+      "category": "infra_non_gcp",
+      "annual": false,
+      "aliases": [
+        "amazon web services",
+        "aws"
+      ]
+    },
+    "azure": {
+      "category": "infra_non_gcp",
+      "annual": false,
+      "aliases": [
+        "microsoft azure",
+        "azure"
+      ]
+    },
+    "cloudflare": {
+      "category": "infra_non_gcp",
+      "annual": false,
+      "aliases": [
+        "cloudflare"
+      ]
+    },
+    "runpod": {
+      "category": "infra_non_gcp",
+      "annual": false,
+      "aliases": [
+        "runpod"
+      ]
+    },
+    "gcp": {
+      "category": "gcp",
+      "annual": false,
+      "aliases": [
+        "google cloud",
+        "google cloud platform",
+        "google gcp",
+        "google services cloud",
+        "google payment corp"
+      ]
+    },
+    "hetzner_online": {
+      "category": "infra_non_gcp",
+      "annual": false,
+      "aliases": [
+        "hetzner online"
+      ]
+    },
+    "xai": {
+      "category": "llm_vendor",
+      "annual": false,
+      "aliases": [
+        "xai"
+      ]
+    },
+    "facebook": {
+      "category": "marketing",
+      "annual": false,
+      "aliases": [
+        "facebook"
+      ]
+    },
+    "meta_platforms": {
+      "category": "marketing",
+      "annual": false,
+      "aliases": [
+        "meta platforms"
+      ]
+    },
+    "tiktok": {
+      "category": "marketing",
+      "annual": false,
+      "aliases": [
+        "tiktok"
+      ]
+    },
+    "x_ads": {
+      "category": "marketing",
+      "annual": false,
+      "aliases": [
+        "x ads"
+      ]
+    },
+    "floship": {
+      "category": "fulfillment",
+      "annual": false,
+      "aliases": [
+        "floship"
+      ]
+    },
+    "shipbob": {
+      "category": "fulfillment",
+      "annual": false,
+      "aliases": [
+        "shipbob"
+      ]
+    },
+    "uber": {
+      "category": "travel_meals",
+      "annual": false,
+      "aliases": [
+        "uber"
+      ]
+    },
+    "lyft": {
+      "category": "travel_meals",
+      "annual": false,
+      "aliases": [
+        "lyft"
+      ]
+    },
+    "doordash": {
+      "category": "travel_meals",
+      "annual": false,
+      "aliases": [
+        "doordash"
+      ]
+    },
+    "airbnb": {
+      "category": "travel_meals",
+      "annual": false,
+      "aliases": [
+        "airbnb"
+      ]
+    },
+    "payroll": {
+      "category": "excluded",
+      "annual": false,
+      "aliases": [
+        "gusto",
+        "rippling",
+        "deel",
+        "remote com"
+      ]
+    },
+    "taxes": {
+      "category": "excluded",
+      "annual": false,
+      "aliases": [
+        "irs",
+        "us treasury tax",
+        "eftps",
+        "franchise tax board"
+      ]
+    },
+    "hardware_cogs": {
+      "category": "excluded",
+      "annual": false,
+      "aliases": [
+        "jlcpcb",
+        "lcsc",
+        "pcbway",
+        "seeed",
+        "digikey",
+        "digi key",
+        "mouser"
+      ]
+    },
+    "card_repayment": {
+      "category": "excluded",
+      "annual": false,
+      "aliases": [
+        "mercury io autopay",
+        "mercury credit",
+        "mercury card payment"
+      ]
+    }
   }
 }

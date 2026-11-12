@@ -9,7 +9,7 @@ Capture timestamps are client assertions, so a well-formed device header alone n
 
 A signed fresh manifest covers at most 20 files. Mobile detects a conversation with more than 20 pending fresh WALs before requesting a manifest and routes the whole conversation through backfill in three-file batches. It never claims one immutable fresh content set and strands the remainder behind a conflicting manifest.
 
-Historical recovery defaults are a 30-day lookback and thirty globally concurrent Cloud Tasks dispatches capped at thirty per second. The processed-speech daily accounting caps remain available, but `SYNC_BACKFILL_ADMISSION_LIMITS=false` leaves them unenforced at upload admission. `SYNC_BACKFILL_INFLIGHT_LIMIT=false` is retired for v2: no Redis per-UID admission slot is acquired even if that setting changes. `SYNC_BACKFILL_UID_SEQUENCER=on` in dev/prod is the phase-two setting (2026-09-28); `off` is the kill switch, under which eligible uploads still receive 202 and newly accepted jobs dispatch directly through Cloud Tasks as after #19352. The new admission path writes a bounded per-UID direct-job marker before enqueue, and the new worker refreshes it when direct work starts. A later config PR turns the sequencer on after the phase-one drain gate. On mode persists each accepted job in Firestore and dispatches at most one worker job per UID. Queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite.
+Historical recovery defaults are a 30-day lookback and thirty globally concurrent Cloud Tasks dispatches capped at thirty per second. The processed-speech daily accounting caps remain available, but `SYNC_BACKFILL_ADMISSION_LIMITS=false` leaves them unenforced at upload admission. `SYNC_BACKFILL_INFLIGHT_LIMIT` and its unused admission primitive are retired after C6: no Redis per-UID admission slot is acquired. Token-fenced release remains for slots left by older revisions. `SYNC_BACKFILL_UID_SEQUENCER=on` in dev/prod is the phase-two setting (2026-09-28); `off` is the kill switch, under which eligible uploads still receive 202 and newly accepted jobs dispatch directly through Cloud Tasks as after #19352. The new admission path writes a bounded per-UID direct-job marker before enqueue, and the new worker refreshes it when direct work starts. A later config PR turns the sequencer on after the phase-one drain gate. On mode persists each accepted job in Firestore and dispatches at most one worker job per UID. Queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite.
 
 Production deploys require `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS` as a comma-separated list of Cloud Monitoring notification-channel resource names. The workflow provisions log-based metrics and routed alert policies at 70% and 90%, then verifies each policy has a notification channel before traffic shifts.
 
@@ -205,13 +205,27 @@ The 45-day content ledger counts only same-content classified failures:
 `sync_invalid_audio` after decode finds no usable audio (whole job), or a
 classified persistence failure with the same bounded fingerprint on each
 attempt. Classified persistence failures are the data-shape exception classes
-(for example, `persistence:ValueError`), the `provenance_mismatch` and
-`redirect_cycle` assignment conflicts, and the recognized Firestore
-document-size marker. One classified segment failure is enough for the batch to
+(for example, `persistence:ValueError`), named assignment conflicts, and the
+recognized Firestore document-size marker. Every `SyncAssignmentConflict` raise
+site names its reason (`failure_subtype`). Structural reasons
+(`provenance_mismatch`, `redirect_cycle`, `redirect_chain_too_long`,
+`donor_tombstone_no_redirect`, `ancestry_flatten_rejected`,
+`corrected_speech_changed`, `record_target_retired`,
+`record_route_owner_changed`, `record_privacy_changed`) strike on every lane.
+Reasons that wait on another writer (`live_target_not_persisted`,
+`lineage_ownership_ambiguous`, `record_target_missing`,
+`record_finalize_pending`) strike only on backfill, whose capture is hours old.
+Projection owner drains making no progress on `live_target_not_persisted` are held
+out of admission for 30, 60, 120, 240, then at most 300 seconds. Expiry only
+re-admits the owner for its next sweep request, never wakes it; any progress or other stop resets
+the attempt count, without changing the existing hold deadline or dispositions.
+Set `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF=off` to restore ordinary `head_error`
+retries; `omi_batch_projection_live_target_backoffs_total` counts applied delays.
+One classified segment failure is enough for the batch to
 earn the strike, even beside successful siblings; differing fingerprints in one
 batch share `persistence:mixed`. Unknown exceptions, provider invalid-input
-verdicts, other assignment conflicts, and unknown Firestore `InvalidArgument`
-do not count. Three consecutive matching failures within 24 hours
+verdicts, the unlabeled `other` conflict, finalize-phase conflicts, and unknown
+Firestore `InvalidArgument` do not count. Three consecutive matching failures within 24 hours
 pause that content for 24 hours, then it is admitted again automatically;
 there is no permanent pause. A different or unclassified failure resets
 the streak; an expired window starts at one.
@@ -246,10 +260,10 @@ persistence failure, without exception text, paths or ids.
 
 A canonical conversation near Firestore's 1 MiB limit rolls new speech over to
 another conversation instead of failing after paid transcription:
-`sync_assignment_target outcome=size_rollover` (with `trigger=estimate` or
+`sync_assignment_target reason=size_rollover outcome=rolled_over` (with `trigger=estimate` or
 `trigger=commit_limit`) and `omi_fallback_event component=sync_dispatch
-to=size_rollover` count it, `outcome=size_limit_retry` counts the one commit
-backstop retry, and `outcome=size_rollover_unavailable` means the speech had no
+to=size_rollover` count it, `reason=size_limit_retry outcome=rejected` counts the one commit
+backstop retry, and `reason=size_rollover_unavailable outcome=unavailable` means the speech had no
 safe home, so the original write was attempted unchanged. `firestore_error=document_size_limit`
 should then be rare; when it still occurs it names `sync_day_index`, `sync_recent`,
 a `donor`, or a `conversation` rejected a second time after the backstop retry.
@@ -257,6 +271,53 @@ a `donor`, or a `conversation` rejected a second time after the backstop retry.
 stepped past. When the only id the chunk can create a conversation under is its own
 existing or redirected anchor, there is no safe home: fences hold, but the write
 can fail again after the backstop, so `size_rollover_unavailable` is not a recovery.
+
+Size observations carry hashed `job_ref`/`attempt_ref`, the rejected plan's
+`segments_bucket`/`speech_seconds_bucket`, and closed
+`rollover_target_kind=new_row|sibling_row|none`. `stage=commit` confirms a rollover;
+`stage=plan` is only a transaction-body observation. A final size exception keeps
+the last rejected document's buckets with `outcome=rejected`. Absent job context
+uses `none` refs. See the [size attribution contract](../../utils/sync/ARCHITECTURE.md#conversation-size)
+for bucket boundaries and the change from normalized to hashed refs.
+
+### Internal failures are not `upstream_error`
+
+A persistence or finalize failure never reached an STT vendor. Sync segment and
+job metrics and logs record it as `outcome=internal_error` with a bounded
+`failure_reason` (`storage_rate_limited`, `quota_exhausted`,
+`firestore_contention`, `assignment_conflict`, `persistence_error`,
+`finalize_error`), counted in
+`omi_sync_internal_failures_total{kind,lane,failure_reason}`. A job is internal
+only when no segment error came from a provider. The job `errors` codes are
+`sync_storage_rate_limited` (GCS 429) and `sync_firestore_contention`
+(exhausted assignment contention); other internal causes keep
+`sync_persistence_failed`/`sync_finalize_failed`. Vendor dashboards read
+`outcome=upstream_error` alone.
+
+Sync bridges copy donor audio idempotently: one destination listing per bridge,
+skip an object with the same crc32c and size, create or replace only under a
+generation precondition, and back off a GCS 429 with jitter (four attempts).
+`omi_sync_bridge_audio_copy_total{outcome=copied|skipped|rate_limited|raced}`
+shows the split; `raced` is a concurrent bridge that already wrote the same
+bytes.
+
+Fresh jobs take a per-(uid, candidate conversation) Redis turn around
+persistence and finalize, so concurrent fresh jobs for one conversation stop
+contending (`omi_sync_fresh_conversation_turn_total{outcome}`). `timeout` and
+`unavailable` proceed unserialized; the assignment transaction stays
+authoritative. Kill switch: `SYNC_FRESH_CONVERSATION_TURN=off`.
+
+Ordinary sync absorbs re-point only the rows they match, while the canonical's
+`sync_merged_from` stays cumulative, so an absorbed row's own ancestors can keep
+redirecting at it (a multi-hop chain inside one lineage). When a chunk later lands
+on a smart-merge survivor and matches that row, the one-hop flatten re-points
+every hop of such a chain at the survivor in the same transaction. The finalize
+bridge accepts a chain that stays inside the survivor's lineage and ends at it.
+A chain that leaves the lineage, cycles, or crosses a non-tombstone still
+conflicts. `event=sync_ancestry_flatten outcome=rejected reason=...` and
+`event=sync_bridge outcome=source_rejected kind=...` name what was left. Kill
+switch: `CONVERSATION_SMART_MERGE_FLATTEN_CHAIN_REPAIR=off` restores the strict
+one-hop check (`ancestry_flatten_rejected` / `bridge_source_not_tombstone`).
 
 ## Run ownership and recovery
 
@@ -276,7 +337,9 @@ later setting change cannot silently reinterpret existing retry material.
 Never set `active` on a normal deploy while old revisions may run. The
 protected two-phase `Sync ledger fence cutover` workflow requires an operator
 to set the environment variable `legacy` → `standby`, stage all three services,
-pause `sync-jobs` and `sync-backfill`, promote standby traffic, and delete then
+pause `sync-jobs` and `sync-backfill` (in prod also `sync-jobs-fresh` and
+`sync-backfill-fresh`, which carry live dispatch since the 10-18/10-19
+stalls), promote standby traffic, and delete then
 prove absent every prior zero-traffic revision. It deliberately leaves queues
 paused on any failure. Only after that barrier does an operator set
 `standby` → `active` and approve the activation job; activation promotes all
@@ -396,3 +459,36 @@ apply. A nonzero error count returns a failing exit code without printing
 exception details or identities. The background reconcile job picks up repaired
 owners on ticks after their staggered deadlines. Do not apply a repair before
 the empty-owner exclusion and stagger-aware reconcile code is deployed. No one-off repair is part of deploying this code.
+
+### Durable expiry custody (dark)
+
+`SYNC_DURABLE_REDRIVE_GUARD=false` and
+`SYNC_LEGACY_COMPLETION_CONVERGENCE=false` default off in code/dev and are enabled on production `backend-sync` and `backend-sync-backfill` in `backend/deploy/runtime_env/prod.overlay.yaml`. Change only through a
+reviewed configuration rollout. The guard independently enables the existing
+bounded missing-key/run-lock scan even when
+`SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM=false`. Its transaction removes an expired
+request from dispatch only after retaining the exact accepted payload under
+`sync_redrive_required/{job_id}` with `status=redrive_required`. A canonical
+completed ledger permits retirement without a handoff. Bound runs and competing
+content owners refuse transfer. Partial results and processed segment IDs remain
+on the ledger. A missing-job worker ACK follows durable custody and retains
+staged bytes; a custody write failure propagates and keeps the task retryable.
+
+The Scheduler reads durable `sync_redrive_stats/backlog` into
+`sync_redrive_required`, `sync_redrive_nearest_deadline_timestamp_seconds`, and
+`sync_redrive_unknown_deadline`. The nearest timestamp is an exact source
+custody deadline when known, otherwise a conservative attention deadline at
+acceptance. It is **not** a promise of recoverable source bytes. A positive
+unknown count requires source inventory/preservation. These are unresolved
+handoff counts, not transcription successes. No automatic redriver, source hold,
+release or abandonment is enabled by this PR. An operator resolving custody
+must reconcile the aggregate and nearest deadline transactionally; never delete
+handoff rows to make the gauge fall.
+
+Legacy convergence reads the canonical completed result after acquiring the
+worker run lock and before download/provider work. It finalizes Redis using
+that same token via the existing compare-and-set finalizer without binding a
+ledger epoch or changing dispatch mode. Invalid/held results continue the
+ordinary path; read errors and lost tokens fail closed. Flag rollback restores
+legacy behavior but does not remove durable custody records. Leave protective
+holds intact until delivery/explicit abandonment is verified.

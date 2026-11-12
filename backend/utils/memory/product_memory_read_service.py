@@ -20,7 +20,6 @@ from database.firestore_index_registry import (
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.memory_read_api import query_archive_product_memory_items
-from utils.memory.belief_model import normalize_temporal_read_view
 from utils.other.list_budget import ListReadBudget
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
@@ -51,7 +50,6 @@ def fetch_default_product_memory_search(
     """
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
-    temporal_view = normalize_temporal_read_view(view)
     from utils.memory.memory_service import MemoryService
 
     return MemoryService(db_client=db_client).default_product_search(
@@ -61,7 +59,7 @@ def fetch_default_product_memory_search(
         now=now,
         limit=bounded_limit,
         offset=bounded_offset,
-        view=temporal_view,
+        view='released',
         as_of=as_of,
     )
 
@@ -87,7 +85,6 @@ def fetch_archive_product_memory_search(
 
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
-    normalize_temporal_read_view(view)
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
     results = query_archive_product_memory_items(query, items, policy=policy, now=as_of or now)
     total_count = len(results)

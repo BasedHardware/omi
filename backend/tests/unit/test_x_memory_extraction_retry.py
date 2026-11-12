@@ -189,7 +189,7 @@ async def test_scheduled_x_job_routes_every_user_through_one_flex_run(monkeypatc
 
     assert router_construction == [(registry_db, 123.0)]
     assert sync_calls == [('uid-1', router), ('uid-2', router)]
-    assert summary == {'users': 2, 'synced': 1, 'new_posts': 3, 'failed': 0, 'errors': []}
+    assert summary == {'users': 2, 'synced': 1, 'new_posts': 3, 'failed': 0, 'skipped': 0, 'errors': []}
 
 
 def test_provider_5xx_skips_only_the_failed_chunk_and_leaves_it_pending(monkeypatch):

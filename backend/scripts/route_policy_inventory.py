@@ -29,7 +29,10 @@ from starlette.routing import Mount, Route, WebSocketRoute
 
 try:
     from scripts import export_openapi
-except ModuleNotFoundError:  # Direct CLI execution via scripts/openapi_runner.sh.
+except ImportError:  # Direct CLI execution via scripts/openapi_runner.sh.
+    # ImportError, not just ModuleNotFoundError: since #22936 a repo-root
+    # `scripts/` namespace package can shadow this name from sys.path and the
+    # failed `from scripts import ...` raises plain ImportError.
     import export_openapi
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -57,6 +60,7 @@ AUTH_MECHANISMS = {
     'service_oidc',
     'google_compute_identity_token',
     'webhook_signature',
+    'plugin_capability',
     'websocket_first_message',
     'unknown',
 }
@@ -195,7 +199,7 @@ def _timeout_class_for_path(path: str, paths_timeout: dict[str, Any]) -> str:
         return 'sync_job'
     if path == '/v2/audio-merge-jobs/run':
         return 'audio_merge'
-    if path == '/v1/users/account-deletion-wipes/run':
+    if path in {'/v1/users/account-deletion-wipes/run', '/v1/conversations/deletion-batch-purges/run'}:
         return 'account_deletion_wipe'
     if path == '/v1/conversation-finalization-jobs/run':
         return 'listen_finalization'

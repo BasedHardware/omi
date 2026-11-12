@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import os
 import re
@@ -12,12 +11,15 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Collection
 
 from config.stt_provider_policy import (
+    LANGUAGE_EQUIVALENCE,
+    canonical_language,
     SONIOX_PROVIDER,
     STTServingSurface,
     normalized_stt_language,
     provider_is_enabled,
     soniox_accepts_language_hint,
 )
+from config.policy.listen import current_listen_policy, hintable_allocation, listen_value
 from database.live_language_profile import append_live_language_session
 from langdetect import DetectorFactory, detect_langs
 from utils.executors import db_executor, run_blocking, start_background_task, sync_executor
@@ -30,15 +32,7 @@ MAX_PENDING_DETECTIONS = 32
 MAX_DETECTION_CHARS = 512
 LIVE_PROVIDERS = frozenset({'soniox', 'modulate', 'deepgram', 'parakeet'})
 MIN_LEARNED_SESSIONS = 3
-# Only near-identical spoken language pairs belong here. Codes are normalized
-# to their base form before this intentionally small equivalence map is used.
-LANGUAGE_EQUIVALENCE = {'ur': 'hi', 'hr': 'sr', 'bs': 'sr', 'id': 'ms'}
 MAX_SONIOX_LANGUAGE_HINTS = 3
-
-
-def canonical_language(language: str | None) -> str:
-    code = normalized_stt_language(language)
-    return LANGUAGE_EQUIVALENCE.get(code, code)
 
 
 def learned_expected(primary: str, sessions: list[dict[str, int]]) -> tuple[str, ...]:
@@ -87,7 +81,11 @@ class LiveLanguageProfile:
 
     @property
     def learning_enabled(self) -> bool:
-        return self.in_scope and self.multi and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true'
+        return (
+            self.in_scope
+            and self.multi
+            and str(listen_value('learned_language_profile', 'STT_LEARNED_LANGUAGE_PROFILE', 'false')).lower() == 'true'
+        )
 
     @classmethod
     def create(
@@ -104,7 +102,11 @@ class LiveLanguageProfile:
             primary = ''
         expected = (primary, 'en') if multi and primary not in ('', 'en') else ((primary,) if primary else ())
         source = 'declared'
-        if in_scope and multi and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true':
+        if (
+            in_scope
+            and multi
+            and str(listen_value('learned_language_profile', 'STT_LEARNED_LANGUAGE_PROFILE', 'false')).lower() == 'true'
+        ):
             learned = learned_expected(primary, learned_sessions or [])
             if learned:
                 expected, source = learned, 'learned'
@@ -112,17 +114,6 @@ class LiveLanguageProfile:
         eligible = in_scope and multi and group == 'non_en'
         arm = 'hintable' if eligible and hintable_allocation(uid) else ('control' if eligible else 'na')
         return cls(primary, expected, group, arm, multi, in_scope, source)
-
-
-def hintable_allocation(uid: str | None) -> bool:
-    if not uid:
-        return False
-    try:
-        percent = min(100.0, max(0.0, float(os.getenv('STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT', '0'))))
-    except ValueError:
-        percent = 0.0
-    bucket = int.from_bytes(hashlib.sha256(('stt-hintable:' + uid).encode()).digest()[:8], 'big')
-    return bucket / 2**64 * 100 < percent
 
 
 def prefer_hintable_soniox(
@@ -147,13 +138,15 @@ def prefer_hintable_soniox(
 
 
 def soniox_hints(language: str, profile: LiveLanguageProfile | None = None) -> list[str]:
+    # Newly resolved sessions always enable hints; honor a recorded older arm.
+    policy = current_listen_policy.get()
     normalized = normalized_stt_language(language)
     if (
         profile
         and profile.in_scope
         and profile.multi
         and profile.primary_group == 'non_en'
-        and os.getenv('STT_MULTI_LANGUAGE_HINTS', 'true').lower() == 'true'
+        and (policy is None or policy.multi_language_hints)
     ):
         candidates = profile.expected
     else:

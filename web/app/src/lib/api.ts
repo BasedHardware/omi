@@ -2,6 +2,11 @@ import { getIdToken } from './firebase';
 import { version as webAppVersion } from '../../package.json';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
+  parseStorefront,
+  type PlanStorefront,
+  type StorefrontTrigger,
+} from './planStorefront';
+import {
   invalidateCache,
   invalidationPatterns,
   fetchWithCache,
@@ -32,6 +37,8 @@ import type {
   ActionItemsResponse,
   FairUseStatusResponse,
   StoreRecordingPermissionResponse,
+  ClientFlagsResponse,
+  ConnectorAccess,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -65,7 +72,11 @@ const API_BASE_URL = '/api/proxy';
 
 /** Retain the status for safe endpoint-specific recovery messages. */
 export class ApiHttpError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly state?: string,
+  ) {
     super(message);
     this.name = 'ApiHttpError';
   }
@@ -129,9 +140,18 @@ async function fetchWithAuthResponse<T>(
       if (response.status === 401) {
         throw new ApiHttpError(401, 'Unauthorized - please sign in again');
       }
+      let state: string | undefined;
+      try {
+        const body = JSON.parse(errorText);
+        const value = body?.state ?? body?.detail?.state;
+        if (typeof value === 'string') state = value;
+      } catch {
+        /* Non-JSON errors retain their HTTP status. */
+      }
       throw new ApiHttpError(
         response.status,
         `API error: ${response.status} ${response.statusText}`,
+        state,
       );
     }
 
@@ -168,6 +188,37 @@ export interface GetConversationsParams {
   startDate?: Date;
   endDate?: Date;
   folderId?: string;
+  starred?: boolean;
+}
+
+/** Flags owned by Omi's flag store for this account; unlisted keys keep reading PostHog. */
+/** Missing/error confirmation keeps the previous Home failure rows. */
+export async function getHomeFailurePlacement(): Promise<boolean> {
+  const snapshot = await fetchWithAuth<import('./omiApi.generated').PendingWorkSnapshot>(
+    '/v1/pending-work',
+  );
+  return snapshot.enabled === true && snapshot.home_processing_today === true;
+}
+
+export async function getAttentionItems(): Promise<{
+  enabled?: boolean;
+  items: import('./attentionItems').AttentionItem[];
+}> {
+  return fetchWithAuth('/v1/attention-items');
+}
+
+export async function retryAttentionItem(
+  id: string,
+  key: string,
+): Promise<{ operation_id: string; state: string }> {
+  return fetchWithAuth(`/v1/attention-items/${encodeURIComponent(id)}/retry`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+  });
+}
+
+export async function getClientFlags(): Promise<ClientFlagsResponse> {
+  return fetchWithAuth<ClientFlagsResponse>('/v1/flags?surface=web-app');
 }
 
 export async function getConversations(
@@ -181,6 +232,7 @@ export async function getConversations(
     startDate,
     endDate,
     folderId,
+    starred,
   } = params;
 
   const queryParams = new URLSearchParams({
@@ -200,6 +252,10 @@ export async function getConversations(
 
   if (folderId) {
     queryParams.set('folder_id', folderId);
+  }
+
+  if (starred !== undefined) {
+    queryParams.set('starred', starred.toString());
   }
 
   return fetchWithAuth<Conversation[]>(`/v1/conversations?${queryParams}`);
@@ -478,10 +534,11 @@ export async function toggleActionItemCompleted(
 export async function updateActionItemDueDate(
   id: string,
   due_at: string | null,
+  due?: ActionItem['due'],
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ due_at }),
+    body: JSON.stringify({ due_at, ...(due === undefined ? {} : { due }) }),
   });
 }
 
@@ -520,40 +577,25 @@ export interface GetMemoriesParams {
   offset?: number;
   categories?: MemoryCategory[];
   cursor?: string;
-  view?: MemoryView;
 }
-
-/** Server-selected memory presentation. The server remains authoritative for
- * ordering and eligibility; the web client only selects the read surface. */
-export type MemoryView = 'useful_now' | 'history' | 'all';
 
 export interface MemoriesPage {
   memories: Memory[];
   nextCursor: string | null;
   truncated: boolean;
-  /** `null` means this server predates the beta capability header. */
-  beliefEnabled: boolean | null;
-}
-
-function headerBoolean(response: Response, name: string): boolean | null {
-  const value = response.headers.get(name)?.trim().toLowerCase();
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return null;
 }
 
 /** Read one server-ordered page and retain pagination/capability receipts. */
 export async function getMemoriesPage(
   params: GetMemoriesParams = {},
 ): Promise<MemoriesPage> {
-  const { limit = 100, offset = 0, cursor, view } = params;
+  const { limit = 100, offset = 0, cursor } = params;
 
   const queryParams = new URLSearchParams({
     limit: limit.toString(),
     offset: cursor ? '0' : offset.toString(),
   });
   if (cursor) queryParams.set('cursor', cursor);
-  if (view) queryParams.set('view', view);
 
   const { data: raw, response } = await fetchWithAuthResponse<unknown>(
     `/v3/memories?${queryParams}`,
@@ -562,7 +604,6 @@ export async function getMemoriesPage(
     memories: normalizeKnowledgeLedgerMemories(raw),
     nextCursor: response.headers.get('X-Omi-Memory-Next-Cursor'),
     truncated: response.headers.get('X-Omi-List-Truncated')?.toLowerCase() === 'true',
-    beliefEnabled: headerBoolean(response, 'X-Omi-Memory-Belief-Enabled'),
   };
 }
 
@@ -581,7 +622,7 @@ export async function getMemories(params: GetMemoriesParams = {}): Promise<Memor
 
 /**
  * Find memories by id. The backend has no memory-by-id read, so this walks the
- * owner-wide `all` view and stops once every id is found. `complete` is false
+ * owner-wide list and stops once every id is found. `complete` is false
  * when the walk stopped early (page cap, truncated read): an id missing then
  * may still exist and must not be reported as deleted.
  */
@@ -598,7 +639,7 @@ export async function findMemoriesByIds(
   let cursor: string | undefined;
   const seenCursors = new Set<string>();
   for (let page = 0; page < maxPages; page++) {
-    const result = await fetchPage({ limit, offset, cursor, view: 'all' });
+    const result = await fetchPage({ limit, offset, cursor });
     for (const memory of result.memories) {
       if (wanted.has(memory.id)) found.set(memory.id, memory);
     }
@@ -694,21 +735,6 @@ export async function reviewMemory(id: string, accept: boolean): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}/review?value=${accept}`, {
     method: 'POST',
   });
-}
-
-export type MemoryUseAction = 'suppress' | 'allow' | 'useful';
-
-/** Record an owner's use preference without deleting or rewriting the memory. */
-export async function setMemoryUse(
-  id: string,
-  action: MemoryUseAction,
-  feedbackId: string,
-): Promise<void> {
-  await fetchWithAuth(`/v3/memories/${id}/use`, {
-    method: 'POST',
-    body: JSON.stringify({ action, feedback_id: feedbackId }),
-  });
-  invalidateCache(invalidationPatterns.memories);
 }
 
 // ============================================================================
@@ -1127,6 +1153,17 @@ export async function sendMessageStream(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'No error body');
+    if (response.status === 402) {
+      try {
+        const pause = JSON.parse(errorText)?.detail?.chat_at_cap;
+        if (pause?.state === 'paused' && pause.trigger === 'usage_budget') {
+          window.dispatchEvent(new CustomEvent('omi-chat-paused', { detail: pause }));
+          throw new Error(pause.title);
+        }
+      } catch (error) {
+        if (error instanceof Error && !(error instanceof SyntaxError)) throw error;
+      }
+    }
     console.error('Send message error:', response.status, errorText);
     throw new Error(`Failed to send message: ${response.status}`);
   }
@@ -1978,6 +2015,22 @@ export async function getAvailablePlans(): Promise<AvailablePlansResponse | null
 }
 
 /**
+ * Ladder-v1 plans sheet payload (`GET /v2/payments/plans`). Throws on any
+ * failure so the sheet shows its error state; there is no fallback catalog.
+ */
+export async function getStorefront(params: {
+  source: string;
+  trigger?: StorefrontTrigger | null;
+  locale?: string;
+}): Promise<PlanStorefront> {
+  const query = new URLSearchParams({ source: params.source });
+  if (params.trigger) query.set('trigger', params.trigger);
+  if (params.locale) query.set('locale', params.locale);
+  const raw = await fetchWithAuth<unknown>(`/v2/payments/plans?${query.toString()}`);
+  return parseStorefront(raw);
+}
+
+/**
  * Create a checkout session for subscription
  */
 export async function createCheckoutSession(
@@ -1996,6 +2049,14 @@ export async function createCheckoutSession(
     console.error('createCheckoutSession error:', error);
     throw error;
   }
+}
+
+/** Apply a promotion code to the current subscription, including during a free trial. */
+export async function redeemCode(code: string): Promise<RedeemCodeResponse> {
+  return fetchWithAuth<RedeemCodeResponse>('/v1/payments/redeem-code', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
 }
 
 /**
@@ -2133,7 +2194,7 @@ export async function assignBulkTranscriptSegments(
  * (backend returns HTTP 402 for `/segments/text` on gated accounts).
  */
 export class SegmentEditPlanRequiredError extends Error {
-  constructor(message = 'Editing the transcript requires the Unlimited plan.') {
+  constructor(message = 'Editing the transcript requires Omi Pro.') {
     super(message);
     this.name = 'SegmentEditPlanRequiredError';
   }
@@ -2211,6 +2272,7 @@ import type {
   UpgradeSubscriptionResponse,
   CancelSubscriptionResponse,
   CustomerPortalResponse,
+  RedeemCodeResponse,
 } from '@/types/user';
 
 /** Get user's developer API keys; opt into errors for settings. */
@@ -2266,11 +2328,46 @@ export async function getMcpApiKeys(
   }
 }
 
+/** Offline fallback for older/unavailable scope-contract endpoints. */
+export const MCP_READ_ONLY_SCOPES = [
+  'memories.read',
+  'conversations.read',
+  'action_items.read',
+  'goals.read',
+] as const;
+
+async function getMcpDefaultScopes(): Promise<readonly string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const contract = await fetchWithAuth<ConnectorAccess>('/v1/mcp/keys/scopes', {
+      signal: controller.signal,
+    });
+    if (
+      Array.isArray(contract.default_scopes) &&
+      contract.default_scopes.length > 0 &&
+      contract.default_scopes.every((scope) => typeof scope === 'string')
+    ) {
+      return contract.default_scopes;
+    }
+  } catch {
+    // Older/offline backends keep the existing explicit read-only request.
+  } finally {
+    clearTimeout(timeout);
+  }
+  console.warn('MCP scope contract unavailable; using read-only fallback');
+  return MCP_READ_ONLY_SCOPES;
+}
+
 /** Create a new MCP API key */
-export async function createMcpApiKey(name: string): Promise<McpApiKey> {
+export async function createMcpApiKey(
+  name: string,
+  scopes?: readonly string[],
+): Promise<McpApiKey> {
+  const requestedScopes = scopes ?? (await getMcpDefaultScopes());
   return fetchWithAuth<McpApiKey>('/v1/mcp/keys', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, scopes: requestedScopes }),
   });
 }
 

@@ -1,5 +1,7 @@
 """Tests for the executor-backed listen persistence boundary."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from models.users import PlanType
@@ -154,3 +156,44 @@ async def test_credit_refresh_emits_threshold_event_for_plus(monkeypatch):
 
 async def _completed():
     return None
+
+
+@pytest.mark.anyio
+async def test_without_funded_admission_keeps_main_long_refresh(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    runtime = object.__new__(listen_runtime.ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='user-1', source='desktop')
+    runtime.limits = ListenLimits(credits_refresh_seconds=900)
+    runtime.state = ListenSessionState(
+        remaining_seconds_cache=None, remaining_seconds_cache_ts=100, remaining_seconds_cache_initialized=True
+    )
+    runtime.user_has_credits = True
+    # Custom STT has no funded socket; it must not scan the ledger each minute.
+    runtime.receiver = SimpleNamespace(cap_admission=None)
+    reads = Mock(return_value=0)
+
+    async def call(function, *args, **kwargs):
+        if function is listen_runtime.check_credits_invalidation:
+            return False
+        if function is listen_runtime.get_remaining_transcription_seconds:
+            assert kwargs == {'source': 'desktop'}
+            return reads()
+        if function is listen_runtime.user_db.get_user_valid_subscription:
+            return SimpleNamespace(plan=PlanType.operator)
+        raise AssertionError(function)
+
+    runtime.persistence = SimpleNamespace(call=call)
+    # Budget crosses immediately after the previous read; no chunk performs IO.
+    for now in (110, 159, 160):
+        monkeypatch.setattr(listen_runtime.time, 'time', lambda: now)
+        await runtime._refresh_credits(transcription_seconds=10)
+        if now < 160:
+            reads.assert_not_called()
+    reads.assert_not_called()
+    assert runtime.user_has_credits
+    monkeypatch.setattr(listen_runtime.time, 'time', lambda: 1000)
+    await runtime._refresh_credits(transcription_seconds=10)
+    reads.assert_called_once()
+    assert not runtime.user_has_credits

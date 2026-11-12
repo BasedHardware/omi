@@ -3,10 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/episodes/episode_moments_section.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
+import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -18,7 +24,9 @@ import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
 
+import 'conversation_action_items_section.dart';
 import 'conversation_screenshots_section.dart';
+import 'summary_task_recovery.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
 
@@ -27,7 +35,12 @@ class SummaryTab extends StatefulWidget {
   final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
+
+  /// How many of the Summary tab's search matches precede the action-item
+  /// section; the page computes it alongside the tab's total.
+  final int summarySearchResultOffset;
   final VoidCallback? onTapWhenSearchEmpty;
+  final ValueChanged<List<String>>? onShowActionItemInTranscript;
 
   /// Switches the page to the Transcript tab.
   final VoidCallback? onOpenTranscript;
@@ -38,7 +51,9 @@ class SummaryTab extends StatefulWidget {
       this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
+      this.summarySearchResultOffset = 0,
       this.onTapWhenSearchEmpty,
+      this.onShowActionItemInTranscript,
       this.onOpenTranscript});
 
   @override
@@ -49,6 +64,14 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   bool _isEditing = false;
   @override
   bool get wantKeepAlive => true;
+
+  /// A moment recorded in another conversation of the same episode opens that conversation.
+  Future<void> _openConversation(BuildContext context, String id) async {
+    final known = context.read<ConversationProvider?>()?.conversations.where((c) => c.id == id).firstOrNull;
+    final conversation = known ?? await getConversationById(id);
+    if (conversation == null || !context.mounted) return;
+    routeToPage(context, ConversationDetailPage(conversation: conversation));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +133,10 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                       sliver: SliverMainAxisGroup(slivers: [
                         // Title and facts live in the page header, shared by every tab.
                         SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
+                        // Where the transcript and summary were made, when the phone made them.
+                        // Redo with Omi Cloud waits on a re-transcription endpoint.
+                        if (conversation != null && !discarded)
+                          SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(
@@ -142,6 +169,22 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                                       );
                                 },
                               ),
+                        // After the note's sections, before the screenshots: the Mac's order.
+                        if (conversation != null &&
+                            !_isEditing &&
+                            !summarySelection.isApp &&
+                            !provider.isLoading &&
+                            !provider.loadingReprocessConversation)
+                          SliverToBoxAdapter(child: SummaryTaskRecovery(conversation: conversation)),
+                        if (!discarded && conversation != null)
+                          ConversationActionItemsSection(
+                            items: conversation.structured.actionItems,
+                            conversationId: conversation.id,
+                            onShowInTranscript: widget.onShowActionItemInTranscript ?? (_) {},
+                            searchQuery: widget.searchQuery,
+                            currentResultIndex: widget.currentResultIndex,
+                            searchResultOffset: widget.summarySearchResultOffset,
+                          ),
                       ]),
                     ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed
@@ -154,6 +197,15 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
                       sliver: SliverMainAxisGroup(slivers: [
+                        // The episode this conversation belonged to, when it had several moments.
+                        if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
+                          SliverToBoxAdapter(
+                            child: EpisodeMomentsSection(
+                              key: ValueKey('episode-moments-${conversation.id}'),
+                              conversationId: conversation.id,
+                              onOpenConversation: (id) => _openConversation(context, id),
+                            ),
+                          ),
                         if (feedbackKind == FeedbackPromptKind.summary)
                           SummaryFeedbackPrompt(
                             key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),

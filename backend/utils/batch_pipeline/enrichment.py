@@ -1,32 +1,16 @@
-"""Task adapter for the existing coalesced sync enrichment outbox."""
+"""Task adapter for the coalesced enrichment outbox (``utils.enrichment``)."""
 
+import logging
 import re
 from typing import Callable
 
-from google.cloud import firestore
-from database._client import get_firestore_client
-from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
-from utils.sync import reprocess
+from utils.conversations.summary_delivery import SummaryRepairSuperseded
+from utils.enrichment import outbox as reprocess
+from utils.enrichment.custody import discard_blocked
 
+logger = logging.getLogger(__name__)
 
-def discard_blocked(document_id: str) -> bool:
-    """A deletion/protection fence retires derived work without recreating it."""
-    client = get_firestore_client()
-    ref = client.collection(reprocess.COLLECTION).document(document_id)
-
-    @firestore.transactional
-    def discard(transaction):
-        row = ref.get(transaction=transaction).to_dict() or {}
-        if not row:
-            return False
-        try:
-            assert_batch_write_allowed(client, transaction, row['uid'], conversation_ids=[row['conversation_id']])
-        except BatchPrivacyBlocked:
-            transaction.delete(ref)
-            return True
-        return False
-
-    return discard(client.transaction())
+__all__ = ['discard_blocked', 'run_enrichment']
 
 
 def run_enrichment(
@@ -46,11 +30,16 @@ def run_enrichment(
     def enrich(uid: str, conversation_id: str, language: str):
         if discard_blocked(document_id):
             return
-        callback = process
-        if callback is None:
-            from utils.sync.pipeline import _reprocess_conversation_after_update  # type: ignore[reportPrivateUsage]
+        # Processing imports are heavy; load them only in the worker that runs a delivery.
+        from utils.enrichment import callback as enrichment_callback
 
-            callback = _reprocess_conversation_after_update
-        return callback(uid, conversation_id, language)
+        try:
+            return (process or enrichment_callback.enrich_conversation)(uid, conversation_id, language)
+        except enrichment_callback.SyncConversationPersistenceFenced:
+            # A lifecycle fence is a terminal supersession, not a delivery failure (#21968): the newer
+            # writer owns the conversation and marks its own obligation. The outbox settles this claim
+            # as superseded (re-armed when the version moved, retired otherwise) instead of retrying.
+            logger.info('event=sync_reprocess outcome=conversation_fenced')
+            raise SummaryRepairSuperseded('conversation persistence fenced') from None
 
     return reprocess.run(document_id, task_token, enrich, now=now)

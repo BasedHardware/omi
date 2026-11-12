@@ -1,8 +1,11 @@
 from dataclasses import replace
 from contextlib import nullcontext
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import io
 import logging
 import sys
+import time
 import wave
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -10,10 +13,12 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
+from config import stt_cap_dispatch as cap_policy
+from config.batch_pipeline import worker_silence_disposition_enabled
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer import batch_pipeline, batch_pipeline_models
+from utils.batch_pipeline.word_validation import BatchValidationError, ValidationReason
 from diarizer.batch_pipeline import (
-    BatchValidationError,
     PipelineWorker,
     LiveWords,
     Window,
@@ -22,7 +27,22 @@ from diarizer.batch_pipeline import (
     speech_windows,
 )
 from diarizer.batch_pipeline_models import ParakeetWords, PyannoteVAD, decode_pcm16_wav
-from utils.batch_pipeline.contracts import WorkItem, Priority
+from utils.batch_pipeline.contracts import FailedWork, WorkItem, Priority, WorkResult, ValidationFailureWork
+from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.pump import Pump
+from utils.batch_pipeline.recovery_disposition import result_outcome
+from utils.batch_pipeline.worker_silence import inspect_worker_silence
+from utils.stt import local_vad as vad
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+
+@pytest.fixture(autouse=True)
+def _full_gpu_stages(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+    # This suite pins the full-stage chain. The ship-on GPU skips have their own
+    # contract in test_batch_pipeline_diarization_gate.py.
+    monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false')
 
 
 class Samples:
@@ -65,6 +85,7 @@ def setup_worker(**kwargs):
         return {'turns': []}
 
     settings = dict(
+        language_of=lambda item: 'en',  # Synthetic English fixture.
         decode=decode,
         vad=lambda s: [(0, len(s) / 16000)],
         words_providers={'parakeet': provider},
@@ -78,11 +99,20 @@ def setup_worker(**kwargs):
 
 def test_cross_user_chain_decode_once_sort_restore_and_persist():
     worker, words, saved, decoded, diarized, failures = setup_worker()
-    results = worker.process_batch([item('long', 4), item('short', 2)])
+    results = worker.process_batch(
+        [
+            replace(item('long', 4), language_receipt_enabled=True),
+            replace(item('short', 2), language_receipt_enabled=True),
+        ]
+    )
     assert words.calls == [[2, 4]]
     assert decoded == ['long', 'short']
     assert len(diarized) == 2
     assert {r.segment_id for r in results} == {'long', 'short'}
+    assert all(r.language_receipt['language'] == 'en' for r in results)
+    assert all(r.language_receipt['route'] == 'parakeet' for r in results)
+    assert all(r.language_receipt['word_count'] == 1 for r in results)
+    assert all(r.language_receipt['letters'] == 5 and r.language_receipt['incompatible_letters'] == 0 for r in results)
     assert saved['short']['words'][0]['word'] == 'hello'
     assert not failures
 
@@ -96,10 +126,137 @@ def test_vad_silence_skips_models_but_persists_result():
     assert saved['a']['speech_spans'] == []
 
 
+@pytest.mark.parametrize('language,route', [('en', 'parakeet'), ('vi', 'blocked'), (None, 'blocked')])
+@pytest.mark.parametrize('failure', ['vad_call', 'vad_windows'])
+def test_route_precedes_vad_failure_without_claiming_asr(monkeypatch, caplog, language, route, failure):
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true')
+    caplog.set_level(logging.INFO)
+
+    def vad(_):
+        routes = [r.message for r in caplog.records if 'event=batch_language_route' in r.message]
+        assert len(routes) == 1 and f'route={route}' in routes[0]
+        if failure == 'vad_call':
+            raise BatchValidationError(ValidationReason.VAD_BOUNDS)
+        return [(3, 4)]  # speech_windows rejects bounds on a two-second buffer.
+
+    worker, words, saved, *_ = setup_worker(language_of=lambda _: language, vad=vad)
+    result = worker.process_batch([item()])
+    assert len(result) == 1 and isinstance(result[0], ValidationFailureWork)
+    assert result[0].reason == 'vad_bounds'
+    assert not words.calls and not saved
+    assert sum('event=batch_language_route' in r.message for r in caplog.records) == 1
+
+
+@pytest.mark.parametrize('shadow', [False, True])
+def test_route_once_on_success_and_no_route_for_shadow(caplog, shadow):
+    caplog.set_level(logging.INFO)
+    worker, words, *_ = setup_worker()
+    assert worker.process_batch([replace(item(), shadow=shadow)])[0].outcome == 'success'
+    assert words.calls
+    assert sum('event=batch_language_route' in r.message for r in caplog.records) == int(not shadow)
+
+
+def test_route_precedes_packed_segmentation_and_vad_failure(caplog):
+    caplog.set_level(logging.INFO)
+
+    def segment(samples):
+        assert sum('event=batch_language_route' in r.message for r in caplog.records) == 1
+        return ['features']
+
+    def vad(samples, features):
+        raise BatchValidationError(ValidationReason.VAD_BOUNDS)
+
+    flight = SimpleNamespace(segment=segment, vad_spans=vad)
+    worker, words, saved, *_ = setup_worker(flight_models=flight)
+    result = worker.process_batch([item()])
+    assert len(result) == 1 and isinstance(result[0], ValidationFailureWork)
+    assert result[0].reason == 'vad_bounds'
+    assert not words.calls and not saved
+    assert sum('event=batch_language_route' in r.message for r in caplog.records) == 1
+
+
 def test_failure_is_not_silence_and_siblings_survive():
     worker, _, _, _, _, failures = setup_worker(decode=lambda i: Samples(99) if i.segment_id == 'bad' else Samples(2))
     assert [r.segment_id for r in worker.process_batch([item('bad'), item('ok')])] == ['ok']
     assert failures == [('bad', 'ValueError')]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('safety_net', [False, True])
+@pytest.mark.parametrize(
+    'message',
+    ['staging requires 16kHz mono PCM16 WAV', 'invalid staged audio length', 'truncated staged WAV'],
+)
+async def test_invalid_staged_audio_quarantines_first_attempt(monkeypatch, caplog, message, safety_net):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', str(safety_net))
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'false')
+    # Exercise the unchanged decoder with bytes for each terminal condition.
+    body = io.BytesIO()
+    with wave.open(body, 'wb') as handle:
+        handle.setnchannels(2 if message.startswith('staging requires') else 1)
+        handle.setsampwidth(2)
+        handle.setframerate(16000)
+        handle.writeframes(b'' if message == 'invalid staged audio length' else b'\0' * 64000)
+    staged = body.getvalue()[:-2] if message == 'truncated staged WAV' else body.getvalue()
+    with pytest.raises(ValueError, match=f'^{message}$'):
+        decode_pcm16_wav(staged)
+    worker, words, saved, _, diarized, _ = setup_worker(decode=lambda _: decode_pcm16_wav(staged))
+    results = worker.process_batch([item()])
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'staged_audio_invalid')]
+    assert 'reason=staged_audio_invalid samples=-1' in caplog.text
+    assert message not in caplog.text
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item(), time.time())
+    lease = queue.pull(time.time())[0]
+    fail = Mock(wraps=queue.fail)
+    monkeypatch.setattr(queue, 'fail', fail)
+    assert await Pump(queue, worker)._publish(lease, {'a': results[0]}, set())
+    assert fail.call_args.kwargs['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}
+    assert 'quarantine' not in fail.call_args.kwargs
+    job = store.rows['jobs', 'a']
+    assert job['state'] == 'quarantined' and job['attempt'] == 1
+    assert job['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'staged_audio_invalid'}
+    assert job['recovery_state'] == 'held' and not job['merge_pending']
+    assert queue.pull(time.time() + 600) == []
+    assert not words.calls and not saved and not diarized
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'stage,error',
+    [
+        ('fetch_decode', ValueError('different decode failure')),
+        ('fetch_decode', wave.Error('truncated staged WAV')),
+        ('fetch_decode', RuntimeError('truncated staged WAV')),
+        ('persist', ValueError('truncated staged WAV')),
+        ('asr', RuntimeError('transient GPU failure')),
+    ],
+)
+async def test_other_worker_errors_still_retry(monkeypatch, stage, error):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    broken = Mock(side_effect=error)
+    settings = {('decode' if stage == 'fetch_decode' else 'persist'): broken}
+    if stage == 'asr':
+        settings = {'words_providers': {'parakeet': SimpleNamespace(transcribe_batch=broken)}}
+    worker, *_ = setup_worker(**settings)
+    results = worker.process_batch([item()])
+    assert len(results) == 1 and isinstance(results[0], FailedWork) and results[0].segment_id == 'a'
+    assert results[0].measured_held_vad_speech_seconds == (None if stage == 'fetch_decode' else 2)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item(), time.time())
+    lease = queue.pull(time.time())[0]
+    fail = Mock(wraps=queue.fail)
+    monkeypatch.setattr(queue, 'fail', fail)
+    assert await Pump(queue, worker)._publish(lease, {'a': results[0]}, set())
+    assert 'worker_failure' not in fail.call_args.kwargs and 'quarantine' not in fail.call_args.kwargs
+    assert fail.call_args.kwargs['worker_vad_receipt'] == results[0].worker_vad_receipt
+    job = store.rows['jobs', 'a']
+    assert job['state'] == 'retry' and job['attempt'] == 1
+    assert 'worker_failure' not in job
+    queue.recover(job['available_at'])
+    assert queue.pull(job['available_at'])[0].item.segment_id == 'a'
 
 
 @pytest.mark.parametrize(
@@ -132,7 +289,9 @@ def test_item_failures_log_class_and_stage_without_callback_or_private_content(s
     else:
         settings['persist'] = broken
     worker, *_ = setup_worker(**settings)
-    assert worker.process_batch([item(duration=60)]) == []
+    results = worker.process_batch([item(duration=60)])
+    expected_reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage)
+    assert results == ([ValidationFailureWork('a', stage, expected_reason)] if expected_reason else [])
     records = [record for record in caplog.records if 'event=batch_worker_failed' in record.getMessage()]
     assert len(records) == worker.counts['failed'] == 1
     reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage, 'unclassified')
@@ -210,7 +369,7 @@ def test_empty_asr_on_vad_speech_stays_failure_with_numeric_shape(caplog):
         words_providers={'parakeet': EmptyWords()},
         on_failure=None,
     )
-    assert worker.process_batch([item(duration=7.9)]) == []
+    assert worker.process_batch([item(duration=7.9)]) == [ValidationFailureWork('a', 'assemble_words', 'empty_asr')]
     assert not saved
     message = next(r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage())
     assert 'stage=assemble_words' in message and 'reason=empty_asr' in message
@@ -282,8 +441,8 @@ def test_recovery_never_truncates_audio_to_fit_budget():
             pytest.fail('oversized recovery must stay held, never transcribe a prefix')
 
     provider = ParakeetWords(Model())
-    assert provider.recover_empty(np.ones(117 * 16000, dtype=np.float32), 272) == []
-    assert provider.recover_empty(np.ones(31 * 16000, dtype=np.float32), 34) == []
+    assert provider.recover_empty(np.ones(117 * 16000, dtype=np.float32), 272) is None
+    assert provider.recover_empty(np.ones(31 * 16000, dtype=np.float32), 34) is None
 
 
 def test_empty_recovery_remains_failure_and_healthy_sibling_survives(caplog):
@@ -300,7 +459,9 @@ def test_empty_recovery_remains_failure_and_healthy_sibling_survives(caplog):
     worker, _, saved, _, diarized, failures = setup_worker(
         words_providers={'parakeet': EmptyWords()}, recover_words=recover
     )
-    assert [r.segment_id for r in worker.process_batch([item(), item('b', 3)])] == ['b']
+    results = worker.process_batch([item(), item('b', 3)])
+    assert ValidationFailureWork('a', 'assemble_words', 'empty_asr') in results
+    assert [r.segment_id for r in results if isinstance(r, WorkResult)] == ['b']
     assert calls == [32000, 48000] and set(saved) == {'b'}
     assert failures == [('a', 'BatchValidationError')] and diarized == [48000]
     assert 'reason=empty_asr' in caplog.text
@@ -310,14 +471,16 @@ def test_empty_recovery_remains_failure_and_healthy_sibling_survives(caplog):
 def test_recovery_only_runs_for_valid_empty_speech(mode):
     class Provider:
         def transcribe_batch(self, arrays):
-            return [[{'word': 'synthetic', 'timestamp': [-1 if mode == 'invalid' else 0, 1]}] for _ in arrays]
+            clocks = [-2, -1] if mode == 'invalid' else [0, 1]
+            return [[{'word': 'synthetic', 'timestamp': clocks}] for _ in arrays]
 
     worker, *_ = setup_worker(
         vad=lambda s: [] if mode == 'silence' else [(0, 2)],
         words_providers={'parakeet': Provider()},
         recover_words=lambda *args: pytest.fail('must not retry silence, successful words or malformed clocks'),
     )
-    assert bool(worker.process_batch([item()])) == (mode != 'invalid')
+    results = worker.process_batch([item()])
+    assert any(isinstance(r, WorkResult) for r in results) == (mode != 'invalid')
 
 
 def test_recovery_fatal_cuda_quarantines_chain():
@@ -361,7 +524,9 @@ def test_context_only_hypothesis_is_observable_failure_not_silence(caplog):
         words_providers={'parakeet': ContextWords()},
         on_failure=None,
     )
-    assert worker.process_batch([item(duration=10.02)]) == []
+    assert worker.process_batch([item(duration=10.02)]) == [
+        ValidationFailureWork('a', 'assemble_words', 'no_owned_words')
+    ]
     assert not saved
     message = next(r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage())
     assert 'reason=no_owned_words' in message and 'asr_words=1 owned_words=0' in message
@@ -433,7 +598,9 @@ def test_noncanonical_headers_fail_before_vad_or_assembly(channels, rate, caplog
         vad=lambda _: pytest.fail('header failure must precede VAD'),
         on_failure=None,
     )
-    assert worker.process_batch([item(duration=1)]) == []
+    assert worker.process_batch([item(duration=1)]) == [
+        ValidationFailureWork('a', 'fetch_decode', 'staged_audio_invalid')
+    ]
     assert 'stage=fetch_decode' in caplog.text
     assert 'stage=vad_windows' not in caplog.text and 'stage=assemble_words' not in caplog.text
 
@@ -517,7 +684,8 @@ def test_reuse_default_off_never_reads_lineage():
 
 
 @pytest.mark.parametrize('spans', [[(-1, 1)], [(0, float('nan'))], [(0, 100)]])
-def test_invalid_vad_is_failure_not_silence(spans):
+def test_invalid_vad_is_failure_not_silence(spans, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'false')
     worker, _, _, _, _, failures = setup_worker(vad=lambda s: spans)
     assert worker.process_batch([item()]) == []
     assert failures == [('a', 'BatchValidationError')]
@@ -646,6 +814,16 @@ def test_pool_unit_limits_reject_conversation_on_shared_live_before_decode():
     assert not words.calls and failures == [('a', 'ValueError')]
 
 
+def test_unit_ceiling_ignores_admission_clock_noise_below_one_frame():
+    # Admitted record durations are epoch-clock differences; the decoded
+    # sample count, not float noise, decides whether a unit fits the pool.
+    worker, _, saved, _, _, failures = setup_worker(config=ProviderConfig(max_unit_seconds=2))
+    assert worker.process_batch([item(duration=2 + 4.76837158203125e-07)])
+    assert 'a' in saved and not failures
+    with pytest.raises(ValueError, match='dedicated batch'):
+        worker.process_batch([item('b', duration=2 + 1 / 16000)])
+
+
 def test_pool_defaults_and_unsafe_config(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'shared_live')
     monkeypatch.delenv('BATCH_PIPELINE_UNIT_SECONDS', raising=False)
@@ -722,7 +900,7 @@ def test_capture_vad_groups_keep_words_and_diarization_on_original_span_clocks()
 def test_cap_provenance_is_additive_and_uses_actual_padded_provider_audio(monkeypatch, enforce):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
     worker, words, saved, _, _, _ = setup_worker()
-    worker.process_batch([item('a', 2)], authorize_dispatch=lambda ids: ids)
+    worker.process_batch([item('a', 2)], authorize_dispatch=lambda ids: {i: None for i in ids})
     if enforce:
         assert saved['a']['cap_dispatch'] == {
             'omi_funded_accepted_provider_audio_seconds': 2,
@@ -734,23 +912,6 @@ def test_cap_provenance_is_additive_and_uses_actual_padded_provider_audio(monkey
     assert words.calls == [[2]]
 
 
-def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkeypatch):
-    from utils.batch_pipeline.contracts import HeldWork
-
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    worker, words, saved, _, diarized, failures = setup_worker()
-    checks = []
-
-    def authorize(ids):
-        checks.append(ids)
-        return set()
-
-    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
-    assert result == [HeldWork('a')]
-    assert checks == [{'a'}]
-    assert not words.calls and not saved and not diarized and not failures
-
-
 def test_worker_missing_authority_does_not_spend_at_cap(monkeypatch):
     from utils.batch_pipeline.contracts import HeldWork
 
@@ -760,12 +921,18 @@ def test_worker_missing_authority_does_not_spend_at_cap(monkeypatch):
     assert not words.calls and not saved
 
 
+@pytest.mark.parametrize('scope', ['legacy', 'offline'])
 @pytest.mark.parametrize('enforce', [False, True])
 @pytest.mark.parametrize('recovery_allowed', [False, True])
-def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, enforce, recovery_allowed):
+def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, scope, enforce, recovery_allowed):
     from utils.batch_pipeline.contracts import HeldWork
 
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce if scope == 'legacy' else False))
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', str(enforce if scope == 'offline' else False))
+    if scope == 'offline':
+        # Exercise the new boundary with both legacy selection fences closed.
+        monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'off')
+        monkeypatch.setattr(cap_policy, '_BATCH_LANE_READY', False)
     calls, checks = [], []
 
     class Model:
@@ -783,11 +950,13 @@ def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, 
 
     def authorize(ids):
         checks.append(ids)
-        return ids if len(checks) == 1 or recovery_allowed else set()
+        if len(checks) == 1 or recovery_allowed:
+            return {segment_id: None for segment_id in ids}
+        return {segment_id: 'allowance_exhausted' for segment_id in ids}
 
     result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
     if enforce and not recovery_allowed:
-        assert result == [HeldWork('a')]
+        assert result == [HeldWork('a', reason='allowance_exhausted')]
         assert calls == [[2]]
         assert not saved and not diarized and not failures
     else:
@@ -811,7 +980,7 @@ def test_oversized_recovery_neither_rechecks_nor_counts_unsubmitted_audio(enforc
         272,
         **({'before_dispatch': before, 'after_dispatch': after} if enforce else {}),
     )
-    assert result is None if enforce else result == []
+    assert result is None
     before.assert_not_called()
     after.assert_not_called()
 
@@ -831,15 +1000,15 @@ def test_oversized_empty_retry_holds_only_when_enforced(monkeypatch, enforce):
         words_providers={'parakeet': provider},
         recover_words=provider.recover_empty,
     )
-    result = worker.process_batch([item('a', 117)], authorize_dispatch=lambda ids: ids)
+    result = worker.process_batch([item('a', 117)], authorize_dispatch=lambda ids: {i: None for i in ids})
     assert model.transcribe.call_count == 1  # Initial ASR only; 121s padded retry cannot fit.
     assert not saved and not diarized
     if enforce:
         assert result == [HeldWork('a')]
         assert not failures
     else:
-        # Exact main behavior: an empty retry enters ordinary provider failure.
-        assert not result and failures == [('a', 'BatchValidationError')]
+        assert result == [ValidationFailureWork('a', 'assemble_words', 'empty_asr')]
+        assert failures == [('a', 'BatchValidationError')]
 
 
 @pytest.mark.parametrize('enabled', [False, True])
@@ -855,7 +1024,11 @@ def test_exhausted_padded_empty_asr_hands_off_without_fabricating_silence(monkey
     retry = Mock(return_value=[])
     worker, _, saved, _, diarized, _ = setup_worker(words_providers={'parakeet': EmptyWords()}, recover_words=retry)
     results = worker.process_batch([item()])
-    assert results == ([RecoveryWork('a', padded_retry_empty=True)] if enabled else [])
+    assert results == (
+        [RecoveryWork('a', padded_retry_empty=True)]
+        if enabled
+        else [ValidationFailureWork('a', 'assemble_words', 'empty_asr')]
+    )
     retry.assert_called_once()
     assert not saved and not diarized
     assert worker.counts['silence'] == 0
@@ -868,3 +1041,205 @@ def test_empty_vad_is_the_only_silence_even_with_recovery_enabled(monkeypatch):
     assert worker.process_batch([item()])[0].outcome == 'silence'
     retry.assert_not_called()
     assert saved['a']['speech_spans'] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled,speech', [(True, False), (True, True), (False, False), (False, True)])
+async def test_worker_strict_silence_commits_or_preserves_quarantine(monkeypatch, enabled, speech):
+
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', str(enabled))
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    strict = Mock(return_value=[{'start': 0.25, 'end': 0.5}] if speech else [])
+    monkeypatch.setattr(vad, 'offline_pcm_speech_segments', strict)
+    # Full shadow sampling keeps the record-only inspection in the expected count.
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '100')
+    provider = Mock()
+    provider.transcribe_batch.side_effect = lambda samples: [[] for _ in samples]
+    retry = Mock(return_value=[])
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.zeros(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=retry,
+    )
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item(), time.time())
+    pump = Pump(queue, worker)
+    # Drive the real worker -> scheduler -> ordered-merge path, without a GPU
+    # or provider. No RecoveryWork may be emitted for confirmed local silence.
+    await pump.run_once()
+    provider.transcribe_batch.assert_called_once()
+    retry.assert_called_once()
+    assert strict.call_count == 2  # decode shadow plus disposition or sampled EMPTY_ASR observation
+    if enabled and not speech:
+        assert store.rows['jobs', 'a']['state'] == 'committed'
+        assert store.rows['results', 'a']['result']['outcome'] == 'silence'
+        assert result_outcome(saved['a']) == 'silence'
+        assert saved['a']['speech_seconds'] == 0 and saved['a']['speech_spans'] == []
+        assert saved['a']['words_provider'] == 'strict_local_vad'
+        assert not failures and worker.counts['failed'] == 0
+        assert worker.counts['silence'] == 1
+    else:
+        assert store.rows['jobs', 'a']['state'] == 'quarantined'
+        assert ('results', 'a') not in store.rows and not saved
+        assert failures == [('a', 'BatchValidationError')]
+        assert worker.counts['silence'] == 0
+    assert not diarized
+
+
+@pytest.mark.parametrize('raw', [None, [{'start': 0, 'end': 99}], RuntimeError('unavailable')])
+def test_worker_strict_vad_failure_retains_empty_asr(monkeypatch, raw):
+
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'true')
+    strict = Mock(**({'side_effect': raw} if isinstance(raw, Exception) else {'return_value': raw}))
+    monkeypatch.setattr(vad, 'offline_pcm_speech_segments', strict)
+    provider = Mock(transcribe_batch=lambda samples: [[] for _ in samples])
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.zeros(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=lambda *_: [],
+    )
+    assert worker.process_batch([item()]) == [ValidationFailureWork('a', 'assemble_words', 'empty_asr')]
+    assert failures == [('a', 'BatchValidationError')] and not saved and not diarized
+
+
+def test_worker_silence_adapter_preserves_exact_pcm_and_shared_evidence(monkeypatch):
+
+    pcm = np.resize(np.array([-32768, -1, 0, 1, 32767], dtype='<i2'), 32000)
+    strict = Mock(return_value=[])
+    monkeypatch.setattr(vad, 'offline_pcm_speech_segments', strict)
+    assert inspect_worker_silence(item(), pcm.astype(np.float32) / 32768)['outcome'] == 'silence'
+    assert strict.call_args.args[0] == pcm.tobytes()
+    for invalid in [np.full(32000, np.nan), np.full(32000, 1.0), np.full(32000, 0.000001)]:
+        with pytest.raises(ValueError, match='canonical PCM16'):
+            inspect_worker_silence(item(), invalid)
+    assert strict.call_count == 1
+
+
+def test_worker_silence_uses_real_local_silero():
+
+    payload = inspect_worker_silence(item(), np.zeros(32000, dtype=np.float32))
+    assert payload['outcome'] == 'silence' and payload['speech_spans'] == []
+
+
+@pytest.mark.parametrize('recovered', [False, True])
+def test_worker_disposition_does_not_replace_positive_asr(monkeypatch, recovered):
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'true')
+    strict = Mock(side_effect=AssertionError('positive ASR must not be disposed'))
+    monkeypatch.setattr(batch_pipeline, 'inspect_worker_silence', strict)
+    provider = Mock()
+    # Midpoint is outside core ownership, but initial ASR WAS positive.
+    provider.transcribe_batch.return_value = [[{'word': 'heard', 'timestamp': [4.5, 4.8]}]]
+    worker, _, saved, _, _, _ = setup_worker(
+        decode=lambda _: np.zeros(160320, dtype=np.float32),
+        vad=lambda _: [(1, 2)],
+        words_providers={'parakeet': provider},
+        recover_words=lambda *_: [{'word': 'heard', 'timestamp': [1, 1.1]}] if recovered else [],
+    )
+    results = worker.process_batch([item(duration=10.02)])
+    assert any(isinstance(r, WorkResult) for r in results) is recovered
+    if not recovered:
+        assert results == [ValidationFailureWork('a', 'assemble_words', 'no_owned_words')]
+    assert bool(saved) is recovered
+    strict.assert_not_called()
+
+
+def test_worker_silence_flag_defaults_off(monkeypatch):
+
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', raising=False)
+    assert not worker_silence_disposition_enabled()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'duration,expected_calls,expected_empty,expected_retry,expected_evidence',
+    [
+        (10, 2, True, 'empty', {'padded_retry': 'empty', 'version': 1}),
+        (117, 1, False, 'skipped_oversize', {'padded_retry': 'skipped_oversize', 'version': 1}),
+    ],
+)
+async def test_empty_asr_records_padded_retry_empty_only_when_padded_retry_ran(
+    monkeypatch, caplog, duration, expected_calls, expected_empty, expected_retry, expected_evidence
+):
+    from utils.batch_pipeline.contracts import RecoveryWork
+
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    model = Mock()
+    model.transcribe.side_effect = lambda arrays, **_: [
+        SimpleNamespace(text='', timestamp={'word': []}) for _ in arrays
+    ]
+    provider = ParakeetWords(model)
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('a', duration), time.time())
+    pump = Pump(queue, worker)
+    with caplog.at_level(logging.INFO):
+        await pump.run_once()
+    assert model.transcribe.call_count == expected_calls
+    assert not saved and not diarized
+    assert failures == [('a', 'BatchValidationError')]
+    assert (
+        f'event=batch_asr_recovery segment_id=a reason=empty_asr samples={duration * 16000} owned_words=0 outcome={expected_retry}'
+        in caplog.text
+    )
+    job = store.rows['jobs', 'a']
+    assert job['state'] == 'quarantined' and job['recovery_state'] == 'held'
+    assert job.get('worker_empty_evidence') == expected_evidence
+    direct = worker.process_batch([item('b', duration)])
+    assert direct == [RecoveryWork('b', padded_retry_empty=expected_empty, padded_retry=expected_retry)]
+
+
+@pytest.mark.parametrize('ladder', [False])
+def test_mixed_owner_gpu_batch_only_enforces_enrolled_owner(monkeypatch, ladder):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:owner-a')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'batch')
+    worker, words, saved, _, _, failures = setup_worker()
+    checks = []
+
+    def authorize(ids):
+        checks.append(ids)
+        return {segment_id: 'allowance_exhausted' for segment_id in ids}
+
+    result = worker.process_batch([item('a', 2), item('b', 2)], authorize_dispatch=authorize)
+    assert checks == [{'a'}]
+    assert words.calls == [[2]]
+    assert set(saved) == {'b'} and not failures
+    assert 'cap_dispatch' not in saved['b']
+    assert any(isinstance(row, batch_pipeline.HeldWork) and row.segment_id == 'a' for row in result)
+
+
+@pytest.mark.parametrize('lanes', ['live', 'sync', ''])
+def test_gpu_batch_outside_lane_does_not_require_cap_authority(monkeypatch, lanes):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    worker, words, saved, _, _, failures = setup_worker()
+    worker.process_batch([item('a', 2)])
+    assert words.calls == [[2]] and set(saved) == {'a'} and not failures
+
+
+@pytest.mark.parametrize('kill', [False, True])
+@pytest.mark.parametrize('authorized', [False, True])
+def test_offline_default_rechecks_gpu_spend_outside_legacy_scope(monkeypatch, kill, authorized):
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if kill else 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
+    worker, words, saved, _, _, failures = setup_worker()
+    authorize = Mock(side_effect=lambda ids: {i: None for i in ids} if authorized else {i: '' for i in ids})
+    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
+    if kill or authorized:
+        assert words.calls == [[2]] and set(saved) == {'a'}
+    else:
+        assert words.calls == [] and not saved
+        assert result == [batch_pipeline.HeldWork('a')]
+    assert not failures
+    assert authorize.call_count == int(not kill)

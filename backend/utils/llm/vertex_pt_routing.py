@@ -8,16 +8,18 @@ the shared Gemini ladders below cannot serve company-paid generation. No I/O, no
 the proxy injects observations and owns every side effect, so every rule here
 is unit-testable without a network.
 
-Prices per 1M tokens (Vertex global endpoint). The 2.5 Flash and 3.1
-Flash-Lite prices match the gateway cards checked 2026-10-15. The 3.8 Flash
-entry is the scheduled standard rate effective 2027-01-01; its introductory
-rate through 2026-12-31 is half that amount. 2.5 Flash-Lite and 2.5 Pro keep
-the existing routing reference prices because the gateway table has no cards
-for those models.
+Prices per 1M tokens (Vertex global endpoint). The 2.5 Flash price is the
+Vertex AI Gemini 2.5 Standard tier verified 2026-10-18 at
+https://cloud.google.com/vertex-ai/generative-ai/pricing (the earlier figures
+were the Priority tier); the 3.1 Flash-Lite price matches the gateway card
+checked 2026-10-15. The 3.8 Flash entry is the scheduled standard rate
+effective 2027-01-01; its introductory rate through 2026-12-31 is half that
+amount. 2.5 Flash-Lite and 2.5 Pro keep the existing routing reference
+prices because the gateway table has no cards for those models.
 
     gemini-2.5-flash-lite   $0.10 in / $0.40 out
     gemini-3.1-flash-lite   $0.25 in / $1.50 out
-    gemini-2.5-flash        $0.54 in / $4.50 out
+    gemini-2.5-flash        $0.30 in / $2.50 out
     gemini-2.5-pro          $1.25 in / $10.00 out
     gemini-3.8-flash        $1.50 in / $7.50 out (standard, from 2027-01-01)
 
@@ -71,14 +73,14 @@ OVERFLOW_PREFERENCE = ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite')
 PRICE_PER_MTOK_IN: dict[str, float] = {
     'gemini-2.5-flash-lite': 0.10,
     'gemini-3.1-flash-lite': 0.25,
-    'gemini-2.5-flash': 0.54,
+    'gemini-2.5-flash': 0.30,
     'gemini-2.5-pro': 1.25,
     PT_MODEL_TARGET: 1.50,
 }
 PRICE_PER_MTOK_OUT: dict[str, float] = {
     'gemini-2.5-flash-lite': 0.40,
     'gemini-3.1-flash-lite': 1.50,
-    'gemini-2.5-flash': 4.50,
+    'gemini-2.5-flash': 2.50,
     'gemini-2.5-pro': 10.00,
     PT_MODEL_TARGET: 7.50,
 }

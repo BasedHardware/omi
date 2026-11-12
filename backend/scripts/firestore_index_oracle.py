@@ -723,7 +723,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--export', type=Path, required=True)
     parser.add_argument('--project', default='based-hardware-dev')
-    parser.add_argument('--database', default='jit-qa')
+    parser.add_argument('--database', default='(default)')
     parser.add_argument('--output-dir', type=Path, required=True)
     parser.add_argument('--allow-prod-read-only', action='store_true')
     parser.add_argument('--concurrency', type=int, default=8)
@@ -751,9 +751,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error('expected a non-empty v1 recorder export')
     if any(driver.get('errors') for driver in export.get('drivers', [])):
         parser.error('recorder export has driver errors')
-    if has_root_probe(export) and (args.project, args.database) != ('based-hardware-dev', 'jit-qa'):
+    if has_root_probe(export) and (args.project, args.database) != ('based-hardware-dev', '(default)'):
         parser.error(
-            'root collection-group probes only run on based-hardware-dev/jit-qa; '
+            'root collection-group probes only run on based-hardware-dev/(default); '
             'real production roots are never read'
         )
     namespace = f'index-oracle-{uuid.uuid4().hex}'

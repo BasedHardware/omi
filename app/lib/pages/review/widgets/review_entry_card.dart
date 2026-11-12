@@ -11,12 +11,10 @@ import 'package:omi/utils/other/temp.dart';
 /// Home entry to the questions only the user can answer. With none waiting it draws nothing: the
 /// applied-change history lives in Activity, behind Home's bell.
 ///
-/// Review absorbs the older single-purpose prompt cards, so while Review is off for the account
-/// (or not yet known) [fallback] is shown in its place instead.
+/// Review replaced the older single-purpose prompt cards (the speaker prompt card was deleted on
+/// 2026-10-23). While Review is off or not yet known it draws nothing.
 class ReviewEntryCard extends StatefulWidget {
-  const ReviewEntryCard({super.key, this.fallback});
-
-  final Widget? fallback;
+  const ReviewEntryCard({super.key});
 
   @override
   State<ReviewEntryCard> createState() => _ReviewEntryCardState();
@@ -59,7 +57,7 @@ class _ReviewEntryCardState extends State<ReviewEntryCard> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ReviewProvider?>();
-    if (provider == null || !provider.isOn) return widget.fallback ?? const SizedBox.shrink();
+    if (provider == null || !provider.isOn) return const SizedBox.shrink();
     final count = provider.items.length;
     if (count == 0) return const SizedBox.shrink();
     final title = context.l10n.reviewEntryTitle;

@@ -1,6 +1,8 @@
 """Behavioral regression coverage for the extracted listen runtime."""
 
 import asyncio
+import json
+import struct
 from collections import deque
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -10,10 +12,14 @@ import pytest
 from models.transcript_segment import CombineSegmentsResult
 from routers.listen.contracts import ListenRequest
 from routers.listen.conversations import resolve_onboarding_provenance_marker
+from routers.listen.conversations import LiveConversationController
+from routers.listen import conversations as conversation_module
 from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
 from utils.async_tasks import WebSocketTaskSupervisor
 from utils.listen_session_bootstrap import ListenConnectBase
+from utils.listen_pusher_session import ListenPusherSession, ListenPusherSessionConfig, ListenPusherSessionDeps
+from utils.sync.live_cap_hold import LiveHeldAudio
 from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
 from utils.stt.live_failure import terminate_live_stt_backoff
 from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
@@ -24,6 +30,18 @@ from starlette.websockets import WebSocketState
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
+
+
+@pytest.fixture(autouse=True)
+def _policy_storage_boundary(monkeypatch):
+    # These partial runtimes exercise onboarding/selection rather than storage.
+    # Full policy startup and Redis faults have their own runtime-boundary suite.
+    from config.policy.listen import resolve_listen_policy
+
+    monkeypatch.setattr(
+        'routers.listen.runtime.initialize_session_policy',
+        AsyncMock(return_value=resolve_listen_policy('runtime-regression', flags={})),
+    )
 
 
 def _capture_product_event_inputs(monkeypatch, module):
@@ -81,6 +99,78 @@ def _assert_deletion_teardown_skipped_owner_writes(runtime):
     runtime._flush_usage.assert_not_awaited()
     runtime.conversations.process_conversation.assert_not_awaited()
     runtime.parity_capture.persist.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('cap_enforcement', [False, True])
+async def test_uncapped_desktop_close_sends_104_before_pusher_close(monkeypatch, cap_enforcement):
+    """Exercise the real teardown -> controller -> binary handoff with an empty cap sink."""
+    order = []
+    frames = []
+    conversation = {'id': 'conversation-1', 'source': 'desktop', 'transcript_segments': [{'text': 'fixture'}]}
+
+    async def persist(fn, *args, **kwargs):
+        if fn.__name__ == '_account_deletion_blocks_owner_persistence':
+            return False
+        if fn is conversation_module.conversations_db.get_conversation:
+            return conversation
+        if fn is conversation_module.lifecycle_service.request_finalization:
+            return fn(*args, **kwargs)
+        return None
+
+    request = ListenRequest(websocket=SimpleNamespace(client_state=WebSocketState.DISCONNECTED), uid='synthetic')
+    runtime = _deletion_teardown_runtime(request, persist)
+    runtime.state.close_code = 1000
+    runtime.client_kind = 'desktop_unknown_os'
+    runtime._record_session_transcript_outcome = MagicMock()
+    runtime.transcripts.flush_speaker_assignments.side_effect = lambda *_: order.append('speakers')
+    runtime.receiver.flush_multi_channel_tail.side_effect = lambda: order.append('tail')
+
+    async def send(frame):
+        frames.append(bytes(frame))
+        order.append(struct.unpack('I', frame[:4])[0])
+
+    async def close():
+        order.append('pusher_close')
+
+    session = ListenPusherSession(
+        ListenPusherSessionConfig('synthetic', 'session', 16000, False, 'en', False, 8, 8, 8, 8),
+        ListenPusherSessionDeps(
+            get_current_conversation_id=lambda: 'conversation-1',
+            is_active=lambda: runtime.state.active,
+            shutdown_event=runtime.state.shutdown_event,
+            get_byok_keys=lambda: None,
+            on_conversation_processed=lambda _: None,
+            wait_for_event=AsyncMock(return_value=True),
+        ),
+    )
+    session.pusher_ws = SimpleNamespace(send=send)
+    session.pusher_connected = True
+    runtime.request_conversation_processing = session.request_conversation_processing
+    runtime.pusher_close = close
+    runtime.conversations = LiveConversationController(runtime)
+    runtime.conversations.on_conversation_processing_started = MagicMock()
+    monkeypatch.setattr(conversation_module, 'get_byok_keys', lambda: None)
+    monkeypatch.setattr(
+        conversation_module.lifecycle_service,
+        'request_finalization',
+        lambda *args, **kwargs: {'route': 'pusher', 'job_id': 'job-1', 'dispatch_generation': 1},
+    )
+
+    async def finish_session():
+        if cap_enforcement:
+            # Enforcement can be enabled without this account ever holding audio.
+            # Its empty sink must not perform storage IO or delay finalization.
+            await LiveHeldAudio(runtime).finish_updates(None, asyncio.Event())
+        await runtime._teardown_components()
+
+    await asyncio.wait_for(finish_session(), timeout=1)
+    assert order == ['speakers', 104, 'tail', 'pusher_close']
+    assert len(frames) == 1
+    payload = json.loads(frames[0][4:])
+    assert payload['conversation_id'] == 'conversation-1'
+    assert payload['finalization_job_id'] == 'job-1'
+    assert payload['dispatch_generation'] == 1
 
 
 @pytest.mark.anyio

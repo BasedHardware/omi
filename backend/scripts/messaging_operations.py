@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Read-only deployment diff by default; explicit validation/apply for the operator.
 
-Never reads secrets or customer documents. Reconciles only the declared messaging
-job or uniquely named alert policies. Scheduler stays under scheduler_reconcile.py.
+Never reads secrets or customer documents. Reconciles the declared messaging job,
+log metrics or uniquely named alert policies. Scheduler stays under scheduler_reconcile.py.
 """
 
 import argparse
@@ -16,8 +16,15 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import AuthorizedSession
 
 ROOT = Path(__file__).resolve().parents[1] / 'deploy' / 'messaging'
+BATCH_PROJECTION_LOG_METRICS = (
+    Path(__file__).resolve().parents[1] / 'charts/monitoring/batch-projection/log-metrics.json'
+)
 PROJECT = 'based-hardware'
 CONTEXT_RATE_POLICY = 'Messaging: shaped context degraded above 5%'
+# The job runs `python -m utils.messaging.maintenance`, which only the fat backend
+# image ships today and the backend-workers role image ships after the plan B B3
+# cutover (runtime_images.json: messaging-maintenance -> workers/backend-workers).
+MAINTENANCE_JOB_IMAGES = ('backend', 'backend-workers')
 
 
 def contains(actual, expected):
@@ -46,10 +53,12 @@ def request(session, method, url, **kwargs):
 
 
 def desired_job(image):
-    if not re.fullmatch(
-        r'(?:gcr.io|[a-z0-9-]+-docker.pkg.dev)/based-hardware/[a-zA-Z0-9_./-]+@sha256:[a-f0-9]{64}', image
-    ):
-        raise ValueError('An admitted production image pinned by sha256 is required')
+    admitted = '|'.join(re.escape(name) for name in MAINTENANCE_JOB_IMAGES)
+    if not re.fullmatch(rf'gcr\.io/{PROJECT}/(?:{admitted})@sha256:[a-f0-9]{{64}}', image):
+        raise ValueError(
+            'An admitted production image pinned by sha256 is required: '
+            + ' or '.join(f'gcr.io/{PROJECT}/{name}@sha256:<digest>' for name in MAINTENANCE_JOB_IMAGES)
+        )
     job = json.loads((ROOT / 'maintenance-job.json').read_text())
     job['template']['template']['containers'][0]['image'] = image
     return job
@@ -116,10 +125,10 @@ def normalize_policy(value):
     return value
 
 
-def reconcile_log_metrics(session, mode):
+def reconcile_log_metrics(session, mode, path=ROOT / 'log-metrics.json'):
     if mode == 'validate':
         raise ValueError('Logging has no validateOnly API; use --check to review the diff')
-    bodies = json.loads((ROOT / 'log-metrics.json').read_text())
+    bodies = json.loads(path.read_text())
     url = f'https://logging.googleapis.com/v2/projects/{PROJECT}/metrics/'
     planned = []
     for body in bodies:
@@ -228,7 +237,7 @@ def reconcile_alerts(session, channels, mode, group='all'):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('resource', choices=('job', 'log-metrics', 'alerts'))
+    parser.add_argument('resource', choices=('job', 'log-metrics', 'batch-projection-log-metrics', 'alerts'))
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument('--check', action='store_true')
     modes.add_argument('--validate', action='store_true')
@@ -255,6 +264,8 @@ def main():
         drift = reconcile_job(session, args.image, mode)
     elif args.resource == 'log-metrics':
         drift = reconcile_log_metrics(session, mode)
+    elif args.resource == 'batch-projection-log-metrics':
+        drift = reconcile_log_metrics(session, mode, BATCH_PROJECTION_LOG_METRICS)
     else:
         drift = reconcile_alerts(session, args.notification_channels, mode, args.alert_group)
     return 1 if mode == 'check' and drift else 0

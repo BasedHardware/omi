@@ -23,6 +23,7 @@ import google.auth
 from google.auth.transport.requests import AuthorizedSession
 
 from database import capture_wedge_state
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.notification_dispatch import (
     NotificationDispatchStatus,
     NotificationIntent,
@@ -283,6 +284,18 @@ def run_capture_wedge_check(
             return counts
         delivered = positive_bytes_uids(list(positive_result.get('entries') or []))
         streaks = {uid: count for uid, count in streaks.items() if uid not in delivered}
+
+    eligible_streaks: dict[str, int] = {}
+    for uid, count in streaks.items():
+        try:
+            if account_deletion_blocks_user_work(uid):
+                continue
+        except Exception as error:
+            counts['errors'] += 1
+            logger.error('selfheal wedge deletion fence failed type=%s', type(error).__name__)
+            continue
+        eligible_streaks[uid] = count
+    streaks = eligible_streaks
 
     counts['candidates'] = len(streaks)
     day = now.strftime('%Y-%m-%d')

@@ -1,0 +1,5 @@
+# Apply only AFTER every caller serves STT_GPU_FLEET_OFF=true and traffic drains.
+# Keeps all chart objects, routes and autoscaler; no pool or storage changes.
+maintenanceMode: true
+autoscaling:
+  minReplicas: 1

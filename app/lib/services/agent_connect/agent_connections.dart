@@ -2,9 +2,11 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/api/mcp_api.dart';
 import 'package:omi/backend/schema/mcp_api_key.dart';
+import 'package:omi/backend/schema/connector_access.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/agent_connect/agent_prompts.dart';
 import 'package:omi/services/agent_connect/zkr_share.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Product name; never translated.
 const chatGptBrandName = 'ChatGPT';
@@ -18,10 +20,10 @@ final chatGptDirectoryUrl =
 Uri chatGptPromptUrl(String prompt) => Uri.https('chatgpt.com', '/', {'q': prompt});
 
 /// OAuth client ids that mean "ChatGPT holds a grant". The directory listing always grants under
-/// the prod id, even on a dev backend; mirrors backend `PUBLIC_CHATGPT_CLIENT_IDS`.
+/// the prod id, even on a dev backend. Fallback when served metadata is absent.
 const chatGptClientIds = {'omi-chatgpt-prod', 'omi-chatgpt-dev'};
 
-/// What the ChatGPT screens ask ChatGPT to read (backend `config/mcp_scopes.py`). The backend
+/// Fallback when the backend does not serve ChatGPT required scopes. The backend
 /// enforces each scope separately, so a grant missing one gets refused for that kind of question.
 const chatGptRequiredScopes = {'memories.read', 'conversations.read', 'action_items.read', 'goals.read'};
 
@@ -86,10 +88,16 @@ class AgentConnections {
         chatGptMissingScopes: chatGptMissingScopes,
       );
 
-  static AgentConnections from({required List<Map<String, dynamic>> grants, required List<McpApiKey> keys}) {
+  static AgentConnections from({
+    required List<Map<String, dynamic>> grants,
+    required List<McpApiKey> keys,
+    ConnectorAccess? chatGptAccess,
+  }) {
+    final clientIds = chatGptAccess?.clientIds ?? chatGptClientIds;
+    final requiredScopes = chatGptAccess?.requiredScopes ?? chatGptRequiredScopes;
     final live = [
       for (final grant in grants)
-        if (chatGptClientIds.contains(grant['client_id']) && isLiveGrant(grant) && grant['id'] is String) grant,
+        if (clientIds.contains(grant['client_id']) && isLiveGrant(grant) && grant['id'] is String) grant,
     ];
     final chatGpt = [for (final grant in live) grant['id'] as String];
     final scopes = <String>{
@@ -104,7 +112,7 @@ class AgentConnections {
     return AgentConnections(
       chatGptGrantIds: chatGpt,
       agentKeys: agentKeys,
-      chatGptMissingScopes: scopes.isEmpty ? const {} : chatGptRequiredScopes.difference(scopes),
+      chatGptMissingScopes: scopes.isEmpty ? const {} : requiredScopes.difference(scopes),
     );
   }
 }
@@ -112,7 +120,7 @@ class AgentConnections {
 /// The calls the Connect an Agent screens make. Fields are seams for tests.
 class AgentConnectService {
   AgentConnectService({
-    Future<List<Map<String, dynamic>>> Function()? loadGrants,
+    Future<McpOauthGrants> Function()? loadGrants,
     Future<void> Function(String grantId)? revokeGrant,
     Future<List<McpApiKey>> Function()? loadKeys,
     Future<McpApiKeyCreated> Function(String name)? createKey,
@@ -127,7 +135,7 @@ class AgentConnectService {
         _share = share ?? ((secret) => createZkrShare(secret, name: 'omi-mcp-key.txt')),
         _apiBase = apiBase;
 
-  final Future<List<Map<String, dynamic>>> Function() _loadGrants;
+  final Future<McpOauthGrants> Function() _loadGrants;
   final Future<void> Function(String grantId) _revokeGrant;
   final Future<List<McpApiKey>> Function() _loadKeys;
   final Future<McpApiKeyCreated> Function(String name) _createKey;
@@ -138,14 +146,21 @@ class AgentConnectService {
   Future<AgentConnections> load() async {
     final results = await Future.wait([_loadGrants(), _loadKeys()]);
     return AgentConnections.from(
-      grants: results[0] as List<Map<String, dynamic>>,
+      grants: (results[0] as McpOauthGrants).grants,
+      chatGptAccess: (results[0] as McpOauthGrants).chatGptAccess,
       keys: results[1] as List<McpApiKey>,
     );
   }
 
   /// Whether ChatGPT can look up a conversation; grants only, for surfaces that do not show keys.
-  Future<bool> chatGptCanReadConversations() async =>
-      AgentConnections.from(grants: await _loadGrants(), keys: const []).chatGptCanReadConversations;
+  Future<bool> chatGptCanReadConversations() async {
+    final response = await _loadGrants();
+    return AgentConnections.from(
+      grants: response.grants,
+      keys: const [],
+      chatGptAccess: response.chatGptAccess,
+    ).chatGptCanReadConversations;
+  }
 
   Future<void> disconnectChatGpt(AgentConnections connections) =>
       Future.wait(connections.chatGptGrantIds.map(_revokeGrant));
@@ -176,12 +191,37 @@ class AgentConnectService {
     try {
       final older = (await _loadKeys()).where((key) => key.name == agent.keyName && key.id != keepKeyId);
       await Future.wait(older.map((key) => _deleteKey(key.id)));
-    } catch (_) {}
+    } catch (e) {
+      // Still best effort, but no longer silent: revokeAgent sweeps any key left behind.
+      Logger.debug('retireOlderKeys failed for ${agent.keyName}: $e');
+    }
   }
 
   String get _base => _apiBase ?? Env.apiBaseUrl ?? 'https://api.omi.me/';
 
   Future<void> revokeKey(String keyId) => _deleteKey(keyId);
+
+  /// Revokes every key [agent] holds, not only the one on screen: a failed [retireOlderKeys] can
+  /// leave an older key alive under the same name. Reloads the list first, so a stale screen cannot
+  /// miss one, and throws if any delete fails so the agent is never shown gone while a key works.
+  ///
+  /// If the list itself cannot load, the shown key is still revoked and the call throws, so the
+  /// sheet says it failed and a retry (with a working list) sweeps the rest. A key the list no
+  /// longer has is already gone and is not deleted twice.
+  Future<void> revokeAgent(ComputerAgent agent, {required String shownKeyId}) async {
+    final List<McpApiKey> listed;
+    try {
+      listed = await _loadKeys();
+    } catch (_) {
+      await _deleteKey(shownKeyId);
+      rethrow;
+    }
+    final ids = [
+      for (final key in listed)
+        if (key.name == agent.keyName) key.id
+    ];
+    await Future.wait(ids.map(_deleteKey));
+  }
 }
 
 @immutable

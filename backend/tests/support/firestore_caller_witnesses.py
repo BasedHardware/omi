@@ -27,6 +27,7 @@ from fastapi import HTTPException
 import database.conversations as conversations_db
 import database.conversation_scan as conversation_scan
 import database.users as users_db
+from database.ports.folders import FolderEntity
 import routers.conversations as conversations_router
 import routers.developer as developer_router
 import routers.google_calendar as google_calendar_router
@@ -39,6 +40,7 @@ import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
 import utils.llm.fair_use_classifier as fair_use_classifier
 import utils.llm.goals as llm_goals
+import utils.open_loops.daily as open_loops_daily
 import utils.other.notifications as notifications_utils
 import utils.retrieval.tool_services.conversations as tool_conversations
 import utils.retrieval.tools.conversation_tools as conversation_tools
@@ -294,7 +296,7 @@ def _run_integration_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCaptur
 
 def _run_search_overview(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, search_router, 'run_blocking', _inline_run_blocking)
-    _stub(monkeypatch, search_router, '_list_folders', lambda uid: [{'id': 'folder-1', 'name': 'F'}])
+    _stub(monkeypatch, search_router, '_list_folders', lambda uid: [FolderEntity(id='folder-1', name='F')])
     _stub(monkeypatch, search_router.daily_summaries_db, 'get_summaries_count', lambda uid: 0)
     _stub(monkeypatch, search_router.memories_db, 'count_default_visible_memories', lambda uid: 0)
     _stub(monkeypatch, users_db, 'count_people', lambda uid: 0)
@@ -409,11 +411,38 @@ def _run_daily_summary_generation(monkeypatch: pytest.MonkeyPatch, capture: Help
     )
     trial(
         capture,
-        notifications_utils._generate_and_store_daily_summary,
+        notifications_utils._legacy_generate_and_store_daily_summary,
         'u1',
         '2026-01-15',
         FROZEN_NOW,
         FROZEN_LATER,
+    )
+
+
+def _run_completed_day_generation(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    from utils.other import daily_recap
+
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    _stub(monkeypatch, daily_recap, 'account_deletion_blocks_user_work', lambda _uid: False)
+    _stub(monkeypatch, notifications_utils, 'generated_compute_allowed', lambda *_: True)
+    _stub(monkeypatch, notifications_utils, 'try_acquire_daily_summary_lock', lambda *_: True)
+    _stub(monkeypatch, notifications_utils, 'release_daily_summary_lock', lambda *_: None)
+    _stub(monkeypatch, notifications_utils.daily_summaries_db, 'get_daily_summary_by_date', lambda *_: None)
+    _stub(monkeypatch, notifications_utils.daily_summaries_db, 'create_daily_summary', lambda _uid, row: row['id'])
+    trial(capture, daily_recap.generate, 'u1', '2026-01-15', FROZEN_NOW, FROZEN_LATER, legacy=lambda *_: None)
+
+
+def _run_open_loops_daily_pass(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    monkeypatch.setenv('OPEN_LOOPS_ENABLED', 'on')
+    _stub(monkeypatch, open_loops_daily.open_loops_db, 'get_cards_doc', lambda *a, **k: None)
+    trial(
+        capture,
+        open_loops_daily.run_daily_pass,
+        'u1',
+        date_str='2026-01-15',
+        start_utc=FROZEN_NOW,
+        end_utc=FROZEN_LATER,
+        tz='UTC',
     )
 
 
@@ -670,12 +699,28 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_goal_context,
         ),
         CallerWitness(
-            'utils/other/notifications.py:_generate_and_store_daily_summary:database.conversations.get_conversations',
+            'utils/other/daily_recap.py:generate:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('daily-summary-generation',),
+            1,
+            _run_completed_day_generation,
+        ),
+        CallerWitness(
+            'utils/other/notifications.py:_legacy_generate_and_store_daily_summary:database.conversations.get_conversations',
             'database.conversations.get_conversations',
             'database.conversations.get_conversations',
             ('daily-summary-generation',),
             1,
             _run_daily_summary_generation,
+        ),
+        CallerWitness(
+            'utils/open_loops/daily.py:run_daily_pass:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('open-loops-daily-pass',),
+            1,
+            _run_open_loops_daily_pass,
         ),
         CallerWitness(
             'utils/retrieval/tool_services/conversations.py:get_conversations_text:database.conversations.get_conversations',

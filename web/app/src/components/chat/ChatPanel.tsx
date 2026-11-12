@@ -1,5 +1,15 @@
 'use client';
 
+import { ChatBudgetPause, useChatBudgetPause } from './ChatBudgetPause';
+import {
+  chatDraftKeys,
+  chatDraftRevision,
+  chatDraftOwner,
+  clearChatDraft,
+  readChatDraft,
+  restoreChatDraft,
+  writeChatDraft,
+} from './chatDraft';
 import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Sparkles, Trash2, Brain, Paperclip, ArrowLeft } from 'lucide-react';
@@ -14,6 +24,7 @@ import { PostHogManager } from '@/lib/analytics/posthog';
 import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
 import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
 import { ChatMarkdown } from './ChatMarkdown';
+import { ChatCitationCards } from './ChatCitationCards';
 import { ChatEvidenceCard } from './ChatEvidenceCard';
 import { PanelReveal } from '@/components/ui/PanelReveal';
 
@@ -51,6 +62,7 @@ function getQuickPrompts(contextType: string | undefined): string[] {
 }
 
 export function ChatPanel() {
+  const budget = useChatBudgetPause();
   const { isOpen, closeChat, currentContext, selectedAppId, chat, clearAppContext } =
     useChatContext();
   const {
@@ -65,7 +77,7 @@ export function ChatPanel() {
     loadHistory,
   } = chat;
 
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => readChatDraft(chatDraftKeys.panel));
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
@@ -74,6 +86,37 @@ export function ChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Hydrate before enabling persistence so an empty initial render cannot
+  // clear a durable encrypted draft before it has been decrypted.
+  useEffect(() => {
+    if (!isOpen) return;
+    const cachedDraft = readChatDraft(chatDraftKeys.panel);
+    if (cachedDraft) {
+      setInput((current) => current || cachedDraft);
+      return;
+    }
+    let active = true;
+    const revision = chatDraftRevision(chatDraftKeys.panel);
+    void restoreChatDraft(chatDraftKeys.panel).then((draft) => {
+      if (!active) return;
+      if (chatDraftRevision(chatDraftKeys.panel) === revision && draft) {
+        setInput((current) => current || draft);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [isOpen]);
+
+  const updateDraftInput = (value: string) => {
+    setInput(value);
+    if (value) {
+      void writeChatDraft(chatDraftKeys.panel, value);
+    } else {
+      clearChatDraft(chatDraftKeys.panel);
+    }
+  };
 
   // Fetch app info when selectedAppId changes
   useEffect(() => {
@@ -176,7 +219,7 @@ export function ChatPanel() {
 
   // Handle voice transcript - append to input and focus
   const handleVoiceTranscript = (transcript: string) => {
-    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    updateDraftInput(input ? `${input} ${transcript}` : transcript);
     inputRef.current?.focus();
   };
 
@@ -184,7 +227,8 @@ export function ChatPanel() {
     if (
       (!text.trim() && !selectedFiles.some((item) => item.uploadedId)) ||
       isLoading ||
-      isStreaming
+      isStreaming ||
+      budget.state !== null
     )
       return;
 
@@ -201,7 +245,22 @@ export function ChatPanel() {
 
     setInput('');
     setSelectedFiles([]);
-    await sendMessage(text, fileIds, currentContext);
+    const ownerAtSend = chatDraftOwner();
+    const accepted = await sendMessage(text, fileIds, currentContext);
+    // A different account may have signed in while this send ran; the
+    // continuation must not write the previous account's prompt under the new
+    // owner's draft key.
+    if (chatDraftOwner() !== ownerAtSend) return;
+    // Only this send's own draft is retired on acceptance; a newer draft the
+    // user typed while the reply streamed is never clobbered. The persist
+    // effect may have already cleared the composer's own copy, so an empty
+    // persisted draft on failure still restores this send's text.
+    const persisted = readChatDraft(chatDraftKeys.panel);
+    if (persisted === text) {
+      if (accepted) clearChatDraft(chatDraftKeys.panel);
+    } else if (persisted === '') {
+      if (!accepted) writeChatDraft(chatDraftKeys.panel, text);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -225,6 +284,7 @@ export function ChatPanel() {
     (input.trim() || selectedFiles.some((f) => f.uploadedId)) &&
     !isLoading &&
     !isStreaming &&
+    budget.state === null &&
     !isUploading;
 
   return (
@@ -321,7 +381,7 @@ export function ChatPanel() {
                       <button
                         key={i}
                         onClick={() => handleSend(prompt)}
-                        disabled={isLoading || isStreaming}
+                        disabled={isLoading || isStreaming || budget.state !== null}
                         className={cn(
                           'rounded-full px-3 py-1.5 text-sm',
                           'bg-bg-tertiary hover:bg-bg-quaternary',
@@ -373,6 +433,7 @@ export function ChatPanel() {
                                 {message.text}
                               </ChatMarkdown>
                             </div>
+                            <ChatCitationCards memories={message.memories} />
                             <ChatEvidenceCard
                               envelope={parseChatEvidenceFromRecord(message)}
                             />
@@ -452,6 +513,7 @@ export function ChatPanel() {
                 <div ref={messagesEndRef} />
               </div>
 
+              <ChatBudgetPause budget={budget} />
               {/* Input area */}
               <div className="border-t border-bg-tertiary">
                 {/* File preview bar */}
@@ -459,7 +521,7 @@ export function ChatPanel() {
                   <FilePreview
                     files={selectedFiles}
                     onRemove={handleRemoveFile}
-                    disabled={isLoading || isStreaming}
+                    disabled={isLoading || isStreaming || budget.state !== null}
                   />
                 )}
 
@@ -469,7 +531,10 @@ export function ChatPanel() {
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={
-                        isLoading || isStreaming || selectedFiles.length >= MAX_FILES
+                        isLoading ||
+                        isStreaming ||
+                        budget.state !== null ||
+                        selectedFiles.length >= MAX_FILES
                       }
                       className={cn(
                         'flex-shrink-0 rounded-lg p-2',
@@ -499,10 +564,10 @@ export function ChatPanel() {
                       ref={inputRef}
                       type="text"
                       value={input}
-                      onChange={(e) => setInput(e.target.value)}
+                      onChange={(e) => updateDraftInput(e.target.value)}
                       onKeyDown={handleKeyDown}
                       placeholder="Ask anything..."
-                      disabled={isLoading || isStreaming}
+                      disabled={isLoading || isStreaming || budget.state !== null}
                       className={cn(
                         'flex-1 rounded-xl px-4 py-3',
                         'border border-bg-quaternary bg-bg-tertiary',
@@ -516,7 +581,7 @@ export function ChatPanel() {
                     {/* Inline voice recorder */}
                     <InlineVoiceRecorder
                       onTranscript={handleVoiceTranscript}
-                      disabled={isLoading || isStreaming}
+                      disabled={isLoading || isStreaming || budget.state !== null}
                     />
 
                     {/* Send button */}

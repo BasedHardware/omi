@@ -9,7 +9,6 @@ enum ClientProcessingContract {
   static let localRuntime = "local"
   static let deterministicRuntime = "deterministic"
   static let deterministicModelID = "deterministic-minimum"
-  static let defaultEmoji = "🧠"
   static let defaultDeviceClass = "macos"
 
   static let titleMax = 120
@@ -73,7 +72,10 @@ enum ClientProcessingContract {
   ) -> OmiAPI.ClientProcessing {
     let title = clip(draft.title, max: titleMax, empty: fallbackTitle)
     let overview = clip(draft.overview, max: overviewMax, empty: "")
-    let emoji = clip(draft.emoji ?? defaultEmoji, max: emojiMax, empty: defaultEmoji)
+    // No emoji from local inference: omit the key. The backend stamps the
+    // category's emoji through the shared fallback (💬 for other) — never a
+    // client-side "unset" sentinel.
+    let emoji = draft.emoji.map { clip($0, max: emojiMax, empty: "") }.flatMap { $0.isEmpty ? nil : $0 }
     let category = OmiAPI.CategoryEnum(rawValue: draft.category ?? "other") ?? .other
     let sections = Array(draft.sections.prefix(maxSections)).compactMap(projectedSection)
     let events = Array(draft.events.prefix(maxEvents)).compactMap(projectedEvent)
@@ -111,7 +113,7 @@ enum ClientProcessingContract {
       schemaVersion: schemaVersion,
       structure: OmiAPI.ProjectedStructure(
         category: .other,
-        emoji: defaultEmoji,
+        emoji: nil,
         events: [],
         overview: minimum.overview,
         sections: [],

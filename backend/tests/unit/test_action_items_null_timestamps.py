@@ -79,3 +79,70 @@ def test_action_item_list_sort_key_handles_none_created_at():
     ]
     sorted_items = sorted(items, key=action_items_db._action_item_list_sort_key)
     assert [item['id'] for item in sorted_items] == ['valid-created', 'null-created']
+
+
+def test_action_item_list_sort_key_coerces_iso_string_and_naive_datetimes():
+    now_utc = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
+    items = [
+        {
+            'id': 'string-due',
+            'completed': False,
+            'due_at': '2026-10-25T14:00:00Z',
+            'created_at': '2026-10-18T10:00:00Z',
+        },
+        {
+            'id': 'naive-due',
+            'completed': False,
+            'due_at': datetime(2026, 10, 24, 14, 0),
+            'created_at': now_utc,
+        },
+        {
+            'id': 'aware-due',
+            'completed': False,
+            'due_at': datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc),
+            'created_at': now_utc,
+        },
+    ]
+    # Sorting mixed string and naive datetimes must not raise TypeError or AttributeError
+    sorted_items = sorted(items, key=action_items_db._action_item_list_sort_key)
+    assert [item['id'] for item in sorted_items] == ['naive-due', 'string-due', 'aware-due']
+
+
+def test_coerce_item_datetime_apple_reminders_and_scores():
+    # Apple Reminders sorting with ISO string and naive datetimes
+    dt_min = datetime.min.replace(tzinfo=timezone.utc)
+    synced = [
+        {'id': 'item-str', 'updated_at': '2026-10-18T10:00:00Z'},
+        {'id': 'item-naive', 'updated_at': datetime(2026, 10, 19, 10, 0)},
+        {'id': 'item-none', 'updated_at': None},
+    ]
+    synced.sort(
+        key=lambda x: action_items_db._coerce_item_datetime(x.get('updated_at'), dt_min),
+        reverse=True,
+    )
+    assert [item['id'] for item in synced] == ['item-naive', 'item-str', 'item-none']
+
+    # Scores deleted-items window check with ISO strings and naive datetimes
+    tz = timezone.utc
+    day_start = datetime(2026, 10, 19, 0, 0, tzinfo=tz)
+    day_end = datetime(2026, 10, 20, 0, 0, tzinfo=tz)
+    week_start = datetime(2026, 10, 13, 0, 0, tzinfo=tz)
+
+    deleted = [
+        {'due_at': '2026-10-19T12:00:00Z', 'created_at': datetime(2026, 10, 15, 12, 0)},
+        {'due_at': datetime(2026, 10, 19, 14, 0), 'created_at': '2026-10-14T08:00:00Z'},
+        {'due_at': None, 'created_at': None},
+    ]
+
+    due_in_day = 0
+    created_in_week = 0
+    for data in deleted:
+        due = action_items_db._coerce_item_datetime(data.get('due_at'), None)
+        if due is not None and day_start <= due < day_end:
+            due_in_day += 1
+        created = action_items_db._coerce_item_datetime(data.get('created_at'), None)
+        if created is not None and week_start <= created < day_end:
+            created_in_week += 1
+
+    assert due_in_day == 2
+    assert created_in_week == 2

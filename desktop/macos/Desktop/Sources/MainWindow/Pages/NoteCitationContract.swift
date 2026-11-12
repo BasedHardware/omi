@@ -15,14 +15,103 @@ enum NoteCitationContract {
     }
   }
 
+  /// Read-time repair of a conversation title (web `presentableNoteTitle`). Titles keep ordinary
+  /// bracketed words ("Project [Q3]"): only bracket units made of known IDs, citation-shaped IDs (a
+  /// segment UUID, `s01234`, a `^1` footnote) or a speaker label are debris, and a nested group
+  /// ("[Project [s01234]]") is kept whole. Everything else the note repair does applies as for any
+  /// note text.
+  static func repairTitle(_ input: String, valid: Set<String>) -> String {
+    var mask = "\u{E012}"
+    while input.contains(mask) { mask += "\u{E012}" }
+    let characters = Array(input)
+    var kept: [String] = []
+    var masked = ""
+    var last = 0
+    for group in titleBracketGroups(characters) {
+      let unit = String(characters[group.start..<group.end])
+      if !group.nested && isTitleCitation(String(unit.dropFirst().dropLast()), valid: valid) { continue }
+      masked += String(characters[last..<group.start]) + mask + slotDigits(kept.count) + "\u{E013}"
+      kept.append(unit)
+      last = group.end
+    }
+    masked += String(characters[last...])
+    let slotPattern = NSRegularExpression.escapedPattern(for: mask) + "[\u{E100}-\u{EFFF}]+\u{E013}"
+    return replace(repair(masked, valid: valid).text, pattern: slotPattern) { slot in
+      let index = slot.unicodeScalars.reduce(0) { value, scalar in
+        (0xE100...0xEFFF).contains(Int(scalar.value)) ? value * 0xF00 + Int(scalar.value) - 0xE100 : value
+      }
+      return index < kept.count ? kept[index] : slot
+    }
+  }
+
+  /// Balanced bracket groups that are not inside another closed group.
+  private static func titleBracketGroups(_ characters: [Character]) -> [(start: Int, end: Int, nested: Bool)] {
+    typealias Group = (start: Int, end: Int, nested: Bool)
+    var groups: [Group] = []
+    var stack: [(start: Int, inner: [Group])] = []
+    func flush() {
+      for open in stack { groups.append(contentsOf: open.inner) }
+      stack = []
+    }
+    for (index, character) in characters.enumerated() {
+      if character == "\n" {
+        flush()
+      } else if "[［【".contains(character) {
+        stack.append((start: index, inner: []))
+      } else if "]］】".contains(character), let open = stack.popLast() {
+        let group: Group = (start: open.start, end: index + 1, nested: !open.inner.isEmpty)
+        if stack.isEmpty { groups.append(group) } else { stack[stack.count - 1].inner.append(group) }
+      }
+    }
+    flush()
+    return groups.sorted { $0.start < $1.start }
+  }
+
+  private static func isTitleCitation(_ content: String, valid: Set<String>) -> Bool {
+    let bare =
+      content
+      .replacingOccurrences(of: "[\u{200B}\u{200C}\u{200D}\u{2060}\u{FEFF}]", with: "", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    if matches(bare, #"(?i)^(?:spk|speaker)[ _]\p{Nd}+:?$"#) { return true }
+    return bare.split(whereSeparator: { $0.isWhitespace || $0 == "," || $0 == ";" }).allSatisfy { token in
+      valid.contains(String(token))
+        || matches(
+          String(token),
+          #"(?i)^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|s[0-9]{4,}|\^[0-9]+)$"#)
+    }
+  }
+
+  private static func slotDigits(_ index: Int) -> String {
+    var index = index
+    var scalars = String.UnicodeScalarView()
+    repeat {
+      if let digit = Unicode.Scalar(UInt32(0xE100 + index % 0xF00)) { scalars.insert(digit, at: scalars.startIndex) }
+      index /= 0xF00
+    } while index > 0
+    return String(scalars)
+  }
+
+  /// Protected-unit keys: a prefix the input does not contain, the unit's index in base 254 over
+  /// U+E002..U+E0FF, then U+E001. Private-use characters match no repair pattern, and the keys
+  /// stay short however many units a note holds.
+  private static func keyDigits(_ index: Int) -> String {
+    var index = index
+    var scalars: [Unicode.Scalar] = []
+    repeat {
+      if let digit = Unicode.Scalar(UInt32(0xE002 + index % 254)) { scalars.insert(digit, at: 0) }
+      index /= 254
+    } while index > 0
+    return String(String.UnicodeScalarView(scalars))
+  }
+
   private static func repairPass(_ input: String, valid: Set<String>) -> (text: String, sourceIDs: [String]) {
-    var protected: [(String, String)] = []
+    var protected: [String: String] = [:]
     var prefix = "\u{E000}"
     while input.contains(prefix) { prefix += "\u{E000}" }
     let marker = "\u{0000}"
     func protect(_ value: String) -> String {
-      let key = prefix + String(repeating: "\u{E002}", count: protected.count) + "\u{E001}"
-      protected.append((key, value))
+      let key = prefix + keyDigits(protected.count) + "\u{E001}"
+      protected[key] = value
       return key
     }
     var text = replace(
@@ -115,7 +204,12 @@ enum NoteCitationContract {
     if text.contains("\u{0001}") {
       text = text.replacingOccurrences(of: "\u{0001}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    for (key, value) in protected.reversed() { text = text.replacingOccurrences(of: key, with: value) }
+    // One pass, restoring nested units (a link label that held a code span) recursively.
+    let keyPattern = NSRegularExpression.escapedPattern(for: prefix) + "[\u{E002}-\u{E0FF}]+\u{E001}"
+    func restore(_ value: String) -> String {
+      replace(value, pattern: keyPattern) { key in protected[key].map(restore) ?? key }
+    }
+    text = restore(text)
     var seen = Set<String>()
     return (text, recovered.filter { seen.insert($0).inserted })
   }

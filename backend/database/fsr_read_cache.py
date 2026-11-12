@@ -115,8 +115,9 @@ def memo(uid, key, fetch):
 
 
 def user_snapshot(uid, client, fields=None):
-    # Only opted-in requests use a shared entitlement projection so subscription
-    # and BYOK share one user-document read without retaining unrelated fields.
+    # Only opted-in requests use a shared entitlement projection so subscription,
+    # BYOK and the Stripe customer id share one user-document read without
+    # retaining unrelated fields.
     holder = _request.get()
     if not _bypass.get() and holder is not None and not holder.closed and lever_enabled('request_read_dedupe', uid):
         # SDK snapshots contain clients/locks and cannot be deep-copied. Retain
@@ -125,7 +126,12 @@ def user_snapshot(uid, client, fields=None):
             key = (uid, ('user_snapshot', plane_id(client)))
             if key not in holder.values:
                 _event('request_read_dedupe', 'snapshot_miss')
-                holder.values[key] = client.collection('users').document(uid).get(['subscription', 'byok'])
+                from config.referral_campaign import GRANT_FIELD, campaign_enabled
+
+                projection = ['subscription', 'byok', 'stripe_customer_id']
+                if campaign_enabled():
+                    projection.append(GRANT_FIELD)
+                holder.values[key] = client.collection('users').document(uid).get(projection)
             else:
                 _event('request_read_dedupe', 'snapshot_hit')
             return holder.values[key]
@@ -150,9 +156,21 @@ def _forget(uid):
                     del holder.values[key]
 
 
+def forget_request_reads(uid):
+    """Drop this request's memoized reads after a durable write.
+
+    Request dedupe has no Redis generation of its own. Writers of a document
+    that ``memo`` may have already returned call this so a later read in the
+    same request sees the write. No request scope is a no-op.
+    """
+    _forget(uid)
+
+
 # These are correctness limits, not merely tunable defaults.
 _CACHE_TTLS = {
     'deletion_marker_cache': ('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
+    'legal_hold_fence_cache': ('FSR_LEGAL_HOLD_NEGATIVE_TTL_SECONDS', 30),
+    'tombstone_negative_cache': ('FSR_TOMBSTONE_NEGATIVE_TTL_SECONDS', 30),
     'subscription_cache': ('FSR_SUBSCRIPTION_TTL_SECONDS', 60),
     'usage_month_cache': ('FSR_USAGE_MONTH_TTL_SECONDS', 60),
     'serving_config_cache': ('FSR_SERVING_CONFIG_TTL_SECONDS', 300),
@@ -250,9 +268,20 @@ def _json_hook(value):
     return value
 
 
-def cached_read(family, uid, variant, fetch, *, seconds=60, cacheable=lambda value: True, validate=lambda value: True):
+def cached_read(
+    family,
+    uid,
+    variant,
+    fetch,
+    *,
+    seconds=60,
+    cacheable=lambda value: True,
+    validate=lambda value: True,
+    shadow=False,
+    on_hit=None,
+):
     """CAS publication prevents a read started before a write from repopulating."""
-    if _bypass.get() or family in _fresh_families.get() or not lever_enabled(family, uid):
+    if _bypass.get() or family in _fresh_families.get() or (not shadow and not lever_enabled(family, uid)):
         return fetch()
     env_name, maximum = _CACHE_TTLS[family]
     seconds = min(max(1, seconds), ttl(env_name, maximum))
@@ -269,6 +298,11 @@ def cached_read(family, uid, variant, fetch, *, seconds=60, cacheable=lambda val
                 and validate(envelope['payload'])
             ):
                 _event(family, 'hit')
+                if on_hit is not None:
+                    try:
+                        on_hit(envelope['payload'])
+                    except Exception:
+                        pass  # Observation cannot turn a hit into a durable read.
                 return copy.deepcopy(envelope['payload'])
     except Exception:
         _failure(family, 'read')

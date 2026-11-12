@@ -51,6 +51,7 @@ from utils.observability.speaker_tag_prompts import (
     OWNER_CONFIRMATION_EVENTS,
 )
 from utils.product_telemetry import emit_product_event
+from utils.ignored_voice_markers import retire_exclusion_markers
 from utils.executors import (
     ExecutorSaturatedError,
     db_executor,
@@ -86,6 +87,7 @@ from utils.stt.speaker_embedding import extract_embedding_from_bytes
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.speaker_match import mean_embedding
 from utils.speaker_tag_prompts import embedding_cache as owner_embedding_cache
+from utils.speaker_tag_prompts.recurring import metric_origin, current_ids
 
 logger = logging.getLogger(__name__)
 
@@ -443,6 +445,7 @@ def get_prompts(uid: str, now: Optional[datetime] = None, *, owner_excerpt: bool
             timed_out = True
             return False
 
+    recurring_ids = current_ids(uid, conversations)
     prompts = select_prompts(
         conversations,
         now=now,
@@ -450,6 +453,9 @@ def get_prompts(uid: str, now: Optional[datetime] = None, *, owner_excerpt: bool
         named_allowed=named_allowed,
         answered=voice_profiles_db.answered_prompt_ids(state, now),
         people=people,
+        recurring_uid=uid,
+        recurring_profile_ids=recurring_ids,
+        stored_people=stored_people,
         pinned=pinned,
         ignored=voice_profiles_db.ignored_voice_keys(state),
         prior_enabled=pinned_speaker_prior_enabled(),
@@ -483,7 +489,16 @@ def get_prompts(uid: str, now: Optional[datetime] = None, *, owner_excerpt: bool
         )
     SPEAKER_TAG_PROMPT_REQUESTS.labels(status='ok').inc()
     for prompt in prompts:
-        SPEAKER_TAG_PROMPTS_SERVED.labels(kind=prompt.kind.value).inc()
+        SPEAKER_TAG_PROMPTS_SERVED.labels(
+            kind=prompt.kind.value,
+            origin=metric_origin(
+                uid,
+                next(c for c in conversations if c['id'] == prompt.conversation_id),
+                prompt.segment_ids,
+                prompt.origin.value,
+                recurring_ids,
+            ),
+        ).inc()
     return SpeakerTagPromptsResponse(prompts=prompts, first_time=first_time, save_other_voice_profiles=save_others)
 
 
@@ -697,7 +712,9 @@ def _apply_owner_answer(
         )
         quality_label = outcome.value
     voice_profiles_db.record_tag_prompt_answered(uid, request.prompt_id, now)
-    SPEAKER_TAG_PROMPT_ANSWERS.labels(kind='owner_check', answer=request.answer.value).inc()
+    SPEAKER_TAG_PROMPT_ANSWERS.labels(
+        kind='owner_check', answer=request.answer.value, origin=request.origin.value
+    ).inc()
     SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=quality_label).inc()
     return SpeakerTagPromptAnswerResponse(
         quality_outcome=outcome, conversation_id=request.conversation_id, segment_identities=identities
@@ -729,6 +746,10 @@ def apply_answer(
     # Naming a voice by hand is free on every plan; only automatic non-owner suggestions are paid
     # (get_prompts withholds them), so an answer to an already-served card is never refused here.
 
+    conversation = conversations_db.get_conversation(uid, request.conversation_id) or {}
+    origin = metric_origin(
+        uid, conversation, request.segment_ids, request.origin.value, current_ids(uid, [conversation])
+    )
     person_id: Optional[str] = None
     person_enrolled = False
     voice_sample_queued = False
@@ -739,6 +760,18 @@ def apply_answer(
     if answer == SpeakerTagPromptAnswer.me:
         conversation, resolved = _assign(
             uid, request, is_user=True, person_id=None, train=False, owner_segment_ids=request.segment_ids
+        )
+        # A card "Me"/person answer replaces any live not_a_person exclusion,
+        # so the ignored-voice marker must retire through the same shared
+        # reconciliation the live sheet uses (the router-only copy used to
+        # leave the positively assigned voice listed as ignored).
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
         )
         if schedule is not None:
             assigned = set(resolved) & {s.get('id') for s in conversation.get('transcript_segments') or []}
@@ -756,6 +789,14 @@ def apply_answer(
         settings = voice_profiles_db.get_voice_profile_settings(uid)
         train = settings['save_other_voice_profiles']
         conversation, resolved = _assign(uid, request, is_user=False, person_id=person_id, train=train)
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
+        )
         if not train:
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='disabled_by_user').inc()
         elif schedule is not None:
@@ -783,8 +824,25 @@ def apply_answer(
                 raise TagPromptInvalid('person_id is required')
             rejection = {'kind': 'not_person', 'person_id': request.suggested_person_id}
         else:
-            rejection = None
+            rejection = (
+                {'kind': 'not_a_person', 'person_id': None}
+                if request.answer == SpeakerTagPromptAnswer.not_a_person
+                else None
+            )
         conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False, rejection=rejection)
+        # Any newer non-not_a_person answer supersedes an earlier exclusion:
+        # retire_exclusion_markers distinguishes rejection kinds, so the stale
+        # not_a_person marker is cleared for not_me / not_person / unnamed
+        # answers while a still-winning not_a_person keeps (and re-records)
+        # its marker below.
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
+        )
         if answer == SpeakerTagPromptAnswer.not_a_person:
             resolved_ids = set(resolved)
             speaker_ids = {
@@ -809,14 +867,18 @@ def apply_answer(
         person_enrolled=person_enrolled,
     )
     voice_profiles_db.record_tag_prompt_answered(uid, request.prompt_id, now)
-    SPEAKER_TAG_PROMPT_ANSWERS.labels(kind=request.kind.value, answer=answer.value).inc()
+    SPEAKER_TAG_PROMPT_ANSWERS.labels(
+        kind=request.kind.value,
+        answer=answer.value,
+        origin=origin,
+    ).inc()
     SPEAKER_TAG_PROMPT_QUALITY.labels(outcome=outcome.value).inc()
     emit_product_event(
         uid=uid,
         event='Speaker Tag Prompt Answered',
         properties={
             'kind': request.kind.value,
-            'origin': request.origin.value,
+            'origin': origin,
             'answer': answer.value,
             'quality_outcome': outcome.value,
             'first_time': request.first_time,

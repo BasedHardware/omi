@@ -31,10 +31,23 @@ def captured_legacy():
     return legacy_snapshot()
 
 
-def test_all_main_legacy_price_entitlements_are_byte_identical(captured_legacy):
-    captured = captured_legacy
-    assert json.dumps(captured, sort_keys=True, separators=(',', ':')) + '\n' == GOLDEN.read_text()
+def test_all_main_legacy_price_entitlements_are_byte_identical_except_approved_rename(captured_legacy):
     expected = json.loads(GOLDEN.read_text())
+    # #24367 renamed unlimited_v2 to Omi Pro without changing its entitlements.
+    # Keep the historical fixture intact and allow only that exact display rename;
+    # every other definition field and runtime entitlement remains byte-pinned.
+    for snapshot in expected.values():
+        # Removed internal trial eligibility was never a served entitlement.
+        for desktop in snapshot['desktop_cases']:
+            desktop.pop('paywall_eligible')
+        definition = snapshot['definition']
+        if definition['id'] == 'unlimited_v2':
+            assert definition['display_name'] == 'Unlimited'
+            definition['display_name'] = 'Omi Pro'
+    assert (
+        json.dumps(captured_legacy, sort_keys=True, separators=(',', ':')) + '\n'
+        == json.dumps(expected, sort_keys=True, separators=(',', ':')) + '\n'
+    )
     assert set(expected) == set(RECOGNIZED_STRIPE_PRICE_PLAN_TYPES)
     for price, snapshot in expected.items():
         resolved = resolve_price_entitlements(price, {})
@@ -266,3 +279,18 @@ def test_cli_check_with_base_ref_reports_missing_price_id(monkeypatch, capsys):
     monkeypatch.setattr(generator, 'scan_embedded_stripe_ids', lambda catalog: [])
     assert generator.main() == 1
     assert 'nonempty price_id' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('price,plan', sorted(RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()))
+def test_every_recognized_paid_legacy_price_retains_cloud_screen_vectors(price, plan):
+    resolved = resolve_price_entitlements(price, {})
+    assert resolved['entitlement_version'] == 'legacy'
+    assert resolved['capabilities']['cloud_screen_vectors'] is True
+    assert resolved['plan_id'] == plan.value
+
+
+@pytest.mark.parametrize('plan,allowed', [('basic', False), ('plus', False), ('operator', True), ('architect', True)])
+def test_ladder_cloud_screen_capability_is_price_versioned(plan, allowed):
+    assert get_entitlement_version(plan, 'ladder_v1')['capabilities']['cloud_screen_vectors'] is allowed
+    if plan != 'basic':
+        assert get_entitlement_version(plan, 'legacy')['capabilities']['cloud_screen_vectors'] is True

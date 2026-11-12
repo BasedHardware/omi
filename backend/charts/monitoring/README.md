@@ -8,9 +8,25 @@ Repo-enforceable inventory of expected prod scrape targets, routing labels, and
 no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.prod.yaml).
 
 - **Enforced in CI** by `backend/tests/unit/test_monitoring_telemetry_contract.py`.
-- Jobs marked `coverage_status: enforced` must appear in `omi-journey-scrape-missing`.
-- Jobs marked `coverage_status: declared` are wired in values/ServiceMonitors but
-  do not yet have a dedicated coverage alert (follow-up to expand the scrape-missing rule).
+- Jobs marked `coverage_status: enforced` must have their own `omi-scrape-<job>`
+  rule in [`alerts/scrape-health.json`](./alerts/scrape-health.json), mirrored exactly
+  in `alert-rules.json`. The Stackdriver job uses `omi-scrape-stackdriver-metrics`
+  to stay within Grafana's 40-character UID limit. The former `declared` status
+  is no longer accepted.
+- Exemptions require a reviewed reason and an explicit entry in the contract
+  test's reviewed exemptions; no jobs are currently exempt.
+- Scrape-health rules are muted agent-tier warnings sustained for 30m. Always-on
+  jobs cover down, absent and empty scrapes; kube-state-metrics keeps its existing
+  `omi-kube-state-metrics-empty` owner for empty scrapes. Opt-in batch releases
+  cover down/empty only while targets exist and treat NoData as OK.
+- Down and empty boolean results are added before thresholding above zero;
+  PromQL `or` would retain a healthy down-result zero and mask an empty-scrape
+  result one with the same labels. Always-on rules aggregate the absent/down
+  branch to a single unlabeled result before adding the empty branch.
+- These rules do not pin autoscaling target counts. For multi-release jobs
+  (Parakeet main/LID and the two Cloud Run exporters), a silently deleted release
+  is not detected while another release remains healthy. Whole-job absence takes
+  roughly 35m to fire, including Prometheus staleness and the 30m pending period.
 - Managed GKE control-plane exclusions (`kubeProxy` / `kubeScheduler` /
   `kubeControllerManager`) are documented here and owned by #9138 / PR #11093 —
   do not page `TargetDown` for those endpoints.
@@ -111,7 +127,7 @@ the protected `prod` Environment or `development`; production uses its existing
 `MONITOR_GRAFANA_TOKEN`, while development may inherit the repository's dev token.
 PR #21686 restored legacy dashboard provisioning through monitoring-specific
 Environments; the broader alert writer requires protected production authority
-and a permission probe. Rotate only failed credentials. Never use TV `GRAFANA_TOKEN`.
+and a permission probe. Rotate only failed credentials. Never use a credential belonging to the retired TV Grafana instance.
 
 The production path upserts `alert-rules.json` by stable UID, backs up live rules
 before writes, preserves UI/API provenance and notification timing, retains
@@ -256,6 +272,17 @@ Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver
 
 Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports Cloud Run backend, desktop-backend, sync services, and notifications-job, and Prometheus scrapes it as `cloud-run-application-metrics`. The checked-in namespace allowlist includes those services and `notifications-job`; deployed ingestion still requires each sidecar and the matching metrics-egress release (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
 
+The Cloud Run exporter `metrics.interval: 10m` is the query lookback, not the
+polling cadence. Prometheus scrapes these exporters every 120s in prod, once per
+replica. Their one-hour `monitoring.descriptor-cache-ttl` caches descriptor
+discovery only; time series are still read inline on every scrape. New metric
+descriptors can take up to one hour to appear (restart the exporter to discover
+them immediately). This reduces descriptor API traffic and collection work,
+not the billed `ListTimeSeries` units. Verify `up`, scrape errors, family
+coverage and alert inputs after the metrics-egress release; keep the existing
+scrape interval, lookback, filters and family lists. Revert the extra argument
+to roll back descriptor caching.
+
 ## Components
 
 | Component | Chart | Purpose | Namespace |
@@ -377,13 +404,13 @@ Bridges GCP Cloud Monitoring into Prometheus. Two releases share the existing Wo
 
 - `prod-omi-prometheus-stackdriver-exporter` exposes LB and Firestore metrics sampled by Google every 60 seconds; the production scrape is 60 seconds. HPA rate windows remain five minutes.
 - `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend`, `desktop-backend`, and `notifications-job`; Prometheus scrapes this release every 60 seconds.
-- `prod-omi-cloud-run-sync-metrics-exporter` (`prometheus-stackdriver-exporter/<env>_sync_omi_cloud_run_metrics_exporter.yaml`) reads only the consumed families from `backend-sync`, `backend-sync-backfill`, and `backend-integration`: `omi_sync_*`, `omi_journey_*`, `omi_client_journey_*`, `omi_capture_finalization_*`, `omi_queue_oldest_ready_*`, `omi_owner_recognition_conversations_total`, `omi_conversation_duration_seconds`, `omi_conversation_summary_vector_upserts_total`, and `omi_firestore_documents_per_operation`. Those services run the full backend codebase, so importing every family from them took a collection from ~52k to ~187k series and OOMKilled the exporter at 2Gi (2026-10-16). It is a separate release because the exporter ANDs every matching filter and Cloud Monitoring rejects `OR` across `resource.labels` (HTTP 400), so one filter cannot select "all families here, some families there". Add a family only together with the alert or dashboard that reads it from those services. Both releases are scraped as `cloud-run-application-metrics`.
+- `prod-omi-cloud-run-sync-metrics-exporter` (`prometheus-stackdriver-exporter/<env>_sync_omi_cloud_run_metrics_exporter.yaml`) reads only the consumed families from `backend-sync`, `backend-sync-backfill`, and `backend-integration`: `omi_sync_*`, `omi_journey_*`, `omi_client_journey_*`, `omi_capture_finalization_*`, `omi_queue_oldest_ready_*`, `omi_owner_recognition_conversations_total`, `omi_conversation_duration_seconds`, `omi_conversation_relevance_decision_total`, `omi_conversation_summary_vector_upserts_total`, and `omi_firestore_documents_per_operation`. Those services run the full backend codebase, so importing every family from them took a collection from ~52k to ~187k series and OOMKilled the exporter at 2Gi (2026-10-16). It is a separate release because the exporter ANDs every matching filter and Cloud Monitoring rejects `OR` across `resource.labels` (HTTP 400), so one filter cannot select "all families here, some families there". Add a family only together with the alert or dashboard that reads it from those services. Both releases are scraped as `cloud-run-application-metrics`.
 
 The application exporter is separate to prevent Cloud Monitoring API read cost from multiplying every per-instance application series by the legacy 1-second scrape rate. Stackdriver exporter exposes normalized names such as `stackdriver_prometheus_target_prometheus_googleapis_com_<metric>_<type>`; retain the `service_name` and `instance` labels and aggregate counters across instances in PromQL.
 
 ### Deployment verification: scrape Cloud Run `backend-sync`
 
-The sync exporter release imports `omi_sync_*` and `omi_conversation_duration_seconds` from the sync services (not `omi_conversation_{speech_seconds,segments}` or `omi_fallback_total`, which no alert reads from them); until it deploys, `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_duration_seconds{source="sync"}` are empty in Prometheus. Alerts and the Core Features sync panel use Cloud Logging of `omi_sync_intake` / `omi_conversation_shape` instead.
+The sync exporter release imports `omi_sync_*`, `omi_conversation_duration_seconds`, and `omi_conversation_relevance_decision_total` from the sync services (not `omi_conversation_{speech_seconds,segments}` or `omi_fallback_total`, which no alert or dashboard reads from them). Until the values deploy, sync-service series for `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, `omi_conversation_duration_seconds{source="sync"}`, and `omi_conversation_relevance_decision_total` are absent in Prometheus. The Core Features dashboard keeps its Cloud Logging sync-intake panel and adds a rolling one-hour relevance discard-share table; its service/trigger rows appear after the metrics-egress workflow applies the sync exporter values.
 
 Concrete change, cost, verify:
 
@@ -446,7 +473,7 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Kubernetes / Scheduler | `2e6b6a3b4bddf1427b3a55aa1311c656` | `kubernetes-mixin` | Bundled |
 | Node Exporter / AIX | `7e0a61e486f727d763fb1d86fdd629c2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / MacOS | `629701ea43bf69291922ea45f4a87d37` | `node-exporter-mixin` | Bundled |
-| Omi Core Features | `omi-core-features` | — | **Custom** — user-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), and conversation search freshness (summary-vector writes and retrieval degradation). Conversation-shape histograms for `source="sync"` and `omi_sync_intake_total` are empty in Prometheus until backend-sync is scraped; the collapsed row's third panel reads Cloud Logging of `omi_sync_intake` instead. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
+| Omi Core Features | `omi-core-features` | — | **Custom** — glance board. First screen: eight outcome tiles each with a trend, what is stuck, who stayed; everything else is in collapsed rows. User-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), rolling one-hour relevance discard share by Cloud Run service and trigger, and conversation search freshness (summary-vector writes and retrieval degradation). Sync-service series appear after the metrics-egress workflow applies the sync exporter values; the collapsed row retains its Cloud Logging `omi_sync_intake` panel. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
 | Node Exporter / Nodes | `7d57716318ee0dddbac5a7f451fb7753` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Cluster | `3e97d1d02672cdd0861f4c97c64f89b2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Node | `fac67cfbe174d3ef53eb473d73d9212f` | `node-exporter-mixin` | Bundled |
@@ -667,15 +694,15 @@ Grafana: prod at `https://monitor.omi.me/`, dev at `https://monitor.omiapi.com/`
 2. **Export the dashboard JSON:**
 ```bash
 # Get a Grafana API token (Settings → API Keys → Add, role=Viewer)
-export GRAFANA_TOKEN="your-token"
+export MONITOR_GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omiapi.com"  # dev first
 
 # List dashboards to find the UID
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/search?type=dash-db" | jq '.[] | {title, uid}'
 
 # Export a specific dashboard (strips runtime fields)
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/<UID>" | \
   jq '.dashboard | del(.id, .version)' > dashboards/<name>.json
 ```
@@ -689,11 +716,11 @@ curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
 4. **Import to Grafana** (if creating on a new/different instance):
 ```bash
 # First, get or create the target folder (returns folderUid)
-FOLDER_UID=$(curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+FOLDER_UID=$(curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/folders" | jq -r '.[] | select(.title=="GKE") | .uid')
 
 # Import with folder placement
-curl -s -X POST -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -X POST -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"folderUid\": \"$FOLDER_UID\", \"overwrite\": true}" \
   "$GRAFANA_HOST/api/dashboards/db"
@@ -713,12 +740,12 @@ When a dashboard is edited via the Grafana UI (emergency fixes, quick iterations
 
 ```bash
 # 1. Set up
-export GRAFANA_TOKEN="your-token"
+export MONITOR_GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"  # or monitor.omiapi.com
 
 # 2. Export the updated dashboard
 DASHBOARD_UID="07e4c65f-ae79-414d-bf05-99468267d199"  # example: Parakeet ASR
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/$DASHBOARD_UID" | \
   jq '.dashboard | del(.id, .version)' > dashboards/parakeet-asr-monitoring.json
 
@@ -732,7 +759,7 @@ git commit -m "sync(monitoring): export parakeet dashboard from Grafana UI"
 
 **Bulk sync (all 17 custom dashboards):**
 ```bash
-export GRAFANA_TOKEN="your-token"
+export MONITOR_GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"
 
 # UID → folder mapping (mirrors repo directory structure)
@@ -763,10 +790,10 @@ declare -A DASHBOARDS=(
 for uid in "${!DASHBOARDS[@]}"; do
   folder="${DASHBOARDS[$uid]}"
   mkdir -p "dashboards/$folder"
-  slug=$(curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  slug=$(curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
     "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
     jq -r '.meta.slug // .dashboard.title' | tr ' /' '-' | tr '[:upper:]' '[:lower:]')
-  curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
     "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
     jq '.dashboard | del(.id, .version)' > "dashboards/$folder/${slug}.json"
   echo "Exported: $folder/$slug ($uid)"
@@ -777,13 +804,13 @@ done
 ```bash
 # Export from dev
 export GRAFANA_HOST="https://monitor.omiapi.com"
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/<uid>" | \
   jq '.dashboard | del(.id, .version)' > dashboards/<folder>/<name>.json
 
 # Import to prod with correct folder
 FOLDER_UID="aev9igt5fwgsgc"  # example: GKE folder
-curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
+curl -s -X POST -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"folderUid\": \"$FOLDER_UID\", \"overwrite\": true}" \
   "https://monitor.omi.me/api/dashboards/db"
@@ -822,8 +849,8 @@ Pusher release workflows additionally call `verify_pusher_live_alert_route.py`
 before publishing or promoting an image. The protected `MONITOR_GRAFANA_TOKEN`
 secret (repo-scoped for dest `monitor.omiapi.com`, `prod` environment-scoped
 for `monitor.omi.me`) must be able to read provisioned alert rules, datasource
-health and queries, and contact points. Do not reuse `GRAFANA_TOKEN` here; that
-secret belongs to the TV Cloud Run Grafana. The default invocation is the
+health and queries, and contact points. Do not reuse the retired TV-instance
+credential here. The default invocation is the
 Pusher release gate: it fails closed unless the committed memory-admission
 and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
 both Pusher and backend-listen have a non-terminating scrape target and every such target is up, and the
@@ -841,7 +868,13 @@ It never prints contact-point settings or token material.
 
 The same script can classify every committed rule in `alerts/*.json` against
 live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent,
-live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
+live-but-uncommitted, present-but-paused, and present-but-divergent UIDs.
+Paused rules also count as live-and-matching when the committed source explicitly
+sets `isPaused=true` and the rest of the definition matches. The paused bucket is
+informational; either direction of pause-state drift is divergent and fails the
+selected gate. An unapproved live unpause bypasses the source's reviewed hold,
+so it fails rather than merely warning. Missing or malformed live pause state fails too.
+Default
 `--fail-on none` reports drift without failing; `--fail-on gated` fails only on
 UIDs listed in `live-alert-gate.json`. The monitoring workflow uses `--mode
 import` to upsert, by stable UID (POST when absent, PUT when present), the
@@ -857,11 +890,11 @@ value still fails. The import verifies each rule's `alert_identity` and Telegram
 receiver and confirms that receiver exists with resolve notifications enabled;
 it never deletes or pauses other rules. It then runs `--mode fleet --alert-set live-stt
 --fail-on gated`, which covers the canaries and every gated UID. The `live-stt` verification scope includes those Redis rules and the gated finalization rules, and fails closed
-when any of them is absent, paused, or divergent. They are Grafana-managed alerts,
+when any of them is absent or divergent, including a pause state that differs
+from the committed source. They are Grafana-managed alerts,
 not PrometheusRule CRDs. Their `component="other"` selector matches the shared
 fallback bucket for `redis_cache`; cache-write children are initialized at zero.
-Soniox runway UIDs remain pending until
-their metrics have a data source. The token is read from a mode-0600 file and
+The token is read from a mode-0600 file and
 neither token material nor contact-point settings are logged. Split-vs-combined
 equality in unit tests is not evidence a rule is live; only the workflow's
 token-backed fleet verification proves that.
@@ -966,7 +999,6 @@ backend/charts/monitoring/
 │   │   └── plugins.json
 │   ├── gke/                             # Matches Grafana "GKE" folder
 │   │   ├── backend-listen.json
-│   │   ├── deepgram-self-hosted.json
 │   │   ├── diarizer.json
 │   │   ├── pusher.json
 │   │   └── vad.json
@@ -1028,6 +1060,41 @@ Grafana availability independently; it cannot prove query-path or delivery healt
 
 ### Metrics Contract
 
+Core Features Prometheus trend panels use `[$__interval]` with `maxDataPoints: 24` and a 5m
+minimum interval, so the window equals the step, each sample is read once, and a short range
+does not end a whole step before now. The line is coloured by its value at each point, and gaps
+under an hour are bridged because low-traffic tiles have empty steps. The recap trend reads Cloud
+Monitoring with a fixed `[1h]` window and `step: 1h`. They follow the time picker;
+on Prometheus a fixed 14-day trend would exceed the 10-day Prometheus retention and cost about
+7 to 15 seconds per tile, so longer history needs recording rules first. Do not set
+`noValue` on these panels: Grafana coerces it to a number and draws gaps as that
+value. Outcome tiles keep a neutral base threshold step, because "no traffic" takes the base
+colour and absence must not read as a red outcome. Daily recaps come from Cloud Monitoring and
+keep their own 98%/90% bands.
+
+Core Features keeps capture success / (success + failure) separate from the
+3-hour stale terminal count and share. Stale finalization includes deliberate
+lifecycle/discard fences; it cannot establish missing conversations or an
+accepted-cohort conversion rate. The dead-letter stat uses
+`delta((max(listen_finalization_jobs{status="dead_letter"}))[$__range:1m])`,
+clamped at zero and rounded: the Firestore projection survives pod churn and
+replicas must be collapsed before computing the change. It includes abandoned
+BYOK waits as well as exhausted retries, and excludes pre-projection history.
+The stat requires a current summary timestamp no older than 15 minutes, so
+cached history alone cannot paint a dead publisher green. The existing
+system-owned age gauge already excludes `blocked_byok`.
+
+`omi_client_journey_terminal_total` adds `reason` from the existing closed
+`CLIENT_JOURNEY_ISSUE_CLASSES` enum for failure/degraded/unknown, and `none` for
+success/cancelled. Unknown input collapses to `unknown`; no input text is
+exported. The 12 issue classes give at most 38 outcome/reason combinations
+per journey/client kind, or 3,420 counter children per process at the full
+9-by-10 bound (previously 450). Children are emitted only on real events;
+the histogram gains no dimension. During rolling deploys and historical
+queries the breakdown retains old series as `legacy_unlabeled`. Backend,
+listen and pusher emitter releases are required before reason coverage is
+complete; dashboard provisioning alone does not deploy the label.
+
 `omi_stt_stream_close_total{provider,reason}` pre-creates 55 zero-valued children:
 the four bounded providers plus the `unknown` fallback, crossed with the eleven
 bounded close reasons in `utils/stt/stream_close.py`. Initialization runs on that
@@ -1044,6 +1111,21 @@ one-line reason in `DECLARED_SPARSE`. The allowlist records existing debt and
 must shrink as initialization is added. Exporter/GPU/other service registries and
 full selector coverage are outside this family-level contract; stream-close
 selector coverage has its own unit test.
+
+The backend-listen fleet-health write counters use closed labels:
+`omi_stt_fleet_health_write_attempted_total{write_path,kind}` counts each logical
+write passed to the scheduler, including writes dropped by its bounds;
+`omi_stt_fleet_health_write_written_total` counts only after Redis acknowledges
+a commit, and
+`omi_stt_fleet_health_write_dropped_total{write_path,kind,reason}` records bounded
+drop reasons. `write_path` is `transcript_result`, `cost_routing_result`, or
+`cost_bench`; `kind` is `result` or `bench`; `reason` is `redis_backoff`,
+`identity_changed`, `identity_changed_after_commit`, `redis_error`,
+`loop_unavailable`, `in_flight_limit`, `background_schedule_error`, or
+`cross_thread_schedule_error`. The finalization
+`listen_finalization_summary_last_success_timestamp_seconds` gauge is registered
+only after a successful Firestore summary, so absence means this process has not
+yet confirmed the summary.
 
 Each service that exposes Prometheus metrics should document them alongside its ServiceMonitor or in its chart's values comments. Minimum contract:
 
@@ -1331,6 +1413,11 @@ once the operator stays running; verify `up` converges upward before chasing ind
 library. `--lint` runs offline in the existing local/CI checks manifest and the
 monitoring unit suite. Regenerate the committed metric-name snapshot with:
 
+The snapshot covers in-cluster Prometheus. `datasource_metrics` records separately
+observed families for another datasource, with its observation time and evidence.
+Those names admit rules only for that datasource; refreshing the local snapshot
+preserves them. A GMP-only histogram must not be presented as a local series.
+
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
 python3 backend/scripts/alert_backtest.py \
@@ -1365,6 +1452,9 @@ boolean threshold units, reduction/math support and pending periods on rate,
 ratio or average queries. `legacy_debt` pins unchanged pre-existing findings to
 a rule hash; any rule edit invalidates the exception. It is debt, never deployment
 approval. The snapshot is historical presence, not proof of current ingestion.
+`declared_metrics` records source-backed metric names that are not yet in that
+historical snapshot; offline lint accepts them, while a live replay still checks
+the actual Prometheus series and fails if they have not been deployed or scraped.
 Explicit `admission_holds` require a rule to stay paused until its reviewed hold
 is removed. Live replay exits nonzero on dead, noisy or unproven results.
 The CI gate catches structural regressions; live threshold calibration remains

@@ -956,3 +956,176 @@ class TestMetricsEndpoint:
             "parakeet_requests_total",
         ]:
             assert name in body, f"Missing metric: {name}"
+
+
+def _wav_bytes(seconds: float, sample_rate: int = 16000, channels: int = 1) -> bytes:
+    buf = io.BytesIO()
+    frames = np.zeros((int(seconds * sample_rate), channels), dtype=np.float32)
+    frames[:, :] = 0.01
+    sf.write(buf, frames if channels > 1 else frames[:, 0], sample_rate, format="WAV", subtype="PCM_16")
+    return buf.getvalue()
+
+
+class TestLanguageEndpoint:
+    """POST /v2/language: the spoken-language gate in front of Parakeet-25."""
+
+    def _client(self, probabilities=None, model="whisper-base", side_effect=None):
+        app, mod, gpu, _ = _make_app_with_mocks()
+        gpu.language_id_model = model
+        gpu.submit_language_sync = MagicMock(return_value=probabilities or {}, side_effect=side_effect)
+        return TestClient(app, raise_server_exceptions=False), mod, gpu
+
+    def test_unavailable_when_gate_not_loaded(self):
+        client, _, gpu = self._client(model=None)
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(6), "audio/wav")})
+        assert resp.status_code == 503
+        assert resp.json()["error"] == "lid_unavailable"
+        gpu.submit_language_sync.assert_not_called()
+
+    def test_arabic_canary_routes_multilingual(self):
+        client, mod, _ = self._client({"ar": 0.9963, "en": 0.0002, "fr": 0.0001, "he": 0.0034})
+        before = mod.LID_ROUTES.labels(route="multilingual", bucket="ar")._value.get()
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(5.536), "audio/wav")})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["route"] == "multilingual"
+        assert body["language"] == "ar"
+        assert body["p_supported"] == pytest.approx(0.0003)
+        assert body["threshold"] == 0.985
+        assert mod.LID_ROUTES.labels(route="multilingual", bucket="ar")._value.get() == before + 1
+
+    def test_supported_speech_routes_parakeet(self):
+        client, _, _ = self._client({"en": 0.975, "de": 0.02, "ja": 0.005})
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(12), "audio/wav")})
+        assert resp.json()["route"] == "parakeet"
+        assert resp.json()["p_supported"] == pytest.approx(0.995)
+
+    def test_under_one_second_never_reaches_the_model(self):
+        client, _, gpu = self._client({"en": 1.0})
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(0.5), "audio/wav")})
+        assert resp.status_code == 200
+        assert resp.json()["route"] == "multilingual"
+        gpu.submit_language_sync.assert_not_called()
+
+    def test_input_is_cut_to_30s_mono_16k(self):
+        client, _, gpu = self._client({"en": 1.0})
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(40, 48000, 2), "audio/wav")})
+        assert resp.status_code == 200
+        samples = gpu.submit_language_sync.call_args.args[0]
+        assert samples.ndim == 1 and samples.dtype == np.float32
+        assert len(samples) == 30 * 16000
+        assert resp.json()["audio_seconds"] == 30.0
+
+    def test_unreadable_audio_is_422(self):
+        client, _, gpu = self._client({"en": 1.0})
+        resp = client.post("/v2/language", files={"file": ("a.wav", b"not audio", "audio/wav")})
+        assert resp.status_code == 422
+        gpu.submit_language_sync.assert_not_called()
+
+    def test_worker_failure_is_503_not_500(self):
+        client, _, _ = self._client(side_effect=RuntimeError("GPU queue full"))
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(6), "audio/wav")})
+        assert resp.status_code == 503
+        assert resp.json()["error"] == "lid_error"
+
+
+class TestOutputLanguageAlarm:
+    def test_counts_only_transcripts_with_enough_letters(self):
+        _, mod, _, _ = _make_app_with_mocks()
+        before_ja = mod.OUTPUT_LANGUAGE.labels(bucket="ja")._value.get()
+        before_p25 = mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get()
+        mod._record_output_language({"text": "short text", "detected_language": "ja"})
+        mod._record_output_language({"text": "a" * 30, "detected_language": "ja"})
+        mod._record_output_language({"text": "b" * 30, "detected_language": "de"})
+        assert mod.OUTPUT_LANGUAGE.labels(bucket="ja")._value.get() == before_ja + 1
+        assert mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get() == before_p25 + 1
+        assert mod.language_bucket("zh-cn") == "zh"
+        assert mod.language_bucket("sw") == "other"
+
+
+def test_v1_alarm_counts_prerecorded_but_not_live_window():
+    app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+    text = "Das ist ein ziemlich langer deutscher Satz über das Wetter heute."
+
+    async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
+        return {"text": text, "timestamp": {"segment": [{"segment": text, "start": 0.0, "end": 1.0}]}}
+
+    engine.submit = AsyncMock(side_effect=fake_submit)
+    recorded = []
+    done = threading.Event()
+    with patch.object(mod, "_record_output_language_quietly", side_effect=lambda r: (recorded.append(r), done.set())):
+        client = TestClient(app, raise_server_exceptions=False)
+        client.post(
+            "/v1/transcribe",
+            files={"file": ("t.wav", b"x", "audio/wav")},
+            headers={"X-Omi-STT-Surface": "live-window"},
+        )
+        assert client.post("/v1/transcribe", files={"file": ("t.wav", b"x", "audio/wav")}).status_code == 200
+        assert done.wait(timeout=5)
+    assert [r["text"] for r in recorded] == [text]
+    before = mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get()
+    mod._record_output_language({"text": text})  # /v1 body has no detected_language
+    assert mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get() == before + 1
+
+
+def test_language_probe_upload_is_capped():
+    app, mod, gpu, _ = _make_app_with_mocks()
+    gpu.language_id_model = "whisper-base"
+    gpu.submit_language_sync = MagicMock(return_value={"en": 1.0})
+    client = TestClient(app, raise_server_exceptions=False)
+    big = b"\0" * (mod._LID_MAX_UPLOAD_BYTES + 1)
+    resp = client.post("/v2/language", files={"file": ("a.wav", big, "audio/wav")})
+    assert resp.status_code == 413
+    gpu.submit_language_sync.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_lid_only_lifespan_skips_asr_batch_and_stream_warmup(monkeypatch):
+    app, mod, worker, _ = _make_app_with_mocks()
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setattr(mod, 'gpu_worker', None)
+    monkeypatch.setattr(mod, 'batch_engine', None)
+    worker_factory = MagicMock(return_value=worker)
+    monkeypatch.setattr(mod, 'GPUWorker', worker_factory)
+    batch_factory = MagicMock(side_effect=AssertionError('ASR batch engine started'))
+    monkeypatch.setattr(mod, 'BatchEngine', batch_factory)
+    warmup = MagicMock(side_effect=AssertionError('stream decoder warmed'))
+    monkeypatch.setattr(mod, 'warmup_rnnt_decoder', warmup)
+    async with mod.lifespan(app):
+        worker.start.assert_called_once()
+        assert mod.batch_engine is None
+    worker.stop.assert_called_once()
+    batch_factory.assert_not_called()
+    warmup.assert_not_called()
+
+
+def test_lid_only_routes_and_model_readiness(monkeypatch):
+    app, mod, worker, _ = _make_app_with_mocks()
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setattr(app.router, 'routes', list(app.router.routes))
+    mod._restrict_lid_routes()
+    assert {r.path for r in app.router.routes} == {'/health', '/v2/language', '/metrics'}
+    client = TestClient(app)
+    assert client.post('/v2/transcribe').status_code == 404
+    assert client.get('/docs').status_code == 404
+    worker.language_id_model = None
+    assert client.get('/health').status_code == 503
+    worker.language_id_model = 'whisper-base'
+    assert client.get('/health').status_code == 200
+    worker.submit_language_sync.return_value = {'en': 0.99}
+    result = client.post('/v2/language', files={'file': ('probe.wav', _make_wav_bytes(duration_s=30), 'audio/wav')})
+    assert result.status_code == 200
+    assert result.json()['audio_seconds'] == 30
+    monkeypatch.setattr(mod, 'gpu_worker', None)
+    assert client.get('/health').status_code == 503
+
+
+def test_lid_only_skips_configured_stream_model(monkeypatch):
+    _, mod, _, _ = _make_app_with_mocks()
+    transcribe = sys.modules['transcribe']
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setattr(transcribe, 'STREAM_MODEL_NAME', 'must-not-load')
+    load = MagicMock(side_effect=AssertionError('stream ASR loaded'))
+    monkeypatch.setattr(transcribe, '_load_nemo_model', load)
+    transcribe._init_stream_model()
+    load.assert_not_called()

@@ -113,9 +113,11 @@ def test_pt_constants_stay_distinct():
 
 
 def test_routing_price_table_tracks_gateway_cards_without_changing_overflow_order():
-    # Vertex global endpoint cards reviewed 2026-10-15; 3.8 uses its dated
-    # post-intro standard card so this clock-free routing policy stays stable.
-    assert (ptr.PRICE_PER_MTOK_IN['gemini-2.5-flash'], ptr.PRICE_PER_MTOK_OUT['gemini-2.5-flash']) == (0.54, 4.50)
+    # 2.5 Flash corrected to the Standard tier: Google Cloud Vertex AI pricing
+    # https://cloud.google.com/vertex-ai/generative-ai/pricing, Gemini 2.5
+    # section, Standard tab (verified 2026-10-18), not Priority. 3.8 uses its
+    # dated post-intro standard card so this clock-free routing policy stays stable.
+    assert (ptr.PRICE_PER_MTOK_IN['gemini-2.5-flash'], ptr.PRICE_PER_MTOK_OUT['gemini-2.5-flash']) == (0.30, 2.50)
     assert (ptr.PRICE_PER_MTOK_IN['gemini-3.1-flash-lite'], ptr.PRICE_PER_MTOK_OUT['gemini-3.1-flash-lite']) == (
         0.25,
         1.50,

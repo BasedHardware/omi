@@ -151,13 +151,13 @@ def test_retry_replans_from_new_receipt_without_mutating_input(world, monkeypatc
         db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['a'], firestore_client=store)
         return call(client.transaction())
 
-    original_run = db.run_transactional
+    original_run = db.run_preloaded_transactional
 
     def once_then_retry(client, call):
-        monkeypatch.setattr(db, 'run_transactional', original_run)
+        monkeypatch.setattr(db, 'run_preloaded_transactional', original_run)
         return retry(client, call)
 
-    monkeypatch.setattr(db, 'run_transactional', once_then_retry)
+    monkeypatch.setattr(db, 'run_preloaded_transactional', once_then_retry)
     result = db.update_conversation_segments('u', 'c', [], live_segments=fresh)
     assert attempts[0].removed_ids == ['b']
     assert result.removed_ids == []
@@ -179,7 +179,8 @@ async def test_live_adapter_uses_transaction_result_for_client_ids(world):
 
     host = SimpleNamespace(
         request=SimpleNamespace(uid='u'),
-        state=SimpleNamespace(speaker_map_dirty=False),
+        state=SimpleNamespace(speaker_map_dirty=False, source_position_map=None),
+        is_multi_channel=False,
         persistence=SimpleNamespace(call=persist),
         speakers=SimpleNamespace(segment_assignments={}, speaker_to_person={}, segment_identity_status={}),
     )
@@ -224,7 +225,8 @@ async def test_recognized_speaker_words_merge_into_one_live_utterance(world, per
 
     host = SimpleNamespace(
         request=SimpleNamespace(uid='u'),
-        state=SimpleNamespace(speaker_map_dirty=False),
+        state=SimpleNamespace(speaker_map_dirty=False, source_position_map=None),
+        is_multi_channel=False,
         persistence=SimpleNamespace(call=persist),
         speakers=SimpleNamespace(
             segment_assignments={},
@@ -313,7 +315,8 @@ async def test_manually_labeled_owner_words_merge_despite_live_voice_status(worl
 
     host = SimpleNamespace(
         request=SimpleNamespace(uid='u'),
-        state=SimpleNamespace(speaker_map_dirty=False),
+        state=SimpleNamespace(speaker_map_dirty=False, source_position_map=None),
+        is_multi_channel=False,
         persistence=SimpleNamespace(call=persist),
         speakers=SimpleNamespace(
             segment_assignments={},

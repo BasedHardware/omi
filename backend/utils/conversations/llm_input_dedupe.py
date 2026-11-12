@@ -6,34 +6,56 @@ objects fail closed instead of silently stringifying two distinct inputs alike.
 
 from __future__ import annotations
 
+from config.refactor_modes import serving_for
+from config.llm_input_versions import prompt_version
+from config.memory_l1_admission import noise_skip_enabled
+from config.llm_input_legacy import (
+    LEGACY_DEPENDENCY_VERSIONS,
+    LEGACY_IMPLEMENTATIONS,
+    LEGACY_ROUTING,
+    LEGACY_PROMPT_VERSIONS,
+)
+
 import dataclasses
 import hashlib
 import json
 import os
-from datetime import date, datetime
-from enum import Enum
 from functools import lru_cache
 from importlib.metadata import version as distribution_version
 from pathlib import Path
+from datetime import date, datetime
+from enum import Enum
 from typing import Any
 
 from prometheus_client import Counter
 from pydantic import BaseModel
 from models.structured import Structured
 
-from config.summary_guarantee import enabled as summary_enabled
 from utils.conversations.summary_delivery import present as summary_present
 from config.sync_reprocess import dedupe_enabled
-from config.repeat_work import revision_reuse
-from utils.llm.model_config import get_route_ref
+
 from utils.sync.repeat_work_metrics import record_feature
+from utils.task_intelligence import reminder_policy
 
 SKIPPED = Counter(
     'conversation_llm_input_dedupe_skipped_total', 'Successful conversation feature input reused', ['feature']
 )
+MISSES = Counter(
+    'conversation_llm_input_dedupe_misses_total',
+    'Conversation feature calls evaluated with no reusable input',
+    ['feature'],
+)
+CHECKPOINT_ERRORS = Counter(
+    'conversation_llm_input_dedupe_checkpoint_errors_total',
+    'Input hash matched but the stored output checkpoint was unusable',
+    ['feature'],
+)
 NOTES_HASH = 'notes_llm_input_hash'
 NOTES_OUTPUT_HASH = 'notes_llm_output_hash'
 L1_HASH = 'l1_llm_input_hash'
+# Serialization and model wrappers can change effective inputs without a source
+# edit. Installed distributions are immutable for this process; read them once.
+INSTALLED_DEPENDENCY_VERSIONS = tuple((name, distribution_version(name)) for name in ('pydantic', 'langchain-core'))
 
 
 def canonical(value: Any) -> Any:
@@ -61,13 +83,13 @@ def canonical(value: Any) -> Any:
 
 
 @lru_cache(maxsize=2)
-def implementation_digest(feature: str) -> str:
+def _legacy_implementation_digest(feature: str) -> str:
     # Invalidate persisted results on prompt/schema/orchestration edits as well
-    # as input changes. Read lazily: imports perform no filesystem/client IO.
+    # as input changes. Source files are read lazily; dependencies are snapshotted
+    # at import so both key modes use the same installed-version identity.
     root = Path(__file__).resolve().parents[1]
     paths = [
         'conversations/process_conversation.py',
-        'conversations/owner_jev.py',
         'llm/jev_client.py',
         'llm/model_config.py',
         'llm/model_constants.py',
@@ -79,11 +101,21 @@ def implementation_digest(feature: str) -> str:
         'llm/working_observations.py',
         'llm/conversation_processing.py',
         'llm/conversation_notes_prompts.py',
+        'llm/notes_packet.py',
+        'llm/action_item_v2.py',
+        'llm/notes_output.py',
+        'llm/notes_lengths.py',
+        'llm/notes_effort.py',
+        'llm/notes_output_contract.py',
+        'llm/notes_identity.py',
+        'llm/output_language.py',
+        'llm/speaker_evidence_prompt.py',
+        'llm/notes_short_clip.py',
+        'llm/notes_language_inputs.py',
         'llm/conversation_title_people.py',
         'llm/meeting_notes_rich_prompts.py',
         'llm/meeting_notes_presentation.py',
         'llm/meeting_notes_validation.py',
-        'memory/belief_model.py',
         'memory/rejected_memory_feedback.py',
         'prompts.py',
         '../models/structured.py',
@@ -92,29 +124,68 @@ def implementation_digest(feature: str) -> str:
         '../models/conversation.py',
         '../models/memories.py',
     ]
-    dependencies = '|'.join(f'{name}:{distribution_version(name)}' for name in ('pydantic', 'langchain-core')).encode()
+    dependencies = '|'.join(f'{name}:{version}' for name, version in INSTALLED_DEPENDENCY_VERSIONS).encode()
     return hashlib.sha256(b''.join((root / path).read_bytes() for path in paths) + dependencies).hexdigest()
 
 
-def fingerprint(feature: str, inputs: Any) -> str:
-    value = {'feature': feature, 'implementation': implementation_digest(feature), 'input': canonical(inputs)}
-    if revision_reuse():
-        value['route'] = canonical(get_route_ref('conv_structure' if feature == 'notes' else 'memory_l1'))
-        value['deployment_version'] = os.getenv('REPEAT_WORK_LLM_VERSION', '2026-10-16-v1')
+# Routing is part of the effective model input, even if the prompt did not change.
+ROUTING_SOURCES = (
+    'llm/model_config.py',
+    'llm/model_constants.py',
+    'llm/clients.py',
+    'llm/providers.py',
+    'llm/jev_client.py',
+    '../config/jev_decisions.py',
+)
+
+
+@lru_cache(maxsize=1)
+def routing_digest() -> str:
+    root = Path(__file__).resolve().parents[1]
+    return hashlib.sha256(b''.join((root / path).read_bytes() for path in ROUTING_SOURCES)).hexdigest()
+
+
+def stable_implementation(feature: str) -> str:
+    dependencies = '|'.join(f'{name}:{version}' for name, version in INSTALLED_DEPENDENCY_VERSIONS)
+    return f'{prompt_version(feature)}:{routing_digest()}:{dependencies}'
+
+
+def implementation_digest(feature: str) -> str:
+    return stable_implementation(feature) if noise_skip_enabled() else _legacy_implementation_digest(feature)
+
+
+def _fingerprint(feature: str, inputs: Any, implementation: str) -> str:
+    value = {'feature': feature, 'implementation': implementation, 'input': canonical(inputs)}
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 
 
+def fingerprint(feature: str, inputs: Any) -> str:
+    return _fingerprint(feature, inputs, implementation_digest(feature))
+
+
+def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
+    if saved == digest:
+        return True
+    # Accept both modes across a rollback. Never make a flag flip buy the same
+    # eligible work again. Historical keys are allowed only for the same routing
+    # and compatible prompt sources/dependencies; exact inputs + output validation
+    # still apply. A dependency bump deliberately recomputes once per input.
+    implementations = {stable_implementation(feature), _legacy_implementation_digest(feature)}
+    if (
+        INSTALLED_DEPENDENCY_VERSIONS == LEGACY_DEPENDENCY_VERSIONS
+        and routing_digest() == LEGACY_ROUTING
+        and prompt_version(feature) in LEGACY_PROMPT_VERSIONS[feature]
+    ):
+        implementations.update(LEGACY_IMPLEMENTATIONS[feature])
+        implementations.update(f'{version}:{routing_digest()}' for version in LEGACY_PROMPT_VERSIONS[feature])
+        dependencies = '|'.join(f'{name}:{version}' for name, version in INSTALLED_DEPENDENCY_VERSIONS)
+        implementations.update(
+            f'{version}:{routing_digest()}:{dependencies}' for version in LEGACY_PROMPT_VERSIONS[feature]
+        )
+    return bool(saved) and any(saved == _fingerprint(feature, inputs, item) for item in implementations)
+
+
 def _stored(uid: str, conversation: Any, *, db_client: Any = None) -> dict[str, Any]:
-    if revision_reuse():
-        # The processing caller already loaded this document. Never add another
-        # Firestore hot-path read for an optional exact-input cache check.
-        return {
-            NOTES_HASH: getattr(conversation, NOTES_HASH, None),
-            NOTES_OUTPUT_HASH: getattr(conversation, NOTES_OUTPUT_HASH, None),
-            L1_HASH: getattr(conversation, L1_HASH, None),
-            'structured': getattr(conversation, 'structured', None),
-            'discarded': getattr(conversation, 'discarded', False),
-        }
     from database import conversations
 
     # L1 already has an injected persistence client. Its checkpoint is metadata
@@ -131,29 +202,40 @@ def _stored(uid: str, conversation: Any, *, db_client: Any = None) -> dict[str, 
     return row
 
 
+def _notes_packet_identity(uid: str) -> dict[str, Any]:
+    from config.refactor_modes import serving_for
+    from utils.llm.notes_packet import PACKET_VERSION
+
+    serving = serving_for('NOTES_PACKET_V2_MODE', uid)
+    return {'mode': 'serve' if serving else 'legacy', 'version': PACKET_VERSION if serving else 1}
+
+
 def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
+    open_loop_out = kwargs.pop('open_loop_out', None)
+    if kwargs.get('task_intelligence_capture') and reminder_policy.enabled():
+        kwargs['reminder_source'] = reminder_policy.source_input(conversation)
     if not dedupe_enabled() or hashes is None:
-        return generate(prefix, uid=uid, **kwargs)
-    digest = fingerprint(
-        'notes',
-        {
-            'prefix': prefix,
-            **({'content_revision': getattr(conversation, 'sync_content_revision', None)} if revision_reuse() else {}),
-            'arguments': kwargs,
-            'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
-            'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
-        },
-    )
+        return generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
+    inputs = {
+        'prefix': prefix,
+        **({}),
+        'arguments': kwargs,
+        'notes_packet': _notes_packet_identity(uid),
+        'action_items_v2': serving_for('ACTION_ITEMS_V2_MODE', uid),
+        'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
+        'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
+        'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),
+    }
+    digest = fingerprint('notes', inputs)
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
     saved = None
-    if row.get(NOTES_HASH) == digest and row.get(NOTES_OUTPUT_HASH) and not row.get('discarded'):
+    matched_input = _matches(row.get(NOTES_HASH), 'notes', inputs, digest) and not row.get('discarded')
+    if matched_input and row.get(NOTES_OUTPUT_HASH):
         from pydantic import ValidationError
 
         try:
             candidate = Structured.model_validate(row.get('structured'))
-            if row[NOTES_OUTPUT_HASH] == output_fingerprint(candidate) and (
-                not summary_enabled(uid) or summary_present(candidate)
-            ):
+            if row[NOTES_OUTPUT_HASH] == output_fingerprint(candidate) and summary_present(candidate):
                 saved = candidate
         except ValidationError:
             pass  # An unusable optional checkpoint is an ordinary cache miss.
@@ -162,8 +244,11 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         SKIPPED.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'reused')
     else:
+        if matched_input:
+            CHECKPOINT_ERRORS.labels(feature='notes').inc()
+        MISSES.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'invoked')
-        output = generate(prefix, uid=uid, **kwargs)
+        output = generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
     hashes[NOTES_HASH] = digest
     hashes[NOTES_OUTPUT_HASH] = output_fingerprint(output)
     return output
@@ -203,15 +288,13 @@ def l1_input(uid: str, conversation: Any, inputs: Any, *, db_client: Any = None)
         return None, False
     digest = fingerprint(
         'l1',
-        (
-            {'inputs': inputs, 'content_revision': getattr(conversation, 'sync_content_revision', None)}
-            if revision_reuse()
-            else inputs
-        ),
+        (inputs),
     )
-    matched = _stored(uid, conversation, db_client=db_client).get(L1_HASH) == digest
+    matched = _matches(_stored(uid, conversation, db_client=db_client).get(L1_HASH), 'l1', inputs, digest)
     if matched:
         SKIPPED.labels(feature='l1').inc()
+    else:
+        MISSES.labels(feature='l1').inc()
     record_feature(uid, conversation, 'l1', 'reused' if matched else 'invoked')
     return digest, matched
 

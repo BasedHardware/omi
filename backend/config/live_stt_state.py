@@ -8,6 +8,8 @@ state. Raw URLs and credentials never enter Redis paths, logs, or metrics.
 
 from __future__ import annotations
 
+from config.refactor_switches import default_off as rollout_default_off
+
 import hashlib
 import os
 
@@ -58,7 +60,9 @@ def family_endpoint(family: str) -> str:
     if family == 'parakeet':
         return os.getenv('HOSTED_PARAKEET_API_URL', '').rstrip('/')
     if family == 'deepgram':
-        enabled = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').strip().lower() == 'true'
+        enabled = rollout_default_off(
+            'DEEPGRAM_SELF_HOSTED_ENABLED', os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').strip().lower() == 'true'
+        )
         return os.getenv('DEEPGRAM_SELF_HOSTED_URL', '') if enabled else ''
     env = _ENDPOINT_ENV.get(family)
     if env and os.getenv(env):
@@ -81,6 +85,16 @@ def cost_key(target, language: str) -> str:
 def cost_lease_key(target, language: str) -> str:
     fingerprint = _digest('live-stt-cost-v8', target.family, target_endpoint(target), family_credential(target.family))
     return f'{COST_PREFIX}:{stage()}:{fingerprint}:lease:{target.id}:{language}'
+
+
+def cost_reset_key(target) -> str:
+    """One durable, content-free reset generation floor per target identity."""
+    return cost_key(target, 'operator-reset-generation')
+
+
+def cost_surge_key(target) -> str:
+    """Expiring source-bench deadline, independent of gate recovery/reset."""
+    return cost_key(target, 'failover-surge-until')
 
 
 def fleet_prefix(family: str, *, account: bool = False, endpoint: str | None = None) -> str:

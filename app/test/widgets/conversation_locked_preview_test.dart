@@ -8,14 +8,13 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 const _title = 'Planning the next team meeting';
-// The locked preview routes to the usage page, so its action says so.
-const _upgrade = 'View Usage';
+// The locked preview offers this phone or a plan (David, 11-02), so its action says Upgrade.
+const _upgrade = 'Upgrade';
 
 class _Routes extends NavigatorObserver {
   final pushed = <Route<dynamic>>[];
@@ -111,7 +110,7 @@ void main() {
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_title)), findsOneWidget);
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_upgrade)), findsNothing);
         expect(find.byType(BackdropFilter), findsNothing);
-        expect(find.text('Pending'), findsOneWidget);
+        expect(find.text('Pending'), findsNothing, reason: 'David, 11-02: the frosted card carries no Pending text');
         expect(find.byIcon(Icons.lock_outline), findsNothing);
         expect(find.byIcon(Icons.hourglass_empty), findsOneWidget);
         expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
@@ -150,16 +149,13 @@ void main() {
     expect(find.text(_upgrade), findsNothing);
   });
 
-  testWidgets('the waiting preview opens usage without forcing a paywall', (tester) async {
+  testWidgets('the waiting preview opens a sheet with its choices, not a page', (tester) async {
     final routes = _Routes();
     await pumpRow(tester, observer: routes);
     await tester.tap(find.byKey(const Key('locked_preview_action')));
     expect(routes.pushed, hasLength(2));
-    final route = routes.pushed.last as MaterialPageRoute;
-    final destination = route.builder(tester.element(find.byType(ConversationListItem)));
-    expect(destination, isA<UsagePage>());
-    expect((destination as UsagePage).showUpgradeDialog, isFalse);
-    // Check navigation without building the network-backed usage screen.
+    expect(routes.pushed.last, isA<OmiSheetRoute>());
+    // Check navigation without building the network-backed plans sheet.
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -202,10 +198,7 @@ void main() {
     }
     await tester.tap(find.byKey(const Key('locked_preview_action')));
     expect(routes.pushed, hasLength(2));
-    expect(
-      (routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
-      isA<UsagePage>(),
-    );
+    expect(routes.pushed.last, isA<OmiSheetRoute>());
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -264,12 +257,10 @@ void main() {
         await tester.tapAt(Offset(rect.left + 16, rect.center.dy));
         expect(routes.pushed, hasLength(visible ? 2 : 1));
         if (visible) {
-          expect((routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(OmiLockedPreview))),
-              isA<UsagePage>());
+          expect(routes.pushed.last, isA<OmiSheetRoute>());
           await tester.pumpWidget(const SizedBox.shrink());
         } else {
           await tester.pumpAndSettle();
-          expect(find.byType(UsagePage), findsNothing);
           expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
           expect(tester.takeException(), isNull);
         }
@@ -289,8 +280,7 @@ void main() {
       await tester.tapAt(Offset(first.left + 16, (first.bottom + second.top) / 2));
       expect(routes.pushed, hasLength(visible ? 2 : 1));
       if (visible) {
-        expect((routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
-            isA<UsagePage>());
+        expect(routes.pushed.last, isA<OmiSheetRoute>());
         await tester.pumpWidget(const SizedBox.shrink());
       } else {
         await tester.pumpAndSettle();

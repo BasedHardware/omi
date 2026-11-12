@@ -1,39 +1,103 @@
-"""Default-off, at-most-once legacy STT dispatch with durable result reconciliation."""
+"""Fenced legacy recovery with bounded independent recognition for language guards."""
+
+from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
 
 from dataclasses import fields
-import io
+import hashlib
+import os
+import re
+from urllib.parse import urlsplit
 import logging
+import threading
 import time
-import wave
 
+from prometheus_client import Counter
+
+from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
-from config.stt_cap_dispatch import enabled as cap_enabled
+from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.observability.fallback import record_fallback
 from config.batch_pipeline import (
-    recovery_owners,
-    recovery_enabled_for,
-    recover_all_admitted,
+    recovery_dispatch_batch_size,
+    recovery_wake_lease_seconds,
     empty_asr_disposition_enabled,
-    speech_empty_multilingual_enabled,
-    terminal_empty_disposition_enabled,
+    recovery_policy_refresh_enabled,
+    second_multilingual_enabled,
 )
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_policy import load_stage_policy, refresh_disabled_recovery
+from config.policy import kill_switch
+from config.batch_pipeline_empty_asr import safety_net_enabled, terminal_empty_allowed
+from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
+from config.batch_language_recovery import (
+    MAX_AUDIO_SECONDS,
+    allowed as independent_allowed,
+    long_recovery_allowed,
+    enabled as independent_enabled,
+    language_guarded,
+    below_silence_threshold,
+)
+from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
-from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
-from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
+from database.batch_pipeline_quarantine_recovery import (
+    RecoveryStore,
+    recovery_candidates,
+    cancel_fenced_recovery,
+    has_words_receipt,
+    MISSING_RESULT_DWELL_SECONDS,
+)
+from utils.batch_pipeline.contracts import (
+    WorkItem,
+    held_vad_census,
+    held_silence_allowed,
+    held_result_allowed,
+    worker_vad_speech,
+)
+from utils.batch_pipeline.recovery_recognizers import (
+    transcribe,
+    second_transcribe,
+    second_transcribe_async,
+    recognizer_attempt,
+    independent_ready,
+)
+from utils.batch_pipeline.recovery_steps import ProviderStep, run_sync, run_async
+from utils.batch_pipeline.source_audio import InvalidRetainedManifest
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
-    at_stage,
     RecoveryFailure,
+    RecoveryProviderFailed,
     result_outcome,
+    result_vad_evidence,
     MultilingualEmpty,
+    WordsWithoutVad,
     padded_empty,
     terminal_empty_payload,
+    TWO_PROVIDER_EMPTY_EVIDENCE,
+    SECOND_CHANCE_EMPTY_EVIDENCE,
+    independent_silence_payload,
+    log_result_held,
 )
 
+from utils.cloud_tasks import enqueue_named_task, named_task_exists
+from utils.sync.stage import current_stage
+
 logger = logging.getLogger(__name__)
+
+# A delivered wake that could not start (allowance, cap or transient refusal)
+# is retried on the former 120s cadence rather than waiting out the lease.
+REWAKE_AFTER_HELD_SECONDS = 120
+# Consecutive failed custody probes before a new wake is minted regardless.
+MAX_WAKE_PROBE_ERRORS = 3
+# Billing label from config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER.
+# Language-guarded units use the separately bounded Soniox recovery policy.
+SECOND_PROVIDER = HELD_RECOVERY_SECOND_PROVIDER
+SECOND_PROVIDER_CALLS = Counter(
+    'omi_batch_recovery_second_provider_total',
+    'Second multilingual recovery calls after an empty or failed Modulate response',
+    ['provider', 'outcome'],
+)
 
 
 def log_failure(failure):
@@ -49,82 +113,184 @@ def log_terminal_empty():
     logger.info('event=batch_terminal_empty stage=response_validation reason=no_recoverable_speech')
 
 
-def transcribe(item, binding, audio, *, multilingual=None):
-    """Use the sync client directly, with no whole-upload coordinator or retries."""
-    from diarizer.batch_pipeline import validate_words
+def metered(record, *args):
+    # Metering is best-effort: it must never change a unit's disposition.
+    try:
+        record(*args)
+    except Exception:
+        pass
 
-    # Preserve the existing deferred STT boundary: its transitive encryption
-    # module requires runtime secrets and cannot join credential-free imports.
-    from utils.stt.pre_recorded import prerecorded_from_bytes, modulate_prerecorded_from_bytes
 
-    pcm, duration, spans = inspect_audio(item, audio)
-    if not spans:
-        if empty_asr_disposition_enabled():
-            return silence_payload(duration)
-        raise RecoveryFailure('strict_vad', 'no_speech')
-    # Keep the authenticated intake manifest in the original artifact only;
-    # third-party STT receives canonical audio without ancillary provenance.
-    output = io.BytesIO()
-    with wave.open(output, 'wb') as clean:
-        clean.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
-        clean.writeframes(pcm)
-    # attempts=2 disables all existing client retry branches. An uncertain call
-    # must remain held, never be silently reissued by the recovery dispatcher.
-    use_multilingual = speech_empty_multilingual_enabled() if multilingual is None else multilingual
-    if use_multilingual:
-        # Unknown intake language currently selects Parakeet again. Its European
-        # language model cannot recover unsupported-language speech by repadding.
-        # Use an independent multilingual provider within the SAME paid intent;
-        # attempts=2 disables Modulate's recursive retry branches too.
-        dispatch = lambda: modulate_prerecorded_from_bytes(
-            output.getvalue(), language=binding.language, return_language=True, attempts=2
+def record_accepted(owner_id, provider, seconds):
+    if cap_enabled(owner_id, 'batch'):
+        record_audio(
+            'sync',
+            'accepted',
+            provider,
+            seconds,
+            funded_allowance(owner_id, lane='batch').reason == 'plan_allowance_exhausted',
         )
-    else:
-        dispatch = lambda: prerecorded_from_bytes(
-            output.getvalue(), language=binding.language, return_language=True, attempts=2
-        )
-    response = at_stage('provider', 'provider_failed', dispatch)
 
-    def validate_response():
-        if not isinstance(response, tuple) or len(response) != 2:
-            raise ValueError('response shape')
-        raw, language = response
-        if not isinstance(language, str) or not language:
-            raise ValueError('response language')
-        words = validate_words([{**word, 'word': word['text']} for word in raw], duration)
-        if not words:
-            if use_multilingual:
-                raise MultilingualEmpty(duration, spans)
-            raise RecoveryFailure('response_validation', 'empty_asr')
-        return words, language
 
-    words, language = at_stage('response_validation', 'invalid_response', validate_response)
-    # Preserve legacy speaker labels directly in build_incoming. Exclusive batch
-    # diarization turns cannot represent overlapping legacy utterances.
-    payload = {
-        'audio_seconds': duration,
-        'speech_seconds': sum(s['end'] - s['start'] for s in spans),
-        'speech_spans': spans,
-        'words': words,
-        'diarization': {'turns': []},
-        'words_provider': 'legacy_sync',
-        'language': language,
-        'recovery_version': 1,
-    }
-    at_stage('payload_validation', 'invalid_payload', lambda: projection_speech_spans(payload, duration))
-    return payload
+def second_provider_eligible(job, empty):
+    # The language guard has its own bounded, ship-on independent path.
+    if language_guarded(job):
+        return independent_allowed(empty.duration)
+    if SECOND_PROVIDER is None:
+        return False
+    return second_multilingual_enabled()
 
 
 class QuarantineRecovery:
-    def __init__(self, store, artifacts, *, stt=transcribe, clock=time.time):
+    def __init__(self, store, artifacts, *, stt=transcribe, second_stt=second_transcribe, clock=time.time):
         self.store, self.artifacts, self.stt, self.clock = store, artifacts, stt, clock
+        self.second_stt = second_stt
         self.protocol = RecoveryStore(store)
         self._candidate_after: str | None = None
+        # The serving pass and the dispatch loop share this instance.
+        self._sweeping = threading.Lock()
+
+    def _refreshed(self, segment_id, owner_id, job, policy):
+        """A disabled snapshot with no paid intent follows today's recovery setting."""
+        if not recovery_policy_refresh_enabled():
+            return job, policy
+        refreshed = refresh_disabled_recovery(self.store, segment_id, owner_id)
+        return refreshed if refreshed is not None else (job, policy)
+
+    def _second_eligible(self, job, empty):
+        return second_provider_eligible(job, empty)
+
+    def _second_multilingual(
+        self, item, owner_id, audio, empty, policy, *, guarded=False, token=None, first_empty=True, job=None
+    ):
+        """At most one independent call inside the running intent; None leaves custody held."""
+        payload, outcome, word_count = None, 'refused', None
+        provider = 'soniox' if guarded else SECOND_PROVIDER
+        if provider is None:
+            return None
+        measured = sum(span['end'] - span['start'] for span in empty.spans)
+        try:
+            # The allowance and consent are rechecked before spending the extra call.
+            ready = self.second_stt is not second_transcribe or independent_ready()
+            if ready and sync_allowed(
+                owner_id, item.duration_seconds, provider, lane='batch', path=DispatchPath.QUARANTINE
+            ):
+                if not record_recognizer(
+                    self.store, item.segment_id, token, 'recovery', provider, 'started', None, measured, claim=True
+                ):
+                    return None
+                outcome = 'error'
+                record_fallback(
+                    component='stt_selection',
+                    from_mode='modulate',
+                    to_mode=provider,
+                    reason='other',
+                    outcome='degraded',
+                )
+                reply = yield ProviderStep(
+                    self.second_stt,
+                    (item, audio, empty, not guarded) if self.second_stt is second_transcribe else (item, audio, empty),
+                    second_transcribe_async if self.second_stt is second_transcribe else None,
+                )
+                payload, outcome, word_count = recognizer_attempt(reply.result)
+        except (BatchPrivacyBlocked, ProjectionBlocked):
+            raise
+        except Exception:
+            payload, outcome = None, 'error'
+        if outcome in {'words', 'empty', 'error'}:
+            record_recognizer(
+                self.store,
+                item.segment_id,
+                token,
+                'recovery',
+                provider,
+                outcome,
+                word_count,
+                measured,
+            )
+        elif outcome == 'refused':
+            record_recognizer(self.store, item.segment_id, token, 'recovery', provider, 'refused', None, measured)
+        SECOND_PROVIDER_CALLS.labels(provider, outcome).inc()
+        try:
+            logger.info('event=batch_recovery_second_provider provider=%s outcome=%s', provider, outcome)
+        except Exception:
+            pass
+        if outcome in ('words', 'empty'):
+            metered(record_accepted, owner_id, provider, item.duration_seconds)
+        if guarded:
+            if (
+                outcome == 'empty'
+                and first_empty
+                and below_silence_threshold(
+                    held_vad_census(job or {'duration_seconds': item.duration_seconds}, measured)
+                )
+            ):
+                return independent_silence_payload(empty.duration, empty.spans)
+            return payload
+        if (
+            outcome == 'empty'
+            and first_empty
+            and bool(empty.spans)
+            and policy.terminal_empty_disposition
+            and terminal_empty_allowed(empty.spans)
+        ):
+            evidence = (
+                TWO_PROVIDER_EMPTY_EVIDENCE
+                if (job or {}).get('worker_empty_evidence') == {'padded_retry': 'skipped_long_speech', 'version': 1}
+                else SECOND_CHANCE_EMPTY_EVIDENCE
+            )
+            return terminal_empty_payload(
+                empty.duration,
+                empty.spans,
+                evidence,
+                recognizer_receipts={
+                    name: {'provider': name, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': measured}
+                    for name in ('modulate', provider)
+                },
+            )
+        return payload
 
     def recover(self, segment_id, owner_id):
-        if not recovery_enabled_for(owner_id):
-            return 'disabled'
+        """Synchronous operator/test entrypoint; serving uses recover_async."""
+        return run_sync(self._recover_steps(segment_id, owner_id))
+
+    async def recover_async(self, segment_id, owner_id):
+        return await run_async(self._recover_steps(segment_id, owner_id))
+
+    def _previous_result(self, job, item, token):
+        """Adopt a predecessor upload that finished after its missing-object probe."""
+        for entry in job['recovery'].get('missing_result_history', []):
+            previous = entry['token']
+            uri = self.artifacts.find_recovery_result(item, previous)
+            if uri:
+                payload = self.artifacts.load_result(item, uri)
+                outcome = result_outcome(payload)
+                measured = result_vad_evidence(payload)
+                independent = payload.get('words_provider') == 'independent_empty_strict_vad'
+                if not held_result_allowed(job, outcome, measured, independent=independent):
+                    continue
+                changed = self.protocol.settle(
+                    item.segment_id,
+                    token,
+                    self.clock(),
+                    uri,
+                    outcome=outcome,
+                    measured_held_vad_speech_seconds=measured,
+                    independent_silence=independent,
+                    previous_token=previous,
+                )
+                return 'reconciled' if changed else 'held'
+        return None
+
+    def _recover_steps(self, segment_id, owner_id):
         try:
+            job, policy = load_stage_policy(self.store, segment_id, 'recovery')
+            if not job or job.get('owner_id') != owner_id:
+                return 'held'
+            if not policy.recovery_enabled:
+                job, policy = self._refreshed(segment_id, owner_id, job, policy)
+            if not policy.recovery_enabled:
+                return 'disabled'
             job = self.protocol.prepare(segment_id, owner_id, self.clock())
             if job is None:
                 return 'held'
@@ -133,43 +299,133 @@ class QuarantineRecovery:
             if job['recovery_state'] == 'running':
                 uri = self.artifacts.find_recovery_result(item, token)
                 if uri:
-                    outcome = result_outcome(self.artifacts.load_result(item, uri))
+                    payload = self.artifacts.load_result(item, uri)
+                    outcome = result_outcome(payload)
+                    measured = result_vad_evidence(payload)
+                    independent = payload.get('words_provider') == 'independent_empty_strict_vad'
+                    if not held_result_allowed(job, outcome, measured, independent=independent):
+                        failure = {'stage': 'payload_validation', 'reason': 'invalid_payload'}
+                        return (
+                            'failed_held'
+                            if self.protocol.settle(
+                                segment_id,
+                                token,
+                                self.clock(),
+                                failure=failure,
+                                measured_held_vad_speech_seconds=measured,
+                            )
+                            else 'held'
+                        )
                     return (
                         'reconciled'
-                        if self.protocol.settle(segment_id, token, self.clock(), uri, outcome=outcome)
+                        if self.protocol.settle(
+                            segment_id,
+                            token,
+                            self.clock(),
+                            uri,
+                            outcome=outcome,
+                            measured_held_vad_speech_seconds=measured,
+                            independent_silence=independent,
+                        )
                         else 'held'
                     )
-                # Bound the scan dwell without allowing takeover. A very late
-                # provider reply is rejected after this terminal transition.
-                if self.clock() - job['recovery']['started_at'] > 900:
+                # Receipts contain counts, not the transcript. Requeue once
+                # under a new token; the normal task path rechecks funding and
+                # privacy before another call. Never run STT in this scan.
+                if self.clock() - job['recovery']['started_at'] > MISSING_RESULT_DWELL_SECONDS:
+                    if has_words_receipt(job['recovery']):
+                        retry = self.protocol.retry_missing_result(segment_id, token, self.clock())
+                        logger.warning('event=batch_recovery_missing_result outcome=%s', retry)
+                        return 'held'
+                    # No usable receipt: retain the existing bounded dwell.
                     failure = {'stage': 'provider', 'reason': 'abandoned_running'}
                     if self.protocol.settle(segment_id, token, self.clock(), failure=failure):
                         log_failure(failure)
                 return 'held'
-            disposition = empty_asr_disposition_enabled()
-            if not disposition and not sync_allowed(owner_id, item.duration_seconds):
+            previous = self._previous_result(job, item, token)
+            if previous is not None:
+                return previous
+            byok = admitted_as_byok(job)
+            if byok and not language_guarded(job):
+                record_decision(DispatchPath.QUARANTINE, True, DispatchReason.BYOK)
+            disposition = (
+                language_guarded(job)
+                or empty_asr_disposition_enabled()
+                or (safety_net_enabled() and self.stt is transcribe)
+            )
+            if (
+                not disposition
+                and (not byok or language_guarded(job))
+                and not sync_allowed(owner_id, item.duration_seconds, lane='batch', path=DispatchPath.QUARANTINE)
+            ):
                 return 'held'
-            audio = self.artifacts.fetch_audio(item)
-            local_payload, inspection_failure = None, None
+            try:
+                audio = self.artifacts.fetch_audio(item)
+            except InvalidRetainedManifest:
+                # Deterministic on the stored bytes: hold once instead of a 500 retry loop.
+                if not self.protocol.hold_invalid_manifest(segment_id, token, self.clock(), audio_uri=item.audio_uri):
+                    return 'held'
+                logger.info('event=batch_quarantine_recovery outcome=failed_held reason=invalid_retained_manifest')
+                return 'failed_held'
+            duration = item.duration_seconds
+            # The input-bound worker VAD is acoustic evidence for ordinary
+            # empty/ownership failures too. A later zero CPU VAD cannot turn
+            # that speech into silence or suppress the existing recovery call.
+            worker = worker_vad_speech(job)
+            local_payload, inspection_failure, measured_vad, inspected_spans = None, None, None, None
             if disposition:
                 try:
                     _, duration, spans = inspect_audio(item, audio)
-                    if not spans:
+                    inspected_spans = spans
+                    measured_vad = sum(span['end'] - span['start'] for span in spans)
+                    if not spans and not language_guarded(job) and worker is None:
+                        if not held_silence_allowed(job, measured_vad):
+                            raise RecoveryFailure('payload_validation', 'invalid_payload')
                         local_payload = silence_payload(duration)
                 except RecoveryFailure as error:
                     inspection_failure = error
+            if (
+                language_guarded(job)
+                and inspected_spans == []
+                and not independent_allowed(duration)
+                and not long_recovery_allowed(duration)
+                and not (independent_enabled() and worker is not None)
+            ):
+                if duration > MAX_AUDIO_SECONDS and self.protocol.hold_duration_limit(
+                    segment_id, token, self.clock(), audio_uri=item.audio_uri, audio_seconds=duration
+                ):
+                    logger.info('event=batch_quarantine_recovery outcome=failed_held reason=independent_duration_limit')
+                    return 'failed_held'
+                self.protocol.observe_vad(segment_id, token, 0)
+                return 'held'
 
             # Privacy and the intent token are rechecked after download and
             # immediately before issuing the sole application-level STT call.
             if (
                 local_payload is None
                 and inspection_failure is None
-                and not sync_allowed(owner_id, item.duration_seconds)
+                and (not byok or language_guarded(job))
+                and not sync_allowed(owner_id, item.duration_seconds, lane='batch', path=DispatchPath.QUARANTINE)
             ):
+                if measured_vad is not None:
+                    self.protocol.observe_vad(segment_id, token, measured_vad)
                 return 'held'
-            multilingual = speech_empty_multilingual_enabled()
-            if not recovery_enabled_for(owner_id) or not self.protocol.start(
-                segment_id, token, self.clock(), provider='modulate' if multilingual else 'legacy_sync'
+            # Existing guard-owned custody must drain safely even after the
+            # new-admission guard is rolled back.
+            # The worker's bound VAD receipt is the only evidence that may
+            # locate recognized words when strict CPU VAD finds no speech.
+            multilingual = safety_net_enabled() or policy.speech_empty_multilingual or language_guarded(job)
+            # Downloads/VAD/funding checks may have taken minutes. Recheck the
+            # old upload immediately before minting the replacement's call.
+            previous = self._previous_result(job, item, token)
+            if previous is not None:
+                return previous
+            if not self.protocol.start(
+                segment_id,
+                token,
+                self.clock(),
+                provider='modulate' if multilingual else 'legacy_sync',
+                local_silence=local_payload is not None,
             ):
                 return 'held'
             from database.batch_pipeline_projection_protocol import normalized_binding
@@ -182,7 +438,7 @@ class QuarantineRecovery:
                     reason='other',
                     outcome='degraded',
                 )
-            payload = None
+            payload, empty, recognized_count, provider_failure = None, None, None, None
             try:
                 if inspection_failure is not None:
                     raise inspection_failure
@@ -190,41 +446,136 @@ class QuarantineRecovery:
                     local_payload
                     if local_payload is not None
                     else (
-                        self.stt(item, normalized_binding(job['projection_binding']), audio, multilingual=multilingual)
+                        self.stt(
+                            item,
+                            normalized_binding(job['projection_binding']),
+                            audio,
+                            multilingual=multilingual,
+                            force_recognition=language_guarded(job) or worker is not None,
+                            worker_speech=worker,
+                        )
                         if self.stt is transcribe
                         else self.stt(item, normalized_binding(job['projection_binding']), audio)
                     )
                 )
                 result_outcome(payload)
-                if cap_enabled() and payload.get('outcome') != 'silence':
-                    record_audio(
-                        'sync',
-                        'accepted',
-                        'modulate' if multilingual else 'unknown',
-                        item.duration_seconds,
-                        funded_allowance(owner_id).reason == 'plan_allowance_exhausted',
-                    )
+                if payload.get('outcome') != 'silence':
+                    metered(record_accepted, owner_id, 'modulate' if multilingual else 'unknown', item.duration_seconds)
+                    if language_guarded(job) or (multilingual and self.stt is transcribe):
+                        raw_words = payload['words']
+                        if not isinstance(raw_words, list):
+                            raise RecoveryFailure('payload_validation', 'invalid_payload')
+                        record_recognizer(
+                            self.store,
+                            segment_id,
+                            token,
+                            'recovery',
+                            'modulate',
+                            'words',
+                            len(raw_words),
+                            measured_vad,
+                        )
             except BatchPrivacyBlocked:
                 raise
             except Exception as error:
+                if isinstance(error, RecoveryProviderFailed):
+                    provider_failure = error
+                    measured_vad = sum(span['end'] - span['start'] for span in error.spans)
+                recognized_count = error.word_count if isinstance(error, WordsWithoutVad) else None
                 failure = (
                     {'stage': error.stage, 'reason': error.reason}
                     if isinstance(error, RecoveryFailure)
                     else {'stage': 'provider', 'reason': 'operation_failed'}
                 )
-                if (
-                    terminal_empty_disposition_enabled()
-                    and multilingual
-                    and padded_empty(job)
-                    and isinstance(error, MultilingualEmpty)
-                ):
-                    payload = terminal_empty_payload(error.duration, error.spans)
-                    failure = None
+                if multilingual and isinstance(error, MultilingualEmpty):
+                    empty = MultilingualEmpty(error.duration, error.spans, worker)
+                    measured_vad = sum(span['end'] - span['start'] for span in error.spans)
+                    if (
+                        not language_guarded(job)
+                        and policy.terminal_empty_disposition
+                        and padded_empty(job)
+                        and bool(error.spans)
+                        and terminal_empty_allowed(error.spans)
+                    ):
+                        payload = terminal_empty_payload(error.duration, error.spans)
+                        failure = None
             else:
                 failure = None
+            first_empty = empty is not None
+            # Preserve bounded outcomes for ordinary multilingual recovery too;
+            # an absent receipt must not be mistaken for an empty recognizer.
+            # Inspection failures and locally proven silence are not attempts.
+            if (
+                multilingual
+                and self.stt is transcribe
+                and not language_guarded(job)
+                and inspection_failure is None
+                and local_payload is None
+                and (failure or first_empty)
+            ):
+                record_recognizer(
+                    self.store,
+                    segment_id,
+                    token,
+                    'recovery',
+                    'modulate',
+                    'empty' if first_empty else 'words' if recognized_count else 'error',
+                    0 if first_empty else recognized_count,
+                    measured_vad,
+                )
+            if (
+                failure
+                and multilingual
+                and empty is None
+                and inspection_failure is None
+                and (language_guarded(job) or failure['reason'] == 'provider_failed')
+                and (inspected_spans is not None or provider_failure is not None)
+            ):
+                if provider_failure is not None:
+                    duration, inspected_spans = provider_failure.duration, provider_failure.spans
+                    measured_vad = sum(span['end'] - span['start'] for span in inspected_spans)
+                if language_guarded(job):
+                    record_recognizer(
+                        self.store,
+                        segment_id,
+                        token,
+                        'recovery',
+                        'modulate',
+                        'words' if recognized_count else 'error',
+                        recognized_count,
+                        measured_vad,
+                    )
+                empty = MultilingualEmpty(duration, inspected_spans, worker)
+            # Outside the handler: neither metering nor a second provider may chain the first.
+            if empty is not None:
+                # A valid empty answer is still accepted, billed audio.
+                if first_empty or recognized_count:
+                    metered(record_accepted, owner_id, 'modulate', item.duration_seconds)
+                if first_empty and language_guarded(job):
+                    record_recognizer(self.store, segment_id, token, 'recovery', 'modulate', 'empty', 0, measured_vad)
+                if failure and self._second_eligible(job, empty):
+                    payload = yield from self._second_multilingual(
+                        item,
+                        owner_id,
+                        audio,
+                        empty,
+                        policy,
+                        guarded=language_guarded(job),
+                        token=token,
+                        first_empty=first_empty,
+                        job=job,
+                    )
+                    if payload is not None:
+                        failure = None
+                elif failure and language_guarded(job):
+                    record_recognizer(
+                        self.store, segment_id, token, 'recovery', 'soniox', 'refused', None, measured_vad
+                    )
             # Log outside the exception handler: logger failures must not chain a private exception.
             if failure:
-                if not self.protocol.settle(segment_id, token, self.clock(), failure=failure):
+                if not self.protocol.settle(
+                    segment_id, token, self.clock(), failure=failure, measured_held_vad_speech_seconds=measured_vad
+                ):
                     return 'held'
                 log_failure(failure)
                 return 'failed_held'
@@ -232,10 +583,22 @@ class QuarantineRecovery:
                 return 'held'
             # Storage/commit failures leave running intact: the deterministic
             # encrypted object can be reconciled without repeating STT.
+            stage = 'persist'
             try:
                 outcome = result_outcome(payload)
                 uri = self.artifacts.persist_recovery_result(item, payload, token)
-                changed = self.protocol.settle(segment_id, token, self.clock(), uri, outcome=outcome)
+                stage = 'settle'
+                changed = self.protocol.settle(
+                    segment_id,
+                    token,
+                    self.clock(),
+                    uri,
+                    outcome=outcome,
+                    measured_held_vad_speech_seconds=result_vad_evidence(payload),
+                    independent_silence=payload.get('words_provider') == 'independent_empty_strict_vad',
+                )
+                if not changed:
+                    log_result_held('quarantine', 'settle', reason='refused')
                 if changed and outcome == 'no_recoverable_speech':
                     log_terminal_empty()
                 if changed and outcome == 'silence':
@@ -249,7 +612,8 @@ class QuarantineRecovery:
                 return 'recovered' if changed else 'result_held'
             except BatchPrivacyBlocked:
                 raise
-            except Exception:
+            except Exception as error:
+                log_result_held('quarantine', stage, exception_type=type(error).__name__)
                 return 'result_held'
         except BatchPrivacyBlocked:
             cancel_fenced_recovery(self.store, segment_id)
@@ -257,31 +621,165 @@ class QuarantineRecovery:
         except ProjectionBlocked:
             return 'held'
 
-    def sweep(self):
-        counts = {}
-        all_admitted = recover_all_admitted()
-        owners = (None,) if all_admitted else recovery_owners()
-        for selected_owner in owners:
-            if all_admitted:
-                candidates = recovery_candidates(
-                    self.store.client, self.store.namespace, None, after_id=self._candidate_after
-                )
-            else:
-                candidates = recovery_candidates(self.store.client, self.store.namespace, selected_owner)
-            if all_admitted and not candidates:
-                self._candidate_after = None  # Wrap next tick, without a second query.
-            for segment_id, owner_id in candidates:
-                if all_admitted:
-                    self._candidate_after = segment_id  # Held/capped rows cannot pin the global page.
+    def dispatch(self, segment_id, owner_id):
+        try:
+            return self._dispatch(segment_id, owner_id)
+        except BatchPrivacyBlocked:
+            cancel_fenced_recovery(self.store, segment_id)
+            return 'cancelled'
+        except ProjectionBlocked:
+            return 'held'
+        except Exception as error:
+            # A broken queue must not move a guarded Soniox poll into a
+            # maintenance thread. Keep the prepared obligation for dispatch.
+            job, _ = load_stage_policy(self.store, segment_id, 'recovery')
+            if job and language_guarded(job):
+                logger.warning('event=batch_quarantine_recovery action=dispatch outcome=held')
+                return 'held'
+            # A lost create-task acknowledgement can race delivery. Both paths
+            # adopt the SAME intent; only RecoveryStore.start may spend it.
+            logger.warning(
+                'event=batch_quarantine_recovery action=dispatch outcome=inline exception_type=%s',
+                type(error).__name__,
+            )
+            record_fallback(
+                component='sync_dispatch',
+                from_mode='cloud_tasks',
+                to_mode='inline',
+                reason='enqueue_failed',
+                outcome='degraded',
+            )
+            return self.recover(segment_id, owner_id)
+
+    def _dispatch(self, segment_id, owner_id):
+        existing, policy = load_stage_policy(self.store, segment_id, 'recovery')
+        if not existing or existing.get('owner_id') != owner_id:
+            return 'held'
+        if not policy.recovery_enabled:
+            existing, policy = self._refreshed(segment_id, owner_id, existing, policy)
+        if not policy.recovery_enabled:
+            return 'disabled'
+        # prepare() is the existing durable privacy/ownership fence. Enqueue
+        # acknowledgement loss never spends the intent. The HTTP handler or
+        # inline fallback must win prepared -> running before a provider call.
+        job = self.protocol.prepare(segment_id, owner_id, self.clock())
+        if job is None:
+            return 'held'
+        if job['recovery_state'] == 'running':
+            return self.recover(segment_id, owner_id)  # Artifact reconciliation only.
+        audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
+        target = urlsplit(audience)
+        if (
+            target.scheme != 'https'
+            or not target.netloc
+            or target.path not in ('', '/')
+            or target.query
+            or target.fragment
+        ):
+            raise ValueError('recovery task requires the serving origin audience')
+        token = job['recovery']['token']
+        digest = hashlib.sha256(segment_id.encode()).hexdigest()
+        queue = os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', '')
+        lease, seq = recovery_wake_lease_seconds(), 0
+        if lease:
+            # One outstanding wake per intent. A leased wake is queued or being
+            # delivered, so the sweep adds nothing. At expiry only an
+            # authoritative NotFound for that task permits the next wake: a
+            # task still waiting in a saturated queue keeps its lease. Parallel
+            # deliveries remain fenced by RecoveryStore.start.
+            now = self.clock()
+            wake = job.get('recovery_wake') or {}
+            current = wake.get('seq', 0) if wake.get('token') == token else 0
+            if current and wake.get('wake_until', 0) > now:
+                return 'pending'  # Read from prepare()'s snapshot: no extra transaction.
+            if current and wake.get('probe_errors', 0) < MAX_WAKE_PROBE_ERRORS:
+                previous = f'bpr-{current_stage()}-{digest}-{token}-w{current}'
+                probe_error = False
                 try:
-                    outcome = self.recover(segment_id, owner_id)
+                    alive = named_task_exists(wake.get('queue') or queue, previous)
                 except Exception:
-                    outcome = 'held'
-                counts[outcome] = counts.get(outcome, 0) + 1
+                    # Unknown custody keeps the old wake; bounded so a broken
+                    # probe cannot strand the intent.
+                    alive, probe_error = True, True
+                if alive:
+                    self.protocol.extend_wake(segment_id, token, current, now, lease, probe_error=probe_error)
+                    return 'pending'
+            seq = self.protocol.claim_wake(segment_id, token, now, lease, queue=queue, expected_seq=current)
+            if seq is None:
+                return 'pending'
+            task_id = f'bpr-{current_stage()}-{digest}-{token}-w{seq}'
+        else:
+            # Kill switch: legacy time-bucketed wake on every sweep.
+            task_id = f'bpr-{current_stage()}-{digest}-{token}-{int(self.clock() // 120)}'
+        try:
+            enqueue_named_task(
+                queue,
+                audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
+                task_id,
+                {'stage': current_stage(), 'segment_id': segment_id},
+                audience=audience,
+                invoker_sa=os.getenv('SYNC_TASKS_INVOKER_SA', '').strip(),
+            )
+        except Exception:
+            # The task may not exist. If the inline fallback leaves the intent
+            # prepared, re-wake on the 120s cadence rather than the full lease.
+            if lease:
                 try:
-                    logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
+                    self.protocol.shorten_wake(segment_id, seq, self.clock(), REWAKE_AFTER_HELD_SECONDS)
                 except Exception:
                     pass
-                if outcome in {'recovered', 'failed_held', 'result_held', 'cancelled'}:
-                    break  # One provider dispatch per queried cohort per sweep; continue at this cursor next tick.
+            raise
+        return 'queued'
+
+    def delivered(self, segment_id, outcome, task_name=None):
+        """A delivery of wake ``-w<seq>`` that left the intent prepared re-arms the
+        120s cadence for that wake only. Legacy or unnamed deliveries change nothing."""
+        match = re.search(r'-w([0-9]{1,9})$', str(task_name or '').rsplit('/', 1)[-1])
+        if outcome == 'held' and match and recovery_wake_lease_seconds():
+            self.protocol.shorten_wake(segment_id, int(match.group(1)), self.clock(), REWAKE_AFTER_HELD_SECONDS)
+
+    def sweep(self):
+        if not self._sweeping.acquire(blocking=False):
+            return {}  # A concurrent scan of the same instance is already dispatching.
+        try:
+            return self._sweep()
+        finally:
+            self._sweeping.release()
+
+    def _sweep(self):
+        counts = {}
+        budget = recovery_dispatch_batch_size()
+        # Discovery is independent of today's admission/recovery cohort. Every
+        # candidate is authorized by its recorded policy; rollback must drain it.
+        candidates = recovery_candidates(
+            self.store.client, self.store.namespace, None, limit=budget, after_id=self._candidate_after
+        )
+        if not candidates:
+            self._candidate_after = None
+        for segment_id, owner_id in candidates[:budget]:
+            self._candidate_after = segment_id
+            try:
+                _, policy = load_stage_policy(self.store, segment_id, 'recovery')
+                task = (
+                    kill_switch('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', policy_id=policy.policy_id)
+                    if policy
+                    else False
+                )
+                outcome = (self.dispatch if task else self.recover)(segment_id, owner_id)
+            except Exception as error:
+                logger.warning(
+                    'event=batch_quarantine_recovery action=dispatch outcome=retry exception_type=%s',
+                    type(error).__name__,
+                )
+                outcome = 'held'
+            counts[outcome] = counts.get(outcome, 0) + 1
+            try:
+                logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
+            except Exception:
+                pass
+        if len(candidates) < budget:
+            # A short page reached the end of the scan. Resuming after its last
+            # ID would skip every earlier candidate, including new quarantines,
+            # for a whole pass.
+            self._candidate_after = None
         return counts

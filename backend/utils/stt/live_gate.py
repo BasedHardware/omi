@@ -3,14 +3,40 @@
 from __future__ import annotations
 
 import math
-import os
 from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
 from typing import Any
 
+from config.policy.listen import disruption_gate
+from config.live_stt_resilience import recovery_sample_guard_enabled
+
 # 10x 1,800 sessions/hour is 1,500 identities per five-minute window.
 HEALTHY_USERS = 2048
 FAILURE_RESERVE = 8
+RECOVERY_REBENCH_MINIMUM = 100
+RECOVERY_FAST_MINIMUM = 20
+RECOVERY_FAST_FAILURE_SHARE = 0.25
+# High digits identify an operator reset; low digits retain ordinary gate
+# generations. One million transitions of headroom keeps epochs distinct.
+RESET_GENERATION_STRIDE = 1_000_000
+
+
+def reset_generation_floor(raw: str | bytes | None) -> int:
+    if raw is None:
+        return 0
+    generation = int(raw)
+    if generation <= 0 or generation % RESET_GENERATION_STRIDE:
+        raise ValueError('invalid operator reset generation')
+    return generation
+
+
+def generation_allows(current: int, captured: int | None, *, connect: bool = False) -> bool:
+    """Connect failures follow ordinary gate changes, never an operator reset."""
+    if captured is None:
+        return current // RESET_GENERATION_STRIDE == 0
+    return current == captured or (
+        connect and current // RESET_GENERATION_STRIDE == captured // RESET_GENERATION_STRIDE
+    )
 
 
 @dataclass(frozen=True)
@@ -113,11 +139,7 @@ class GateState:
         return asdict(self)
 
 
-def gate_rate() -> float:
-    gate = float(os.getenv('STT_ROUTING_DISRUPTION_GATE', '0.08'))
-    if not math.isfinite(gate) or not 0 < gate < 1:
-        raise ValueError('disruption gate must be between 0 and 1')
-    return gate
+gate_rate = disruption_gate
 
 
 @lru_cache(maxsize=16)
@@ -130,7 +152,14 @@ def _increments(gate: float) -> tuple[tuple[float, float], ...]:
 
 
 def transition(
-    state: GateState, failed: bool, now: float, *, witness: str | None = None, language_only: bool = False
+    state: GateState,
+    failed: bool,
+    now: float,
+    *,
+    witness: str | None = None,
+    language_only: bool = False,
+    failover_surge: bool = False,
+    block_full_share: bool = False,
 ) -> GateState:
     gate = gate_rate()
     if state.threshold != gate:
@@ -197,16 +226,29 @@ def transition(
         else:
             uid, count, failures = users[index]
             if count >= 3:
-                return _promote_trial(state, now)
+                return _promote_trial(state, now, block_full_share=block_full_share)
             users[index] = (uid, count + 1, failures + int(failed))
         state = replace(state, trial_users=tuple(users))
     if witness is not None and witness not in state.witnesses and len(state.witnesses) < 4:
         state = replace(state, witnesses=(*state.witnesses, witness))
-    state = replace(state, recent_failures=(*state.recent_failures, (witness or '0' * 16) if failed else '')[-32:])
+    # Mark surge deaths only for the burst arm. Keep rate, CUSUM and breadth
+    # for sustained detection. The fixed-width marker fits the existing Redis
+    # schema; older readers conservatively count it as an ordinary death.
+    # Compare the trailing 60 fingerprint bits so marked/unmarked votes from
+    # one user still consume one breadth identity.
+    failure_witness = witness or '0' * 16
+    if failover_surge:
+        failure_witness = '!' + failure_witness[1:]
+    state = replace(
+        state,
+        recent_failures=(*state.recent_failures, failure_witness if failed else '')[-32:],
+    )
     # Fleet writers always supply a UID fingerprint. A single repeated caller
     # must not turn its failures into a fleet outage, even after healthy history.
     # Anonymous outcomes are used only by the mathematical simulation.
-    counts = [state.recent_failures.count(uid) for uid in set(state.recent_failures) if uid]
+    identities = [uid[1:] for uid in state.recent_failures if uid]
+    counts = [identities.count(uid) for uid in set(identities)]
+    burst_failures = sum(bool(uid) and not uid.startswith('!') for uid in state.recent_failures)
     broad_failure = witness is None or (len(counts) >= 4 and max(counts) * 2 <= sum(counts))
     if required and state.trial_users:
         # Equal-weight user votes also protect late failures after a caller's
@@ -229,13 +271,23 @@ def transition(
     sparse_failure = language_only and len(counts) >= 2 and sum(counts) >= 16
     # The fast catastrophic score also needs eight recent failures; a rare
     # short burst of five failures must not bench a mostly healthy target.
-    detected = evidence[0] >= 12 or evidence[1] >= 11 or (sum(counts) >= 8 and evidence[2] >= 10)
+    detected = evidence[0] >= 12 or evidence[1] >= 11 or (burst_failures >= 8 and evidence[2] >= 10)
     decisive = (broad_failure and detected) or (sparse_failure and max(evidence) >= 14)
-    if required:
+    guarded_trial = required and recovery_sample_guard_enabled()
+    if guarded_trial:
+        # The ordinary burst path needs a meaningful sample. A separately
+        # bounded high-failure path still removes a truly broken trial quickly.
+        # Both use admitted, non-censored outcomes and retain witness fairness.
+        fast_failure = n >= RECOVERY_FAST_MINIMUM and failures / n >= RECOVERY_FAST_FAILURE_SHARE and broad_failure
+        decisive = (decisive and n >= RECOVERY_REBENCH_MINIMUM and user_rate > gate) or fast_failure
+    elif required:
         decisive = decisive and user_rate > gate
-    rejected_trial = required and n >= required and user_rate > gate and broad_failure
+    rejected_trial = required and not guarded_trial and n >= required and user_rate > gate and broad_failure
     if n >= 8 and (decisive or rejected_trial):
-        strikes = min(state.strikes + 1, 10)
+        # A larger recovery sample must not multiply chronic-outage exposure.
+        # Advance one extra cooldown exponent on consecutive trial rejections;
+        # the first full-traffic bench and its first re-entry wait are unchanged.
+        strikes = min(state.strikes + (2 if guarded_trial else 1), 10)
         return GateState(
             threshold=gate,
             stage=0,
@@ -244,12 +296,14 @@ def transition(
             evidence=evidence,
             recent_failures=state.recent_failures,
             trial_users=state.trial_users,
-            until=now + min(14400, 300 * 2 ** (strikes - 1)),
+            until=now + min(21600 if guarded_trial else 14400, 300 * 2 ** (strikes - 1)),
             strikes=strikes,
             generation=state.generation + 1,
         )
     if required:
-        promoted = _promote_trial(replace(state, n=n, failures=failures, evidence=evidence), now)
+        promoted = _promote_trial(
+            replace(state, n=n, failures=failures, evidence=evidence), now, block_full_share=block_full_share
+        )
         if promoted.stage != state.stage:
             return promoted
     if required and n >= 4 * required:
@@ -274,7 +328,7 @@ def transition(
     )
 
 
-def _promote_trial(state: GateState, now: float) -> GateState:
+def _promote_trial(state: GateState, now: float, *, block_full_share: bool = False) -> GateState:
     """Promote a trial stage purely from already-admitted evidence and dwell."""
     required = {5: 30, 25: 60}.get(state.stage)
     if required is None or not state.trial_users:
@@ -288,10 +342,16 @@ def _promote_trial(state: GateState, now: float) -> GateState:
         and now - state.trial_started_at >= dwell
         and user_rate <= gate_rate()
     ):
+        if state.stage == 25 and block_full_share:
+            # Held below full share: this target would become the only
+            # stage-100 primary while its guard target is still trialling
+            # (2026-10-28: modulate promoted at a 6.2% rate while soniox
+            # trialed at stage 5). The next vote re-tests the hold.
+            return state
         return GateState(
             threshold=state.threshold,
             stage=25 if state.stage == 5 else 100,
-            strikes=state.strikes,
+            strikes=0 if state.stage == 25 and recovery_sample_guard_enabled() else state.strikes,
             generation=state.generation + 1,
             trial_started_at=now,
         )

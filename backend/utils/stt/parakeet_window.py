@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from config.policy import kill_switch
+from config.policy.listen import current_listen_policy
+from config.parakeet_canary import ShapeRoute
+
 import asyncio
 import logging
 import math
@@ -17,11 +21,27 @@ import numpy as np
 
 from utils.async_tasks import wait_for_event
 from utils.stt.batch_pressure import BatchPressure
+from config.live_stt_resilience import window_replica_recovery_enabled
+from config.parakeet_ja import window_endpoint
+from utils.stt.window_replicas import QueueTimeout, can_route_replicas, post_window, window_replicas
+from utils.stt import window_replicas as replica_http
 from utils.http_client import get_stt_client, get_stt_semaphore
+from utils.executors import run_blocking, db_executor
+from utils.stt.live_metrics import (
+    SHAPE_FIRST_TEXT,
+    SHAPE_POST,
+    SHAPE_OUTCOME,
+    SHAPE_SESSIONS,
+    SHAPE_INFLIGHT,
+    bounded_shape_outcome,
+)
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
+from utils.observability.reasons import LiveSttReason, ReasonFamily, reason_label
 from utils.stt import streaming as st
+from utils.stt.live_reason import LOCAL_DELIVERY_REPLAY_SEND_STALLED
 from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import demand_cohort
+from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.live_metrics import (
     WINDOW_ACTIVE,
     WINDOW_ADMISSION,
@@ -34,6 +54,7 @@ from utils.stt.live_metrics import (
     WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
     WINDOW_POSTS,
+    WINDOW_REPLICA_ATTEMPTS,
     WINDOW_SESSION_OUTCOME,
     WINDOW_REPLAY_CUT_REQUESTS,
     WINDOW_REPLAY_CUT_PERFORMED,
@@ -49,7 +70,6 @@ from utils.stt.window_anchor import (
     buffer_cap_seconds,
     collapse_decoder_loops,
     decide_window,
-    parse_tdt_segments,
     read_max_context_seconds,
     read_pace_seconds,
 )
@@ -99,12 +119,21 @@ STRANDED_SILENCE_SECONDS = 5.0
 # Answered-empty context may leave TDT only after the 90s capture replay horizon.
 ANSWERED_CONTEXT_RETENTION_SECONDS = 90.0
 FIRST_TEXT_DEADLINE_SECONDS = 12.0
+FIRST_POST_SECONDS = 8.0
 DEADLINE_CUT_POST_LATENCY_SECONDS = 1.2
 # Three times the observed 280ms admission; never suppress unresolved audio.
 SHORT_SPEECH_EPISODE_SECONDS = 1.0
 # Several short utterances may return empty; only emitted text renews this allowance.
 ANSWERED_EMPTY_SPEECH_BUDGET_SECONDS = 3.0
 MAX_EMPTY_STREAK = 4
+
+
+def stranded_drift_settle_enabled() -> bool:
+    """Kill switch, default on: settle stranded answers whose text was unplaceable."""
+    policy = current_listen_policy.get()
+    return kill_switch(
+        'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED', policy_id=policy.policy_id if policy is not None else 'control'
+    )
 
 
 def _positive_float_env(name: str, default: float) -> float:
@@ -212,10 +241,6 @@ class SessionPcmGain:
         return out
 
 
-class QueueTimeout(TimeoutError):
-    """Deadline expired while waiting for the shared STT semaphore."""
-
-
 @dataclass(frozen=True)
 class _WindowJob:
     pcm: bytes
@@ -269,11 +294,11 @@ batch_pressure = BatchPressure()
 
 
 class WindowedParakeetSocket(ParakeetStreamingSocket):
-    """One in-flight POST, sentence-anchored growing windows, no retries.
+    """One in-flight POST, sentence-anchored windows, bounded replica recovery.
 
     The owner must supply only actively VAD-gated audio. A gate fault kills the
     socket before any raw audio reaches send(). All shutdown paths release admission.
-    Buffer overflow sheds this pod's TDT circuit so new sessions skip the GPU.
+    Pressure and admission caps own local capacity; buffer overflow fails the leg.
     """
 
     def __init__(
@@ -291,15 +316,22 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._first_speech_at: float | None = None
         self._first_text_recorded = False
         self._demand_cohort = demand_cohort()
+        # Pin intent-to-treat identity before any POST/background callback. A
+        # fallback leg keeps the session arm even if task context later changes.
+        self._routing_cohort = current_routing_cohort.get()
+        self._shape_route = (
+            self._routing_cohort.parakeet_shape_route if self._routing_cohort else ShapeRoute(initialized=True)
+        )
+        self._shape_url: str | None = None
         self.progress_deadline_enabled = False
         self.allow_no_text_rescue: Callable[[], bool] = lambda: True
         self._first_text_deadline = _positive_float_env(
             'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', FIRST_TEXT_DEADLINE_SECONDS
         )
-        self._deadline_cut_enabled = os.getenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', 'false').lower() == 'true'
-        self._deadline_cut_post_latency = _positive_float_env(
-            'PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', DEADLINE_CUT_POST_LATENCY_SECONDS
+        self._first_post_seconds = min(
+            pace, _positive_float_env('PARAKEET_WINDOW_FIRST_POST_SECONDS', FIRST_POST_SECONDS)
         )
+        self._first_text_cut_enabled = os.getenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', 'true').lower() != 'false'
         self._max_empty_streak = _positive_int_env('PARAKEET_WINDOW_MAX_EMPTY_STREAK', MAX_EMPTY_STREAK)
         self._empty_streak = 0
         self._first_text_timer: asyncio.TimerHandle | None = None
@@ -357,6 +389,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._beyond_window_repost: int | None = None
         self._agc_peak = 0.0
         self._agc_last_gain = 1.0
+        self._family_endpoint = api_url == os.getenv('HOSTED_PARAKEET_API_URL')
+        # Only the internal HTTP family uses direct GPU identities.
+        self.replica_scoped = window_replica_recovery_enabled() and can_route_replicas(
+            api_url, os.getenv('HOSTED_PARAKEET_API_URL'), batch_pressure.ready_replicas()
+        )
+        self._empty_replica_retry_used = False
+        self._replica_attempted = False
 
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         self._health_success, self._health_close = on_success, on_close
@@ -447,7 +486,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._session_outcome_recorded or self._first_speech_at is None:
             return
         self._session_outcome_recorded = True
-        reason = self._dead_reason if self._dead_reason in {'first_text_deadline', 'empty_streak'} else 'none'
+        reason = (
+            self._dead_reason if self._dead_reason in {'first_text_deadline', 'empty_streak', 'cancelled'} else 'none'
+        )
         WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text', reason=reason).inc()
 
     def _cancel_first_text_timer(self) -> None:
@@ -673,15 +714,39 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._dead_reason = reason
         if reason == 'capacity_full':
             self._capacity_subtype = capacity_subtype
-        if reason in {'first_text_deadline', 'empty_streak', 'capacity_full'}:
+        if reason in {
+            'first_text_deadline',
+            'empty_streak',
+            'capacity_full',
+            'replay_ring_overflow',
+            LOCAL_DELIVERY_REPLAY_SEND_STALLED,
+        }:
+            self._typed_death_reason = reason
+        if self.replica_scoped and reason in {
+            'provider_5xx',
+            'timeout',
+            'connection_lost',
+            'provider_auth_rejected',
+            'provider_budget_exhausted',
+            'provider_rate_limited',
+        }:
             self._typed_death_reason = reason
         # Observers must see the root cause before they see the dead latch.
         self._dead = True
         self.finish()
 
     def _shed_capacity(self) -> None:
-        st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+        if not self.replica_scoped:
+            self._record_family_failure('capacity_full')
         self.fail('capacity_full', capacity_subtype='buffer_cap')
+
+    def _record_family_failure(self, error_class: str) -> None:
+        # The shared Parakeet circuit describes the default (v3) pool. A failure
+        # on another endpoint, such as the Japanese model, must not open it.
+        if self._family_endpoint:
+            st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                error_class=error_class
+            )
 
     def finish(self) -> None:
         self._closed = True
@@ -751,6 +816,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         except asyncio.CancelledError:
             # A deadline can cancel an in-flight POST through finish(). Preserve
             # that first failure so session telemetry matches the replay reason.
+            # Otherwise listen cancelled this task (owner close, recovery switch,
+            # teardown): bounded, censored 'cancelled' (live_reason), never a
+            # provider connection_lost. The raw death_reason carries it, so a
+            # listen-local cause (send_failed/vad_failed) still takes precedence.
             if not self._dead:
                 self._dead = True
                 self._dead_reason = 'cancelled'
@@ -805,20 +874,20 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         has_held_tail = cut_requested and len(
             decide_window(segments, job.duration, job.duration + 1.0, force=job.force, pause=job.pause).emit
         ) < len(segments)
-        # Sentence anchoring may hold a healthy nonempty answer until the
-        # context cap (24s), beyond the first/progress deadline (12s). If the
-        # remaining budget is within the qualified POST latency allowance,
-        # publish the held tail using the existing timestamp-preserving cut.
-        # A normal first POST after 6s of capture must still hold its sentence;
-        # neither a full pace nor the next pacing wait is a cut allowance.
-        # Empty answers and in-flight faults retain the original deadline.
-        deadline_cut = (
-            self._deadline_cut_enabled
+        # Sentence anchoring can hold valid text past an armed startup or
+        # progress watchdog. Release a wholly held answer while that watchdog
+        # requires text; an ordinary emittable segment keeps its boundary.
+        # Empty answers and in-flight faults retain the deadline and replay.
+        deadline_text_cut = (
+            self._first_text_cut_enabled
             and self._deadline_speech_at is not None
             and (not self._first_text_recorded or self.progress_deadline_enabled)
-            and self._deadline_speech_at + self._first_text_deadline - time.monotonic()
-            <= self._deadline_cut_post_latency
+            and (not self.progress_deadline_enabled or self.allow_no_text_rescue())
+            and not decide_window(
+                segments, job.duration, self._max_context_seconds, force=job.force, pause=job.pause
+            ).emit
         )
+        deadline_cut = deadline_text_cut
         decision = decide_window(
             segments,
             job.duration,
@@ -848,12 +917,20 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     self._first_text_recorded = True
                     self._cancel_first_text_timer()
                     if self._first_speech_at is not None:
+                        first_text_seconds = max(0.0, time.monotonic() - self._first_speech_at)
+                        # A leg that crossed a kill/identity boundary cannot
+                        # populate the next experiment's fresh lookback.
+                        if self._routing_cohort is not None and self._shape_route.measured:
+                            SHAPE_FIRST_TEXT.labels(arm=self._shape_route.arm).observe(first_text_seconds)
                         record_metric(
                             WINDOW_FIRST_TEXT,
                             {'demand_cohort': getattr(self, '_demand_cohort', 'ineligible')},
-                            max(0.0, time.monotonic() - self._first_speech_at),
+                            first_text_seconds,
                             observe=True,
                         )
+                        cohort = getattr(self, '_routing_cohort', None)
+                        if cohort is not None:
+                            cohort.window_first_text(first_text_seconds)
             # Snapshot the emission boundary in this socket's stream seconds
             # BEFORE the callback: downstream rewrites start/end in place onto
             # other clocks (the epoch translator projects wall-epoch seconds,
@@ -896,8 +973,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self._beyond_window_repost = None
         elif emitted:
             self._beyond_window_repost = None
-        if job.stranded_flush and not segments:
-            self._answered_empty_stranded_flushes = min(1000000, self._answered_empty_stranded_flushes + 1)
+        # A stranded flush is the last POST this silence selects: its answer
+        # must settle capacity, or a held anchor waits for a repost that never
+        # comes and the near-silent capture ring overflows into failover. Text
+        # whose timestamps fell in the silence envelope cannot be placed, so
+        # settle it like an empty answer: context and replay are retained.
+        unplaced = bool(segments) and beyond_window and stranded_drift_settle_enabled()
+        if job.stranded_flush and unplaced:
+            WINDOW_STRANDED_FLUSHES.labels(outcome='settled_unplaced').inc()
+        if job.stranded_flush and (not segments or unplaced):
+            if not segments:
+                self._answered_empty_stranded_flushes = min(1000000, self._answered_empty_stranded_flushes + 1)
             # Successful empty decoding after a long silence settles capacity
             # only. Keep the POST anchor/PCM and replay copy for later context.
             self._accounted_speech_end = max(self._accounted_speech_end, job.end_bytes)
@@ -905,11 +991,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._answered_empty_span = (first, self._accounted_speech_end)
             self._answered_context_ends.append((job.end_bytes, self._capture_seconds))
             self._stranded_fragment_answered = not self._has_unanswered_speech()
-            new_anchor_bytes = None
+            if not emitted:
+                new_anchor_bytes = None
             if self._stranded_fragment_answered:
                 self._replay_cut_requested = False
                 if (
-                    not self._first_text_recorded
+                    not segments
+                    and not self._first_text_recorded
                     and self._capture_silence_seconds >= STRANDED_SILENCE_SECONDS
                     and self._deadline_speech_bytes < self._to_bytes(SHORT_SPEECH_EPISODE_SECONDS)
                     and self._answered_empty_speech_bytes < self._to_bytes(ANSWERED_EMPTY_SPEECH_BUDGET_SECONDS)
@@ -1008,6 +1096,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             stepped = self._now_bytes + self._pace_bytes
             if self._now_bytes <= self._anchor_bytes:
                 stepped = self._anchor_bytes + self._pace_bytes
+            if self._last_post_end < 0 and not self._first_text_recorded and self._deadline_speech_at is not None:
+                stepped = self._anchor_bytes + self._to_bytes(self._first_post_seconds)
             closing = self._closed
             pause = False
             if silence_flush or idle_flush or stranded_flush:
@@ -1151,42 +1241,157 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             )
             return self._last_speaker
 
-    async def _post_window(self, pcm: bytes) -> httpx.Response:
-        # Snapshot the uniform scale before the first await so a later send
-        # cannot change this POST's envelope. Overlapping later POSTs may use a
-        # lower gain if the session peak grew; each POST stays internally flat.
+    async def _post_window(
+        self,
+        pcm: bytes,
+        *,
+        url: str | None = None,
+        timeout_seconds: float | None = None,
+        attempt: replica_http.PostAttempt | None = None,
+    ) -> httpx.Response:
+        # Snapshot one flat gain per POST before the first await.
         wav = _pcm16_to_wav_bytes(self._normalize_posted_pcm(pcm), self._sample_rate)
-        acquired = False
+        return await post_window(
+            wav,
+            url=url or (self._shape_url + '/v1/transcribe' if self._shape_url else self._url),
+            budget=self._post_timeout if timeout_seconds is None else timeout_seconds,
+            get_client=get_stt_client,
+            get_semaphore=get_stt_semaphore,
+            attempt=attempt,
+        )
+
+    async def _post_replicas(self, pcm: bytes, dur: float) -> list[RawSegment]:
+        """Two distinct pods share the original POST/first-text budget.
+        One retry per empty episode preserves anchors; silence is not outage.
+        """
+        excluded: set[str] = set()
+        retry_reason: LiveSttReason | None = None
+        last_error: Exception | None = None
         try:
-            async with asyncio.timeout(self._post_timeout) as deadline:
-                async with get_stt_semaphore():
-                    acquired = True
-                    when = deadline.when()
-                    remaining = (
-                        max(0.0, when - asyncio.get_running_loop().time()) if when is not None else self._post_timeout
+            budget = self._post_timeout
+            if self._first_text_timer is not None:
+                budget = min(budget, max(0.001, self._first_text_timer.when() - asyncio.get_running_loop().time()))
+            async with asyncio.timeout(budget) as deadline:
+                for attempt in range(2):
+                    ready = batch_pressure.ready_replicas()
+                    replica = window_replicas.claim(
+                        ready, exclude=frozenset(excluded), discovered=batch_pressure.discovered_replicas()
                     )
-                    remaining = math.floor(remaining * 1000) / 1000
-                    if remaining <= 0:
-                        raise TimeoutError('post budget exhausted at semaphore admission')
-                    return await get_stt_client().post(
-                        self._url,
-                        files={'file': ('audio.wav', wav, 'audio/wav')},
-                        headers={
-                            'X-Omi-STT-Surface': 'live-window',
-                            'X-Omi-STT-Timeout-Seconds': f'{remaining:.3f}',
-                        },
-                    )
-        except (TimeoutError, httpx.TimeoutException):
-            if not acquired:
-                raise QueueTimeout() from None
+                    if replica is None:
+                        if not attempt and replica_http.service_snapshot_allows(
+                            batch_pressure,
+                            st.parakeet_family_circuit_state(),
+                            window_replicas,
+                            attempted=self._replica_attempted,
+                        ):
+                            return await replica_http.post_service_window(
+                                self._post_window, self.fail, self._without_loops, pcm, dur
+                            )
+                        if last_error is not None:
+                            raise last_error
+                        if attempt:
+                            return []  # one empty answer; no distinct pod available
+                        self.fail('capacity_full', capacity_subtype='admission')
+                        raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
+                    excluded.add(replica.ip)
+                    self._replica_attempted = True
+                    failed: bool | None = None
+                    segments: list[RawSegment] = []
+                    post_attempt = replica_http.PostAttempt()
+                    try:
+                        remaining = (deadline.when() or 0) - asyncio.get_running_loop().time()
+                        budget = window_replicas.attempt_budget(remaining, ready, excluded, not attempt)
+                        response = await self._post_window(
+                            pcm, url=replica.url(self._url), timeout_seconds=budget, attempt=post_attempt
+                        )
+                        if response.status_code == 503 and response.headers.get('X-Omi-STT-Error') == 'queue_timeout':
+                            # Preserve capacity refusal without retrying or quarantining.
+                            WINDOW_REPLICA_ATTEMPTS.labels(outcome='queue_timeout').inc()
+                            self.fail('capacity_full', capacity_subtype='queue_timeout')
+                            response.raise_for_status()
+                        response.raise_for_status()
+                        segments = replica_http.parse_window_response(response, dur, self._without_loops)
+                        failed = False  # a valid HTTP/model response proves service health
+                        WINDOW_REPLICA_ATTEMPTS.labels(outcome='text' if segments else 'empty').inc()
+                    except asyncio.CancelledError:
+                        failed = post_attempt.cancelled(
+                            deadline_expired=deadline.expired() or self.death_reason == 'first_text_deadline'
+                        )
+                        raise
+                    except (QueueTimeout, httpx.PoolTimeout):
+                        # Local semaphore pressure says nothing about this GPU.
+                        raise QueueTimeout() from None
+                    except Exception as error:
+                        if self._dead:
+                            raise
+                        replica_http.raise_if_non_replica_error(error, self.fail)
+                        failed = True
+                        timed_out = isinstance(error, (TimeoutError, httpx.TimeoutException))
+                        retry_reason = LiveSttReason.TIMEOUT if timed_out else LiveSttReason.PROVIDER_5XX
+                        WINDOW_REPLICA_ATTEMPTS.labels(
+                            outcome=reason_label(ReasonFamily.LIVE_STT, retry_reason, LiveSttReason)
+                        ).inc()
+                        last_error = error
+                        if attempt:
+                            raise
+                        continue
+                    finally:
+                        window_replicas.settle(replica, failed=failed)
+                    if segments:
+                        self._empty_replica_retry_used = False
+                        if attempt:
+                            record_fallback(
+                                component='stt_selection',
+                                from_mode='parakeet',
+                                to_mode='parakeet',
+                                reason=retry_reason or 'empty_streak',
+                                outcome='recovered',
+                            )
+                        return segments
+                    if attempt or self._empty_replica_retry_used:
+                        return []
+                    self._empty_replica_retry_used = True
+                    retry_reason = LiveSttReason.EMPTY_STREAK
+        except QueueTimeout:
+            self.fail('timeout')
             raise
+        except (TimeoutError, httpx.TimeoutException):
+            self.fail('timeout')
+            raise
+        except Exception:
+            if not self._dead:
+                self.fail('provider_5xx')
+            raise
+        return []
 
     async def _post_and_parse(self, pcm: bytes, dur: float) -> list[RawSegment]:
+        self._shape_url = (
+            await run_blocking(db_executor, self._shape_route.resolve)
+            if os.getenv('PARAKEET_SHAPE_CANARY_FILE')
+            else None
+        )
+        shape_arm = 'canary' if self._shape_url else 'control'
+        shape_measured = self._routing_cohort is not None and self._shape_route.measured
+        if shape_measured and not self._shape_route.counted:
+            SHAPE_SESSIONS.labels(arm=self._shape_route.arm).inc()
+            self._shape_route.counted = True
         started = time.monotonic()
         outcome = 'error'
         self._posts_since_anchor = min(1000000, self._posts_since_anchor + 1)
         self._post_in_flight = True
+        if shape_measured:
+            SHAPE_INFLIGHT.labels(arm=shape_arm).inc()
         try:
+            if self.replica_scoped and self._shape_url is None:
+                try:
+                    segments = await self._post_replicas(pcm, dur)
+                finally:
+                    self._post_in_flight = False
+                outcome = 'success' if segments else 'empty'
+                if not segments:
+                    self._empty_posts_since_anchor = min(1000000, self._empty_posts_since_anchor + 1)
+                self._health_success()
+                return segments
             try:
                 response = await self._post_window(pcm)
             finally:
@@ -1195,19 +1400,15 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 outcome = 'queue_timeout'
                 self.fail('capacity_full', capacity_subtype='queue_timeout')
                 response.raise_for_status()
-            if response.status_code >= 500:
-                st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+            if response.status_code >= 500 and self._shape_url is None:
+                self._record_family_failure('provider_5xx')
                 self.fail('provider_5xx')
                 response.raise_for_status()
             if response.status_code == 413:
                 self.fail('provider_5xx')
                 raise ValueError('TDT payload too large')
             response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, dict) or ('text' not in data and 'segments' not in data):
-                self.fail('provider_5xx')
-                raise ValueError('Invalid TDT response')
-            segments = [self._without_loops(seg) for seg in parse_tdt_segments(cast(dict[str, Any], data), dur)]
+            segments = replica_http.parse_window_response(response, dur, self._without_loops)
             outcome = 'success' if segments else 'empty'
             if not segments:
                 self._empty_posts_since_anchor = min(1000000, self._empty_posts_since_anchor + 1)
@@ -1221,7 +1422,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self.fail('timeout')
             raise
         except (TimeoutError, httpx.TimeoutException):
-            st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+            if not self.replica_scoped and self._shape_url is None:
+                self._record_family_failure('timeout')
             self.fail('timeout')
             raise
         except Exception:
@@ -1229,6 +1431,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self.fail('provider_5xx')
             raise
         finally:
+            if shape_measured:
+                SHAPE_INFLIGHT.labels(arm=shape_arm).dec()
+                SHAPE_POST.labels(arm=shape_arm).observe(time.monotonic() - started)
+                SHAPE_OUTCOME.labels(arm=shape_arm, outcome=bounded_shape_outcome(outcome)).inc()
             WINDOW_POSTS.labels(outcome=outcome).inc()
             WINDOW_LATENCY.observe(time.monotonic() - started)
             WINDOW_CONTEXT.observe(dur)
@@ -1308,12 +1514,18 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         return emitted
 
 
-def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate: int) -> WindowedParakeetSocket:
+def connect_window(
+    callback: Callable[[list[dict[str, Any]]], None], sample_rate: int, *, language: str = ''
+) -> WindowedParakeetSocket:
+    api_url = window_endpoint(language)
+    if not api_url:
+        raise ParakeetConnectionError('config_incomplete')
     try:
         min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
     except ValueError:
         min_replicas = 0
-    if not batch_pressure.allows(
+    # Batch pressure describes the default pool; the Japanese deployment has its own.
+    if api_url == os.getenv('HOSTED_PARAKEET_API_URL') and not batch_pressure.allows(
         os.getenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', ''),
         min_replicas,
     ):
@@ -1321,7 +1533,7 @@ def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate
         raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
     release = admission.acquire()
     try:
-        socket = WindowedParakeetSocket(callback, os.environ['HOSTED_PARAKEET_API_URL'], sample_rate, release)
+        socket = WindowedParakeetSocket(callback, api_url, sample_rate, release)
         socket.start()
         # Count only a socket whose pump started successfully. Keeping this at the
         # connection boundary makes the accepted outcome describe an actual

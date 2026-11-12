@@ -7,6 +7,7 @@ normalized the assertion and attached an auditable receipt.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -17,12 +18,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
 from google.cloud.firestore_v1 import FieldFilter, transactional
-from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from database._client import db as default_db_client
 from database.firestore_index_registry import REQUIRED_MEMORY_PROCESSING_QUERY
 from database.memory_apply_store import apply_long_term_patch_firestore
+from database.required_intake_fence import RequiredIntakeSourceChanged
 from database.memory_collections import MemoryCollections
 from models.memory_admission import (
     REQUIRED_PROCESSING_RECEIPT_VERSION,
@@ -31,6 +32,9 @@ from models.memory_admission import (
 from models.memory_apply import (
     ApplyStatus,
     MemoryControlState,
+    MemoryWriterClass,
+    WriterAdmissionError,
+    require_writer_admitted,
     build_patch_mutation_identity,
 )
 from models.memory_contracts import (
@@ -55,7 +59,7 @@ from utils.memory.required_promotion import (
     REQUIRED_PROCESSOR_VERSION,
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
-from utils.memory.promotion_flex import PromotionFlexDeferred
+from utils.memory.promotion_flex import PromotionFlexDeferred as RequiredProcessingDeferred
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +236,9 @@ def _claim_retry_state_transaction(
     now: datetime,
     lease_seconds: int,
 ) -> RequiredProcessingClaim:
+    from database.required_intake_fence import assert_account_active
+
+    assert_account_active(uid, transaction, db_client)
     item_ref = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{expected_item.memory_id}")
     item_payload = _snapshot_payload(item_ref.get(transaction=transaction))
     if not item_payload:
@@ -465,6 +472,8 @@ def is_pending_required_processing(item: MemoryItem) -> bool:
         and item.processing_state == ProcessingState.pending
         and bool(promotion.get("required"))
         and promotion.get("user_review") is not False
+        and not promotion.get('is_locked')
+        and not promotion.get('is_dismissed')
         and promotion.get("processing_status")
         in {
             REQUIRED_PROCESSING_STATUS_PENDING,
@@ -478,6 +487,9 @@ def list_pending_required_processing_items(
     *,
     db_client: Any = None,
     limit: int = 25,
+    captured_after: Optional[datetime] = None,
+    captured_before: Optional[datetime] = None,
+    cursor: Optional[Dict[str, Any]] = None,
 ) -> List[MemoryItem]:
     client = db_client if db_client is not None else default_db_client
     requested_limit = max(1, min(limit, MAX_REQUIRED_PROCESSING_QUERY_SCAN))
@@ -499,7 +511,17 @@ def list_pending_required_processing_items(
         },
         field_filter_factory=FieldFilter,
     )
-    snapshots = query.order_by("captured_at").order_by("memory_id").limit(scan_limit).stream()
+    if captured_after is not None:
+        # The captured_at range rides the same composite index: equality
+        # prefix plus one range on the first ordered field stays within the
+        # declared index contract.
+        query = query.where(filter=FieldFilter("captured_at", ">=", captured_after))
+    if captured_before is not None:
+        query = query.where(filter=FieldFilter("captured_at", "<", captured_before))
+    query = query.order_by("captured_at").order_by("memory_id")
+    if cursor:
+        query = query.start_after(cursor)
+    snapshots = query.limit(scan_limit).stream()
     pending: List[MemoryItem] = []
     for snapshot in snapshots:
         payload = _snapshot_payload(snapshot)
@@ -519,7 +541,29 @@ def _response_content(response: Any) -> str:
     return str(content or "")
 
 
+def list_receipted_required_processing_items(uid, *, db_client, limit=100, cursor=None):
+    """Use the same required-intake index; ordinary observations never fill this page."""
+    query = REQUIRED_MEMORY_PROCESSING_QUERY.build(
+        db_client.collection(MemoryCollections(uid=uid).memory_items),
+        {
+            'tier': 'short_term',
+            'status': 'active',
+            'processing_state': 'processed',
+            'required': True,
+            'processing_statuses': [REQUIRED_PROCESSING_STATUS_PROCESSED],
+        },
+        field_filter_factory=FieldFilter,
+    )
+    query = query.order_by('captured_at').order_by('memory_id')
+    if cursor:
+        query = query.start_after(cursor)
+    snapshots = query.limit(max(1, min(limit, 100))).stream()
+    return [MemoryItem(**_snapshot_payload(snapshot)) for snapshot in snapshots]
+
+
 def invoke_required_memory_processor(item: MemoryItem, llm: Any) -> ProcessedRequiredMemory:
+    from langchain_core.output_parsers import PydanticOutputParser
+
     parser = PydanticOutputParser(pydantic_object=ProcessedRequiredMemory)
     provenance = dict((item.promotion or {}).get("submission") or {})
     source_attribution = dict((item.promotion or {}).get("source_attribution") or {})
@@ -650,8 +694,14 @@ def _apply_processed_result(
     attempt_count: int,
     db_client: Any,
     now: datetime,
+    expected_head_commit_id: Optional[str] = None,
 ) -> ApplyStatus:
     control = _read_control_state(item.uid, db_client=db_client)
+    _require_processing_writer(control, item)
+    if item.account_generation != control.account_generation:
+        raise RequiredIntakeSourceChanged('required_intake_account_generation_changed')
+    if expected_head_commit_id is not None and control.head_commit_id != expected_head_commit_id:
+        raise RequiredProcessingDeferred('required_intake_dedupe_snapshot_changed')
     evidence_ids = [evidence.evidence_id for evidence in item.evidence]
     source_attribution = _conserved_processed_source_attribution(item, processed)
     logical_payload: Dict[str, Any] = {
@@ -723,6 +773,8 @@ def _apply_processed_result(
         )
         if result.status != ApplyStatus.retryable_head_mismatch:
             break
+        if expected_head_commit_id is not None:
+            raise RequiredProcessingDeferred('required_intake_dedupe_snapshot_changed')
     assert result is not None
     return result.status
 
@@ -922,6 +974,18 @@ class RequiredProcessingAttempt:
     context: tuple[MemoryItem, RequiredProcessingRetryState, str, datetime] | None = None
 
 
+def _require_processing_writer(control, item):
+    writer = (
+        MemoryWriterClass.ledger
+        if item.ledger_schema_version == 'knowledge_ledger.v1'
+        else MemoryWriterClass.compatibility
+    )
+    try:
+        require_writer_admitted(control, writer)
+    except WriterAdmissionError as error:
+        raise RequiredIntakeSourceChanged('required_intake_writer_mode_owned') from error
+
+
 def _begin_required_processing(
     uid: str,
     memory_id: str,
@@ -943,6 +1007,18 @@ def _begin_required_processing(
             result=(
                 RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_pending_required_processing")
             )
+        )
+
+    control = _read_control_state(uid, db_client=client)
+    if item.account_generation != control.account_generation:
+        return RequiredProcessingAttempt(
+            result=RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason='account_generation_changed')
+        )
+    try:
+        _require_processing_writer(control, item)
+    except RequiredIntakeSourceChanged:
+        return RequiredProcessingAttempt(
+            result=RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason='writer_mode_owned')
         )
 
     current_time = _coerce_utc(now or datetime.now(timezone.utc))
@@ -989,7 +1065,9 @@ def _begin_required_processing(
     return RequiredProcessingAttempt(context=(item, state, lease_owner, current_time))
 
 
-def _settle_required_processing(uid, context, *, db_client, processed=None, error=None, result_guard=None):
+def _settle_required_processing(
+    uid, context, *, db_client, processed=None, error=None, result_guard=None, expected_head_commit_id=None
+):
     item, state, lease_owner, current_time = context
     memory_id = item.memory_id
     client = db_client
@@ -999,14 +1077,16 @@ def _settle_required_processing(uid, context, *, db_client, processed=None, erro
         assert processed is not None
         if result_guard is not None:
             result_guard()
+        fence = {'expected_head_commit_id': expected_head_commit_id} if expected_head_commit_id is not None else {}
         status = _apply_processed_result(
             item,
             processed,
             attempt_count=state.attempt_count,
             db_client=client,
             now=current_time,
+            **fence,
         )
-    except PromotionFlexDeferred:
+    except (RequiredProcessingDeferred, RequiredIntakeSourceChanged):
         try:
             _release_deferred_retry_state(
                 uid,
@@ -1081,6 +1161,7 @@ def process_required_memory_item(
     now=None,
     attempt_lease_seconds=REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     result_guard=None,
+    expected_head_commit_id=None,
 ):
     if processor is None:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="processor_not_configured")
@@ -1098,7 +1179,46 @@ def process_required_memory_item(
     except Exception as exc:
         error = exc
     return _settle_required_processing(
-        uid, context, db_client=client, processed=processed, error=error, result_guard=result_guard
+        uid,
+        context,
+        db_client=client,
+        processed=processed,
+        error=error,
+        result_guard=result_guard,
+        **({'expected_head_commit_id': expected_head_commit_id} if expected_head_commit_id is not None else {}),
+    )
+
+
+async def process_required_memory_item_async(
+    uid, memory_id, *, db_client, processor, timeout_seconds, result_guard=None, now=None
+):
+    """The same revision lease/receipt path without holding a DB worker on IO.
+
+    Cancellation cannot stop executor IO. A cancelled call never settles or
+    releases its lease; the next sweep reclaims it after the ordinary TTL.
+    """
+    begun = await run_blocking(db_executor, _begin_required_processing, uid, memory_id, db_client=db_client, now=now)
+    if begun.result is not None:
+        return begun.result
+    context = begun.context
+    assert context is not None
+    processed, error = None, None
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            processed = await run_blocking(llm_executor, processor, context[0])
+    except TimeoutError:
+        error = RequiredProcessingDeferred('required_intake_timeout')
+    except Exception as exc:
+        error = exc
+    return await run_blocking(
+        db_executor,
+        _settle_required_processing,
+        uid,
+        context,
+        db_client=db_client,
+        processed=processed,
+        error=error,
+        result_guard=result_guard,
     )
 
 
@@ -1172,7 +1292,7 @@ async def run_required_memory_processing_async(
             if result.quarantined:
                 report.quarantined_memory_ids.append(item.memory_id)
             if result.error_code == "flex_deferred":
-                raise PromotionFlexDeferred("required_intake_deferred")
+                raise RequiredProcessingDeferred("required_intake_deferred")
         else:
             report.skipped_memory_ids.append(item.memory_id)
     return report

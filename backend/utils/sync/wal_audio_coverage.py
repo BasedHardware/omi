@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional, TypeGuard
 
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.sync_audio_coverage import sync_wal_audio_coverage_active_for
 from utils.capture_evidence import decoded_frame_map
 from utils.executors import submit_with_context
@@ -37,6 +36,7 @@ from utils.sync.audio_coverage import (
     validated_live_ranges,
 )
 from utils.sync.files import get_timestamp_from_path, get_wav_duration
+from utils.sync.capture_clock import is_early_capture_time
 from utils.sync.lineage_diagnostics import classify_generation_row
 from utils.sync.recording_session_target import clean_text, source_value
 
@@ -231,6 +231,9 @@ def apply_wal_audio_coverage(
                     'incomplete': source_incomplete,
                     'coverage_trimmed': True,
                 }
+                clock_origin = (frame_map or {}).get('capture_clock_at', float(base_timestamp))
+                if is_early_capture_time(clock_origin):
+                    frame_maps[derivative_path]['capture_clock_at'] = clock_origin
                 wav_paths.append(derivative_path)
     except Exception as e:
         _remove_generated(generated)
@@ -441,11 +444,7 @@ def build_sync_source_frame_maps(
 ) -> dict:
     """Anchor each decoded WAL WAV to original frame ordinals when S1 claims exist."""
     source_frame_maps: dict = {}
-    if not (
-        capture_evidence_dark_write_enabled()
-        and isinstance(capture_evidence_claims, Mapping)
-        and capture_evidence_claims
-    ):
+    if not ((isinstance(capture_evidence_claims, Mapping) and capture_evidence_claims)):
         return source_frame_maps
     for wav_path in wav_paths:
         claim = capture_evidence_claims.get(os.path.basename(wav_path).replace('.wav', '.bin'))
@@ -463,6 +462,12 @@ def build_sync_source_frame_maps(
                 wav_channels=decoded_wav.getnchannels(),
             )
         if mapping is not None:
+            try:
+                clock_origin = get_timestamp_from_path(wav_path)
+            except (IndexError, ValueError):
+                clock_origin = None
+            if clock_origin is not None and is_early_capture_time(clock_origin):
+                mapping['capture_clock_at'] = clock_origin
             source_frame_maps[wav_path] = mapping
     return source_frame_maps
 
@@ -504,11 +509,12 @@ async def apply_sync_wal_audio_coverage(
     """
     source_frame_maps = build_sync_source_frame_maps(capture_evidence_claims, wav_paths, decoded_frames)
     if not (
-        source_frame_maps
-        and sync_wal_audio_coverage_active_for(uid)
-        and capture_evidence_dark_write_enabled()
-        and capture_evidence_claims
-        and recording_session_id
+        (
+            source_frame_maps
+            and sync_wal_audio_coverage_active_for(uid)
+            and capture_evidence_claims
+            and recording_session_id
+        )
     ):
         return wav_paths, source_frame_maps, False
 

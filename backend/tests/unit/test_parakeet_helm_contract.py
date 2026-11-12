@@ -42,7 +42,7 @@ def test_parakeet_values_own_explicit_stream_capacity_and_allocation(environment
 def test_prod_parakeet_autoscaling_and_zone_spread_contract():
     values = _values('prod')
 
-    assert values['autoscaling']['minReplicas'] == 3
+    assert values['autoscaling']['minReplicas'] == 7
     assert values['autoscaling']['maxReplicas'] == 12
     assert values['topologySpreadConstraints'] == [
         {
@@ -65,14 +65,14 @@ def test_demand_scaler_renders_requests_and_queue_ages_without_raw_tail_or_gpu()
         '-f',
         str(CHART / 'prod_omi_parakeet_values.yaml'),
         '--set',
-        'autoscaling.demand.enabled=true',
+        'fleetRetired=false,autoscaling.demand.enabled=true',
         '--set-string',
         'image.tag=packing-contract-test',
         '--show-only',
         'templates/hpa.yaml',
     ]
     hpa = yaml.safe_load(subprocess.run(command, check=True, text=True, capture_output=True).stdout)
-    assert hpa['spec']['minReplicas'] == 3 and hpa['spec']['maxReplicas'] == 12
+    assert hpa['spec']['minReplicas'] == 7 and hpa['spec']['maxReplicas'] == 12
     metrics = hpa['spec']['metrics']
     assert all(metric['type'] == 'Pods' for metric in metrics)
     targets = {metric['pods']['metric']['name']: str(metric['pods']['target']['averageValue']) for metric in metrics}
@@ -89,6 +89,46 @@ def test_packing_is_dark_and_admission_remains_two_thirty_five():
     assert _literal_env(values)['PARAKEET_EXPLICIT_CUDA_GRAPHS'] == 'false'
     assert values['autoscaling']['requestsPerPod'] == 2
     assert values['autoscaling']['targetGPUUtilization'] == 35
+
+
+@pytest.mark.parametrize('demand_enabled', [False, True])
+def test_workload_only_hpa_omits_mixed_latency_and_preserves_capacity_controls(demand_enabled):
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm not installed')
+    assert _values('prod')['autoscaling']['workloadOnly'] is True
+    command = [
+        helm,
+        'template',
+        'prod-omi-parakeet',
+        str(CHART),
+        '-f',
+        str(CHART / 'prod_omi_parakeet_values.yaml'),
+        '--set',
+        'fleetRetired=false,autoscaling.workloadOnly=true',
+        '--set',
+        f'autoscaling.demand.enabled={str(demand_enabled).lower()}',
+        '--set-string',
+        'image.tag=workload-hpa-contract-test',
+        '--show-only',
+        'templates/hpa.yaml',
+    ]
+    hpa = yaml.safe_load(subprocess.run(command, check=True, text=True, capture_output=True).stdout)
+    spec = hpa['spec']
+    assert (spec['minReplicas'], spec['maxReplicas']) == (7, 12)
+    assert spec['behavior'] == _values('prod')['autoscaling']['behavior']
+    metrics = {m[m['type'].lower()]['metric']['name']: m[m['type'].lower()]['target'] for m in spec['metrics']}
+    expected = {'parakeet_active_requests_total': {'type': 'AverageValue', 'averageValue': '2'}}
+    if demand_enabled:
+        expected.update(
+            {
+                'parakeet_live_queue_age_seconds': {'type': 'AverageValue', 'averageValue': '0.75'},
+                'parakeet_backfill_queue_age_seconds': {'type': 'AverageValue', 'averageValue': '30'},
+            }
+        )
+    else:
+        expected['parakeet_gpu_utilization'] = {'type': 'Value', 'value': '35'}
+    assert metrics == expected
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -137,44 +177,11 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
     assert 'name: PARAKEET_STREAM_CAPACITY\n              value: "25"' in rendered
     assert 'name: PARAKEET_STREAM_ALLOCATION_PERCENT\n              value: "100"' in rendered
     deployment = next(document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'Deployment')
-    hpa = next(
-        document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'HorizontalPodAutoscaler'
+    # Production retirement keeps model/admission configuration without an autoscaler.
+    assert deployment['spec']['replicas'] == 0
+    assert not any(
+        document and document.get('kind') == 'HorizontalPodAutoscaler' for document in yaml.safe_load_all(rendered)
     )
-    assert hpa['spec']['minReplicas'] == 3
-    assert hpa['spec']['maxReplicas'] == 12
-    assert hpa['spec']['metrics'] == [
-        {
-            'type': 'Pods',
-            'pods': {
-                'metric': {'name': 'parakeet_active_requests_total'},
-                'target': {'type': 'AverageValue', 'averageValue': '2'},
-            },
-        },
-        {
-            'type': 'External',
-            'external': {
-                'metric': {'name': 'parakeet_gpu_utilization'},
-                'target': {'type': 'Value', 'value': '35'},
-            },
-        },
-        {
-            'type': 'External',
-            'external': {
-                'metric': {'name': 'parakeet_request_latency_p99'},
-                'target': {'type': 'Value', 'value': '3'},
-            },
-        },
-    ]
-    assert hpa['spec']['behavior'] == {
-        'scaleUp': {
-            'stabilizationWindowSeconds': 0,
-            'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 60}],
-        },
-        'scaleDown': {
-            'stabilizationWindowSeconds': 900,
-            'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 900}],
-        },
-    }
     assert 'progressDeadlineSeconds' not in deployment['spec']
     container = deployment['spec']['template']['spec']['containers'][0]
     assert container['readinessProbe']['httpGet']['path'] == '/health'

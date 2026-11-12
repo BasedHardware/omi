@@ -27,7 +27,7 @@ vi.mock("@/lib/services/user-growth", () => ({
   sliceSeries: vi.fn(),
 }));
 
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { GET } from "@/app/api/omi/stats/daily-new-users/route";
 import { GET as wallGET } from "@/app/api/omi/stats/wall/route";
 vi.mock("@/lib/wall-cache", () => ({
@@ -65,6 +65,7 @@ function jwt(overrides: Record<string, unknown> = {}, key = privateKey) {
     "base64url"
   )}`;
 }
+const scoped = (req: NextRequest) => requireScope(req, "analytics:read");
 function request(
   token: string,
   path = "/api/omi/stats/daily-new-users",
@@ -81,7 +82,10 @@ async function denied(
   path?: string,
   method?: string
 ) {
-  const response = await verifyAdmin(request(token, path, method));
+  const response = await requireScope(
+    request(token, path, method),
+    "analytics:read"
+  );
   expect(response).toBeInstanceOf(NextResponse);
   expect((response as NextResponse).status).toBe(401);
   expect(console.info).toHaveBeenCalledTimes(1);
@@ -151,8 +155,8 @@ describe("stats-only Google machine identity", () => {
     "accepts Google's issuer %s and wall scope",
     async (iss) => {
       expect(
-        await verifyAdmin(request(jwt({ iss }), "/api/omi/stats/wall"))
-      ).toEqual({ uid: "stats-reader:123456789" });
+        await scoped(request(jwt({ iss }), "/api/omi/stats/wall"))
+      ).toMatchObject({ uid: "stats-reader:123456789", kind: "stats-reader" });
     }
   );
   it.each([
@@ -171,6 +175,13 @@ describe("stats-only Google machine identity", () => {
   ])("rejects invalid signed claims %j", async (claims, reason) =>
     denied(jwt(claims), reason)
   );
+  it("holds only the stats scopes it had before roles", async () => {
+    const response = await requireScope(request(jwt()), "users:read");
+    expect((response as NextResponse).status).toBe(403);
+    expect(await requireScope(request(jwt()), "finance:read")).toMatchObject({
+      kind: "stats-reader",
+    });
+  });
   it("rejects an unsigned JWT", async () => {
     const token = jwt().split(".");
     await denied(
@@ -208,7 +219,7 @@ describe("stats-only Google machine identity", () => {
       "ADMIN_STATS_READER_SAS",
       `other@project.iam.gserviceaccount.com, \n ${email}`
     );
-    expect(await verifyAdmin(request(jwt()))).toEqual({
+    expect(await scoped(request(jwt()))).toMatchObject({
       uid: "stats-reader:123456789",
     });
   });
@@ -218,7 +229,7 @@ describe("stats-only Google machine identity", () => {
   });
   it("cannot turn forged Firebase claims into admin access", async () => {
     firebase.verify.mockResolvedValue(null);
-    const response = await verifyAdmin(
+    const response = await scoped(
       request(jwt({ iss: "https://securetoken.google.com/based-hardware" }))
     );
     expect((response as NextResponse).status).toBe(401);
@@ -232,14 +243,14 @@ describe("existing human Firebase admin authentication", () => {
     async (method) => {
       firebase.verify.mockResolvedValue({ uid: "human-admin" });
       expect(
-        await verifyAdmin(
+        await scoped(
           request(
             jwt({ iss: "https://securetoken.google.com/based-hardware" }),
             "/api/omi/team-members",
             method
           )
         )
-      ).toEqual({ uid: "human-admin" });
+      ).toMatchObject({ uid: "human-admin", kind: "human" });
       expect(firebase.collection).toHaveBeenCalledWith("adminData");
       expect(console.info).not.toHaveBeenCalled();
     }
@@ -248,15 +259,15 @@ describe("existing human Firebase admin authentication", () => {
     vi.stubEnv("ADMIN_STATS_READER_SAS", "");
     firebase.verify.mockResolvedValue({ uid: "human-admin" });
     expect(
-      await verifyAdmin(
+      await scoped(
         request(jwt({ iss: "https://securetoken.google.com/based-hardware" }))
       )
-    ).toEqual({ uid: "human-admin" });
+    ).toMatchObject({ uid: "human-admin", kind: "human" });
   });
   it("still forbids a Firebase user without admin membership", async () => {
     firebase.verify.mockResolvedValue({ uid: "ordinary-user" });
     firebase.doc.mockResolvedValue({ exists: false });
-    const response = await verifyAdmin(
+    const response = await scoped(
       request(jwt({ iss: "https://securetoken.google.com/based-hardware" }))
     );
     expect((response as NextResponse).status).toBe(403);
@@ -270,7 +281,7 @@ it("every stats route, including wall when merged, uses the shared auth boundary
       if (entry.isDirectory()) visit(path);
       else if (entry.name === "route.ts") {
         expect(readFileSync(path, "utf8"), path).toMatch(
-          /verifyAdmin\(request\)|mobileOnboardingHandler\(/
+          /requireScope\(request, ['"](analytics|finance):read['"]\)|mobileOnboardingHandler\(/
         );
       }
     }

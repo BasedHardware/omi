@@ -6,6 +6,7 @@ Verifies:
 """
 
 import importlib.util
+from contextlib import ExitStack
 import os
 import shutil as _shutil
 import sys
@@ -120,6 +121,24 @@ def _desktop_transcribe_isolation():
     # ``stub_modules`` teardown: evict new keys AND restore swapped values.
     _saved_modules = dict(_sys.modules)
     _saved_keys = set(_saved_modules)
+    # The real auth/timeit module now depends on directory routing. Keep this
+    # transcription-only harness off that persistence plane, just like its
+    # existing Firestore/provider collaborators.
+    directory = ModuleType('database.directory')
+    directory.__path__ = []
+    directory_router = ModuleType('database.directory.router')
+    directory_router.routing_active = lambda: False
+    directory_router.cached_plane = lambda _uid: 'firestore'
+    directory_router.DirectoryRoutingUnavailable = RuntimeError
+    directory_scope = ExitStack()
+    directory_scope.enter_context(
+        stub_modules(
+            {
+                'database.directory': directory,
+                'database.directory.router': directory_router,
+            }
+        )
+    )
     try:
         _restore_package_paths()
 
@@ -445,157 +464,11 @@ def _desktop_transcribe_isolation():
             _cur = _sys2.modules.get(_k)
             if _cur is not None and _cur is not _orig:
                 _sys2.modules[_k] = _orig
+        directory_scope.close()
 
 
 # ---------------------------------------------------------------------------
 # deepgram_prerecorded_from_bytes: encoding/language/model options
-# ---------------------------------------------------------------------------
-
-
-class TestDeepgramPrerecordedFromBytesPCM:
-    """Verify raw PCM options are forwarded correctly to Deepgram."""
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_pcm_encoding_passed_to_options(self, mock_client):
-        """When encoding='linear16', options should include encoding, sample_rate, channels."""
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {
-            'results': {
-                'channels': [
-                    {
-                        'alternatives': [
-                            {
-                                'words': [
-                                    {
-                                        'word': 'hello',
-                                        'start': 0.0,
-                                        'end': 0.5,
-                                        'speaker': 0,
-                                        'punctuated_word': 'Hello',
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            }
-        }
-        mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
-
-        pcm_bytes = b'\x00' * 3200  # 100ms of 16kHz 16-bit mono
-        deepgram_prerecorded_from_bytes(pcm_bytes, encoding='linear16', sample_rate=16000, channels=1)
-
-        call_args = mock_client.listen.rest.v.return_value.transcribe_file.call_args
-        source = call_args[0][0]
-        options = call_args[0][1]
-
-        assert source['mimetype'] == 'audio/raw'
-        assert options['encoding'] == 'linear16'
-        assert options['sample_rate'] == 16000
-        assert options['channels'] == 1
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_wav_no_encoding_options(self, mock_client):
-        """When encoding=None (WAV mode), encoding/sample_rate/channels should NOT be in options."""
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {'results': {'channels': [{'alternatives': [{'words': []}]}]}}
-        mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
-
-        deepgram_prerecorded_from_bytes(b'\x00' * 1000, encoding=None)
-
-        call_args = mock_client.listen.rest.v.return_value.transcribe_file.call_args
-        source = call_args[0][0]
-        options = call_args[0][1]
-
-        assert source['mimetype'] == 'audio/wav'
-        assert 'encoding' not in options
-        assert 'sample_rate' not in options
-        assert 'channels' not in options
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_language_passed_to_options(self, mock_client):
-        """When language is specified (not multi), it should be in options."""
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {'results': {'channels': [{'alternatives': [{'words': []}]}]}}
-        mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
-
-        deepgram_prerecorded_from_bytes(b'\x00' * 100, language='es', model='nova-3')
-
-        call_args = mock_client.listen.rest.v.return_value.transcribe_file.call_args
-        options = call_args[0][1]
-
-        assert options['language'] == 'es'
-        assert options['model'] == 'nova-3'
-        assert options['detect_language'] is False
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_multi_language_enables_detection(self, mock_client):
-        """When language='multi', detect_language should be True and no language set."""
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {'results': {'channels': [{'alternatives': [{'words': []}]}]}}
-        mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
-
-        deepgram_prerecorded_from_bytes(b'\x00' * 100, language='multi')
-
-        call_args = mock_client.listen.rest.v.return_value.transcribe_file.call_args
-        options = call_args[0][1]
-
-        assert options['detect_language'] is True
-        assert 'language' not in options
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_model_param_forwarded(self, mock_client):
-        """Custom model name should be forwarded to Deepgram options."""
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {'results': {'channels': [{'alternatives': [{'words': []}]}]}}
-        mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
-
-        deepgram_prerecorded_from_bytes(b'\x00' * 100, model='nova-3', language='zh')
-
-        call_args = mock_client.listen.rest.v.return_value.transcribe_file.call_args
-        options = call_args[0][1]
-
-        assert options['model'] == 'nova-3'
-        assert options['language'] == 'zh'
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_return_language_extracts_detected_lang(self, mock_client):
-        """return_language=True should return (words, detected_language) tuple."""
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {
-            'results': {
-                'channels': [
-                    {
-                        'detected_language': 'es-ES',
-                        'alternatives': [
-                            {
-                                'words': [
-                                    {
-                                        'word': 'hola',
-                                        'start': 0.0,
-                                        'end': 0.5,
-                                        'speaker': 0,
-                                        'punctuated_word': 'Hola',
-                                    }
-                                ]
-                            }
-                        ],
-                    }
-                ]
-            }
-        }
-        mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
-
-        result = deepgram_prerecorded_from_bytes(b'\x00' * 100, language='multi', return_language=True)
-
-        assert isinstance(result, tuple)
-        words, detected_lang = result
-        assert len(words) == 1
-        assert detected_lang == 'es'  # normalized from es-ES
-
-
-# ---------------------------------------------------------------------------
-# transcribe_pcm_bytes: language selection and error propagation
 # ---------------------------------------------------------------------------
 
 
@@ -780,59 +653,6 @@ class TestTranscribePcmBytes:
 # ---------------------------------------------------------------------------
 
 
-class TestDeepgramPrerecordedFromBytesEdgeCases:
-    """Verify retry logic, return_language with empty words, and error paths."""
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_retry_raises_after_max_attempts(self, mock_client):
-        """After the configured retry is exhausted, should raise RuntimeError."""
-        mock_client.listen.rest.v.return_value.transcribe_file.side_effect = Exception('connection timeout')
-
-        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
-            deepgram_prerecorded_from_bytes(b'\x00' * 100, encoding='linear16')
-
-        # Should have been called twice (initial attempt + one retry)
-        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 2
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_return_language_empty_words_returns_detected_lang(self, mock_client):
-        """return_language=True with no words should return ([], detected_language)."""
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {
-            'results': {'channels': [{'detected_language': 'ja', 'alternatives': [{'words': []}]}]}
-        }
-        mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
-
-        result = deepgram_prerecorded_from_bytes(b'\x00' * 100, language='multi', return_language=True)
-
-        assert isinstance(result, tuple)
-        words, lang = result
-        assert words == []
-        assert lang == 'ja'
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_no_channels_raises_and_retries(self, mock_client):
-        """Empty channels in response should trigger retry."""
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {'results': {'channels': []}}
-        mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
-
-        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
-            deepgram_prerecorded_from_bytes(b'\x00' * 100)
-
-        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 2
-
-
-# ---------------------------------------------------------------------------
-# connect_to_deepgram: start() failure guard (#6302)
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# Router-level endpoint tests: content-type dispatch and validation
-# ---------------------------------------------------------------------------
-
-
 def _stub_router_deps():
     """Stub all transitive dependencies needed to import routers.chat via importlib."""
     extra_models = [
@@ -881,7 +701,6 @@ def _stub_router_deps():
     sys.modules['utils.voice_duration_limiter'] = limiter_stub
     subscription_stub = sys.modules.setdefault('utils.subscription', MagicMock())
     subscription_stub.enforce_chat_quota = MagicMock()
-    subscription_stub.is_trial_paywalled = MagicMock(return_value=False)
     # Ensure redis_db.check_rate_limit returns (True, 99, 0)
     rdb = sys.modules.get('database.redis_db')
     if rdb:

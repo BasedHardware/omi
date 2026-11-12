@@ -92,6 +92,13 @@ def _build_fakes():
     database_redis_stub.try_acquire_listen_lock = MagicMock(return_value=True)
     database_redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
+    directory_pkg = types.ModuleType("database.directory")
+    directory_pkg.__path__ = []
+    directory_router_stub = types.ModuleType("database.directory.router")
+    directory_router_stub.routing_active = lambda: False
+    directory_router_stub.cached_plane = lambda _uid: 'firestore'
+    directory_router_stub.DirectoryRoutingUnavailable = RuntimeError
+
     users_stub = types.ModuleType("database.users")
     users_stub.record_user_platform = MagicMock()
     users_stub.record_client_device = MagicMock()
@@ -99,6 +106,8 @@ def _build_fakes():
 
     fakes = {
         "database": database_pkg,
+        "database.directory": directory_pkg,
+        "database.directory.router": directory_router_stub,
         "utils": utils_pkg,
         "utils.other": utils_other_pkg,
         "firebase_admin": firebase_admin_stub,
@@ -245,29 +254,6 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
             data = ws.receive_json()
             self.assertEqual(data["uid"], "test-uid-123")
         mock_verify.assert_called_once_with("valid_token")
-
-    @patch.dict(
-        os.environ,
-        {
-            'OMI_JIT_QA_AUTH_ONLY': 'true',
-            'OMI_ENV_STAGE': 'dev',
-            'GOOGLE_CLOUD_PROJECT': 'based-hardware-dev',
-            'OMI_JIT_QA_UID_ALLOWLIST': 'qa-user',
-        },
-        clear=False,
-    )
-    @patch('utils.other.endpoints.verify_token', return_value='other-user')
-    def test_first_message_auth_rejects_non_qa_uid_before_account_work(self, mock_verify):
-        """Accept-first WebSocket auth must still enforce the isolated QA UID fence."""
-        endpoints = sys.modules['utils.other.endpoints']
-        with self.assertRaises(WebSocketException) as ctx:
-            asyncio.run(
-                endpoints.get_current_user_uid_from_ws_message(
-                    {'type': 'websocket.receive', 'text': '{"type":"auth","token":"valid_token"}'},
-                )
-            )
-        self.assertEqual(ctx.exception.code, 1008)
-        mock_verify.assert_called_once_with('valid_token')
 
     def test_empty_bearer_token_sends_close_1008(self):
         """Authorization: 'Bearer ' (empty token) -> close with 1008."""

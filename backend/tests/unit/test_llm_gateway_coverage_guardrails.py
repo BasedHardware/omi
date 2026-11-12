@@ -62,12 +62,14 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
     DirectUse('routers/desktop_tts_updates.py', 'OPENAI_API_KEY'),
-    DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
+    # utils/llm/providers.py ChatGoogleGenerativeAI and utils/llm/clients.py
+    # AsyncAnthropic / ChatAnthropic constructions moved behind lazy SDK
+    # materializers inside the same gateway seam files (deferred heavy imports),
+    # so the scanner no longer sees them as direct uses; the seam itself still
+    # owns every provider client construction.
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
-    DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
-    DirectUse('utils/llm/clients.py', 'ChatAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
@@ -100,22 +102,15 @@ _RESOLVER_DEFINITION_FILE = 'utils/llm/model_config.py'
 # clients._so_gemini: iterates the active profile.
 # judge.py: model_feature defaults to the pinned screen_frame_judge key.
 # managed_compute.py: pass-through of authorize_managed_compute's feature into get_provider.
-# llm_input_dedupe.py: checkpoint identity follows the actual notes / L1 extractor route.
 KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
     {
         ('utils/llm/persona.py', 'get_llm', 'feature'),
         ('llm_gateway/gateway/config_loader.py', 'get_model', 'feature'),
         ('llm_gateway/gateway/config_loader.py', 'get_provider', 'feature'),
         ('utils/llm/clients.py', '_get_model_config', 'feature'),
-        ('utils/memory/belief_backfill.py', 'get_llm', 'BELIEF_BACKFILL_LLM_FEATURE'),
         ('utils/llm/clients.py', '_get_model_config', 'f'),
         ('utils/screen_frames/judge.py', 'get_llm', 'model_feature'),
         ('utils/managed_compute.py', 'get_provider', 'feature'),
-        (
-            'utils/conversations/llm_input_dedupe.py',
-            'get_route_ref',
-            "'conv_structure' if feature == 'notes' else 'memory_l1'",
-        ),
     }
 )
 _FEATURE_SCAN_SKIP_DIRS = {'.venv', 'venv', '.openapi-venv', '__pycache__', 'tests'}
@@ -280,8 +275,6 @@ def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
 def test_only_background_flex_routes_allow_the_documented_flex_timeout():
     config = load_gateway_config(prod_mode=True)
 
-    assert config.route_artifacts['route.memory_conflict.model_config.001'].timeouts.request_ms == 120_000
-    assert config.route_artifacts['route.memory_conflict_flex.model_config.001'].timeouts.request_ms == 900_000
     assert config.route_artifacts['route.memory_l2_flex.model_config.001'].timeouts.request_ms == 900_000
     assert config.route_artifacts['route.x_memory_extraction_flex.model_config.001'].timeouts.request_ms == 900_000
 

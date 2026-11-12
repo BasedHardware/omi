@@ -75,6 +75,8 @@ def _load_parakeet():
         fakes[mod] = MagicMock()
 
     with stub_modules(fakes):
+        # gpu_worker imports its sibling language_gate; register it the same way.
+        load_module_fresh("language_gate", str(_PARAKEET_DIR / "language_gate.py"))
         gpu_worker = load_module_fresh("gpu_worker", str(_PARAKEET_DIR / "gpu_worker.py"))
         batch_engine = load_module_fresh("batch_engine", str(_PARAKEET_DIR / "batch_engine.py"))
         BatchEngine = batch_engine.BatchEngine

@@ -4,10 +4,14 @@ Do not import the existing Parakeet GPUWorker here: it owns a second GPU thread
 and loads unrelated embedding models. This chain is the sole model owner.
 """
 
+from collections import OrderedDict
 import io
 from copy import deepcopy
 from contextlib import nullcontext
+from typing import TypeGuard
+import math
 import wave
+from typing import Any, Callable
 import numpy as np
 
 try:
@@ -22,15 +26,40 @@ except ImportError:
     open_dict = None
 
 from config.batch_pipeline_providers import provider_config
-from diarizer.batch_pipeline import PipelineWorker, SAMPLE_RATE, crop_model_vad_spans, validate_words
-from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
+from config.batch_pipeline_empty_asr import safety_net_enabled
+from utils.batch_pipeline.word_validation import validate_words
+from diarizer.batch_pipeline import (
+    PipelineWorker,
+    SAMPLE_RATE,
+    bounded_window_words,
+    crop_model_vad_spans,
+    padded_retry_fits,
+    padded_retry_seconds,
+)
+from diarizer.batch_pipeline_context import capture_stream
+from diarizer.batch_pipeline_flight import (
+    VAD_SEGMENTATION_KEY,
+    FlightPyannote,
+    VadSegmentationReuse,
+    diarization_payload,
+    install_shared_trunk,
+)
+from utils.batch_pipeline.audio import INTAKE_CONTEXT_VERSION, read_context
+from utils.batch_pipeline import leaf_timings
+
+# NeMo label-looping CUDA graph modes; both replay the eager algorithm exactly.
+# "no_graphs" is NeMo's stateful test path and never a production mode.
+_GRAPH_MODES = frozenset({'full_graph', 'no_while_loops'})
 
 
-def pin_parakeet_decoding(model):
-    """Persist eager decoding across NeMo's first timestamp initialization.
+def pin_parakeet_decoding(model, *, cuda_graphs):
+    """Persist the chosen decoding mode across NeMo's first timestamp initialization.
 
-    A one-shot disable_cuda_graphs() is insufficient: transcribe(timestamps=True)
-    rebuilds decoding from cfg. Set both options before that reconstruction.
+    A one-shot toggle is insufficient: transcribe(timestamps=True) rebuilds
+    decoding from cfg. Set every option before that reconstruction. Both modes
+    run batched label-looping greedy TDT (arXiv 2406.06220); graphs only remove
+    per-step kernel launches. NeMo recaptures only when a call exceeds the
+    captured batch or frame count, so varying window counts replay one graph.
     """
     config = deepcopy(model.cfg.decoding)
     # Some checkpoints use a structured DictConfig with initially absent fields.
@@ -42,27 +71,38 @@ def pin_parakeet_decoding(model):
         else nullcontext()
     )
     with editing:
+        config.strategy = 'greedy_batch'
         config.compute_timestamps = True
-        config.greedy.use_cuda_graph_decoder = False
+        config.greedy.use_cuda_graph_decoder = cuda_graphs
     model.change_decoding_strategy(config, verbose=False)
-    model.decoding.decoding.disable_cuda_graphs()
-    assert_eager_decoding(model)
+    if not cuda_graphs:
+        model.decoding.decoding.disable_cuda_graphs()
+    assert_decoding_mode(model, cuda_graphs)
 
 
-def assert_eager_decoding(model):
-    computer = model.decoding.decoding.decoding_computer
-    if computer.allow_cuda_graphs is not False or computer.full_graph is not None:
+def assert_decoding_mode(model, cuda_graphs):
+    # Only GreedyBatchedTDTInfer owns a label-looping computer.
+    computer = getattr(model.decoding.decoding, 'decoding_computer', None)
+    if computer is None:
+        raise RuntimeError('worker CUDA graph policy violated; restart required')
+    mode = getattr(computer.cuda_graphs_mode, 'value', computer.cuda_graphs_mode)
+    if cuda_graphs:
+        actual = computer.allow_cuda_graphs is True and mode in _GRAPH_MODES
+    else:
+        actual = computer.allow_cuda_graphs is False and mode is None and computer.full_graph is None
+    if not actual:
         raise RuntimeError('worker CUDA graph policy violated; restart required')
 
 
 class ParakeetWords:
-    def __init__(self, model, *, enforce_eager=False):
+    def __init__(self, model, *, cuda_graphs=None):
         self.model = model
-        self.enforce_eager = enforce_eager
+        # None skips the assertion (unpinned fakes); a bool is the pinned mode.
+        self.cuda_graphs = cuda_graphs
 
     def transcribe_batch(self, samples):
-        if self.enforce_eager:
-            assert_eager_decoding(self.model)
+        if self.cuda_graphs is not None:
+            assert_decoding_mode(self.model, self.cuda_graphs)
         # NeMo accepts float32 16kHz arrays: no file write, read or second decode.
         hypotheses = self.model.transcribe(
             samples,
@@ -72,13 +112,13 @@ class ParakeetWords:
             num_workers=0,
             verbose=False,
         )
-        if self.enforce_eager:
-            assert_eager_decoding(self.model)
+        if self.cuda_graphs is not None:
+            assert_decoding_mode(self.model, self.cuda_graphs)
         result = []
         for hypothesis in hypotheses:
             entries = hypothesis.timestamp.get('word', [])
             words = [{'word': w['word'], 'timestamp': [float(w['start']), float(w['end'])]} for w in entries]
-            if hypothesis.text.strip() and not words:
+            if hypothesis.text.strip() and not words and not safety_net_enabled():
                 raise ValueError('Parakeet returned text without word clocks')
             result.append(words)
         return result
@@ -95,12 +135,11 @@ class ParakeetWords:
         duration = len(samples) / SAMPLE_RATE
         left = 2 * SAMPLE_RATE
         right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
-        padded_seconds = (len(samples) + left + right) / SAMPLE_RATE
-        if padded_seconds > min(120, max_padded_seconds):
-            # The callback identifies enforced dispatch. Main's unflagged
-            # adapter still returns an empty hypothesis; policy holds must not
-            # spend a provider-failure attempt for audio never submitted.
-            return None if before_dispatch is not None else []
+        padded_seconds = padded_retry_seconds(samples)
+        if not padded_retry_fits(samples, max_padded_seconds):
+            # Never return an empty hypothesis for audio that exceeded the
+            # padded recovery bound and was never submitted to the model.
+            return None
         padded = np.pad(samples, (left, right))
         if before_dispatch is not None and not before_dispatch():
             return None  # Retain raw work without spending a provider-failure attempt.
@@ -116,43 +155,202 @@ class ParakeetWords:
             # Only the real capture owns words. Synthetic padding can never
             # establish speech; intersect edge-straddling clocks with capture.
             if 0 <= (start + end) / 2 < duration:
-                result.append({**word, 'timestamp': [max(0, start), min(duration, end)]})
-        return validate_words(result, duration)
+                result.append({**word, 'timestamp': [start, end]})
+        return bounded_window_words(result, duration)
 
 
 class PyannoteDiarizer:
-    def __init__(self, model):
+    def __init__(self, model, *, timings_of: Callable[[], Any] | None = None, segmentation_reuse=None):
         self.model = model
+        self.timings_of = timings_of or (lambda: None)
+        self.segmentation_reuse = segmentation_reuse
 
     def __call__(self, samples):
         if torch is None:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
-        with torch.inference_mode():
-            output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
-        activity = [
-            {'start': float(t.start), 'end': float(t.end), 'speaker': str(s)} for t, s in output.speaker_diarization
-        ]
-        exclusive = getattr(output, 'exclusive_speaker_diarization', None)
-        turns = (
-            [{'start': float(t.start), 'end': float(t.end), 'speaker': str(s)} for t, s in exclusive]
-            if exclusive is not None
-            else exclusive_from_activity(activity)
-        )
-        return {'turns': turns, 'overlaps': overlap_regions(activity), 'backend': 'pyannote'}
+        file = {'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000}
+        if self.segmentation_reuse is not None:
+            # Full-unit diarization of the waveform VAD just scored: same forwards.
+            scores = self.segmentation_reuse.take(samples)
+            if scores is not None:
+                file[VAD_SEGMENTATION_KEY] = scores
+        with leaf_timings.active(self.timings_of()), leaf_timings.embedding_hook(self.model), torch.inference_mode():
+            output = self.model(file)
+        return diarization_payload(output)
 
 
 class PyannoteVAD:
-    def __init__(self, model):
+    def __init__(self, model, *, segmentation_reuse=None):
         self.model = model
+        self.segmentation_reuse = segmentation_reuse
 
     def __call__(self, samples):
         if torch is None:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
-        with torch.inference_mode():
+        reuse = self.segmentation_reuse
+        with reuse.capturing(samples) if reuse is not None else nullcontext(), torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
-        return crop_model_vad_spans(
+        spans = crop_model_vad_spans(
             [(float(t.start), float(t.end)) for t in output.get_timeline().support()], len(samples) / 16000
         )
+        if reuse is not None and not spans:
+            reuse.forget(samples)  # Silence is never diarized.
+        return spans
+
+
+class StagedAudio:
+    """Fetch+decode staged audio once, keeping each unit's capture-stream identity.
+
+    The authenticated intake context frozen in the staged WAV names the source,
+    device and lock the per-unit chunk identity was built from. Record-lane
+    audio carries no intake context; its conversation is its stream.
+    """
+
+    MAX_PENDING = 256
+
+    def __init__(self, fetch_audio, *, timings_of: Callable[[], Any] | None = None):
+        self.fetch_audio = fetch_audio
+        self.timings_of = timings_of or (lambda: None)
+        # Keep the actual item alive with its context: object ids cannot be
+        # reused, and a re-leased attempt cannot overwrite a draining attempt.
+        self._streams: OrderedDict[int, tuple[Any, str | None]] = OrderedDict()
+        self._languages: OrderedDict[int, tuple[Any, str | None]] = OrderedDict()
+
+    def decode(self, item):
+        with leaf_timings.active(self.timings_of()):
+            body = self.fetch_audio(item)
+            return self._decode(item, body)
+
+    def _decode(self, item, body):
+        try:
+            context = read_context(body)
+        except Exception:
+            context = None
+        self._streams[id(item)] = (item, capture_stream(item, context))
+        self._languages[id(item)] = (
+            item,
+            stt_language(
+                context,
+                duration_seconds=item.duration_seconds,
+                expected_owner_id=item.owner_id,
+                expected_segment_id=item.segment_id,
+            ),
+        )
+        for pending in (self._streams, self._languages):
+            while len(pending) > self.MAX_PENDING:
+                pending.popitem(last=False)
+        return leaf_timings.call('decode', decode_pcm16_wav, body)
+
+    def stream(self, item):
+        stream = self._streams.pop(id(item), (None, None))[1]
+        return ('shadow:' + stream) if item.shadow and stream else stream
+
+    def language(self, item):
+        """Intake's resolved STT language ('' unknown); None when intake did not record one."""
+        return self._languages.pop(id(item), (None, None))[1]
+
+
+MAX_SELF_LID_PROBE_SECONDS = 30.0
+# Earlier intake persisted the language endpoint's millisecond-rounded duration.
+SELF_LID_DURATION_TOLERANCE_SECONDS = 0.0005 + 1 / 16000 + 1e-9
+
+
+def _finite_number(value: object) -> TypeGuard[int | float]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def _valid_self_lid_context(context, *, duration_seconds, expected_owner_id, expected_segment_id) -> bool:
+    """Bind self-LID permission to the authenticated upload that produced the unit."""
+    if (
+        isinstance(context.get('version'), bool)
+        or not isinstance(context.get('version'), int)
+        or context.get('version') != INTAKE_CONTEXT_VERSION
+        or not isinstance(expected_owner_id, str)
+        or not expected_owner_id
+        or context.get('owner_id') != expected_owner_id
+        or not isinstance(expected_segment_id, str)
+        or not expected_segment_id
+        or context.get('segment_id') != expected_segment_id
+        or not isinstance(context.get('source'), str)
+        or not context['source'].strip()
+        or any(not isinstance(context.get(key), str) or not context[key].strip() for key in ('job_id', 'content_id'))
+        or not _finite_number(duration_seconds)
+        or duration_seconds <= 0
+    ):
+        return False
+
+    probe_seconds = context.get('stt_language_probe_seconds')
+    if not _finite_number(probe_seconds) or not 0 < probe_seconds <= MAX_SELF_LID_PROBE_SECONDS:
+        return False
+    expected_probe_seconds = min(float(duration_seconds), MAX_SELF_LID_PROBE_SECONDS)
+    return abs(probe_seconds - expected_probe_seconds) <= SELF_LID_DURATION_TOLERANCE_SECONDS
+
+
+def stt_language(
+    context,
+    *,
+    duration_seconds=None,
+    expected_owner_id=None,
+    expected_segment_id=None,
+):
+    if not isinstance(context, dict) or 'stt_language' not in context:
+        return None
+    value = context['stt_language']
+    if not isinstance(value, str):
+        return None
+    from config.prerecorded_language import (
+        MIN_AUDIO_LID_CONFIDENCE,
+        audio_lid_confidence_floor,
+        language_class,
+        self_lid_confidence_floor,
+    )
+
+    evidence = context.get('stt_language_evidence')
+    confidence = context.get('stt_language_confidence')
+    classification = language_class(value)
+
+    if evidence == 'self_lid':
+        if (
+            not 2 <= len(value) <= 8
+            or not value.isascii()
+            or value != value.lower()
+            or not value.replace('-', '').isalpha()
+            or any(not part for part in value.split('-'))
+            or not _finite_number(duration_seconds)
+            or not _valid_self_lid_context(
+                context,
+                duration_seconds=duration_seconds,
+                expected_owner_id=expected_owner_id,
+                expected_segment_id=expected_segment_id,
+            )
+            or not _finite_number(confidence)
+            or not 0 <= confidence <= 1
+        ):
+            return None
+        if classification == 'supported':
+            minimum = self_lid_confidence_floor(min(float(duration_seconds), MAX_SELF_LID_PROBE_SECONDS))
+            if minimum is None or confidence < minimum:
+                return None
+        # An authenticated unsupported top language remains unavailable to the
+        # fixed Parakeet worker and is retained for its multilingual recovery.
+        return value
+
+    if classification == 'supported':
+        # Older intake copied the app's primary language even in multilingual
+        # mode. Such a hint is not proof that this audio is supported.
+        minimum = audio_lid_confidence_floor(duration_seconds) if evidence == 'audio_lid' else MIN_AUDIO_LID_CONFIDENCE
+        if (
+            evidence not in ('declared', 'audio_lid')
+            or not _finite_number(confidence)
+            or not minimum <= confidence <= 1
+        ):
+            return None
+    return value
 
 
 def decode_pcm16_wav(body):
@@ -177,7 +375,7 @@ def create_local_worker(
     pyannote_model,
     live_words=None,
     single_speaker=None,
-    on_failure=None
+    on_failure=None,
 ):
     """Compose once per GPU process after explicit model startup.
 
@@ -191,17 +389,44 @@ def create_local_worker(
         raise ValueError(
             'local model chain requires dedicated batch GPU; shared-live requires its existing GPU arbiter'
         )
-    pin_parakeet_decoding(parakeet_model)
-    words = ParakeetWords(parakeet_model, enforce_eager=True)
-    return PipelineWorker(
-        decode=lambda item: decode_pcm16_wav(fetch_audio(item)),
-        vad=PyannoteVAD(vad_model),
+    pin_parakeet_decoding(parakeet_model, cuda_graphs=config.asr_cuda_graphs)
+    words = ParakeetWords(parakeet_model, cuda_graphs=config.asr_cuda_graphs)
+    flight = (
+        FlightPyannote.create(pyannote_model, vad_model, budget_seconds=config.flight_batch_seconds)
+        if config.flight_batching
+        else None
+    )
+    if flight is None and config.shared_embedding_trunk:
+        install_shared_trunk(pyannote_model)
+    # Flight batching shares segmentation its own way; the serial chain hands
+    # VAD's raw scores to full-unit diarization instead of a second forward.
+    reuse = (
+        VadSegmentationReuse.install(pyannote_model, vad_model)
+        if flight is None and config.vad_segmentation_reuse
+        else None
+    )
+    # Resolve dynamically: run_process binds its private registry after loading.
+    staged = StagedAudio(fetch_audio, timings_of=lambda: worker.timings)
+
+    def persist(item, payload):
+        with leaf_timings.active(worker.timings):
+            return persist_result(item, payload)
+
+    worker = PipelineWorker(
+        decode=staged.decode,
+        vad=PyannoteVAD(vad_model, segmentation_reuse=reuse),
         words_providers={'parakeet': words},
         recover_words=words.recover_empty,
-        diarizers={'pyannote': PyannoteDiarizer(pyannote_model)},
-        persist=persist_result,
+        diarizers={
+            'pyannote': PyannoteDiarizer(pyannote_model, timings_of=lambda: worker.timings, segmentation_reuse=reuse)
+        },
+        persist=persist,
         config=config,
         live_words=live_words,
         single_speaker=single_speaker,
         on_failure=on_failure,
+        flight_models=flight,
+        stream_of=staged.stream,
+        language_of=staged.language,
     )
+    return worker

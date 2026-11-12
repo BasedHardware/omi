@@ -13,6 +13,7 @@ import {
   shouldFollowLiveEdge,
 } from '@/lib/scrollEdges';
 import { ChatMarkdown } from './ChatMarkdown';
+import { ChatCitationCards } from './ChatCitationCards';
 import { ChatEvidenceCard } from './ChatEvidenceCard';
 
 /**
@@ -140,6 +141,7 @@ export function ChatTranscript({
                   )}
                   <ChatMarkdown memories={message.memories}>{message.text}</ChatMarkdown>
                 </div>
+                <ChatCitationCards memories={message.memories} />
                 <ChatEvidenceCard envelope={parseChatEvidenceFromRecord(message)} />
                 <span className="mt-1 block text-xs text-text-quaternary">
                   {formatMessageTime(message.created_at)}

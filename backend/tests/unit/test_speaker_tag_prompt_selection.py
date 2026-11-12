@@ -444,3 +444,57 @@ def test_flag_off_ignores_persisted_pinned_candidates(monkeypatch):
     prompt = _select_with([conversation], people={'p2': 'Maya'}, pinned={'p2'}, prior_enabled=False)[0]
     assert prompt.kind == SpeakerTagPromptKind.identify
     assert prompt.suggested_person_id is None
+
+
+def test_recurring_uses_identify_and_only_trusted_mentions_or_voice_near_misses(monkeypatch):
+    from utils.speaker_tag_prompts import recurring
+
+    monkeypatch.setattr(recurring, 'recurring_enabled_for', lambda *_: True)
+    conversation = _conversation(
+        segments=[
+            _segment(
+                'a',
+                0,
+                0,
+                10,
+                text='Alice met Roberta today',
+                recurring_voice_id='v',
+                voice_candidates=[{'person_id': 'near', 'level': 1, 'suggest': True}],
+            )
+        ]
+    )
+    prompts = selection.select_prompts(
+        [conversation],
+        now=NOW,
+        owner_has_voice=False,
+        named_allowed=True,
+        answered=set(),
+        people={'alice': 'Alice', 'bob': 'Bob', 'near': 'Sam', 'inferred': 'Roberta'},
+        recurring_uid='u',
+        stored_people=[
+            {'id': 'alice', 'name': 'Alice', 'is_user_created': True},
+            {'id': 'bob', 'name': 'Bob', 'is_user_created': True},
+            {'id': 'inferred', 'name': 'Roberta'},
+        ],
+        pinned={'near'},
+        prior_enabled=True,
+    )
+    assert len(prompts) == 1 and prompts[0].kind == SpeakerTagPromptKind.identify
+    assert set(prompts[0].suggested_person_ids) == {'near', 'alice'}
+    # The released wire origin stays unchanged; recurring is server metric attribution.
+    assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
+    assert recurring.metric_origin('u', conversation, ['a'], 'unnamed') == 'recurring'
+    monkeypatch.setattr(recurring, 'recurring_enabled_for', lambda *_: False)
+    assert recurring.metric_origin('u', conversation, ['a'], 'unnamed') == 'unnamed'
+
+
+def test_recurring_mentions_are_bounded_whole_names():
+    from utils.speaker_tag_prompts.recurring import mentioned_people
+
+    conversation = {'transcript_segments': [{'text': 'Joanne talked about Alice.'}]}
+    people = [
+        {'id': 'ann', 'name': 'Ann', 'is_user_created': True},
+        {'id': 'alice', 'name': 'Alice', 'is_user_created': True},
+        {'id': 'inferred_alice', 'name': 'Alice'},
+    ]
+    assert mentioned_people(conversation, people) == ['alice']

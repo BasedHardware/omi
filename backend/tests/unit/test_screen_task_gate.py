@@ -6,6 +6,7 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 
+from config.jev_decisions import SCREEN_TASK_JEV_AUTO_LANE_ID, SCREEN_TASK_JEV_MODEL
 from routers import desktop_task_gate as route
 from utils.llm import screen_task_gate as gate
 from utils.llm.jev_client import JevAnswers
@@ -65,7 +66,20 @@ def test_gateway_deadline_and_lane_are_bounded(monkeypatch):
     seen = []
     monkeypatch.setattr(gate, 'ask_jev', lambda *a, **k: seen.append(k) or _answers(0.5))
     gate.decide_screen_task('screen')
-    assert seen == [{'lane': 'screen_task', 'timeout_seconds': 2.0, 'max_attempts': 1}]
+    assert seen == [
+        {
+            'lane': 'screen_task',
+            'model': SCREEN_TASK_JEV_AUTO_LANE_ID,
+            'expected_model': SCREEN_TASK_JEV_MODEL,
+            'timeout_seconds': 2.0,
+            'max_attempts': 1,
+        }
+    ]
+
+
+def test_screen_task_jev_114_model_is_independent_of_other_jev_callers():
+    assert SCREEN_TASK_JEV_MODEL == 'typesafe/jev-1.14'
+    assert SCREEN_TASK_JEV_AUTO_LANE_ID == 'omi:auto:jev-screen-task'
 
 
 @pytest.mark.asyncio
@@ -73,7 +87,6 @@ async def test_http_route_rejects_without_pixels_and_logs_only_bounded_fields(mo
     app = FastAPI()
     app.include_router(route.router)
     app.dependency_overrides[route.screen_task_gate.__defaults__[0].dependency] = lambda: 'synthetic-user'
-    monkeypatch.setattr(route, 'is_desktop_trial_paywalled', lambda *a: False)
     seen = []
     monkeypatch.setattr(
         route, 'decide_screen_task', lambda state: seen.append(state) or gate.ScreenTaskGateDecision(False, 'rejected')
@@ -88,18 +101,6 @@ async def test_http_route_rejects_without_pixels_and_logs_only_bounded_fields(mo
     assert invalid.status_code == 422
     assert 'PRIVATE_SENTINEL' in seen[0]
     assert 'PRIVATE_SENTINEL' not in caplog.text and 'private task' not in caplog.text
-
-
-@pytest.mark.asyncio
-async def test_http_gate_preserves_trial_paywall(monkeypatch):
-    app = FastAPI()
-    app.include_router(route.router)
-    app.dependency_overrides[route.screen_task_gate.__defaults__[0].dependency] = lambda: 'synthetic-user'
-    monkeypatch.setattr(route, 'is_desktop_trial_paywalled', lambda *a: True)
-    monkeypatch.setattr(route, 'decide_screen_task', lambda *a: pytest.fail('paywalled request called Jev'))
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://local') as client:
-        result = await client.post('/v1/screen-task/gate', json={'ocr_text': 'screen'})
-    assert result.status_code == 402
 
 
 @pytest.mark.asyncio
@@ -191,7 +192,6 @@ def _gate_app():
 
 
 def _serve_gate(monkeypatch):
-    monkeypatch.setattr(route, 'is_desktop_trial_paywalled', lambda *a: False)
     monkeypatch.setattr(route, 'decide_screen_task', lambda *a: gate.ScreenTaskGateDecision(False, 'rejected'))
 
 

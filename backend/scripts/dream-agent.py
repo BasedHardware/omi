@@ -11,10 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.dream_agent import Caps, mode
 from database import dream_store, dream_feedback
+from utils.rollout_cohorts import configure_rollout_runtime
 from utils.dream_agent import run_pass, drain
 
 
 def main():
+    configure_rollout_runtime()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--uid')
     parser.add_argument('--seed-ref', action='append', default=[], help='collection/id of authorized dev data')
@@ -32,7 +34,8 @@ def main():
         if any(len(ref) != 2 for ref in refs):
             parser.error('seed references must be collection/id')
         dream_store.mark_dirty(args.uid, refs)
-    result = asyncio.run(run_pass(args.uid) if args.uid else drain())
+    # A one-owner operator run is not a sampled scheduled pass: never judged.
+    result = asyncio.run(run_pass(args.uid, judge=False) if args.uid else drain())
     # Print metadata only; the encrypted per-user run doc contains proposed content.
     reports = result if isinstance(result, list) else [result]
     print(

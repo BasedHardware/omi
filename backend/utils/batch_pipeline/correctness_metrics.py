@@ -3,6 +3,11 @@
 Counters are process-local and can undercount a lost transaction reply or process
 exit. Sum rates/increases across CPU and GPU processes; never equate a sampled
 counter delta with a durable ledger census. Labels contain only closed tokens.
+
+`failed` counts every quarantine (CUDA, validation, empty ASR) and `recovered`
+automatic recoveries with a result (epoch-2 operator successes are not counted),
+so failed/admitted is not an unrecovered-empty-ASR rate.
+Gate a ramp on durable job fields (`recovery_state`, `worker_empty_evidence`).
 """
 
 import os
@@ -18,6 +23,16 @@ DURATION = Counter(
 LABELS = Counter(
     'omi_batch_pipeline_projected_segments_total', 'New persisted segments by assignment authority', ['authority']
 )
+CONFLICT_HOLDS = Counter(
+    'omi_batch_pipeline_projection_conflict_holds_total', 'Observed assignment conflict holds', ['subtype']
+)
+
+
+def record_conflict_hold(subtype: object) -> None:
+    from utils.sync.assignment_errors import bounded_sync_assignment_subtype
+
+    if enabled():
+        CONFLICT_HOLDS.labels(bounded_sync_assignment_subtype(subtype)).inc()
 
 
 def enabled() -> bool:

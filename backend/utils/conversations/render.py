@@ -14,6 +14,7 @@ from models.conversation import Conversation
 from models.note_claims import current_note_claims
 from models.transcript_segment import TranscriptSegment, strip_grouping_internal_fields
 from utils.conversations.summary_selection import select_primary_summary
+from utils.conversations.owner_attribution import speaker_role_projection
 from models.conversation_photo import ConversationPhoto
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.model_text import (
@@ -27,6 +28,8 @@ from utils.model_text import (
     generated,
     untrusted_block,
 )
+
+from utils.speakers.display import display_participants, developer_speaker_names
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +77,13 @@ def format_local_date(dt: datetime, display_tz: tzinfo) -> str:
 # ---------------------------------------------------------------------------
 
 
-def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> None:
+def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]], *, preserve_api_values: bool = False) -> None:
     """Add speaker_name to transcript segments based on person_id mappings.
 
     Mutates conversation dicts in-place. Works with both single conversations
     (pass as [conv]) and lists.
     """
-    user_name = get_user_name(uid, use_default=False) or 'User'
+    user_name = get_user_name(uid, use_default=False) or ('User' if preserve_api_values else 'You')
 
     all_person_ids: Set[str] = set()
     for conv in conversations:
@@ -95,15 +98,18 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
         people_map = {str(p['id']): str(p['name']) for p in people_data}
 
     for conv in conversations:
+        # Dense labels are assigned per conversation: the same diarization id in another
+        # conversation is a different voice, never the same "Speaker A".
         segments = cast(List[Dict[str, Any]], conv.get('transcript_segments') or [])
+        if preserve_api_values:
+            for seg, name in zip(segments, developer_speaker_names(segments, names=people_map, owner_name=user_name)):
+                seg['speaker_name'] = name
+            continue
+        display = display_participants(
+            segments, names=people_map, owner_name=user_name, resolution=conv.get('speaker_resolution')
+        )
         for seg in segments:
-            if seg.get('is_user'):
-                seg['speaker_name'] = user_name
-            elif seg.get('person_id') and str(seg['person_id']) in people_map:
-                seg['speaker_name'] = people_map[str(seg['person_id'])]
-            else:
-                speaker_id = seg.get('speaker_id')
-                seg['speaker_name'] = f"Speaker {speaker_id}" if speaker_id is not None else 'Unknown speaker'
+            seg['speaker_name'] = display.label(seg)
 
 
 def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None:
@@ -122,7 +128,7 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
         return
 
     all_folders = folders_db.get_folders(uid)
-    folder_map: Dict[str, str] = {str(f['id']): str(f['name']) for f in all_folders}
+    folder_map: Dict[str, str] = {str(f.id): str(f.name) for f in all_folders}
 
     for conv in conversations:
         folder_id = conv.get('folder_id')
@@ -194,6 +200,9 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv.pop('geolocation', None)
     # Server-computed capture badge stays on app views, outside the integration contract.
     conv.pop('capture_coverage', None)
+    # First-party speaker-exclusion state is not part of the public integration
+    # contract either; stays on app views (same §capture_coverage precedent).
+    conv.pop('excluded_speakers', None)
     for field in PROJECTION_FAMILY_FIELDS:
         conv.pop(field, None)
     # Where the live receiver heard each segment is internal placement evidence, not transcript.
@@ -260,6 +269,12 @@ def conversations_to_string(
     user's timezone when this text is fed to the chat LLM so it reasons about times correctly.
     """
     result: List[str] = []
+    if conversations and speaker_role_projection(()) is not None:
+        result.append(
+            '[Attribution: titles, notes, tasks and events below are generated representations, not verbatim '
+            'speaker evidence. Preserve named subjects and uncertainty; an account-owned recording does not '
+            'mean its statements, experiences or commitments belong to the account owner.]'
+        )
     elapsed_timestamps_shown = False
     people_map: Dict[str, Person] = {p.id: p for p in people} if people else {}
     if clock is not None and tz is not None:
