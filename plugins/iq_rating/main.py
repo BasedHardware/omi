@@ -5,13 +5,14 @@ A simple, viral-optimized app that shows all people you've met
 sorted by their IQ scores (smartest to dumbest).
 """
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from typing import List, Optional, Dict
 import logging
 import os
 import requests
 import hashlib
+import html
 import random
 import re
 import time
@@ -19,6 +20,30 @@ import threading
 import sqlite3
 import json
 from pathlib import Path
+
+try:
+    from .iq_auth import require_iq_auth, require_iq_auth_if_uid
+except ImportError:
+    from iq_rating.iq_auth import require_iq_auth, require_iq_auth_if_uid
+
+
+def _json_data_island(field: str, value) -> str:
+    """Render a value as a non-executing JSON data island for the /iq page.
+
+    The page template parses these islands with JSON.parse at startup, so the
+    decoded JS values are identical to what json.dumps would have inlined.
+    Embedding attacker-controllable values (uid, the iq_rating_token query
+    parameter) directly into an inline <script> is a reflected-XSS vector:
+    JSON strings may legally contain raw < > & and a closing script tag, so a
+    crafted value can break out of the script element. A <script
+    type="application/json"> block never executes, and html.escape makes the
+    payload unable to close the element early or inject attributes.
+    """
+    payload = json.dumps(value)
+    return '<script type="application/json" id="{0}">{1}</script>'.format(
+        field, html.escape(payload, quote=True)
+    )
+
 
 # Setup logging
 logging.basicConfig(
@@ -1581,8 +1606,9 @@ PEOPLE_LIST_CONTENT = """
 </div>
 
 <script>
-    const uid = '{uid}';
-    let peopleData = {people_data_json};
+    const uid = JSON.parse(document.getElementById('iq-data-uid').textContent);
+    const tokenParam = JSON.parse(document.getElementById('iq-data-token-param').textContent);
+    let peopleData = JSON.parse(document.getElementById('iq-data-people').textContent);
     let currentSort = 'dumbest';
     
     function getIqColor(iq) {{
@@ -1611,7 +1637,7 @@ PEOPLE_LIST_CONTENT = """
         if (!confirm(`Remove "${{personName}}" from the list?`)) return;
         
         try {{
-            const response = await fetch(`/iq-rating/iq/hide?uid=${{uid}}&person_id=${{personId}}`, {{ method: 'POST' }});
+            const response = await fetch(`/iq-rating/iq/hide?uid=${{encodeURIComponent(uid)}}&${{tokenParam}}person_id=${{personId}}`, {{ method: 'POST' }});
             if (response.ok) {{
                 peopleData = peopleData.filter(p => p.id !== personId);
                 sortBy(currentSort);
@@ -1634,7 +1660,7 @@ PEOPLE_LIST_CONTENT = """
     async function adjustIq(e, personId, delta) {{
         e.stopPropagation();
         try {{
-            const response = await fetch(`/iq-rating/iq/adjust?uid=${{uid}}&person_id=${{personId}}&delta=${{delta}}`, {{ method: 'POST' }});
+            const response = await fetch(`/iq-rating/iq/adjust?uid=${{encodeURIComponent(uid)}}&${{tokenParam}}person_id=${{personId}}&delta=${{delta}}`, {{ method: 'POST' }});
             const data = await response.json();
             if (data.success) {{
                 // Update local data
@@ -1715,7 +1741,7 @@ async def root():
 
 
 @router.get("/iq", response_class=HTMLResponse)
-async def iq_rating_page(uid: Optional[str] = Query(None, description="User ID")):
+async def iq_rating_page(request: Request, uid: Optional[str] = Depends(require_iq_auth_if_uid)):
     """IQ Rating page."""
     if not uid:
         html = IQ_RATING_HTML.format(
@@ -1748,7 +1774,13 @@ async def iq_rating_page(uid: Optional[str] = Query(None, description="User ID")
         
         # Generate page with people data
         people_json = json.dumps(people_with_iq)
-        content = PEOPLE_LIST_CONTENT.format(uid=uid, people_data_json=people_json, total_people=len(people_with_iq))
+        query_token = request.query_params.get('iq_rating_token', '').strip()
+        token_param = json.dumps(f'iq_rating_token={query_token}&' if query_token else '')
+        content = PEOPLE_LIST_CONTENT.format(
+            uid=_json_data_island('iq-data-uid', uid),
+            token_param=_json_data_island('iq-data-token-param', token_param),
+            people_data_json=_json_data_island('iq-data-people', people_json),
+            total_people=len(people_with_iq))
         html = IQ_RATING_HTML.format(content=content)
         return HTMLResponse(content=html)
         
@@ -1760,7 +1792,7 @@ async def iq_rating_page(uid: Optional[str] = Query(None, description="User ID")
 
 
 @router.get("/iq/api")
-async def iq_rating_api(uid: str = Query(..., description="User ID")):
+async def iq_rating_api(uid: str = Depends(require_iq_auth)):
     """API endpoint to get IQ ratings as JSON."""
     try:
         people_with_iq = get_people_for_user(uid)
@@ -1787,21 +1819,21 @@ async def iq_rating_api(uid: str = Query(..., description="User ID")):
 
 
 @router.post("/iq/hide")
-async def hide_person_route(uid: str = Query(...), person_id: str = Query(...)):
+async def hide_person_route(uid: str = Depends(require_iq_auth), person_id: str = Query(...)):
     """Hide a person from the list (not a real name)."""
     success = hide_person(uid, person_id)
     return {"success": success, "person_id": person_id}
 
 
 @router.post("/iq/unhide")
-async def unhide_person_route(uid: str = Query(...), person_id: str = Query(...)):
+async def unhide_person_route(uid: str = Depends(require_iq_auth), person_id: str = Query(...)):
     """Unhide a person."""
     success = unhide_person(uid, person_id)
     return {"success": success, "person_id": person_id}
 
 
 @router.post("/iq/adjust")
-async def adjust_iq_route(uid: str = Query(...), person_id: str = Query(...), delta: int = Query(...)):
+async def adjust_iq_route(uid: str = Depends(require_iq_auth), person_id: str = Query(...), delta: int = Query(...)):
     """Adjust a person's IQ score. delta can be positive or negative."""
     new_iq = adjust_iq(uid, person_id, delta)
     if new_iq is not None:
@@ -1810,7 +1842,7 @@ async def adjust_iq_route(uid: str = Query(...), person_id: str = Query(...), de
 
 
 @router.get("/iq/preload")
-async def preload_data(uid: str = Query(..., description="User ID")):
+async def preload_data(uid: str = Depends(require_iq_auth)):
     """Preload data for a user in background."""
     if get_people_for_user(uid) is not None:
         return {"status": "already_loaded", "uid": uid}
@@ -1825,7 +1857,7 @@ async def preload_data(uid: str = Query(..., description="User ID")):
 
 
 @router.get("/iq/refresh")
-async def refresh_data(uid: str = Query(..., description="User ID")):
+async def refresh_data(uid: str = Depends(require_iq_auth)):
     """Force refresh data for a user (re-fetch from API)."""
     # Clear existing data
     conn = sqlite3.connect(DB_PATH)
