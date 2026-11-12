@@ -928,6 +928,14 @@ LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
 for _outcome in ('completed', 'migrated', 'skipped', 'error'):
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
 
+LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL = Counter(
+    'listen_finalization_due_marker_sweep_total',
+    'Queued or leased finalization jobs older than 24h without a due marker, by sweep outcome',
+    ['outcome'],
+)
+for _outcome in ('remarked', 'skipped', 'error'):
+    LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL.labels(outcome=_outcome)
+
 LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL = Counter(
     'listen_finalization_byok_session_abandoned_total',
     'Best-effort post-commit BYOK abandonment signal; use the document-derived last_24h gauge for alerting',

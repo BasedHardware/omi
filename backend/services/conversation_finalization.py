@@ -48,6 +48,7 @@ from utils.metrics import (
     LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS,
     LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
     LISTEN_FINALIZATION_RETRIES_TOTAL,
+    LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL,
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
     OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL,
     OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL,
@@ -231,6 +232,17 @@ def reconcile_listen_finalization_jobs(
     if not replay_enabled() or not is_listen_finalization_tasks_configured():
         _publish_job_metrics(firestore_client=firestore_client)
         return result
+
+    # Before the candidate page is read, so a row restored to due is replayed in this pass.
+    try:
+        due_markers = jobs_db.remark_missing_due_markers(firestore_client=firestore_client)
+    except Exception:
+        logger.exception('listen finalization due-marker sweep failed')
+        due_markers = {'remarked': 0, 'skipped': 0, 'error': 1}
+    for outcome, count in due_markers.items():
+        LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL.labels(outcome=outcome).inc(count)
+    if due_markers['remarked']:
+        logger.warning('event=listen_finalization_due_marker_sweep remarked=%s', due_markers['remarked'])
 
     oldest_overdue_age = 0.0
     try:
