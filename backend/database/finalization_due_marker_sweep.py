@@ -8,20 +8,18 @@ ledger module stays within its line budget.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from prometheus_client import Counter
 
+from database._client import get_firestore_client
 from database.conversation_finalization_jobs import (
     FINALIZATION_JOBS_COLLECTION,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     STALE_PROCESSING_SWEEP_STATE_COLLECTION,
-    _advance_stale_processing_sweep_cursor_txn,
-    _client,
-    _now,
 )
 
 LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL = Counter(
@@ -31,6 +29,18 @@ LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL = Counter(
 )
 for _outcome in ('remarked', 'skipped', 'error'):
     LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL.labels(outcome=_outcome)
+
+
+def _advance_cursor_txn(
+    transaction: Any, doc_ref: Any, expected_generation: int, path: str | None, now: datetime
+) -> bool:
+    """CAS on the persisted generation, like the stale-processing sweep cursor."""
+    snapshot = doc_ref.get(transaction=transaction)
+    generation = int((snapshot.to_dict() or {}).get('generation', 0)) if getattr(snapshot, 'exists', False) else 0
+    if generation != expected_generation:
+        return False
+    transaction.set(doc_ref, {'resume_after_path': path, 'generation': generation + 1, 'updated_at': now})
+    return True
 
 
 FINALIZATION_DUE_MARKER_STALE_AFTER = timedelta(hours=24)
@@ -69,8 +79,8 @@ def remark_missing_due_markers(
     existing status + created_at index, so no new composite index is needed.
     Each row is re-read and re-checked inside its own transaction.
     """
-    client = _client(firestore_client)
-    current = now or _now()
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    current = now or datetime.now(timezone.utc)
     cutoff = current - stale_after
     page_size = max(1, min(int(limit), 200))
     collection = client.collection(FINALIZATION_JOBS_COLLECTION)
@@ -105,7 +115,7 @@ def remark_missing_due_markers(
                 outcome = 'error'
             result[outcome] += 1
         next_path = snapshots[-1].reference.path if len(snapshots) == page_size else None
-        firestore.transactional(_advance_stale_processing_sweep_cursor_txn)(
-            client.transaction(), state_ref, int(state.get('generation', 0)), next_path, _now()
+        firestore.transactional(_advance_cursor_txn)(
+            client.transaction(), state_ref, int(state.get('generation', 0)), next_path, datetime.now(timezone.utc)
         )
     return result
