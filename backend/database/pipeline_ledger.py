@@ -213,6 +213,10 @@ def plan_advance(
     stored one. ``illegal`` means a backward or unknown transition.
     ``terminal`` means the capture already reached a terminal and cannot move
     again without an explicit, higher-revision re-open.
+
+    For ``failed:upload_failed`` the supplied ``end_at`` is the most recent
+    failed-attempt stamp (``mark_record_upload_failed`` overwrites it), not the
+    first loss of audio. It is a firing clock, not a first-failure measure.
     """
     current = time.time() if now is None else now
     if stage.startswith(FAILED_PREFIX):
@@ -423,10 +427,10 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
     error is swallowed: the real transition already committed and stays
     authoritative.
     """
-    if not pipeline_ledger_enabled():
-        _observe_write('disabled')
-        return False
     try:
+        if not pipeline_ledger_enabled():
+            _observe_write('disabled')
+            return False
         client = firestore_client if firestore_client is not None else get_firestore_client()
         source_ref = fields.pop('source_ref', None)
         owner_ref = fields.pop('owner_ref', None)

@@ -322,6 +322,14 @@ def test_advance_is_silent_when_disabled(monkeypatch):
     assert ledger.advance('uid', 'capture', ledger.SEALED, firestore_client=_BoomClient()) is False
 
 
+def test_advance_swallows_a_raising_enable_check(monkeypatch):
+    def boom():
+        raise RuntimeError('synthetic enable-check failure')
+
+    monkeypatch.setattr(ledger, 'pipeline_ledger_enabled', boom)
+    assert ledger.advance('uid', 'capture', ledger.SEALED, firestore_client=_BoomClient()) is False
+
+
 def test_advance_writes_the_planned_document(monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'on')
     client = _FakeClient()

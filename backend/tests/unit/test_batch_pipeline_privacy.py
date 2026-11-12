@@ -1,5 +1,6 @@
 """D's deletion hook, storage scope and TTL declaration contracts."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from datetime import datetime, timedelta, timezone
@@ -8,6 +9,7 @@ import pytest
 from google.api_core.exceptions import NotFound
 
 from database import batch_pipeline_purge as purge, conversation_tombstones
+from database import pipeline_ledger
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.user_data_deletion import purge_user_subtree
 from scripts.batch_pipeline_ttl import ttl_resources
@@ -145,11 +147,8 @@ def test_owner_orphan_sweep_stays_inside_owner_namespace_and_checks_versions(mon
     blob.delete.assert_called_once_with(if_generation_match=42)
 
 
-def test_completion_ttl_manifest_is_stage_bounded_and_has_no_privacy_authorities():
-    resources = ttl_resources('demo-synthetic', 'synthetic-db')
-    assert len(resources) == len(set(resources)) == 19
-    assert all(resource.endswith('/fields/expires_at') for resource in resources)
-    assert {resource.split('/collectionGroups/')[1].split('/')[0] for resource in resources} == {
+def stage_groups():
+    return {
         f'batch_pipeline_{stage}_{table}'
         for stage in ('prod', 'dev')
         for table in (
@@ -163,9 +162,33 @@ def test_completion_ttl_manifest_is_stage_bounded_and_has_no_privacy_authorities
             'shadow_lid_probes',
             'shadow_lid_spend',
         )
-    } | {'pipeline_ledger'}
+    }
+
+
+USER_COLLECTION_GROUPS = {pipeline_ledger.COLLECTION}
+
+
+def test_completion_ttl_manifest_is_stage_bounded_and_has_no_privacy_authorities():
+    resources = ttl_resources('demo-synthetic', 'synthetic-db')
+    assert len(resources) == len(set(resources)) == 19
+    assert all(resource.endswith('/fields/expires_at') for resource in resources)
+    assert {resource.split('/collectionGroups/')[1].split('/')[0] for resource in resources} == (
+        stage_groups() | USER_COLLECTION_GROUPS
+    )
+    assert stage_groups().isdisjoint(USER_COLLECTION_GROUPS)
     with pytest.raises(ValueError):
         ttl_resources('foreign/path')
+
+
+def test_retention_manifest_user_group_is_the_canonical_ledger_collection():
+    from pathlib import Path
+
+    policy = json.loads(
+        (Path(__file__).resolve().parents[2] / 'deploy' / 'batch-pipeline' / 'retention.json').read_text()
+    )
+    declared = set(policy['collection_groups']) - stage_groups()
+    assert declared == USER_COLLECTION_GROUPS
+    assert declared == {pipeline_ledger.COLLECTION}
 
 
 def test_account_purge_erases_cohort_membership_and_retries_failures(monkeypatch):
@@ -217,8 +240,10 @@ def test_account_purge_removes_creator_owned_public_apps_and_nested_data(monkeyp
     assert purge_user_subtree('creator', client, recursive)['status'] == 'ok'
 
     plugins.document.assert_called_once_with('creator-app')
-    assert [call.args[0] for call in recursive.call_args_list] == [api_keys, reviews]
+    assert [call.args[0] for call in recursive.call_args_list[:2]] == [api_keys, reviews]
     assert all(call.kwargs == {'client': client} for call in recursive.call_args_list)
+    # The post-root ledger sweep is the only user-subcollection call here.
+    assert any(call.args == (pipeline_ledger.COLLECTION,) for call in user_ref.collection.call_args_list)
     app_ref.delete.assert_called_once_with()
     delete_app_cache.assert_called_once_with('creator-app')
     delete_generic_cache.assert_called_once()

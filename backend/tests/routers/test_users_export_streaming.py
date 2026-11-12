@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 from unittest.mock import ANY, MagicMock
 
@@ -461,5 +462,37 @@ def test_source_error_closes_iterator_without_completion(monkeypatch):
     assert b'export_complete' not in body
 
 
-def test_export_inventory_includes_pipeline_ledger():
-    assert 'pipeline_ledger' in data_export.PIPELINE_LEDGER_EXPORT_COLLECTIONS
+def test_export_carries_a_real_pipeline_ledger_row_body(monkeypatch):
+    row = {
+        'stage': 'sealed',
+        'owner_key': '0123456789abcdef',
+        'admitted_at': 100.0,
+        'expires_at': '2026-11-12T00:00:00+00:00',
+        'transitions': [{'stage': 'sealed', 'at': 100.0, 'revision': 1}],
+    }
+    monkeypatch.setattr(data_export, 'get_user_profile', MagicMock(return_value={}))
+    monkeypatch.setattr(data_export, 'get_people', MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export, 'iter_all_action_items', MagicMock(return_value=iter([])))
+    monkeypatch.setattr(
+        data_export,
+        'MemoryService',
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=MagicMock(return_value=iter([])))),
+    )
+    monkeypatch.setattr(data_export.conversations_db, 'iter_all_conversations', MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export.conversations_db, 'iter_all_conversation_photos', MagicMock(return_value=[]))
+    monkeypatch.setattr(data_export.chat_db, 'iter_all_messages', MagicMock(return_value=iter([])))
+    monkeypatch.setattr(data_export, '_iter_user_nested_subcollection', MagicMock(return_value=iter([])))
+    monkeypatch.setattr(
+        data_export,
+        '_iter_user_subcollection',
+        MagicMock(
+            side_effect=lambda _uid, name: (
+                iter([dict(row)]) if name == data_export.PIPELINE_LEDGER_EXPORT_COLLECTIONS[0] else iter([])
+            )
+        ),
+    )
+
+    payload = json.loads(''.join(data_export.iter_user_data_export('uid1')))
+
+    assert payload['pipeline_ledger'] == {data_export.PIPELINE_LEDGER_EXPORT_COLLECTIONS[0]: [row]}
+    assert payload['pipeline_ledger'][data_export.PIPELINE_LEDGER_EXPORT_COLLECTIONS[0]][0]['stage'] == 'sealed'

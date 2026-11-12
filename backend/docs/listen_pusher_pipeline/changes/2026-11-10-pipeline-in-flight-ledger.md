@@ -11,11 +11,12 @@ Stages: `capturing`, `sealed`, `transcribed`, `noted`, `done`; terminals
 `no_speech`, `noise`, `failed:<reason>` with a closed reason vocabulary. Every
 nonterminal stage has a deadline and an exit. `advance()` is idempotent for the
 same stage and revision, refuses backward transitions, and re-opens a terminal
-only with an explicit higher revision. Terminal rows are retained for at least
-26 hours (`PIPELINE_LEDGER_TERMINAL_TTL_SECONDS`, default 93600, capped at 7
-days) so the C2 24h exact census plus grace can read them. Nonterminal rows also
-carry a bounded `expires_at` (7-day max lifetime, refreshed on every transition)
-so a stalled row cannot live forever.
+only with an explicit higher revision. Terminal rows carry an `expires_at` stamp
+at least 26 hours out (`PIPELINE_LEDGER_TERMINAL_TTL_SECONDS`, default 93600,
+capped at 7 days) so a C2 24h exact census plus grace can read them once the TTL
+policy exists. Nonterminal rows also carry a bounded `expires_at` stamp (7-day
+max lifetime, refreshed on every transition). Nothing in this change provisions
+the Firestore TTL policy, so these stamps do not delete anything yet.
 
 Instrumented in this change — two ends that already exist:
 
@@ -28,7 +29,9 @@ Instrumented in this change — two ends that already exist:
 - **Upload failure** (`database/record_audio.py`): `failed:upload_failed` with
   `end_type=unknown`, using `record_upload_failed_at` as `end_at` and falling
   back to the observation time — never last speech and never the ledger-write
-  time. `mark_record_upload_failed` persists that firing clock.
+  time. `mark_record_upload_failed` overwrites that stamp on every failed
+  attempt, so `end_at` is the **most recent failed attempt**, not the first
+  loss of audio. Treat it as a firing clock, not a first-failure measure.
 
 That is at most **two transitions per capture** in this change. The notes
 (`noted`/`done`) writers, admission (`capturing`) and transcript-landed
@@ -90,14 +93,17 @@ row; the independent admission counter makes the loss visible.
 ## Switch, rollback, metrics, read helper
 
 `PIPELINE_LEDGER` defaults on (`config/refactor_modes.py` `default_on`). Set it
-to `false`/`0`/`off` to stop all ledger writes; capture behavior is unchanged.
-No new flag, and no data deletion is needed.
+to `false`/`0`/`off` to stop all ledger writes. The ledger-only conversation
+fields (`record_admitted_at`, `record_upload_failed_at`) are gated on the same
+flag, so with the ledger off the old conversation payload is restored and
+capture behavior is unchanged. No new flag, and no data deletion is needed.
 
 Rollback is a revert: the ledger is write-only and fail-open, no read path and
 no transition depends on it, so a revert restores capture behavior exactly.
-Reverting the code does not undo rows already written and does not un-provision
-any TTL; rows already written expire on their 26-hour terminal TTL, and the
-retention declaration stays inert until a deployer applies it.
+Rows already written keep their `expires_at` stamp but do **not** expire until an
+operator applies the TTL policy; a code revert neither deletes rows nor
+un-provisions a TTL that was applied. The retention declaration stays inert
+until a deployer applies it.
 
 The stuck-row alert (`charts/monitoring/alert-rules.json`,
 `charts/monitoring/alerts/pipeline-ledger.json`) is set to `warning`/`agent`
@@ -117,6 +123,20 @@ Metrics: `omi_pipeline_ledger_admit_total` (independent coverage denominator),
 rows with `admitted_at` in `[start, end)`. They are read-only, bounded by
 `limit`, and raise `LedgerWindowTruncated` instead of silently sampling. C2
 reads only through this helper.
+
+## Known cohort exclusions (not backfilled)
+
+- **Captures sealed before this deploy.** A capture that committed its seal
+  before these writers landed has no `record_admitted_at`, so the seal hook
+  never sees an admission and never writes a ledger row. The census reads
+  `iter_window`/`iter_global_window`, which filter on `admitted_at`, so this
+  cohort is absent rather than counted as a stuck or missing row. That is the
+  documented exclusion; there is no backfill in this change and none is
+  implied.
+- **`end_at` on `failed:upload_failed`.** `mark_record_upload_failed`
+  overwrites `record_upload_failed_at` on each failed attempt, so `end_at` is
+  the most recent failed attempt, not the first loss. It is a firing clock and
+  must not be read as first-failure latency.
 
 Contract: [pipeline ledger](../../listen_pusher_pipeline.mdx). New captures now
 produce ledger rows, so the C2 census starts returning non-zero coverage for

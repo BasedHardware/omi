@@ -11,7 +11,7 @@ import pytest
 
 from database import conversations
 from database import pipeline_ledger
-from database.record_audio import seal_record_audio, set_record_upload_pending
+from database.record_audio import mark_record_upload_failed, seal_record_audio, set_record_upload_pending
 
 pytestmark = pytest.mark.integration
 
@@ -166,6 +166,61 @@ def test_account_erasure_removes_the_pipeline_ledger(client, monkeypatch):
     assert _ledger(client, uid, capture_id) is None
 
 
+def test_erasure_sweeps_a_ledger_write_that_lands_after_the_collection_walk(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from database import user_data_deletion
+    from database._client import delete_collection_recursive
+
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    uid, capture_id = 'u-erase-race', 'c-erase-race'
+    _seed(client, uid, capture_id)
+    # The collection must already exist so the account walk enumerates and
+    # sweeps it before the root delete; the delayed write lands after that.
+    client.collection('users').document(uid).collection(pipeline_ledger.COLLECTION).document('existing').set(
+        {'stage': pipeline_ledger.CAPTURING}
+    )
+
+    fired = []
+    calls = []
+
+    def racing_delete(sub, *, client):
+        calls.append(getattr(sub, 'id', None))
+        delete_collection_recursive(sub, client=client)
+        if getattr(sub, 'id', None) == pipeline_ledger.COLLECTION and not fired:
+            fired.append(True)
+            # A delayed seal/upload-failure commits after the ledger sweep but
+            # before the owner root is deleted, so the owner fence still allows
+            # the row. Only the post-root sweep can remove it.
+            assert pipeline_ledger.advance(uid, capture_id, pipeline_ledger.SEALED, now=100, firestore_client=client)
+
+    monkeypatch.setattr('database.batch_pipeline_purge.purge_batch_owner', lambda _uid: None)
+    monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: client)
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
+    monkeypatch.setattr(user_data_deletion, 'delete_generic_cache', lambda *_a, **_kw: None)
+    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', lambda *_a, **_kw: None)
+    monkeypatch.setattr(user_data_deletion, 'generation_ref', lambda _ref: SimpleNamespace(delete=lambda: None))
+
+    result = user_data_deletion.purge_user_subtree(uid, client, racing_delete)
+
+    assert result['status'] == 'ok'
+    assert fired == [True]
+    assert [name for name in calls if name == pipeline_ledger.COLLECTION] == [
+        pipeline_ledger.COLLECTION,
+        pipeline_ledger.COLLECTION,
+    ]
+    assert (
+        client.collection('users')
+        .document(uid)
+        .collection(pipeline_ledger.COLLECTION)
+        .document('existing')
+        .get()
+        .exists
+        is False
+    )
+    assert _ledger(client, uid, capture_id) is None
+
+
 def test_delayed_ledger_write_does_not_recreate_after_source_delete(client, monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'on')
     uid, capture_id = 'u-del', 'c-del'
@@ -232,6 +287,20 @@ def test_disabled_ledger_leaves_real_state_unchanged(client, monkeypatch):
 
     row = _conversation_ref(client, uid, capture_id).get().to_dict()
     assert row['record_audio_closed'] is True
+    assert 'record_admitted_at' not in row
+    assert _ledger(client, uid, capture_id) is None
+
+
+def test_ledger_off_restores_the_upload_failure_payload(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'off')
+    uid, capture_id = 'u-off-fail', 'c-off-fail'
+    _seed(client, uid, capture_id)
+
+    assert mark_record_upload_failed(uid, capture_id, firestore_client=client)
+
+    row = _conversation_ref(client, uid, capture_id).get().to_dict()
+    assert row['record_upload_failed'] is True
+    assert 'record_upload_failed_at' not in row
     assert _ledger(client, uid, capture_id) is None
 
 
@@ -250,6 +319,23 @@ def test_ledger_failure_after_real_commit_leaves_real_state_unchanged(client, mo
     row = _conversation_ref(client, uid, capture_id).get().to_dict()
     assert row['record_audio_closed'] is True
     assert _ledger(client, uid, capture_id) is None
+
+
+def test_source_revision_failure_cannot_fail_the_seal(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    uid, capture_id = 'u-revboom', 'c-revboom'
+    _seed(client, uid, capture_id)
+
+    def boom(_snapshot):
+        raise RuntimeError('synthetic source revision failure')
+
+    monkeypatch.setattr(pipeline_ledger, 'source_revision', boom)
+
+    assert seal_record_audio(uid, capture_id, firestore_client=client) is None
+
+    row = _conversation_ref(client, uid, capture_id).get().to_dict()
+    assert row['record_audio_closed'] is True
+    assert _ledger(client, uid, capture_id)['stage'] == pipeline_ledger.SEALED
 
 
 def test_stale_advance_cannot_overwrite_a_newer_stage(client, monkeypatch):

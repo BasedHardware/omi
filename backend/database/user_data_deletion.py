@@ -76,5 +76,13 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     if root_exists:
         logger.info(f"Deleting user document: {uid}")
         user_ref.delete()
+    # The ledger's erasure fence only refuses once the owner root is gone, so a
+    # seal or upload-failure that commits between the ledger sweep above and the
+    # root delete can write into an already-swept collection. One bounded sweep
+    # after the root delete removes that row; the same pattern
+    # ``delete_conversation`` uses for a delayed child commit.
+    from database import pipeline_ledger
+
+    delete_collection(user_ref.collection(pipeline_ledger.COLLECTION), client=client)
     stop_quiet_checks_for_account(uid, firestore_client=client)
     return {'status': 'ok', 'message': 'Account deleted successfully'}

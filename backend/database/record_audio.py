@@ -6,6 +6,7 @@ import time
 from google.cloud import firestore
 
 from config import record_seal_rules
+from config.refactor_modes import pipeline_ledger_enabled
 from database import pipeline_ledger
 from database._client import get_firestore_client, run_transactional
 from database import record_token_lease_metrics as lease_metrics
@@ -32,6 +33,11 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     admitted = False
     source_revision = 0
     failed_at = None
+    try:
+        ledger_enabled = pipeline_ledger_enabled()
+    except Exception:
+        # Ledger configuration is never allowed to fail the authoritative seal.
+        ledger_enabled = False
 
     @firestore.transactional
     def commit(tx):
@@ -44,7 +50,11 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
         failed_at = None
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
-        source_revision = pipeline_ledger.source_revision(snapshot)
+        try:
+            source_revision = pipeline_ledger.source_revision(snapshot)
+        except Exception:
+            # Ledger code must not be able to fail the seal transaction.
+            source_revision = 0
         failed_at = row.get('record_upload_failed_at')
         if row.get('deleted') or not row:
             return 'deleted'
@@ -66,8 +76,9 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
                 patch['record_seal_refused_at'] = None
             # Admission is a durable per-capture fact, not a per-seal event. A
             # reconnect re-opens the row; the next seal must not count a second
-            # admission or reset the ledger deadline.
-            if row.get('record_admitted_at') is None:
+            # admission or reset the ledger deadline. It is ledger-only state,
+            # so with the ledger off the old conversation payload is restored.
+            if ledger_enabled and row.get('record_admitted_at') is None:
                 patch['record_admitted_at'] = time.time()
                 admitted = True
             tx.update(ref, patch)
@@ -226,6 +237,10 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
     """Persist a terminal upload/drop refusal before the session forgets it."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    try:
+        ledger_enabled = pipeline_ledger_enabled()
+    except Exception:
+        ledger_enabled = False
 
     @firestore.transactional
     def commit(tx):
@@ -236,15 +251,16 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
             return False  # Immutable legacy owners never enter this protocol.
         # Always write, including repeated failures: a repair plan must observe
         # a new failure even while the sticky flag was already true.
-        tx.update(
-            ref,
-            {
-                'record_upload_failed': True,
-                'record_upload_failed_at': time.time(),
-                'record_audio_closed': False,
-                'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
-            },
-        )
+        patch: dict[str, object] = {
+            'record_upload_failed': True,
+            'record_audio_closed': False,
+            'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
+        }
+        # The firing clock is ledger-only state; with the ledger off the old
+        # conversation payload is restored.
+        if ledger_enabled:
+            patch['record_upload_failed_at'] = time.time()
+        tx.update(ref, patch)
         return True
 
     return run_transactional(client, commit, transient=True)

@@ -9,6 +9,7 @@ from typing import IO, Any, Generator, Iterable, Iterator, Mapping, Optional, Se
 
 from database import chat as chat_db
 from database import conversations as conversations_db
+from database import pipeline_ledger
 from database.action_items import iter_all_action_items
 from utils.retrieval.frame_request_storage import download_frame_request_pixels
 from database.users import get_people, get_user_profile
@@ -99,7 +100,7 @@ MEMORY_REVIEW_EXPORT_COLLECTIONS = (
 
 # The in-flight capture ledger is content-free implementation state, but it is
 # durable per-user data and must be portable and erasable with the account.
-PIPELINE_LEDGER_EXPORT_COLLECTIONS = ('pipeline_ledger',)
+PIPELINE_LEDGER_EXPORT_COLLECTIONS = (pipeline_ledger.COLLECTION,)
 
 # Account-lifetime canonical ledger history and lineage authority. These rows
 # are retained independently of the user-facing MemoryDB projection and must

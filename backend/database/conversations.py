@@ -10,7 +10,13 @@ backend/docs/storing-conversations.md).
 
 from utils.conversations import phase_shadow
 
-from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
+from database import (
+    conversation_visibility_counts,
+    processing_backlog,
+    speaker_auto_enroll,
+    capture_group_notes,
+    pipeline_ledger,
+)
 from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks
 from utils.observability.delivery import summary_terminal_outcome
@@ -2597,11 +2603,12 @@ def delete_pipeline_ledger_row(uid: str, conversation_id: str) -> None:
     The ledger is a sibling collection, not a child of the conversation, so the
     recursive child sweep in :func:`delete_conversation` never reaches it. A
     nonterminal row would otherwise survive until its max-lifetime TTL.
+
+    Fail-open belongs to the ledger write path, not here: a transient delete
+    error propagates so the caller retries instead of leaving a durable row
+    with no retry. Nothing in this path logs the conversation id.
     """
-    try:
-        db.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id).delete()
-    except Exception:
-        logger.warning('pipeline ledger cleanup failed conversation=%s', conversation_id)
+    db.collection('users').document(uid).collection(pipeline_ledger.COLLECTION).document(conversation_id).delete()
 
 
 def delete_conversation(uid, conversation_id):

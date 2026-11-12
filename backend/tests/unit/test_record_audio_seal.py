@@ -11,6 +11,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from database import pipeline_ledger
 from database.record_audio import seal_record_audio, mark_record_upload_failed, set_record_upload_pending
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_pusher_audio_timeline import (
@@ -37,6 +38,7 @@ def records(env, monkeypatch):
     registry = barrier_module._ProcessRecordTokens()
     monkeypatch.setattr(barrier_module, '_process_record_tokens', lambda: registry)
     client = StrictFirestore()
+    client.rows[('users', 'uid-at')] = {'id': 'uid-at'}
     client.rows[PATH] = {'record_lane_owner': 'batch_live_v1', 'status': 'completed', 'opaque_content': 'preserved'}
     monkeypatch.setattr(record_audio_db, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal_record_audio)
@@ -56,6 +58,7 @@ def _finalize():
 @pytest.mark.parametrize('owner', ['batch_live_v1', 'batch_sync_v1'])
 async def test_reconnect_finalize_without_audio_seals_persisted_batch_owner(records, env, monkeypatch, durable, owner):
     records.rows[PATH]['record_lane_owner'] = owner
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', str(durable).lower())
     await _run(FakeWebSocket([_conversation('record'), _finalize()]))
     assert not env  # Nothing flushed in this session.
@@ -68,8 +71,12 @@ async def test_reconnect_finalize_without_audio_seals_persisted_batch_owner(reco
         not any(path == PATH for path, _ in tx.sets) and not any(path == PATH for path, _ in tx.creates)
         for tx in records.transactions
     )
-    non_path_writes = [path for tx in records.transactions for path, _ in (*tx.sets, *tx.creates) if path != PATH]
-    assert all(path[:3] == ('users', 'uid-at', 'pipeline_ledger') for path in non_path_writes)
+    non_path_writes = [
+        (path, payload) for tx in records.transactions for path, payload in (*tx.sets, *tx.creates) if path != PATH
+    ]
+    assert non_path_writes, 'the seal must write the sibling ledger row'
+    assert all(path[:3] == ('users', 'uid-at', 'pipeline_ledger') for path, _ in non_path_writes)
+    assert any(payload.get('stage') == pipeline_ledger.SEALED for _, payload in non_path_writes)
 
 
 @pytest.mark.parametrize('owner', [None, 'legacy_final_pass_v1'])

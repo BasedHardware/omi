@@ -2250,3 +2250,18 @@ def test_pusher_pcm_refusals_are_sustained_agent_only_pressure():
         assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [0], 'type': 'gt'}
         assert 'no receipt' in rule['annotations']['user_impact']
         assert 'PUSHER_STORAGE_PCM_BUDGET_MB' in rule['annotations']['safe_next_action']
+
+
+def test_pipeline_ledger_stuck_is_agent_warning_with_silent_mute_and_measurable_rearm():
+    rearm_expression = 'omi_pipeline_ledger_stuck_rows{stage="sealed"} == 0'
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-pipeline-ledger-stuck']
+        assert rule['labels']['severity'] == 'warning', export_name
+        assert rule['labels']['tier'] == 'agent', export_name
+        assert rule['labels']['audience'] == 'agent', export_name
+        assert rule['updated'] == '2026-11-12T00:00:00Z', export_name
+        assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent'], export_name
+        rearm = rule['annotations']['rearm_condition']
+        assert 'lookback' not in rearm, export_name
+        assert rearm_expression in rearm, export_name
+        assert '>= 26h' in rearm, export_name

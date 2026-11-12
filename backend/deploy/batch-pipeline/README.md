@@ -9,6 +9,13 @@ the returned ACTIVE states before any cohort rollout. This uses Firestore Admin
 index manifest intentionally rejects `ttl=true`, so TTL has a separate manifest.
 No policy has been applied by this change.
 
+`retention.json` is no longer batch-only: it also contains the user-owned
+`pipeline_ledger` collection group. `scripts/batch_pipeline_ttl.py --apply` now
+enables `pipeline_ledger.expires_at` as well as the batch completion fields, so
+the next apply is a user-data deletion decision. Record that decision (and the
+returned ACTIVE states) before running `--apply`; a code revert does not
+un-provision the TTL.
+
 Encrypted staged audio/result objects are erased 24 hours after successful
 projection. `expire_completed_segment` arms cleanup only once the projection is
 ready; the maintenance pump drains `cleanup_completed_artifacts`. Receipt TTL is
