@@ -1,0 +1,17 @@
+{
+  "id": "yearly-switch-retention",
+  "kind": "question",
+  "owner": "Churn",
+  "question": "Which registered offer observations arrive in an exact namespace/build? Descriptive only; UID intent-to-treat denominators come from EXP-006 enrollment, not event presence. Accepted is intent, not a paid switch.",
+  "query": "contracts/analytics/consumers/yearly-switch-retention.sql",
+  "events": [
+    "retentionOfferShown",
+    "retentionOfferAccepted",
+    "yearlyRetentionObservation"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number"
+  ],
+  "zero_policy": "No rows means no observed event, not zero take-up or churn. Missing billing linkage and maturity remain WAITING. No attribution from overall Stripe totals."
+}

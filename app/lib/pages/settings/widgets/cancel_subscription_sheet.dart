@@ -7,6 +7,10 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/payment.dart' as payment_api;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/pages/settings/widgets/leave_flow_widgets.dart';
+import 'package:omi/pages/settings/widgets/yearly_retention_placement.dart';
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -20,10 +24,16 @@ const _stepCount = 3;
 /// step is its own route, so the iOS edge swipe and system back step back one step. This widget
 /// is step 1 and owns the flow; [show] resolves `true` when the subscription was cancelled.
 class CancelSubscriptionFlow extends StatefulWidget {
-  const CancelSubscriptionFlow({super.key, this.loadOffer});
+  const CancelSubscriptionFlow(
+      {super.key, this.loadOffer, this.yearlyClaim, this.yearlyEnabled, this.yearlyPreview, this.yearlyApply});
 
   /// Hermetic preview/test seam; production reads the retention endpoint.
   final Future<wire.GeneratedRetentionOfferResponse?> Function()? loadOffer;
+
+  final Future<wire.GeneratedYearlySwitchResponse?> Function(String)? yearlyClaim;
+  final Future<bool> Function()? yearlyEnabled;
+  final YearlySwitchLoader? yearlyPreview;
+  final YearlySwitchApplier? yearlyApply;
 
   static Future<bool?> show(BuildContext context) {
     return Navigator.of(context).push<bool>(omiPageRoute(builder: (_) => const CancelSubscriptionFlow()));
@@ -35,7 +45,11 @@ class CancelSubscriptionFlow extends StatefulWidget {
 
 /// What the reader has entered so far, shared by the three steps.
 class _CancelFlow {
-  _CancelFlow({this.loadOffer});
+  _CancelFlow({this.loadOffer, this.yearlyClaim, this.yearlyEnabled, this.yearlyPreview, this.yearlyApply});
+  final Future<wire.GeneratedYearlySwitchResponse?> Function(String)? yearlyClaim;
+  final Future<bool> Function()? yearlyEnabled;
+  final YearlySwitchLoader? yearlyPreview;
+  final YearlySwitchApplier? yearlyApply;
   final Future<wire.GeneratedRetentionOfferResponse?> Function()? loadOffer;
   final exit = LeaveFlowExit();
   final details = TextEditingController();
@@ -45,7 +59,12 @@ class _CancelFlow {
 }
 
 class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
-  late final _flow = _CancelFlow(loadOffer: widget.loadOffer);
+  late final _flow = _CancelFlow(
+      loadOffer: widget.loadOffer,
+      yearlyClaim: widget.yearlyClaim,
+      yearlyEnabled: widget.yearlyEnabled,
+      yearlyPreview: widget.yearlyPreview,
+      yearlyApply: widget.yearlyApply);
 
   static const _reasons = [
     _Reason('too_expensive', FontAwesomeIcons.wallet),
@@ -201,8 +220,10 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     final offer = await (_flow.loadOffer ?? payment_api.getRetentionOffer)();
     if (!mounted || offer == null || !offer.eligible || offer.discountedAmount == null) return;
     setState(() => _offer = offer);
-    PlatformManager.instance.analytics
-        .track('Retention Offer Shown', properties: {'reason': _flow.reason, 'percent_off': offer.percentOff});
+    const TypedEvents().emit(RetentionOfferShown(
+        reason: RetentionOfferShownReason.values
+            .firstWhere((value) => value.wireName == _flow.reason, orElse: () => RetentionOfferShownReason.other),
+        percentOff: offer.percentOff));
   }
 
   String _monthlyPrice(wire.GeneratedRetentionOfferResponse offer) =>
@@ -212,8 +233,10 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     final offer = _offer;
     if (offer == null || _busy) return;
     setState(() => _isAcceptingOffer = true);
-    PlatformManager.instance.analytics
-        .track('Retention Offer Accepted', properties: {'reason': _flow.reason, 'percent_off': offer.percentOff});
+    const TypedEvents().emit(RetentionOfferAccepted(
+        reason: RetentionOfferAcceptedReason.values
+            .firstWhere((value) => value.wireName == _flow.reason, orElse: () => RetentionOfferAcceptedReason.other),
+        percentOff: offer.percentOff));
     final ok = await payment_api.acceptRetentionOffer();
     if (!mounted) return;
     if (ok) {
@@ -277,8 +300,18 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
       title: context.l10n.justAMoment,
       subtitle: context.l10n.cancelConsequencesSubtitle,
       canPop: !_busy,
-      body: Column(
+      body: ListView(
         children: [
+          YearlyRetentionPlacement(
+            surface: YearlySwitchSurface.cancel,
+            emphasized: _flow.reason == 'too_expensive',
+            busy: _busy,
+            claim: _flow.yearlyClaim,
+            readEnabled: _flow.yearlyEnabled,
+            loadPreview: _flow.yearlyPreview,
+            apply: _flow.yearlyApply,
+            onSwitched: () => _flow.exit.close(context, false),
+          ),
           if (offer != null) ...[
             LeaveFlowNotice(
               icon: FontAwesomeIcons.tag,
@@ -293,9 +326,9 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
             color: OmiColors.warning,
           ),
           const SizedBox(height: OmiSpacing.md),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+            child: Column(
               children: [
                 LeaveFlowConsequenceRow(icon: FontAwesomeIcons.infinity, text: context.l10n.cancelConsequenceNoAccess),
                 LeaveFlowConsequenceRow(icon: FontAwesomeIcons.bolt, text: context.l10n.cancelConsequenceBattery),

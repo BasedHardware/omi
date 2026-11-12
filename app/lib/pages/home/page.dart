@@ -1,3 +1,5 @@
+import 'package:omi/pages/settings/widgets/yearly_retention_placement.dart';
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 // The home page: capture start/stop entry point, permission gating,
 // foreground-service lifecycle, and on-device transcription wiring.
 //
@@ -916,6 +918,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 );
                               },
                             ),
+                          if (onHome) const YearlyRetentionPlacement(surface: YearlySwitchSurface.engaged),
                           // Home shows an active call in its capture row; Tasks gets the slim bar.
                           if (!onHome) const ActiveCallTopBar(),
                           Expanded(

@@ -1,0 +1,31 @@
+{
+  "approval": "PENDING; no authorization or activation",
+  "locale": "en",
+  "strings": {
+    "yearlySwitchTitle": "Switch to Yearly",
+    "yearlySwitchHomeTitle": "Save {amount} a year with yearly",
+    "yearlySwitchHomeSubtitle": "Same plan, billed once a year",
+    "yearlySwitchPlanValue": "{plan}, {price} a year",
+    "yearlySwitchDueToday": "Due today",
+    "yearlySwitchRenews": "Renews",
+    "yearlySwitchCreditNote": "Includes credit for the rest of this month.",
+    "yearlySwitchDeclined": "Payment declined. You're still on monthly.",
+    "yearlySwitchFailed": "Couldn't switch. You're still on monthly.",
+    "yearlySwitchPreviewFailed": "Couldn't load your price.",
+    "yearlySwitchUnavailable": "Yearly billing isn't available for your plan right now.",
+    "yearlySwitchDoneTitle": "You're on yearly",
+    "yearlySwitchDoneBody": "{amount} charged today. Renews {date}.",
+    "cancelSubscription": "Cancel Subscription",
+    "retentionOfferBody": "Stay and pay {price} a month for the next {months} months.",
+    "retentionOfferAccept": "Stay for {percent}% off",
+    "cancel": "Cancel"
+  },
+  "fixture_amounts": {
+    "monthly_minor": 2999,
+    "yearly_minor": 26991,
+    "savings_minor": 8997,
+    "due_today_minor": 24492,
+    "currency": "USD"
+  },
+  "note": "Existing list-price yearly billing, not a new discount. Rendered amounts are synthetic, never verified live prices."
+}

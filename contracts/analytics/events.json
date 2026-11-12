@@ -5067,6 +5067,114 @@
         "subscription-payment-recovery"
       ],
       "correlation": null
+    },
+    {
+      "id": "retentionOfferShown",
+      "wire_name": "Retention Offer Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other"
+          ]
+        },
+        "percentOff": {
+          "type": "int",
+          "wire_name": "percent_off"
+        }
+      },
+      "consumers": [
+        "yearly-switch-retention"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "retentionOfferAccepted",
+      "wire_name": "Retention Offer Accepted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other"
+          ]
+        },
+        "percentOff": {
+          "type": "int",
+          "wire_name": "percent_off"
+        }
+      },
+      "consumers": [
+        "yearly-switch-retention"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "yearlyRetentionObservation",
+      "wire_name": "Yearly Retention Observation",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "placement": {
+          "type": "enum",
+          "wire_name": "placement",
+          "values": [
+            "cancel",
+            "engaged"
+          ]
+        },
+        "action": {
+          "type": "enum",
+          "wire_name": "action",
+          "values": [
+            "shown",
+            "opened",
+            "confirmed",
+            "succeeded",
+            "failed",
+            "dismissed"
+          ]
+        },
+        "variant": {
+          "type": "enum",
+          "wire_name": "variant",
+          "values": [
+            "control",
+            "treatment"
+          ]
+        },
+        "experimentVersion": {
+          "type": "int",
+          "wire_name": "experiment_version"
+        }
+      },
+      "consumers": [
+        "yearly-switch-retention"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {

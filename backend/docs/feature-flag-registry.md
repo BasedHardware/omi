@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-11 -->
+<!-- feature-flag-registry as-of: 2026-11-12 -->
 
 # Feature-flag authority registry
 
@@ -120,7 +120,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-11-11.
+None as of 2026-11-12.
 
 ## Flags
 
@@ -641,6 +641,7 @@ and an explicit empty literal renders as `''`.
 | `TRANSLATION_ONOPEN_ENABLED` | Serve bounded on-open translation for opt-in detail GETs | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | auditfix |
 | `VERTEX_EMBEDDING_DEDUPE_ENABLED` | Default on; same-owner exact-input Vertex vector reuse, keyed by complete text, task, title and endpoint. Successful vectors only, 600s TTL, 512 entries and 262144 scalar values per process. False bypasses batch and cross-request reuse and clears cache. | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `WAKE_WORD_ADJUDICATION_ENABLED` | Incident stop for wake-word adjudication | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | unowned |
+| `YEARLY_SWITCH_RETENTION_ENABLED` | Default on after approval/authorized rollout; explicit false stops both mobile placements while preserving UID controls and existing settings billing. | backend | env | closed | — | — | — | — | keep | keep | — | churn |
 | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | keep | — | auditfix |
 | `desktop-rating-prompt-disabled` | Stop the rating prompt | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `free-tier-kill-switch-v1` | Remote free-tier stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
@@ -851,6 +852,8 @@ and an explicit empty literal renders as `''`.
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
+| `YEARLY_SWITCH_RETENTION_APPROVAL_REF` | Empty by default: requires exact David render/copy approval reference before admission. | backend | env | closed | — | — | — | — | keep | keep | — | churn |
+| `YEARLY_SWITCH_RETENTION_ROLLOUT_AUTHORIZED` | False by default; separately authorized rollout gate, never set by implementer. | backend | env | closed | — | — | — | — | keep | keep | — | churn |
 | `mobile-chat-apps-all-channels` | Omi store only: private chat channel endpoints for David; prevents the public Telegram rule from exposing iMessage/WhatsApp. Default off, explicit allowlist only; backend channel admission remains authoritative | mobile | posthog | closed | — | — | — | absent (enable) | keep | keep | — | auditfix |
 | `watch_copy_dedupe_off` | True keeps and uploads Watch recovery copies; false deduplicates copies covered at least 95% by server-reachable live custody | mobile | posthog | closed | — | — | — | expected (kill) | keep | keep | — | uicleanup |
 
@@ -1409,6 +1412,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` — Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio (fail: closed)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)
 - `VERTEX_EMBEDDING_DEDUPE_ENABLED` — Default on; same-owner exact-input Vertex vector reuse, keyed by complete text, task, title and endpoint. Successful vectors only, 600s TTL, 512 entries and 262144 scalar values per process. False bypasses batch and cross-request reuse and clears cache. (fail: open)
+- `YEARLY_SWITCH_RETENTION_APPROVAL_REF` — Empty by default: requires exact David render/copy approval reference before admission. (fail: closed)
+- `YEARLY_SWITCH_RETENTION_ENABLED` — Default on after approval/authorized rollout; explicit false stops both mobile placements while preserving UID controls and existing settings billing. (fail: closed)
+- `YEARLY_SWITCH_RETENTION_ROLLOUT_AUTHORIZED` — False by default; separately authorized rollout gate, never set by implementer. (fail: closed)
 
 ## Not feature flags
 

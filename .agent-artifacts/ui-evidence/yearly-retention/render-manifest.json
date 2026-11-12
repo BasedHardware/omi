@@ -1,0 +1,60 @@
+{
+  "viewport_logical": [
+    430,
+    932
+  ],
+  "pixel_ratio": 2,
+  "theme": "light",
+  "locale": "en",
+  "synthetic": true,
+  "approval": "PENDING",
+  "historical_source": "ac02feb05f0d6389f473e08a25980397b1348b0f",
+  "renders": [
+    {
+      "file": "000-cancel-before.png",
+      "sha256": "c61c0f7a30d2265d20d4676d33e3cf7b5599a402fe29f9541972746b74b54591",
+      "role": "Historical production cancellation source at ac02feb05f0d6389f473e08a25980397b1348b0f"
+    },
+    {
+      "file": "001-cancel-control.png",
+      "sha256": "c61c0f7a30d2265d20d4676d33e3cf7b5599a402fe29f9541972746b74b54591",
+      "role": "Current cancellation control/no yearly offer"
+    },
+    {
+      "file": "002-cancel-after.png",
+      "sha256": "c86f131d2f17d1c4609f8122547736723abda7d99b80ba1dac4ab407f213e854",
+      "role": "Production cancellation, too_expensive treatment; yearly before discount; Cancel pinned"
+    },
+    {
+      "file": "003-engaged-off.png",
+      "sha256": "c8a533f4e69db77bad22161f65d451011ab375083d1caa8dc28e67aaa7febe6d",
+      "role": "Minimal Home host before/flag-off: no new placement"
+    },
+    {
+      "file": "004-engaged-after.png",
+      "sha256": "d4c3d860cd9a7d1562c6d7cb892bf3211f9f618fe770bcb00c30e69503e24154",
+      "role": "Production engaged placement in minimal Home host, not full Home shell"
+    },
+    {
+      "file": "005-exact-price-preview.png",
+      "sha256": "697b664a8ad996a8e6915ff1fd0b1800059987b889cb3845039ea677e2015711",
+      "role": "Production existing yearly preview, exact synthetic charge and annual total"
+    },
+    {
+      "file": "006-payment-declined.png",
+      "sha256": "41cf1a03b27b4b4f2e9f1bbe87f3c3d77ccfb3977e90081fd9f7d24a58bd0ce4",
+      "role": "Production switch decline, monthly retained; dismiss sheet to Cancel subscription"
+    }
+  ],
+  "limitations": [
+    "Widget rasters, not device/system-safe-area or full Home-shell acceptance.",
+    "No task-owned agent-flutter debug app was available; device/debugger verification not claimed.",
+    "No actual Stripe price, account, deployment, approval, activation or lift is represented."
+  ],
+  "source_files_sha256": {
+    "app/lib/pages/settings/widgets/cancel_subscription_sheet.dart": "a049f3a5bda156086529967dc03c9ba6b437f0633b2d43328a4a8692aa00927f",
+    "app/lib/pages/settings/widgets/yearly_retention_placement.dart": "facced025f90667eb1ef5b8e3bd8a99480e80b6d8acde43583d46b03a9827bc1",
+    "app/lib/pages/settings/widgets/yearly_switch.dart": "fee6db941bd881fdcd074d7ca85f250b5594c37f3b877d1587572c9bbb7a376e",
+    "app/test/widgets/yearly_retention_test.dart": "bcf7d79f0f3905a2f734cefa7aa3ec6824e984878b8ce01924edf64acb8338c6"
+  }
+}
