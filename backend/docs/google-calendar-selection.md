@@ -8,6 +8,16 @@ Issue: #20195. This is separate from Google OAuth approval/configuration #12354.
 selection. Google CalendarList is paginated with `minAccessRole=reader`, including
 hidden readable calendars; free/busy-only and deleted entries are excluded. The
 already requested `calendar` OAuth scope covers this call; no scope is widened.
+Narrowing Calendar to `calendar.events.readonly` plus
+`calendar.calendarlist.readonly` (added by explicit incremental consent) belongs
+to the dedicated Calendar project/client work, not this change; until then this
+selection rides the consent bundle users already granted.
+
+Both routes are rate limited per Omi user at 10 requests/minute
+(`google_calendar:selection`). Each read enumerates up to 20 CalendarList pages
+before fanning out, so an unthrottled poller could drain the shared OAuth
+client's Calendar quota. Opted-in event reads additionally use the bounded
+metadata cache described below.
 
 Preferences live on the Omi user document, keyed by a digest of Google's verified
 primary-calendar ID. A reconnect to that Google account reuses its selection;
@@ -42,10 +52,12 @@ Discovery errors never serve stale data. Event requests always go to Google;
 403/404/410 on a secondary calendar excludes it and evicts local discovery metadata.
 Google remains the authorization boundary even during the 30-second metadata TTL.
 
-GET and PUT catalog routes share the Redis-backed `calendar:catalog` budget of
-12 requests per UID per minute, exempt from event-wide rate-limit boosts.
-Exhaustion returns 429 with Retry-After before any Google call; Redis failure
-returns 503. Existing operational shadow-mode override still applies. The cache
+GET and PUT catalog routes share the Redis-backed `google_calendar:selection` budget of
+10 requests per UID per minute, exempt from event-wide rate-limit boosts.
+Exhaustion returns 429 with Retry-After before any Google call. Redis failure
+fails open, preserving the incoming maintainer change and the shared first-party
+endpoint policy; the quota cap is unavailable during that outage. Existing
+operational shadow-mode override still applies. The cache
 reduces repeated conversation-read discovery, while this fleet-wide rate limit
 bounds manual refresh/save traffic. Simultaneous cold misses may each discover;
 the cache does not claim cross-worker single-flight or replace Google quota limits.
@@ -94,7 +106,9 @@ this same authority rather than reintroducing a primary-only source.
 - [x] Windows/Linux typecheck, 30 UI/transport/owner-fence tests and changed-file ESLint
 - [x] Generated API/schema consumers and repository preflight; 14 schema
       inventory and 29 Dart-generator/UTF-8 contract tests
-- [ ] Final diff review and exact-head CI; remain draft until required gates pass
+- [x] Per-user rate limit on the catalog and save routes
+- [ ] Final combined diff review and exact-head CI; the new follow-up must
+      pass before readiness. Live qualification follows the recorded decision below
 
 Provider verification and backend/app releases must be recorded separately from
 local synthetic tests. A synthetic provider's Personal/Workspace-shaped payloads
@@ -106,7 +120,7 @@ as part of the local verification.
 
 November 12 follow-up checks:
 - [x] Cache expiry, owner/grant/selection separation, revocation and error/no-stale-data regressions
-- [x] Shared route rate budget, 429 Retry-After and limiter-outage 503 before provider calls
+- [x] Shared route rate budget, 429 Retry-After and documented first-party fail-open behavior on limiter outage
 - [x] Production routes with real local Firestore persistence and synthetic provider revocation
 - [ ] Current follow-up commit CI
 
@@ -116,9 +130,32 @@ selection. Once saved, the shared server reads apply it to older clients too.
 No existing imported memories, source recordings or connected credentials are
 deleted by this change.
 
-Before readiness, record live Personal and Workspace account results with approved QA access for
-calendar discovery, selected secondary reads, reconnect and access revocation.
-This verifies Google's grant/admin policy boundary; synthetic contract fixtures
-do not replace it. Exact-head CI must also pass.
-Customer confirmation and store/backend releases are later states, separate from
-technical merge readiness.
+## Deferred live provider qualification
+
+Maintainer decision, 2026-11-12: live Personal and Workspace provider
+qualification moves to the first client build that exposes the picker instead of
+blocking this backend merge.
+
+Why that is bounded:
+
+- The consent request is unchanged — same OAuth client, same scopes, same
+  redirect. This change adds no new Google surface, so it cannot change a
+  Workspace administrator's app-access decision. That boundary is exactly as
+  verified as the existing Calendar integration.
+- No released client calls `PUT /v1/calendar/google/calendars`, so the additive
+  API is unreachable and every user without a saved selection keeps the
+  unchanged primary-only read path.
+- Discovery, per-calendar access loss, grant loss and reconnect are covered by
+  hermetic and Firestore-emulator tests. What those cannot prove is a live
+  Google grant and a live Workspace policy decision.
+
+This PR also contains picker UI, so the first exposing desktop/mobile build must
+complete this qualification before release; the automatic desktop Beta train
+must not be mistaken for provider verification. No live result is claimed here.
+
+The first dogfood build therefore performs: connect, discover, save two
+calendars, read a secondary-only event, reconnect, and remove a calendar whose
+access was revoked. Record the result here when that build exists.
+
+Exact-head CI must pass before merge. Customer confirmation and store/backend
+releases are later states, separate from technical merge readiness.

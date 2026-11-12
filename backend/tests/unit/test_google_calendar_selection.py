@@ -358,7 +358,7 @@ async def test_catalog_routes_share_budget_and_reject_before_google(provider, mo
 
     monkeypatch.setattr(routes.auth, 'check_rate_limit', budget)
     monkeypatch.setattr(routes.auth, 'RATE_LIMIT_SHADOW', False)
-    assert get_effective_limit('calendar:catalog', boost=100) == (12, 60)
+    assert get_effective_limit('google_calendar:selection', boost=100) == (10, 60)
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'omi-A'
@@ -370,11 +370,11 @@ async def test_catalog_routes_share_budget_and_reject_before_google(provider, mo
         )
         assert result.status_code == 429 and result.headers['Retry-After'] == '45'
         assert len(calls) == before
-    assert seen == [('omi-A', 'calendar:catalog', 12, 60)] * 2
+    assert seen == [('omi-A', 'google_calendar:selection', 10, 60)] * 2
 
 
 @pytest.mark.asyncio
-async def test_catalog_limiter_failure_does_not_spend_provider_quota(provider, monkeypatch):
+async def test_catalog_limiter_outage_preserves_first_party_availability(provider, monkeypatch):
     import redis
 
     _, _, _, calls = provider
@@ -387,8 +387,8 @@ async def test_catalog_limiter_failure_does_not_spend_provider_quota(provider, m
     app.include_router(routes.router)
     app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'omi-A'
     async with AsyncClient(transport=ASGITransport(app=app), base_url='http://omi.test') as client:
-        assert (await client.get('/v1/calendar/google/calendars')).status_code == 503
-    assert not calls
+        assert (await client.get('/v1/calendar/google/calendars')).status_code == 200
+    assert any(url.endswith('/calendarList') for _, url, _ in calls)
 
 
 @pytest.mark.asyncio

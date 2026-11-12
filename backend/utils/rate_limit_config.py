@@ -79,7 +79,7 @@ _BOOST_EXEMPT_DEFAULT = (
     "storefront:plans,import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
     "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
-    "conversations:task-presence,calendar:catalog"
+    "conversations:task-presence,google_calendar:selection"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -92,8 +92,6 @@ _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_
 # ---------------------------------------------------------------------------
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
-    # Shared GET/PUT budget; catalog enumeration may consume up to 20 Google calls.
-    "calendar:catalog": (12, 60),
     # Spaces device pulls and FCM refreshes permit paging bursts.
     "spaces:changes": (600, 60),
     # Cursor acknowledgements track device pull frequency.
@@ -237,6 +235,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "memories:extract": (30, 3600),
     # Return-only SSOT calendar/gmail/notes synthesis for desktop connector imports
     "connectors:synthesize": (30, 3600),
+    # Calendar read selection. Each catalog read enumerates Google CalendarList
+    # (up to 20 pages) and each save re-derives it, so a polling client can drain
+    # the shared OAuth client's Calendar quota. A picker opens on user intent.
+    "google_calendar:selection": (10, 60),
     # Return-only SSOT provisional conversation topic (emoji + short title)
     "conversations:topic": (60, 3600),
     # Return-only SSOT AI user profile synthesis (once-daily desktop cadence)
