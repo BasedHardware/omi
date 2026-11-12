@@ -699,27 +699,18 @@ def search_memories_core(uid: str, query: str, *, limit: int) -> Dict[str, Any]:
             raise_tool_error_from_http(exc)
         index_unavailable = True
         fallback_reason = "http_error"
-        logger.warning("MCP memory index search unavailable (HTTP %s): %s", exc.status_code, exc.detail)
+        logger.warning("MCP memory index search unavailable status_code=%s", exc.status_code)
         rows = []
     except _PROGRAMMING_ERRORS:
         raise
     except Exception as exc:
         index_unavailable = True
         fallback_reason = "unavailable"
-        logger.warning("MCP memory index search unavailable (%s): %s", type(exc).__name__, exc)
+        logger.warning("MCP memory index search unavailable error_type=%s", type(exc).__name__)
         rows = []
 
     coverage = "eligible_indexed_memories"
     if not rows:
-        if index_unavailable:
-            record_fallback(
-                component="agent_tools",
-                from_mode="indexed_memories",
-                to_mode="lexical_scan",
-                reason=fallback_reason,
-                outcome="degraded",
-                log=logger,
-            )
         max_rounds = _MEMORY_KEYSET_MAX_ROUNDS if index_unavailable else _MEMORY_LEXICAL_NO_HIT_MAX_ROUNDS
         try:
             rows = _lexical_search_memories(uid, query, limit=capped_limit, max_rounds=max_rounds)
@@ -728,13 +719,45 @@ def search_memories_core(uid: str, query: str, *, limit: int) -> Dict[str, Any]:
         except _PROGRAMMING_ERRORS:
             raise
         except Exception as exc:
+            if index_unavailable:
+                record_fallback(
+                    component="agent_tools",
+                    from_mode="indexed_memories",
+                    to_mode="lexical_scan",
+                    reason=fallback_reason,
+                    outcome="exhausted",
+                    log=logger,
+                )
             raise ToolExecutionError(
-                "No indexed memory matches and lexical memory search is unavailable. "
+                "Memory index search is unavailable and lexical memory search failed. "
                 "Use get_memories to browse recent memories; this does not establish that the topic is absent.",
                 code=-32009,
                 http_status=503,
             ) from exc
         if index_unavailable:
+            if not rows:
+                record_fallback(
+                    component="agent_tools",
+                    from_mode="indexed_memories",
+                    to_mode="lexical_scan",
+                    reason=fallback_reason,
+                    outcome="exhausted",
+                    log=logger,
+                )
+                raise ToolExecutionError(
+                    "Memory index search is unavailable and bounded lexical scan found no matches. "
+                    "Use get_memories to browse recent memories; this does not establish that the topic is absent.",
+                    code=-32009,
+                    http_status=503,
+                )
+            record_fallback(
+                component="agent_tools",
+                from_mode="indexed_memories",
+                to_mode="lexical_scan",
+                reason=fallback_reason,
+                outcome="degraded",
+                log=logger,
+            )
             coverage = "lexical_fallback_only"
         elif rows:
             coverage = "eligible_indexed_memories_with_lexical_recovery"
@@ -743,5 +766,3 @@ def search_memories_core(uid: str, query: str, *, limit: int) -> Dict[str, Any]:
     if not rows:
         result["message"] = "No eligible indexed matches. This does not establish absence; use the memory list."
     return result
-
-

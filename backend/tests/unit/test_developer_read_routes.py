@@ -117,6 +117,10 @@ def test_memory_search_checks_persisted_grant_before_shared_search(routes):
     unavailable = client.get('/v1/dev/user/memories/search?query=budget')
     assert unavailable.status_code == 503
     assert 'unavailable' in unavailable.json()['detail']
+    search.side_effect = ToolExecutionError('query is required and cannot be empty', code=-32602)
+    invalid = client.get('/v1/dev/user/memories/search?query=budget')
+    assert invalid.status_code == 400
+    assert 'query is required' in invalid.json()['detail']
 
 
 def test_people_does_not_expand_existing_key_privileges(routes):

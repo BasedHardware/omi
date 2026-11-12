@@ -257,15 +257,18 @@ def test_empty_memory_vectors_recover_lexical_matches_without_outage_telemetry(m
     assert service.read_page.call_count == 1
 
 
-def test_memory_index_outage_emits_typed_fallback_telemetry_and_coverage(memory_core):
+def test_memory_index_outage_emits_typed_fallback_telemetry_and_coverage(memory_core, caplog):
     handler, service, telemetry = memory_core
-    service.search_mcp.side_effect = RuntimeError('vector unavailable')
+    service.search_mcp.side_effect = RuntimeError('secret vector payload')
     service.read_page.return_value = SimpleNamespace(
         memories=[_memory_item('lexical-hit', 'Agreed quarterly budget cap with finance team', category='work')],
         next_cursor=None,
         truncated=False,
     )
-    result = handler.search_memories_core('owner', 'quarterly budget', limit=10)
+    with caplog.at_level('WARNING'):
+        result = handler.search_memories_core('owner', 'quarterly budget', limit=10)
+    assert 'secret vector payload' not in caplog.text
+    assert 'error_type=RuntimeError' in caplog.text
     assert [m['id'] for m in result['memories']] == ['lexical-hit']
     assert result['search_coverage'] == 'lexical_fallback_only'
     telemetry.assert_called_once()
@@ -274,6 +277,23 @@ def test_memory_index_outage_emits_typed_fallback_telemetry_and_coverage(memory_
     assert telemetry.call_args.kwargs['to_mode'] == 'lexical_scan'
     assert telemetry.call_args.kwargs['reason'] == 'unavailable'
     assert telemetry.call_args.kwargs['outcome'] == 'degraded'
+
+
+def test_memory_index_outage_with_empty_lexical_scan_raises_503_instead_of_empty_list(memory_core, caplog):
+    from fastapi import HTTPException
+
+    handler, service, telemetry = memory_core
+    service.search_mcp.side_effect = HTTPException(status_code=503, detail='sensitive upstream detail')
+    with caplog.at_level('WARNING'), pytest.raises(handler.ToolExecutionError) as exc:
+        handler.search_memories_core('owner', 'quarterly budget', limit=10)
+    assert 'sensitive upstream detail' not in caplog.text
+    assert 'status_code=503' in caplog.text
+    assert exc.value.http_status == 503
+    assert exc.value.code == -32009
+    assert 'get_memories' in exc.value.message
+    telemetry.assert_called_once()
+    assert telemetry.call_args.kwargs['reason'] == 'http_error'
+    assert telemetry.call_args.kwargs['outcome'] == 'exhausted'
 
 
 def test_memory_index_programming_error_is_not_masked_as_outage(memory_core):
@@ -286,13 +306,15 @@ def test_memory_index_programming_error_is_not_masked_as_outage(memory_core):
 
 
 def test_memory_index_failure_and_lexical_failure_is_actionable(memory_core):
-    handler, service, _ = memory_core
+    handler, service, telemetry = memory_core
     service.search_mcp.side_effect = RuntimeError('vector unavailable')
     service.read_page.side_effect = RuntimeError('store unavailable')
     with pytest.raises(handler.ToolExecutionError) as exc:
         handler.search_memories_core('owner', 'budget', limit=10)
     assert exc.value.http_status == 503
     assert 'get_memories' in exc.value.message
+    telemetry.assert_called_once()
+    assert telemetry.call_args.kwargs['outcome'] == 'exhausted'
 
 
 def test_search_memories_rejects_blank_query(memory_core):
@@ -301,5 +323,3 @@ def test_search_memories_rejects_blank_query(memory_core):
         handler.search_memories('owner', {'query': '   '}, auth_context=object())
     assert exc.value.code == -32602
     service.search_mcp.assert_not_called()
-
-
