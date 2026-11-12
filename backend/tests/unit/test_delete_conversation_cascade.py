@@ -213,6 +213,29 @@ def test_delete_conversation_without_children_still_deletes_the_document(store):
     ]
 
 
+def test_merge_source_delete_also_removes_the_sibling_ledger_row(monkeypatch):
+    from utils.conversations import merge_conversations
+
+    calls = []
+    monkeypatch.setattr(
+        merge_conversations,
+        '_delete_conversation_and_related_data',
+        lambda *args, **kwargs: calls.append(('delete', args, kwargs)),
+    )
+    monkeypatch.setattr(
+        merge_conversations.conversations_db,
+        'delete_pipeline_ledger_row',
+        lambda uid, cid: calls.append(('ledger', uid, cid)),
+    )
+
+    merge_conversations.delete_merged_source('uid-1', 'conv-1', 'conv-2')
+
+    assert calls == [
+        ('delete', ('uid-1', 'conv-1'), {'merged_into': 'conv-2'}),
+        ('ledger', 'uid-1', 'conv-1'),
+    ]
+
+
 def test_delete_pipeline_ledger_row_propagates_a_transient_failure(monkeypatch):
     client = MagicMock()
     client.collection.return_value.document.return_value.collection.return_value.document.return_value.delete.side_effect = RuntimeError(

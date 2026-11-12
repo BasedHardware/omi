@@ -352,6 +352,90 @@ def test_stale_advance_cannot_overwrite_a_newer_stage(client, monkeypatch):
     assert doc['attempt'] == 2
 
 
+def _summary_payload(capture_id, *, overview='Synthetic real summary'):
+    return {
+        'id': capture_id,
+        'status': 'completed',
+        'sync_content_revision': 3,
+        'data_protection_level': 'standard',
+        'summary_output_present': True,
+        'structured': {'title': 'Title', 'overview': overview},
+    }
+
+
+def _isolate_conversation_writes(monkeypatch, client):
+    monkeypatch.setattr(conversations, 'db', client)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *_: None)
+    monkeypatch.setattr(conversations, '_delete_conversation_search_index', lambda *_: None)
+    monkeypatch.setattr(conversations, 'stop_quiet_check_for_conversation', lambda *_, **__: None)
+
+
+def test_summary_hook_writes_noted_then_done_once(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    _isolate_conversation_writes(monkeypatch, client)
+    uid, capture_id = 'u-notes', 'c-notes'
+    _seed(
+        client,
+        uid,
+        capture_id,
+        summary_first_pending_at=100,
+        summary_title_provenance='server_minimum',
+        sync_content_revision=3,
+    )
+
+    assert conversations.persist_processing_result_with_lifecycle(uid, _summary_payload(capture_id))
+
+    doc = _ledger(client, uid, capture_id)
+    assert doc['stage'] == pipeline_ledger.DONE
+    assert doc['terminal'] is True
+    assert doc['home_ready_at'] is not None
+    assert [entry['stage'] for entry in doc['transitions']] == [pipeline_ledger.NOTED, pipeline_ledger.DONE]
+    assert doc['attempt'] == 2
+
+
+def test_discarded_summary_does_not_write_the_ledger(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    _isolate_conversation_writes(monkeypatch, client)
+    uid, capture_id = 'u-discard', 'c-discard'
+    _seed(
+        client,
+        uid,
+        capture_id,
+        summary_first_pending_at=100,
+        summary_title_provenance='server_minimum',
+        sync_content_revision=3,
+    )
+    payload = _summary_payload(capture_id)
+    payload['summary_output_present'] = False
+    payload['discarded'] = True
+
+    assert conversations.persist_processing_result_with_lifecycle(uid, payload)
+
+    assert _ledger(client, uid, capture_id) is None
+
+
+def test_delayed_summary_hook_cannot_recreate_a_deleted_capture(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    uid, capture_id = 'u-notes-del', 'c-notes-del'
+    _seed(client, uid, capture_id)
+    owner_ref = client.collection('users').document(uid)
+    source_ref = _conversation_ref(client, uid, capture_id)
+    source_ref.delete()
+
+    assert not pipeline_ledger.advance(
+        uid,
+        capture_id,
+        pipeline_ledger.NOTED,
+        revision=1,
+        reopen=True,
+        source_ref=source_ref,
+        owner_ref=owner_ref,
+        firestore_client=client,
+    )
+    assert _ledger(client, uid, capture_id) is None
+
+
 def test_census_window_reads_the_committed_rows(client, monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'on')
     uid, capture_id = 'u-window', 'c-window'
