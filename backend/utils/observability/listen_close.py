@@ -15,7 +15,7 @@ import logging
 import time
 from typing import Any, Optional
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import REGISTRY, Counter, Histogram
 
 from utils.observability.reasons import ListenNoAudioCloseReason
 
@@ -43,7 +43,10 @@ LISTEN_WS_CLOSE_FINALIZE_SECONDS = Histogram(
 # Named differently from omi_listen_no_audio_teardown_total on purpose: that family keeps its own
 # labels (transcription_source), and one metric name cannot carry two label sets. Its client_platform
 # values mirror utils.observability.transcription._PLATFORMS; a test pins the two sets together.
-OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL = Counter(
+# Reuse the registered collector when a test reloads this module.
+OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL: Counter = getattr(REGISTRY, '_names_to_collectors', {}).get(
+    'omi_listen_no_audio_close_reason_total'
+) or Counter(
     'omi_listen_no_audio_close_reason_total',
     'Accepted /v4/listen sessions that tore down before any first audio byte, by the close the server observed',
     ['client_platform', 'close_reason'],

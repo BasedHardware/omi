@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from time import monotonic
 from typing import Literal, TypeVar, cast
 
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 from starlette.requests import ClientDisconnect
 
 from utils.metrics import (
@@ -44,10 +44,15 @@ _JOURNEYS = frozenset({'chat_response', 'pusher_session', 'capture_finalization'
 
 # Sibling of omi_journey_terminal_total, deliberately not a label on it (that label set is pinned
 # by the journey SLO and headline contracts). One increment per failure terminal.
-OMI_JOURNEY_FAILURE_REASON_TOTAL = Counter(
-    'omi_journey_failure_reason_total',
-    'Failed real-traffic product journey terminals by closed journey name and closed failure reason',
-    ['journey', 'reason'],
+# Tests reload this module; reuse the registered collector instead of registering it twice.
+OMI_JOURNEY_FAILURE_REASON_TOTAL = cast(
+    Counter,
+    getattr(REGISTRY, '_names_to_collectors', {}).get('omi_journey_failure_reason_total')
+    or Counter(
+        'omi_journey_failure_reason_total',
+        'Failed real-traffic product journey terminals by closed journey name and closed failure reason',
+        ['journey', 'reason'],
+    ),
 )
 # Explicit members: every reason child exists at zero before the first failure.
 OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.UNKNOWN.value)
