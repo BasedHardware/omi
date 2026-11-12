@@ -135,6 +135,11 @@ jobs:
       # deploy lane's readiness job already does.
       actions: 'read'
       contents: 'read'
+      # Keyless index check (2026-11-01): the readiness composite now mints its
+      # OIDC token through the dev deploy pool, so this boundary job needs
+      # id-token: write. The token still impersonates only omi-ci-index-check@
+      # (ciFirestoreIndexReader), never the deployer.
+      id-token: 'write'
     runs-on: ubuntu-latest
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
@@ -212,15 +217,6 @@ jobs:
             --trigger-is-ancestor-of-sha "$trigger_is_ancestor_of_sha"
           printf 'admitted_sha=%s\n' "$admitted_sha" >> "$GITHUB_OUTPUT"
 
-      - name: Require read-only Firestore credentials
-        env:
-          GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
-        run: |
-          if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then
-            echo "::error title=Missing Firestore read-only credentials::Set GCP_FIRESTORE_READONLY_CREDENTIALS in the development environment before deploying."
-            exit 1
-          fi
-
       - name: Checkout admitted Firestore source
         uses: actions/checkout@v7
         with:
@@ -243,7 +239,8 @@ jobs:
         with:
           source_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
           verify_credential_project: 'true'
 
   deploy:

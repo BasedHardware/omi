@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
-/// Which paywall a free user sees. New variants are added here and in the PostHog flag; the
-/// split, the kill switch and the per-variant payload live in PostHog so they change over the air.
+/// The paywall designs. Free users get [trial]; the others are reachable only through the
+/// debug-build override. A later test goes through the Omi flag store plus exposure events.
 enum PaywallVariant {
   /// The shipped `PlansSheet`, exactly as before the experiment existed.
   control('control'),
@@ -32,14 +32,13 @@ enum PaywallVariant {
   }
 }
 
-/// The resolved arm plus its payload. Held for the analytics identity it was read for, so a reader
-/// never flips between paywalls mid-session and an account switch never inherits another
-/// account's arm; PostHog's experience continuity keeps the arm stable across sessions.
+/// The arm plus its placement.
 @immutable
 class PaywallExperimentConfig {
   const PaywallExperimentConfig({required this.variant, this.webUrl, this.onboardingPaywall = false});
 
   static const control = PaywallExperimentConfig(variant: PaywallVariant.control);
+  static const trial = PaywallExperimentConfig(variant: PaywallVariant.trial, onboardingPaywall: true);
 
   final PaywallVariant variant;
 
@@ -66,18 +65,14 @@ class PaywallExperimentConfig {
   String toString() => 'PaywallExperimentConfig(${variant.wireName}, url: $webUrl, onboarding: $onboardingPaywall)';
 }
 
-/// Client gate for the mobile paywall A/B test.
+/// Which paywall a free reader gets: always [PaywallExperimentConfig.trial]. Readers the backend says
+/// cannot get a trial see the shipped sheet instead ([PaywallRouter]).
 ///
-/// Evaluated from the PostHog multivariate flag `paywall-variant` (project 302298). Fail-closed:
-/// no analytics identity, a slow read, an unknown variant, a malformed payload or an account
-/// switch while reading all mean [PaywallVariant.control], and the app behaves exactly as it did
-/// before the experiment.
-///
-/// Payload per variant (JSON object):
-/// `{"url": "https://…", "onboarding_paywall": true}` — `url` is required for `web` and must be
-/// https; `onboarding_paywall` is optional and defaults to false.
+/// Debug payload (JSON object): `{"url": "https://…", "onboarding_paywall": true}` — `url` is required
+/// for `web` and must be https; `onboarding_paywall` is optional and defaults to false.
 abstract final class PaywallExperiment {
-  /// PostHog flag key. Registered in `config/feature-flags.yaml`.
+  /// The exposure's flag name dashboards break metrics down by; released builds still read this
+  /// PostHog flag. Registered in `config/feature-flags.yaml`.
   static const enabledFlag = 'paywall-variant';
 
   /// Debug-build override: `--dart-define=OMI_PAYWALL_VARIANT=outline|web|trial` (and optionally
@@ -89,9 +84,6 @@ abstract final class PaywallExperiment {
   static const defaultWebUrl = 'https://omi-paywall.vercel.app/';
 
   static bool get debugOverrideActive => kDebugMode && _debugVariant.isNotEmpty;
-
-  static PaywallExperimentConfig? _cached;
-  static String? _cachedIdentity;
 
   /// Parses one flag read into a config. Anything unexpected collapses to control.
   static PaywallExperimentConfig parse({String? variant, Object? payload}) {
@@ -123,52 +115,17 @@ abstract final class PaywallExperiment {
     }
   }
 
-  /// The arm for the current analytics identity. [readVariant], [readPayload] and [identity]
-  /// default to the analytics manager and are injectable for tests. The first resolved read is
-  /// held for that identity; a different identity reads again, and an identity that changes while
-  /// the reads are in flight yields control without being held.
-  static Future<PaywallExperimentConfig> resolve({
-    Future<String?> Function(String key)? readVariant,
-    Future<Object?> Function(String key)? readPayload,
-    String? Function()? identity,
-    bool refresh = false,
-  }) async {
-    if (debugOverrideActive) {
-      return parse(
-        variant: _debugVariant,
-        payload: {'url': _debugWebUrl.isEmpty ? defaultWebUrl : _debugWebUrl, 'onboarding_paywall': true},
-      );
-    }
-    final whoAmI = identity ?? () => AnalyticsManager().settledDistinctId;
-    final who = whoAmI();
-    if (who == null) return PaywallExperimentConfig.control; // nobody to assign yet: try again later
-    final cached = _cached;
-    if (cached != null && _cachedIdentity == who && !refresh) return cached;
-    try {
-      final variant = await (readVariant ?? AnalyticsManager().getFeatureFlagVariant)(enabledFlag);
-      if (variant == null) return PaywallExperimentConfig.control; // unresolved: try again next time
-      final payload = variant == PaywallVariant.control.wireName
-          ? null
-          : await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag);
-      if (whoAmI() != who) return PaywallExperimentConfig.control; // account switched mid-read
-      final config = parse(variant: variant, payload: payload);
-      _cached = config;
-      _cachedIdentity = who;
-      return config;
-    } catch (_) {
-      return PaywallExperimentConfig.control;
-    }
+  /// The arm to show.
+  static PaywallExperimentConfig get current {
+    if (!debugOverrideActive) return PaywallExperimentConfig.trial;
+    return parse(
+      variant: _debugVariant,
+      payload: {'url': _debugWebUrl.isEmpty ? defaultWebUrl : _debugWebUrl, 'onboarding_paywall': true},
+    );
   }
 
-  /// Records the exposure PostHog Experiments attribute metrics to (`$feature_flag_called`), once
-  /// per identity and arm, and tags every later event with `$feature/paywall-variant`. Control
-  /// counts too: it is the experiment's denominator. True when an exposure was sent.
+  /// Records the exposure (`$feature_flag_called`), once per identity and arm, and tags every later
+  /// event with `$feature/paywall-variant`. True when an exposure was sent.
   static bool recordExposure(PaywallExperimentConfig config, {bool Function(String key, String variant)? record}) =>
       (record ?? AnalyticsManager().recordFeatureFlagExposure)(enabledFlag, config.variant.wireName);
-
-  @visibleForTesting
-  static void resetForTesting() {
-    _cached = null;
-    _cachedIdentity = null;
-  }
 }

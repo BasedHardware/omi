@@ -70,8 +70,15 @@ cloud_run:
     # 2026-10-24 costcut (live 22:48Z): cap 80 -> 50; warm floor 1 -> 5 so the sync
     # pump keeps conversation-finalization headroom (min 5 x concurrency 20, the
     # shape deploy-backend-stack sizes its queue against).
-    max_instances: 50
-    min_instances: 5
+    # syncwall: source cap 50 -> 40; lead applies after fresh-latency review.
+    # 2026-11-02 margin G1 dropped (cap 30 never applied): after #24264 removed the
+    # short deferred re-polls, sync runs long jobs at concurrency p95 18-20 of 20 on
+    # ~33 instances, so a lower cap would queue work rather than trim idle capacity.
+    # 2026-11-04 legacy-dark (David e53a35, rev 56 17:55Z): warm floor 5 -> 0. The long
+    # in-request legacy pipeline is gone and uploads arrive continuously, so the floor
+    # only bit when idle. Live service-level min applied 19:13Z by cl2-deploy. Rollback: 5.
+    max_instances: 40
+    min_instances: 0
   backend-sync-backfill:
     env:
       SYNC_TASKS_QUEUE: sync-backfill-fresh
@@ -99,10 +106,12 @@ cloud_run:
   backend-integration:
     env:
       SYNC_TASKS_QUEUE: sync-jobs-fresh
-      # C4 (lane 9): summary-debt repair moves to the enrichment-maintenance Scheduler job,
-      # which targets backend-integration. The manifest enables it on backend-sync only,
-      # so without this the new owner's tick is a no-op.
+      # C4 (lane 9): enrichment-maintenance targets backend-integration.
+      # 2026-11-09 David (relay 3e764e): enable until the long-term fix.
+      # Keep aligned with runtime_env/prod.overlay.yaml; backend-sync stays disabled.
       SUMMARY_DEBT_REPAIR_ENABLED: 'true'
+      # lead2 8b9c8f (2026-11-10): keep the spend cap aligned; rollback 10.
+      SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT: '8'
       # live-only, 2026-10-20 inventory
       FAIR_USE_ENABLED: 'true'
       HTTP_DEFAULT_TIMEOUT: '600'
@@ -127,7 +136,8 @@ cloud_tasks:
     # utils/cloud_tasks.py get_sync_tasks_max_attempts mirrors it. The config-train is
     # the only writer of this cap now that trains skip the ops-owned queues.
     max_concurrent_dispatches: 160
-    max_dispatches_per_second: 25
+    # Smooth fresh bursts; concurrency and the five-attempt contract stay fixed.
+    max_dispatches_per_second: 15
     max_attempts: 5
     min_backoff: 60s
     max_backoff: 300s
@@ -145,10 +155,33 @@ cloud_tasks:
     max_backoff: 60s
     log_sampling_ratio: 0.1
   enrichment:
-    # Contract (a)/(d), lane 9. Created by the first prod config-train at M3.
-    enabled: false
-    max_concurrent_dispatches: 50
+    # Contract (a)/(d), lane 9: plan C3's queue for new sr- obligations (ENRICHMENT_ROUTE=enrichment_queue).
+    # Created by the config-train before the backend roll that sets the route (planc, Plan C prod activation).
+    # 2026-11-10 ruling 008024: reconcile primary live drift to 300/25 independently
+    # of fresh tuning; a fresh-only rollback must preserve this primary capacity.
+    max_concurrent_dispatches: 300
     max_dispatches_per_second: 25
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
+  enrichment-fresh:
+    # 2026-11-10 ruling 008024: permanent 30/10 for first-summary catch-up.
+    # The operational Firestore-pressure guard may temporarily lower live concurrency
+    # to 15 (rate stays 10); Git stays 30. cl2-deploy alone applies prod changes.
+    # Re-evaluate the 168h age gate after the backlog drains; this changes no admission policy.
+    max_concurrent_dispatches: 30
+    max_dispatches_per_second: 10
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
+  provider-stt:
+    # Plan C8: provider-STT wakes for BYOK and non-Parakeet units, served by backend-integration. Idle while
+    # legacy_sync=on (the provider route needs draining/dark); it must exist before draining
+    # (DRAINING_PRECONDITIONS provider_stt_live). At 100% about 205k units/day take this route (2.4/s mean);
+    # 48 concurrent / 10 per second covers a 2x peak at ~10s per vendor call. One paid call per unit is
+    # enforced by the outbox intent, not by queue attempts.
+    max_concurrent_dispatches: 48
+    max_dispatches_per_second: 10
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s

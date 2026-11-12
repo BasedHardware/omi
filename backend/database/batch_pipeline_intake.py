@@ -6,7 +6,8 @@ from typing import Callable
 
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline import require_record_protocol_ready
-from config.record_audio import require_record_audio_barrier
+from config.record_audio import record_identity, require_record_audio_barrier, restore_pending
+from config.record_seal_rules import token_lease_mode
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
@@ -53,8 +54,34 @@ def admit(
         raise ValueError('work identity must match projection binding')
     policy = policy or resolve_batch_policy(binding.owner_id)
     content_key = f'{binding.owner_id}/{binding.content_id}'
+    serialized_binding = asdict(binding)
+    # Ordinary work must remain readable by pre-partial projection hosts
+    # throughout the roll. Only partial work requires the new field/readers.
+    if not binding.partial_record:
+        serialized_binding.pop('partial_record')
 
     def commit(tx):
+        row = {}
+        partial_parent = (intake or {}).get('record_partial_parent')
+        if binding.record_origin:
+            target = binding.target_conversation_id
+            if not target:
+                raise ValueError('registered record target unavailable')
+            key = f'{binding.owner_id}/{target}'
+            row = tx.get('conversations', key)
+            if not row or row.get('deleted') or row.get('uses_custom_stt') or (partial_parent and row.get('discarded')):
+                raise ValueError('registered record target unavailable')
+            if row.get('discarded'):
+                # Full archives, partial children and ledger replays can name
+                # another unit. Read the row's canonical obligation as well.
+                obligation_ids = {
+                    binding.segment_ids[0],
+                    record_identity(binding.owner_id, target)[1],
+                }
+                if partial_parent:
+                    obligation_ids.add(partial_parent)
+                if restore_pending(row, *(tx.get('jobs', key) for key in obligation_ids)):
+                    raise ValueError('registered record target unavailable')
         existing = tx.get('content', content_key)
         if existing.get('dispatch_protocol') == PROTOCOL:
             return {'outcome': 'batch', 'job_id': existing['job_id']}
@@ -65,11 +92,24 @@ def admit(
             # Redis ownership. Its existing recovery path remains authoritative.
             return {'outcome': 'busy', 'job_id': existing.get('job_id')}
         pending = tx.get('jobs', binding.segment_ids[0])
+        partial_metadata = intake or {}
+        partial_parent = partial_metadata.get('record_partial_parent')
+        if partial_parent:
+            pending = tx.get('jobs', partial_parent)
+            run = pending.get('partial_run') or {}
+            if (
+                not pending.get('partial_coordinator')
+                or run.get('complete')
+                or run.get('generation') != partial_metadata.get('record_partial_generation')
+                or run.get('page') != partial_metadata.get('record_partial_page')
+                or binding.content_id != partial_metadata.get('record_partial_content')
+            ):
+                raise ValueError('partial continuation ownership changed')
         reserved_recording = (
             pending.get('state') == 'record_pending'
             and pending.get('owner_id') == binding.owner_id
             and pending.get('conversation_id') == binding.target_conversation_id
-            and pending.get('record_content_id') == binding.content_id
+            and (partial_parent or pending.get('record_content_id') == binding.content_id)
         )
         admission = policy
         if reserved_recording:
@@ -81,17 +121,29 @@ def admit(
                 if raw is not None
                 else replace(policy, batch_enabled=True, live_admission_enabled=True, live_record_enabled=True)
             )
+        if partial_parent and admission.provider_reason == 'byok':
+            raise ValueError('partial BYOK excluded')
+        if binding.native_record and policy.stt_route == 'provider':
+            # Capture reserved custody before units existed. Complete only the
+            # unit route now; retain every recorded cohort/funding decision.
+            admission = replace(
+                admission,
+                stt_route=policy.stt_route,
+                provider_reason='byok' if admission.provider_reason == 'byok' else policy.provider_reason,
+                provider_service=policy.provider_service,
+            )
         if not admission.batch_enabled:
             raise AdmissionDisabled('recorded admission policy does not enable batch')
         if binding.record_origin:
             key = f'{binding.owner_id}/{binding.target_conversation_id}'
-            row = tx.get('conversations', key)
-            if not row or row.get('deleted') or row.get('uses_custom_stt'):
-                raise ValueError('registered record target unavailable')
             if binding.native_record:
                 require_record_protocol_ready()
                 require_record_audio_barrier(row, expected=record_barrier)
-            expected = 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
+            expected = (
+                row.get('record_lane_owner')
+                if partial_parent and reserved_recording
+                else 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
+            )
             if row.get('record_lane_owner') not in {None, expected}:
                 raise ValueError('record owner is immutable')
             if row.get('record_lane_owner') != expected:
@@ -112,9 +164,17 @@ def admit(
                 tx.put('artifacts', key, artifact)
             created = enqueue_item(tx, item, now, policy=admission)
             job = tx.get('jobs', item.segment_id)
-            if not created and job.get('projection_binding') != asdict(binding):
+            previous_binding = dict(job.get('projection_binding') or {})
+            if previous_binding.get('partial_record') is False:
+                previous_binding.pop('partial_record')
+            if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
-            job['projection_binding'] = asdict(binding)
+            job['projection_binding'] = serialized_binding
+            if binding.native_record and record_barrier is not None and token_lease_mode() != 'off':
+                job['record_input_upload_revision'] = record_barrier.get('record_upload_revision')
+            if partial_metadata.get('release'):
+                # Readers (hard-3, the 2h alarm) split released backfill from fresh audio per row.
+                job['release'] = partial_metadata['release']
             tx.put('jobs', item.segment_id, job)
         if intake is not None:
             tx.put('intakes', binding.job_id, {**intake, 'accepted_at': now})

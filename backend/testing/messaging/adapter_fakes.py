@@ -41,6 +41,8 @@ class FixtureTransport:
                 return httpx.Response(401, json={'error': 'unauthorized'})
             if url.endswith('/messages'):
                 return httpx.Response(200, json={'ok': True, 'messageId': 'keiki-message'})
+            if method == 'POST' and '/attachments?filename=' in url:
+                return httpx.Response(201, json={'id': 'att_upload', 'mimeType': kwargs['headers']['Content-Type']})
             return httpx.Response(200, json={'ok': True})
         if url.endswith('/getFile'):
             return httpx.Response(200, json={'ok': True, 'result': {'file_path': 'documents/fixture.txt'}})

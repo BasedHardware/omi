@@ -382,8 +382,8 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--concurrency=6' in action
     assert '--cpu=2' in action
-    # 2026-10-24 right-sizing: prod worker 8->4 GiB (live 06:06Z); dev keeps 8 GiB.
-    assert "--memory=${{ inputs.project_id == 'based-hardware' && '4Gi' || '8Gi' }}" in action
+    # margin-20: prod 2Gi (7d max bucket <=1.149GiB at concurrency 6); dev keeps 8Gi.
+    assert "--memory=${{ inputs.project_id == 'based-hardware' && '2Gi' || '8Gi' }}" in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     # Runtime ops owns the cap; both deploy paths preserve it rather than reset it.
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')

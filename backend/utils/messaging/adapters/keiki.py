@@ -14,16 +14,17 @@ import json
 import logging
 import re
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from utils.messaging.adapters.base import BaseAdapter
 from utils.messaging.adapters.linq import IMessageAdapter, link_code
+from utils.messaging.adapters.media import MEDIA_TYPES, OUTBOUND_MEDIA_TYPES, is_audio_video
 from utils.messaging.adapters.modalities import emoji_only
 from utils.messaging.adapters.rendering import valid_item_link
 from utils.messaging.adapters.transport import ProviderError, request_json
-from utils.messaging.contracts import ChannelCapabilities, ChannelMessage
-from utils.observability.fallback import record_fallback
+from utils.messaging.contracts import ChannelCapabilities, ChannelMessage, InboundAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,11 @@ CHANNEL_SERVICES = {
     'imessage': frozenset({'imessage', 'sms', 'photon', 'linq'}),
     'whatsapp': frozenset({'whatsapp'}),
 }
-FILES_UNAVAILABLE = 'I can’t send files in this chat yet. Open Omi to see it.'
 TAPBACKS = {'love': '❤️', 'like': '👍', 'dislike': '👎', 'laugh': '😂', 'emphasize': '‼️', 'question': '❓'}
 _ATTACHMENT = re.compile(r'attachment_id=')
+# Keiki's own description of a file, e.g. "[Voice note: Audio Message.caf; attachment_id=att_…]".
+# Omi reads the file itself, so the annotation is dropped from the text the model sees.
+_ANNOTATION = re.compile(r'\[[^\[\]]*attachment_id=[^\[\]]*\]')
 
 
 def turn_auth(signing_secret, agent_id, turn_id, *, now=None):
@@ -105,6 +108,45 @@ class KeikiClient:
             sleep=self.sleep,
         )
 
+    def attachment_reference(self, turn_id, attachment_id):
+        # The turn route works for the turn's whole life; the payload's own url expires in 15 minutes.
+        return self.turn_url(turn_id) + '/attachments/' + quote(attachment_id, safe='')
+
+    def _turn_of(self, reference):
+        prefix = self.api_base + '/turns/'
+        if not reference.startswith(prefix):
+            raise PermissionError('Untrusted media location')
+        turn_id, sep, rest = reference[len(prefix) :].partition('/attachments/')
+        if not sep or not turn_id or not rest or '/' in turn_id + rest:
+            raise PermissionError('Untrusted media location')
+        return turn_id
+
+    async def download(self, reference):
+        turn_id = self._turn_of(reference)
+        token = turn_auth(self._secret, self.agent_id, turn_id, now=self.clock())
+        return await self.transport.download(
+            reference, allowed_hosts={urlparse(self.api_base).hostname}, headers={'Authorization': 'Bearer ' + token}
+        )
+
+    async def upload(self, turn_id, artifact, data):
+        from utils.messaging.delivery_context import send_guard
+
+        if send_guard.get() is not None:
+            await send_guard.get()()
+        token = turn_auth(self._secret, self.agent_id, turn_id, now=self.clock())
+        response = await self.transport.request(
+            'POST',
+            self.turn_url(turn_id) + '/attachments?filename=' + quote(artifact.name, safe=''),
+            content=data,
+            headers={'Authorization': 'Bearer ' + token, 'Content-Type': artifact.mime_type},
+        )
+        if response.status_code >= 300:
+            raise ProviderError('Attachment upload failed', status_code=response.status_code)
+        attachment_id = response.json().get('id')
+        if not isinstance(attachment_id, str) or not attachment_id:
+            raise ProviderError('Attachment upload returned no id')
+        return attachment_id
+
     async def complete(self, turn_id, ok):
         try:
             await self.call(turn_id, '/complete', {'status': 'completed' if ok else 'failed'}, idempotent=True)
@@ -131,9 +173,9 @@ class KeikiAdapter(BaseAdapter):
             typing=True,
             reactions=True,
             max_text_len=1200 if channel == 'imessage' else 4000,
-            # Keiki's turn API sends files only from its own sandbox paths; Omi files stay in Omi.
-            media_in=(),
-            media_out=(),
+            media_in=MEDIA_TYPES,
+            # iMessage plays Ogg voice notes poorly, as on Linq; WhatsApp voice notes need Ogg/Opus.
+            media_out=tuple(m for m in OUTBOUND_MEDIA_TYPES if channel != 'imessage' or m != 'audio/ogg'),
             free_reply_window=timedelta(hours=24) if channel == 'whatsapp' else None,
             rate_limits={'chat_per_minute': 30, 'max_send_receive_ratio': max_ratio},
         )
@@ -175,10 +217,12 @@ class KeikiAdapter(BaseAdapter):
         spoken = [m for m in turn.get('messages', ()) if isinstance(m, dict) and not m.get('silent')]
         if not spoken:
             return ()
-        text = '\n'.join(str(m.get('text') or '') for m in spoken).strip()
+        attachments, acknowledgement = self._attachments(turn['turnId'], spoken)
+        text = '\n'.join(_ANNOTATION.sub('', str(m.get('text') or '')).strip() for m in spoken).strip()
         content = '\n'.join(str(m.get('content') or '') for m in spoken)
-        attachments = bool(_ATTACHMENT.search(content))
-        if not text and not attachments:
+        # A file Keiki annotated but did not hand over cannot be read; say so instead of guessing.
+        unreadable = not attachments and not acknowledgement and bool(_ATTACHMENT.search(content))
+        if not text and not attachments and not acknowledgement and not unreadable:
             return ()
         command = text.lower()
         last = spoken[-1]
@@ -203,10 +247,10 @@ class KeikiAdapter(BaseAdapter):
                 unlink=command in ('unlink', '/unlink'),
                 command=(
                     'unsupported'
-                    if attachments
+                    if unreadable
                     else (
                         'ack'
-                        if emoji_only(text)
+                        if not attachments and (emoji_only(text) or acknowledgement and not text)
                         else (
                             'help'
                             if command in ('help', '/help')
@@ -214,10 +258,35 @@ class KeikiAdapter(BaseAdapter):
                         )
                     )
                 ),
+                attachments=tuple(attachments),
                 quoted_text=quoted_text[:2000] if isinstance(quoted_text, str) else None,
                 quoted_message_id=str(quoted['messageId'])[:200] if quoted.get('messageId') else None,
             ),
         )
+
+    def _attachments(self, turn_id, spoken):
+        attachments, acknowledgement = [], False
+        for message in spoken:
+            entries = message.get('attachments')
+            for entry in entries if isinstance(entries, list) else ():
+                if not isinstance(entry, dict) or not isinstance(entry.get('id'), str) or not entry['id']:
+                    continue
+                mime = str(entry.get('mimeType') or 'application/octet-stream').lower()
+                if mime == 'image/gif':  # stickers and GIFs read as a reaction, as on Linq
+                    acknowledgement = True
+                    continue
+                size = entry.get('size')
+                attachment = InboundAttachment(
+                    self.client.attachment_reference(turn_id, entry['id']),
+                    str(entry.get('filename') or 'attachment')[:200],
+                    mime,
+                    size if isinstance(size, int) and not isinstance(size, bool) else 0,
+                )
+                attachments.append(replace(attachment, voice=is_audio_video(attachment)))
+        return attachments, acknowledgement
+
+    async def download(self, attachment):
+        return await self.client.download(attachment.reference)
 
     async def unhandled(self, body):
         # A turn Omi will not answer still holds Keiki's conversation slot until it settles.
@@ -235,19 +304,29 @@ class KeikiAdapter(BaseAdapter):
     async def send(self, message, *, text=None, artifact=None, draft=False, link=None):
         if draft:
             return
-        if artifact:
-            # Unreachable while media_out is empty (the sink refuses files first); kept so a
-            # capability change degrades to a notice rather than a failed turn.
-            record_fallback(
-                component='other', from_mode='channel_file', to_mode='text_notice', reason='other', outcome='degraded'
-            )
-            text = FILES_UNAVAILABLE
         if link:
             if not valid_item_link(link):
                 raise ValueError('Item link required')
             text = link
-        operation = self.operation(message, ('link:' + link) if link else 'text:' + (text or ''))
+        operation = self.operation(
+            message,
+            (
+                ('link:' + link)
+                if link
+                else ('artifact:' + artifact.file_store_ref if artifact else 'text:' + (text or ''))
+            ),
+        )
         if not await self.ledger.begin(message, operation, ratio=self.max_ratio, retry_reserved=True):
+            return
+        if artifact:
+            data = await self.owned_bytes(artifact)
+            attachment_id = await self.client.upload(message.provider_message_id, artifact, data)
+            await self.client.call(
+                message.provider_message_id,
+                '/actions',
+                {'action': 'send_file', 'attachmentId': attachment_id, 'idempotencyKey': operation},
+            )
+            await self.ledger.commit(message, operation, attachment_id, message_sent=True)
             return
         body = {'text': text, 'idempotencyKey': operation}
         reply_to = await self.reply_target(message)
@@ -292,4 +371,5 @@ class KeikiAdapter(BaseAdapter):
             await sink.action('react', reaction)
             return 'Reaction sent.'
 
-        return (StructuredTool.from_function(name=self.channel + '_react', coroutine=react),)
+        files = tuple(t for t in super().tools(sink) if t.name != self.channel + '_react')
+        return files + (StructuredTool.from_function(name=self.channel + '_react', coroutine=react),)

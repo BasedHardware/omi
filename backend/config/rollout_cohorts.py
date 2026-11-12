@@ -18,16 +18,14 @@ COHORT_ENVS = {
     # The composition root injects scoped policy env readers with the runtime.
     'batch-pipeline': lambda: '',
     'batch-pipeline-recovery': lambda: '',
-    'first-summary': lambda: os.getenv('FIRST_SUMMARY_UID_ALLOWLIST', ''),
-    'audio-archive': lambda: os.getenv('AUDIO_ARCHIVE_UID_ALLOWLIST', ''),
+    'audio-archive': lambda: '',
     'dream-agent': lambda: os.getenv('DREAM_AGENT_UID_ALLOWLIST', ''),
     'speaker-grouping-shadow': lambda: os.getenv('SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST', ''),
     'stt-live-demand': lambda: os.getenv('STT_LIVE_DEMAND_UID_ALLOWLIST', ''),
-    'sync-legacy-fresh': lambda: os.getenv('SYNC_LEGACY_FRESH_UID_ALLOWLIST', ''),
     'sync-lineage-resolve': lambda: os.getenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', ''),
     'transcription-final-pass': lambda: os.getenv('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', ''),
     'transcription-shadow': lambda: os.getenv('TRANSCRIPTION_SHADOW_UID_ALLOWLIST', ''),
-    'mobile-standard-batch': lambda: os.getenv('MOBILE_STANDARD_BATCH_UIDS', ''),
+    'mobile-standard-batch': lambda: '',
     'messaging-telegram': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
     'messaging-imessage': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
 }
@@ -59,7 +57,7 @@ _members_resolver: Callable[[str], tuple[str, ...]] | None = None
 _load_resolver: Callable[[str], Any] | None = None
 _warm_resolver: Callable[[str], Any] | None = None
 _percent_resolver: Callable[[str, float], float] | None = None
-_legacy_sync_resolver: Callable[[], str] | None = None
+_legacy_sync_resolver: Callable[[str | None], str] | None = None
 
 
 def configured() -> bool:
@@ -112,7 +110,7 @@ async def warm_rollout_cohorts(uid: str) -> None:
         await _warm_resolver(uid)
 
 
-def configure_runtime_percent(percent: Callable[[str, float], float], legacy_sync: Callable[[], str]) -> None:
+def configure_runtime_percent(percent: Callable[[str, float], float], legacy_sync: Callable[[str | None], str]) -> None:
     """Bind the runtime `_ramp` reader (utils.rollout.runtime_percent); unbound processes keep env values."""
     global _percent_resolver, _legacy_sync_resolver
     _percent_resolver, _legacy_sync_resolver = percent, legacy_sync
@@ -128,11 +126,11 @@ def runtime_percent(name: str, *, env_default: float) -> float:
     return _percent_resolver(name, env_default)
 
 
-def legacy_sync_mode() -> str:
+def legacy_sync_mode(uid: str | None = None) -> str:
     """'on' | 'draining' | 'dark' (contract (h)); unbound means 'on', today's behaviour."""
     if _legacy_sync_resolver is None:
         return 'on'
-    return _legacy_sync_resolver()
+    return _legacy_sync_resolver(uid)
 
 
 # The free-tier policy retired in #22238. Retain its pure token grammar and

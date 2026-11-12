@@ -6,6 +6,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/notifications/fcm_token_registration.dart' show fcmRegistrationOrderKey;
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -32,6 +33,7 @@ const Set<String> kPreferencesKeptOnSignOut = {
   'companionAssociationPrompted',
   'autoSyncOfflineRecordings',
   // Display and phone behaviour
+  fcmRegistrationOrderKey,
   SharedPreferencesUtil.appearanceDefaultMigrationKey,
   SharedPreferencesUtil.appearanceModeKey,
   'showShortConversations',

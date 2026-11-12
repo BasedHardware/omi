@@ -1,5 +1,6 @@
 from database.people_generation import bump_people_generation, write_person
 from database.person_speech_samples import add_sample_transaction
+from database.people_projection import project_people
 from config.refactor_modes import serving_for
 from utils.speakers.person_pool import (
     pool_profile,
@@ -47,7 +48,7 @@ from database.person_aliases import (
 from database.read_boundary import parse_payload_strict, parse_snapshot_or_none, parse_snapshot_strict
 from database.speaker_learning_fields import project_person_learning, speech_sample_source, voice_learning_fields
 from database.speaker_profile_authority import person_teaching_authorized
-from database import speaker_auto_enroll as auto_enroll_db
+from database import speaker_auto_enroll as auto_enroll_db, transcript_pointer
 from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
@@ -388,17 +389,21 @@ def clear_byok_active(uid: str):
 
 @cache_writer('deletion_marker_cache')
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
-    # Stored in a top-level collection so it survives the user record being deleted.
-    # Use merge=True so a retried delete request does not erase a durable wipe marker
-    # (pending/failed/retrying/deleting_auth) already written to the same document.
-    account_deletion_document(uid).set(
+    """Attach deletion feedback to an existing wipe marker. Never creates one.
+
+    The feedback fields used to be merge-written before the wipe intent. A failed
+    intent then left a marker with only feedback fields and no wipe_status, which
+    blocks sign-in with no restore path. Update-only fails when no marker exists,
+    so feedback can no longer create a marker. Callers run after the intent write
+    and treat a failure as best-effort.
+    """
+    account_deletion_document(uid).update(
         {
             'uid': uid,
             'reason': reason or '',
             'reason_details': reason_details or '',
             'timestamp': datetime.now(timezone.utc),
-        },
-        merge=True,
+        }
     )
 
 
@@ -991,12 +996,8 @@ def get_person(uid: str, person_id: str, *, include_dismissed: bool = False):
     return project_person_learning(uid, person_data, firestore_client=db)
 
 
-def get_people(uid: str, *, include_dismissed: bool = False):
-    cache = {}
-    return [
-        project_person_learning(uid, person, firestore_client=db, projection_cache=cache)
-        for person in list_people(db, uid, include_dismissed=include_dismissed)
-    ]
+def get_people(uid: str, *, include_dismissed: bool = False, memoize: bool = False):
+    return project_people(db, uid, include_dismissed, memoize, list_people, project_person_learning)
 
 
 def count_people(uid: str, *, firestore_client: Any = None) -> int:
@@ -1150,8 +1151,9 @@ def replace_person_speech_profile(
         'speech_sample_source': speech_sample_source(conversation_id, segment_ids, expected_receipt_generation),
         **voice_learning_fields('learned', 'stored', speech_seconds),
     }
-    return _replace_speech_profile_transaction(
-        db.transaction(),
+    return transcript_pointer.run_preloaded_transactional(
+        db,
+        _replace_speech_profile_transaction,
         ref,
         expected_updated_at,
         profile,
@@ -1607,7 +1609,14 @@ def update_user_subscription(uid: str, subscription_data: dict):
     user_ref = db.collection('users').document(uid)
     invalidate_subscription(uid)
     try:
-        user_ref.update({'subscription': subscription_data_to_store})
+        from config.referral_campaign import campaign_enabled
+
+        if campaign_enabled():
+            from database.referral_campaign import write_commercial_subscription
+
+            write_commercial_subscription(uid, subscription_data_to_store, client=db)
+        else:
+            user_ref.update({'subscription': subscription_data_to_store})
     finally:
         invalidate_subscription(uid)
 
@@ -2024,7 +2033,7 @@ def set_user_training_data_opt_in(uid: str, status: str):
 
 
 def get_user_valid_subscription(
-    uid: str, *, firestore_client: Any | None = None, provision: bool = True
+    uid: str, *, firestore_client: Any | None = None, provision: bool = True, include_promotions: bool = True
 ) -> Optional[Subscription]:
     """
     Gets the user's subscription if it is currently valid for use.
@@ -2052,6 +2061,19 @@ def get_user_valid_subscription(
         subscription = get_existing_user_subscription(uid, firestore_client=firestore_client)
         if subscription is None:
             subscription = get_default_basic_subscription()
+
+    # Promotional access is separate authority; billing readers above keep the
+    # commercial subscription/price/version untouched. Expiry is checked on
+    # every admission, outside the commercial subscription cache.
+    from utils.referral_campaign import GRANT_FIELD, campaign_enabled, effective_subscription_payload
+
+    if include_promotions and campaign_enabled():
+        grant_doc = user_snapshot(uid, firestore_client or db, [GRANT_FIELD])
+        grant = (grant_doc.to_dict() or {}).get(GRANT_FIELD)
+        original = subscription.model_dump()
+        projected = effective_subscription_payload(original, grant)
+        if projected != original:
+            subscription = parse_payload_strict(Subscription, projected, document_path=f'users/{uid}')
 
     # Basic (free) plans are only valid if their status is active.
     if subscription.plan == PlanType.basic:

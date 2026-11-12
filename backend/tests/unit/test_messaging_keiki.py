@@ -66,7 +66,11 @@ def adapter(monkeypatch):
         result.sent.append(dict(message=message, text=text, artifact=artifact, draft=draft))
         await send(message, text=text, artifact=artifact, draft=draft, **({'link': link} if link else {}))
 
+    async def owned_bytes(artifact):
+        return b'owned'
+
     monkeypatch.setattr(result, 'send', record)
+    monkeypatch.setattr(result, 'owned_bytes', owned_bytes)
     return result
 
 
@@ -293,7 +297,89 @@ def test_react_maps_tapbacks_to_the_current_message(adapter):
     }
     with pytest.raises(ValueError):
         asyncio.run(adapter.action(message, 'react', 'rocket'))
-    assert [t.name for t in adapter.tools(None)] == ['imessage_react']
+    assert [t.name for t in adapter.tools(None)] == [
+        'imessage_send_file',
+        'imessage_send_photo',
+        'imessage_send_voice',
+        'imessage_react',
+    ]
+
+
+VOICE = {
+    'id': 'att_voice',
+    'filename': 'Audio Message.caf',
+    'mimeType': 'audio/x-caf',
+    'size': 4830,
+    'url': BASE + '/attachments/att_voice/content?exp=1&sig=s',
+}
+
+
+def test_inbound_files_become_attachments_without_keiki_annotations(adapter):
+    annotation = '[Voice note: Audio Message.caf; attachment_id=att_voice; transcript: hi]'
+    photo = dict(VOICE, id='att_photo', filename='IMG_1.HEIC', mimeType='image/heic', size=900)
+    value = turn(
+        messages=[
+            {'text': annotation, 'content': annotation, 'messageId': 'm1', 'attachments': [VOICE]},
+            {'text': 'what is this?', 'content': 'what is this?', 'messageId': 'm2', 'attachments': [photo]},
+        ]
+    )
+    (message,) = adapter.parse(json.dumps(value).encode())
+    assert message.text == 'what is this?' and message.command is None
+    voice, image = message.attachments
+    assert voice.reference == BASE + '/turns/turn-1/attachments/att_voice'
+    assert (voice.name, voice.mime_type, voice.size, voice.voice) == ('Audio Message.caf', 'audio/x-caf', 4830, True)
+    assert (image.mime_type, image.voice) == ('image/heic', False)
+    assert 'audio/x-caf' in adapter.capabilities.media_in
+
+
+def test_gif_reads_as_a_reaction_and_unhanded_files_stay_unsupported(adapter):
+    gif = dict(VOICE, id='att_gif', filename='a.gif', mimeType='image/gif')
+    sticker = turn(messages=[{'text': '', 'content': '[Image; attachment_id=att_gif]', 'attachments': [gif]}])
+    assert adapter.parse(json.dumps(sticker).encode())[0].command == 'ack'
+    legacy = turn(messages=[{'text': '', 'content': '[Photo; attachment_id=a1]', 'messageId': 'm'}])
+    assert adapter.parse(json.dumps(legacy).encode())[0].command == 'unsupported'
+
+
+def test_download_uses_the_turn_route_with_turn_auth(adapter):
+    message = adapter.parse(json.dumps(turn(messages=[{'text': 'x', 'attachments': [VOICE]}])).encode())[0]
+    assert asyncio.run(adapter.download(message.attachments[0])) == b'test file'
+    ((url, kwargs),) = adapter.transport.downloads
+    assert url == BASE + '/turns/turn-1/attachments/att_voice'
+    assert kwargs['allowed_hosts'] == {'onkeiki.com'}
+    assert kwargs['headers']['Authorization'].startswith('Bearer kts1.')
+    for reference in (
+        VOICE['url'],
+        BASE + '/turns/turn-1/attachments/a/b',
+        'https://evil.example/turns/t/attachments/a',
+    ):
+        with pytest.raises(PermissionError):
+            asyncio.run(adapter.client.download(reference))
+
+
+def test_outbound_file_uploads_then_sends_natively(adapter, monkeypatch):
+    from utils.messaging.contracts import Artifact
+
+    message = adapter.parse(json.dumps(turn()).encode())[0]
+    adapter.ledger.received.add((message.external_chat_id, message.provider_message_id))
+
+    async def owned(artifact):
+        return b'%PDF-1.7'
+
+    monkeypatch.setattr(adapter, 'owned_bytes', owned)
+    artifact = Artifact('chat_files/u/f.pdf', 'application/pdf', 8, 'Plan v2.pdf')
+    asyncio.run(adapter.send(message, artifact=artifact))
+    upload = next(c for c in adapter.transport.calls if '/attachments?' in c[1])
+    assert upload[0] == 'POST' and upload[1] == BASE + '/turns/turn-1/attachments?filename=Plan%20v2.pdf'
+    assert upload[2]['content'] == b'%PDF-1.7'
+    assert upload[2]['headers']['Content-Type'] == 'application/pdf'
+    (action,) = calls(adapter, '/actions')
+    assert action[2]['json'] == {
+        'action': 'send_file',
+        'attachmentId': 'att_upload',
+        'idempotencyKey': action[2]['json']['idempotencyKey'],
+    }
+    assert not calls(adapter, '/messages')
+    assert 'audio/ogg' not in adapter.capabilities.media_out
 
 
 def test_whatsapp_channel_and_runtime_wiring(monkeypatch):

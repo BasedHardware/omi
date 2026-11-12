@@ -11,12 +11,13 @@ answered blocks, and a failure there is shared briefly, never retried per panel.
 
 import base64
 import json
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 AUDIENCE = "https://admin.omi.me/api/omi/stats"
@@ -39,7 +40,9 @@ class NoRedirect(HTTPRedirectHandler):
 # each become a distinct 360-second cache/slot entry. The set is fixed and small.
 WALL_PATH = "/api/omi/stats/wall"
 SERIES_NAMES = ("headline", "growth", "activation", "retention", "revenue", "health")
-ALLOWED_PATHS = frozenset([WALL_PATH] + [f"{WALL_PATH}/series/{name}" for name in SERIES_NAMES])
+ALLOWED_PATHS = frozenset(
+    [WALL_PATH, "/api/omi/stats/uptime"] + [f"{WALL_PATH}/series/{name}" for name in SERIES_NAMES]
+)
 # A cold admin response returns within its 5 s bound while the fill continues
 # (`"refreshing": true`). Cache that body only briefly so the next panel refresh
 # picks up the filled result instead of pinning the empty one for 15 minutes.
@@ -50,6 +53,111 @@ UNAVAILABLE = b'{"error":"stats upstream unavailable"}'
 # The admin keeps stale-good legs for 24h and labels them; the proxy never holds a
 # body longer than that.
 MAX_STALE = 24 * 3600
+
+
+# Uptime (David 2026-11-06): "what % of the time a user used the product did it
+# go the way it should". Served by this sidecar from FIXED PromQL against the
+# in-cluster Prometheus, because the Business org must not hold a Prometheus
+# datasource (see README: datasource queries are not folder-scoped). No query
+# text, label or range ever comes from the request. Attempt-weighted: every
+# settled attempt in a core journey counts once; cancelled/degraded/unknown are
+# not settled. Definitions mirror the Omi Core Features stat panels.
+UPTIME_PATH = "/api/omi/stats/uptime"
+PROMETHEUS = os.environ.get(
+    "OMI_UPTIME_PROMETHEUS_URL", "http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090"
+)
+# (key, label, success selector, settled selector)
+UPTIME_JOURNEYS = (
+    (
+        "capture",
+        "Live capture",
+        'pusher_socket_closed_total{frames_seen="audio",reason!~"queue_wait_timeout|application_error"}',
+        'pusher_socket_closed_total{frames_seen="audio"}',
+    ),
+    (
+        "saved",
+        "Conversation saved",
+        'omi_journey_terminal_total{journey="capture_finalization",outcome="success"}',
+        'omi_journey_terminal_total{journey="capture_finalization",outcome=~"success|failure"}',
+    ),
+    (
+        "chat",
+        "Chat answer",
+        'omi_journey_terminal_total{journey="chat_response",outcome="success"}',
+        'omi_journey_terminal_total{journey="chat_response",outcome=~"success|failure"}',
+    ),
+    (
+        "ptt",
+        "Push-to-talk",
+        'omi_client_journey_terminal_total{job="cloud-run-application-metrics",journey="realtime_voice",outcome="success"}',
+        'omi_client_journey_terminal_total{job="cloud-run-application-metrics",journey="realtime_voice",outcome=~"success|failure"}',
+    ),
+)
+UPTIME_DAYS = 35
+UPTIME_TTL = 900
+UPTIME_MAX_STALE = 6 * 3600
+GOOD_MARK, BAD_MARK = "\u200b", "\u2060"  # tone markers read by the board (lib/wall-series.ts)
+
+
+def uptime_pct(success, settled):
+    return None if not settled else round(100 * success / settled, 2)
+
+
+def uptime_delta_text(current, prior):
+    """The board's strip text: change in percentage points, up is good."""
+    if current is None:
+        return "—"
+    if prior is None:
+        return "no prior"
+    shown = round(current - prior, 1)
+    glyph = "▲" if shown > 0 else "▼" if shown < 0 else "■"
+    mark = GOOD_MARK if shown > 0 else BAD_MARK if shown < 0 else ""
+    return f"{glyph}\u00a0{abs(shown):.1f}\u00a0pp{mark}"
+
+
+def build_uptime(instant, ranged, now):
+    """Uptime frames from two fixed-query readers: `instant(expr) -> float|None`
+    and `ranged(expr) -> [(unix_seconds, float)]`. Pure; no I/O of its own."""
+    totals = {"now": [0.0, 0.0], "prior": [0.0, 0.0]}
+    journeys = []
+    for key, label, success, settled in UPTIME_JOURNEYS:
+        row = {"journey": label}
+        for window, offset in (("now", ""), ("prior", " offset 7d")):
+            ok = instant(f"sum(increase({success}[7d]{offset}))") or 0.0
+            all_ = instant(f"sum(increase({settled}[7d]{offset}))") or 0.0
+            totals[window][0] += ok
+            totals[window][1] += all_
+            if window == "now":
+                row.update(uptime=uptime_pct(ok, all_), attempts=round(all_), failures=round(all_ - ok))
+        journeys.append(row)
+    current = uptime_pct(*totals["now"])
+    prior = uptime_pct(*totals["prior"])
+    days = {}
+    for key, _label, success, settled in UPTIME_JOURNEYS:
+        for part, expr in (("ok", success), ("all", settled)):
+            for stamp, value in ranged(f"sum(increase({expr}[1d]))"):
+                day = days.setdefault(int(stamp), {})
+                day[f"{key}_{part}"] = value
+    daily = []
+    for stamp in sorted(days):
+        day = days[stamp]
+        row = {"date": (stamp - 86400) * 1000}  # the UTC day the 1d increase covers
+        ok_sum = all_sum = 0.0
+        for key, *_ in UPTIME_JOURNEYS:
+            ok, all_ = day.get(f"{key}_ok", 0.0), day.get(f"{key}_all", 0.0)
+            row[key] = uptime_pct(ok, all_)
+            ok_sum, all_sum = ok_sum + ok, all_sum + all_
+        row["all"] = uptime_pct(ok_sum, all_sum)
+        daily.append(row)
+    return {
+        "asOf": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "frames": {
+            "headline": [{"value": current, "prior": prior}],  # one row: a null is never shown as an older value
+            "strip": [{"uptime": uptime_delta_text(current, prior)}],
+            "journeys": journeys,
+            "daily": daily,
+        },
+    }
 
 
 def allowed_path(path):
@@ -91,6 +199,8 @@ class StatsProxy:
         self.good = {}  # path -> (at, body, serve_until), last 200
         self.fill_locks = {}
         self.refreshing = set()
+        self.uptime_lock = threading.Lock()
+        self.uptime_cache = None  # (at, body)
 
     def request(self, url, headers=None, data=None, timeout=20):
         request = Request(url, headers=headers or {}, data=data)
@@ -208,9 +318,49 @@ class StatsProxy:
             with self.state_lock:
                 self.refreshing.discard(path)
 
+    def prometheus(self, endpoint, params):
+        body = self.request(f"{PROMETHEUS}/api/v1/{endpoint}?{urlencode(params)}", timeout=30)
+        parsed = json.loads(body)
+        if parsed.get("status") != "success":
+            raise ValueError("prometheus query failed")
+        return parsed["data"]["result"]
+
+    def uptime(self):
+        """Fixed-query uptime, cached UPTIME_TTL; a failed refresh serves the
+        last good body up to UPTIME_MAX_STALE (its own asOf says how old)."""
+        with self.uptime_lock:
+            stamp = self.clock()
+            cached = self.uptime_cache
+            if cached and stamp < cached[0] + UPTIME_TTL:
+                return 200, cached[1]
+            now = datetime.fromtimestamp(stamp, timezone.utc)
+            end = int(stamp // 86400 * 86400)  # whole UTC days
+
+            def instant(expr):
+                result = self.prometheus("query", {"query": expr, "time": int(stamp)})
+                return float(result[0]["value"][1]) if result else None
+
+            def ranged(expr):
+                result = self.prometheus(
+                    "query_range",
+                    {"query": expr, "start": end - 86400 * (UPTIME_DAYS - 1), "end": end, "step": 86400},
+                )
+                return [(t, float(v)) for t, v in result[0]["values"]] if result else []
+
+            try:
+                body = json.dumps(build_uptime(instant, ranged, now), ensure_ascii=False).encode()
+            except Exception:
+                if cached and stamp < cached[0] + UPTIME_MAX_STALE:
+                    return 200, cached[1]
+                return 502, UNAVAILABLE
+            self.uptime_cache = (stamp, body)
+            return 200, body
+
     def fetch(self, path):
         if not allowed_path(path):
             return 404, b'{"error":"not found"}'
+        if path == UPTIME_PATH:
+            return self.uptime()
         now = self.clock()
         start = False
         with self.state_lock:

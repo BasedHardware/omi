@@ -46,6 +46,42 @@ does not belong in it.
 Mint returns `deep_link` and `address` from this map. The app prefers those
 values and uses the PostHog payload only when the API field is empty.
 
+### Phone lines
+
+A channel entry with a `lines` list spreads new links across those lines. Each new link goes
+to the line with the most room, and a person stays on their line afterwards.
+
+```json
+"imessage": {
+  "provider": "keiki",
+  "address": "+14155252967",
+  "lines": [
+    {"address": "+14155252967", "started": "2026-10-30"},
+    {"address": "+14155550101", "started": "2026-11-15", "new_per_day": 25},
+    {"address": "+14155550102", "enabled": false}
+  ]
+}
+```
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `address` | required | The line in E.164. It must be assigned to the channel's Keiki agent first, or texts to it reach nobody. |
+| `max_users` | 400 | Stop adding people here (80% of Keiki's 500). Use about 280 if users send 25 or more messages a day. |
+| `new_per_day` | 40 | New people in any rolling 24 hours (80% of Keiki's 50). |
+| `started` | none | The line's first day. It takes 10 new people a day in week one, 10 more each week after, up to `new_per_day`. A date in the future keeps the line out until then. Leave it out for no ramp. |
+| `enabled` | true | `false` takes no new links and keeps the people already on the line. Use it to slow a struggling line; Keiki advises against moving its users. |
+
+Adding a line: buy it, assign it to the Keiki agent, then add it here with today's `started`
+and ship the manifest through the rollout coordinator. Before adding the line, check that
+`seat_cap` in `OMI_MESSAGING_CHANNEL_POLICY` (180 for iMessage unless set) is high enough; it
+caps the whole channel regardless of lines.
+
+When every line is full, mint answers 409 and puts the person on the waitlist.
+`omi_messaging_line_assignments_total{result="full"}` counts those. Add a line before it
+moves. A malformed or empty `lines` value closes linking the same way, so check the JSON
+before shipping. A person returning to a line they linked on keeps it, even if it has filled
+since.
+
 Turn the PostHog flag `mobile-chat-apps` on for the same uid, with the same
 addresses in the payload as a fallback:
 

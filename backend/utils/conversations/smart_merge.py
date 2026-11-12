@@ -68,6 +68,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.summary_delivery import PROCESS_CONTEXT, present as summary_present
 from config.merge_ancestry import flatten_updates
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
+from utils.episodes import member_notes
 from utils.conversations.process_conversation import process_conversation, save_structured_vector
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge_policy import (
@@ -104,6 +105,7 @@ from utils.metrics import (
     record_smart_merge_flatten,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.finalization import finalization_diagnostic_id
 from utils.other.storage import compute_audio_files_fingerprint, enqueue_conversation_artifact_build
 
 logger = logging.getLogger(__name__)
@@ -797,6 +799,8 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
         _cleanup_flattened_ancestors(uid, donor_id, donor, survivor_id)
         step = 'refresh'
         refresh_survivor(uid, survivor_id, owner=owner)
+    except member_notes.LiveMemberNotesDeferred:
+        raise  # Scheduling waits retain donor custody without spending retry budget.
     except Exception as error:
         # Bounded: no ids, no message text (provider errors can quote transcript).
         logger.warning('event=smart_merge outcome=incomplete step=%s cause=%s', step, _incomplete_cause(error))
@@ -804,7 +808,8 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
             raise
         raise SmartMergeIncomplete(type(error).__name__) from error
     if resumed:
-        logger.info('event=smart_merge outcome=resumed_ok')
+        # Closed vocabulary: the hash only, never the raw finalization job id.
+        logger.info('event=smart_merge outcome=resumed_ok job_hash=%s', finalization_diagnostic_id(owner))
 
 
 _DEFERRED_RETRACTION = (DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable)
@@ -960,6 +965,8 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 smart_merge_refresh=(claimed, owner),
             )
+        except member_notes.LiveMemberNotesDeferred:
+            raise  # Outer custody owner releases the lease and schedules the wait.
         except Exception:
             record_conversation_smart_merge_refresh('failed')
             raise

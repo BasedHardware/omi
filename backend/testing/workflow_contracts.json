@@ -44,6 +44,27 @@
   },
   "workflows": [
     {
+      "id": "empty_capture_operator_recovery",
+      "risk": "high",
+      "sources": [
+        "backend/scripts/capture_empty_recovery.py",
+        "backend/utils/conversations/empty_capture_recovery.py",
+        "backend/scripts/capture_empty_recovery_privacy.py"
+      ],
+      "tests": [
+        "tests/unit/test_empty_capture_recovery.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "dry run performs no product writes or paid transcription and emits counts only",
+        "whole-document update-time preconditions preserve concurrent transcripts and user edits",
+        "standard and enhanced transcripts retain their persisted protection level",
+        "one durable claim prevents duplicate paid attempts on rerun",
+        "only measured zero-speech short rows can be reversibly discarded with private write-ahead undo",
+        "partial or unreadable retained audio never proves silence"
+      ]
+    },
+    {
       "id": "task_candidate_resolution",
       "risk": "high",
       "sources": [

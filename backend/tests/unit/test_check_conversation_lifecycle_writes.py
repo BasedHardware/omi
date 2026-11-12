@@ -122,5 +122,58 @@ def test_stuck_noise_storage_is_callable_only_through_lifecycle():
         assert violations(source, 'backend/utils/conversations/lifecycle.py') == []
         assert 'direct lifecycle database call' in violations(source, 'backend/services/operator.py')[0]
     raw = "ref = user.collection('conversations').document(cid)\ntransaction.update(ref, {'status': 'completed'})\n"
-    assert violations(raw, 'backend/database/stuck_backfill.py') == []
+    assert 'requires relevance_decision' in violations(raw, 'backend/database/stuck_backfill.py')[0]
     assert violations(raw, 'backend/database/other_backfill.py')
+
+
+def test_only_atomic_hidden_noise_close_is_exempt_from_visible_decision_contract():
+    source = "transaction.update(ref, {'status': 'completed', 'discarded': True, TERMINAL_NO_DERIVED_EFFECTS_FIELD: True, MARKER: {'version': 1}})"
+    assert violations(source, 'backend/database/stuck_backfill.py') == []
+    assert violations(source, 'backend/database/conversations.py')
+    for marker in ("'discarded': True, ", 'TERMINAL_NO_DERIVED_EFFECTS_FIELD: True, ', "MARKER: {'version': 1}"):
+        assert violations(source.replace(marker, ''), 'backend/database/stuck_backfill.py')
+
+
+def test_no_speech_storage_is_callable_only_through_lifecycle():
+    for method in ('close_no_speech', 'restore_no_speech'):
+        source = f'no_speech_terminal_db.{method}(uid, conversation_id)\n'
+        assert violations(source, 'backend/utils/conversations/lifecycle.py') == []
+        assert 'direct lifecycle database call' in violations(source, 'backend/services/operator.py')[0]
+    raw = "ref = user.collection('conversations').document(cid)\ntransaction.update(ref, {'status': 'completed'})\n"
+    assert 'requires relevance_decision' in violations(raw, 'backend/database/no_speech_terminal.py')[0]
+    assert violations(raw, 'backend/database/other_backfill.py')
+
+
+def test_only_atomic_no_speech_close_is_exempt_from_visible_decision_contract():
+    source = "transaction.update(ref, {'status': 'completed', 'discarded': True, TERMINAL_NO_DERIVED_EFFECTS_FIELD: True, MARKER: {'version': 1}})"
+    assert violations(source, 'backend/database/no_speech_terminal.py') == []
+    assert violations(source, 'backend/database/conversations.py')
+    for marker in ("'discarded': True, ", 'TERMINAL_NO_DERIVED_EFFECTS_FIELD: True, ', "MARKER: {'version': 1}"):
+        assert violations(source.replace(marker, ''), 'backend/database/no_speech_terminal.py')
+
+
+def test_allowlisted_literal_completed_write_requires_atomic_decision():
+    for path in ('backend/database/conversations.py', 'backend/database/conversation_finalization_jobs.py'):
+        assert any(
+            'requires relevance_decision' in e
+            for e in violations("transaction.update(conversation_ref, {'status': 'completed'})", path)
+        )
+        assert (
+            violations(
+                "transaction.update(conversation_ref, {'status': 'completed', 'relevance_decision': decision})", path
+            )
+            == []
+        )
+        if path.endswith('conversation_finalization_jobs.py'):
+            assert violations("transaction.update(job_ref, {'status': 'completed'})", path) == []
+        assert any(
+            'requires relevance_decision' in e
+            for e in violations("transaction.update(ref, {'status': 'completed'})", path)
+        )
+
+
+def test_secret_free_restore_owner_is_narrowly_scoped():
+    path = 'backend/utils/conversations/no_speech_restore.py'
+    assert violations('no_speech_terminal_db.restore_no_speech(uid, cid)', path) == []
+    assert violations('no_speech_terminal_db.close_no_speech(uid, cid)', path)
+    assert violations('conversations_db.set_conversation_as_discarded(uid, cid)', path)

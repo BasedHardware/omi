@@ -4,8 +4,24 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  record_token_lease_mode:
+    description: 'Caller-supplied record token lease mode'
+    required: false
+    default: 'off'
+  record_token_lease_mode_serve_percent:
+    description: 'Caller-supplied record token lease serve percentage'
+    required: false
+    default: '0'
+  record_token_lease_seconds:
+    description: 'Caller-supplied record token lease duration in seconds'
+    required: false
+    default: '3600'
+  record_token_lease_deployed_at:
+    description: 'Caller-supplied pinned record token lease release epoch'
+    required: false
+    default: '0'
   backend_sync_memory:
-    description: 'backend-sync memory: 6Gi prod right-size (2026-10-24 costcut), 4Gi/8Gi fallback trial values; dev callers keep 8Gi'
+    description: 'backend-sync memory: 6Gi prod right-size (2026-10-24 costcut), 4Gi/5Gi/8Gi trial values; dev callers keep 8Gi'
     required: false
     default: '8Gi'
   firebase_probe_signer_service_account:
@@ -112,6 +128,31 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Bind shared record token lease rollout inputs
+      shell: bash
+      env:
+        RECORD_TOKEN_LEASE_MODE: ${{ inputs.record_token_lease_mode }}
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ inputs.record_token_lease_mode_serve_percent }}
+        RECORD_TOKEN_LEASE_SECONDS: ${{ inputs.record_token_lease_seconds }}
+        RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ inputs.record_token_lease_deployed_at }}
+      run: |
+        python3 - <<'PYTHON'
+        import math, os
+        mode = os.environ['RECORD_TOKEN_LEASE_MODE']
+        percent = int(os.environ['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'])
+        seconds = int(os.environ['RECORD_TOKEN_LEASE_SECONDS'])
+        epoch = float(os.environ['RECORD_TOKEN_LEASE_DEPLOYED_AT'])
+        if mode not in {'off', 'shadow', 'serve'} or not 0 <= percent <= 100 or not 1800 <= seconds <= 7200:
+            raise ValueError('invalid record token lease rollout vector')
+        if not math.isfinite(epoch) or epoch < 0 or (mode != 'off' and epoch <= 0):
+            raise ValueError('enabled record token leases require a pinned release epoch')
+        epoch_value = str(int(epoch)) if epoch.is_integer() else repr(epoch)
+        with open(os.environ['GITHUB_ENV'], 'a') as output:
+            for key, value in {'RECORD_TOKEN_LEASE_MODE': mode, 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': percent,
+                               'RECORD_TOKEN_LEASE_SECONDS': seconds, 'RECORD_TOKEN_LEASE_DEPLOYED_AT': epoch_value}.items():
+                output.write(f'{key}={value}\n')
+        PYTHON
+
     - name: Validate deploy profile boundary
       shell: bash
       env:
@@ -690,8 +731,8 @@ runs:
         project_id: ${{ inputs.project_id }}
         image: ${{ steps.service-images.outputs.backend }}
         no_traffic: true
-        # 2026-10-24 costcut mirror: prod backend keeps its live shape in source (it was
-        # revision-inherited only, so a fresh service would deploy defaults). Dev inherits.
+        # Prod backend sizing is explicit so a fresh service cannot deploy defaults. Dev inherits.
+        # margin-20: 7d application memory p95 <=1.312GiB, max bucket <=1.710GiB; rollback 8Gi.
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
@@ -699,7 +740,7 @@ runs:
           --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_identity_flags }}
-          ${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=8Gi --concurrency=20 --min-instances=3 --max-instances=100' || '' }}
+          ${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20 --min-instances=3 --max-instances=100' || '' }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
@@ -782,7 +823,7 @@ runs:
       env:
         SYNC_MEMORY: ${{ inputs.backend_sync_memory }}
       run: |
-        case "$SYNC_MEMORY" in 4Gi|6Gi|8Gi) ;; *) echo 'backend-sync memory must be 4Gi, 6Gi or 8Gi' >&2; exit 1 ;; esac
+        case "$SYNC_MEMORY" in 4Gi|5Gi|6Gi|8Gi) ;; *) echo 'backend-sync memory must be 4Gi, 5Gi, 6Gi or 8Gi' >&2; exit 1 ;; esac
 
     - name: Resolve live sync maxScale
       id: live-max-scale
@@ -826,6 +867,7 @@ runs:
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_sync_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_sync_flags }}
           ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
           --cpu=2
           --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
@@ -873,8 +915,12 @@ runs:
         # At 4 dispatches the queue saturated (median dispatch delay ~6 min),
         # which exceeds the 300s replay window: the reconciler then minted a
         # new generation for most jobs and about half of all dispatches were
-        # stale-generation acks. 16 leaves headroom on backend-sync
-        # (min 5 x concurrency 20) for the I/O-bound handler.
+        # stale-generation acks. 16 fits inside a single backend-sync
+        # instance (concurrency 20) for the I/O-bound handler, so it needs no
+        # warm floor. Since legacy-dark (2026-11-04) the service minimum is 0;
+        # continuous upload traffic keeps instances warm, and an idle-start
+        # burst pays one cold start (2026-11-02..04: p50 ~37s, p99 <=125s,
+        # max bucket <=183s), still under the 300s replay window.
         if gcloud tasks queues describe conversation-finalization \
           --location="${{ inputs.region }}" \
           --project="${{ inputs.project_id }}" >/dev/null 2>&1; then
@@ -938,10 +984,10 @@ runs:
           ${{ steps.runtime-env.outputs.backend_integration_identity_flags }}
           ${{ steps.runtime-env.outputs.backend_integration_flags }}
           --cpu=2
-          --memory=2Gi
-          --concurrency=40
+          --memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}
+          --concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}
           --min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}
-          --max-instances=50
+          --max-instances=${{ inputs.runtime_env == 'prod' && '35' || '50' }}
           --no-cpu-throttling
         env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}

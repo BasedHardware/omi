@@ -223,6 +223,33 @@ def test_every_baseline_entry_has_a_reason():
         assert isinstance(entry.get('count'), int) and entry['count'] > 0, _describe(key)
 
 
+def test_function_rename_requires_rekeying_baseline_without_changing_counts(monkeypatch):
+    source = '''
+import os
+
+def dispatch_binding():
+    os.getenv('SYNC_TASKS_QUEUE')
+    os.getenv('SYNC_TASKS_QUEUE')
+'''
+    path = 'utils/enrichment/outbox.py'
+    reads = {(path, function, name): count for (function, name), count in scan_source(source).items()}
+    old_key = (path, '_dispatch_binding', 'SYNC_TASKS_QUEUE')
+    new_key = (path, 'dispatch_binding', 'SYNC_TASKS_QUEUE')
+    entry = {'count': 2, 'why': 'Same reads in the renamed function.'}
+    baseline = {old_key: entry}
+    monkeypatch.setattr(sys.modules[__name__], 'load_baseline', lambda: baseline)
+
+    assert reads == {new_key: 2}
+    with pytest.raises(AssertionError) as refusal:
+        test_batch_stage_env_reads_match_baseline(reads)
+    assert f'NEW {_describe(new_key)} count 2 > baseline 0' in str(refusal.value)
+    assert f'STALE {_describe(old_key)} baseline count 2 > current 0' in str(refusal.value)
+
+    baseline[new_key] = baseline.pop(old_key)
+    test_batch_stage_env_reads_match_baseline(reads)
+    assert baseline[new_key] is entry
+
+
 def test_pending_allowance_matches_names_and_prefixes(tmp_path, monkeypatch):
     entries = {
         ('a.py', 'f', 'X_*'): {'pending': True, 'count': 2},

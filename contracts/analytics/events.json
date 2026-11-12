@@ -2708,7 +2708,8 @@
             "open",
             "select",
             "copy_conversation_id",
-            "test_prompt"
+            "test_prompt",
+            "export_transcript"
           ]
         },
         "surface": {
@@ -4509,6 +4510,69 @@
       "correlation": null
     },
     {
+      "id": "paywallMonthlyFallbackShown",
+      "wire_name": "Paywall Monthly Fallback Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallMonthlyFallbackAccepted",
+      "wire_name": "Paywall Monthly Fallback Accepted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "purchased",
+            "cancelled",
+            "failed"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallMonthlyFallbackDismissed",
+      "wire_name": "Paywall Monthly Fallback Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
       "id": "onboardingWebviewShown",
       "wire_name": "Onboarding Webview Shown",
       "status": "active",
@@ -4962,6 +5026,45 @@
       },
       "consumers": [
         "wal-upload-refusals"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueShown",
+      "wire_name": "Subscription Payment Issue Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueUpdateTapped",
+      "wire_name": "Subscription Payment Issue Update Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssuePortalOpened",
+      "wire_name": "Subscription Payment Issue Portal Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
       ],
       "correlation": null
     }

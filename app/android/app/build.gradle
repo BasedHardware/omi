@@ -55,6 +55,13 @@ kotlin {
     jvmToolchain(21)
 }
 
+// Match the Flutter plugin's SDK attribution in our first native setup.
+// Read the resolved package, so dependency upgrades cannot silently stale it.
+def flutterPlugins = new groovy.json.JsonSlurper().parse(rootProject.file('../.flutter-plugins-dependencies'))
+def posthogPlugin = flutterPlugins.plugins.android.find { it.name == 'posthog_flutter' }
+def posthogFlutterVersion = new File(posthogPlugin.path, 'pubspec.yaml').readLines()
+        .find { it.startsWith('version:') }.split(':', 2)[1].trim()
+
 android {
 
     buildFeatures {
@@ -108,6 +115,7 @@ android {
     }
 
     defaultConfig {
+        buildConfigField "String", "POSTHOG_FLUTTER_VERSION", "\"${posthogFlutterVersion}\""
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId "com.friend.ios"
         minSdkVersion 29
@@ -176,6 +184,7 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.posthog:posthog-android:[3.51.0,4.0.0]'
     implementation 'androidx.constraintlayout:constraintlayout:2.0.0-alpha3'
     implementation 'io.intercom.android:intercom-sdk:latest.release'
     implementation 'com.twilio:voice-android:6.10.2'

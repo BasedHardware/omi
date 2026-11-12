@@ -5,6 +5,7 @@ Discovery scans at most 128 batch-live rows per page, including refused rows.
 """
 
 from collections import Counter
+from config.record_seal_rules import overlap_trim_enabled
 from utils.batch_pipeline.record_seal_reasons import proof_diagnostics
 import math
 import time
@@ -16,7 +17,17 @@ from database._client import run_transactional
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreTransaction
 from utils.batch_pipeline.live import record_identity, register_recording
-from utils.batch_pipeline.record_seal_repair import plan_digest, seal_refusal, seal_row_state, retained_tail_proof
+from utils.batch_pipeline.record_seal_repair import (
+    plan_digest,
+    seal_refusal,
+    seal_row_state,
+    retained_tail_proof,
+    observe_orphan_parked,
+)
+
+from utils.batch_pipeline.record_producer_proof import leases_would_release
+from database import record_token_lease_metrics as lease_metrics
+from config import record_seal_rules as lease
 
 OPERATION = 'record-seal-nojob-v1'
 REGISTRATION_FIELDS = ('source', 'language', 'client_device_id', 'client_platform', 'uses_custom_stt', 'external_data')
@@ -87,7 +98,7 @@ class RegistrationPlan:
         self.job = value
 
 
-def refusal(row, producer_proof):
+def refusal(row, producer_proof, *, uid=None, repair_upload_failed=False):
     if row.get('record_lane_owner') != 'batch_live_v1':
         return 'not_batch_owned'
     if row.get('uses_custom_stt') or row.get('data_protection_level') not in {None, 'standard', 'enhanced'}:
@@ -97,8 +108,27 @@ def refusal(row, producer_proof):
         return 'upload_pending'
     # Never offer a producers-stopped escape hatch: token rows need pod proof.
     return seal_refusal(
-        {'state': 'record_pending', 'record_content_id': 'candidate'}, row, producer_proof=producer_proof
+        {'state': 'record_pending', 'record_content_id': 'candidate', 'owner_id': uid},
+        row,
+        producer_proof=producer_proof,
+        repair_upload_failed=repair_upload_failed,
     )
+
+
+def observe_existing_orphan(observation, producer_proof, *, repair_upload_failed=False):
+    """Inspect only the existing snapshot, after the transaction has finished."""
+    if not observation:
+        return
+    try:
+        # The conversation row may be missing (deleted). Guard inside the try so the
+        # telemetry-only check can neither raise nor change the already_registered result.
+        job, row = observation['job'], observation['row']
+        if row is None or job.get('registration_origin') != 'restore' or not row.get('discarded'):
+            return
+        reason = seal_refusal(job, row, producer_proof=producer_proof, repair_upload_failed=repair_upload_failed)
+        observe_orphan_parked(job, row, reason, seal_path='nojob')
+    except Exception:
+        return
 
 
 def registration(tx, uid, cid, row, server_flags):
@@ -117,42 +147,64 @@ def registration(tx, uid, cid, row, server_flags):
     return capture.job
 
 
-def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, producer_proof=None):
+def plan_backfill(
+    store, paths, storage_client, artifacts, *, server_flags, producer_proof=None, repair_upload_failed=False
+):
     validate_server_flags(server_flags)
     if len(paths) > 128 or len(set(paths)) != len(paths):
         raise ValueError('bounded unique discovery page required')
     entries = []
     for path in sorted(paths):
         entry = {'path': path, 'disposition': 'unavailable'}
+        diagnostics = {}
         try:
             uid, cid = conversation_path(path)
             _, job_id = record_identity(uid, cid)
             job_ref = store.client.collection(f'{store.namespace}_jobs').document(job_id)
 
+            observation = {}
+
             def read(tx):
+                observation.clear()
                 row = tx.get('conversations', f'{uid}/{cid}')
-                if job_ref.get(transaction=tx.transaction).exists:
+                snapshot = job_ref.get(transaction=tx.transaction)
+                if snapshot.exists:
+                    observation.update(job=snapshot.to_dict() or {}, row=row)
                     return row, None, 'already_registered'
-                reason = refusal(row, producer_proof)
+                reason = refusal(row, producer_proof, uid=uid, repair_upload_failed=repair_upload_failed)
                 if reason:
                     return row, None, reason
                 return row, registration(tx, uid, cid, row, server_flags), None
 
             row, job, reason = store.run(read)
+            observe_existing_orphan(observation, producer_proof, repair_upload_failed=repair_upload_failed)
             if reason:
                 entry['disposition'] = reason
+                if reason == 'upload_pending' and leases_would_release(
+                    row.get('record_upload_sessions'),
+                    producer_proof,
+                    uid=uid,
+                    row=row,
+                ):
+                    entry['lease_reason'] = 'lease_would_expire'
+                    lease_metrics.EXPIRED_WOULD.inc()
             else:
-                proof = retained_tail_proof(job, row, storage_client, artifacts)
+                proof = retained_tail_proof(job, row, storage_client, artifacts, diagnostics=diagnostics)
                 # Refusals grant no write authority. Do not bind their volatile
                 # upload revisions into approval for unrelated completed rows.
-                entry.update(row=row_state(row), job=job, disposition='eligible', proof_sha256=proof)
+                entry.update(row=row_state(row), job=job, disposition='eligible', proof_sha256=proof, **diagnostics)
         except BatchPrivacyBlocked:
             entry['disposition'] = 'privacy_refused'
         except (ValueError, TypeError, AttributeError, KeyError) as error:
             entry['disposition'] = 'proof_refused'
             entry.update(proof_diagnostics(error))
+        except TimeoutError as error:
+            entry['disposition'] = 'read_error'
+            if str(error) == 'speaker audio listing budget exhausted':
+                entry['proof_reason'] = 'budget_limit'
         except Exception:
             entry['disposition'] = 'read_error'
+        entry.update(diagnostics)
         entries.append(entry)
     body = {
         'operation': OPERATION,
@@ -160,6 +212,8 @@ def plan_backfill(store, paths, storage_client, artifacts, *, server_flags, prod
         'entries': entries,
         'producer_proof': producer_proof,
         'server_flags': server_flags,
+        'repair_upload_failed': repair_upload_failed,
+        'overlap_trim_enabled': overlap_trim_enabled(),
     }
     return {**body, 'plan_sha256': plan_digest(body)}
 
@@ -175,22 +229,33 @@ def apply_backfill(store, plan, approved_digest):
         if entry['disposition'] != 'eligible':
             outcomes[entry['disposition']] += 1
             continue
+        if plan.get('overlap_trim_enabled') and not overlap_trim_enabled():
+            outcomes['state_changed'] += 1
+            continue
         uid, cid = conversation_path(entry['path'])
         job_id = entry['job']['segment_id']
         job_ref = store.client.collection(f'{store.namespace}_jobs').document(job_id)
         row_ref = store.client.collection('users').document(uid).collection('conversations').document(cid)
         now = time.time()
 
+        observation = {}
+
         @firestore.transactional
         def commit(raw):
+            observation.clear()
             tx = FirestoreTransaction(store.client, store.namespace, raw)
             row = tx.get('conversations', f'{uid}/{cid}')
-            if job_ref.get(transaction=raw).exists:
+            snapshot = job_ref.get(transaction=raw)
+            if snapshot.exists:
+                observation.update(job=snapshot.to_dict() or {}, row=row)
                 return 'already_registered'
             if row_state(row) != entry['row']:
                 return 'state_changed'
-            reason = refusal(row, plan['producer_proof'])
+            reason = refusal(
+                row, plan['producer_proof'], uid=uid, repair_upload_failed=plan.get('repair_upload_failed', False)
+            )
             if reason:
+                observation.update(job=entry['job'], row=row)
                 return reason
             tx.check_privacy(uid, (cid,), expected_generation=entry['job']['privacy_generation'])
             job = registration(tx, uid, cid, row, plan['server_flags'])
@@ -203,12 +268,28 @@ def apply_backfill(store, plan, approved_digest):
                 {
                     'record_upload_sessions': {},
                     'record_audio_closed': True,
+                    **({'record_upload_failed': False} if row.get('record_upload_failed') else {}),
                 },
             )
-            return 'sealed_registered'
+            return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed_registered'
 
         try:
-            outcomes[run_transactional(store.client, commit, transient=True)] += 1
+            result = run_transactional(store.client, commit, transient=True)
+            outcomes[result] += 1
+            if (
+                result in {'sealed_registered', 'upload_failed_cleared'}
+                and lease.token_lease_serving(uid)
+                and leases_would_release(
+                    entry['row'].get('record_upload_sessions'),
+                    plan['producer_proof'],
+                    uid=uid,
+                    row=entry['row'],
+                )
+            ):
+                lease_metrics.EXPIRED_SEALED.inc()
+            observe_existing_orphan(
+                observation, plan['producer_proof'], repair_upload_failed=plan.get('repair_upload_failed', False)
+            )
         except BatchPrivacyBlocked:
             outcomes['privacy_refused'] += 1
         except Exception:

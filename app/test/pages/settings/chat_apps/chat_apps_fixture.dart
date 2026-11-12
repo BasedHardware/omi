@@ -76,6 +76,9 @@ class FakeMessagingBackend {
 
   /// How long minted proofs live.
   Duration proofTtl = const Duration(minutes: 10);
+
+  /// The line minted proofs name, when the backend assigned one.
+  String? proofAddress;
   int _minted = 0;
 
   Future<http.Response> send(ApiRequest request) async {
@@ -110,6 +113,7 @@ class FakeMessagingBackend {
           'proof': proof,
           'kind': body['kind'],
           'expires_at': DateTime.now().toUtc().add(proofTtl).toIso8601String(),
+          if (proofAddress != null) 'address': proofAddress,
         }),
         200,
       );

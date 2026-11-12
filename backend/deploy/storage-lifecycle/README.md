@@ -25,6 +25,14 @@ pricing on them never pays back (measured p76; the unscoped rule was headed
 for a ~$1.9k/mo adder from ~11-14). `backend/tests/unit/test_storage_lifecycle_contract.py`
 pins the suffix list. The dev bucket's rule carries no suffix.
 
+Prod Archive transition dropped (2026-11-02): David withdrew the existing-stock
+Coldline-to-Archive proposal in #24280 because of its large one-time operation
+cost (about $38k for the 381.6M-object stock in the rollout carry report).
+`prod.json` has no ARCHIVE rule, and the private-cloud lifecycle validator rejects
+one in either environment. The forward policy in `canonical-forward.json`
+still describes release-scoped packs in a **new empty regional bucket only**;
+it does not authorize reclassifying existing prod stock (see `FORWARD.md`).
+
 Prod noncurrent `.opus.enc` delete (2026-10-26, c3gcs): prod.json declares a
 Delete rule for **noncurrent** `chunks/**.opus.enc` generations carrying
 `numNewerVersions: 1`. It removes only strictly-superseded generations — a live
@@ -42,9 +50,17 @@ noncurrent `.opus.enc` from ever aging into Coldline transitions; the dominant
 inflow (merge re-copies) is already stopped by skip-existing copies (#23507).
 Applying this file is one-shot irreversible for the generations it deletes:
 versioning does not protect noncurrent versions removed by a lifecycle rule.
-**Dispatch gate:** the live bucket's `merged/` Delete rule is currently removed
-under the 10-24 audio-loss incident freeze; applying prod.json re-declares it,
-so the lead must not dispatch `apply` for prod until the freeze is lifted (or
-must explicitly accept re-declaring `merged/`).
+**Dispatch gate:** the 2026-11-02 rollout handoff reports only the playback
+30-day Delete and the batch-scoped Coldline transition live. `prod.json` still
+declares the 3-day `merged/` Delete and the noncurrent `.opus.enc` Delete above;
+**any prod apply would install both**, even with Archive removed. David has not
+ruled on `merged/` after the 10-24 audio-loss incident freeze. The lead must not
+dispatch prod `apply` until those additional delete rules are explicitly cleared.
 
 Plan and evidence: `omi-knowledge-base/projects/gcp-cost-efficiency/evidence/2026-09-02-coldline-rollout-plan.md`.
+
+`lake-forward.json` declares the new, unprovisioned object lake: encrypted space
+content has no age-based deletion, versioning or soft-delete copies. Transcripts
+stay Standard/Nearline. `validate_object_lake_bucket_contract.py` checks this
+contract offline; [LAKE.md](LAKE.md) documents the separately authorized bucket,
+KMS and audit-log provisioning. No existing bucket receives this policy.

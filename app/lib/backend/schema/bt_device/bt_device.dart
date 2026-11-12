@@ -420,7 +420,8 @@ class BtDevice {
 
   Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
     var modelNumber = 'Omi';
-    var firmwareRevision = '1.0.2';
+    // A failed DIS read must stay unknown so routing waits for a successful retry.
+    var firmwareRevision = '';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
     String? serialNumber;

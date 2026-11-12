@@ -29,6 +29,21 @@ class Store:
     def collection(self, name):
         return Ref(self, name)
 
+    def batch(self):
+        return Batch()
+
+
+class Batch:
+    def __init__(self):
+        self.refs = []
+
+    def delete(self, ref):
+        self.refs.append(ref)
+
+    def commit(self):
+        for ref in self.refs:
+            ref.delete()
+
 
 class Ref:
     def __init__(self, store, path):
@@ -62,6 +77,8 @@ def function(path, name, namespace):
     if path == 'routers/conversations.py' and name == 'delete_conversation':
         namespace['nullcontext'] = nullcontext
         namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+        namespace.setdefault('CONVERSATION_DELETE_GATE_WAIT_SECONDS', 0.0)
+        namespace.setdefault('deferred_batch_purges', lambda uid: nullcontext())
         function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n
@@ -155,7 +172,10 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'logger': MagicMock(),
         'conversation_tombstones': tombstones,
         'db_client_module': SimpleNamespace(db=store),
-        'conversations_db': SimpleNamespace(get_conversation=lambda *args: {'sync_merged_from': ['donor']}),
+        'conversations_db': SimpleNamespace(
+            get_conversation_raw_snapshot=lambda *args, **kwargs: {'sync_merged_from': ['donor']}
+        ),
+        'object_lake': SimpleNamespace(LakeFetchError=type('LakeFetchError', (Exception,), {})),
         'os': SimpleNamespace(getenv=lambda *args: 'canonical'),
         'MemoryService': lambda **kw: SimpleNamespace(retract_conversation_memories=retract),
         'retraction_can_be_skipped': lambda *a, **kw: False,

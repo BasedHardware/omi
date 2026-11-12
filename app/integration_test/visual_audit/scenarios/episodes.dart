@@ -55,7 +55,9 @@ final episodeScenarios = <AuditScenario>[
     state: 'Fictional dinner episode with two processing members, followed by completion',
     run: (a) async {
       final now = DateTime.now();
-      final closed = _closedFixture(day: DateTime(now.year, now.month, now.day));
+      // Uncomposed while members process: only an uncomposed episode holds one processing row.
+      // A composed episode keeps its notes row instead (home_rows_test).
+      var closed = _closedFixture(day: DateTime(now.year, now.month, now.day), composed: false);
       final pending = [
         for (final member in closed.members)
           ServerConversation(
@@ -76,7 +78,6 @@ final episodeScenarios = <AuditScenario>[
         ..debugSetLive(null)
         ..debugSetHomeEpisodes([closed]);
       addTearDown(history.dispose);
-      addTearDown(episodes.dispose);
       await a.pump(const HomeFrame(), scaffold: false, providers: [
         ChangeNotifierProvider<ConversationProvider>.value(value: history),
         ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
@@ -84,6 +85,9 @@ final episodeScenarios = <AuditScenario>[
       expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
       expect(find.text('Dinner and plans for the weekend'), findsNothing);
       await a.shot('Episode ended; both members processing in one row', step: 'processing');
+      // The summary lands: the same episode is now composed, so its row shows the title.
+      closed = _closedFixture(day: DateTime(now.year, now.month, now.day), composed: true);
+      episodes.debugSetHomeEpisodes([closed]);
       history
         ..processingConversations = []
         ..conversations = closed.members
@@ -92,6 +96,9 @@ final episodeScenarios = <AuditScenario>[
       expect(find.byKey(const Key('home_processing_row')), findsNothing);
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
       await a.shot('Processing finished; same slot becomes the episode row', step: 'complete');
+      // Unmount before disposing: a processing hold re-reads on a timer that must not outlive the page.
+      await a.tester.pumpWidget(const SizedBox.shrink());
+      episodes.dispose();
     },
   ),
   AuditScenario(
@@ -103,7 +110,7 @@ final episodeScenarios = <AuditScenario>[
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final yesterday = today.subtract(const Duration(days: 1));
-      final closed = _closedFixture(day: yesterday);
+      final closed = _closedFixture(day: yesterday, composed: true);
       final unrelated = ServerConversation(
           id: 'garden',
           createdAt: yesterday.add(const Duration(hours: 15, minutes: 20)),
@@ -144,9 +151,8 @@ final episodeScenarios = <AuditScenario>[
       expect(find.text('Today'), findsOneWidget);
       expect(find.text('Yesterday'), findsOneWidget);
       expect(find.text('Planning Saturday’s trail'), findsOneWidget);
-      final snippet = a.tester.widget<Text>(
-          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
-      expect(snippet.textSpan!.toPlainText(), endsWith('The newest line keeps my label.'));
+      expect(find.byKey(const Key('home_live_episode_preview')), findsOneWidget);
+      expect(find.textContaining('The newest line keeps my label.', findRichText: true), findsOneWidget);
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
       expect(find.text('A quick call about the garden'), findsOneWidget);
       await a.shot('Open full Home with its header, Today live episode and Yesterday rows');
@@ -158,7 +164,7 @@ final episodeScenarios = <AuditScenario>[
     page: 'lib/pages/conversations/conversations_page.dart (ConversationsPage)',
     state: 'Fictional dinner episode with two retained parts, a single-member episode and an unrelated conversation',
     run: (a) async {
-      final closed = _closedFixture();
+      final closed = _closedFixture(composed: true);
       final morning = ServerConversation(
           id: 'morning',
           createdAt: DateTime(2026, 10, 29, 9, 15),
@@ -196,7 +202,7 @@ final episodeScenarios = <AuditScenario>[
         ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
       ]);
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
-      expect(find.textContaining('2 parts'), findsOneWidget);
+      expect(find.textContaining('2 parts'), findsNothing);
       expect(find.text('Dinner at the noodle house'), findsNothing);
       expect(find.text('Coffee and a new book'), findsOneWidget);
       await a.shot('Open Home with closed episode rows');
@@ -244,7 +250,7 @@ final episodeScenarios = <AuditScenario>[
   ),
 ];
 
-Episode _closedFixture({DateTime? day}) {
+Episode _closedFixture({DateTime? day, bool composed = false}) {
   final date = day ?? DateTime(2026, 10, 29);
   final start = DateTime(date.year, date.month, date.day, 18, 56);
   final middle = DateTime(date.year, date.month, date.day, 20, 5);
@@ -270,6 +276,15 @@ Episode _closedFixture({DateTime? day}) {
           startedAt: middle,
           finishedAt: end,
           structured: Structured('A weekend in the mountains', '', emoji: '🏕️')),
+    ],
+    moments: [
+      if (composed)
+        EpisodeMoment(
+            id: 'dinner-moment',
+            conversationId: 'dinner',
+            startedAt: start,
+            endedAt: middle,
+            points: const [EpisodePoint('Picked a trail for Saturday.')]),
     ],
     bullets: const [
       'Caught up over dinner and picked a trail for Saturday.',

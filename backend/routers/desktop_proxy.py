@@ -1,3 +1,12 @@
+"""Desktop Gemini proxy (/v1/proxy/gemini*): company-paid Vertex lanes with
+reservation-aware admission, BYOK passthrough, and sanitized request bodies.
+
+Reserved capacity is finite and shared with internal workloads, so requests are
+admitted against live reservation state and refused rather than queued when the
+lane is exhausted; body sanitization and size limits live in utils/llm so this
+router stays routing-only (backend/docs/llm/model_endpoint_inventory.yaml).
+"""
+
 import asyncio
 import json
 import os
@@ -52,7 +61,7 @@ from utils.metrics import SCREEN_TASK_CLIENT_BYPASS_TOTAL
 from utils.managed_compute import Decision, authorize_managed_compute
 from utils.llm.screen_task_admission import enforce_flagged_screen_task_proxy
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import RELEASE_PROBE_UID, is_desktop_trial_paywalled
+from utils.subscription import RELEASE_PROBE_UID
 
 router = APIRouter(route_class=DesktopGeminiProxyRoute)
 
@@ -1372,24 +1381,6 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
     )
 
 
-async def _authorized_desktop_user(request: Request, uid: str = Depends(get_current_user_uid)) -> str:
-    try:
-        _, requested_model, _ = _path_parts(request.path_params.get('path', ''))
-    except HTTPException:
-        requested_model = ''
-    managed_luna = requested_model == LUNA_MODEL
-    if await run_blocking(
-        db_executor,
-        is_desktop_trial_paywalled,
-        uid,
-        'desktop',
-        required_byok_provider=None if managed_luna else 'gemini',
-        byok_exempt=not managed_luna,
-    ):
-        raise HTTPException(status_code=402, detail='trial_expired')
-    return uid
-
-
 # Existing generate/stream gates retain their managed-compute authority.
 # Embedding refusal instead uses the catalog capability and exact client opt-in:
 # old clients retain proxy access, and validated Gemini BYOK stays exempt.
@@ -1463,7 +1454,7 @@ async def _enforce_managed_plan_gate(uid: str, path: str, local_embeddings: str 
 
 
 @router.post('/v1/proxy/gemini/{path:path}')
-async def gemini_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+async def gemini_proxy(request: Request, path: str, uid: str = Depends(get_current_user_uid)) -> Response:
     if request.headers.get('X-Omi-Screen-Task-Client-Bypass') == 'true':
         SCREEN_TASK_CLIENT_BYPASS_TOTAL.inc()
     enforce_flagged_screen_task_proxy(request.headers)
@@ -1472,6 +1463,6 @@ async def gemini_proxy(request: Request, path: str, uid: str = Depends(_authoriz
 
 
 @router.post('/v1/proxy/gemini-stream/{path:path}')
-async def gemini_stream_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+async def gemini_stream_proxy(request: Request, path: str, uid: str = Depends(get_current_user_uid)) -> Response:
     await _enforce_managed_plan_gate(uid, path, request.headers.get('X-Omi-Local-Embeddings'))
     return await _proxy(request, path, True, uid)

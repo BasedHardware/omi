@@ -369,6 +369,15 @@ class TestExtractResults:
         assert seg["start"] == 0.1235
         assert seg["end"] == 1.9877
 
+    def test_extract_token_text_lists_as_strings(self):
+        hyp = MagicMock()
+        hyp.text = "今日。"
+        hyp.timestamp = {
+            "char": [{"char": ["今日"], "start": 0.0, "end": 0.4}, {"char": ["。"], "start": 0.4, "end": 0.4}],
+        }
+        out = GPUWorker._extract_results([hyp], timestamps=True)
+        assert [c["char"] for c in out[0]["timestamp"]["char"]] == ["今日", "。"]
+
 
 class TestGPUWorkerGC:
     def test_gc_collect_increments_counter(self):
@@ -1169,3 +1178,38 @@ class TestLanguageGate:
             with pytest.raises(RuntimeError):
                 w._load_language_id()
         assert w.fatal_cuda_reason == "illegal_memory_access"
+
+
+@pytest.mark.parametrize('load_failure', [False, True])
+def test_lid_only_worker_preloads_only_whisper(monkeypatch, _gpu_worker_module, load_failure):
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setenv('PARAKEET_DEVICE', 'cpu')
+    model = MagicMock(model_key='whisper-base')
+    model.probabilities.return_value = {'en': 0.99}
+    load = MagicMock(side_effect=RuntimeError('unavailable')) if load_failure else MagicMock(return_value=model)
+    monkeypatch.setattr(_gpu_worker_module.language_gate, 'load', load)
+    nemo_load = _get_nemo_asr().models.ASRModel.from_pretrained
+    nemo_load.reset_mock()
+    worker = GPUWorker()
+    try:
+        worker.start()
+        worker._ready.wait(timeout=2)
+        assert worker.is_ready is not load_failure
+        if not load_failure:
+            assert worker.language_id_model == 'whisper-base'
+            assert worker.submit_language_sync([0.0]) == {'en': 0.99}
+        assert worker._model is None
+        assert worker._embedding_model is None
+        nemo_load.assert_not_called()
+        load.assert_called_once_with('cpu')
+    finally:
+        worker.stop()
+
+
+@pytest.mark.parametrize('device,model', [('cuda:0', MagicMock()), ('cpu', None)])
+def test_lid_only_rejects_gpu_or_disabled_lid(monkeypatch, _gpu_worker_module, device, model):
+    monkeypatch.setenv('PARAKEET_LID_ONLY', 'true')
+    monkeypatch.setenv('PARAKEET_DEVICE', device)
+    monkeypatch.setattr(_gpu_worker_module.language_gate, 'load', lambda device: model)
+    with pytest.raises(ValueError):
+        GPUWorker()._load_model()

@@ -1,4 +1,4 @@
-"""Redis-backed admission and daily spend guards for historical sync recovery."""
+"""Redis-backed legacy slot cleanup and daily spend guards for sync recovery."""
 
 from __future__ import annotations
 
@@ -13,8 +13,6 @@ from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)
 
-BACKFILL_SLOT_TTL_SECONDS = 2 * 24 * 60 * 60
-
 
 def _key(key: str) -> str:
     # Preserve production counters/leases across deployment. Dev and local
@@ -24,16 +22,11 @@ def _key(key: str) -> str:
 
 def _admission_limits_enabled() -> bool:
     # Disabled by default. Cloud Tasks queue concurrency is the sole pacer for
-    # historical recovery, so the app-level per-user in-flight slot and daily
-    # speech caps below are redundant — and they refused legitimate uploads
+    # historical recovery, so app-level daily speech caps are redundant
+    # and refused legitimate uploads
     # (202-then-queue is defeated when the endpoint 429s the upload itself).
     # Set SYNC_BACKFILL_ADMISSION_LIMITS=true to restore the old gating.
     return os.getenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'false').lower() == 'true'
-
-
-def _inflight_limit_enabled() -> bool:
-    """One concurrent backfill job per uid; only an explicit ``false`` disables it."""
-    return os.getenv('SYNC_BACKFILL_INFLIGHT_LIMIT', 'true').strip().lower() != 'false'
 
 
 def per_user_daily_limit_ms() -> int:
@@ -52,20 +45,6 @@ def retry_after_next_utc_day() -> int:
 
 def _day_suffix() -> str:
     return datetime.now(timezone.utc).strftime('%Y%m%d')
-
-
-def try_acquire_backfill_slot(uid: str, job_id: str) -> bool:
-    """Claim the per-uid in-flight slot; ``True`` when acquired or already held by ``job_id``."""
-    if not (_inflight_limit_enabled() or _admission_limits_enabled()):
-        return True
-    key = _key(f'sync_backfill:inflight:{uid}')
-    acquired = redis_client.set(key, job_id, nx=True, ex=BACKFILL_SLOT_TTL_SECONDS)
-    if acquired:
-        return True
-    existing = redis_client.get(key)
-    if isinstance(existing, bytes):
-        existing = existing.decode()
-    return existing == job_id
 
 
 _RELEASE_SLOT_SCRIPT = """

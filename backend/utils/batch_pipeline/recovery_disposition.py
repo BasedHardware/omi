@@ -1,6 +1,7 @@
 """Content-free recovery failures and strict, in-memory silence evidence."""
 
 import io
+import logging
 import wave
 from collections.abc import Callable
 from typing import Any
@@ -18,6 +19,21 @@ from utils.observability.reasons import (
 STAGES = reason_values(RecoveryFailureStage)
 REASONS = reason_values(RecoveryFailureReason)
 AUDIO_DURATION_TOLERANCE_SECONDS = 0.1
+logger = logging.getLogger(__name__)
+
+
+def log_result_held(route, stage, *, exception_type='none', reason='exception'):
+    """Content-free diagnostics; logging must not chain a private exception."""
+    try:
+        logger.warning(
+            'event=batch_recovery_result_held route=%s stage=%s reason=%s exception_type=%s',
+            route,
+            stage,
+            reason,
+            exception_type,
+        )
+    except Exception:
+        pass
 
 
 class RecoveryFailure(ValueError):
@@ -29,6 +45,21 @@ class RecoveryFailure(ValueError):
         super().__init__(self.reason)
 
 
+def stage_failure(stage: str, reason: str, error: Exception) -> RecoveryFailure:
+    """Build the same bounded failure even when diagnostic logging fails."""
+    failure = RecoveryFailure(stage, reason)
+    try:
+        logger.warning(
+            'event=batch_recovery_stage_failure stage=%s reason=%s exception_type=%s',
+            failure.stage,
+            failure.reason,
+            type(error).__name__,
+        )
+    except Exception:
+        pass
+    return failure
+
+
 def at_stage(stage: str, reason: str, operation: Callable[[], Any]):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
@@ -36,8 +67,8 @@ def at_stage(stage: str, reason: str, operation: Callable[[], Any]):
         return operation()
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
-    except Exception:
-        raise RecoveryFailure(stage, reason) from None
+    except Exception as error:
+        raise stage_failure(stage, reason, error) from None
 
 
 def inspect_audio(item, audio, *, vad=None):
@@ -213,6 +244,14 @@ class MultilingualEmpty(RecoveryFailure):
         self.duration, self.spans = duration, spans
         # Bound worker VAD seconds the independent recognizer may cite (see words_payload).
         self.worker_speech = worker_speech
+
+
+class RecoveryProviderFailed(RecoveryFailure):
+    """Provider failure with validated audio/VAD context for guarded failover."""
+
+    def __init__(self, duration, spans, worker_speech=None):
+        super().__init__('provider', 'provider_failed')
+        self.duration, self.spans, self.worker_speech = duration, spans, worker_speech
 
 
 class WordsWithoutVad(RecoveryFailure):

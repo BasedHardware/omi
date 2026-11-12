@@ -13,11 +13,18 @@ PURPOSE = b'record-seal-repair-cursor-v1'
 
 
 class RepairCursor:
-    def __init__(self, client, secret):
+    def __init__(self, client, secret, *, jobs=False, urgent=False):
         if len(secret) < 32:
             raise ValueError('cursor key required')
         self.cipher = AESGCM(hmac.digest(secret, PURPOSE, 'sha256'))
-        self.ref = client.collection('batch_pipeline_prod_maintenance').document('record_seal_repair_cursor_v1')
+        self.jobs, self.urgent = jobs, urgent
+        # Separate namespaces prevent an ascending frontier from skipping work in descending order.
+        name = (
+            'record_seal_repair_urgent_cursor_v1'
+            if urgent
+            else 'record_seal_repair_jobs_cursor_v2' if jobs else 'record_seal_repair_cursor_v2'
+        )
+        self.ref = client.collection('batch_pipeline_prod_maintenance').document(name)
 
     def read(self, budget):
         snapshot = self.ref.get(timeout=budget.timeout(), retry=None)
@@ -33,12 +40,25 @@ class RepairCursor:
             return None
         path = value['path']
         parts = path.split('/') if isinstance(path, str) else []
-        if len(parts) < 4 or len(parts) % 2 or parts[-2] != 'conversations' or not all(parts):
+        valid = (
+            (len(parts) == 2 and parts[0] == 'batch_pipeline_prod_jobs')
+            if self.jobs
+            else (len(parts) >= 4 and len(parts) % 2 == 0 and parts[-2] == 'conversations')
+        )
+        if not valid or not all(parts):
             raise ValueError('invalid maintenance frontier')
-        if type(value['seconds']) is not int or type(value['nanos']) is not int or not 0 <= value['nanos'] < 10**9:
-            raise ValueError('invalid maintenance frontier')
-        stamp = Timestamp(seconds=value['seconds'], nanos=value['nanos'])
-        cursor = {'path': path, 'finished_at': DatetimeWithNanoseconds.from_timestamp_pb(stamp)}
+        if self.jobs and 'enqueued_at' in value:
+            # Urgent cursors preserve raw scalar query positions even when a
+            # malformed deadline is ineligible. Ordinary enqueue clocks stay numeric.
+            allowed = (int, float, bool, str, type(None)) if self.urgent else (int, float)
+            if type(value['enqueued_at']) not in allowed or 'horizon' not in value:
+                raise ValueError('invalid maintenance frontier')
+            cursor = {'path': path, 'enqueued_at': value['enqueued_at']}
+        else:
+            if type(value['seconds']) is not int or type(value['nanos']) is not int or not 0 <= value['nanos'] < 10**9:
+                raise ValueError('invalid maintenance frontier')
+            stamp = Timestamp(seconds=value['seconds'], nanos=value['nanos'])
+            cursor = {'path': path, 'finished_at': DatetimeWithNanoseconds.from_timestamp_pb(stamp)}
         if 'horizon' in value:
             horizon = datetime.fromisoformat(value['horizon'])
             if horizon.tzinfo is None:
@@ -49,7 +69,10 @@ class RepairCursor:
     def write(self, cursor, budget):
         value = None
         if cursor is not None:
-            finished = cursor['finished_at']
+            age_order = self.jobs and 'enqueued_at' in cursor
+            # Keep the legacy timestamp envelope too: an older binary can
+            # still read this frontier as a hash cursor after a code rollback.
+            finished = cursor['horizon'] if age_order else cursor['finished_at']
             # datetime.isoformat/fromisoformat truncates Firestore nanoseconds,
             # which can otherwise make a full equal-finish page repeat forever.
             if isinstance(finished, DatetimeWithNanoseconds):
@@ -58,6 +81,8 @@ class RepairCursor:
                 stamp = Timestamp()
                 stamp.FromDatetime(finished)
             value = {'path': cursor['path'], 'seconds': stamp.seconds, 'nanos': stamp.nanos}
+            if age_order:
+                value['enqueued_at'] = cursor['enqueued_at']
             if 'horizon' in cursor:
                 # This boundary originates from datetime.now, not Firestore.
                 value['horizon'] = cursor['horizon'].isoformat()

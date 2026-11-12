@@ -570,7 +570,7 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       expect(tester.takeException(), isNull);
     });
-    testWidgets('with episodes on it shows the running notes, captured tasks, moments and Wrap Up Now', (tester) async {
+    testWidgets('with episodes on it shows the running notes, captured tasks and Wrap Up Now', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
       capture.segments = [
@@ -588,8 +588,7 @@ void main() {
       expect(find.byKey(const Key('live_episode_so_far')), findsOneWidget);
       expect(find.textContaining('Picking a place near the office'), findsOneWidget);
       expect(find.textContaining('Book a table for Friday'), findsOneWidget);
-      expect(find.text('Where to eat'), findsOneWidget);
-      expect(find.text('Booking'), findsOneWidget);
+      expect(find.text('Where to eat'), findsNothing);
       expect(find.byKey(const Key('episode_wrap_up_button')), findsOneWidget);
       expect(find.text('Omi wraps this up when you move on'), findsOneWidget);
       expect(find.byKey(const Key('process_now_button')), findsNothing);

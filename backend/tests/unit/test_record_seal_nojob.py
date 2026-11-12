@@ -49,7 +49,7 @@ def source(monkeypatch):
     store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
     artifacts = SimpleNamespace(authorize=Mock(), key_for_owner=lambda _: b'x' * 32)
     monkeypatch.setattr(repair, 'list_audio_chunks', lambda *a, **kw: ['retained'])
-    monkeypatch.setattr(repair, 'retained_record_units', lambda *a: (u for u in [(100, 2, [{'generation': 1}])]))
+    monkeypatch.setattr(repair, 'retained_record_units', lambda *a, **kw: (u for u in [(100, 2, [{'generation': 1}])]))
     return store, client, artifacts
 
 
@@ -182,11 +182,11 @@ def test_stale_row_digest_and_transaction_race_are_refused(source, change):
 
 def test_tail_generation_changes_digest_and_short_tail_refused(source, monkeypatch):
     previous = plan(source)
-    monkeypatch.setattr(repair, 'retained_record_units', lambda *a: (u for u in [(100, 2, [{'generation': 2}])]))
+    monkeypatch.setattr(repair, 'retained_record_units', lambda *a, **kw: (u for u in [(100, 2, [{'generation': 2}])]))
     fresh = plan(source)
     with pytest.raises(ValueError, match='approval'):
         backfill.apply_backfill(source[0], fresh, previous['plan_sha256'])
-    monkeypatch.setattr(repair, 'retained_record_units', lambda *a: (u for u in [(100, 1, [])]))
+    monkeypatch.setattr(repair, 'retained_record_units', lambda *a, **kw: (u for u in [(100, 1, [])]))
     assert plan(source)['entries'][0]['disposition'] == 'proof_refused'
     assert no_writes(source[1])
 

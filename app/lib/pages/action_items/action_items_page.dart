@@ -1,3 +1,9 @@
+// The Tasks page: dated Today/Tomorrow/Later sections plus an expandable
+// No Deadline section, completion toggles, and task-integration entry points.
+//
+// Dated sections render complete lists on load while No Deadline is the only
+// section allowed to page, and completion state is driven through the shared
+// action-items provider so list, widget and integration views stay consistent.
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -39,6 +45,7 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
+  bool _initialLoadScheduled = true;
 
   // Task -> goal mapping
   final Map<String, String> _taskGoalLinks = {};
@@ -87,6 +94,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      setState(() => _initialLoadScheduled = false);
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       final suggestions = provider.suggestions;
@@ -99,7 +107,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           phase == ApiViewPhase.terminal ||
           phase == ApiViewPhase.authenticationRequired ||
           phase == ApiViewPhase.empty;
-      if (provider.actionItems.isEmpty && !typedResultAlreadyProjected) {
+      if (!typedResultAlreadyProjected) {
         provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -367,8 +375,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       destructive: true,
     );
     if (!shouldClear) return;
-    final deleted = await Future.wait(items.map(provider.deleteActionItem));
-    if (!mounted || deleted.every((ok) => ok)) return;
+    // One batch request, not one delete per task: concurrent single deletes for one owner
+    // contend on the same server route document and fail.
+    final deleted = await provider.deleteActionItems(items);
+    if (!mounted || deleted) return;
     // The provider has already put each rejected row back; say so, as a single delete does
     // (task_delete_undo.dart), instead of letting the rows reappear in silence.
     OmiFeedback.error(context, l10n.failedToDeleteActionItem);
@@ -488,7 +498,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     OmiHaptics.medium();
                     return provider.forceRefreshActionItems();
                   },
-                  child: provider.isLoading && provider.actionItems.isEmpty
+                  child: (provider.isLoading ||
+                              (_initialLoadScheduled && !provider.hasLoaded && apiPhase == ApiViewPhase.data)) &&
+                          provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : showTypedStatus
                           ? CustomScrollView(

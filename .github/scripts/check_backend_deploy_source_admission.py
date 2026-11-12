@@ -203,8 +203,12 @@ def validate_firestore_gate_steps(
         (f"source_sha: {source_sha_binding}", f"{label} must bind the gate to the admitted source SHA"),
         ("project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}", f"{label} must target the runtime project"),
         (
-            "credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}",
-            f"{label} must pass read-only Firestore credentials to the gate",
+            "service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com",
+            f"{label} must pass the keyless index-check identity to the gate",
+        ),
+        (
+            "workloadIdentityPools/omi-gha-deploy-",
+            f"{label} must authenticate the gate through a deploy workload identity pool",
         ),
     ):
         require_fragment(errors, gate, fragment, message)
@@ -440,19 +444,14 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         ):
             require_fragment(errors, admission, fragment, message)
         admission_index = named_step_index(readiness_steps, "Resolve and verify the newest proven main source")
-        credential_index = named_step_index(readiness_steps, "Require read-only Firestore credentials")
         checkout_index = named_step_index(readiness_steps, "Checkout admitted Firestore source")
         gate_index = named_step_index(readiness_steps, FIRESTORE_GATE_STEP)
-        if admission_index is not None and credential_index is not None and admission_index > credential_index:
-            errors.append("automatic release-proof freshness validation must run before read-only credential use")
         if admission_index is not None and checkout_index is not None and admission_index > checkout_index:
             errors.append(
                 "automatic release-proof freshness validation must run before admitted-source checkout or execution"
             )
         if admission_index is not None and gate_index is not None and admission_index > gate_index:
             errors.append("automatic release-proof freshness validation must run before the Firestore readiness gate")
-        if credential_index is not None and checkout_index is not None and credential_index > checkout_index:
-            errors.append("read-only credential use must run before admitted-source checkout")
         if checkout_index is not None and gate_index is not None and checkout_index > gate_index:
             errors.append("admitted-source checkout must run before the Firestore readiness gate")
         validate_firestore_gate_steps(

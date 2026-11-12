@@ -355,7 +355,8 @@ final offlineProcessingScenarios = <AuditScenario>[
         providers: [ChangeNotifierProvider<SyncProvider>.value(value: sync)],
       );
       expect(find.text('On the Way'), findsOneWidget);
-      expect(find.text('Details for support'), findsOneWidget);
+      expect(find.text('Details for support'), findsNothing, reason: 'removed per David, 11-02');
+      expect(find.byKey(const Key('on_the_way_days')), findsOneWidget);
       await a.shot('Open On the Way from the device Catching up tile');
     },
   ),

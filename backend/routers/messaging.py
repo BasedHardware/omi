@@ -35,7 +35,7 @@ def mint_link_proof(
         raise HTTPException(status_code=409, detail={'reason': error.reason, 'message': str(error)}) from None
     except PermissionError:
         raise HTTPException(status_code=503, detail={'reason': 'seat_state_unavailable'}) from None
-    deep_link, address = public_link_fields(body.channel, proof['proof'])
+    deep_link, address = public_link_fields(body.channel, proof['proof'], address=proof.get('address'))
     return {**proof, 'deep_link': deep_link, 'address': address}
 
 

@@ -2,6 +2,7 @@
 
 import hashlib
 import inspect
+import json
 import logging
 import time
 from contextvars import ContextVar
@@ -10,8 +11,6 @@ from types import SimpleNamespace
 from typing import Any, Callable, ParamSpec, TypeVar
 
 from prometheus_client import Counter, Histogram
-
-from config.repeat_work import revision_reuse
 
 P = ParamSpec('P')
 R = TypeVar('R')
@@ -54,6 +53,7 @@ LLM_FEATURES = frozenset(
         'jev_conversation_relevance',
         'jev_conversation_smart_merge',
         'jev_episode_boundary',
+        'jev_episode_boundary_f',
         'knowledge_graph',
         'memories',
         'notifications',
@@ -80,12 +80,62 @@ FINALS = Counter(
 )
 PLAYBACK_WRITES = Counter('omi_playback_writes_total', 'Playback write decisions', ['outcome'])
 PLAYBACK_BUILDS = Counter('omi_playback_artifacts_total', 'Playback artifact work', ['representation', 'outcome'])
+PLAYBACK_LOCK_CONTENTION = Counter(
+    'omi_sync_playback_lock_contention_total', 'Conversation merge freshness checks while locked', ['outcome']
+)
 PLAYBACK_BUILD_SECONDS = Histogram(
     'omi_playback_build_seconds',
     'Cold playback build duration',
     ['representation'],
     buckets=(0.1, 1, 3, 5, 10, 20, 30, 60, 120, 300),
 )
+
+
+# Bounded outcome labels for on-demand playback work. Every terminal and retry
+# response of an on-demand task lands in one of these, so failed playback is
+# visible next to built/exists instead of only lowering queue and GCS volume.
+DEMAND_PLAYBACK_OUTCOMES = frozenset(
+    {
+        'built',
+        'exists',
+        'superseded',
+        'unavailable',
+        'failed_final',
+        'retry',
+        'locked',
+        'destructive_deferred',
+        'skipped',
+        'account_pending_deletion',
+        'chunks_missing',
+        'empty_audio',
+        'no_audio_files',
+        'deleted_conversation',
+        'invalid_payload',
+        'error',
+    }
+)
+
+_DEMAND_STATUS_OUTCOMES = {'done': 'built', 'deferred': 'destructive_deferred'}
+
+
+def record_demand_playback_outcome(payload: Any, response_body: bytes | None) -> None:
+    """Count one on-demand audio-merge response; ``None`` body means an unhandled exception."""
+    if not isinstance(payload, dict) or payload.get('on_demand') is not True:
+        return
+    representation = 'conversation' if payload.get('schema_version') == 2 else 'file'
+    outcome = 'error'
+    if response_body is not None:
+        try:
+            body: Any = json.loads(response_body)
+        except Exception:
+            body = None
+        fields: dict[str, Any] = body if isinstance(body, dict) else {}
+        status = str(fields.get('status') or '')
+        if status == 'dropped':
+            outcome = str(fields.get('reason') or '')
+        else:
+            outcome = _DEMAND_STATUS_OUTCOMES.get(status, status)
+    PLAYBACK_BUILDS.labels(representation, outcome if outcome in DEMAND_PLAYBACK_OUTCOMES else 'other').inc()
 
 
 def _join(uid: str, conversation: object, event: str, feature: str = 'none', outcome: str = 'success') -> None:
@@ -110,15 +160,11 @@ def _join(uid: str, conversation: object, event: str, feature: str = 'none', out
 
 
 def record_feature(uid: str, conversation: object, feature: str, outcome: str) -> None:
-    if revision_reuse():
-        FEATURES.labels(feature, outcome).inc()
-        _join(uid, conversation, 'feature', feature, outcome)
+    pass
 
 
 def record_final(uid: str, conversation: object) -> None:
-    if revision_reuse():
-        FINALS.inc()
-        _join(uid, conversation, 'durable_final')
+    pass
 
 
 def record_llm_call(outcome: str, feature: str = 'other', *, direct: bool = False) -> None:
@@ -128,8 +174,6 @@ def record_llm_call(outcome: str, feature: str = 'other', *, direct: bool = Fals
         bounded_outcome = outcome if outcome in {'completed', 'failed'} else 'other'
         PHASE_A_CALLS.labels(bounded_feature, bounded_outcome).inc()
         _join(*current, 'llm_call', feature=bounded_feature, outcome=bounded_outcome)
-        if revision_reuse() and not direct:
-            CALLS.labels(outcome).inc()
 
 
 def record_survivor_refresh(uid: str, conversation_id: str, episode_id: str | None) -> None:

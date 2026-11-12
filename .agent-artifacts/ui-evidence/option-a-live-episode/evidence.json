@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-live-row.png",
+      "platform": "mobile-ios",
+      "description": "A1: Home live row, tile with running length, title, Listening. Fictional content.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-live-summary.png",
+      "platform": "mobile-ios",
+      "description": "A2: live page Summary, So far only, no Live card or Moments. Fictional content.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-live-transcript-catch-up.png",
+      "platform": "mobile-ios",
+      "description": "A3: live Transcript, final lines, Transcribed up to rule, a tiny saved line, Just now on this phone. Fictional content.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-home-rows.png",
+      "platform": "mobile-ios",
+      "description": "Home rows: processing row with chevron and Writing notes, finished row with no parts label. Fictional content. Tile box is a missing emoji font in tests.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-episode-writing.png",
+      "platform": "mobile-ios",
+      "description": "Finished recording, notes still writing: the same page, skeletons and Tasks. Fictional content.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-episode-finished.png",
+      "platform": "mobile-ios",
+      "description": "Finished episode: composed notes on the same page. Fictional content.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-episode-writing-dark.png",
+      "platform": "mobile-ios",
+      "description": "Writing page, dark. Fictional content.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-home-rows-dark.png",
+      "platform": "mobile-ios",
+      "description": "Home rows, dark. Fictional content.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

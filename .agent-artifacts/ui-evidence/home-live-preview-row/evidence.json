@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-title-preview.png",
+      "platform": "mobile-ios",
+      "description": "Home live row with a title, duration and newest on-device preview words.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-before-title.png",
+      "platform": "mobile-ios",
+      "description": "Home Listening row shows newest preview words before a title is available.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-no-preview.png",
+      "platform": "mobile-ios",
+      "description": "Home live row retains the Listening fallback while no preview words exist.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-home-largest-type.png",
+      "platform": "mobile-ios",
+      "description": "Home live row at the largest accessibility text scale keeps the newest words on two lines.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

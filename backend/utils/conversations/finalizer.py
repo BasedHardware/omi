@@ -18,7 +18,9 @@ from config.merge_before_processing import enabled as merge_before_processing_en
 from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
+from config.server_batch import proven_empty as server_batch_proven_empty
 from config.episodes import episodes_enabled_for
+from config.episode_attach import noop_schedule_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
@@ -35,7 +37,12 @@ from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.smart_merge import smart_merge_step
+from utils.conversations.smart_merge import (
+    _INCOMPLETE_CODES,  # pyright: ignore[reportPrivateUsage] — the closed incomplete-code set this boundary must reuse, never re-declare
+    SmartMergeIncomplete,
+    _incomplete_cause,  # pyright: ignore[reportPrivateUsage]
+    smart_merge_step,
+)
 from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
@@ -50,8 +57,11 @@ from utils.conversations.process_conversation import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.lifecycle_clocks import overlap_snapshot
+from config.home_processing import live_member_notes_enabled
+from utils.episodes import member_notes
 from utils.episodes.client_gate import client_seen as episode_client_seen
 from utils.episodes.finalize import close_now as close_episode_now
+from utils.episodes.finalize import skip_unchanged_schedule
 from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
@@ -148,6 +158,24 @@ async def _episode_after_finalization(
     if not row:
         return
     try:
+        if trigger == ProcessingTrigger.SYNC_UPDATE and episodes_enabled_for(uid) and noop_schedule_enabled():
+            try:
+                unchanged = await asyncio.wait_for(
+                    run_blocking(
+                        db_executor,
+                        skip_unchanged_schedule,
+                        uid,
+                        conversation_id,
+                        row,
+                        finalized=True,
+                        absorbed_from=absorbed_from,
+                    ),
+                    timeout=EPISODE_CLOSE_TIMEOUT_SECONDS,
+                )
+            except Exception:
+                unchanged = False  # A slow/unavailable memo must retain the full hook.
+            if unchanged:
+                return
         await asyncio.wait_for(
             run_blocking(
                 lifecycle_executor(uid, episode=True),
@@ -194,7 +222,11 @@ async def _episode_after_absorb(uid: str, donor_id: str, trigger: ProcessingTrig
 
 
 class ConversationFinalizationError(RuntimeError):
-    """A retryable persisted-conversation finalization failure."""
+    """A persisted-conversation failure classified by its owning entrypoint.
+
+    Generic processing_failed wrappers retain their exception chain; absent
+    evidence of a transient cause, entrypoints apply the deterministic cap.
+    """
 
     def __init__(self, code: str):
         self.code = code
@@ -205,18 +237,38 @@ class ConversationFinalizationDisposition(str, Enum):
     completed = 'completed'
     fenced = 'fenced'
     deferred = 'deferred'
+    discarded = 'discarded'
 
 
 def _record_registration_required(row: dict[str, Any]) -> bool:
-    """Retain native audio obligations unless a closed archive proves no input."""
-    return row.get('record_lane_owner') == 'batch_live_v1' and not (
-        server_batch_owned(row)
-        and row.get('server_batch_audio_closed') is True
-        and row.get('server_batch_audio_received') is False
-        and not row.get('record_upload_failed')
-        and not row.get('record_upload_sessions')
-        and not server_batch_has_audio(row)
+    """Retain required audio obligations; discarded and proven-empty rows have none."""
+    return (
+        row.get('record_lane_owner') == 'batch_live_v1'
+        and not row.get('discarded')
+        and not server_batch_proven_empty(row)
     )
+
+
+async def _register_before_notes_wait(uid: str, row: dict) -> None:
+    # A preview is enough for the notes gate, but not retained-audio custody.
+    # Registration is idempotent and must precede every scheduling exit.
+    if _record_registration_required(row) and not await run_blocking(db_executor, register_recording, uid, row):
+        RECORD_REGISTER_REFUSED.inc()
+        logger.warning('event=register_refused owner=batch_live_v1')
+        raise ConversationFinalizationError('record_registration_refused')
+
+
+async def _yield_live_member_notes(job_id: str, generation: int, lease_epoch: int):
+    yielded = await run_blocking(
+        db_executor,
+        finalization_jobs_db.mark_finalization_retryable,
+        job_id,
+        generation,
+        lease_epoch,
+        'live_episode_notes',
+        count_attempt=False,
+    )
+    return ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
 
 
 async def finalize_persisted_conversation(
@@ -250,6 +302,19 @@ async def finalize_persisted_conversation(
         and not conversation.transcript_segments
         and not getattr(conversation, 'photos', None)
     ):
+        if conversation_data.get('discarded'):
+            if not await run_blocking(
+                db_executor,
+                lifecycle_service.complete_discarded_server_batch_fanout,
+                uid,
+                conversation_id,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+            ):
+                raise ConversationFinalizationError('fanout_completion_conflict')
+            logger.info('event=server_batch_finalization outcome=discarded')
+            return ConversationFinalizationDisposition.discarded
         if not server_batch_has_audio(conversation_data):
             if not conversation_data.get('server_batch_audio_closed'):
                 raise RuntimeError('server batch archive is not closed')
@@ -267,31 +332,29 @@ async def finalize_persisted_conversation(
         # its upload barrier still prevents work until pusher has committed the tail.
         if not await run_blocking(db_executor, register_recording, uid, conversation_data):
             raise RuntimeError('desktop batch registration refused')
-        if conversation.status != ConversationStatus.completed:
-            if not await run_blocking(
-                db_executor, lifecycle_service.complete_server_batch_capture, uid, conversation_id, conversation_data
-            ):
-                raise RuntimeError('desktop batch completion fenced')
-        fanout = await run_blocking(
+        completion = await run_blocking(
             db_executor,
-            lifecycle_service.claim_finalization_fanout,
+            lifecycle_service.complete_server_batch_capture,
+            uid,
+            conversation_id,
+            conversation_data,
             finalization_job_id,
             dispatch_generation,
             lease_epoch,
         )
-        if fanout['status'] == 'claimed':
-            if not await run_blocking(
-                db_executor,
-                lifecycle_service.complete_finalization_fanout,
-                finalization_job_id,
-                dispatch_generation,
-                lease_epoch,
-            ):
-                raise RuntimeError('desktop batch handoff completion fenced')
-        elif fanout['status'] not in {'completed', 'fenced'}:
-            raise RuntimeError('desktop batch handoff claim pending')
+        if completion in {'fenced', 'lease_conflict'}:
+            return ConversationFinalizationDisposition.fenced
+        if completion != 'completed':
+            raise RuntimeError('desktop batch completion fenced')
         return ConversationFinalizationDisposition.completed
     await _episode_at_finalization_start(uid, conversation_id, conversation_data, trigger)
+    if (
+        conversation_data.get('transcript_segments')
+        and live_member_notes_enabled(uid)
+        and await run_blocking(db_executor, member_notes.waits, uid, conversation_data, trigger)
+    ):
+        await _register_before_notes_wait(uid, conversation_data)
+        return await _yield_live_member_notes(finalization_job_id, dispatch_generation, lease_epoch)
 
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
 
@@ -446,7 +509,10 @@ async def finalize_persisted_conversation(
 
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
-        if _record_registration_required(conversation_data):
+        # Processing may have persisted a discard or revival after the initial read.
+        # Preserve that result while retaining the raw archive/producer metadata.
+        conversation_discarded = bool(getattr(conversation, 'discarded', False))
+        if _record_registration_required({**conversation_data, 'discarded': conversation_discarded}):
             stage = 'record_registration'
             if not await run_blocking(
                 db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
@@ -463,12 +529,14 @@ async def finalize_persisted_conversation(
         # action/goal, audio, webhook, memory) so a losing finalizer produces
         # zero canonical side effects (#10468 r5).
         stage = 'fanout_claim'
+        claim_kwargs = {'expected_discarded': True} if conversation_discarded else {}
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,
             finalization_job_id,
             dispatch_generation,
             lease_epoch,
+            **claim_kwargs,
         )
         if silent_backfill:
             if fanout['status'] == 'completed':
@@ -672,6 +740,11 @@ async def finalize_persisted_conversation(
         schedule_person_voice_learning_retry(uid, conversation_id)
         await _episode_after_finalization(uid, conversation_id, episode_row, trigger)
         return ConversationFinalizationDisposition.completed
+    except member_notes.LiveMemberNotesDeferred:
+        # A smart-merge survivor can become linked after the initial admission
+        # check. Keep its new wait out of the provider-failure attempt budget.
+        await _register_before_notes_wait(uid, conversation_data)
+        return await _yield_live_member_notes(finalization_job_id, dispatch_generation, lease_epoch)
     except ConversationAbsorbed:
         # The absorb transaction fenced the job lease and replaced the donor
         # with a redirect. Close via the normal transactional fanout fence.
@@ -722,7 +795,16 @@ async def finalize_persisted_conversation(
             finalization_diagnostic_id(conversation_id),
             dispatch_generation,
         )
-        raise ConversationFinalizationError('processing_failed') from error
+        # A smart-merge incomplete keeps its bounded fence code so the retry
+        # budget, counters, and logs can class it; a non-member code (the
+        # generic wrapper stores an exception class name) and any other
+        # failure collapse to the generic code, keeping the conversation-row
+        # vocabulary and retry affordance byte-identical. Never the exception
+        # message (transcript risk).
+        incomplete_cause = _incomplete_cause(error) if isinstance(error, SmartMergeIncomplete) else None
+        raise ConversationFinalizationError(
+            incomplete_cause if incomplete_cause in _INCOMPLETE_CODES else 'processing_failed'
+        ) from error
 
 
 async def _load_admitted_conversation(

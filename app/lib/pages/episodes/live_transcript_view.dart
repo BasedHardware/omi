@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -16,7 +17,6 @@ import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_capturing/widgets/speaker_suggestion_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/episodes/live_preview_transcript.dart';
-import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -111,9 +111,9 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
         final decorated = widget.episode != null;
-        // Under the transcript on the episode page, as the last thing read; the legacy page's
-        // floating controls cover its bottom, so there it stays on top.
-        final behind = _showsLivePreview(provider)
+        // With final lines, the episode page says this in the transcript itself (the tail's catch-up).
+        // Without any it sits under the view, and the legacy page's floating controls keep it on top.
+        final behind = _showsLivePreview(provider) && (!decorated || provider.segments.isEmpty)
             ? ListenableBuilder(
                 listenable: provider.livePreview!,
                 builder: (context, _) => _quietBehindLine(provider) ?? const SizedBox.shrink(),
@@ -122,7 +122,6 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         return Column(
           children: [
             const CaptureRecoveryStatus(),
-            const HeldAudioLiveBanner(),
             if (provider.localSttFailure case final failure?)
               LocalSttRecoveryNotice(
                 failure: failure,
@@ -282,7 +281,12 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         final divider = decorations.dividerBefore[segment.id];
         final items = decorations.itemsAfter[segment.id] ?? const <EpisodeItem>[];
         final tail = index == segments.length - 1 && preview != null
-            ? LivePreviewTail(preview: preview, coverage: _coverageFor(provider))
+            ? LivePreviewTail(
+                preview: preview,
+                coverage: _coverageFor(provider),
+                catchUp:
+                    widget.episode == null ? null : (context) => _catchUp(provider, segment) ?? const SizedBox.shrink(),
+              )
             : null;
         if (divider == null && items.isEmpty && tail == null) return line;
         return Column(
@@ -452,35 +456,57 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       ConnectivityProvider.showNoInternetDialog(context);
       return;
     }
-    final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-      (s) => s.speakerId == speakerId,
-      orElse: () => SpeakerLabelSuggestionEvent.empty(),
-    );
+    final anchor = provider.segments.firstWhere((line) => line.id == segmentId);
+    final suggestion = provider.suggestionsBySegmentId[segmentId] ?? SpeakerLabelSuggestionEvent.empty();
     showNameSpeakerSheet(
       context,
       speakerId: speakerId,
       segmentId: segmentId,
-      segments: provider.segments,
+      segments: provider.segments.where((line) => anchor.sameRecordingVoice(line)).toList(),
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
+      wholeRecording: true,
+      onNotAPerson: () => provider.assignSpeakerToConversation(
+          speakerId,
+          '',
+          '',
+          [
+            for (final segment in provider.segments)
+              if (segment.speakerId == speakerId) segment.id,
+          ],
+          notAPerson: true),
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
-        final saved = await provider.assignSpeakerToConversation(
+        final identity = provider.speakerAssignmentIdentity;
+        var reported = false;
+        unawaited(provider.assignSpeakerToConversation(
           speakerId,
           personId,
           personName,
           segmentIds,
           applyToSpeaker: applyToSpeaker,
-        );
-        if (saved) {
-          // The user's own answer now: no longer a label Omi carried over.
-          for (final segment in provider.segments) {
-            if (segmentIds.contains(segment.id) || (applyToSpeaker && segment.speakerId == speakerId)) {
-              segment.speakerLabelSource = SpeakerLabelSource.manual;
+          voice: anchor.recordingVoice,
+          onSettled: (result) {
+            if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+            reported = true;
+            if (result.limited || result.partial) {
+              OmiFeedback.error(context, context.l10n.speakerRenameIssue(result.limited ? 'limit' : 'partial'));
+            } else if (result.saved) {
+              OmiFeedback.confirm(
+                  context,
+                  result.coverageComplete
+                      ? context.l10n.speakerLabelLinesLabeled(result.lines)
+                      : context.l10n.speakerRecordingCoverage('saved', result.lines));
+            } else {
+              OmiFeedback.error(context,
+                  result.stale ? context.l10n.speakerSelectionChanged : context.l10n.failedToSaveCheckConnection);
             }
-          }
-          if (mounted) setState(() {});
-        }
-        return saved;
+          },
+        ).then((saved) {
+          if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+          if (!saved && !reported) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+          setState(() {});
+        }));
+        return true;
       },
     );
   }
@@ -533,18 +559,33 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   Future<void> _acceptSuggestion(TranscriptSegment segment, Person person, CaptureProvider provider) async {
     final ids = [
       for (final s in provider.segments)
-        if (s.speakerId == segment.speakerId && !s.isUser && s.personId == null) s.id,
+        if (segment.sameRecordingVoice(s) && !s.isUser && s.personId == null) s.id,
     ];
     OmiHaptics.light();
+    final identity = provider.speakerAssignmentIdentity;
+    var reported = false;
     final ok = await provider.assignSpeakerToConversation(
       segment.speakerId,
       person.id,
       person.name,
       ids,
       applyToSpeaker: true,
+      voice: segment.recordingVoice,
+      onSettled: (result) {
+        if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+        reported = true;
+        if (result.limited || result.partial) {
+          OmiFeedback.error(context, context.l10n.speakerRenameIssue(result.limited ? 'limit' : 'partial'));
+        } else if (result.saved) {
+          OmiHaptics.success();
+        } else {
+          OmiFeedback.error(
+              context, result.stale ? context.l10n.speakerSelectionChanged : context.l10n.failedToSaveCheckConnection);
+        }
+      },
     );
-    if (!mounted) return;
-    ok ? OmiHaptics.success() : OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain);
+    if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+    if (!ok && !reported) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
   }
 
   Widget _buildTranscriptTimelineItem(
@@ -674,6 +715,37 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     if (transcriptionInterrupted) return context.l10n.transcriptionPausedReconnecting;
     if (!photoChannelActive) return context.l10n.listeningTranscriptWillAppear;
     return context.l10n.waitingForTranscriptOrPhotos;
+  }
+
+  /// Where the final transcript ends on the episode page: "Transcribed up to 9:28 AM", then one
+  /// tiny line for the audio saved past it. Failures and retries keep the pill, as [_quietBehindLine].
+  Widget? _catchUp(CaptureProvider provider, TranscriptSegment last) {
+    if (_quietBehindLine(provider) == null) return null;
+    final l10n = context.l10n;
+    final started = provider.liveTranscriptStartedAt;
+    final seconds =
+        provider.unsyncedSessionWals.fold<int>(0, (sum, w) => sum + w.seconds) + provider.inFlightAudioSeconds;
+    final saved = (seconds / 10).round() * 10;
+    return Column(
+      key: const Key('live_transcript_catch_up'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (started != null)
+          _TranscribedUpToRule(l10n.liveTranscribedUpTo(OmiDateFormat.of(context).time(
+            started.add(Duration(milliseconds: (last.end * 1000).round())),
+          ))),
+        if (saved > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
+            child: Text(
+              '${l10n.liveAudioSaved(OmiDuration.compact(saved, l10n))} · ${l10n.liveAudioSavedDetail}',
+              textAlign: TextAlign.center,
+              style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+            ),
+          ),
+      ],
+    );
   }
 
   /// A local-preview session has no uploading pill to watch: one quiet line under the
@@ -868,21 +940,21 @@ class LiveTranscriptDecorations {
   }
 }
 
-/// The thin hairline that names where the final transcript ends and the
-/// on-device preview continues.
-class LivePreviewDivider extends StatelessWidget {
-  const LivePreviewDivider({super.key});
+/// The hairline where the final transcript ends: "Transcribed up to 9:28 AM".
+class _TranscribedUpToRule extends StatelessWidget {
+  const _TranscribedUpToRule(this.label);
+
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    final label = context.l10n.livePreviewOnPhoneDivider;
     final line = Expanded(child: Container(height: 1, color: OmiColors.surface2));
     return Semantics(
       header: true,
       label: label,
       excludeSemantics: true,
       child: Padding(
-        key: const Key('live_preview_divider'),
+        key: const Key('live_transcribed_up_to'),
         padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xs),
         child: Row(
           children: [
@@ -899,14 +971,37 @@ class LivePreviewDivider extends StatelessWidget {
   }
 }
 
+/// The quiet heading over the on-device preview: "Just now, on this phone".
+class LivePreviewDivider extends StatelessWidget {
+  const LivePreviewDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: const Key('live_preview_divider'),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, 0),
+      child: Semantics(
+        header: true,
+        child: Text(
+          context.l10n.livePreviewOnPhoneDivider,
+          style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+        ),
+      ),
+    );
+  }
+}
+
 /// Under the divider: the preview lines the final transcript does not already
 /// cover — the recognizer's still-volatile newest words in lighter text. The
 /// preview carries audio timestamps; only full interval coverage replaces a line.
 class LivePreviewTail extends StatefulWidget {
-  const LivePreviewTail({super.key, required this.preview, required this.coverage});
+  const LivePreviewTail({super.key, required this.preview, required this.coverage, this.catchUp});
 
   final LivePreviewController preview;
   final LivePreviewCoverage coverage;
+
+  /// What sits between the final transcript and the preview, rebuilt with the preview's ticks.
+  final WidgetBuilder? catchUp;
 
   @override
   State<LivePreviewTail> createState() => _LivePreviewTailState();
@@ -933,7 +1028,7 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
       padding: EdgeInsets.fromLTRB(OmiSpacing.md, first ? OmiSpacing.xs : 0, OmiSpacing.md, OmiSpacing.sm),
       child: Text(line.text,
           style: OmiType.body
-              .copyWith(height: 1.4, color: line.isFinal ? OmiColors.textPrimary : OmiColors.textSecondary)),
+              .copyWith(height: 1.4, color: line.isFinal ? OmiColors.textSecondary : OmiColors.textTertiary)),
     );
     _rows[line.id] = (text: line.text, isFinal: line.isFinal, first: first, widget: row);
     return row;
@@ -947,12 +1042,13 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
         final lines = widget.coverage.excludeCovered(widget.preview.lines);
         final ids = lines.map((line) => line.id).toSet();
         _rows.removeWhere((id, _) => !ids.contains(id));
-        if (lines.isEmpty) return const SizedBox.shrink();
+        if (lines.isEmpty && widget.catchUp == null) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const LivePreviewDivider(),
+            if (widget.catchUp case final catchUp?) catchUp(context),
+            if (lines.isNotEmpty) const LivePreviewDivider(),
             for (var i = 0; i < lines.length; i++) _line(lines[i], i == 0),
             SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
           ],

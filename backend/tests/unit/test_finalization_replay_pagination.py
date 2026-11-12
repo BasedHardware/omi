@@ -79,6 +79,7 @@ def test_hundred_nonadvancing_rows_cannot_starve_valid_check(monkeypatch):
     monkeypatch.setattr(jobs, '_now', lambda: NOW)
     monkeypatch.setattr(jobs, 'recover_stranded_byok_jobs', Mock(return_value={'blocked': 0, 'errors': 0}))
     monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
     monkeypatch.setattr(service, '_publish_job_metrics', Mock())
     # Even a broken worker AND broken backoff cannot pin the replay cursor.
     monkeypatch.setattr(jobs, 'defer_finalization_replay', Mock(return_value=False))

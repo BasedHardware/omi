@@ -58,7 +58,7 @@ def test_deadline_inside_tail_iterator_is_not_a_proof_refusal(source, proof, mon
     eligible(source)
     closed = Mock()
 
-    def stalled(*_):
+    def stalled(*_, **kwargs):
         try:
             signal.raise_signal(signal.SIGALRM)
             yield None
@@ -213,7 +213,7 @@ def test_phase_timings_identify_serial_tail_cost(source, proof, monkeypatch):
         clock[0] += 1
         return original(body)
 
-    def tail(*_):
+    def tail(*_, **kwargs):
         clock[0] += 20
         yield (100, 2, [{'generation': 1, 'pcm_sha256': 'proof'}])
 

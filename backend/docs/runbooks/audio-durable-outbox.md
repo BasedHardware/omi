@@ -10,6 +10,15 @@ controls legacy raw admission only after the outbox switch is set to `false`;
 it cannot disable the default-on custody barrier. `AUDIO_ARCHIVE_READ_ENABLED`
 continues to control raw playback reads independently.
 
+`AUDIO_CUSTODY_FRAMED_PERCENT` defaults to 0 independently of
+`AUDIO_ARCHIVE_PERCENT`. Its framed windows rejoin send pauses up to 60 seconds
+of captured audio / 16 MiB, retaining each original frame position and sample
+count. A frame table is not one continuous wall span. Both generations and
+both plaintext hashes still gate each part's receipt; no ACK waits for an
+entire conversation. Raw and projection discovery read the committed frame
+table, never treating a media-only orphan as custody. Percent 0 restores the
+per-pause writer while readers retain support for existing framed objects.
+
 For consented capture, listen retains original packs through capacity pressure,
 upload errors and cancellation. Four commits can run at once; the fifth waits
 before removing its active pack. LISTEN commits at the pack's own 60-second,
@@ -71,6 +80,147 @@ through successful retry; there is no timed early release. A mid-window pod
 loss has issued no audio or coverage custody ACK for that uncommitted window.
 
 ## Recovery and acceptance
+
+After a record socket closes, inline finish waits up to 20 seconds for its
+projection. The existing socket drain gets another 30 seconds. If durable work
+still remains, pusher transfers that same worker to a tracked process owner
+(`PUSHER_MAX_CLOSED_RECORD_DRAINS`, default 32, clamped 8..128; prod values 64).
+No projection is restarted or certified
+by the transfer. Queue accounting and close checks are per conversation;
+a later recording on the socket cannot keep the earlier close waiting for
+the whole socket queue to empty. Each pass consumes a bounded queue snapshot.
+
+Transient close metadata errors keep retrying at the drain's one-second cadence,
+including after the old three-attempt limit. Permanent projection/tail failures
+retain their producer token. A `producer_pending` seal refusal means another
+producer remains; the successfully drained caller has already released its own
+token. At closed-drain capacity, cleanup cancels the worker as before. With
+`PUSHER_ABANDON_EVICTED_TOKENS` on (anything except `off`), one of at most four tracked coordinators
+waits for the worker and every socket storage/barrier executor future, then marks
+each exact owned token `abandoned_at` and forgets its recovery hint. The immutable
+receipts and token remain for repair. Inherited pending clears from another socket are excluded because its writer settlement is not proven by this eviction. Admission refusal/failure retries with
+bounded exponential jitter while the process lives. Abandonment proves stoppage,
+never tail durability: repair still requires archive discovery, retained-tail
+validation and its privacy transaction gate. A reconnect's new token stays live,
+and normal clears cannot remove abandoned tokens. SIGTERM cancels tracked drain
+owners and workers; process death retains the existing pod-death proof fallback.
+Overflow coordination is independently bounded by
+`PUSHER_MAX_ABANDON_RECORD_DRAINS` (default/prod 4, clamped 0..16; invalid uses 4).
+At capacity, no new coordinator starts: `outcome=abandon_overflow` leaves the
+durable token fenced for the existing process/pod-death proof.
+Refusal removes its local recovery hint, preventing a later producer from
+certifying it while the evicted writer is still running. Slots return only when
+coordinators finish, including metadata retries.
+
+Durable custody, PCM reads, uploads and projection refresh use the original
+shared `storage_executor` (128 workers) and its existing queue behavior. There
+is no separate recording pool, routing override or pool-specific refusal before
+ACK. Socket future tracking shields queued and running storage work from caller
+cancellation and waits for actual settlement before abandonment. The closed-worker
+and coordinator count caps do not establish a PCM byte bound or pod RSS bound.
+
+### Pusher PCM storage byte admission (default off)
+
+`PUSHER_STORAGE_PCM_BUDGET_MB` is an integer in MiB, default **0**
+(off / kill switch). Enabled deployment values must be **at least 27 MiB**:
+ceil(20 MiB x4/3) lets the 75% live lane admit the largest socket window even
+when otherwise idle. Smaller positive values are rejected by deployment
+validation; an unvalidated invalid startup value selects off, as malformed
+values do. All committed chart and manifest values remain 0. A
+positive value bounds only PCM submitted to `commit_pcm_window` through the
+shared storage executor, queued plus running, per process. No executor pool,
+projection read/upload, record barrier, seal, failure marker or abandonment
+admission changes. Live windows may use 75% of the limit; disconnect / shutdown
+tails can use the remaining 25% as well, always within the total limit. A large
+tail burst can still refuse: the reserve is headroom, not a durability promise.
+
+A full budget **returns without submitting storage**. It never raises, closes a
+socket or sends opcode 203. There is no receipt and no commit callback. Original
+socket PCM, owner, start time and exact frame checkpoints stay charged to the
+existing 20 MiB per-socket budget; boundary callers cannot erase or rebind them.
+The **first live refusal immediately pauses intake** in the same receive task.
+It probes non-waiting admission every 50 ms without reading another frame until
+that window commits. Refused windows therefore cannot accumulate toward the
+socket byte limit. There is no detached retry task or global admission waiter
+list. Enabled windows also cap at 4096 checkpoints.
+
+The pause is cancellable, including cancellation of the outer socket handler.
+Cancelling this pause does not retry storage in cleanup, whether the peer is
+connected or already disconnected: no tail receipt or ACK is produced, and the
+producer fence stays held for client WAL replay. Cleanup therefore cannot wait
+on a new PCM storage call or its retries. A storage call already submitted before
+cancellation keeps its reservation until actual settlement and cannot send a
+late ACK. Normal receive-finalization tails still bypass the pause and try the reserve;
+a full tail budget retains the producer fence without selecting an error close.
+Known-deleted retained owners use the existing gone-owner disposition before
+retry. Close, abandon and marker operations remain ungated on their metadata
+executor. No ACK means the source WAL must retain and replay. This does not
+measure listen's re-offer cadence or certify installed client WAL behavior.
+
+`omi_pusher_storage_pcm_inflight_bytes` measures submitted custody PCM. When
+admission is enabled, accounting and capacity remain held until storage actually
+settles, including a caller cancelled while its queued/running thread continues.
+An acquire accounting error rolls back its partial mutation and admits using the
+flag-0 dispatch path and emits the shared `omi_fallback_total` signal
+(`pusher`, `storage_pcm_budget` -> `unbudgeted_storage`, `gate_unavailable`,
+`degraded`). Its local error log remains rate-limited. A release error retires exactly its reservation and is
+swallowed. Neither reaches socket failure handling. Both are counted in
+`omi_pusher_storage_pcm_errors_total{reason="acquire|release"}` and logged at
+most once per reason per minute. Late post-cancellation storage failures use the
+same counter/log path with `reason="late_storage"`.
+
+Flag 0 preserves successful PCM bytes, frame checkpoints, receipt/opcode-203
+bytes, and the previous storage-await/cancellation dispatch and observational
+gauge semantics. It does **not** restore every prior failure-path behavior:
+the new `finish_receive` finalizer holds all unresolved owner fences and can
+defer inline finish after genuine storage failures even with the flag off.
+`omi_pusher_storage_pcm_budget_limit_bytes` reports the configured limit (zero
+means off). `omi_pusher_storage_pcm_refusals_total{stage="live|tail|unknown"}`
+counts pre-submit refusals. The agent-tier chart alert
+`omi-pusher-storage-pcm-refusals` fires for rate >0 sustained 30 minutes (fresh
+pusher samples only). Refusal means delayed custody, never evidence of storage.
+
+Proposed enabled size: **512 MiB**, with 384 MiB for ordinary admission and
+128 MiB reserved headroom. For sizing context, 128 storage workers each holding
+60 seconds of 16 kHz PCM use about 234 MiB (128 x 1,920,000 bytes). This is a
+planning calculation, not a live measurement or an RSS guarantee. The byte
+limit excludes per-socket buffers, projection debt, GCS client buffering and
+other process memory. Real socket counts, 48 kHz window prevalence and tail
+size distribution still need measurement before enablement.
+
+Enablement is a separate PR / approved train, owned by uicleanup
+(omi-lifecycle): dev chart first, then **one canary pod for 15 minutes**. Require
+socket kills <=15/15min and pod memory p99 <75% of the 3.5 GiB container limit;
+inspect live/tail refusal rates, GCS errors and capacity/abandon outcomes. The
+owner expands to the fleet within one day of a clean canary or records the
+failed gate. **Rollback: chart value `PUSHER_STORAGE_PCM_BUDGET_MB=0`**, applied
+through the ordinary chart rollout; no image rebuild, object deletion or token
+clear. This PR does not enable any environment or authorize that rollout.
+
+Chart alerts `omi-pusher-storage-queue-warning` (>256 queued storage tasks per
+pusher target for 10m, agent) and `omi-pusher-storage-queue-critical` (>512 for
+10m, page) sum all task kinds, including `other`. These are 2x/4x the 128 storage
+workers. `omi-pusher-memory-working-set-high` pages above 75% of the 3.5 GiB
+limit (2.625 GiB) for 15m, using the pusher dashboard workload selectors.
+Each excludes samples older than 120s before aggregation; absent data is not
+pressure. When they fire, compare queued/active storage tasks, the in-flight
+PCM gauge, pod working set and GCS latency/errors; attribute the pressure to
+the running release and escalate to the lifecycle lead for an approved rollback.
+Preserve client WAL and custody objects. These chart definitions require normal monitoring
+provisioning before they become live.
+
+Rollback uses abandonment `off` and closed cap `32`. Coordinator cap `0` also
+refuses all new abandonment coordination. Ship by pusher train with one canary
+at 64 for 15 minutes: socket kills must be <=15/15min and memory p99 must stay
+below 75% of the unchanged 3.5 GiB limit before fleet expansion. Also review
+capacity/abandoned/abandon_overflow outcomes and repair `upload_pending`. These
+production gates have not been measured by the local regression suite. Do not
+raise prod to 128 without a retained-PCM byte budget.
+
+`event=record_closed_finish` uses only closed outcomes: `retained`, `completed`,
+`failed`, `cancelled`, `capacity`, `abandoned`, `abandon_overflow`. `completed` means the drain settled, not that
+every seal succeeded; projection failures and seal refusals retain their existing
+failure/refusal events. These events contain no recording or producer identity.
 
 After a pod loss, list raw-live objects for the affected owner/conversation and
 the corresponding immutable audio-outbox manifests. Fetch the pinned media

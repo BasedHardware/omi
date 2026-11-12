@@ -41,6 +41,10 @@ WINDOW_SHARE_OF_BASELINE = WINDOW / 3600
 # that lands beyond the last finite bucket is reported as exactly this
 # boundary, not measured.
 FIRST_P95_TOP_BUCKET = 60.0
+# The HPA's own scale-out targets (build_rollback asserts the live spec still
+# carries exactly these): what the live load needs, never the floor.
+REQUESTS_PER_POD = 2
+GPU_TARGET_PERCENT = 35
 FAST_SCALE_UP = {
     'stabilizationWindowSeconds': 0,
     'selectPolicy': 'Max',
@@ -200,6 +204,15 @@ def queries(namespace):
             'omi_stt_window_session_outcome_total',
             '{job="backend-listen-metrics",outcome="no_text",reason="first_text_deadline"}',
         ),
+        # The HPA's inputs at their worst minute of the lookback window (the
+        # adapter's parakeet_active_requests_total and parakeet_gpu_utilization),
+        # so load_need() is what the live load asks for, not what a floor or the
+        # 900s scale-down window holds.
+        'live_requests_max': (
+            f'max_over_time((sum(parakeet_active_streams{gpu})'
+            f' + (sum(parakeet_active_batch_requests{gpu}) or vector(0)))[15m:1m])'
+        ),
+        'gpu_util_max': f'max_over_time(avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{gpu}[1m]))[15m:1m])',
     }
 
 
@@ -215,8 +228,8 @@ def workload_only(spec):
 
 
 def build_rollback(old):
-    """Exact step_fast.build(old, 12, rollback=True) patch and drift assertions."""
-    assert old['maxReplicas'] == 12, 'Unexpected cap'
+    """Restore rollback capacity, including an operator-capped workload HPA."""
+    assert type(old['maxReplicas']) is int and 1 <= old['maxReplicas'] <= ROLLBACK_REPLICAS, 'Unexpected cap'
     metrics = old['metrics']
     names = [m.get('pods', m.get('external', {})).get('metric', {}).get('name') for m in metrics]
     assert set(names) <= {
@@ -230,10 +243,10 @@ def build_rollback(old):
     }, 'Missing/duplicate metric'
     assert next(
         m for m in metrics if m.get('pods', {}).get('metric', {}).get('name') == 'parakeet_active_requests_total'
-    )['pods']['target'] == {'type': 'AverageValue', 'averageValue': '2'}, 'Requests drift'
+    )['pods']['target'] == {'type': 'AverageValue', 'averageValue': str(REQUESTS_PER_POD)}, 'Requests drift'
     assert next(
         m for m in metrics if m.get('external', {}).get('metric', {}).get('name') == 'parakeet_gpu_utilization'
-    )['external']['target'] == {'type': 'Value', 'value': '35'}, 'GPU drift'
+    )['external']['target'] == {'type': 'Value', 'value': str(GPU_TARGET_PERCENT)}, 'GPU drift'
     # Kubernetes defaults selectPolicy=Max on stored objects; Helm may omit it.
     up = {'selectPolicy': 'Max', **old['behavior']['scaleUp']}
     legacy_up = {
@@ -249,6 +262,13 @@ def build_rollback(old):
     restored.append(copy.deepcopy(LATENCY))
     return [
         {'op': 'test', 'path': '/spec', 'value': copy.deepcopy(old)},
+        # Restore the cap in the same atomic patch as the floor, or Kubernetes
+        # rejects minReplicas=12 under an operator's maxReplicas=4/6 cap.
+        *(
+            [{'op': 'replace', 'path': '/spec/maxReplicas', 'value': ROLLBACK_REPLICAS}]
+            if old['maxReplicas'] < ROLLBACK_REPLICAS
+            else []
+        ),
         {'op': 'replace', 'path': '/spec/minReplicas', 'value': ROLLBACK_REPLICAS},
         {'op': 'replace', 'path': '/spec/metrics', 'value': restored},
     ]
@@ -340,6 +360,50 @@ def evaluate(values):
     }
 
 
+def load_need(values, ready):
+    """Pods the live load needs at the HPA's targets; None when unmeasured (evaluate blinds).
+
+    Never below one, so an empty fleet cannot pass as an idle one. GPU work is
+    the ready pods' average utilization times their count: Pending pods carry
+    none.
+    """
+    requests, gpu = values.get('live_requests_max'), values.get('gpu_util_max')
+    if not (finite(requests) and finite(gpu)) or requests < 0 or gpu < 0:
+        return None
+    return max(1, math.ceil(requests / REQUESTS_PER_POD), math.ceil(ready * gpu / GPU_TARGET_PERCENT))
+
+
+def capacity_shortfall(hpa, deployment, events, values, reading, now):
+    """Trip only when ready pods are short of the live load, with that shortfall's scheduling evidence.
+
+    2026-10-30..11-02 01:25Z: 28 of 31 rollbacks tripped only on
+    FailedScheduling or ready < desired, with latency healthy; replaying this
+    rule keeps 4 of them (ready short of the load). In the L4 stockout a rollback's 12 pods
+    leave Pending pods and their events on a 10-node pool; after it expires
+    and the schedule lowers the floor, the 900s scale-down window still holds
+    desired near 12, so the next run tripped again (about every 50 minutes),
+    and an ordinary one-pod scale-up waiting for its node tripped the same
+    way. Pending pods the live load does not need are recorded, not tripped.
+    A real stockout at peak still trips here, and latency, refusals and the
+    first-text gates trip on harm whatever the pod counts say.
+    """
+    desired = hpa.get('status', {}).get('desiredReplicas')
+    if desired is None:
+        reading['blind'].append('desired_replicas_missing')
+        return
+    ready = deployment.get('status', {}).get('readyReplicas', 0)
+    need = load_need(values, ready)
+    failures = scheduling_failures(events, hpa['metadata']['name'], now)
+    reading['load_need'] = need
+    if need is None:
+        return
+    if ready < min(desired, need):
+        reading['trips'].append('ready_shortfall')
+        reading['trips'] += failures
+    else:
+        reading['pending_beyond_load'] = len(failures)
+
+
 def scheduling_failures(events, name, now):
     failed = []
     for event in events:
@@ -412,17 +476,15 @@ def decide(hpa, deployment, events, values, state, now):
         advanced = advance(state, identity, now, False)
         if state.get('identity') == identity and 'rollback' in state:
             advanced['rollback'] = state['rollback']
+        # A rollback expires only once ready also covers the live load: a real
+        # peak stockout holds it instead of cycling expiry -> lower -> trip.
+        capacity_shortfall(hpa, deployment, events, values, reading, now)
         return 'NOOP', advanced, reading
-    reading['trips'] += scheduling_failures(events, hpa['metadata']['name'], now)
+    capacity_shortfall(hpa, deployment, events, values, reading, now)
     if not any(
         c['type'] == 'ScalingActive' and c['status'] == 'True' for c in hpa.get('status', {}).get('conditions', [])
     ):
         reading['trips'].append('HPA_not_ScalingActive')
-    desired = hpa.get('status', {}).get('desiredReplicas')
-    if desired is None:
-        reading['blind'].append('desired_replicas_missing')
-    elif deployment.get('status', {}).get('readyReplicas', 0) < desired:
-        reading['trips'].append('ready_shortfall')
     state = advance(state, identity, now, bool(reading['blind']))
     if now - state['since'] < WINDOW:
         verdict = 'WARMUP'
@@ -442,7 +504,17 @@ def batch_queries(namespace):
     sel = '{namespace="' + namespace + '"}'
     return {
         'oldest_age': f'max(omi_batch_pipeline_oldest_age_seconds{sel})',
+        # Prometheus max ignores NaNs when another priority has a finite age.
+        # Count them separately so one saturated priority cannot look healthy.
+        'age_incomplete': (
+            f'(count(omi_batch_pipeline_oldest_age_seconds{sel} != '
+            f'omi_batch_pipeline_oldest_age_seconds{sel}) or vector(0))'
+        ),
         'retry_age': f'max(omi_batch_pipeline_retry_age_seconds{sel})',
+        'retry_incomplete': (
+            f'(count(omi_batch_pipeline_retry_age_seconds{sel} != '
+            f'omi_batch_pipeline_retry_age_seconds{sel}) or vector(0))'
+        ),
         'freshness': f'max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{sel})',
         'scrape_age': f'max(time() - timestamp(omi_batch_pipeline_metrics_refreshed_at_seconds{sel}))',
     }
@@ -452,8 +524,13 @@ def evaluate_batch(values):
     # No invented projection/custody/speech metrics: worker queue age is a proxy only.
     unknown = ['new_projection_obligations_unavailable', 'audio_custody_unavailable', 'proven_speech_loss_unavailable']
     blind = any(not finite(values.get(k)) for k in batch_queries('unused'))
-    blind = blind or values.get('freshness', 0) > 120 or values.get('scrape_age', 0) > 120
-    trips = [] if blind else (['uncommitted_job_age_over_30m'] if values['oldest_age'] > 1800 else [])
+    fresh = all(finite(values.get(k)) and values[k] <= 120 for k in ('freshness', 'scrape_age'))
+    blind = blind or not fresh
+    blind = blind or values.get('age_incomplete', 0) > 0 or values.get('retry_incomplete', 0) > 0
+    # A missing priority cannot erase a fresh, positively measured breach in
+    # another priority. Keep metrics_blind alongside that known TRIP.
+    late = finite(values.get('oldest_age')) and values['oldest_age'] > 1800
+    trips = ['uncommitted_job_age_over_30m'] if fresh and late else []
     return {
         'verdict': 'TRIP' if trips else 'BLIND' if blind else 'PARTIAL',
         'trips': trips,
@@ -529,9 +606,15 @@ def log(event, **fields):
             return [safe(v) for v in value]
         return value
 
-    severity = logging.ERROR if fields.get('verdict') in {'TRIP', 'BLIND'} or event.endswith('error') else logging.INFO
+    unsafe = fields.get('verdict') in {'TRIP', 'BLIND'} or event.endswith('error')
+    # A bounded Cloud Logging counter consumes this boolean. Keep the signal on
+    # batch observer trips too: their evidence intentionally does not own the
+    # Parakeet Job's exit code. Dry-run readings must never notify humans.
+    page_signal = unsafe and not fields.get('dry_run', False) and os.environ.get('DRY_RUN', 'false').lower() != 'true'
+    severity = logging.ERROR if unsafe else logging.INFO
     logging.getLogger('incluster-guards').log(
-        severity, json.dumps(safe({'event': event, **fields}), allow_nan=False, sort_keys=True)
+        severity,
+        json.dumps(safe({'event': event, **fields, 'page_signal': page_signal}), allow_nan=False, sort_keys=True),
     )
 
 
@@ -657,7 +740,7 @@ def run(client, dry_run, now=None):
     # Batch evaluation is independent of a missing dev HPA or Parakeet data failure.
     batch_values = client.sample(batch_queries(client.namespace))
     batch = evaluate_batch(batch_values)
-    log('batch_safety', **batch, values=batch_values, cloud_run_rollback='disabled')
+    log('batch_safety', **batch, values=batch_values, cloud_run_rollback='disabled', dry_run=dry_run)
     hpa = None
     values = {}
     schedule = None

@@ -1,9 +1,11 @@
+from contextlib import contextmanager
+from contextvars import ContextVar
 import logging
 import random
 import re
 import time
 from threading import Lock
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import os
 from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ResourceExhausted, ServiceUnavailable
@@ -119,16 +121,21 @@ def _install_document_read_probe() -> None:
 _install_document_read_probe()
 
 
-def _install_action_item_write_fences() -> None:
-    # Match the SDK read probe's import-isolation seam. No clients or IO here.
+def _install_document_write_probe() -> None:
+    """Count every committed Firestore write by collection, caller and origin.
+
+    Installed before the commit-boundary patches below, so the transport wrapper
+    sees each request as sent, including the writes those patches append.
+    """
     try:
-        from database.action_item_write_fence import install_write_fences
+        from database.firestore_write_probe import install_document_write_probe
     except ImportError:
         return
-    install_write_fences()
+
+    install_document_write_probe()
 
 
-_install_action_item_write_fences()
+_install_document_write_probe()
 
 
 def _install_memory_change_heads() -> None:
@@ -151,6 +158,21 @@ def _install_list_projection_writer() -> None:
 
 
 _install_list_projection_writer()
+
+
+def _install_batch_privacy_write_fence() -> None:
+    # Legacy bare-Python hygiene runners replace Firestore with a file-less
+    # ModuleType stub (there is no real SDK/write surface to fence there).
+    if not getattr(firestore, '__file__', None):
+        return
+    # This fence is mandatory for memo-enabled readers. Do not silently skip an
+    # ImportError and leave a process capable of unfenced customer-data writes.
+    from database.batch_privacy_write_fence import install_write_fence
+
+    install_write_fence()
+
+
+_install_batch_privacy_write_fence()
 
 
 _firestore_client = None
@@ -491,6 +513,22 @@ def firestore_document_kind(error: BaseException) -> str:
     return 'other'
 
 
+_IN_TXN_BODY: ContextVar[bool] = ContextVar('in_transaction_body', default=False)
+
+
+def in_transaction_body() -> bool:
+    return _IN_TXN_BODY.get()
+
+
+@contextmanager
+def transaction_body() -> Iterator[None]:
+    token = _IN_TXN_BODY.set(True)
+    try:
+        yield
+    finally:
+        _IN_TXN_BODY.reset(token)
+
+
 def run_transactional(
     client: Any,
     transactional_callable: Any,
@@ -536,7 +574,8 @@ def run_transactional(
             transaction = (
                 initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
             )
-            result = transactional_callable(transaction, *args, **kwargs)
+            with transaction_body():
+                result = transactional_callable(transaction, *args, **kwargs)
             if outcome is not None and attempt > 1:
                 outcome['status'] = 'retried_ok'
             return result

@@ -5,7 +5,7 @@ import types
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,11 +14,24 @@ STRIPE_UTILS_SOURCE = Path(__file__).resolve().parents[2] / "utils" / "stripe.py
 _MISSING = object()
 
 
+@pytest.fixture(scope="module", autouse=True)
+def warm_real_payment_dependencies():
+    # Keep immutable dependencies imported before per-test module snapshots.
+    # Deleting/re-importing the entire Stripe/payment dependency graph inside
+    # every call made otherwise hermetic tests exceed the CPU-time contract.
+    import routers.payment  # noqa: F401
+    import utils.stripe  # noqa: F401
+
+
 @pytest.fixture(autouse=True)
-def restore_module_stubs():
+def restore_module_stubs(warm_real_payment_dependencies):
     modules = dict(sys.modules)
     routers_module = modules.get("routers")
     router_payment = getattr(routers_module, "payment", _MISSING) if routers_module else _MISSING
+    utils_module = modules.get("utils")
+    utils_stripe = getattr(utils_module, "stripe", _MISSING) if utils_module else _MISSING
+    stripe_module = modules.get("utils.stripe")
+    stripe_module_state = dict(stripe_module.__dict__) if stripe_module is not None else None
     yield
     for module_name in tuple(sys.modules):
         if module_name not in modules:
@@ -29,6 +42,17 @@ def restore_module_stubs():
             routers_module.__dict__.pop("payment", None)
         else:
             routers_module.payment = router_payment
+    # Parent attributes and the original module's own namespace both need repair:
+    # later files imported production utils.stripe during collection, so installing
+    # MagicMocks on that shared object otherwise survives a sys.modules reset.
+    if utils_module:
+        if utils_stripe is _MISSING:
+            utils_module.__dict__.pop("stripe", None)
+        else:
+            utils_module.stripe = utils_stripe
+    if stripe_module is not None and stripe_module_state is not None:
+        stripe_module.__dict__.clear()
+        stripe_module.__dict__.update(stripe_module_state)
 
 
 def _read_source(path: Path) -> str:
@@ -99,7 +123,143 @@ def test_upgrade_catches_stripe_invalid_request_error():
     assert "stripe.error.InvalidRequestError" in upgrade_section
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
+def checkout_stripe_utils():
+    from utils import stripe as stripe_utils
+
+    return stripe_utils
+
+
+def _issuance(**overrides):
+    metadata = {
+        'attribution_schema': '1',
+        'attribution_source': 'shopify_bundle_code',
+        'shopify_shop': 'fixture-shop.myshopify.com',
+        'shopify_order_id': 'gid://shopify/Order/12345',
+        'bundle_order_line_item_id': 'gid://shopify/LineItem/67890',
+        'bundle_redemption_role': 'unknown',
+    }
+    metadata.update(overrides)
+    return metadata
+
+
+@pytest.mark.parametrize('role', ['self', 'gift', 'unknown'])
+def test_promotion_attribution_accepts_only_the_verified_issuer_contract(checkout_stripe_utils, role):
+    promo = {
+        'id': 'promo_fixture',
+        'max_redemptions': 1,
+        'metadata': _issuance(bundle_redemption_role=role),
+        'client_order': 'ignored',
+    }
+    attribution = checkout_stripe_utils.promotion_code_attribution(promo)
+    assert attribution == {**promo['metadata'], 'bundle_promotion_code_id': 'promo_fixture'}
+    assert 'client_order' not in attribution
+
+
+@pytest.mark.parametrize(
+    'metadata',
+    [
+        {},
+        _issuance(attribution_schema='2'),
+        _issuance(attribution_source='client'),
+        _issuance(shopify_shop='https://fixture-shop.myshopify.com'),
+        _issuance(shopify_order_id='gid://shopify/Product/12345'),
+        _issuance(bundle_order_line_item_id='not-an-id'),
+        _issuance(bundle_redemption_role='self-ish'),
+        _issuance(shopify_order_id=12345),
+    ],
+)
+def test_missing_or_malformed_promotion_attribution_fails_open(checkout_stripe_utils, metadata):
+    assert (
+        checkout_stripe_utils.promotion_code_attribution(
+            {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': metadata}
+        )
+        == {}
+    )
+
+
+@pytest.mark.parametrize('max_redemptions', [None, 0, 2, True, '1'])
+def test_only_single_use_promotion_codes_can_carry_order_provenance(checkout_stripe_utils, max_redemptions):
+    promo = {'id': 'promo_fixture', 'max_redemptions': max_redemptions, 'metadata': _issuance()}
+    assert checkout_stripe_utils.promotion_code_attribution(promo) == {}
+
+
+def test_coupon_never_supplies_or_conflicts_with_unique_code_attribution(checkout_stripe_utils):
+    coupon_only = {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': {}, 'coupon': {'metadata': _issuance()}}
+    assert checkout_stripe_utils.promotion_code_attribution(coupon_only) == {}
+
+    conflict = {
+        'id': 'promo_fixture',
+        'max_redemptions': 1,
+        'metadata': _issuance(),
+        'coupon': {'metadata': _issuance(shopify_shop='other')},
+    }
+    assert checkout_stripe_utils.promotion_code_attribution(conflict) == {}
+
+    matching = {
+        'id': 'promo_fixture',
+        'max_redemptions': 1,
+        'metadata': _issuance(),
+        'coupon': {'metadata': _issuance()},
+    }
+    assert checkout_stripe_utils.promotion_code_attribution(matching)['shopify_order_id'].endswith('/12345')
+
+    shared_coupon = {
+        'id': 'promo_fixture',
+        'max_redemptions': 1,
+        'metadata': _issuance(),
+        'coupon': {'id': 'coupon_shared'},
+    }
+    assert (
+        checkout_stripe_utils.promotion_code_attribution(shared_coupon)['bundle_promotion_code_id'] == 'promo_fixture'
+    )
+
+
+def test_multiple_codes_may_share_one_verified_order(checkout_stripe_utils):
+    first = checkout_stripe_utils.promotion_code_attribution(
+        {'id': 'promo_one', 'max_redemptions': 1, 'metadata': _issuance()}
+    )
+    second = checkout_stripe_utils.promotion_code_attribution(
+        {'id': 'promo_two', 'max_redemptions': 1, 'metadata': _issuance()}
+    )
+    assert first['shopify_order_id'] == second['shopify_order_id']
+    assert first['bundle_promotion_code_id'] != second['bundle_promotion_code_id']
+
+
+def test_session_and_subscription_receive_identical_provenance_without_overriding_auth(checkout_stripe_utils):
+    attribution = checkout_stripe_utils.promotion_code_attribution(
+        {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': _issuance()}
+    )
+    captured = {}
+    checkout_stripe_utils.base_url = 'https://api.example/'
+    with (
+        patch.object(checkout_stripe_utils.stripe.Price, 'retrieve', return_value=SimpleNamespace(currency='usd')),
+        patch.object(
+            checkout_stripe_utils.stripe.checkout.Session,
+            'create',
+            side_effect=lambda **kwargs: captured.update(kwargs) or SimpleNamespace(id='cs_fixture'),
+        ),
+    ):
+        checkout_stripe_utils.create_subscription_checkout_session(
+            'authenticated_uid',
+            'price_fixture',
+            customer_id='cus_fixture',
+            promotion_code_id='promo_fixture',
+            trial_period_days=7,
+            promotion_attribution={**attribution, 'uid': 'forged', 'sub_type': 'forged', 'raw_order': 'forged'},
+        )
+
+    expected = {**attribution, 'uid': 'authenticated_uid', 'sub_type': 'unlimited'}
+    assert captured['metadata'] == expected
+    assert captured['subscription_data']['metadata'] == expected
+    assert captured['subscription_data']['trial_period_days'] == 7
+    assert captured['discounts'] == [{'promotion_code': 'promo_fixture'}]
+    assert captured['customer'] == 'cus_fixture'
+    assert 'raw_order' not in captured['metadata']
+
+
+# Function scope keeps router stub installation inside the restoration fixture.
+@pytest.fixture
 def payment_router():
     return _setup_payment_module(include_client=False)
 
@@ -258,6 +418,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     db_mod.action_items = MagicMock()
 
     redis_mod = sys.modules["database.redis_db"]
+    redis_mod.claim_payment_recovery_notification = MagicMock()
     redis_mod.set_credits_invalidation_signal = MagicMock()
 
     locked_content_mod = sys.modules["database.locked_content"]
@@ -284,7 +445,6 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     sub_mod.filter_plans_for_user = MagicMock()
     sub_mod.should_show_new_plans = MagicMock()
     sub_mod.adapt_plans_for_legacy_client = MagicMock()
-    sub_mod.clear_trial_paywall_cache = MagicMock()
     sub_mod.find_active_paid_subscription_for_user = MagicMock()
     sub_mod.price_ids_match_plan_and_interval = MagicMock(return_value=True)
     sub_mod.desktop_to_consumer_plan_change_error = MagicMock(return_value=None)
@@ -304,10 +464,19 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     subscription_events_mod.record_subscription_event = MagicMock()
     sys.modules["utils.observability.subscription_events"] = subscription_events_mod
 
+    # The webhook seam imports this sibling; preload it so the parent package
+    # is not executed against the incomplete fallback stub above.
+    renewal_observations_mod = types.ModuleType("utils.observability.renewal_observations")
+    renewal_observations_mod.observe_verified_event = AsyncMock()
+    sys.modules["utils.observability.renewal_observations"] = renewal_observations_mod
+
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"
     stripe_utils_mod.TERMINAL_SUBSCRIPTION_STATUSES = frozenset({'canceled', 'incomplete_expired'})
     stripe_utils_mod.create_subscription_checkout_session = MagicMock()
+    stripe_utils_mod.promotion_code_attribution = MagicMock(return_value={})
+    stripe_utils_mod.checkout_promotion_code_ids = MagicMock(return_value=[])
+    stripe_utils_mod.merge_promotion_attribution = MagicMock(side_effect=lambda metadata, attribution: metadata)
     stripe_utils_mod.create_connect_account = MagicMock()
     stripe_utils_mod.refresh_connect_account_link = MagicMock()
     stripe_utils_mod.is_onboarding_complete = MagicMock()
@@ -342,6 +511,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     models_mod.Subscription = MagicMock()
     models_mod.SubscriptionStatus = MagicMock()
     models_mod.PlanLimits = MagicMock()
+    models_mod.PaymentIssue = MagicMock()
 
     users_db_mod = sys.modules["database.users"]
     users_db_mod.get_stripe_connect_account_id = MagicMock()
@@ -418,6 +588,36 @@ def test_checkout_valid_promo_passes_id_to_session():
     assert call_kwargs[1].get("promotion_code_id") == "promo_abc123" or (
         len(call_kwargs[0]) > 4 and call_kwargs[0][4] == "promo_abc123"
     )
+
+
+def test_native_preapplied_code_uses_server_provenance_and_ignores_forged_client_fields():
+    client, router = _setup_payment_module()
+    promo = MagicMock(id='promo_abc123')
+    attribution = {'shopify_order_id': '12345', 'bundle_promotion_code_id': 'promo_abc123'}
+    mock_session = MagicMock(url='https://checkout.stripe.com/test', id='cs_test_123')
+
+    with patch.object(router.stripe, 'PromotionCode') as mock_promo:
+        mock_promo.list.return_value = MagicMock(data=[promo])
+        router.stripe_utils.promotion_code_attribution.return_value = attribution
+        router.stripe_utils.create_subscription_checkout_session.return_value = mock_session
+        with patch.object(router, '_try_reactivate_subscription', return_value=None):
+            response = client.post(
+                '/v1/payments/checkout-session',
+                json={
+                    'price_id': 'price_123',
+                    'promotion_code': 'BUNDLE-CODE',
+                    'shopify_order_id': 'client-forged',
+                    'metadata': {'shopify_order_id': 'client-forged'},
+                },
+            )
+
+    assert response.status_code == 200
+    mock_promo.list.assert_called_once_with(code='BUNDLE-CODE', active=True, limit=1, expand=['data.coupon'])
+    router.stripe_utils.promotion_code_attribution.assert_called_once_with(promo)
+    call_kwargs = router.stripe_utils.create_subscription_checkout_session.call_args.kwargs
+    assert call_kwargs['promotion_code_id'] == 'promo_abc123'
+    assert call_kwargs['promotion_attribution'] == attribution
+    assert call_kwargs['promotion_attribution']['shopify_order_id'] == '12345'
 
 
 def test_checkout_no_promo_omits_promo_id():
