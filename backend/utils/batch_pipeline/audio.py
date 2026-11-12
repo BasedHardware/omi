@@ -1,4 +1,17 @@
-"""GPU-independent canonical WAV and authenticated capture-context envelope."""
+"""GPU-independent canonical WAV and authenticated capture-context envelope.
+
+Every fault this module raises is deterministic on the pinned stored bytes
+(the same envelope re-parses and re-authenticates identically on every
+attempt), so every raise site carries the family type ``StagedAudioInvalid``
+-- the same doctrine as ``decode_pcm16_wav``, ``capture_decode`` and the
+retained-audio decoder wrap sites. ``read_context`` was the last intake
+envelope reader whose raise sites stayed anonymous: a bare ``ValueError``
+here collapsed the whole cohort into the anonymous fault vocabulary prod
+books as ``error_class=ValueError stage=fetch_decode`` and walked the
+bounded retry ladder on bytes no retry can repair.
+
+Failure-Class: FC-sync-decode-fault-anonymous-at-typed-boundaries
+"""
 
 from dataclasses import dataclass
 import io
@@ -60,18 +73,24 @@ def with_context(wav: bytes, context: dict) -> bytes:
 
 def read_context(wav: bytes) -> dict:
     if wav[:4] != b'RIFF' or wav[8:12] != b'WAVE' or struct.unpack('<I', wav[4:8])[0] != len(wav) - 8:
-        raise ValueError('invalid intake WAV envelope')
+        raise StagedAudioInvalid('invalid intake WAV envelope')
     offset, result = 12, None
     while offset + 8 <= len(wav):
         name, size = wav[offset : offset + 4], struct.unpack('<I', wav[offset + 4 : offset + 8])[0]
         offset += 8
         if offset + size > len(wav):
-            raise ValueError('truncated intake WAV chunk')
+            raise StagedAudioInvalid('truncated intake WAV chunk')
         if name == INTAKE_CONTEXT_CHUNK:
             if result is not None or size > INTAKE_CONTEXT_LIMIT:
-                raise ValueError('duplicate or oversized intake context')
-            result = json.loads(wav[offset : offset + size])
+                raise StagedAudioInvalid('duplicate or oversized intake context')
+            try:
+                result = json.loads(wav[offset : offset + size])
+            except (ValueError, RecursionError) as error:
+                # Corrupt or pathological JSON in the stored chunk is
+                # deterministic on the pinned bytes: re-parsing it can never
+                # succeed, so it joins the family like the envelope faults.
+                raise StagedAudioInvalid('authenticated intake context is required') from error
         offset += size + (size % 2)
     if offset != len(wav) or not isinstance(result, dict) or result.get('version') != INTAKE_CONTEXT_VERSION:
-        raise ValueError('authenticated intake context is required')
+        raise StagedAudioInvalid('authenticated intake context is required')
     return result

@@ -618,25 +618,27 @@ def hand_built_wav(context_chunk):
     return head + context_chunk
 
 
-def test_read_context_duplicate_context_chunk_raises_plain_value_error():
+def test_read_context_duplicate_context_chunk_raises_typed_family_error():
     body = json.dumps(minimal_context()).encode()
     chunk = b'OMICTX' + struct.pack('<I', len(body)) + body
-    with pytest.raises(ValueError) as raised:
+    with pytest.raises(StagedAudioInvalid) as raised:
         read_context(hand_built_wav(chunk + chunk))
-    assert type(raised.value) is ValueError
+    assert type(raised.value) is StagedAudioInvalid
+    assert isinstance(raised.value, ValueError)
 
 
-def test_read_context_oversized_chunk_raises_plain_value_error():
+def test_read_context_oversized_chunk_raises_typed_family_error():
     from utils.batch_pipeline.contracts import INTAKE_CONTEXT_LIMIT
 
     body = b'x' * (INTAKE_CONTEXT_LIMIT + 1)
     chunk = b'OMICTX' + struct.pack('<I', len(body)) + body
-    with pytest.raises(ValueError) as raised:
+    with pytest.raises(StagedAudioInvalid) as raised:
         read_context(hand_built_wav(chunk))
-    assert type(raised.value) is ValueError
+    assert type(raised.value) is StagedAudioInvalid
+    assert isinstance(raised.value, ValueError)
 
 
-def test_read_context_missing_version_raises_plain_value_error():
+def test_read_context_missing_version_raises_value_error_family():
     context = {k: v for k, v in minimal_context().items() if k != 'version'}
     body = json.dumps(context).encode()
     chunk = b'OMICTX' + struct.pack('<I', len(body)) + body
