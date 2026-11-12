@@ -1,0 +1,7 @@
+{
+  "version": "0.12.575",
+  "date": "2026-11-12",
+  "changes": [
+    "Fixed Screen Capture turning itself back on after you switch it off"
+  ]
+}
