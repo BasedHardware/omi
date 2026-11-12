@@ -222,7 +222,9 @@ def test_server_journeys_use_only_their_emitting_jobs():
                 # (prod 2026-11-12: 49,870 accepted on backend-listen, 0 on pusher, 2d).
                 if journey == 'capture_finalization' and f'omi_journey_accepted_total{selector}' in expr:
                     owner = 'backend-listen-metrics'
-                assert f'job="{owner}"' in selector, (panel['id'], selector)
+                # Exactly one job matcher: repeated matchers must all match, so a second
+                # job would select nothing while a substring check still passed.
+                assert re.findall(r'\bjob(=~|!~|!=|=)"([^"]*)"', selector) == [('=', owner)], (panel['id'], selector)
                 seen.add(journey)
             # Client and server journey names are disjoint, not join keys.
             for selector in re.findall(r'\bomi_client_journey_\w+\{([^}]*)\}', expr):
